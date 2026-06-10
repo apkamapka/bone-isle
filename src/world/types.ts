@@ -75,6 +75,42 @@ export interface CoastWater {
   ph: number;
 }
 
+/** Loot dropped on the ground (bones from skeletons, coins from goblins). */
+export type LootKind = "bones" | "coins";
+export interface LootItem {
+  type: LootKind;
+  x: number;
+  y: number;
+  t: number;
+}
+
+/** Monster kinds present on the Wild Isle. */
+export type MonsterKind = "skeleton" | "goblin";
+
+/** A live monster instance. */
+export interface Monster {
+  kind: MonsterKind;
+  x: number;
+  y: number;
+  spr: HTMLCanvasElement;
+  hp: number;
+  maxhp: number;
+  speed: number;
+  atkRate: number;
+  atkCd: number;
+  wanderT: number;
+  wx: number;
+  wy: number;
+  bob: number;
+  hurtT: number;
+}
+
+/** A pending respawn (kind + countdown seconds). */
+export interface Respawn {
+  kind: MonsterKind;
+  t: number;
+}
+
 /** Options for generating a world. */
 export interface WorldOpts {
   name: string;
@@ -98,9 +134,9 @@ export interface World {
   trees: Tree[];
   rocks: RockNode[];
   decos: Deco[];
-  monsters: unknown[];
-  loot: unknown[];
-  respawns: unknown[];
+  monsters: Monster[];
+  loot: LootItem[];
+  respawns: Respawn[];
   structures: Structure[];
   buildSpots: BuildSpot[];
   portal: Vec;
