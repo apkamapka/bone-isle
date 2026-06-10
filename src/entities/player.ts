@@ -1,7 +1,7 @@
 /** The player: state, inventory and derived combat stats. */
 import { PLAYER_BASE_HP, PLAYER_BASE_SPEED, PLAYER_ATTACK_RATE, expNeeded } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
-import type { Vec } from "../world/types.ts";
+import type { Vec, Monster, Tree, RockNode, Structure } from "../world/types.ts";
 
 /** Resource / loot counters shown in the HUD. */
 export interface Inventory {
@@ -14,17 +14,16 @@ export interface Inventory {
 /**
  * What the player is currently auto-acting on. A discriminated union so the
  * update loop can branch safely without `any` — this is exactly the kind of
- * bug the strict-TS migration is meant to kill. (Concrete monster/structure
- * targets get wired in when those entities are ported.)
+ * bug the strict-TS migration is meant to kill.
  */
 export type Target =
-  | { kind: "mob"; ref: unknown }
-  | { kind: "dummy"; ref: unknown };
+  | { kind: "mob"; m: Monster }
+  | { kind: "dummy"; s: Structure };
 
 /** Resource node the player is walking up to and harvesting. */
 export type GatherTask =
-  | { kind: "tree"; ref: unknown }
-  | { kind: "rock"; ref: unknown };
+  | { kind: "tree"; obj: Tree }
+  | { kind: "rock"; obj: RockNode };
 
 export interface Player {
   x: number;
