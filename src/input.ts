@@ -1,4 +1,4 @@
-/** Keyboard + mouse input. Keeps a live key map and reports world clicks. */
+/** Keyboard + mouse input. Live key map, click + move tracking, panel keys. */
 import type { Vec } from "./world/types.ts";
 
 const keys: Record<string, boolean> = {};
@@ -21,22 +21,55 @@ export function moveAxis(): { dx: number; dy: number } {
 export interface InputHandlers {
   /** Convert a screen-space click to a world-space point. */
   toWorld: (sx: number, sy: number) => Vec;
-  /** Called with the world-space click position. */
-  onClick: (world: Vec) => void;
+  /** A click at screen position (sx,sy) and the resolved world position. */
+  onClick: (screen: { sx: number; sy: number }, world: Vec) => void;
+  /** Mouse moved to screen position (sx,sy). */
+  onMove?: (sx: number, sy: number) => void;
+  /** Toggle a panel: "build" | "skills" | "equip". */
+  onPanel: (which: "build" | "skills" | "equip") => void;
+  /** Escape pressed. */
+  onEscape: () => void;
 }
 
-/** Wire up listeners against a canvas. Returns nothing; state is module-level. */
+/**
+ * Wire up listeners. The `S` key is shared with downward movement, so a quick
+ * tap toggles the Skills panel while holding it walks the player down.
+ */
 export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
+  let sDownAt = 0;
+
   addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
+    if (e.repeat) {
+      keys[k] = true;
+      return;
+    }
+    if (k === "b") h.onPanel("build");
+    else if (k === "s") sDownAt = performance.now();
+    else if (k === "e") h.onPanel("equip");
+    else if (k === "escape") h.onEscape();
     keys[k] = true;
   });
+
   addEventListener("keyup", (e) => {
-    keys[e.key.toLowerCase()] = false;
+    const k = e.key.toLowerCase();
+    if (k === "s") {
+      if (sDownAt && performance.now() - sDownAt < 250) h.onPanel("skills");
+      sDownAt = 0;
+    }
+    keys[k] = false;
   });
+
+  canvas.addEventListener("mousemove", (e) => {
+    const r = canvas.getBoundingClientRect();
+    h.onMove?.(e.clientX - r.left, e.clientY - r.top);
+  });
+
   canvas.addEventListener("mousedown", (e) => {
     const r = canvas.getBoundingClientRect();
-    h.onClick(h.toWorld(e.clientX - r.left, e.clientY - r.top));
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+    h.onClick({ sx, sy }, h.toWorld(sx, sy));
   });
 }
