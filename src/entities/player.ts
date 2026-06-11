@@ -1,6 +1,7 @@
 /** The player: state, inventory and derived combat stats. */
 import { PLAYER_BASE_HP, PLAYER_BASE_SPEED, PLAYER_ATTACK_RATE, expNeeded } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
+import { moveSpeedBonus } from "../systems/skills.ts";
 import type { Vec, Monster, Tree, RockNode, Structure } from "../world/types.ts";
 
 /** Resource / loot counters shown in the HUD. */
@@ -76,7 +77,7 @@ export function createPlayer(spawn: Vec): Player {
   };
 }
 
-/** Movement speed in px/s (will scale with the Speed skill once ported). */
+/** Movement speed in px/s, including the Speed skill bonus. */
 export function playerSpeed(_p: Player): number {
-  return PLAYER_BASE_SPEED;
+  return PLAYER_BASE_SPEED + moveSpeedBonus();
 }
