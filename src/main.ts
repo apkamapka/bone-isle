@@ -5,19 +5,23 @@ import { SPR } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster } from "./entities/monsters.ts";
-import { playerAttack, hurtPlayer } from "./systems/combat.ts";
+import { playerAttack, hitDummy, hurtPlayer } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
+import { addSkillXp } from "./systems/skills.ts";
+import { tryPlace, structSprite, STRUCTS } from "./systems/building.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { beep, unlockAudio } from "./audio.ts";
 import { initInput, moveAxis, isDown } from "./input.ts";
 import { createGame, switchWorld, respawnAtHome } from "./game.ts";
-import type { Vec, World, Monster } from "./world/types.ts";
+import { drawHud, type HudCtx } from "./ui/hud.ts";
+import { drawPanels, type UiState, type Hotspot } from "./ui/panels.ts";
+import type { Vec, World, Monster, Structure } from "./world/types.ts";
+import type { StructKey } from "./systems/building.ts";
 
 /* ------------------------------------------------------------------
-   Step 5: two islands joined by the portal. Home Isle is safe (no
-   monsters, build pads glow); Wild Isle has the fights. Walk onto the
-   portal to travel. Gathering is back: click a tree to chop (wood) or a
-   rock to mine (stone); both deplete and regrow.
+   Step 6 (final): the whole prototype, now modular. Building (B),
+   skills (S), equipment (E), full HUD, garden regen, training dummy,
+   forge embers. This replaces the single-file legacy build.
    ------------------------------------------------------------------ */
 
 const screen = document.createElement("canvas");
@@ -41,62 +45,106 @@ addEventListener("resize", resize);
 resize();
 
 const game = createGame();
+const P = game.player;
 const cam = { x: 0, y: 0 };
 let moveMarker: { x: number; y: number; t: number } | null = null;
 let waveT = 0;
 let last = performance.now();
 
+const ui: UiState = { panel: null, placing: null, selSlot: null, panelRect: null };
+const mouse = { sx: 0, sy: 0 };
+let hotspots: Hotspot[] = [];
+
 const cw = (): World => game.current;
-const P = game.player;
+
+function togglePanel(which: "build" | "skills" | "equip"): void {
+  ui.placing = null;
+  ui.selSlot = null;
+  ui.panel = ui.panel === which ? null : which;
+}
 
 initInput(screen, {
   toWorld: (sx, sy): Vec => ({ x: sx / scale + cam.x, y: sy / scale + cam.y }),
-  onClick: (w) => {
+  onMove: (sx, sy) => { mouse.sx = sx; mouse.sy = sy; },
+  onPanel: togglePanel,
+  onEscape: () => { ui.panel = null; ui.placing = null; },
+  onClick: ({ sx, sy }, w) => {
     unlockAudio();
-    if (P.dead) return;
-    const world = cw();
-    // monster?
-    for (const m of world.monsters) {
-      if (Math.abs(w.x - m.x) < 8 && w.y > m.y - 16 && w.y < m.y + 4) {
-        P.target = { kind: "mob", m };
-        P.dest = null;
-        P.gather = null;
-        moveMarker = null;
+    // 1) UI hotspots
+    for (const hsp of hotspots) {
+      if (sx >= hsp.x && sx < hsp.x + hsp.w && sy >= hsp.y && sy < hsp.y + hsp.h) {
+        hsp.fn();
         return;
       }
     }
-    // tree?
-    for (const tr of world.trees) {
-      if (tr.stump) continue;
-      const cx = tr.tx * TILE + TILE / 2;
-      if (Math.abs(w.x - cx) < 8 && w.y > tr.ty * TILE + TILE - 27 && w.y < tr.ty * TILE + TILE + 2) {
-        P.gather = { kind: "tree", obj: tr };
-        P.target = null;
-        P.dest = null;
-        moveMarker = null;
-        return;
-      }
+    // 2) swallow clicks on an open panel background
+    const pr = ui.panelRect;
+    if (ui.panel && pr && sx >= pr.x && sx < pr.x + pr.w && sy >= pr.y && sy < pr.y + pr.h) return;
+    // 3) placement mode
+    if (ui.placing) {
+      if (cw() === game.home && tryPlace(game.home, P, ui.placing, w.x, w.y)) ui.placing = null;
+      else ui.placing = null;
+      return;
     }
-    // rock?
-    for (const rk of world.rocks) {
-      if (rk.depleted) continue;
-      const cx = rk.tx * TILE + TILE / 2;
-      const cy = rk.ty * TILE + TILE / 2;
-      if (Math.abs(w.x - cx) < 9 && Math.abs(w.y - cy) < 8) {
-        P.gather = { kind: "rock", obj: rk };
-        P.target = null;
-        P.dest = null;
-        moveMarker = null;
-        return;
-      }
-    }
-    // ground move
-    P.target = null;
-    P.gather = null;
-    P.dest = { x: w.x, y: w.y };
-    moveMarker = { x: w.x, y: w.y, t: 0.8 };
+    // 4) world
+    worldClick(w);
   },
 });
+
+function worldClick(w: Vec): void {
+  if (P.dead) return;
+  const world = cw();
+  for (const m of world.monsters) {
+    if (Math.abs(w.x - m.x) < 8 && w.y > m.y - 16 && w.y < m.y + 4) {
+      P.target = { kind: "mob", m };
+      P.dest = null;
+      P.gather = null;
+      moveMarker = null;
+      return;
+    }
+  }
+  for (const s of world.structures) {
+    if (s.key !== "dummy") continue;
+    const cx = s.tx * TILE + TILE / 2;
+    const cy = s.ty * TILE + TILE;
+    if (Math.abs(w.x - cx) < 8 && w.y > cy - 22 && w.y < cy + 3) {
+      P.target = { kind: "dummy", s };
+      P.dest = null;
+      P.gather = null;
+      moveMarker = null;
+      return;
+    }
+  }
+  for (const tr of world.trees) {
+    if (tr.stump) continue;
+    const cx = tr.tx * TILE + TILE / 2;
+    if (Math.abs(w.x - cx) < 8 && w.y > tr.ty * TILE + TILE - 27 && w.y < tr.ty * TILE + TILE + 2) {
+      P.gather = { kind: "tree", obj: tr };
+      P.target = null;
+      P.dest = null;
+      moveMarker = null;
+      return;
+    }
+  }
+  for (const rk of world.rocks) {
+    if (rk.depleted) continue;
+    const cx = rk.tx * TILE + TILE / 2;
+    const cy = rk.ty * TILE + TILE / 2;
+    if (Math.abs(w.x - cx) < 9 && Math.abs(w.y - cy) < 8) {
+      P.gather = { kind: "rock", obj: rk };
+      P.target = null;
+      P.dest = null;
+      moveMarker = null;
+      return;
+    }
+  }
+  P.target = null;
+  P.gather = null;
+  P.dest = { x: w.x, y: w.y };
+  moveMarker = { x: w.x, y: w.y, t: 0.8 };
+}
+
+const skillUp = (t: string): void => addFloat(cw(), P.x, P.y - 26, t, "#7dff9e");
 
 function update(dt: number): void {
   P.tpCd = Math.max(0, P.tpCd - dt);
@@ -120,9 +168,8 @@ function update(dt: number): void {
 
     if (P.dest) {
       const d = dist(P.x, P.y, P.dest.x, P.dest.y);
-      if (d < 3) {
-        P.dest = null;
-      } else {
+      if (d < 3) P.dest = null;
+      else {
         const vx = (P.dest.x - P.x) / d;
         const vy = (P.dest.y - P.y) / d;
         const ox = P.x;
@@ -136,22 +183,28 @@ function update(dt: number): void {
 
     P.atkCd -= dt;
 
-    // chase + auto-attack a monster target
-    if (P.target && P.target.kind === "mob") {
-      const m = P.target.m;
-      if (!world.monsters.includes(m)) {
+    // chase + auto-attack: monster or training dummy
+    if (P.target) {
+      const t = P.target;
+      if (t.kind === "mob" && !world.monsters.includes(t.m)) {
         P.target = null;
       } else {
-        const d = dist(P.x, P.y, m.x, m.y);
+        const cx = t.kind === "mob" ? t.m.x : t.s.tx * TILE + TILE / 2;
+        const cy = t.kind === "mob" ? t.m.y : t.s.ty * TILE + TILE;
+        const d = dist(P.x, P.y, cx, cy);
         if (d > 20) {
-          const vx = (m.x - P.x) / d;
-          const vy = (m.y - P.y) / d;
+          const vx = (cx - P.x) / d;
+          const vy = (cy - P.y) / d;
           moveEntity(world, P, vx * spd * dt, vy * spd * dt);
           P.bob += dt * 10;
           if (vx) P.face = vx < 0 ? -1 : 1;
         } else if (P.atkCd <= 0) {
           P.atkCd = P.atkRate;
-          if (playerAttack(world, P, m)) P.target = null;
+          if (t.kind === "mob") {
+            if (playerAttack(world, P, t.m)) P.target = null;
+          } else {
+            hitDummy(world, P, t.s);
+          }
         }
       }
     }
@@ -160,9 +213,8 @@ function update(dt: number): void {
     if (P.gather) {
       const g = P.gather;
       const done = g.kind === "tree" ? g.obj.stump : g.obj.depleted;
-      if (done) {
-        P.gather = null;
-      } else {
+      if (done) P.gather = null;
+      else {
         const o = g.obj;
         const cx = o.tx * TILE + TILE / 2;
         const cy = o.ty * TILE + TILE - 4;
@@ -179,11 +231,25 @@ function update(dt: number): void {
       }
     }
 
-    // slow regen
+    // regen — boosted near a garden
+    let nearGarden = false;
+    for (const s of world.structures)
+      if (s.key === "garden" && dist(P.x, P.y, s.tx * TILE + TILE, s.ty * TILE + TILE) < 42) nearGarden = true;
     P.regen += dt;
     if (P.regen > 2) {
       P.regen = 0;
-      if (P.hp < P.maxhp) P.hp = Math.min(P.maxhp, P.hp + 1);
+      if (P.hp < P.maxhp) {
+        const amt = nearGarden ? 3 : 1;
+        P.hp = Math.min(P.maxhp, P.hp + amt);
+        if (nearGarden) addFloat(world, P.x, P.y - 20, `+${amt}`, "#7dff9e");
+      }
+    }
+
+    // Speed trains passively
+    P.speedTrain += dt;
+    if (P.speedTrain > 4) {
+      P.speedTrain = 0;
+      addSkillXp("speed", 1, skillUp);
     }
 
     // loot pickup
@@ -197,27 +263,24 @@ function update(dt: number): void {
       }
     }
 
-    // portal contact
     if (P.tpCd <= 0 && dist(P.x, P.y, world.portal.x, world.portal.y) < 11) switchWorld(game);
   }
 
-  // monsters only act in the current world (Home has none)
   const tgt = { x: P.x, y: P.y, dead: P.dead };
   updateMonsters(world, dt, tgt, (m: Monster) => {
     const dd = MONSTER_DEFS[m.kind].dmg;
     hurtPlayer(world, P, rndi(dd[0], dd[1]));
   });
 
-  // respawns + resource regrowth in BOTH worlds
   for (const w of [game.home, game.wild]) {
     for (let i = w.respawns.length - 1; i >= 0; i--) {
       w.respawns[i].t -= dt;
       if (w.respawns[i].t <= 0) {
-        // Home Isle is safe, so a stray respawn entry there is simply discarded.
         if (!w.safe) spawnMonster(w, w.respawns[i].kind);
         w.respawns.splice(i, 1);
       }
     }
+    for (const s of w.structures) if (s.hurtT) s.hurtT = Math.max(0, s.hurtT - dt);
     tickRegrowth(w, dt, P.x, P.y, w === world);
   }
 
@@ -284,6 +347,24 @@ function drawMob(m: Monster): void {
   drawBar(m.x, m.y - m.spr.height - 3, m.hp / m.maxhp);
 }
 
+function drawStructure(s: Structure): void {
+  const spr = structSprite(s.key);
+  const baseY = s.ty * TILE + (s.key === "dummy" ? TILE : TILE * 2);
+  const cx = s.key === "dummy" ? s.tx * TILE + TILE / 2 : s.tx * TILE + TILE;
+  const x = Math.floor(cx - spr.width / 2 - cam.x);
+  const wob = s.hurtT && s.hurtT > 0 ? (Math.sin(waveT * 40) > 0 ? 1 : -1) : 0;
+  vctx.fillStyle = "rgba(0,0,0,.2)";
+  vctx.fillRect(x + 2, Math.floor(baseY - 3 - cam.y), spr.width - 4, 3);
+  vctx.drawImage(spr, x + wob, Math.floor(baseY - spr.height - cam.y));
+  if (s.key === "forge") {
+    const fl = 0.4 + 0.4 * Math.abs(Math.sin(waveT * 7 + s.anim));
+    vctx.globalAlpha = fl;
+    vctx.fillStyle = "#ff9b3e";
+    vctx.fillRect(x + 10, Math.floor(baseY - spr.height - cam.y) + 19, 7, 4);
+    vctx.globalAlpha = 1;
+  }
+}
+
 function drawPlayer(): void {
   if (P.dead) {
     vctx.drawImage(SPR.bones, Math.floor(P.x - cam.x) - 4, Math.floor(P.y - cam.y) - 4);
@@ -315,6 +396,8 @@ interface Drawable {
 }
 
 function render(): void {
+  hotspots = [];
+  ui.panelRect = null;
   const world = cw();
   vctx.drawImage(world.mapCanvas, -Math.floor(cam.x), -Math.floor(cam.y));
 
@@ -328,7 +411,11 @@ function render(): void {
     if (ph < -0.4) vctx.fillRect(Math.floor(sx + 2 - ph * 3), Math.floor(sy + 11), 4, 1);
   }
 
-  // stumps & rubble (ground level)
+  // gardens (ground level)
+  for (const s of world.structures)
+    if (s.key === "garden") vctx.drawImage(STRUCTS.garden.spr, Math.floor(s.tx * TILE - cam.x), Math.floor(s.ty * TILE + 7 - cam.y));
+
+  // stumps & rubble
   for (const tr of world.trees)
     if (tr.stump) vctx.drawImage(SPR.stump, Math.floor(tr.tx * TILE + 4 - cam.x), Math.floor(tr.ty * TILE + 9 - cam.y));
   for (const rk of world.rocks)
@@ -342,12 +429,19 @@ function render(): void {
       if (s.built) continue;
       const x = Math.floor(s.tx * TILE - cam.x);
       const y = Math.floor(s.ty * TILE - cam.y);
-      vctx.globalAlpha = 0.35 + 0.3 * Math.sin(waveT * 3 + s.tx);
-      vctx.strokeStyle = "#e3b341";
+      const hover = ui.placing !== null && mouse.sx / scale + cam.x >= s.tx * TILE &&
+        mouse.sx / scale + cam.x < (s.tx + 2) * TILE && mouse.sy / scale + cam.y >= s.ty * TILE &&
+        mouse.sy / scale + cam.y < (s.ty + 2) * TILE;
+      vctx.globalAlpha = hover ? 0.9 : 0.35 + 0.3 * Math.sin(waveT * 3 + s.tx);
+      vctx.strokeStyle = ui.placing ? "#9fe8a8" : "#e3b341";
       vctx.lineWidth = 1;
       vctx.strokeRect(x + 0.5, y + 0.5, 31, 31);
-      vctx.fillStyle = "#e3b341";
+      vctx.fillStyle = vctx.strokeStyle;
       for (const [ox, oy] of [[0, 0], [29, 0], [0, 29], [29, 29]] as const) vctx.fillRect(x + ox, y + oy, 3, 3);
+      if (hover) {
+        vctx.globalAlpha = 0.18;
+        vctx.fillRect(x, y, 32, 32);
+      }
       vctx.globalAlpha = 1;
     }
   }
@@ -397,16 +491,23 @@ function render(): void {
       },
     });
   }
+  for (const s of world.structures) {
+    if (s.key === "garden") continue;
+    const baseY = s.ty * TILE + (s.key === "dummy" ? TILE : TILE * 2);
+    draws.push({ y: baseY, draw: () => drawStructure(s) });
+  }
   for (const m of world.monsters) draws.push({ y: m.y, draw: () => drawMob(m) });
   draws.push({ y: P.y, draw: drawPlayer });
   draws.sort((a, b) => a.y - b.y);
   for (const d of draws) d.draw();
 
-  // target marker (monsters)
-  if (P.target && P.target.kind === "mob") {
-    const m = P.target.m;
-    const x = Math.floor(m.x - cam.x);
-    const y = Math.floor(m.y - cam.y - 7);
+  // target marker (monster or dummy)
+  if (P.target) {
+    const t = P.target;
+    const cx = t.kind === "mob" ? t.m.x : t.s.tx * TILE + TILE / 2;
+    const cy = (t.kind === "mob" ? t.m.y : t.s.ty * TILE + TILE) - 7;
+    const x = Math.floor(cx - cam.x);
+    const y = Math.floor(cy - cam.y);
     vctx.strokeStyle = "#ff4b3a";
     vctx.lineWidth = 1;
     const r = 9;
@@ -421,7 +522,6 @@ function render(): void {
     }
     vctx.stroke();
   }
-  // gather marker (green box)
   if (P.gather) {
     const o = P.gather.obj;
     const x = Math.floor(o.tx * TILE + TILE / 2 - cam.x);
@@ -433,7 +533,6 @@ function render(): void {
 
   drawFloats(vctx, world, cam.x, cam.y);
 
-  // teleport flash
   if (game.tpFlash > 0) {
     vctx.globalAlpha = game.tpFlash * 0.8;
     vctx.fillStyle = "#bfeee6";
@@ -441,37 +540,16 @@ function render(): void {
     vctx.globalAlpha = 1;
   }
 
-  // banner + zone label
-  vctx.font = "bold 8px monospace";
-  vctx.textAlign = "left";
-  vctx.fillStyle = "rgba(0,0,0,.6)";
-  vctx.fillText(`${world.name} · click tree/rock to gather · portal to travel`, 9, 15);
-  vctx.fillStyle = "#cfe8d2";
-  vctx.fillText(`${world.name} · click tree/rock to gather · portal to travel`, 8, 14);
-
-  if (game.zoneFlash.t > 0) {
-    vctx.globalAlpha = clamp(game.zoneFlash.t, 0, 1);
-    vctx.textAlign = "center";
-    vctx.font = "bold 14px monospace";
-    vctx.fillStyle = "#ffe9a8";
-    vctx.fillText(game.zoneFlash.text, VIEW_W / 2, 40);
-    vctx.globalAlpha = 1;
-  }
-
-  if (P.dead) {
-    vctx.fillStyle = "rgba(20,10,10,.45)";
-    vctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    vctx.textAlign = "center";
-    vctx.font = "bold 20px monospace";
-    vctx.fillStyle = "#ff6a5e";
-    vctx.fillText("You died", VIEW_W / 2, VIEW_H / 2 - 6);
-    vctx.font = "bold 8px monospace";
-    vctx.fillStyle = "#f3eedd";
-    vctx.fillText(`respawning at Home Isle in ${Math.ceil(P.deadT)}...`, VIEW_W / 2, VIEW_H / 2 + 12);
-  }
-
+  // blit world, then HUD + panels at screen resolution
   sctx.imageSmoothingEnabled = false;
   sctx.drawImage(view, 0, 0, VIEW_W * scale, VIEW_H * scale);
+
+  const hud: HudCtx = { ctx: sctx, scale, screenW: screen.width, screenH: screen.height };
+  drawHud(hud, game, P);
+  drawPanels({
+    hud, ui, player: P, mouse, hotspots,
+    startPlacing: (key: StructKey) => { ui.placing = key; ui.panel = null; beep(400, 0.06, "triangle", 0.05); },
+  });
 }
 
 function frame(now: number): void {
