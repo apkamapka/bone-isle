@@ -57,7 +57,7 @@ let waveT = 0;
 let saveTimer = 0;
 let last = performance.now();
 
-const ui: UiState = { panel: null, placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", panelRect: null };
+const ui: UiState = { panel: null, placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", panelRect: null, offset: { x: 0, y: 0 }, titleBar: null, dragging: false };
 const mouse = { sx: 0, sy: 0 };
 let hotspots: Hotspot[] = [];
 
@@ -69,6 +69,8 @@ function togglePanel(which: PanelKind): void {
   ui.loot = null;
   ui.npc = null;
   ui.panel = ui.panel === which ? null : which;
+  ui.offset.x = 0;
+  ui.offset.y = 0;
 }
 
 /* ---------------- panel actions ---------------- */
@@ -215,9 +217,63 @@ initInput(screen, {
   onPanel: togglePanel,
   onSpell: (i) => doSpell(i),
   onEscape: () => { ui.panel = null; ui.placing = null; ui.loot = null; ui.npc = null; },
-  onClick: ({ sx, sy }) => handleWorldTap(sx, sy),
+  onClick: ({ sx, sy, button }) => {
+    if (button === 2) {
+      // right-click: pure "walk here", ignore targets (Tibia-style)
+      if (P.dead || ui.dragging) return;
+      if (ui.panel || ui.placing) return;
+      const w: Vec = { x: sx / scale + cam.x, y: sy / scale + cam.y };
+      P.dest = { x: w.x, y: w.y };
+      P.target = null; P.gather = null;
+      moveMarker = { x: w.x, y: w.y, t: 0.5 };
+      return;
+    }
+    handleWorldTap(sx, sy);
+  },
 });
 if (isTouchDevice()) initTouch(screen, handleWorldTap);
+
+// Right-click: suppress the browser's context menu so it never interrupts play.
+screen.addEventListener("contextmenu", (e) => e.preventDefault());
+
+// Drag any open panel by grabbing its title bar (works with mouse, pen, touch).
+let drag: { gx: number; gy: number; ox: number; oy: number; baseX: number; baseY: number; w: number; h: number } | null = null;
+const toScreen = (e: PointerEvent): { x: number; y: number } => {
+  const r = screen.getBoundingClientRect();
+  const kx = r.width ? screen.width / r.width : 1;
+  const ky = r.height ? screen.height / r.height : 1;
+  return { x: (e.clientX - r.left) * kx, y: (e.clientY - r.top) * ky };
+};
+screen.addEventListener("pointerdown", (e) => {
+  if (!ui.panel || !ui.titleBar || !ui.panelRect) return;
+  const s = toScreen(e);
+  const tb = ui.titleBar;
+  if (s.x >= tb.x && s.x < tb.x + tb.w && s.y >= tb.y && s.y < tb.y + tb.h) {
+    const pr = ui.panelRect;
+    drag = { gx: s.x, gy: s.y, ox: ui.offset.x, oy: ui.offset.y, baseX: pr.x - ui.offset.x, baseY: pr.y - ui.offset.y, w: pr.w, h: pr.h };
+    ui.dragging = true;
+    try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+    e.preventDefault();
+  }
+});
+screen.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const s = toScreen(e);
+  let nx = drag.ox + (s.x - drag.gx);
+  let ny = drag.oy + (s.y - drag.gy);
+  // keep at least a strip of the panel on screen so it stays grabbable
+  const keep = 60 * scale;
+  const left = clamp(drag.baseX + nx, keep - drag.w, screen.width - keep);
+  const top = clamp(drag.baseY + ny, 0, screen.height - 20 * scale);
+  nx = left - drag.baseX;
+  ny = top - drag.baseY;
+  ui.offset.x = nx;
+  ui.offset.y = ny;
+  e.preventDefault();
+});
+const endDrag = (): void => { drag = null; ui.dragging = false; };
+addEventListener("pointerup", endDrag);
+addEventListener("pointercancel", endDrag);
 
 function worldClick(w: Vec): void {
   if (P.dead) return;
@@ -246,12 +302,15 @@ function worldClick(w: Vec): void {
       return;
     }
   }
-  // structures (dummy to hit, forge/library to use)
+  // structures (dummy to hit, forge/library to use).
+  // Sprites are drawn centered on the 2x2 pad, bottom at ty*TILE + 2*TILE,
+  // so the hitbox must use that same anchor (generously sized).
   for (const s of world.structures) {
-    const cx = s.tx * TILE + TILE / 2;
-    const cy = s.ty * TILE + TILE;
-    if (Math.abs(w.x - cx) < 12 && w.y > cy - 24 && w.y < cy + 4) {
+    const cx = s.tx * TILE + TILE;        // pad center x
+    const baseY = s.ty * TILE + TILE * 2; // sprite base y
+    if (Math.abs(w.x - cx) < 16 && w.y > baseY - 30 && w.y < baseY + 4) {
       if (s.key === "dummy") P.target = { kind: "dummy", s };
+      else if (s.key === "garden") { continue; } // walk-through: ignore clicks
       else P.target = { kind: "structure", s };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
@@ -303,7 +362,8 @@ function targetPoint(): Vec | null {
   if (t.kind === "mob") return { x: t.m.x, y: t.m.y };
   if (t.kind === "corpse") return { x: t.c.x, y: t.c.y };
   if (t.kind === "npc") return { x: t.n.x, y: t.n.y };
-  return { x: t.s.tx * TILE + TILE / 2, y: t.s.ty * TILE + TILE / 2 };
+  // structure: stand just below the sprite base (the pad's lower edge)
+  return { x: t.s.tx * TILE + TILE, y: t.s.ty * TILE + TILE * 2 - 2 };
 }
 
 function gatherPoint(): Vec | null {

@@ -33,6 +33,11 @@ export interface UiState {
   npc: Npc | null;
   shopTab: "buy" | "sell";
   panelRect: { x: number; y: number; w: number; h: number } | null;
+  /** User drag offset applied to whichever panel is open. */
+  offset: { x: number; y: number };
+  /** The draggable title-bar hitbox of the open panel (screen px). */
+  titleBar: { x: number; y: number; w: number; h: number } | null;
+  dragging: boolean;
 }
 
 export interface PanelActions {
@@ -71,7 +76,16 @@ function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, ti
   ctx.fillStyle = "#caa23a";
   ctx.fillRect(x, y + 13 * S, w, S);
   hudText(p.hud, title, x + w / 2, y + 7 * S, 9 * S, "#ffe9a8", "center", true);
+  // grip dots hinting the title bar is draggable
+  ctx.fillStyle = "rgba(255,233,168,.5)";
+  for (let i = 0; i < 3; i++) {
+    ctx.fillRect(x + 6 * S + i * 3 * S, y + 4 * S, S, S);
+    ctx.fillRect(x + 6 * S + i * 3 * S, y + 8 * S, S, S);
+    ctx.fillRect(x + w - 12 * S + i * 3 * S, y + 4 * S, S, S);
+    ctx.fillRect(x + w - 12 * S + i * 3 * S, y + 8 * S, S, S);
+  }
   p.ui.panelRect = { x, y, w, h };
+  p.ui.titleBar = { x, y, w, h: 14 * S };
 }
 
 function hovering(p: PanelInput, x: number, y: number, w: number, h: number): boolean {
@@ -107,8 +121,8 @@ function drawBuild(p: PanelInput): void {
   const w = 246 * S;
   const rowH = 36 * S;
   const h = 20 * S + STRUCT_KEYS.length * rowH + 22 * S;
-  const x = (screenW - w) / 2;
-  const y = (screenH - h) / 2;
+  const x = (screenW - w) / 2 + p.ui.offset.x;
+  const y = (screenH - h) / 2 + p.ui.offset.y;
   goldPanel(p, x, y, w, h, "BUILD — choose a structure");
   let ry = y + 18 * S;
   for (const key of STRUCT_KEYS) {
@@ -148,8 +162,8 @@ function drawSkills(p: PanelInput): void {
   const w = 216 * S;
   const rows = Object.keys(skills) as (keyof typeof skills)[];
   const h = 20 * S + rows.length * 26 * S + 10 * S;
-  const x = screenW - w - 8 * S;
-  const y = (screenH - h) / 2;
+  const x = screenW - w - 8 * S + p.ui.offset.x;
+  const y = (screenH - h) / 2 + p.ui.offset.y;
   goldPanel(p, x, y, w, h, "SKILLS");
   let ry = y + 20 * S;
   for (const key of rows) {
@@ -195,8 +209,8 @@ function drawEquip(p: PanelInput): void {
   const gridW = slot * 3 + gap * 2;
   const w = gridW + 28 * S;
   const h = 20 * S + slot * 3 + gap * 2 + 92 * S;
-  const x = screenW - w - 8 * S;
-  const y = (screenH - h) / 2;
+  const x = screenW - w - 8 * S + p.ui.offset.x;
+  const y = (screenH - h) / 2 + p.ui.offset.y;
   goldPanel(p, x, y, w, h, "EQUIPMENT");
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
@@ -257,8 +271,8 @@ function drawBag(p: PanelInput): void {
   const gridW = cols * cell + (cols - 1) * gap;
   const w = gridW + 24 * S;
   const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S;
-  const x = (screenW - w) / 2;
-  const y = (screenH - h) / 2;
+  const x = (screenW - w) / 2 + p.ui.offset.x;
+  const y = (screenH - h) / 2 + p.ui.offset.y;
   goldPanel(p, x, y, w, h, "BACKPACK");
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
@@ -298,8 +312,8 @@ function drawForge(p: PanelInput): void {
   const w = 280 * S;
   const rowH = 26 * S;
   const h = 20 * S + RECIPES.length * rowH + 20 * S;
-  const x = (screenW - w) / 2;
-  const y = (screenH - h) / 2;
+  const x = (screenW - w) / 2 + p.ui.offset.x;
+  const y = (screenH - h) / 2 + p.ui.offset.y;
   goldPanel(p, x, y, w, h, "FORGE — craft gear");
   let ry = y + 18 * S;
   for (const r of RECIPES) {
@@ -331,8 +345,8 @@ function drawSpellbook(p: PanelInput): void {
   const unlocked = spellsUnlocked(game.worlds.home);
   const rowH = 30 * S;
   const h = 20 * S + SPELLS.length * rowH + 22 * S;
-  const x = (screenW - w) / 2;
-  const y = (screenH - h) / 2;
+  const x = (screenW - w) / 2 + p.ui.offset.x;
+  const y = (screenH - h) / 2 + p.ui.offset.y;
   goldPanel(p, x, y, w, h, "SPELLBOOK");
   if (!unlocked) {
     hudText(hud, "Build a Library on Home Isle", x + w / 2, y + h / 2 - 6 * S, 9 * S, "#d96a5a", "center", true);
@@ -370,8 +384,8 @@ function drawLoot(p: PanelInput): void {
   const rowH = 22 * S;
   const nRows = c.items.length + (c.gold > 0 ? 1 : 0);
   const h = 20 * S + Math.max(1, nRows) * rowH + 26 * S;
-  const x = (screenW - w) / 2;
-  const y = (screenH - h) / 2;
+  const x = (screenW - w) / 2 + p.ui.offset.x;
+  const y = (screenH - h) / 2 + p.ui.offset.y;
   goldPanel(p, x, y, w, h, "CORPSE — loot");
   let ry = y + 18 * S;
   if (nRows === 0) {
@@ -419,8 +433,8 @@ function drawShop(p: PanelInput): void {
   const rowH = 24 * S;
   const rows = shop.entries.filter((e) => (ui.shopTab === "buy" ? e.buy > 0 : e.sell > 0));
   const h = 34 * S + Math.max(1, rows.length) * rowH + 24 * S;
-  const x = (screenW - w) / 2;
-  const y = (screenH - h) / 2;
+  const x = (screenW - w) / 2 + p.ui.offset.x;
+  const y = (screenH - h) / 2 + p.ui.offset.y;
   goldPanel(p, x, y, w, h, npc.name);
   const tabW = 60 * S;
   (["buy", "sell"] as const).forEach((tab, i) => {
@@ -474,8 +488,8 @@ function drawQuests(p: PanelInput): void {
   const w = 320 * S;
   const rowH = 40 * S;
   const h = 20 * S + quests.length * rowH + 16 * S;
-  const x = (screenW - w) / 2;
-  const y = (screenH - h) / 2;
+  const x = (screenW - w) / 2 + p.ui.offset.x;
+  const y = (screenH - h) / 2 + p.ui.offset.y;
   goldPanel(p, x, y, w, h, "QUEST LOG");
   let ry = y + 18 * S;
   for (const q of quests) {

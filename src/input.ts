@@ -27,7 +27,7 @@ export type PanelName = "build" | "skills" | "equip" | "bag" | "quest";
 
 export interface InputHandlers {
   toWorld: (sx: number, sy: number) => Vec;
-  onClick: (screen: { sx: number; sy: number }, world: Vec) => void;
+  onClick: (screen: { sx: number; sy: number; button: number }, world: Vec) => void;
   onMove?: (sx: number, sy: number) => void;
   onPanel: (which: PanelName) => void;
   onSpell: (index: number) => void;
@@ -77,6 +77,6 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     const r = canvas.getBoundingClientRect();
     const sx = e.clientX - r.left;
     const sy = e.clientY - r.top;
-    h.onClick({ sx, sy }, h.toWorld(sx, sy));
+    h.onClick({ sx, sy, button: e.button }, h.toWorld(sx, sy));
   });
 }
