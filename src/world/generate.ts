@@ -1,31 +1,42 @@
 /**
  * Procedural island generation and static map-canvas baking.
- * Produces an organic island: grass interior, sandy coast, ruined walls,
- * a teleport portal, optional build pads, plus trees/rocks/decor.
+ * Deterministic per seed (uses the world RNG from util.ts) so saved games
+ * regenerate the exact same islands. Visual pixel jitter stays random.
  */
-import { TILE, MAP_W, MAP_H, CENTER_X, CENTER_Y } from "../config.ts";
-import { rnd, rndi, dist } from "../util.ts";
+import { TILE } from "../config.ts";
+import { wrnd, wrndi, rnd, rndi, dist } from "../util.ts";
 import { SPR, bakeTree } from "../gfx/sprites.ts";
 import { Tile } from "./types.ts";
-import type { World, WorldOpts, Vec } from "./types.ts";
+import type { World, WorldOpts, Vec, NpcKey } from "./types.ts";
+
+const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement]> = [
+  ["smith", "Borin the Smith", SPR.npcSmith],
+  ["herbalist", "Mira the Herbalist", SPR.npcHerbalist],
+  ["elder", "Elder Oswin", SPR.npcElder],
+];
 
 export function makeWorld(opts: WorldOpts): World {
-  const a1 = rnd(0, 6.28);
-  const a2 = rnd(0, 6.28);
-  const a3 = rnd(0, 6.28);
+  const W = opts.w;
+  const H = opts.h;
+  const CX = W / 2;
+  const CY = H / 2;
+  const a1 = wrnd(0, 6.28);
+  const a2 = wrnd(0, 6.28);
+  const a3 = wrnd(0, 6.28);
+  const r0 = Math.min(W, H * 1.32) * 0.29;
   const landR = (th: number): number =>
-    12.6 * (1 + 0.10 * Math.sin(3 * th + a1) + 0.07 * Math.sin(5 * th + a2) + 0.05 * Math.sin(8 * th + a3));
+    r0 * (1 + 0.10 * Math.sin(3 * th + a1) + 0.07 * Math.sin(5 * th + a2) + 0.05 * Math.sin(8 * th + a3));
 
   const tile: Tile[][] = [];
   const solid: boolean[][] = [];
 
   // base terrain ring
-  for (let y = 0; y < MAP_H; y++) {
+  for (let y = 0; y < H; y++) {
     tile[y] = [];
     solid[y] = [];
-    for (let x = 0; x < MAP_W; x++) {
-      const dx = x - CENTER_X;
-      const dy = (y - CENTER_Y) * 1.32;
+    for (let x = 0; x < W; x++) {
+      const dx = x - CX;
+      const dy = (y - CY) * 1.32;
       const d = Math.hypot(dx, dy);
       const th = Math.atan2(dy, dx);
       const r = landR(th);
@@ -33,8 +44,8 @@ export function makeWorld(opts: WorldOpts): World {
     }
   }
   // grass touching water becomes sand (clean coastline)
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
       if (tile[y][x] !== Tile.Grass) continue;
       for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
         if ((tile[y + oy]?.[x + ox] ?? Tile.Grass) === Tile.Water) {
@@ -44,39 +55,48 @@ export function makeWorld(opts: WorldOpts): World {
       }
     }
   }
-  // ruined stone walls
-  const wallSets = [
-    { ox: Math.floor(CENTER_X) - 7, oy: Math.floor(CENTER_Y) - 4, cells: [[0, 0], [1, 0], [2, 0], [3, 0], [3, 1], [3, 2], [0, 1]] },
-    { ox: Math.floor(CENTER_X) + 6, oy: Math.floor(CENTER_Y) + 3, cells: [[0, 0], [0, 1], [0, 2], [1, 2]] },
-  ] as const;
-  for (const ws of wallSets) {
-    for (const [ox, oy] of ws.cells) {
-      const x = ws.ox + ox;
-      const y = ws.oy + oy;
+  // ruined stone walls, count scaled with island area
+  const wallCount = Math.max(2, Math.round((W * H) / 700));
+  for (let wsi = 0; wsi < wallCount; wsi++) {
+    const ox = Math.floor(CX) + wrndi(-Math.floor(r0 * 0.7), Math.floor(r0 * 0.7));
+    const oy = Math.floor(CY) + wrndi(-Math.floor(r0 * 0.5), Math.floor(r0 * 0.5));
+    const cells: ReadonlyArray<readonly [number, number]> =
+      wrand2() < 0.5
+        ? [[0, 0], [1, 0], [2, 0], [3, 0], [3, 1], [3, 2], [0, 1]]
+        : [[0, 0], [0, 1], [0, 2], [1, 2]];
+    for (const [cx, cy] of cells) {
+      const x = ox + cx;
+      const y = oy + cy;
       if (tile[y]?.[x] === Tile.Grass) tile[y][x] = Tile.Wall;
     }
   }
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
       solid[y][x] = tile[y][x] === Tile.Water || tile[y][x] === Tile.Wall;
     }
   }
 
   const w: World = {
+    key: opts.key,
     name: opts.name,
     safe: opts.safe,
+    w: W,
+    h: H,
     tile,
     solid,
     reserved: [],
     trees: [],
     rocks: [],
+    herbs: [],
     decos: [],
     monsters: [],
-    loot: [],
+    corpses: [],
+    ground: [],
+    npcs: [],
     respawns: [],
     structures: [],
     buildSpots: [],
-    portal: { x: CENTER_X * TILE, y: (CENTER_Y + 3) * TILE },
+    portals: [],
     coastWater: [],
     landR,
     mapCanvas: document.createElement("canvas"),
@@ -90,33 +110,39 @@ export function makeWorld(opts: WorldOpts): World {
   const grassFree = (x: number, y: number): boolean =>
     tile[y]?.[x] === Tile.Grass && !solid[y][x];
 
-  // portal: 3x3 clear grass, south of center
-  let portalSet = false;
-  for (let ry = 0; ry < 10 && !portalSet; ry++) {
-    for (let rx = -8; rx <= 8 && !portalSet; rx++) {
-      const x = Math.floor(CENTER_X) + rx;
-      const y = Math.floor(CENTER_Y) + 3 + ry;
-      let ok = true;
-      for (let j = -1; j <= 1; j++)
-        for (let i = -1; i <= 1; i++)
-          if (!grassFree(x + i, y + j)) ok = false;
-      if (ok) {
-        w.portal = { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 };
-        reserve(x, y, 3.2);
-        portalSet = true;
+  // portals: each needs a 3x3 clear grass patch; first south, then north, east
+  const portalDirs: ReadonlyArray<readonly [number, number]> = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+  opts.portals.forEach((pdef, pi) => {
+    const [dx, dy] = portalDirs[pi % portalDirs.length];
+    for (let rr = 3; rr < Math.max(W, H); rr++) {
+      let placed = false;
+      for (let sweep = -8; sweep <= 8 && !placed; sweep++) {
+        const x = Math.floor(CX) + dx * rr + (dy !== 0 ? sweep : 0);
+        const y = Math.floor(CY) + dy * rr + (dx !== 0 ? sweep : 0);
+        let ok = true;
+        for (let j = -1; j <= 1; j++)
+          for (let i = -1; i <= 1; i++)
+            if (!grassFree(x + i, y + j)) ok = false;
+        ok = ok && farFromReserved(x, y);
+        if (ok) {
+          w.portals.push({ x: x * TILE + TILE / 2, y: y * TILE + TILE / 2, dest: pdef.dest, label: pdef.label });
+          reserve(x, y, 3.6);
+          placed = true;
+        }
       }
+      if (placed) break;
     }
-  }
+  });
 
   // build pads (home only): 2x2 grass
   if (opts.buildSpots) {
-    for (let tries = 0; tries < 900 && w.buildSpots.length < 6; tries++) {
-      const x = rndi(4, MAP_W - 6);
-      const y = rndi(4, MAP_H - 6);
+    for (let tries = 0; tries < 1200 && w.buildSpots.length < 6; tries++) {
+      const x = wrndi(4, W - 6);
+      const y = wrndi(4, H - 6);
       let ok = grassFree(x, y) && grassFree(x + 1, y) && grassFree(x, y + 1) && grassFree(x + 1, y + 1);
       ok = ok && farFromReserved(x + 0.5, y + 0.5);
       ok = ok && w.buildSpots.every((s) => dist(x, y, s.tx, s.ty) >= 4);
-      ok = ok && dist(x, y, CENTER_X, CENTER_Y) > 2.5;
+      ok = ok && dist(x, y, CX, CY) > 2.5;
       if (ok) {
         w.buildSpots.push({ tx: x, ty: y, built: null });
         reserve(x + 0.5, y + 0.5, 3);
@@ -126,16 +152,33 @@ export function makeWorld(opts: WorldOpts): World {
 
   // helper: find a free grass tile away from reserved areas
   const place = (): Vec | null => {
-    for (let tries = 0; tries < 400; tries++) {
-      const x = rndi(3, MAP_W - 4);
-      const y = rndi(3, MAP_H - 4);
+    for (let tries = 0; tries < 600; tries++) {
+      const x = wrndi(3, W - 4);
+      const y = wrndi(3, H - 4);
       if (!grassFree(x, y)) continue;
       if (!farFromReserved(x, y)) continue;
-      if (dist(x, y, CENTER_X, CENTER_Y) < 3) continue;
+      if (dist(x, y, CX, CY) < 3) continue;
       return { x, y };
     }
     return null;
   };
+
+  // NPCs (town only): placed near the center on clear grass
+  if (opts.npcs) {
+    for (const [key, name, spr] of NPC_DATA) {
+      let spot: Vec | null = null;
+      for (let tries = 0; tries < 500 && !spot; tries++) {
+        const x = Math.floor(CX) + wrndi(-7, 7);
+        const y = Math.floor(CY) + wrndi(-5, 5);
+        if (grassFree(x, y) && farFromReserved(x, y)) spot = { x, y };
+      }
+      spot ??= place();
+      if (spot) {
+        w.npcs.push({ key, name, x: spot.x * TILE + TILE / 2, y: spot.y * TILE + TILE / 2, spr, bob: wrnd(0, 3) });
+        reserve(spot.x, spot.y, 2.4);
+      }
+    }
+  }
 
   for (let i = 0; i < opts.trees; i++) {
     const p = place();
@@ -153,6 +196,13 @@ export function makeWorld(opts: WorldOpts): World {
       reserve(p.x, p.y, 2.2);
     }
   }
+  for (let i = 0; i < opts.herbs; i++) {
+    const p = place();
+    if (p) {
+      w.herbs.push({ tx: p.x, ty: p.y, picked: false, respawnT: 0 });
+      reserve(p.x, p.y, 1.6);
+    }
+  }
   for (let i = 0; i < opts.mushrooms; i++) {
     const p = place();
     if (p) { w.decos.push({ spr: SPR.mushroom, tx: p.x, ty: p.y }); reserve(p.x, p.y, 1.6); }
@@ -166,22 +216,32 @@ export function makeWorld(opts: WorldOpts): World {
   return w;
 }
 
+/** Deterministic coin flip helper (kept separate for clarity). */
+import { wrand } from "../util.ts";
+function wrand2(): number {
+  return wrand();
+}
+
 /** Render the static terrain + decorations into world.mapCanvas once. */
 function bakeWorldCanvas(w: World, opts: WorldOpts): void {
+  const W = w.w;
+  const H = w.h;
+  const CX = W / 2;
+  const CY = H / 2;
   const mc = w.mapCanvas;
-  mc.width = MAP_W * TILE;
-  mc.height = MAP_H * TILE;
+  mc.width = W * TILE;
+  mc.height = H * TILE;
   const m = mc.getContext("2d")!;
   const gj = opts.grassShift ?? 0;
 
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
       const t0 = w.tile[y][x];
       const px = x * TILE;
       const py = y * TILE;
       if (t0 === Tile.Water) {
-        const dx = x - CENTER_X;
-        const dy = (y - CENTER_Y) * 1.32;
+        const dx = x - CX;
+        const dy = (y - CY) * 1.32;
         const deep = clamp01((Math.hypot(dx, dy) - w.landR(Math.atan2(dy, dx))) / 6);
         const c1 = [46, 143, 138];
         const c2 = [28, 96, 96];
@@ -227,8 +287,8 @@ function bakeWorldCanvas(w: World, opts: WorldOpts): void {
 
   // dark outline where sand meets water
   m.fillStyle = "#1d4b48";
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
       if (w.tile[y][x] !== Tile.Sand) continue;
       const px = x * TILE;
       const py = y * TILE;
@@ -240,8 +300,8 @@ function bakeWorldCanvas(w: World, opts: WorldOpts): void {
   }
   // dotted grass/sand boundary
   m.fillStyle = "rgba(90,110,50,.7)";
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
       if (w.tile[y][x] !== Tile.Grass) continue;
       const px = x * TILE;
       const py = y * TILE;
@@ -260,18 +320,18 @@ function bakeWorldCanvas(w: World, opts: WorldOpts): void {
     m.fillStyle = "rgba(0,0,0,.18)";
     m.fillRect(d.tx * TILE + 3, d.ty * TILE + TILE - 3, TILE - 6, 2);
   }
-  // portal stone ring base
-  const px = w.portal.x;
-  const py = w.portal.y;
-  m.fillStyle = "#6a7174";
-  for (let a = 0; a < 12; a++) {
-    const th = (a / 12) * 6.283;
-    m.fillRect(Math.round(px + Math.cos(th) * 12 - 1.5), Math.round(py + Math.sin(th) * 7 - 1), 3, 2);
-  }
-  m.fillStyle = "#3a4144";
-  for (let a = 0; a < 12; a += 2) {
-    const th = (a / 12) * 6.283 + 0.26;
-    m.fillRect(Math.round(px + Math.cos(th) * 12 - 1), Math.round(py + Math.sin(th) * 7), 2, 1);
+  // portal stone ring bases
+  for (const pt of w.portals) {
+    m.fillStyle = "#6a7174";
+    for (let a = 0; a < 12; a++) {
+      const th = (a / 12) * 6.283;
+      m.fillRect(Math.round(pt.x + Math.cos(th) * 12 - 1.5), Math.round(pt.y + Math.sin(th) * 7 - 1), 3, 2);
+    }
+    m.fillStyle = "#3a4144";
+    for (let a = 0; a < 12; a += 2) {
+      const th = (a / 12) * 6.283 + 0.26;
+      m.fillRect(Math.round(pt.x + Math.cos(th) * 12 - 1), Math.round(pt.y + Math.sin(th) * 7), 2, 1);
+    }
   }
 }
 

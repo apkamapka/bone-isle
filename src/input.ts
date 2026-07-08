@@ -1,4 +1,5 @@
-/** Keyboard + mouse input. Live key map, click + move tracking, panel keys. */
+/** Keyboard + mouse input. Live key map, click + move tracking, hotkeys. */
+import { touch } from "./ui/touch.ts";
 import type { Vec } from "./world/types.ts";
 
 const keys: Record<string, boolean> = {};
@@ -7,7 +8,7 @@ export function isDown(...names: string[]): boolean {
   return names.some((n) => keys[n]);
 }
 
-/** Directional input from WASD / arrow keys as a (possibly zero) vector. */
+/** Directional input from WASD / arrows plus the touch joystick. */
 export function moveAxis(): { dx: number; dy: number } {
   let dx = 0;
   let dy = 0;
@@ -15,19 +16,21 @@ export function moveAxis(): { dx: number; dy: number } {
   if (isDown("s", "arrowdown")) dy++;
   if (isDown("a", "arrowleft")) dx--;
   if (isDown("d", "arrowright")) dx++;
+  if (touch.active && (Math.abs(touch.jx) > 0.15 || Math.abs(touch.jy) > 0.15)) {
+    dx += touch.jx;
+    dy += touch.jy;
+  }
   return { dx, dy };
 }
 
+export type PanelName = "build" | "skills" | "equip" | "bag" | "quest";
+
 export interface InputHandlers {
-  /** Convert a screen-space click to a world-space point. */
   toWorld: (sx: number, sy: number) => Vec;
-  /** A click at screen position (sx,sy) and the resolved world position. */
   onClick: (screen: { sx: number; sy: number }, world: Vec) => void;
-  /** Mouse moved to screen position (sx,sy). */
   onMove?: (sx: number, sy: number) => void;
-  /** Toggle a panel: "build" | "skills" | "equip". */
-  onPanel: (which: "build" | "skills" | "equip") => void;
-  /** Escape pressed. */
+  onPanel: (which: PanelName) => void;
+  onSpell: (index: number) => void;
   onEscape: () => void;
 }
 
@@ -48,6 +51,10 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     if (k === "b") h.onPanel("build");
     else if (k === "s") sDownAt = performance.now();
     else if (k === "e") h.onPanel("equip");
+    else if (k === "i") h.onPanel("bag");
+    else if (k === "q") h.onPanel("quest");
+    else if (k === "1") h.onSpell(0);
+    else if (k === "2") h.onSpell(1);
     else if (k === "escape") h.onEscape();
     keys[k] = true;
   });

@@ -1,16 +1,19 @@
-/** Combat: player hits monsters, monsters hit the player, drops & leveling. */
+/** Combat: player hits monsters, monsters hit the player, corpses & leveling. */
 import { rndi } from "../util.ts";
-import { expNeeded, MONSTER_RESPAWN_S } from "../config.ts";
+import { expNeeded, MONSTER_RESPAWN_S, CORPSE_DECAY_S } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
-import { MONSTER_DEFS } from "../entities/monsters.ts";
+import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
+import { ITEMS } from "../items.ts";
+import { refreshDerived } from "../entities/player.ts";
 import { addSkillXp, attackPower, defensePower } from "./skills.ts";
+import { onMonsterKilled } from "./quests.ts";
 import type { Player } from "../entities/player.ts";
 import type { World, Monster, Structure } from "../world/types.ts";
 
 /** Player strikes a monster. Returns true if the monster died. */
 export function playerAttack(world: World, p: Player, m: Monster): boolean {
-  const ap = attackPower(p.level);
+  const ap = attackPower(p.level, p.eq);
   const dmg = rndi(ap - 2, ap + 4);
   m.hp -= dmg;
   m.hurtT = 0.15;
@@ -26,7 +29,7 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
 
 /** Whack a training dummy: trains Sword Fighting, no death. */
 export function hitDummy(world: World, p: Player, s: Structure): void {
-  const ap = attackPower(p.level);
+  const ap = attackPower(p.level, p.eq);
   const dmg = rndi(ap - 2, ap + 4);
   s.hurtT = 0.2;
   s.anim = 0;
@@ -35,27 +38,39 @@ export function hitDummy(world: World, p: Player, s: Structure): void {
   beep(220, 0.05, "triangle", 0.05);
 }
 
-/** Resolve a monster death: xp, level-ups, loot drops, schedule respawn. */
-export function killMonster(world: World, p: Player, m: Monster): void {
-  const d = MONSTER_DEFS[m.kind];
-  beep(220, 0.18, "sawtooth", 0.05, -160);
-
-  p.exp += d.exp;
-  addFloat(world, p.x, p.y - 18, `+${d.exp} xp`, "#caa6ff");
+/** Grant xp and process any level-ups. */
+export function grantExp(world: World, p: Player, exp: number): void {
+  p.exp += exp;
+  addFloat(world, p.x, p.y - 18, `+${exp} xp`, "#caa6ff");
   while (p.exp >= p.expNext) {
     p.exp -= p.expNext;
     p.level++;
     p.expNext = expNeeded(p.level);
-    p.maxhp += 20;
+    refreshDerived(p);
     p.hp = p.maxhp;
+    p.mana = p.maxmana;
     addFloat(world, p.x, p.y - 24, "LEVEL UP!", "#7dff9e");
     beep(440, 0.1, "square", 0.06);
   }
+}
 
-  const n = rndi(d.dropN[0], d.dropN[1]);
-  for (let i = 0; i < n; i++) {
-    world.loot.push({ type: d.drop, x: m.x + rndi(-6, 6), y: m.y + rndi(-4, 4), t: 0 });
-  }
+/** Resolve a monster death: xp, level-ups, a lootable corpse, schedule respawn. */
+export function killMonster(world: World, p: Player, m: Monster): void {
+  const d = MONSTER_DEFS[m.kind];
+  beep(220, 0.18, "sawtooth", 0.05, -160);
+  grantExp(world, p, d.exp);
+
+  const { items, gold } = rollLoot(m.kind);
+  world.corpses.push({
+    name: ITEMS[m.kind as keyof typeof ITEMS] ? m.kind : m.kind,
+    x: m.x,
+    y: m.y,
+    items,
+    gold,
+    t: CORPSE_DECAY_S,
+  });
+
+  onMonsterKilled(m.kind, (t) => addFloat(world, p.x, p.y - 32, t, "#ffe9a8"));
 
   const idx = world.monsters.indexOf(m);
   if (idx >= 0) world.monsters.splice(idx, 1);
@@ -65,7 +80,7 @@ export function killMonster(world: World, p: Player, m: Monster): void {
 /** Apply raw damage to the player. Returns true if this killed them. */
 export function hurtPlayer(world: World, p: Player, raw: number): boolean {
   if (p.dead) return false;
-  const dmg = Math.max(1, raw - defensePower());
+  const dmg = Math.max(1, raw - defensePower(p.eq));
   p.hp -= dmg;
   addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
   addFloat(world, p.x, p.y - 18, `-${dmg}`, "#ff6a5e");

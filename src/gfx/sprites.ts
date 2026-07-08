@@ -130,6 +130,146 @@ export const SPR = {
   eqRing: bake(["..cccc..", ".c....c.", ".c....c.", "..cccc.."]),
   eqLegs: bake([".pppppp.", ".pp..pp.", ".pp..pp.", ".pp..pp."]),
   eqBoots: bake(["..b.....", "..b.....", "..bbb...", "..bbbb.."]),
+  // --- new monsters ---
+  spider: bake([
+    "e..ee..e",
+    ".e.ee.e.",
+    "..eeee..",
+    "ee.rr.ee",
+    "..eeee..",
+    ".e.ee.e.",
+    "e..ee..e",
+  ]),
+  orc: bake([
+    "..GGGGGG..",
+    ".GGGGGGGG.",
+    ".GeGGGGeG.",
+    ".GGwGGwGG.",
+    "..GGGGGG..",
+    "b.tttttt.b",
+    ".bttttttb.",
+    "b.tttttt.b",
+    "..tttttt..",
+    "..GG..GG..",
+    "..bb..bb..",
+    ".bb....bb.",
+  ]),
+  ghost: bake([
+    "..mmmmmm..",
+    ".mmmmmmmm.",
+    ".memmmmem.",
+    ".mmmmmmmm.",
+    "mmmmmmmmmm",
+    "mmmmmmmmmm",
+    ".mmmmmmmm.",
+    ".m.mm.mm..",
+    "..m..m..m.",
+  ]),
+  troll: bake([
+    "...pppppp...",
+    "..pppppppp..",
+    "..pePppPep..",
+    "..pppppppp..",
+    "..pwpppwpp..",
+    "p..pppppp..p",
+    "ppbbbbbbbbpp",
+    "p.bbbbbbbb.p",
+    "..bbbbbbbb..",
+    "..bbbbbbbb..",
+    "..pp....pp..",
+    "..PP....PP..",
+    ".PPP....PPP.",
+  ]),
+  // --- NPCs ---
+  npcSmith: bake([
+    "..hhhhhh..",
+    ".hhhhhhhh.",
+    ".hssssssh.",
+    ".hsessesh.",
+    "..sshhss..",
+    ".MMMMMMMM.",
+    "sMMMMMMMMs",
+    ".MbbbbbbM.",
+    ".Mbbbbbbm.",
+    "..kkkkkk..",
+    ".bbbbbbbb.",
+    "..bb..bb..",
+    "..kk..kk..",
+  ]),
+  npcHerbalist: bake([
+    "..gggggg..",
+    ".gggggggg.",
+    ".gssssssg.",
+    ".gsessesg.",
+    "..ssssss..",
+    ".GGGGGGGG.",
+    "sGGGGGGGGs",
+    ".GgGGGGgG.",
+    ".GGGGGGGG.",
+    "..GGGGGG..",
+    ".GGGGGGGG.",
+    "..GG..GG..",
+    "..kk..kk..",
+  ]),
+  npcElder: bake([
+    "..wwwwww..",
+    ".wwwwwwww.",
+    ".wssssssw.",
+    ".wsessesw.",
+    "..ssWWss..",
+    ".WWWWWWWW.",
+    "sWWWWWWWWs",
+    ".WcWWWWcW.",
+    ".WWWWWWWW.",
+    "..WWWWWW..",
+    ".WWWWWWWW.",
+    "..WW..WW..",
+    "..kk..kk..",
+  ]),
+  // --- corpse + ground items ---
+  corpse: bake([
+    "...ww.....",
+    ".wWwwwW.w.",
+    "wwwwwwwwww",
+    ".WwwWWwwW.",
+    "..w....w..",
+  ]),
+  herb: bake([
+    ".g.g.",
+    "gGgGg",
+    ".ggg.",
+    "..G..",
+  ]),
+  silkIcon: bake([
+    ".mm..mm.",
+    "m..mm..m",
+    ".mm..mm.",
+    "m..mm..m",
+  ]),
+  meatIcon: bake([
+    ".rrrr..",
+    "rrrRrr.",
+    "rRrrrrw",
+    ".rrrr.w",
+  ]),
+  potionRed: bake([
+    "..ww..",
+    "..ww..",
+    ".rrrr.",
+    "rrRrrr",
+    "rrrrrr",
+    ".rrrr.",
+  ]),
+  potionBlue: bake([
+    "..ww..",
+    "..ww..",
+    ".MMMM.",
+    "MmMMMM",
+    "MMMMMM",
+    ".MMMM.",
+  ]),
+  swordIron: bake(["...m", "..mm", ".mm.", "mm..", "kk..", "b..."]),
+  swordBone: bake(["...w", "..ww", ".ww.", "ww..", "kk..", "c..."]),
 } as const;
 
 export type SpriteName = keyof typeof SPR;
@@ -255,4 +395,17 @@ export function bakeDummy(): HTMLCanvasElement {
   x.fillStyle = PAL.b; x.fillRect(4, 14, 6, 1);
   x.fillStyle = "#2b2017"; x.fillRect(6, 3, 1, 1); x.fillRect(8, 3, 1, 1);
   return c;
+}
+
+/** Icon lookup for item kinds (bag, corpse loot, shops). */
+import type { ItemKind } from "../items.ts";
+const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
+  wood: SPR.wood, stone: SPR.stoneIcon, bones: SPR.bones, herb: SPR.herb, silk: SPR.silkIcon,
+  mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed, mpPotion: SPR.potionBlue,
+  sword: SPR.sword, ironSword: SPR.swordIron, boneSword: SPR.swordBone,
+  helmet: SPR.eqHead, armor: SPR.eqBody, shieldItem: SPR.eqShield,
+  legs: SPR.eqLegs, boots: SPR.eqBoots, ring: SPR.eqRing, amulet: SPR.eqAmulet,
+};
+export function itemSprite(kind: ItemKind): HTMLCanvasElement {
+  return ITEM_SPR[kind];
 }

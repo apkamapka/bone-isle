@@ -1,5 +1,7 @@
-/** Tibia-style skills: levels that climb as you use them. */
+/** Tibia-style skills: levels that climb as you use them, plus gear bonuses. */
 import { beep } from "../audio.ts";
+import { gearStat } from "../items.ts";
+import type { Equipment } from "../items.ts";
 
 export type SkillKey = "sword" | "shield" | "magic" | "dist" | "speed";
 
@@ -8,14 +10,13 @@ export interface Skill {
   lv: number;
   pts: number;
   color: string;
-  /** Inactive skills are placeholders shown as "coming soon". */
   active: boolean;
 }
 
 export const skills: Record<SkillKey, Skill> = {
   sword: { name: "Sword Fighting", lv: 10, pts: 0, color: "#e1483b", active: true },
   shield: { name: "Shielding", lv: 10, pts: 0, color: "#5aa1e8", active: true },
-  magic: { name: "Magic Level", lv: 0, pts: 0, color: "#b07fe8", active: false },
+  magic: { name: "Magic Level", lv: 0, pts: 0, color: "#b07fe8", active: true },
   dist: { name: "Distance Fighting", lv: 10, pts: 0, color: "#6fc06a", active: false },
   speed: { name: "Speed", lv: 10, pts: 0, color: "#e3b341", active: true },
 };
@@ -26,7 +27,6 @@ export function skillNeed(s: Skill): number {
   return 20 + (s.lv - base) * 12;
 }
 
-/** Callback so the system can surface a "skill up!" float without importing fx→player. */
 export type SkillUpFx = (text: string) => void;
 
 /** Award xp to a skill; may trigger one or more level-ups. */
@@ -42,12 +42,15 @@ export function addSkillXp(key: SkillKey, n: number, onLevel?: SkillUpFx): void 
   }
 }
 
-/** Derived combat stats from skills + level. */
-export function attackPower(level: number): number {
-  return 6 + level + (skills.sword.lv - 10);
+/** Derived combat stats from skills + level + equipped gear. */
+export function attackPower(level: number, eq: Equipment): number {
+  return 6 + level + (skills.sword.lv - 10) + gearStat(eq, "atk");
 }
-export function defensePower(): number {
-  return Math.floor((skills.shield.lv - 10) / 2);
+export function defensePower(eq: Equipment): number {
+  return Math.floor((skills.shield.lv - 10) / 2) + gearStat(eq, "def");
+}
+export function magicPower(): number {
+  return 4 + skills.magic.lv * 2;
 }
 export function moveSpeedBonus(): number {
   return (skills.speed.lv - 10) * 2;
