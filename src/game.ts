@@ -3,10 +3,12 @@ import { makeWorld } from "./world/generate.ts";
 import { portalSpawn } from "./world/collision.ts";
 import { spawnMonster, MONSTER_KINDS } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
+import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
 import type { World, WorldKey } from "./world/types.ts";
 import type { Player } from "./entities/player.ts";
+import type { Bag } from "./items.ts";
 import type { MonsterKind } from "./world/types.ts";
 
 export interface Game {
@@ -15,6 +17,8 @@ export interface Game {
   /** The world the player is currently standing in. */
   current: World;
   player: Player;
+  /** Storage-chest contents, shared across all chests. */
+  stash: Bag;
   zoneFlash: { text: string; t: number };
   tpFlash: number;
 }
@@ -66,6 +70,7 @@ export function createGame(seed = (Math.random() * 1e9) | 0): Game {
     worlds,
     current: worlds.home,
     player,
+    stash: emptyStash(),
     zoneFlash: { text: "Home Isle  (safe)", t: 2.2 },
     tpFlash: 0,
   };

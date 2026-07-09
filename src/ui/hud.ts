@@ -130,21 +130,23 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
 
   // spell bar / hotkey hint (bottom-center) — desktop only; touch uses buttons
   if (!h.touch) {
-    if (spellsUnlocked(game.worlds.home)) {
-      let sx = screenW / 2 - 60 * S;
+    if (spellsUnlocked(game.current) || spellsUnlocked(game.worlds.home)) {
+      const bw = 58 * S;
+      const step = 62 * S;
+      let sx = screenW / 2 - (SPELLS.length * step - (step - bw)) / 2;
       const sy = screenH - pad - 20 * S;
       SPELLS.forEach((sp, i) => {
         const enough = p.mana >= sp.cost;
         ctx.fillStyle = enough ? "rgba(40,60,90,.85)" : "rgba(40,40,40,.7)";
-        ctx.fillRect(sx, sy, 58 * S, 16 * S);
+        ctx.fillRect(sx, sy, bw, 16 * S);
         ctx.strokeStyle = enough ? "#4f8ff0" : "#555";
         ctx.lineWidth = S;
-        ctx.strokeRect(sx + S / 2, sy + S / 2, 58 * S - S, 16 * S - S);
+        ctx.strokeRect(sx + S / 2, sy + S / 2, bw - S, 16 * S - S);
         hudText(h, `${i + 1} ${sp.name}`, sx + 4 * S, sy + 8 * S, 7 * S, enough ? "#dfe8ff" : "#888");
-        sx += 62 * S;
+        sx += step;
       });
     } else {
-      hudText(h, "[B]uild [S]kills [E]quip [I]nv [Q]uests", screenW / 2, screenH - pad - 5 * S, 8 * S, "#e3d9b8", "center", true);
+      hudText(h, "[B]uild [S]kills [E]quip [I]nv [Q]uests · click a Chest to stash", screenW / 2, screenH - pad - 5 * S, 8 * S, "#e3d9b8", "center", true);
     }
   }
 

@@ -15,7 +15,7 @@ import type { Game } from "../game.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
-  | "forge" | "spell" | "loot" | "shop" | null;
+  | "forge" | "spell" | "loot" | "shop" | "stash";
 
 export interface Hotspot {
   x: number;
@@ -25,18 +25,25 @@ export interface Hotspot {
   fn: () => void;
 }
 
+/** One open, draggable window. Multiple can be open at once (z-order = array order). */
+export interface PanelWindow {
+  kind: PanelKind;
+  /** User drag offset from the panel's default anchor. */
+  offset: { x: number; y: number };
+  /** Panel body rect this frame (screen px); set during draw. */
+  rect: { x: number; y: number; w: number; h: number } | null;
+  /** Draggable title-bar hitbox this frame (screen px); set during draw. */
+  titleBar: { x: number; y: number; w: number; h: number } | null;
+}
+
 export interface UiState {
-  panel: PanelKind;
+  /** Open windows, back-to-front. The last one is drawn on top and grabs input first. */
+  windows: PanelWindow[];
   placing: StructKey | null;
   selSlot: EqSlot | null;
   loot: Corpse | null;
   npc: Npc | null;
   shopTab: "buy" | "sell";
-  panelRect: { x: number; y: number; w: number; h: number } | null;
-  /** User drag offset applied to whichever panel is open. */
-  offset: { x: number; y: number };
-  /** The draggable title-bar hitbox of the open panel (screen px). */
-  titleBar: { x: number; y: number; w: number; h: number } | null;
   dragging: boolean;
 }
 
@@ -52,7 +59,9 @@ export interface PanelActions {
   buy: (kind: ItemKind) => void;
   sell: (kind: ItemKind) => void;
   claim: (id: string) => void;
-  close: () => void;
+  deposit: (index: number) => void;
+  withdraw: (index: number) => void;
+  close: (kind: PanelKind) => void;
 }
 
 export interface PanelInput {
@@ -63,6 +72,8 @@ export interface PanelInput {
   mouse: { sx: number; sy: number };
   act: PanelActions;
   hotspots: Hotspot[];
+  /** The window currently being drawn (position, drag offset, hitboxes). */
+  win: PanelWindow;
 }
 
 function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, title: string): void {
@@ -83,13 +94,13 @@ function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, ti
     ctx.fillRect(x + 6 * S + i * 3 * S, y + 4 * S, S, S);
     ctx.fillRect(x + 6 * S + i * 3 * S, y + 8 * S, S, S);
   }
-  p.ui.panelRect = { x, y, w, h };
+  p.win.rect = { x, y, w, h };
   // close (X) button in the top-right of the title bar
   const bs = 13 * S;
   const bx = x + w - bs - 2 * S;
   const by = y + (14 * S - bs) / 2;
   // draggable region is the title bar minus the close button
-  p.ui.titleBar = { x, y, w: w - bs - 6 * S, h: 14 * S };
+  p.win.titleBar = { x, y, w: w - bs - 6 * S, h: 14 * S };
   ctx.fillStyle = "rgba(160,40,30,.9)";
   ctx.fillRect(bx, by, bs, bs);
   ctx.strokeStyle = "#ffcabf";
@@ -103,7 +114,8 @@ function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, ti
   ctx.moveTo(bx + bs - 3.5 * S, by + 3.5 * S);
   ctx.lineTo(bx + 3.5 * S, by + bs - 3.5 * S);
   ctx.stroke();
-  p.hotspots.push({ x: bx - 2 * S, y: by - 2 * S, w: bs + 4 * S, h: bs + 4 * S, fn: () => p.act.close() });
+  const kind = p.win.kind;
+  p.hotspots.push({ x: bx - 2 * S, y: by - 2 * S, w: bs + 4 * S, h: bs + 4 * S, fn: () => p.act.close(kind) });
 }
 
 function hovering(p: PanelInput, x: number, y: number, w: number, h: number): boolean {
@@ -115,20 +127,24 @@ function icon(p: PanelInput, spr: HTMLCanvasElement, x: number, y: number, sc: n
   p.hud.ctx.drawImage(spr, x, y, spr.width * sc, spr.height * sc);
 }
 
-export function drawPanels(p: PanelInput): void {
-  switch (p.ui.panel) {
-    case "build": drawBuild(p); break;
-    case "skills": drawSkills(p); break;
-    case "equip": drawEquip(p); break;
-    case "bag": drawBag(p); break;
-    case "forge": drawForge(p); break;
-    case "spell": drawSpellbook(p); break;
-    case "loot": drawLoot(p); break;
-    case "shop": drawShop(p); break;
-    case "quest": drawQuests(p); break;
-    default: break;
+export function drawPanels(base: Omit<PanelInput, "win">): void {
+  for (const win of base.ui.windows) {
+    const p: PanelInput = { ...base, win };
+    switch (win.kind) {
+      case "build": drawBuild(p); break;
+      case "skills": drawSkills(p); break;
+      case "equip": drawEquip(p); break;
+      case "bag": drawBag(p); break;
+      case "forge": drawForge(p); break;
+      case "spell": drawSpellbook(p); break;
+      case "loot": drawLoot(p); break;
+      case "shop": drawShop(p); break;
+      case "quest": drawQuests(p); break;
+      case "stash": drawStash(p); break;
+      default: break;
+    }
   }
-  if (p.ui.placing) drawPlacingHint(p);
+  if (base.ui.placing) drawPlacingHint(base);
 }
 
 /* ---------------- Build ---------------- */
@@ -139,8 +155,8 @@ function drawBuild(p: PanelInput): void {
   const w = 246 * S;
   const rowH = 36 * S;
   const h = 20 * S + STRUCT_KEYS.length * rowH + 22 * S;
-  const x = (screenW - w) / 2 + p.ui.offset.x;
-  const y = (screenH - h) / 2 + p.ui.offset.y;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "BUILD — choose a structure");
   let ry = y + 18 * S;
   for (const key of STRUCT_KEYS) {
@@ -165,7 +181,7 @@ function drawBuild(p: PanelInput): void {
   hudText(hud, "Click a glowing pad on Home Isle to place · [Esc] cancel", x + w / 2, y + h - 10 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 
-function drawPlacingHint(p: PanelInput): void {
+function drawPlacingHint(p: { hud: HudCtx; ui: UiState }): void {
   const { hud, ui } = p;
   const key = ui.placing;
   if (!key) return;
@@ -180,8 +196,8 @@ function drawSkills(p: PanelInput): void {
   const w = 216 * S;
   const rows = Object.keys(skills) as (keyof typeof skills)[];
   const h = 20 * S + rows.length * 26 * S + 10 * S;
-  const x = screenW - w - 8 * S + p.ui.offset.x;
-  const y = (screenH - h) / 2 + p.ui.offset.y;
+  const x = screenW - w - 8 * S + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "SKILLS");
   let ry = y + 20 * S;
   for (const key of rows) {
@@ -227,8 +243,8 @@ function drawEquip(p: PanelInput): void {
   const gridW = slot * 3 + gap * 2;
   const w = gridW + 28 * S;
   const h = 20 * S + slot * 3 + gap * 2 + 92 * S;
-  const x = screenW - w - 8 * S + p.ui.offset.x;
-  const y = (screenH - h) / 2 + p.ui.offset.y;
+  const x = screenW - w - 8 * S + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "EQUIPMENT");
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
@@ -289,8 +305,8 @@ function drawBag(p: PanelInput): void {
   const gridW = cols * cell + (cols - 1) * gap;
   const w = gridW + 24 * S;
   const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S;
-  const x = (screenW - w) / 2 + p.ui.offset.x;
-  const y = (screenH - h) / 2 + p.ui.offset.y;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "BACKPACK");
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
@@ -330,8 +346,8 @@ function drawForge(p: PanelInput): void {
   const w = 280 * S;
   const rowH = 26 * S;
   const h = 20 * S + RECIPES.length * rowH + 20 * S;
-  const x = (screenW - w) / 2 + p.ui.offset.x;
-  const y = (screenH - h) / 2 + p.ui.offset.y;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "FORGE — craft gear");
   let ry = y + 18 * S;
   for (const r of RECIPES) {
@@ -363,8 +379,8 @@ function drawSpellbook(p: PanelInput): void {
   const unlocked = spellsUnlocked(game.worlds.home);
   const rowH = 30 * S;
   const h = 20 * S + SPELLS.length * rowH + 22 * S;
-  const x = (screenW - w) / 2 + p.ui.offset.x;
-  const y = (screenH - h) / 2 + p.ui.offset.y;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "SPELLBOOK");
   if (!unlocked) {
     hudText(hud, "Build a Library on Home Isle", x + w / 2, y + h / 2 - 6 * S, 9 * S, "#d96a5a", "center", true);
@@ -402,8 +418,8 @@ function drawLoot(p: PanelInput): void {
   const rowH = 22 * S;
   const nRows = c.items.length + (c.gold > 0 ? 1 : 0);
   const h = 20 * S + Math.max(1, nRows) * rowH + 26 * S;
-  const x = (screenW - w) / 2 + p.ui.offset.x;
-  const y = (screenH - h) / 2 + p.ui.offset.y;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "CORPSE — loot");
   let ry = y + 18 * S;
   if (nRows === 0) {
@@ -451,8 +467,8 @@ function drawShop(p: PanelInput): void {
   const rowH = 24 * S;
   const rows = shop.entries.filter((e) => (ui.shopTab === "buy" ? e.buy > 0 : e.sell > 0));
   const h = 34 * S + Math.max(1, rows.length) * rowH + 24 * S;
-  const x = (screenW - w) / 2 + p.ui.offset.x;
-  const y = (screenH - h) / 2 + p.ui.offset.y;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, npc.name);
   const tabW = 60 * S;
   (["buy", "sell"] as const).forEach((tab, i) => {
@@ -506,8 +522,8 @@ function drawQuests(p: PanelInput): void {
   const w = 320 * S;
   const rowH = 40 * S;
   const h = 20 * S + quests.length * rowH + 16 * S;
-  const x = (screenW - w) / 2 + p.ui.offset.x;
-  const y = (screenH - h) / 2 + p.ui.offset.y;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "QUEST LOG");
   let ry = y + 18 * S;
   for (const q of quests) {
@@ -535,4 +551,71 @@ function drawQuests(p: PanelInput): void {
     }
     ry += rowH;
   }
+}
+
+/* ---------------- Storage chest (stash) ---------------- */
+
+function drawGrid(
+  p: PanelInput,
+  slots: ReadonlyArray<{ kind: ItemKind; n: number } | null>,
+  gx: number,
+  gy: number,
+  cols: number,
+  cell: number,
+  gap: number,
+  onClick: (index: number) => void,
+): void {
+  const { hud } = p;
+  const { ctx, scale: S } = hud;
+  slots.forEach((slot, i) => {
+    const cx = gx + (i % cols) * (cell + gap);
+    const cy = gy + Math.floor(i / cols) * (cell + gap);
+    const hov = hovering(p, cx, cy, cell, cell);
+    ctx.fillStyle = hov ? "rgba(202,162,58,.18)" : "rgba(40,32,20,.9)";
+    ctx.fillRect(cx, cy, cell, cell);
+    ctx.strokeStyle = "#6e571f";
+    ctx.lineWidth = S;
+    ctx.strokeRect(cx + S / 2, cy + S / 2, cell - S, cell - S);
+    if (slot) {
+      const spr = itemSprite(slot.kind);
+      const dw = spr.width * 2 * S;
+      const dh = spr.height * 2 * S;
+      icon(p, spr, cx + (cell - dw) / 2, cy + (cell - dh) / 2 - 2 * S, 2 * S);
+      if (slot.n > 1) hudText(hud, `${slot.n}`, cx + cell - 3 * S, cy + cell - 4 * S, 7 * S, "#ffe9a8", "right");
+      const idx = i;
+      p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => onClick(idx) });
+    }
+  });
+}
+
+function drawStash(p: PanelInput): void {
+  const { hud, player, game } = p;
+  const { ctx, scale: S, screenW, screenH } = hud;
+  const cols = 5;
+  const cell = 30 * S;
+  const gap = 4 * S;
+  const gridW = cols * cell + (cols - 1) * gap;
+  const stashRows = Math.ceil(game.stash.length / cols);
+  const bagRows = Math.ceil(player.bag.length / cols);
+  const w = gridW + 24 * S;
+  const headH = 12 * S;
+  const h = 20 * S + headH + stashRows * (cell + gap) + 14 * S + headH + bagRows * (cell + gap) + 10 * S;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
+  goldPanel(p, x, y, w, h, "STORAGE CHEST");
+  const gx = x + (w - gridW) / 2;
+  let gy = y + 18 * S;
+
+  hudText(hud, "Chest — click to take", x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
+  gy += headH;
+  drawGrid(p, game.stash, gx, gy, cols, cell, gap, (i) => p.act.withdraw(i));
+  gy += stashRows * (cell + gap) + 8 * S;
+
+  ctx.fillStyle = "#6e571f";
+  ctx.fillRect(x + 8 * S, gy, w - 16 * S, S);
+  gy += 8 * S;
+
+  hudText(hud, "Backpack — click to store", x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
+  gy += headH;
+  drawGrid(p, player.bag, gx, gy, cols, cell, gap, (i) => p.act.deposit(i));
 }

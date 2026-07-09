@@ -1,8 +1,8 @@
 /** Building system: structure catalog, affordability, placement. */
-import { TILE } from "../config.ts";
+import { TILE, LIBRARY_MANA_BONUS, GARDEN_HP_BONUS } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
-import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy } from "../gfx/sprites.ts";
+import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeChest } from "../gfx/sprites.ts";
 import { bagCount, removeItem } from "../items.ts";
 import { onStructureBuilt } from "./quests.ts";
 import type { ItemKind } from "../items.ts";
@@ -21,16 +21,28 @@ export interface StructDef {
   solid: boolean;
 }
 
-export type StructKey = "forge" | "library" | "garden" | "dummy";
+export type StructKey = "forge" | "library" | "garden" | "dummy" | "chest";
 
 export const STRUCTS: Record<StructKey, StructDef> = {
-  forge: { name: "Forge", cost: { wood: 20, stone: 15 }, spr: bakeForge(), desc: "Unlocks weapon & armor crafting", solid: true },
-  library: { name: "Library", cost: { wood: 15, stone: 10 }, spr: bakeLibrary(), desc: "Unlocks Heal & Fire Bolt spells", solid: true },
-  garden: { name: "Garden", cost: { wood: 10, herb: 4 }, spr: bakeGarden(), desc: "Regenerates HP while nearby", solid: false },
+  forge: { name: "Forge", cost: { wood: 20, stone: 15 }, spr: bakeForge(), desc: "Craft weapons, armor & potions", solid: true },
+  library: { name: "Library", cost: { wood: 15, stone: 10 }, spr: bakeLibrary(), desc: "Learn spells · +30 max mana", solid: true },
+  garden: { name: "Garden", cost: { wood: 10, herb: 4 }, spr: bakeGarden(), desc: "Regen HP & mana nearby · +15 max HP", solid: false },
   dummy: { name: "Training Dummy", cost: { wood: 8, stone: 5 }, spr: bakeDummy(), desc: "Attack it to train Sword Fighting", solid: true },
+  chest: { name: "Storage Chest", cost: { wood: 12, stone: 8 }, spr: bakeChest(), desc: "Stash items you don't want to carry", solid: true },
 };
 
-export const STRUCT_KEYS: StructKey[] = ["forge", "library", "garden", "dummy"];
+export const STRUCT_KEYS: StructKey[] = ["forge", "library", "garden", "dummy", "chest"];
+
+/** Passive max HP/mana bonuses from structures owned on Home Isle. */
+export function structureBonuses(home: World): { maxhp: number; maxmana: number } {
+  let maxhp = 0;
+  let maxmana = 0;
+  for (const s of home.structures) {
+    if (s.key === "library") maxmana += LIBRARY_MANA_BONUS;
+    if (s.key === "garden") maxhp += GARDEN_HP_BONUS;
+  }
+  return { maxhp, maxmana };
+}
 
 export function canAfford(bag: Player["bag"], cost: Cost): boolean {
   return (Object.entries(cost) as [ItemKind, number][]).every(([k, v]) => bagCount(bag, k) >= v);

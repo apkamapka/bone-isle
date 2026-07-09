@@ -2,10 +2,11 @@
 import { buildWorlds, populateWild, type Game } from "./game.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn } from "./world/collision.ts";
-import { applyStructureSolidity } from "./systems/building.ts";
+import { applyStructureSolidity, structureBonuses } from "./systems/building.ts";
+import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { quests } from "./systems/quests.ts";
-import { emptyBag, emptyEquipment } from "./items.ts";
+import { emptyBag, emptyStash, emptyEquipment } from "./items.ts";
 import type { Bag, Equipment, ItemKind } from "./items.ts";
 import type { WorldKey, Structure } from "./world/types.ts";
 
@@ -24,6 +25,7 @@ interface SaveData {
   skills: Record<SkillKey, { lv: number; pts: number }>;
   quests: { id: string; progress: number; done: boolean; claimed: boolean }[];
   structures: Record<WorldKey, Structure[]>;
+  stash?: Bag;
 }
 
 export function hasSave(): boolean {
@@ -57,6 +59,7 @@ export function saveGame(g: Game): void {
     skills: skillDump,
     quests: quests.map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
     structures: structDump,
+    stash: g.stash,
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -114,7 +117,8 @@ export function loadGame(): Game | null {
     if (q) { q.progress = qs.progress; q.done = qs.done; q.claimed = qs.claimed; }
   }
 
-  refreshDerived(player);
+  setActiveBonus(structureBonuses(worlds.home));
+  refreshDerived(player, structureBonuses(worlds.home));
   player.hp = Math.min(sp.hp, player.maxhp);
   player.mana = Math.min(sp.mana, player.maxmana);
 
@@ -124,6 +128,7 @@ export function loadGame(): Game | null {
     worlds,
     current,
     player,
+    stash: normalizeStash(data.stash),
     zoneFlash: { text: current.name + (current.safe ? "  (safe)" : "  (dangerous)"), t: 2 },
     tpFlash: 0,
   };
@@ -156,6 +161,19 @@ function normalizeEquipment(eq: unknown): Equipment {
     for (const slot of Object.keys(out) as (keyof Equipment)[]) {
       const v = (eq as Record<string, unknown>)[slot];
       if (typeof v === "string") out[slot] = v as ItemKind;
+    }
+  }
+  return out;
+}
+
+function normalizeStash(stash: unknown): Bag {
+  const out = emptyStash();
+  if (Array.isArray(stash)) {
+    for (let i = 0; i < out.length && i < stash.length; i++) {
+      const s = stash[i];
+      if (s && typeof s === "object" && "kind" in s && "n" in s) {
+        out[i] = { kind: (s as { kind: ItemKind }).kind, n: (s as { n: number }).n };
+      }
     }
   }
   return out;

@@ -2,7 +2,7 @@
  * Items: the full catalog, backpack stacking, equipment stats and
  * Forge crafting recipes. Pure data + logic — no world imports.
  */
-import { BAG_SIZE } from "./config.ts";
+import { BAG_SIZE, STASH_SIZE } from "./config.ts";
 
 export type ItemKind =
   // resources
@@ -74,6 +74,9 @@ export const EQ_SLOT_KEYS: readonly EqSlot[] = [
 export function emptyBag(): Bag {
   return new Array<ItemStack | null>(BAG_SIZE).fill(null);
 }
+export function emptyStash(): Bag {
+  return new Array<ItemStack | null>(STASH_SIZE).fill(null);
+}
 export function emptyEquipment(): Equipment {
   return { head: null, body: null, legs: null, boots: null, weapon: null, shield: null, ring: null, amulet: null };
 }
@@ -144,6 +147,7 @@ export interface Recipe {
   cost: Partial<Record<ItemKind, number>>;
 }
 export const RECIPES: readonly Recipe[] = [
+  { out: "sword",      cost: { wood: 3, stone: 4 } },
   { out: "ironSword",  cost: { wood: 4, stone: 10 } },
   { out: "boneSword",  cost: { bones: 16, stone: 6 } },
   { out: "helmet",     cost: { stone: 8 } },
@@ -151,6 +155,10 @@ export const RECIPES: readonly Recipe[] = [
   { out: "shieldItem", cost: { wood: 8, stone: 3 } },
   { out: "legs",       cost: { stone: 9, wood: 2 } },
   { out: "boots",      cost: { wood: 6, silk: 4 } },
+  { out: "ring",       cost: { stone: 6, bones: 8 } },
+  { out: "amulet",     cost: { bones: 12, silk: 6 } },
+  { out: "hpPotion",   cost: { herb: 3, mushroom: 2 } },
+  { out: "mpPotion",   cost: { herb: 3, silk: 2 } },
 ];
 
 export function canCraft(bag: Bag, r: Recipe): boolean {

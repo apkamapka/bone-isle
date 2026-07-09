@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, MANA_REGEN_PER_S } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, GARDEN_MANA_PER_S, MANA_REGEN_PER_S, RECALL_COST } from "./config.ts";
 import { moveEntity } from "./world/collision.ts";
 import { SPR } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
@@ -7,7 +7,8 @@ import { playerSpeed, refreshDerived } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster } from "./entities/monsters.ts";
 import { playerAttack, hitDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, structSprite, STRUCTS } from "./systems/building.ts";
+import { tryPlace, structSprite, structureBonuses, STRUCTS } from "./systems/building.ts";
+import { setActiveBonus } from "./systems/derived.ts";
 import { castSpell, spellsUnlocked, SPELLS } from "./systems/magic.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { addItem, removeItem, ITEMS } from "./items.ts";
@@ -18,7 +19,7 @@ import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, respawnAtHome, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
-import { drawPanels, type UiState, type Hotspot, type PanelActions, type PanelKind } from "./ui/panels.ts";
+import { drawPanels, type UiState, type Hotspot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import type { Vec, World, Corpse } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
 import type { StructKey } from "./systems/building.ts";
@@ -82,6 +83,8 @@ addEventListener("orientationchange", () => setTimeout(resize, 100));
 resize();
 
 const game: Game = loadGame() ?? createGame();
+// keep passive structure bonuses (Library mana, Garden HP) in sync from the start
+setActiveBonus(structureBonuses(game.worlds.home));
 refreshDerived(game.player);
 const P = game.player;
 const cam = { x: 0, y: 0 };
@@ -90,26 +93,89 @@ let waveT = 0;
 let saveTimer = 0;
 let last = performance.now();
 
-const ui: UiState = { panel: null, placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", panelRect: null, offset: { x: 0, y: 0 }, titleBar: null, dragging: false };
+const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", dragging: false };
 const mouse = { sx: 0, sy: 0 };
 let hotspots: Hotspot[] = [];
 
 const cw = (): World => game.current;
 const flash = (t: string, c = "#ffe9a8"): void => addFloat(cw(), P.x, P.y - 30, t, c);
 
-function togglePanel(which: PanelKind): void {
+/** Recompute the player's max HP/mana from current owned structures. */
+function recomputeBonuses(): void {
+  setActiveBonus(structureBonuses(game.worlds.home));
+  refreshDerived(P);
+}
+
+/* ---------------- window management (multiple panels open at once) ---------------- */
+
+function findWindow(kind: PanelKind): PanelWindow | undefined {
+  return ui.windows.find((w) => w.kind === kind);
+}
+function hasWindow(kind: PanelKind): boolean {
+  return ui.windows.some((w) => w.kind === kind);
+}
+
+/** A tidy starting offset per panel so a fresh window doesn't bury the others. */
+function defaultOffset(kind: PanelKind): { x: number; y: number } {
+  const S = scale;
+  switch (kind) {
+    case "equip": return { x: 0, y: -70 * S };
+    case "skills": return { x: 0, y: 80 * S };
+    case "bag": return { x: -120 * S, y: 30 * S };
+    case "quest": return { x: -30 * S, y: -40 * S };
+    case "forge": return { x: 70 * S, y: 10 * S };
+    case "spell": return { x: 80 * S, y: -30 * S };
+    case "build": return { x: -50 * S, y: -20 * S };
+    case "stash": return { x: 40 * S, y: 20 * S };
+    case "loot": return { x: 60 * S, y: 40 * S };
+    default: return { x: 0, y: 0 };
+  }
+}
+
+function bringToFront(kind: PanelKind): void {
+  const i = ui.windows.findIndex((w) => w.kind === kind);
+  if (i >= 0 && i < ui.windows.length - 1) {
+    const [w] = ui.windows.splice(i, 1);
+    ui.windows.push(w);
+  }
+}
+
+function openWindow(kind: PanelKind): void {
+  const existing = findWindow(kind);
+  if (existing) { bringToFront(kind); return; }
+  // cascade slightly if several windows are already stacked
+  const base = defaultOffset(kind);
+  const n = ui.windows.length;
+  ui.windows.push({
+    kind,
+    offset: { x: base.x + n * 6 * scale, y: base.y + n * 6 * scale },
+    rect: null,
+    titleBar: null,
+  });
+}
+
+function closeWindow(kind: PanelKind): void {
+  const i = ui.windows.findIndex((w) => w.kind === kind);
+  if (i >= 0) ui.windows.splice(i, 1);
+  if (kind === "loot") ui.loot = null;
+  if (kind === "shop") ui.npc = null;
+  beep(300, 0.05, "sine", 0.04);
+}
+
+function toggleWindow(kind: PanelKind): void {
   ui.placing = null;
-  ui.loot = null;
-  ui.npc = null;
-  ui.panel = ui.panel === which ? null : which;
-  ui.offset.x = 0;
-  ui.offset.y = 0;
+  if (hasWindow(kind)) closeWindow(kind);
+  else openWindow(kind);
+}
+
+function togglePanel(which: PanelKind): void {
+  toggleWindow(which);
 }
 
 /* ---------------- panel actions ---------------- */
 
 const act: PanelActions = {
-  startPlacing: (key: StructKey) => { ui.placing = key; ui.panel = null; },
+  startPlacing: (key: StructKey) => { ui.placing = key; closeWindow("build"); },
   useItem: (kind: ItemKind) => {
     const def = ITEMS[kind];
     if (!removeItem(P.bag, kind, 1)) return;
@@ -148,8 +214,35 @@ const act: PanelActions = {
     const q = quests.find((x) => x.id === id);
     if (q && claimQuest(P, q, (t) => flash(t, "#ffe9a8"))) beep(560, 0.16, "square", 0.06);
   },
-  close: () => { ui.panel = null; ui.loot = null; ui.npc = null; ui.placing = null; beep(300, 0.05, "sine", 0.04); },
+  deposit: (index: number) => { depositToStash(index); },
+  withdraw: (index: number) => { withdrawFromStash(index); },
+  close: (kind: PanelKind) => { closeWindow(kind); },
 };
+
+/* ---------------- storage chest ---------------- */
+
+function depositToStash(index: number): void {
+  const slot = P.bag[index];
+  if (!slot) return;
+  const left = addItem(game.stash, slot.kind, slot.n);
+  const moved = slot.n - left;
+  if (moved <= 0) { flash("stash full"); return; }
+  if (left > 0) slot.n = left;
+  else P.bag[index] = null;
+  beep(360, 0.06, "sine", 0.04);
+}
+
+function withdrawFromStash(index: number): void {
+  const slot = game.stash[index];
+  if (!slot) return;
+  const left = addItem(P.bag, slot.kind, slot.n);
+  const moved = slot.n - left;
+  if (moved <= 0) { flash("bag full"); return; }
+  if (left > 0) slot.n = left;
+  else game.stash[index] = null;
+  syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
+  beep(440, 0.06, "sine", 0.04);
+}
 
 import { craft as craftRecipe } from "./items.ts";
 function craftAt(r: Recipe): boolean {
@@ -161,10 +254,20 @@ function craftAt(r: Recipe): boolean {
 }
 
 function doSpell(index: number): void {
-  const spellKeys = ["heal", "firebolt"] as const;
-  const key = spellKeys[index];
-  if (!key) return;
-  castSpell(cw(), P, key);
+  const spell = SPELLS[index];
+  if (!spell) return;
+  if (!spellsUnlocked(game.worlds.home)) { flash("build a Library first", "#8ab6ff"); return; }
+  if (spell.key === "recall") { doRecall(); return; }
+  castSpell(cw(), P, spell.key);
+}
+
+function doRecall(): void {
+  if (P.dead) return;
+  if (cw() === game.worlds.home) { flash("already home", "#8ab6ff"); return; }
+  if (P.mana < RECALL_COST) { flash("no mana", "#8ab6ff"); return; }
+  P.mana -= RECALL_COST;
+  travelTo(game, "home");
+  flash("recalled home", "#c9a6ff");
 }
 
 function takeOne(c: Corpse, index: number): void {
@@ -199,8 +302,7 @@ function closeCorpseIfEmpty(c: Corpse): void {
     const w = cw();
     const idx = w.corpses.indexOf(c);
     if (idx >= 0) w.corpses.splice(idx, 1);
-    ui.loot = null;
-    if (ui.panel === "loot") ui.panel = null;
+    if (ui.loot === c) { ui.loot = null; closeWindow("loot"); }
   }
 }
 
@@ -224,21 +326,33 @@ function doSell(kind: ItemKind): void {
 
 /* ---------------- input wiring ---------------- */
 
+function pointInOpenPanel(sx: number, sy: number): boolean {
+  for (const win of ui.windows) {
+    const r = win.rect;
+    if (r && sx >= r.x && sx < r.x + r.w && sy >= r.y && sy < r.y + r.h) return true;
+  }
+  return false;
+}
+
 function handleWorldTap(sx: number, sy: number): void {
   unlockAudio();
-  for (const hsp of hotspots) {
+  // hotspots are collected during draw; the topmost window's are last, so
+  // check them first (reverse) to respect z-order on overlapping panels.
+  for (let i = hotspots.length - 1; i >= 0; i--) {
+    const hsp = hotspots[i];
     if (sx >= hsp.x && sx < hsp.x + hsp.w && sy >= hsp.y && sy < hsp.y + hsp.h) {
       hsp.fn();
       return;
     }
   }
-  const pr = ui.panelRect;
-  if (ui.panel && pr && sx >= pr.x && sx < pr.x + pr.w && sy >= pr.y && sy < pr.y + pr.h) return;
-  // tapping outside an open panel closes it
-  if (ui.panel && ui.panel !== "loot" && ui.panel !== "shop") { ui.panel = null; return; }
+  // clicking anywhere on an open panel body (not a hotspot) is swallowed so it
+  // doesn't walk the player; panels stay open (Tibia-style) until you close them.
+  if (pointInOpenPanel(sx, sy)) return;
   const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
   if (ui.placing) {
-    if (cw() === game.worlds.home) tryPlace(game.worlds.home, P, ui.placing, w.x, w.y);
+    if (cw() === game.worlds.home) {
+      if (tryPlace(game.worlds.home, P, ui.placing, w.x, w.y)) recomputeBonuses();
+    }
     ui.placing = null;
     return;
   }
@@ -250,12 +364,19 @@ initInput(screen, {
   onMove: (sx, sy) => { mouse.sx = sx; mouse.sy = sy; },
   onPanel: togglePanel,
   onSpell: (i) => doSpell(i),
-  onEscape: () => { ui.panel = null; ui.placing = null; ui.loot = null; ui.npc = null; },
+  onEscape: () => {
+    if (ui.placing) { ui.placing = null; return; }
+    // close the top-most open panel, one press at a time
+    const top = ui.windows[ui.windows.length - 1];
+    if (top) closeWindow(top.kind);
+  },
   onClick: ({ sx, sy, button }) => {
     if (button === 2) {
       // right-click: pure "walk here", ignore targets (Tibia-style)
       if (P.dead || ui.dragging) return;
-      if (ui.panel || ui.placing) return;
+      if (ui.placing) return;
+      // don't walk when the click lands on an open panel
+      if (pointInOpenPanel(sx, sy)) return;
       const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
       P.dest = { x: w.x, y: w.y };
       P.target = null; P.gather = null;
@@ -271,7 +392,7 @@ if (isTouchDevice()) initTouch(screen, handleWorldTap, overTouchButton);
 screen.addEventListener("contextmenu", (e) => e.preventDefault());
 
 // Drag any open panel by grabbing its title bar (works with mouse, pen, touch).
-let drag: { gx: number; gy: number; ox: number; oy: number; baseX: number; baseY: number; w: number; h: number } | null = null;
+let drag: { win: PanelWindow; gx: number; gy: number; ox: number; oy: number; baseX: number; baseY: number; w: number; h: number } | null = null;
 const toScreen = (e: PointerEvent): { x: number; y: number } => {
   const r = screen.getBoundingClientRect();
   const kx = r.width ? screen.width / r.width : 1;
@@ -279,15 +400,21 @@ const toScreen = (e: PointerEvent): { x: number; y: number } => {
   return { x: (e.clientX - r.left) * kx, y: (e.clientY - r.top) * ky };
 };
 screen.addEventListener("pointerdown", (e) => {
-  if (!ui.panel || !ui.titleBar || !ui.panelRect) return;
   const s = toScreen(e);
-  const tb = ui.titleBar;
-  if (s.x >= tb.x && s.x < tb.x + tb.w && s.y >= tb.y && s.y < tb.y + tb.h) {
-    const pr = ui.panelRect;
-    drag = { gx: s.x, gy: s.y, ox: ui.offset.x, oy: ui.offset.y, baseX: pr.x - ui.offset.x, baseY: pr.y - ui.offset.y, w: pr.w, h: pr.h };
-    ui.dragging = true;
-    try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
-    e.preventDefault();
+  // search top-most first so the visually-front window wins the grab
+  for (let i = ui.windows.length - 1; i >= 0; i--) {
+    const win = ui.windows[i];
+    const tb = win.titleBar;
+    const pr = win.rect;
+    if (!tb || !pr) continue;
+    if (s.x >= tb.x && s.x < tb.x + tb.w && s.y >= tb.y && s.y < tb.y + tb.h) {
+      bringToFront(win.kind);
+      drag = { win, gx: s.x, gy: s.y, ox: win.offset.x, oy: win.offset.y, baseX: pr.x - win.offset.x, baseY: pr.y - win.offset.y, w: pr.w, h: pr.h };
+      ui.dragging = true;
+      try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+      e.preventDefault();
+      return;
+    }
   }
 });
 screen.addEventListener("pointermove", (e) => {
@@ -301,8 +428,8 @@ screen.addEventListener("pointermove", (e) => {
   const top = clamp(drag.baseY + ny, 0, screen.height - 20 * scale);
   nx = left - drag.baseX;
   ny = top - drag.baseY;
-  ui.offset.x = nx;
-  ui.offset.y = ny;
+  drag.win.offset.x = nx;
+  drag.win.offset.y = ny;
   e.preventDefault();
 });
 const endDrag = (): void => { drag = null; ui.dragging = false; };
@@ -496,18 +623,19 @@ function update(dt: number): void {
   for (let i = world.corpses.length - 1; i >= 0; i--) {
     world.corpses[i].t -= dt;
     if (world.corpses[i].t <= 0) {
-      if (ui.loot === world.corpses[i]) { ui.loot = null; if (ui.panel === "loot") ui.panel = null; }
+      if (ui.loot === world.corpses[i]) { ui.loot = null; closeWindow("loot"); }
       world.corpses.splice(i, 1);
     }
   }
 
-  // garden aura heal on home
+  // garden aura heal (HP + mana) on home
   for (const s of game.worlds.home.structures) {
     if (s.key === "garden" && cw() === game.worlds.home) {
       const gx = s.tx * TILE + TILE;
       const gy = s.ty * TILE + TILE;
-      if (dist(P.x, P.y, gx, gy) < GARDEN_RADIUS && P.hp < P.maxhp) {
-        P.hp = Math.min(P.maxhp, P.hp + GARDEN_HEAL_PER_S * dt);
+      if (dist(P.x, P.y, gx, gy) < GARDEN_RADIUS) {
+        if (P.hp < P.maxhp) P.hp = Math.min(P.maxhp, P.hp + GARDEN_HEAL_PER_S * dt);
+        if (P.mana < P.maxmana) P.mana = Math.min(P.maxmana, P.mana + GARDEN_MANA_PER_S * dt);
       }
     }
   }
@@ -532,12 +660,13 @@ function resolveTarget(): void {
   } else if (t.kind === "dummy") {
     if (P.atkCd <= 0) { P.atkCd = P.atkRate; hitDummy(cw(), P, t.s); }
   } else if (t.kind === "corpse") {
-    ui.loot = t.c; ui.panel = "loot"; P.target = null;
+    ui.loot = t.c; openWindow("loot"); P.target = null;
   } else if (t.kind === "npc") {
-    ui.npc = t.n; ui.shopTab = "buy"; ui.panel = "shop"; P.target = null;
+    ui.npc = t.n; ui.shopTab = "buy"; openWindow("shop"); P.target = null;
   } else if (t.kind === "structure") {
-    if (t.s.key === "forge") { ui.panel = "forge"; }
-    else if (t.s.key === "library") { ui.panel = "spell"; }
+    if (t.s.key === "forge") openWindow("forge");
+    else if (t.s.key === "library") openWindow("spell");
+    else if (t.s.key === "chest") openWindow("stash");
     P.target = null;
   }
 }
@@ -776,8 +905,7 @@ function render(): void {
   const hud: HudCtx = { ctx: sctx, scale, screenW: screen.width, screenH: screen.height, touch: touchUI };
   drawHud(hud, game, P);
   hotspots = [];
-  ui.panelRect = null;
-  ui.titleBar = null;
+  for (const win of ui.windows) { win.rect = null; win.titleBar = null; }
   drawPanels({ hud, ui, game, player: P, mouse, act, hotspots });
   if (touchUI) drawTouchControls();
   drawJoystick(sctx);
@@ -822,7 +950,7 @@ function drawTouchControls(): void {
   let by = clamp((screen.height - colH) / 2, screen.height * 0.14, screen.height - colH - m);
   const bx = screen.width - bs - m;
   for (const [label, glyph, panel] of btns) {
-    tButton(bx, by, bs, label, glyph, ui.panel === panel, () => togglePanel(panel));
+    tButton(bx, by, bs, label, glyph, hasWindow(panel), () => togglePanel(panel));
     by += bs + gap;
   }
 
@@ -858,9 +986,7 @@ function overTouchButton(sx: number, sy: number): boolean {
   for (const b of touchButtons) {
     if (sx >= b.x && sx < b.x + b.w && sy >= b.y && sy < b.y + b.h) return true;
   }
-  const pr = ui.panelRect;
-  if (ui.panel && pr && sx >= pr.x && sx < pr.x + pr.w && sy >= pr.y && sy < pr.y + pr.h) return true;
-  return false;
+  return pointInOpenPanel(sx, sy);
 }
 
 function moveAxisNonZero(): boolean {

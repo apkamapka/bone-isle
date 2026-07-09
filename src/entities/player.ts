@@ -2,6 +2,7 @@
 import { PLAYER_BASE_HP, PLAYER_BASE_MANA, PLAYER_BASE_SPEED, PLAYER_ATTACK_RATE, expNeeded } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { moveSpeedBonus } from "../systems/skills.ts";
+import { activeBonus } from "../systems/derived.ts";
 import { emptyBag, emptyEquipment, gearStat } from "../items.ts";
 import type { Bag, Equipment } from "../items.ts";
 import type { Vec, Monster, Tree, RockNode, HerbNode, Structure, Corpse, Npc } from "../world/types.ts";
@@ -80,11 +81,17 @@ export function createPlayer(spawn: Vec): Player {
   };
 }
 
-/** Recompute max HP/mana from base + level + gear (call after (un)equip). */
-export function refreshDerived(p: Player): void {
+/** Passive bonuses to max HP/mana from owned structures (Library, Garden). */
+export interface DerivedBonus {
+  maxhp?: number;
+  maxmana?: number;
+}
+
+/** Recompute max HP/mana from base + level + gear + structure bonuses. */
+export function refreshDerived(p: Player, bonus: DerivedBonus = activeBonus): void {
   const lvBonus = (p.level - 1) * 20;
-  p.maxhp = PLAYER_BASE_HP + lvBonus + gearStat(p.eq, "maxhp");
-  p.maxmana = PLAYER_BASE_MANA + (p.level - 1) * 5 + gearStat(p.eq, "maxmana");
+  p.maxhp = PLAYER_BASE_HP + lvBonus + gearStat(p.eq, "maxhp") + (bonus.maxhp ?? 0);
+  p.maxmana = PLAYER_BASE_MANA + (p.level - 1) * 5 + gearStat(p.eq, "maxmana") + (bonus.maxmana ?? 0);
   if (p.hp > p.maxhp) p.hp = p.maxhp;
   if (p.mana > p.maxmana) p.mana = p.maxmana;
 }

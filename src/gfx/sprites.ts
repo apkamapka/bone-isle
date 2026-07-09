@@ -397,6 +397,31 @@ export function bakeDummy(): HTMLCanvasElement {
   return c;
 }
 
+export function bakeChest(): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = 18;
+  c.height = 14;
+  const x = c.getContext("2d")!;
+  // body
+  x.fillStyle = "#5b3b22"; x.fillRect(1, 5, 16, 8);
+  x.fillStyle = "#7a4a28"; x.fillRect(2, 6, 14, 6);
+  // lid
+  x.fillStyle = "#6e4a2a"; x.fillRect(1, 2, 16, 4);
+  x.fillStyle = "#8a5a32"; x.fillRect(2, 2, 14, 2);
+  // iron bands
+  x.fillStyle = "#3a2a1a";
+  x.fillRect(1, 5, 16, 1);
+  x.fillRect(4, 2, 1, 11); x.fillRect(13, 2, 1, 11);
+  // corners
+  x.fillStyle = "#c9c2a8";
+  x.fillRect(1, 12, 1, 1); x.fillRect(16, 12, 1, 1);
+  x.fillRect(1, 2, 1, 1); x.fillRect(16, 2, 1, 1);
+  // lock
+  x.fillStyle = "#e3b341"; x.fillRect(8, 6, 2, 3);
+  x.fillStyle = "#9a7424"; x.fillRect(8, 7, 2, 1);
+  return c;
+}
+
 /** Icon lookup for item kinds (bag, corpse loot, shops). */
 import type { ItemKind } from "../items.ts";
 const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {

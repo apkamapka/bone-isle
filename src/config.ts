@@ -28,9 +28,20 @@ export const TREE_REGROW_S = 30;
 export const ROCK_REGROW_S = 40;
 export const HERB_REGROW_S = 45;
 
-/** Garden aura: heal radius (px) and HP per second. */
+/** Garden aura: heal radius (px) and HP/mana per second while standing near. */
 export const GARDEN_RADIUS = 40;
 export const GARDEN_HEAL_PER_S = 3;
+export const GARDEN_MANA_PER_S = 2.2;
+
+/** Passive max-stat bonuses granted while you own a structure on Home Isle. */
+export const LIBRARY_MANA_BONUS = 30; // +max mana per Library owned
+export const GARDEN_HP_BONUS = 15;    // +max HP per Garden owned
+
+/** Recall spell: mana cost to teleport back to Home Isle (Library-gated). */
+export const RECALL_COST = 20;
+
+/** Chest storage capacity (slots). */
+export const STASH_SIZE = 20;
 
 export function expNeeded(level: number): number {
   return 40 + level * 40 + level * level * 10;

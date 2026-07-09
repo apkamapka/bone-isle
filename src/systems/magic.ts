@@ -4,10 +4,11 @@ import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
 import { magicPower, addSkillXp } from "./skills.ts";
 import { killMonster } from "./combat.ts";
+import { RECALL_COST } from "../config.ts";
 import type { Player } from "../entities/player.ts";
 import type { World } from "../world/types.ts";
 
-export type SpellKey = "heal" | "firebolt";
+export type SpellKey = "heal" | "firebolt" | "recall";
 
 export interface Spell {
   key: SpellKey;
@@ -19,6 +20,7 @@ export interface Spell {
 export const SPELLS: readonly Spell[] = [
   { key: "heal", name: "Heal", cost: 15, desc: "Restore HP over your Magic Level." },
   { key: "firebolt", name: "Fire Bolt", cost: 12, desc: "Blast the nearest monster with fire." },
+  { key: "recall", name: "Recall", cost: RECALL_COST, desc: "Teleport back to Home Isle." },
 ];
 
 /** True once the player has built a Library on Home Isle. */
@@ -30,6 +32,8 @@ export function spellsUnlocked(home: World): boolean {
 export function castSpell(world: World, p: Player, key: SpellKey): boolean {
   const spell = SPELLS.find((s) => s.key === key);
   if (!spell || p.dead) return false;
+  // recall is a travel action wired up in the main loop, not a world effect here
+  if (key === "recall") return false;
   if (p.mana < spell.cost) {
     addFloat(world, p.x, p.y - 22, "no mana", "#8ab6ff");
     return false;
