@@ -8,7 +8,7 @@ import { updateMonsters, MONSTER_DEFS, spawnMonster } from "./entities/monsters.
 import { playerAttack, hitDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, structSprite, STRUCTS } from "./systems/building.ts";
-import { castSpell } from "./systems/magic.ts";
+import { castSpell, spellsUnlocked, SPELLS } from "./systems/magic.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { addItem, removeItem, ITEMS } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
@@ -31,21 +31,54 @@ import type { StructKey } from "./systems/building.ts";
 const screen = document.createElement("canvas");
 screen.style.imageRendering = "pixelated";
 document.body.appendChild(screen);
-const sctx = screen.getContext("2d")!;
+const sctx = screen.getContext("2d", { alpha: false })!;
 
 const view = document.createElement("canvas");
-view.width = VIEW_W;
-view.height = VIEW_H;
 const vctx = view.getContext("2d")!;
 
+/**
+ * Responsive sizing. The world renders to `view` at an internal resolution
+ * derived from the window aspect ratio (so phones in portrait get a tall,
+ * full-screen view instead of a letterboxed 480x320 strip). `screen` is the
+ * device-pixel backing store that fills the whole viewport.
+ *
+ *   VW,VH   internal world-render resolution (px)
+ *   vScale  device px per internal world px (world→screen zoom)
+ *   scale   HUD unit: device px per design px (HUD/text/button sizing)
+ */
+let VW = VIEW_W;
+let VH = VIEW_H;
+let vScale = 2;
 let scale = 2;
+let touchUI = false;
+
+const DESIGN_W = 480; // reference width the HUD is authored against
+
 function resize(): void {
-  scale = Math.max(1, Math.floor(Math.min(innerWidth / VIEW_W, innerHeight / VIEW_H)));
-  screen.width = VIEW_W * scale;
-  screen.height = VIEW_H * scale;
+  const cw = Math.max(1, innerWidth);
+  const ch = Math.max(1, innerHeight);
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+
+  // CSS px per internal world px. Larger => more zoomed in / chunkier pixels.
+  // Tuned so tiles land around 30-40 CSS px on phones and desktops alike.
+  const f = clamp(Math.round(Math.min(cw, ch) / 220), 2, 6);
+  VW = Math.max(160, Math.ceil(cw / f));
+  VH = Math.max(120, Math.ceil(ch / f));
+  view.width = VW;
+  view.height = VH;
+
+  screen.width = Math.round(cw * dpr);
+  screen.height = Math.round(ch * dpr);
+  screen.style.width = cw + "px";
+  screen.style.height = ch + "px";
   sctx.imageSmoothingEnabled = false;
+
+  vScale = screen.width / VW;          // device px per world px
+  scale = screen.width / DESIGN_W;     // HUD design unit
+  touchUI = isTouchDevice() || Math.min(cw, ch) < 620;
 }
 addEventListener("resize", resize);
+addEventListener("orientationchange", () => setTimeout(resize, 100));
 resize();
 
 const game: Game = loadGame() ?? createGame();
@@ -115,6 +148,7 @@ const act: PanelActions = {
     const q = quests.find((x) => x.id === id);
     if (q && claimQuest(P, q, (t) => flash(t, "#ffe9a8"))) beep(560, 0.16, "square", 0.06);
   },
+  close: () => { ui.panel = null; ui.loot = null; ui.npc = null; ui.placing = null; beep(300, 0.05, "sine", 0.04); },
 };
 
 import { craft as craftRecipe } from "./items.ts";
@@ -202,7 +236,7 @@ function handleWorldTap(sx: number, sy: number): void {
   if (ui.panel && pr && sx >= pr.x && sx < pr.x + pr.w && sy >= pr.y && sy < pr.y + pr.h) return;
   // tapping outside an open panel closes it
   if (ui.panel && ui.panel !== "loot" && ui.panel !== "shop") { ui.panel = null; return; }
-  const w: Vec = { x: sx / scale + cam.x, y: sy / scale + cam.y };
+  const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
   if (ui.placing) {
     if (cw() === game.worlds.home) tryPlace(game.worlds.home, P, ui.placing, w.x, w.y);
     ui.placing = null;
@@ -212,7 +246,7 @@ function handleWorldTap(sx: number, sy: number): void {
 }
 
 initInput(screen, {
-  toWorld: (sx, sy): Vec => ({ x: sx / scale + cam.x, y: sy / scale + cam.y }),
+  toWorld: (sx, sy): Vec => ({ x: sx / vScale + cam.x, y: sy / vScale + cam.y }),
   onMove: (sx, sy) => { mouse.sx = sx; mouse.sy = sy; },
   onPanel: togglePanel,
   onSpell: (i) => doSpell(i),
@@ -222,7 +256,7 @@ initInput(screen, {
       // right-click: pure "walk here", ignore targets (Tibia-style)
       if (P.dead || ui.dragging) return;
       if (ui.panel || ui.placing) return;
-      const w: Vec = { x: sx / scale + cam.x, y: sy / scale + cam.y };
+      const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
       P.dest = { x: w.x, y: w.y };
       P.target = null; P.gather = null;
       moveMarker = { x: w.x, y: w.y, t: 0.5 };
@@ -231,7 +265,7 @@ initInput(screen, {
     handleWorldTap(sx, sy);
   },
 });
-if (isTouchDevice()) initTouch(screen, handleWorldTap);
+if (isTouchDevice()) initTouch(screen, handleWorldTap, overTouchButton);
 
 // Right-click: suppress the browser's context menu so it never interrupts play.
 screen.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -543,11 +577,11 @@ function hpBar(x: number, y: number, frac: number, w = 14): void {
 function render(): void {
   const world = cw();
   // camera follows player, clamped to island
-  cam.x = clamp(P.x - VIEW_W / 2, 0, Math.max(0, world.w * TILE - VIEW_W));
-  cam.y = clamp(P.y - VIEW_H / 2, 0, Math.max(0, world.h * TILE - VIEW_H));
+  cam.x = clamp(P.x - VW / 2, 0, Math.max(0, world.w * TILE - VW));
+  cam.y = clamp(P.y - VH / 2, 0, Math.max(0, world.h * TILE - VH));
 
   vctx.fillStyle = "#1c6060";
-  vctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  vctx.fillRect(0, 0, VW, VH);
   // baked terrain
   vctx.drawImage(world.mapCanvas, -Math.round(cam.x), -Math.round(cam.y));
 
@@ -556,7 +590,7 @@ function render(): void {
   for (const cwv of world.coastWater) {
     const sx = cwv.x - cam.x;
     const sy = cwv.y - cam.y;
-    if (sx < -TILE || sy < -TILE || sx > VIEW_W || sy > VIEW_H) continue;
+    if (sx < -TILE || sy < -TILE || sx > VW || sy > VH) continue;
     const a = 0.5 + 0.5 * Math.sin(waveT * 2 + cwv.ph);
     if (a > 0.6) vctx.fillRect(Math.round(sx + 2), Math.round(sy + 6), 6, 1);
   }
@@ -732,19 +766,101 @@ function render(): void {
   // teleport flash
   if (game.tpFlash > 0) {
     vctx.fillStyle = `rgba(255,255,255,${game.tpFlash})`;
-    vctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    vctx.fillRect(0, 0, VW, VH);
   }
 
   // scale up to screen
-  sctx.drawImage(view, 0, 0, VIEW_W, VIEW_H, 0, 0, screen.width, screen.height);
+  sctx.drawImage(view, 0, 0, VW, VH, 0, 0, screen.width, screen.height);
 
   // HUD + panels (screen space)
-  const hud: HudCtx = { ctx: sctx, scale, screenW: screen.width, screenH: screen.height };
+  const hud: HudCtx = { ctx: sctx, scale, screenW: screen.width, screenH: screen.height, touch: touchUI };
   drawHud(hud, game, P);
   hotspots = [];
   ui.panelRect = null;
+  ui.titleBar = null;
   drawPanels({ hud, ui, game, player: P, mouse, act, hotspots });
+  if (touchUI) drawTouchControls();
   drawJoystick(sctx);
+}
+
+/** On-screen buttons (panel toggles + spells) for touch / small screens. */
+let touchButtons: { x: number; y: number; w: number; h: number }[] = [];
+
+function tButton(x: number, y: number, s: number, label: string, glyph: string, on: boolean, fn: () => void): void {
+  const ctx = sctx;
+  ctx.fillStyle = on ? "rgba(202,162,58,.92)" : "rgba(16,26,24,.82)";
+  ctx.fillRect(x, y, s, s);
+  ctx.strokeStyle = on ? "#ffe9a8" : "#3d5a50";
+  ctx.lineWidth = Math.max(1, scale);
+  ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = on ? "#201a10" : "#e9e2c8";
+  ctx.font = `bold ${Math.round(s * 0.42)}px 'Courier New',monospace`;
+  ctx.fillText(glyph, x + s / 2, y + s * 0.4);
+  ctx.font = `${Math.round(s * 0.2)}px 'Courier New',monospace`;
+  ctx.fillText(label, x + s / 2, y + s * 0.82);
+  hotspots.push({ x, y, w: s, h: s, fn });
+  touchButtons.push({ x, y, w: s, h: s });
+}
+
+function drawTouchControls(): void {
+  touchButtons = [];
+  const bs = clamp(Math.min(screen.width, screen.height) * 0.115, 54, 132);
+  const m = bs * 0.16;
+  const gap = bs * 0.16;
+
+  // right-edge vertical column of panel toggles
+  const btns: [string, string, PanelKind][] = [
+    ["Build", "B", "build"],
+    ["Skills", "S", "skills"],
+    ["Equip", "E", "equip"],
+    ["Bag", "I", "bag"],
+    ["Quest", "Q", "quest"],
+  ];
+  const colH = btns.length * bs + (btns.length - 1) * gap;
+  let by = clamp((screen.height - colH) / 2, screen.height * 0.14, screen.height - colH - m);
+  const bx = screen.width - bs - m;
+  for (const [label, glyph, panel] of btns) {
+    tButton(bx, by, bs, label, glyph, ui.panel === panel, () => togglePanel(panel));
+    by += bs + gap;
+  }
+
+  // spell buttons (bottom, left of the panel column) once the Library exists
+  if (spellsUnlocked(game.worlds.home)) {
+    const sw = bs * 1.15;
+    let sxp = screen.width - bs - m - gap - sw;
+    const syp = screen.height - bs - m;
+    SPELLS.forEach((sp, i) => {
+      const enough = P.mana >= sp.cost;
+      const x = sxp - i * (sw + gap);
+      sctx.fillStyle = enough ? "rgba(40,64,110,.9)" : "rgba(24,26,30,.8)";
+      sctx.fillRect(x, syp, sw, bs);
+      sctx.strokeStyle = enough ? "#6ea6ff" : "#3a4048";
+      sctx.lineWidth = Math.max(1, scale);
+      sctx.strokeRect(x + 0.5, syp + 0.5, sw - 1, bs - 1);
+      sctx.textAlign = "center";
+      sctx.textBaseline = "middle";
+      sctx.fillStyle = enough ? "#dfe8ff" : "#7a808a";
+      sctx.font = `bold ${Math.round(bs * 0.28)}px 'Courier New',monospace`;
+      sctx.fillText(sp.name, x + sw / 2, syp + bs * 0.4);
+      sctx.font = `${Math.round(bs * 0.2)}px 'Courier New',monospace`;
+      sctx.fillText(`${sp.cost} mp`, x + sw / 2, syp + bs * 0.74);
+      const idx = i;
+      hotspots.push({ x, y: syp, w: sw, h: bs, fn: () => doSpell(idx) });
+      touchButtons.push({ x, y: syp, w: sw, h: bs });
+    });
+  }
+}
+
+/** True if a screen point lies on any on-screen button (blocks the joystick). */
+function overTouchButton(sx: number, sy: number): boolean {
+  for (const b of touchButtons) {
+    if (sx >= b.x && sx < b.x + b.w && sy >= b.y && sy < b.y + b.h) return true;
+  }
+  const pr = ui.panelRect;
+  if (ui.panel && pr && sx >= pr.x && sx < pr.x + pr.w && sy >= pr.y && sy < pr.y + pr.h) return true;
+  return false;
 }
 
 function moveAxisNonZero(): boolean {

@@ -52,6 +52,7 @@ export interface PanelActions {
   buy: (kind: ItemKind) => void;
   sell: (kind: ItemKind) => void;
   claim: (id: string) => void;
+  close: () => void;
 }
 
 export interface PanelInput {
@@ -81,11 +82,28 @@ function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, ti
   for (let i = 0; i < 3; i++) {
     ctx.fillRect(x + 6 * S + i * 3 * S, y + 4 * S, S, S);
     ctx.fillRect(x + 6 * S + i * 3 * S, y + 8 * S, S, S);
-    ctx.fillRect(x + w - 12 * S + i * 3 * S, y + 4 * S, S, S);
-    ctx.fillRect(x + w - 12 * S + i * 3 * S, y + 8 * S, S, S);
   }
   p.ui.panelRect = { x, y, w, h };
-  p.ui.titleBar = { x, y, w, h: 14 * S };
+  // close (X) button in the top-right of the title bar
+  const bs = 13 * S;
+  const bx = x + w - bs - 2 * S;
+  const by = y + (14 * S - bs) / 2;
+  // draggable region is the title bar minus the close button
+  p.ui.titleBar = { x, y, w: w - bs - 6 * S, h: 14 * S };
+  ctx.fillStyle = "rgba(160,40,30,.9)";
+  ctx.fillRect(bx, by, bs, bs);
+  ctx.strokeStyle = "#ffcabf";
+  ctx.lineWidth = S;
+  ctx.strokeRect(bx + S / 2, by + S / 2, bs - S, bs - S);
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = Math.max(1, 1.4 * S);
+  ctx.beginPath();
+  ctx.moveTo(bx + 3.5 * S, by + 3.5 * S);
+  ctx.lineTo(bx + bs - 3.5 * S, by + bs - 3.5 * S);
+  ctx.moveTo(bx + bs - 3.5 * S, by + 3.5 * S);
+  ctx.lineTo(bx + 3.5 * S, by + bs - 3.5 * S);
+  ctx.stroke();
+  p.hotspots.push({ x: bx - 2 * S, y: by - 2 * S, w: bs + 4 * S, h: bs + 4 * S, fn: () => p.act.close() });
 }
 
 function hovering(p: PanelInput, x: number, y: number, w: number, h: number): boolean {

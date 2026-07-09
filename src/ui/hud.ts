@@ -11,6 +11,7 @@ export interface HudCtx {
   scale: number;
   screenW: number;
   screenH: number;
+  touch?: boolean;
 }
 
 function panel(h: HudCtx, x: number, y: number, w: number, ph: number): void {
@@ -127,22 +128,24 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
 
   drawMinimap(h, game, p);
 
-  // spell bar (bottom-center) if unlocked
-  if (spellsUnlocked(game.worlds.home)) {
-    let sx = screenW / 2 - 60 * S;
-    const sy = screenH - pad - 20 * S;
-    SPELLS.forEach((sp, i) => {
-      const enough = p.mana >= sp.cost;
-      ctx.fillStyle = enough ? "rgba(40,60,90,.85)" : "rgba(40,40,40,.7)";
-      ctx.fillRect(sx, sy, 58 * S, 16 * S);
-      ctx.strokeStyle = enough ? "#4f8ff0" : "#555";
-      ctx.lineWidth = S;
-      ctx.strokeRect(sx + S / 2, sy + S / 2, 58 * S - S, 16 * S - S);
-      hudText(h, `${i + 1} ${sp.name}`, sx + 4 * S, sy + 8 * S, 7 * S, enough ? "#dfe8ff" : "#888");
-      sx += 62 * S;
-    });
-  } else {
-    hudText(h, "[B]uild [S]kills [E]quip [I]nv [Q]uests", screenW / 2, screenH - pad - 5 * S, 8 * S, "#e3d9b8", "center", true);
+  // spell bar / hotkey hint (bottom-center) — desktop only; touch uses buttons
+  if (!h.touch) {
+    if (spellsUnlocked(game.worlds.home)) {
+      let sx = screenW / 2 - 60 * S;
+      const sy = screenH - pad - 20 * S;
+      SPELLS.forEach((sp, i) => {
+        const enough = p.mana >= sp.cost;
+        ctx.fillStyle = enough ? "rgba(40,60,90,.85)" : "rgba(40,40,40,.7)";
+        ctx.fillRect(sx, sy, 58 * S, 16 * S);
+        ctx.strokeStyle = enough ? "#4f8ff0" : "#555";
+        ctx.lineWidth = S;
+        ctx.strokeRect(sx + S / 2, sy + S / 2, 58 * S - S, 16 * S - S);
+        hudText(h, `${i + 1} ${sp.name}`, sx + 4 * S, sy + 8 * S, 7 * S, enough ? "#dfe8ff" : "#888");
+        sx += 62 * S;
+      });
+    } else {
+      hudText(h, "[B]uild [S]kills [E]quip [I]nv [Q]uests", screenW / 2, screenH - pad - 5 * S, 8 * S, "#e3d9b8", "center", true);
+    }
   }
 
   // zone flash

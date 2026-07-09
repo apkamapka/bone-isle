@@ -68,15 +68,20 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     keys[k] = false;
   });
 
-  canvas.addEventListener("mousemove", (e) => {
+  const toDevice = (clientX: number, clientY: number): { sx: number; sy: number } => {
     const r = canvas.getBoundingClientRect();
-    h.onMove?.(e.clientX - r.left, e.clientY - r.top);
+    const kx = r.width ? canvas.width / r.width : 1;
+    const ky = r.height ? canvas.height / r.height : 1;
+    return { sx: (clientX - r.left) * kx, sy: (clientY - r.top) * ky };
+  };
+
+  canvas.addEventListener("mousemove", (e) => {
+    const { sx, sy } = toDevice(e.clientX, e.clientY);
+    h.onMove?.(sx, sy);
   });
 
   canvas.addEventListener("mousedown", (e) => {
-    const r = canvas.getBoundingClientRect();
-    const sx = e.clientX - r.left;
-    const sy = e.clientY - r.top;
+    const { sx, sy } = toDevice(e.clientX, e.clientY);
     h.onClick({ sx, sy, button: e.button }, h.toWorld(sx, sy));
   });
 }
