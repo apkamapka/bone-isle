@@ -114,18 +114,23 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   bar(h, px + 34 * S, py + 37 * S, 106 * S, 6 * S, used / cap, capFull ? "#e06a4a" : "#caa15a", "#3a3222");
   hudText(h, `${used}/${cap}`, px + 145 * S, py + 40 * S, 8 * S, capFull ? "#ffb59a" : "#e8dcc0");
 
-  // top-right: gold + resource counts
-  const iw = 150 * S;
+  // top-right: gold (box auto-sizes so big amounts always fit the frame)
+  const cd = SPR.coin;
+  const cdw = cd.width * 2 * S;
+  const cdh = cd.height * 2 * S;
+  const goldStr = `${p.gold}`;
+  ctx.font = `bold ${9 * S}px monospace`;
+  const goldW = ctx.measureText(goldStr).width;
+  ctx.font = `${8 * S}px monospace`;
+  const labelW = ctx.measureText("gold").width;
+  const iw = Math.max(150 * S, 9 * S + cdw + 6 * S + goldW + 8 * S + labelW + 10 * S);
   const ih = 22 * S;
   const ix = screenW - iw - pad;
   const iy = pad;
   panel(h, ix, iy, iw, ih);
   ctx.imageSmoothingEnabled = false;
-  const cd = SPR.coin;
-  const cdw = cd.width * 2 * S;
-  const cdh = cd.height * 2 * S;
   ctx.drawImage(cd, ix + 9 * S, iy + (ih - cdh) / 2, cdw, cdh);
-  hudText(h, `${p.gold}`, ix + 9 * S + cdw + 4 * S, iy + ih / 2, 9 * S, "#f3eedd", "left", true);
+  hudText(h, goldStr, ix + 9 * S + cdw + 6 * S, iy + ih / 2, 9 * S, "#f3eedd", "left", true);
   hudText(h, "gold", ix + iw - 8 * S, iy + ih / 2, 8 * S, "rgba(220,214,190,.6)", "right");
 
   // top-left: title + zone

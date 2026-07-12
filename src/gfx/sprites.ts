@@ -96,6 +96,15 @@ export const SPR = {
     "cccccCc",
     ".cCccc.",
   ]),
+  pack: bake([
+    ".hhhh.",
+    "hccchh",
+    "hhhhhh",
+    "hhcchh",
+    "hhhhhh",
+    "hhhhhh",
+    ".hhhh.",
+  ]),
   wood: bake([
     "..tttttt",
     ".tbbbbbt",

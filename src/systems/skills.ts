@@ -1,7 +1,10 @@
 /** Tibia-style skills: levels that climb as you use them, plus gear bonuses. */
 import { beep } from "../audio.ts";
 import { gearStat, equippedBow } from "../items.ts";
-import { DIST_FACTOR_BASE, DIST_FACTOR_PER, DIST_LEVEL_BONUS } from "../config.ts";
+import {
+  DIST_FACTOR_BASE, DIST_FACTOR_PER, DIST_LEVEL_BONUS,
+  MELEE_FIST_ATK, MELEE_FACTOR_BASE, MELEE_FACTOR_PER, MELEE_LEVEL_BONUS,
+} from "../config.ts";
 import type { Equipment } from "../items.ts";
 
 export type SkillKey = "sword" | "shield" | "dist" | "speed";
@@ -53,8 +56,16 @@ export function addSkillXp(key: SkillKey, n: number, onLevel?: SkillUpFx): void 
 }
 
 /** Derived combat stats from skills + level + equipped gear. */
+/**
+ * Melee attack value scaled by Sword Fighting. Unarmed you swing bare fists
+ * (MELEE_FIST_ATK); a weapon adds its gear Attack on top, and the whole thing is
+ * multiplied by a skill-driven factor — so a +7 sword pulls much further ahead
+ * of fists as your Sword skill climbs, rather than being a flat +7.
+ */
 export function attackPower(level: number, eq: Equipment): number {
-  return 6 + level + (skills.sword.lv - 10) + gearStat(eq, "atk");
+  const attackValue = MELEE_FIST_ATK + gearStat(eq, "atk");
+  const factor = MELEE_FACTOR_BASE + (skills.sword.lv - 10) * MELEE_FACTOR_PER;
+  return Math.max(1, Math.round(attackValue * factor) + Math.floor(level * MELEE_LEVEL_BONUS));
 }
 /**
  * Damage of a single arrow shot. The raw attack value (bow power + arrow) is

@@ -57,6 +57,27 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   return false;
 }
 
+/**
+ * Train Distance Fighting on a dummy by firing at it with a bow. Consumes one
+ * arrow, spawns the projectile and shows the hit, but never destroys the dummy.
+ */
+export function shootDummy(world: World, p: Player, s: Structure, arrowKind: ItemKind): boolean {
+  const arrowAtk = ITEMS[arrowKind].ammo?.dmg ?? 0;
+  if (!removeItem(p.bag, arrowKind, 1)) return false;
+  const dp = distancePower(p.level, p.eq, arrowAtk);
+  const dmg = rndi(dp - 2, dp + 3);
+  const tx = s.tx * 16 + 16;
+  const ty = s.ty * 16 + 24;
+  s.hurtT = 0.2;
+  s.anim = 0;
+  const flight = Math.hypot(tx - p.x, ty - p.y) / SHOT_SPEED;
+  world.shots.push({ fromX: p.x, fromY: p.y - 8, toX: tx, toY: ty - 6, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow" });
+  addFloat(world, s.tx * 16 + 8, s.ty * 16 - 4, String(dmg), "#bfe08a");
+  addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+  beep(430, 0.06, "triangle", 0.045, -120);
+  return true;
+}
+
 /** Whack a training dummy: trains Sword Fighting, no death. */
 export function hitDummy(world: World, p: Player, s: Structure): void {
   const ap = attackPower(p.level, p.eq);

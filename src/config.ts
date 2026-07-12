@@ -54,6 +54,20 @@ export const DIST_LEVEL_BONUS = 0.25;   // small flat + level * this
 export const ARROW_MISS_WARN_S = 1.2;   // throttle for the "no arrows" nag
 export const SHOT_SPEED = 520;          // px/s the drawn arrow travels
 
+/**
+ * Melee mirrors ranged: the weapon's attack value (bare fists + gear Attack) is
+ * scaled by a factor that climbs with Sword Fighting. Because the whole attack
+ * value is multiplied, a better weapon pulls further ahead as your skill grows
+ * (Tibia-style) instead of just adding a flat few points.
+ */
+export const MELEE_FIST_ATK = 7;        // unarmed attack value (fists)
+export const MELEE_FACTOR_BASE = 0.9;   // multiplier at Sword level 10
+export const MELEE_FACTOR_PER = 0.09;   // + this per Sword level above 10
+export const MELEE_LEVEL_BONUS = 0.5;   // + level * this (rounded down)
+
+/** Dropped items linger on the ground this long (seconds) before vanishing. */
+export const GROUND_DESPAWN_S = 3600;
+
 /** Chest storage capacity (slots). */
 export const STASH_SIZE = 20;
 

@@ -1,11 +1,11 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S } from "./config.ts";
 import { moveEntity } from "./world/collision.ts";
-import { SPR } from "./gfx/sprites.ts";
+import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster } from "./entities/monsters.ts";
-import { playerAttack, playerShoot, hitDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
+import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost } from "./systems/building.ts";
 import { setActiveBonus } from "./systems/derived.ts";
@@ -21,8 +21,8 @@ import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, respawnAtHome, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
-import { drawPanels, type UiState, type Hotspot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
-import type { Vec, World, Corpse } from "./world/types.ts";
+import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
+import type { Vec, World, Corpse, GroundItem } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -97,9 +97,13 @@ let waveT = 0;
 let saveTimer = 0;
 let last = performance.now();
 
-const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", dragging: false, lookMode: false, inspect: null };
+const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", dragging: false, lookMode: false, inspect: null, split: null };
 const mouse = { sx: 0, sy: 0 };
 let hotspots: Hotspot[] = [];
+let itemSlots: ItemSlot[] = [];
+// mouse drag-and-drop of inventory items
+let suppressClick = false;
+let itemDrag: { src: "bag" | "stash"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean } | null = null;
 
 const cw = (): World => game.current;
 const flash = (t: string, c = "#ffe9a8"): void => addFloat(cw(), P.x, P.y - 30, t, c);
@@ -225,38 +229,159 @@ const act: PanelActions = {
     const q = quests.find((x) => x.id === id);
     if (q && claimQuest(P, q, (t) => flash(t, "#ffe9a8"))) beep(560, 0.16, "square", 0.06);
   },
-  deposit: (index: number) => { depositToStash(index); },
-  withdraw: (index: number) => { withdrawFromStash(index); },
+  moveStack: (src: "bag" | "stash", index: number) => { openMoveChooser(src, index); },
+  splitConfirm: (mode: "store" | "take" | "drop") => { splitConfirm(mode); },
   look: (kind: ItemKind) => { ui.inspect = kind; },
   toggleLook: () => { ui.lookMode = !ui.lookMode; if (!ui.lookMode) ui.inspect = null; },
+  openBag: () => { openWindow("bag"); },
   close: (kind: PanelKind) => { closeWindow(kind); },
 };
 
 /* ---------------- storage chest ---------------- */
 
-function depositToStash(index: number): void {
+/** Store up to `n` of bag slot `index` into the chest. */
+function storePartial(index: number, n: number): void {
   const slot = P.bag[index];
   if (!slot) return;
-  const left = addItem(game.stash, slot.kind, slot.n);
-  const moved = slot.n - left;
+  const take = Math.min(n, slot.n);
+  const left = addItem(game.stash, slot.kind, take);
+  const moved = take - left;
   if (moved <= 0) { flash("stash full"); return; }
-  if (left > 0) slot.n = left;
-  else P.bag[index] = null;
+  slot.n -= moved;
+  if (slot.n <= 0) P.bag[index] = null;
   compactBag(game.stash); compactBag(P.bag);
   beep(360, 0.06, "sine", 0.04);
 }
 
-function withdrawFromStash(index: number): void {
+/** Drop an item stack onto the ground at the player's feet (Tibia-style). */
+function dropToGround(kind: ItemKind, n: number): void {
+  if (n <= 0) return;
+  const world = cw();
+  const jitter = () => (Math.random() - 0.5) * 8;
+  const gx = P.x + jitter();
+  const gy = P.y + 2 + jitter();
+  // merge into a very close stack of the same kind to avoid clutter
+  const near = world.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 7);
+  if (near) near.n += n;
+  else world.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
+  flash(`dropped ${n} ${ITEMS[kind].name}`, "#cfa86a");
+  beep(200, 0.06, "sine", 0.04, -60);
+}
+
+/** Pick a dropped stack back up, as far as weight/space allow. */
+function pickupGround(gi: GroundItem): void {
+  const world = cw();
+  const fitByWeight = Math.floor(freeCap(P) / itemWeight(gi.kind, 1));
+  if (fitByWeight <= 0) { flash("too heavy"); return; }
+  const want = Math.min(gi.n, fitByWeight);
+  const left = addItem(P.bag, gi.kind, want) + (gi.n - want);
+  const took = gi.n - left;
+  if (took <= 0) { flash("bag full"); return; }
+  compactBag(P.bag);
+  syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
+  if (left > 0) gi.n = left;
+  else { const idx = world.ground.indexOf(gi); if (idx >= 0) world.ground.splice(idx, 1); }
+  beep(520, 0.06, "sine", 0.05, 80);
+}
+
+/** Take up to `n` of chest slot `index` into the backpack (weight-limited). */
+function takePartial(index: number, n: number): void {
   const slot = game.stash[index];
   if (!slot) return;
-  const left = addItem(P.bag, slot.kind, slot.n);
-  const moved = slot.n - left;
+  const wantByN = Math.min(n, slot.n);
+  const fitByWeight = Math.floor(freeCap(P) / itemWeight(slot.kind, 1));
+  const want = Math.min(wantByN, Math.max(0, fitByWeight));
+  if (want <= 0) { flash("too heavy"); return; }
+  const left = addItem(P.bag, slot.kind, want);
+  const moved = want - left;
   if (moved <= 0) { flash("bag full"); return; }
-  if (left > 0) slot.n = left;
-  else game.stash[index] = null;
+  slot.n -= moved;
+  if (slot.n <= 0) game.stash[index] = null;
   compactBag(P.bag); compactBag(game.stash);
   syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   beep(440, 0.06, "sine", 0.04);
+}
+
+/** Drop up to `n` of bag slot `index` on the ground. */
+function dropFromBag(index: number, n: number): void {
+  const slot = P.bag[index];
+  if (!slot) return;
+  const take = Math.min(n, slot.n);
+  slot.n -= take;
+  if (slot.n <= 0) P.bag[index] = null;
+  compactBag(P.bag);
+  dropToGround(slot.kind, take);
+}
+
+type Slots = (({ kind: ItemKind; n: number }) | null)[];
+/** Rearrange within one container: fill empty, merge like kinds, else swap. */
+function swapOrMerge(arr: Slots, from: number, to: number): void {
+  if (from === to) return;
+  const a = arr[from];
+  if (!a) return;
+  const b = arr[to];
+  if (!b) { arr[to] = a; arr[from] = null; return; }
+  if (b.kind === a.kind) {
+    const space = ITEMS[a.kind].stack - b.n;
+    const mv = Math.min(space, a.n);
+    b.n += mv; a.n -= mv;
+    if (a.n <= 0) arr[from] = null;
+  } else {
+    arr[from] = b; arr[to] = a;
+  }
+}
+const currentN = (src: "bag" | "stash", index: number): number => {
+  const s = (src === "bag" ? P.bag : game.stash)[index];
+  return s ? s.n : 0;
+};
+
+/** Resolve where a dragged item was released: slot, chest window, or ground. */
+function resolveItemDrop(rx: number, ry: number): void {
+  const d = itemDrag;
+  if (!d) return;
+  // dropped onto another inventory cell?
+  for (let i = itemSlots.length - 1; i >= 0; i--) {
+    const it = itemSlots[i];
+    if (rx >= it.x && rx < it.x + it.w && ry >= it.y && ry < it.y + it.h) {
+      if (it.src === d.src) swapOrMerge(d.src === "bag" ? P.bag : game.stash, d.index, it.index);
+      else if (d.src === "bag") storePartial(d.index, currentN("bag", d.index));
+      else takePartial(d.index, currentN("stash", d.index));
+      return;
+    }
+  }
+  // dropped on an open panel (chest window → store), otherwise cancel
+  if (pointInOpenPanel(rx, ry)) {
+    const overStash = ui.windows.some((w) => w.kind === "stash" && w.rect &&
+      rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h);
+    if (overStash && d.src === "bag") storePartial(d.index, currentN("bag", d.index));
+    return;
+  }
+  // dropped on the world → drop to the ground (backpack items only)
+  if (d.src === "bag") dropFromBag(d.index, currentN("bag", d.index));
+}
+
+/** Open the quantity chooser for a bag/chest slot (or move a single item flat). */
+function openMoveChooser(src: "bag" | "stash", index: number): void {
+  const slot = src === "bag" ? P.bag[index] : game.stash[index];
+  if (!slot) return;
+  const canStore = ui.windows.some((w) => w.kind === "stash");
+  // one item, single obvious action → skip the chooser
+  if (slot.n <= 1) {
+    if (src === "stash") { takePartial(index, 1); return; }
+    if (canStore) { storePartial(index, 1); return; }
+    dropFromBag(index, 1); return;
+  }
+  ui.split = { kind: slot.kind, index, src, max: slot.n, n: slot.n, canStore };
+}
+
+function splitConfirm(mode: "store" | "take" | "drop"): void {
+  const sp = ui.split;
+  if (!sp) return;
+  const n = Math.max(1, Math.min(sp.max, sp.n));
+  if (mode === "store") storePartial(sp.index, n);
+  else if (mode === "take") takePartial(sp.index, n);
+  else dropFromBag(sp.index, n);
+  ui.split = null;
 }
 
 import { craftAcross } from "./items.ts";
@@ -400,6 +525,7 @@ function handleWorldTap(sx: number, sy: number): void {
   }
   // an open inspect popup is dismissed by tapping empty space
   if (ui.inspect) { ui.inspect = null; return; }
+  if (ui.split) { ui.split = null; return; }
   // clicking anywhere on an open panel body (not a hotspot) is swallowed so it
   // doesn't walk the player; panels stay open (Tibia-style) until you close them.
   if (pointInOpenPanel(sx, sy)) return;
@@ -425,6 +551,7 @@ initInput(screen, {
     flash(ui.lookMode ? "look mode on" : "look mode off", "#8ab6ff");
   },
   onEscape: () => {
+    if (ui.split) { ui.split = null; return; }
     if (ui.inspect) { ui.inspect = null; return; }
     if (ui.placing) { ui.placing = null; return; }
     // close the top-most open panel, one press at a time
@@ -432,6 +559,7 @@ initInput(screen, {
     if (top) closeWindow(top.kind);
   },
   onClick: ({ sx, sy, button }) => {
+    if (suppressClick) return;
     if (button === 2) {
       // right-click: pure "walk here", ignore targets (Tibia-style)
       if (P.dead || ui.dragging) return;
@@ -477,8 +605,27 @@ screen.addEventListener("pointerdown", (e) => {
       return;
     }
   }
+  // item drag-and-drop (mouse only; touch uses the quantity chooser)
+  if (e.pointerType === "mouse" && e.button === 0 && !ui.lookMode && !ui.split && !ui.inspect) {
+    for (let i = itemSlots.length - 1; i >= 0; i--) {
+      const it = itemSlots[i];
+      if (s.x >= it.x && s.x < it.x + it.w && s.y >= it.y && s.y < it.y + it.h) {
+        itemDrag = { src: it.src, index: it.index, kind: it.kind, n: it.n, sx: s.x, sy: s.y, active: false };
+        suppressClick = true; // the item's click is resolved on release instead
+        try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+        return;
+      }
+    }
+  }
 });
 screen.addEventListener("pointermove", (e) => {
+  if (itemDrag) {
+    const s = toScreen(e);
+    mouse.sx = s.x; mouse.sy = s.y;
+    if (!itemDrag.active && Math.hypot(s.x - itemDrag.sx, s.y - itemDrag.sy) > 5 * scale) itemDrag.active = true;
+    e.preventDefault();
+    return;
+  }
   if (!drag) return;
   const s = toScreen(e);
   let nx = drag.ox + (s.x - drag.gx);
@@ -494,8 +641,18 @@ screen.addEventListener("pointermove", (e) => {
   e.preventDefault();
 });
 const endDrag = (): void => { drag = null; ui.dragging = false; };
-addEventListener("pointerup", endDrag);
-addEventListener("pointercancel", endDrag);
+addEventListener("pointerup", (e) => {
+  if (itemDrag) {
+    const s = toScreen(e as PointerEvent);
+    if (itemDrag.active) resolveItemDrop(s.x, s.y);
+    else handleWorldTap(itemDrag.sx, itemDrag.sy); // no real drag → treat as a click
+    itemDrag = null;
+    // clear the click suppression after this gesture completes
+    setTimeout(() => { suppressClick = false; }, 0);
+  }
+  endDrag();
+});
+addEventListener("pointercancel", () => { itemDrag = null; suppressClick = false; endDrag(); });
 
 function worldClick(w: Vec): void {
   if (P.dead) return;
@@ -504,6 +661,14 @@ function worldClick(w: Vec): void {
   for (const m of world.monsters) {
     if (Math.abs(w.x - m.x) < 9 && w.y > m.y - 16 && w.y < m.y + 5) {
       P.target = { kind: "mob", m };
+      P.dest = null; P.gather = null; moveMarker = null;
+      return;
+    }
+  }
+  // dropped ground items — pick up on click
+  for (const gi of world.ground) {
+    if (Math.abs(w.x - gi.x) < 9 && w.y > gi.y - 14 && w.y < gi.y + 4) {
+      pickupGround(gi);
       P.dest = null; P.gather = null; moveMarker = null;
       return;
     }
@@ -664,7 +829,7 @@ function update(dt: number): void {
     if (tp) {
       const d = dist(P.x, P.y, tp.x, tp.y);
       let reach = 18;
-      if (P.target.kind === "dummy") reach = 15;
+      if (P.target.kind === "dummy") reach = attackMode().reach;
       else if (P.target.kind === "mob") reach = attackMode().reach;
       if (d > reach) {
         const sp = playerSpeed(P);
@@ -709,6 +874,12 @@ function update(dt: number): void {
       if (ui.loot === world.corpses[i]) { ui.loot = null; closeWindow("loot"); }
       world.corpses.splice(i, 1);
     }
+  }
+
+  // dropped items fade from the ground after their lifetime (1h)
+  for (let i = world.ground.length - 1; i >= 0; i--) {
+    world.ground[i].t -= dt;
+    if (world.ground[i].t <= 0) world.ground.splice(i, 1);
   }
 
   // garden aura heal (HP) on home
@@ -757,7 +928,12 @@ function resolveTarget(): void {
       }
     }
   } else if (t.kind === "dummy") {
-    if (P.atkCd <= 0) { P.atkCd = P.atkRate; hitDummy(cw(), P, t.s); }
+    if (P.atkCd <= 0) {
+      P.atkCd = P.atkRate;
+      const mode = attackMode();
+      if (mode.ranged && mode.arrow) shootDummy(cw(), P, t.s, mode.arrow);
+      else { if (equippedBow(P.eq)) warnNoArrows(); hitDummy(cw(), P, t.s); }
+    }
   } else if (t.kind === "corpse") {
     ui.loot = t.c; openWindow("loot"); P.target = null;
   } else if (t.kind === "npc") {
@@ -915,6 +1091,28 @@ function render(): void {
       vctx.globalAlpha = 1;
     } });
   }
+  // dropped items on the ground
+  for (const gi of world.ground) {
+    const blink = gi.t < 30 ? (Math.sin(waveT * 8) > 0 ? 1 : 0.45) : 1;
+    const spr = itemSprite(gi.kind);
+    drawList.push({ y: gi.y, fn: () => {
+      vctx.globalAlpha = blink;
+      drawShadow(gi.x, gi.y, 6);
+      const px = Math.round(gi.x - cam.x - spr.width / 2);
+      const py = Math.round(gi.y - cam.y - spr.height);
+      vctx.imageSmoothingEnabled = false;
+      vctx.drawImage(spr, px, py);
+      if (gi.n > 1) {
+        vctx.font = "bold 6px monospace";
+        vctx.textAlign = "right";
+        vctx.fillStyle = "#000";
+        vctx.fillText(`${gi.n}`, px + spr.width + 1, py + spr.height + 1);
+        vctx.fillStyle = "#ffe9a8";
+        vctx.fillText(`${gi.n}`, px + spr.width, py + spr.height);
+      }
+      vctx.globalAlpha = 1;
+    } });
+  }
   // NPCs
   for (const n of world.npcs) {
     const bob = Math.sin(waveT * 2 + n.bob) * 1.2;
@@ -1022,8 +1220,27 @@ function render(): void {
   const hud: HudCtx = { ctx: sctx, scale, screenW: screen.width, screenH: screen.height, touch: touchUI };
   drawHud(hud, game, P);
   hotspots = [];
+  itemSlots = [];
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; }
-  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots });
+  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots });
+  // ghost of the item being dragged, following the cursor
+  if (itemDrag && itemDrag.active) {
+    const spr = itemSprite(itemDrag.kind);
+    const gw = spr.width * 2 * scale;
+    const gh = spr.height * 2 * scale;
+    sctx.imageSmoothingEnabled = false;
+    sctx.globalAlpha = 0.85;
+    sctx.drawImage(spr, Math.round(mouse.sx - gw / 2), Math.round(mouse.sy - gh / 2), gw, gh);
+    sctx.globalAlpha = 1;
+    if (itemDrag.n > 1) {
+      sctx.font = `bold ${7 * scale}px monospace`;
+      sctx.textAlign = "right";
+      sctx.fillStyle = "#000";
+      sctx.fillText(`${currentN(itemDrag.src, itemDrag.index)}`, Math.round(mouse.sx + gw / 2) + 1, Math.round(mouse.sy + gh / 2) + 1);
+      sctx.fillStyle = "#ffe9a8";
+      sctx.fillText(`${currentN(itemDrag.src, itemDrag.index)}`, Math.round(mouse.sx + gw / 2), Math.round(mouse.sy + gh / 2));
+    }
+  }
   if (touchUI) drawTouchControls();
   drawJoystick(sctx);
 }

@@ -26,6 +26,18 @@ export interface Hotspot {
   fn: () => void;
 }
 
+/** A draggable inventory cell (backpack or chest) recorded during draw. */
+export interface ItemSlot {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  src: "bag" | "stash";
+  index: number;
+  kind: ItemKind;
+  n: number;
+}
+
 /** One open, draggable window. Multiple can be open at once (z-order = array order). */
 export interface PanelWindow {
   kind: PanelKind;
@@ -50,6 +62,8 @@ export interface UiState {
   lookMode: boolean;
   /** Item currently shown in the inspect popup, if any. */
   inspect: ItemKind | null;
+  /** Quantity chooser for moving/dropping part of a stack. */
+  split: { kind: ItemKind; index: number; src: "bag" | "stash"; max: number; n: number; canStore: boolean } | null;
 }
 
 export interface PanelActions {
@@ -65,10 +79,11 @@ export interface PanelActions {
   buy: (kind: ItemKind) => void;
   sell: (kind: ItemKind) => void;
   claim: (id: string) => void;
-  deposit: (index: number) => void;
-  withdraw: (index: number) => void;
+  moveStack: (src: "bag" | "stash", index: number) => void;
   look: (kind: ItemKind) => void;
   toggleLook: () => void;
+  openBag: () => void;
+  splitConfirm: (mode: "store" | "take" | "drop") => void;
   close: (kind: PanelKind) => void;
 }
 
@@ -80,6 +95,8 @@ export interface PanelInput {
   mouse: { sx: number; sy: number };
   act: PanelActions;
   hotspots: Hotspot[];
+  /** Draggable inventory cells recorded this frame (for mouse drag-and-drop). */
+  itemSlots: ItemSlot[];
   /** The window currently being drawn (position, drag offset, hitboxes). */
   win: PanelWindow;
 }
@@ -193,6 +210,8 @@ function drawInspect(base: Omit<PanelInput, "win">): void {
   const kind = base.ui.inspect;
   if (!kind) return;
   const { ctx, scale: S, screenW, screenH } = base.hud;
+  // full-screen backdrop: any tap off the popup dismisses it (and is consumed)
+  base.hotspots.push({ x: 0, y: 0, w: screenW, h: screenH, fn: () => { base.ui.inspect = null; } });
   const lines = itemInfoLines(kind);
   const title = ITEMS[kind].name;
   const fs = 9 * S;
@@ -221,6 +240,74 @@ function drawInspect(base: Omit<PanelInput, "win">): void {
   base.hotspots.push({ x, y, w, h, fn: () => { base.ui.inspect = null; } });
 }
 
+/** Quantity chooser for moving/dropping part of a stack (bag ⇄ chest / drop). */
+function drawSplit(base: Omit<PanelInput, "win">): void {
+  const sp = base.ui.split;
+  if (!sp) return;
+  const { ctx, scale: S, screenW, screenH } = base.hud;
+  // backdrop: tapping outside the chooser cancels it (and is consumed)
+  base.hotspots.push({ x: 0, y: 0, w: screenW, h: screenH, fn: () => { base.ui.split = null; } });
+  const w = 210 * S;
+  const h = 118 * S;
+  const x = (screenW - w) / 2;
+  const y = (screenH - h) / 2;
+  ctx.fillStyle = "rgba(16,12,8,.98)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#caa23a";
+  ctx.lineWidth = S;
+  ctx.strokeRect(x + S / 2, y + S / 2, w - S, h - S);
+  const spr = itemSprite(sp.kind);
+  icon(base as PanelInput, spr, x + 10 * S, y + 8 * S, 2 * S);
+  hudText(base.hud, ITEMS[sp.kind].name, x + 10 * S + spr.width * 2 * S + 8 * S, y + 14 * S, 9 * S, "#ffe9a8", "left", true);
+  hudText(base.hud, `How many?  (max ${sp.max})`, x + w / 2, y + 34 * S, 7 * S, "rgba(220,214,190,.7)", "center");
+  hudText(base.hud, `${sp.n}`, x + w / 2, y + 52 * S, 14 * S, "#ffe9a8", "center", true);
+
+  const clampN = (v: number): number => Math.max(1, Math.min(sp.max, v));
+  const stepBtn = (bx: number, by: number, bw: number, label: string, fn: () => void): void => {
+    ctx.fillStyle = "rgba(40,32,20,.95)";
+    ctx.fillRect(bx, by, bw, 14 * S);
+    ctx.strokeStyle = "#6e571f";
+    ctx.lineWidth = S;
+    ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, 14 * S - S);
+    hudText(base.hud, label, bx + bw / 2, by + 7 * S, 7 * S, "#e8dcc0", "center", true);
+    base.hotspots.push({ x: bx, y: by, w: bw, h: 14 * S, fn });
+  };
+  const steps: [string, number][] = [["-10", -10], ["-1", -1], ["+1", 1], ["+10", 10]];
+  const sw = 34 * S;
+  let bx = x + (w - (sw * 4 + 6 * S * 3)) / 2;
+  const sry = y + 62 * S;
+  for (const [lbl, d] of steps) { stepBtn(bx, sry, sw, lbl, () => { sp.n = clampN(sp.n + d); }); bx += sw + 6 * S; }
+  const hw = 46 * S;
+  const hy = sry + 18 * S;
+  let hx = x + (w - (hw * 2 + 8 * S)) / 2;
+  stepBtn(hx, hy, hw, "Half", () => { sp.n = clampN(Math.floor(sp.max / 2) || 1); }); hx += hw + 8 * S;
+  stepBtn(hx, hy, hw, "All", () => { sp.n = sp.max; });
+
+  const acts: [string, "store" | "take" | "drop"][] = [];
+  if (sp.src === "stash") acts.push(["Take", "take"]);
+  else { if (sp.canStore) acts.push(["Store", "store"]); acts.push(["Drop", "drop"]); }
+  acts.push(["Cancel", "drop"]);
+  const aw = (w - 20 * S - (acts.length - 1) * 6 * S) / acts.length;
+  let ax = x + 10 * S;
+  const ay = y + h - 20 * S;
+  for (const [lbl, mode] of acts) {
+    const isCancel = lbl === "Cancel";
+    const col = isCancel ? "#d08a7a" : lbl === "Drop" ? "#d0a24a" : "#8fd08a";
+    ctx.fillStyle = isCancel ? "rgba(60,30,26,.95)" : "rgba(30,44,30,.95)";
+    ctx.fillRect(ax, ay, aw, 15 * S);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = S;
+    ctx.strokeRect(ax + S / 2, ay + S / 2, aw - S, 15 * S - S);
+    hudText(base.hud, lbl, ax + aw / 2, ay + 7 * S, 8 * S, col, "center", true);
+    const capturedMode = mode;
+    base.hotspots.push({ x: ax, y: ay, w: aw, h: 15 * S, fn: () => {
+      if (isCancel) { base.ui.split = null; return; }
+      base.act.splitConfirm(capturedMode);
+    } });
+    ax += aw + 6 * S;
+  }
+}
+
 export function drawPanels(base: Omit<PanelInput, "win">): void {
   for (const win of base.ui.windows) {
     const p: PanelInput = { ...base, win };
@@ -241,6 +328,7 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
   if (base.ui.placing) drawPlacingHint(base);
   drawItemTooltip(base);
   drawInspect(base);
+  drawSplit(base);
 }
 
 /* ---------------- Build ---------------- */
@@ -336,9 +424,9 @@ const SLOT_LABEL: Readonly<Record<EqSlot, string>> = {
  * hands flanking the body, ring & legs below, boots at the foot, and a read-only
  * ammo slot showing which arrows a bow would fire. Empty cells keep the diamond.
  */
-type EqCell = EqSlot | "ammo" | null;
+type EqCell = EqSlot | "ammo" | "backpack" | null;
 const EQ_LAYOUT: readonly EqCell[] = [
-  "amulet", "head",   null,
+  "amulet", "head",   "backpack",
   "weapon", "body",   "shield",
   "ring",   "legs",   "ammo",
   null,     "boots",  null,
@@ -357,7 +445,6 @@ function drawEquip(p: PanelInput): void {
   const x = screenW - w - 8 * S + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "EQUIPMENT");
-  lookToggle(p, x, y, w);
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
   const ammoKind = bestArrow(player.bag);
@@ -365,6 +452,19 @@ function drawEquip(p: PanelInput): void {
     if (cell === null) return;
     const cx = gx + (i % cols) * (slot + gap);
     const cy = gy + Math.floor(i / cols) * (slot + gap);
+
+    if (cell === "backpack") {
+      ctx.fillStyle = "rgba(40,32,20,.9)";
+      ctx.fillRect(cx, cy, slot, slot);
+      ctx.strokeStyle = "#caa23a";
+      ctx.lineWidth = S;
+      ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
+      const spr = SPR.pack;
+      icon(p, spr, cx + (slot - spr.width * 2 * S) / 2, cy + (slot - spr.height * 2 * S) / 2 - 3 * S, 2 * S);
+      hudText(hud, "Bag", cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.85)", "center");
+      p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => p.act.openBag() });
+      return;
+    }
 
     if (cell === "ammo") {
       ctx.fillStyle = "rgba(40,32,20,.9)";
@@ -468,6 +568,7 @@ function drawBag(p: PanelInput): void {
       const def = ITEMS[stackSlot.kind];
       const idx = i;
       const k = stackSlot.kind;
+      p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, src: "bag", index: idx, kind: k, n: stackSlot.n });
       if (p.ui.lookMode) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.look(k) });
       } else if (def.slot) {
@@ -475,7 +576,7 @@ function drawBag(p: PanelInput): void {
       } else if (def.heal || def.crystal) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.useItem(k, idx) });
       } else {
-        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.look(k) });
+        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.moveStack("bag", idx) });
       }
     }
   });
@@ -718,6 +819,7 @@ function drawGrid(
   cell: number,
   gap: number,
   onClick: (index: number) => void,
+  src?: "bag" | "stash",
 ): void {
   const { hud } = p;
   const { ctx, scale: S } = hud;
@@ -739,6 +841,7 @@ function drawGrid(
       if (hov) tooltipKind = slot.kind;
       const idx = i;
       const kind = slot.kind;
+      if (src) p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, src, index: idx, kind, n: slot.n });
       p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => (p.ui.lookMode ? p.act.look(kind) : onClick(idx)) });
     }
   });
@@ -764,7 +867,7 @@ function drawStash(p: PanelInput): void {
 
   hudText(hud, "Chest — click to take", x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
   gy += headH;
-  drawGrid(p, game.stash, gx, gy, cols, cell, gap, (i) => p.act.withdraw(i));
+  drawGrid(p, game.stash, gx, gy, cols, cell, gap, (i) => p.act.moveStack("stash", i), "stash");
   gy += stashRows * (cell + gap) + 8 * S;
 
   ctx.fillStyle = "#6e571f";
@@ -773,5 +876,5 @@ function drawStash(p: PanelInput): void {
 
   hudText(hud, "Backpack — click to store", x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
   gy += headH;
-  drawGrid(p, player.bag, gx, gy, cols, cell, gap, (i) => p.act.deposit(i));
+  drawGrid(p, player.bag, gx, gy, cols, cell, gap, (i) => p.act.moveStack("bag", i), "bag");
 }
