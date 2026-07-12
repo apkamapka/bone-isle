@@ -8,7 +8,9 @@ export type ItemKind =
   // resources
   | "wood" | "stone" | "bones" | "herb" | "silk"
   // consumables
-  | "mushroom" | "meat" | "hpPotion" | "mpPotion"
+  | "mushroom" | "meat" | "hpPotion"
+  // crystals (charge-based spell replacements — one "use" per charge)
+  | "healCrystal" | "fireCrystal" | "recallCrystal"
   // gear
   | "sword" | "ironSword" | "boneSword"
   | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet";
@@ -20,7 +22,6 @@ export interface GearStats {
   def?: number;
   speed?: number;
   maxhp?: number;
-  maxmana?: number;
 }
 
 export interface ItemDef {
@@ -33,9 +34,10 @@ export interface ItemDef {
   weight: number;
   slot?: EqSlot;
   gear?: GearStats;
-  /** Consumable effect: hp/mana restored on use. */
+  /** Consumable effect: hp restored on use (potions, food). */
   heal?: number;
-  mana?: number;
+  /** True for charge-based crystals; each use consumes one from the stack. */
+  crystal?: true;
 }
 
 export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
@@ -47,7 +49,9 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   mushroom:  { name: "Mushroom",     stack: 20, value: 2, weight: 4, heal: 10 },
   meat:      { name: "Raw Meat",     stack: 20, value: 3, weight: 8, heal: 6 },
   hpPotion:  { name: "Health Potion", stack: 10, value: 12, weight: 5, heal: 45 },
-  mpPotion:  { name: "Mana Potion",   stack: 10, value: 12, weight: 5, mana: 35 },
+  healCrystal:   { name: "Life Crystal",   stack: 50, value: 8, weight: 2, crystal: true },
+  fireCrystal:   { name: "Fire Crystal",   stack: 50, value: 8, weight: 2, crystal: true },
+  recallCrystal: { name: "Recall Crystal", stack: 50, value: 6, weight: 2, crystal: true },
   sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 3 } },
   ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 7 } },
   boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 12 } },
@@ -57,7 +61,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 2 } },
   boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 6 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
-  amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 25, maxmana: 15 } },
+  amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
 };
 
 /** Weight of `n` of a given item kind, in oz. */
@@ -181,6 +185,8 @@ export function gearStat(eq: Equipment, key: keyof GearStats): number {
 /** Forge crafting recipes. */
 export interface Recipe {
   out: ItemKind;
+  /** How many of `out` a single craft yields (default 1). Crystals batch charges. */
+  outN?: number;
   cost: Partial<Record<ItemKind, number>>;
 }
 export const RECIPES: readonly Recipe[] = [
@@ -195,7 +201,9 @@ export const RECIPES: readonly Recipe[] = [
   { out: "ring",       cost: { stone: 6, bones: 8 } },
   { out: "amulet",     cost: { bones: 12, silk: 6 } },
   { out: "hpPotion",   cost: { herb: 3, mushroom: 2 } },
-  { out: "mpPotion",   cost: { herb: 3, silk: 2 } },
+  { out: "healCrystal",   outN: 10, cost: { herb: 4, silk: 3 } },
+  { out: "fireCrystal",   outN: 8,  cost: { bones: 5, stone: 4 } },
+  { out: "recallCrystal", outN: 4,  cost: { silk: 4, bones: 3 } },
 ];
 
 export function canCraft(bag: Bag, r: Recipe): boolean {
@@ -203,12 +211,13 @@ export function canCraft(bag: Bag, r: Recipe): boolean {
 }
 export function craft(bag: Bag, r: Recipe): boolean {
   if (!canCraft(bag, r)) return false;
-  if (addItem(bag, r.out, 1) > 0) return false; // bag full — don't consume
+  if (addItem(bag, r.out, r.outN ?? 1) > 0) return false; // bag full — don't consume
   for (const [k, v] of Object.entries(r.cost) as [ItemKind, number][]) removeItem(bag, k, v);
   return true;
 }
 export function recipeCostText(r: Recipe): string {
-  return (Object.entries(r.cost) as [ItemKind, number][])
+  const out = (Object.entries(r.cost) as [ItemKind, number][])
     .map(([k, v]) => `${v} ${ITEMS[k].name}`)
     .join(" + ");
+  return (r.outN ?? 1) > 1 ? `${out}  →  x${r.outN}` : out;
 }

@@ -101,7 +101,6 @@ export function respawnAtHome(g: Game): void {
   g.player.x = p.x;
   g.player.y = p.y;
   g.player.hp = g.player.maxhp;
-  g.player.mana = g.player.maxmana;
   g.player.dead = false;
   g.zoneFlash = { text: "Home Isle  (safe)", t: 2 };
 }

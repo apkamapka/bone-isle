@@ -1,8 +1,7 @@
 /** All toggleable UI panels. Each draws itself and pushes clickable hotspots. */
 import { SPR, itemSprite } from "../gfx/sprites.ts";
-import { skills, skillNeed, attackPower, defensePower, magicPower } from "../systems/skills.ts";
+import { skills, skillNeed, attackPower, defensePower } from "../systems/skills.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText } from "../systems/building.ts";
-import { SPELLS, spellsUnlocked } from "../systems/magic.ts";
 import { ITEMS, EQ_SLOT_KEYS, RECIPES, canCraft, recipeCostText, bagCount } from "../items.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
@@ -15,7 +14,7 @@ import type { Game } from "../game.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
-  | "forge" | "spell" | "loot" | "shop" | "stash";
+  | "forge" | "loot" | "shop" | "stash";
 
 export interface Hotspot {
   x: number;
@@ -53,7 +52,6 @@ export interface PanelActions {
   equipItem: (kind: ItemKind, slotIndex: number) => void;
   unequip: (slot: EqSlot) => void;
   craft: (r: Recipe) => void;
-  castSpell: (index: number) => void;
   takeLoot: (c: Corpse, index: number) => void;
   takeAllLoot: (c: Corpse) => void;
   buy: (kind: ItemKind) => void;
@@ -136,7 +134,6 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
       case "equip": drawEquip(p); break;
       case "bag": drawBag(p); break;
       case "forge": drawForge(p); break;
-      case "spell": drawSpellbook(p); break;
       case "loot": drawLoot(p); break;
       case "shop": drawShop(p); break;
       case "quest": drawQuests(p); break;
@@ -281,10 +278,8 @@ function drawEquip(p: PanelInput): void {
   sy += 8 * S;
   const stats: ReadonlyArray<readonly [string, string | number]> = [
     ["HP", `${Math.ceil(player.hp)} / ${player.maxhp}`],
-    ["Mana", `${Math.ceil(player.mana)} / ${player.maxmana}`],
     ["Attack", `~${attackPower(player.level, player.eq)}`],
     ["Defense", defensePower(player.eq)],
-    ["Magic Pwr", magicPower()],
   ];
   for (const [k, v] of stats) {
     hudText(hud, k, x + 12 * S, sy, 8 * S, "#cfe8d2");
@@ -330,7 +325,7 @@ function drawBag(p: PanelInput): void {
       const k = stackSlot.kind;
       if (def.slot) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.equipItem(k, idx) });
-      } else if (def.heal || def.mana) {
+      } else if (def.heal || def.crystal) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.useItem(k, idx) });
       }
     }
@@ -368,43 +363,6 @@ function drawForge(p: PanelInput): void {
     ry += rowH;
   }
   hudText(hud, "Click a recipe to craft (needs materials in your bag)", x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
-}
-
-/* ---------------- Spellbook ---------------- */
-
-function drawSpellbook(p: PanelInput): void {
-  const { hud, player, game } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
-  const w = 240 * S;
-  const unlocked = spellsUnlocked(game.worlds.home);
-  const rowH = 30 * S;
-  const h = 20 * S + SPELLS.length * rowH + 22 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "SPELLBOOK");
-  if (!unlocked) {
-    hudText(hud, "Build a Library on Home Isle", x + w / 2, y + h / 2 - 6 * S, 9 * S, "#d96a5a", "center", true);
-    hudText(hud, "to learn spells.", x + w / 2, y + h / 2 + 6 * S, 8 * S, "rgba(220,214,190,.7)", "center");
-    return;
-  }
-  let ry = y + 18 * S;
-  SPELLS.forEach((sp, i) => {
-    const enough = player.mana >= sp.cost;
-    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && enough) {
-      ctx.fillStyle = "rgba(79,143,240,.15)";
-      ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
-    }
-    hudText(hud, `[${i + 1}] ${sp.name}`, x + 12 * S, ry + 8 * S, 9 * S, enough ? "#dfe8ff" : "#8a8070", "left", true);
-    hudText(hud, `${sp.cost} mana`, x + w - 12 * S, ry + 8 * S, 8 * S, enough ? "#8ab6ff" : "#d96a5a", "right");
-    hudText(hud, sp.desc, x + 12 * S, ry + 19 * S, 7 * S, "rgba(220,214,190,.6)");
-    if (enough) {
-      const idx = i;
-      const ryy = ry;
-      p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.castSpell(idx) });
-    }
-    ry += rowH;
-  });
-  hudText(hud, "Cast with [1]/[2] or click · from the spell bar too", x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 
 /* ---------------- Corpse loot ---------------- */

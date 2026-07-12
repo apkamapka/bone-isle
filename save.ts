@@ -7,7 +7,7 @@ import { applyStructureSolidity, structureBonuses } from "./systems/building.ts"
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { quests } from "./systems/quests.ts";
-import { emptyBag, emptyStash, emptyEquipment } from "./items.ts";
+import { emptyBag, emptyStash, emptyEquipment, ITEMS } from "./items.ts";
 import type { Bag, Equipment, ItemKind } from "./items.ts";
 import type { WorldKey, Structure } from "./world/types.ts";
 
@@ -19,7 +19,7 @@ interface SaveData {
   current: WorldKey;
   player: {
     x: number; y: number;
-    hp: number; maxhp: number; mana: number; maxmana: number;
+    hp: number; maxhp: number;
     gold: number; level: number; exp: number; expNext: number;
     bag: Bag; eq: Equipment;
   };
@@ -53,7 +53,7 @@ export function saveGame(g: Game): void {
     current: g.current.key,
     player: {
       x: p.x, y: p.y,
-      hp: p.hp, maxhp: p.maxhp, mana: p.mana, maxmana: p.maxmana,
+      hp: p.hp, maxhp: p.maxhp,
       gold: p.gold, level: p.level, exp: p.exp, expNext: p.expNext,
       bag: p.bag, eq: p.eq,
     },
@@ -94,7 +94,10 @@ export function loadGame(): Game | null {
   (Object.keys(worlds) as WorldKey[]).forEach((k) => {
     const saved = data.structures[k];
     if (saved && saved.length) {
-      worlds[k].structures = saved.map((s) => ({ ...s }));
+      // Drop structures whose kind no longer exists (e.g. the old Library).
+      worlds[k].structures = saved
+        .filter((s) => s.key !== "library")
+        .map((s) => ({ ...s }));
     }
   });
   applyStructureSolidity(worlds.home);
@@ -122,7 +125,6 @@ export function loadGame(): Game | null {
   setActiveBonus(structureBonuses(worlds.home));
   refreshDerived(player, structureBonuses(worlds.home));
   player.hp = Math.min(sp.hp, player.maxhp);
-  player.mana = Math.min(sp.mana, player.maxmana);
 
   const current = worlds[data.current] ?? worlds.home;
   return {
@@ -144,14 +146,19 @@ export function deleteSave(): void {
   }
 }
 
+function validItem(s: unknown): { kind: ItemKind; n: number } | null {
+  if (s && typeof s === "object" && "kind" in s && "n" in s) {
+    const kind = (s as { kind: string }).kind;
+    if (kind in ITEMS) return { kind: kind as ItemKind, n: (s as { n: number }).n };
+  }
+  return null;
+}
+
 function normalizeBag(bag: unknown): Bag {
   const out = emptyBag();
   if (Array.isArray(bag)) {
     for (let i = 0; i < out.length && i < bag.length; i++) {
-      const s = bag[i];
-      if (s && typeof s === "object" && "kind" in s && "n" in s) {
-        out[i] = { kind: (s as { kind: ItemKind }).kind, n: (s as { n: number }).n };
-      }
+      out[i] = validItem(bag[i]);
     }
   }
   return out;
@@ -162,7 +169,7 @@ function normalizeEquipment(eq: unknown): Equipment {
   if (eq && typeof eq === "object") {
     for (const slot of Object.keys(out) as (keyof Equipment)[]) {
       const v = (eq as Record<string, unknown>)[slot];
-      if (typeof v === "string") out[slot] = v as ItemKind;
+      if (typeof v === "string" && v in ITEMS) out[slot] = v as ItemKind;
     }
   }
   return out;
@@ -172,10 +179,7 @@ function normalizeStash(stash: unknown): Bag {
   const out = emptyStash();
   if (Array.isArray(stash)) {
     for (let i = 0; i < out.length && i < stash.length; i++) {
-      const s = stash[i];
-      if (s && typeof s === "object" && "kind" in s && "n" in s) {
-        out[i] = { kind: (s as { kind: ItemKind }).kind, n: (s as { n: number }).n };
-      }
+      out[i] = validItem(stash[i]);
     }
   }
   return out;

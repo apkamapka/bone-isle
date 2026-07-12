@@ -11,8 +11,6 @@ export const VIEW_H = 320;
 export const PLAYER_BASE_SPEED = 58;
 export const PLAYER_ATTACK_RATE = 0.7;
 export const PLAYER_BASE_HP = 100;
-export const PLAYER_BASE_MANA = 50;
-export const MANA_REGEN_PER_S = 1.6;
 
 /** Backpack capacity (slots). */
 export const BAG_SIZE = 16;
@@ -29,17 +27,17 @@ export const TREE_REGROW_S = 90;
 export const ROCK_REGROW_S = 120;
 export const HERB_REGROW_S = 75;
 
-/** Garden aura: heal radius (px) and HP/mana per second while standing near. */
+/** Garden aura: heal radius (px) and HP per second while standing near. */
 export const GARDEN_RADIUS = 40;
 export const GARDEN_HEAL_PER_S = 3;
-export const GARDEN_MANA_PER_S = 2.2;
 
-/** Passive max-stat bonuses granted while you own a structure on Home Isle. */
-export const LIBRARY_MANA_BONUS = 30; // +max mana per Library owned
-export const GARDEN_HP_BONUS = 15;    // +max HP per Garden owned
+/** Passive max-HP bonus granted while you own a Garden on Home Isle. */
+export const GARDEN_HP_BONUS = 15;
 
-/** Recall spell: mana cost to teleport back to Home Isle (Library-gated). */
-export const RECALL_COST = 20;
+/** Crystals (charge-based, replace spells). Values are per single charge. */
+export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level*3
+export const FIRE_CRYSTAL_DMG = 18;     // damage = this + level
+export const FIRE_CRYSTAL_RANGE = 120;  // px the fire crystal can reach
 
 /** Chest storage capacity (slots). */
 export const STASH_SIZE = 20;

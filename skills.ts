@@ -3,7 +3,7 @@ import { beep } from "../audio.ts";
 import { gearStat } from "../items.ts";
 import type { Equipment } from "../items.ts";
 
-export type SkillKey = "sword" | "shield" | "magic" | "dist" | "speed";
+export type SkillKey = "sword" | "shield" | "dist" | "speed";
 
 export interface Skill {
   name: string;
@@ -22,7 +22,6 @@ export interface Skill {
 export const skills: Record<SkillKey, Skill> = {
   sword: { name: "Sword Fighting", lv: 10, pts: 0, color: "#e1483b", active: true, offset: 10, factor: 1.1, base: 50 },
   shield: { name: "Shielding", lv: 10, pts: 0, color: "#5aa1e8", active: true, offset: 10, factor: 1.1, base: 50 },
-  magic: { name: "Magic Level", lv: 0, pts: 0, color: "#b07fe8", active: true, offset: 0, factor: 1.1, base: 400 },
   dist: { name: "Distance Fighting", lv: 10, pts: 0, color: "#6fc06a", active: false, offset: 10, factor: 1.1, base: 50 },
   speed: { name: "Speed", lv: 10, pts: 0, color: "#e3b341", active: true, offset: 10, factor: 1.4, base: 40 },
 };
@@ -58,9 +57,6 @@ export function attackPower(level: number, eq: Equipment): number {
 }
 export function defensePower(eq: Equipment): number {
   return Math.floor((skills.shield.lv - 10) / 2) + gearStat(eq, "def");
-}
-export function magicPower(): number {
-  return 4 + skills.magic.lv * 2;
 }
 export function moveSpeedBonus(): number {
   return (skills.speed.lv - 10) * 2;

@@ -1,8 +1,8 @@
 /** Building system: structure catalog, affordability, placement. */
-import { TILE, LIBRARY_MANA_BONUS, GARDEN_HP_BONUS } from "../config.ts";
+import { TILE, GARDEN_HP_BONUS } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
-import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeChest } from "../gfx/sprites.ts";
+import { SPR, bakeForge, bakeGarden, bakeDummy, bakeChest } from "../gfx/sprites.ts";
 import { countAcross, removeAcross } from "../items.ts";
 import { onStructureBuilt } from "./quests.ts";
 import type { ItemKind, Bag } from "../items.ts";
@@ -23,28 +23,25 @@ export interface StructDef {
   single?: boolean;
 }
 
-export type StructKey = "forge" | "library" | "garden" | "dummy" | "dummyII" | "chest";
+export type StructKey = "forge" | "garden" | "dummy" | "dummyII" | "chest";
 
 export const STRUCTS: Record<StructKey, StructDef> = {
-  forge: { name: "Forge", cost: { wood: 40, stone: 30 }, spr: bakeForge(), desc: "Craft weapons, armor & potions", solid: true },
-  library: { name: "Library", cost: { wood: 30, stone: 24, herb: 6 }, spr: bakeLibrary(), desc: "Learn spells · +30 max mana", solid: true },
-  garden: { name: "Garden", cost: { wood: 22, herb: 12, stone: 6 }, spr: bakeGarden(), desc: "Regen HP & mana nearby · +15 max HP", solid: false },
+  forge: { name: "Forge", cost: { wood: 40, stone: 30 }, spr: bakeForge(), desc: "Craft gear, potions & crystals", solid: true },
+  garden: { name: "Garden", cost: { wood: 22, herb: 12, stone: 6 }, spr: bakeGarden(), desc: "Regen HP nearby · +15 max HP", solid: false },
   dummy: { name: "Training Dummy", cost: { wood: 16, stone: 12 }, spr: bakeDummy(), desc: "Attack it to train Sword Fighting", solid: true, single: true },
   dummyII: { name: "War Dummy", cost: { wood: 30, stone: 24, bones: 16 }, spr: bakeDummy(), desc: "Trains Sword Fighting + Shielding", solid: true, single: true },
   chest: { name: "Storage Chest", cost: { wood: 24, stone: 16 }, spr: bakeChest(), desc: "Stash items you don't want to carry", solid: true },
 };
 
-export const STRUCT_KEYS: StructKey[] = ["forge", "library", "garden", "dummy", "dummyII", "chest"];
+export const STRUCT_KEYS: StructKey[] = ["forge", "garden", "dummy", "dummyII", "chest"];
 
-/** Passive max HP/mana bonuses from structures owned on Home Isle. */
-export function structureBonuses(home: World): { maxhp: number; maxmana: number } {
+/** Passive max-HP bonus from structures owned on Home Isle (Garden). */
+export function structureBonuses(home: World): { maxhp: number } {
   let maxhp = 0;
-  let maxmana = 0;
   for (const s of home.structures) {
-    if (s.key === "library") maxmana += LIBRARY_MANA_BONUS;
     if (s.key === "garden") maxhp += GARDEN_HP_BONUS;
   }
-  return { maxhp, maxmana };
+  return { maxhp };
 }
 
 export function canAfford(bag: Bag, cost: Cost, stash?: Bag): boolean {

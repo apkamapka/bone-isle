@@ -50,7 +50,6 @@ export function grantExp(world: World, p: Player, exp: number): void {
     p.expNext = expNeeded(p.level);
     refreshDerived(p);
     p.hp = p.maxhp;
-    p.mana = p.maxmana;
     addFloat(world, p.x, p.y - 24, "LEVEL UP!", "#7dff9e");
     beep(440, 0.1, "square", 0.06);
   }

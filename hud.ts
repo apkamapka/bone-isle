@@ -1,8 +1,9 @@
-/** Screen-space HUD: HP/mana/EXP bars, gold, minimap, spells, overlays. */
+/** Screen-space HUD: HP/EXP bars, cap, gold, minimap, action bar, overlays. */
 import { TILE } from "../config.ts";
-import { SPR } from "../gfx/sprites.ts";
+import { SPR, itemSprite } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
-import { SPELLS, spellsUnlocked } from "../systems/magic.ts";
+import { actionSlots } from "../systems/actions.ts";
+import { bagCount } from "../items.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import type { Player } from "../entities/player.ts";
 import type { Game } from "../game.ts";
@@ -96,24 +97,22 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   const pad = 8 * S;
   ctx.textBaseline = "middle";
 
-  // bottom-left: HP + mana + EXP
+  // bottom-left: HP + EXP + Cap
   const pw = 190 * S;
-  const ph = 68 * S;
+  const ph = 54 * S;
   const px = pad;
   const py = screenH - ph - pad;
   panel(h, px, py, pw, ph);
   bar(h, px + 10 * S, py + 8 * S, 130 * S, 8 * S, p.hp / p.maxhp, "#e1483b", "#5d1a14");
   hudText(h, `HP ${Math.ceil(p.hp)}/${p.maxhp}`, px + 145 * S, py + 11 * S + 1, 8 * S, "#ffd9d4");
-  bar(h, px + 10 * S, py + 22 * S, 130 * S, 8 * S, p.mana / p.maxmana, "#4f8ff0", "#182a52");
-  hudText(h, `MP ${Math.ceil(p.mana)}/${p.maxmana}`, px + 145 * S, py + 25 * S + 1, 8 * S, "#cfe0ff");
-  bar(h, px + 10 * S, py + 36 * S, 130 * S, 8 * S, p.exp / p.expNext, "#b07fe8", "#3c2752");
-  hudText(h, `Lv ${p.level}`, px + 145 * S, py + 39 * S + 1, 8 * S, "#e6d4ff");
+  bar(h, px + 10 * S, py + 22 * S, 130 * S, 8 * S, p.exp / p.expNext, "#b07fe8", "#3c2752");
+  hudText(h, `Lv ${p.level}`, px + 145 * S, py + 25 * S + 1, 8 * S, "#e6d4ff");
   const cap = carryCap(p);
   const used = Math.round(carriedWeight(p));
   const capFull = used >= cap;
-  hudText(h, "Cap", px + 10 * S, py + 54 * S, 8 * S, "rgba(220,214,190,.7)");
-  bar(h, px + 34 * S, py + 51 * S, 106 * S, 6 * S, used / cap, capFull ? "#e06a4a" : "#caa15a", "#3a3222");
-  hudText(h, `${used}/${cap}`, px + 145 * S, py + 54 * S, 8 * S, capFull ? "#ffb59a" : "#e8dcc0");
+  hudText(h, "Cap", px + 10 * S, py + 40 * S, 8 * S, "rgba(220,214,190,.7)");
+  bar(h, px + 34 * S, py + 37 * S, 106 * S, 6 * S, used / cap, capFull ? "#e06a4a" : "#caa15a", "#3a3222");
+  hudText(h, `${used}/${cap}`, px + 145 * S, py + 40 * S, 8 * S, capFull ? "#ffb59a" : "#e8dcc0");
 
   // top-right: gold + resource counts
   const iw = 150 * S;
@@ -135,26 +134,36 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
 
   drawMinimap(h, game, p);
 
-  // spell bar / hotkey hint (bottom-center) — desktop only; touch uses buttons
+  // action bar (bottom-center) — desktop only; touch uses on-screen buttons
   if (!h.touch) {
-    if (spellsUnlocked(game.current) || spellsUnlocked(game.worlds.home)) {
-      const bw = 58 * S;
-      const step = 62 * S;
-      let sx = screenW / 2 - (SPELLS.length * step - (step - bw)) / 2;
-      const sy = screenH - pad - 20 * S;
-      SPELLS.forEach((sp, i) => {
-        const enough = p.mana >= sp.cost;
-        ctx.fillStyle = enough ? "rgba(40,60,90,.85)" : "rgba(40,40,40,.7)";
-        ctx.fillRect(sx, sy, bw, 16 * S);
-        ctx.strokeStyle = enough ? "#4f8ff0" : "#555";
-        ctx.lineWidth = S;
-        ctx.strokeRect(sx + S / 2, sy + S / 2, bw - S, 16 * S - S);
-        hudText(h, `${i + 1} ${sp.name}`, sx + 4 * S, sy + 8 * S, 7 * S, enough ? "#dfe8ff" : "#888");
-        sx += step;
-      });
-    } else {
-      hudText(h, "[B]uild [S]kills [E]quip [I]nv [Q]uests · click a Chest to stash", screenW / 2, screenH - pad - 5 * S, 8 * S, "#e3d9b8", "center", true);
+    const bw = 34 * S;
+    const gap = 6 * S;
+    const n = actionSlots.length;
+    let sx = screenW / 2 - (n * bw + (n - 1) * gap) / 2;
+    const sy = screenH - pad - 22 * S;
+    for (let i = 0; i < n; i++) {
+      const slot = actionSlots[i];
+      const item = slot && slot.type === "crystal" ? slot.item : null;
+      const charges = item ? bagCount(p.bag, item) : 0;
+      const usable = item != null && charges > 0;
+      ctx.fillStyle = slot ? "rgba(30,40,50,.85)" : "rgba(24,24,24,.6)";
+      ctx.fillRect(sx, sy, bw, bw);
+      ctx.strokeStyle = usable ? "#caa15a" : "#455";
+      ctx.lineWidth = S;
+      ctx.strokeRect(sx + S / 2, sy + S / 2, bw - S, bw - S);
+      hudText(h, `${i + 1}`, sx + 3 * S, sy + 6 * S, 7 * S, "rgba(220,214,190,.6)");
+      if (item) {
+        const spr = itemSprite(item);
+        const isc = 2 * S;
+        ctx.imageSmoothingEnabled = false;
+        ctx.globalAlpha = usable ? 1 : 0.35;
+        ctx.drawImage(spr, sx + (bw - spr.width * isc) / 2, sy + (bw - spr.height * isc) / 2 - S, spr.width * isc, spr.height * isc);
+        ctx.globalAlpha = 1;
+        hudText(h, `${charges}`, sx + bw - 3 * S, sy + bw - 4 * S, 7 * S, usable ? "#ffe9a8" : "#c86", "right");
+      }
+      sx += bw + gap;
     }
+    hudText(h, "1 Life · 2 Fire · 3 Recall", screenW / 2, sy - 6 * S, 7 * S, "rgba(220,214,190,.5)", "center");
   }
 
   // zone flash
