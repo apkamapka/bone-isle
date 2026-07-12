@@ -360,7 +360,7 @@ function handleWorldTap(sx: number, sy: number): void {
   const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
   if (ui.placing) {
     if (cw() === game.worlds.home) {
-      if (tryPlace(game.worlds.home, P, ui.placing, w.x, w.y)) recomputeBonuses();
+      if (tryPlace(game.worlds.home, P, ui.placing, w.x, w.y, game.stash)) recomputeBonuses();
     }
     ui.placing = null;
     return;

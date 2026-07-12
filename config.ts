@@ -23,10 +23,11 @@ export const MONSTER_RESPAWN_S = 12;
 /** How long a lootable corpse stays on the ground (seconds). */
 export const CORPSE_DECAY_S = 75;
 
-/** Resource node regrowth (seconds). */
-export const TREE_REGROW_S = 30;
-export const ROCK_REGROW_S = 40;
-export const HERB_REGROW_S = 45;
+/** Resource node regrowth (seconds). Slow enough that you rotate between
+ *  nodes and islands rather than farming one spot — paired with denser nodes. */
+export const TREE_REGROW_S = 90;
+export const ROCK_REGROW_S = 120;
+export const HERB_REGROW_S = 75;
 
 /** Garden aura: heal radius (px) and HP/mana per second while standing near. */
 export const GARDEN_RADIUS = 40;

@@ -145,6 +145,29 @@ export function removeItem(bag: Bag, kind: ItemKind, n: number): boolean {
   return true;
 }
 
+/** Total count of `kind` across several bags (e.g. backpack + storage chest). */
+export function countAcross(bags: readonly Bag[], kind: ItemKind): number {
+  let n = 0;
+  for (const b of bags) n += bagCount(b, kind);
+  return n;
+}
+
+/**
+ * Remove `n` of `kind` spread across several bags, in order (backpack first,
+ * then stash). Returns true only if the combined total was enough.
+ */
+export function removeAcross(bags: readonly Bag[], kind: ItemKind, n: number): boolean {
+  if (countAcross(bags, kind) < n) return false;
+  let left = n;
+  for (const b of bags) {
+    if (left <= 0) break;
+    const have = bagCount(b, kind);
+    const take = Math.min(have, left);
+    if (take > 0) { removeItem(b, kind, take); left -= take; }
+  }
+  return true;
+}
+
 /** Sum a gear stat across all equipped items. */
 export function gearStat(eq: Equipment, key: keyof GearStats): number {
   let v = 0;
