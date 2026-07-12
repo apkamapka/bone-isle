@@ -41,6 +41,17 @@ export const FIRE_CRYSTAL_RANGE = 120;  // px the fire crystal can reach
 export const SPEAR_CRYSTAL_DMG = 40;    // Spear Crystal (tower-researched) = this + level*2
 export const SPEAR_CRYSTAL_RANGE = 160; // longer reach than a Fire Crystal
 
+/**
+ * Ranged combat. A bow is a two-handed weapon (locks out the shield) that
+ * fires arrows — real ammo consumed one per shot. Reach/power live on the item
+ * (see ITEMS.bow / ITEMS.longbow, ITEMS.arrow / ITEMS.boneArrow); these are the
+ * shared knobs the formula in skills.ts builds on.
+ */
+export const DIST_BASE = 4;             // flat base of a shot's damage
+export const DIST_PER_LEVEL = 0.5;      // + level * this (rounded down)
+export const ARROW_MISS_WARN_S = 1.2;   // throttle for the "no arrows" nag
+export const SHOT_SPEED = 520;          // px/s the drawn arrow travels
+
 /** Chest storage capacity (slots). */
 export const STASH_SIZE = 20;
 

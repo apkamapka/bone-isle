@@ -309,6 +309,37 @@ export const SPR = {
     "rRRr.",
     ".rr..",
   ]),
+  bow: bake([
+    ".hh.",
+    "h..M",
+    "h..M",
+    "h..M",
+    "h..M",
+    ".hh.",
+  ]),
+  longbow: bake([
+    ".hh..",
+    "h..M.",
+    "h..M.",
+    "h.cM.",
+    "h..M.",
+    "h..M.",
+    ".hh..",
+  ]),
+  arrow: bake([
+    ".M.",
+    "MMM",
+    ".b.",
+    ".b.",
+    "cbc",
+  ]),
+  boneArrow: bake([
+    ".w.",
+    "www",
+    ".W.",
+    ".W.",
+    "cWc",
+  ]),
 } as const;
 
 export type SpriteName = keyof typeof SPR;
@@ -471,6 +502,7 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   legs: SPR.eqLegs, boots: SPR.eqBoots, ring: SPR.eqRing, amulet: SPR.eqAmulet,
   healCrystal: SPR.crystalHeal, fireCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
   spearCrystal: SPR.crystalSpear, fireRuby: SPR.fireRuby,
+  bow: SPR.bow, longbow: SPR.longbow, arrow: SPR.arrow, boneArrow: SPR.boneArrow,
 };
 export function itemSprite(kind: ItemKind): HTMLCanvasElement {
   return ITEM_SPR[kind];

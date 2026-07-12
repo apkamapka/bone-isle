@@ -1,6 +1,7 @@
 /** Tibia-style skills: levels that climb as you use them, plus gear bonuses. */
 import { beep } from "../audio.ts";
-import { gearStat } from "../items.ts";
+import { gearStat, equippedBow } from "../items.ts";
+import { DIST_BASE, DIST_PER_LEVEL } from "../config.ts";
 import type { Equipment } from "../items.ts";
 
 export type SkillKey = "sword" | "shield" | "dist" | "speed";
@@ -22,7 +23,7 @@ export interface Skill {
 export const skills: Record<SkillKey, Skill> = {
   sword: { name: "Sword Fighting", lv: 10, pts: 0, color: "#e1483b", active: true, offset: 10, factor: 1.1, base: 50 },
   shield: { name: "Shielding", lv: 10, pts: 0, color: "#5aa1e8", active: true, offset: 10, factor: 1.1, base: 50 },
-  dist: { name: "Distance Fighting", lv: 10, pts: 0, color: "#6fc06a", active: false, offset: 10, factor: 1.1, base: 50 },
+  dist: { name: "Distance Fighting", lv: 10, pts: 0, color: "#6fc06a", active: true, offset: 10, factor: 1.1, base: 50 },
   speed: { name: "Speed", lv: 10, pts: 0, color: "#e3b341", active: true, offset: 10, factor: 1.4, base: 40 },
 };
 
@@ -54,6 +55,15 @@ export function addSkillXp(key: SkillKey, n: number, onLevel?: SkillUpFx): void 
 /** Derived combat stats from skills + level + equipped gear. */
 export function attackPower(level: number, eq: Equipment): number {
   return 6 + level + (skills.sword.lv - 10) + gearStat(eq, "atk");
+}
+/**
+ * Damage of a single arrow shot: flat base + level + Distance skill + the bow's
+ * power + the arrow's own damage. Distance Fighting scales this the way Sword
+ * scales melee, so investing in the bow line is its own progression.
+ */
+export function distancePower(level: number, eq: Equipment, arrowDmg: number): number {
+  const bowPower = equippedBow(eq)?.power ?? 0;
+  return DIST_BASE + Math.floor(level * DIST_PER_LEVEL) + (skills.dist.lv - 10) + bowPower + arrowDmg;
 }
 export function defensePower(eq: Equipment): number {
   return Math.floor((skills.shield.lv - 10) / 2) + gearStat(eq, "def");

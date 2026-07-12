@@ -1,11 +1,11 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S } from "./config.ts";
 import { moveEntity } from "./world/collision.ts";
 import { SPR } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster } from "./entities/monsters.ts";
-import { playerAttack, hitDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
+import { playerAttack, playerShoot, hitDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost } from "./systems/building.ts";
 import { setActiveBonus } from "./systems/derived.ts";
@@ -13,7 +13,7 @@ import { useCrystal } from "./systems/crystals.ts";
 import { actionSlots } from "./systems/actions.ts";
 import { researchById, isResearched, markResearched } from "./systems/tower.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
-import { addItem, removeItem, ITEMS, itemWeight, bagCount } from "./items.ts";
+import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
@@ -186,12 +186,18 @@ const act: PanelActions = {
     beep(500, 0.12, "sine", 0.05, 180);
   },
   equipItem: (kind: ItemKind) => {
-    const slot = ITEMS[kind].slot;
+    const def = ITEMS[kind];
+    const slot = def.slot;
     if (!slot) return;
     if (!removeItem(P.bag, kind, 1)) return;
     const prev = P.eq[slot];
     P.eq[slot] = kind;
     if (prev) addItem(P.bag, prev, 1);
+    // Two-handed rule: a bow occupies both hands, so it can't share with a shield.
+    if (def.bow && P.eq.shield) { addItem(P.bag, P.eq.shield, 1); P.eq.shield = null; }
+    if (slot === "shield" && P.eq.weapon && ITEMS[P.eq.weapon].bow) {
+      addItem(P.bag, P.eq.weapon, 1); P.eq.weapon = null;
+    }
     refreshDerived(P);
     beep(420, 0.1, "triangle", 0.05);
   },
@@ -575,6 +581,27 @@ function gatherPoint(): Vec | null {
   return { x: o.tx * TILE + TILE / 2, y: o.ty * TILE + TILE / 2 };
 }
 
+/**
+ * How the player engages a monster right now. A bow with arrows shoots from
+ * afar (its own reach); anything else closes to melee range. A bow with no
+ * arrows falls back to a melee poke so you're never fully stuck.
+ */
+function attackMode(): { ranged: boolean; reach: number; arrow: ItemKind | null } {
+  const bow = equippedBow(P.eq);
+  if (bow) {
+    const arrow = bestArrow(P.bag);
+    if (arrow) return { ranged: true, reach: bow.range, arrow };
+  }
+  return { ranged: false, reach: 15, arrow: null };
+}
+
+let noArrowWarnT = 0;
+function warnNoArrows(): void {
+  if (noArrowWarnT > 0) return;
+  noArrowWarnT = ARROW_MISS_WARN_S;
+  flash("no arrows", "#ff9e6a");
+}
+
 /* ---------------- update ---------------- */
 
 function checkPortals(): void {
@@ -622,7 +649,9 @@ function update(dt: number): void {
     const tp = targetPoint();
     if (tp) {
       const d = dist(P.x, P.y, tp.x, tp.y);
-      const reach = P.target.kind === "mob" || P.target.kind === "dummy" ? 15 : 18;
+      let reach = 18;
+      if (P.target.kind === "dummy") reach = 15;
+      else if (P.target.kind === "mob") reach = attackMode().reach;
       if (d > reach) {
         const sp = playerSpeed(P);
         moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt);
@@ -681,6 +710,14 @@ function update(dt: number): void {
   // structure anim
   for (const s of world.structures) { s.anim = (s.anim ?? 0) + dt; if (s.hurtT) s.hurtT = Math.max(0, s.hurtT - dt); }
 
+  // arrows in flight (cosmetic — the hit already landed when fired)
+  if (noArrowWarnT > 0) noArrowWarnT = Math.max(0, noArrowWarnT - dt);
+  for (let i = world.shots.length - 1; i >= 0; i--) {
+    const sh = world.shots[i];
+    sh.p += dt / sh.dur;
+    if (sh.p >= 1) world.shots.splice(i, 1);
+  }
+
   tickRegrowth(world, dt, P.x, P.y, true);
   checkPortals();
   updateFloats(dt);
@@ -695,7 +732,16 @@ function resolveTarget(): void {
   const t = P.target;
   if (!t) return;
   if (t.kind === "mob") {
-    if (P.atkCd <= 0) { P.atkCd = P.atkRate; if (playerAttack(cw(), P, t.m)) P.target = null; }
+    if (P.atkCd <= 0) {
+      P.atkCd = P.atkRate;
+      const mode = attackMode();
+      if (mode.ranged && mode.arrow) {
+        if (playerShoot(cw(), P, t.m, mode.arrow)) P.target = null;
+      } else {
+        if (equippedBow(P.eq)) warnNoArrows();
+        if (playerAttack(cw(), P, t.m)) P.target = null;
+      }
+    }
   } else if (t.kind === "dummy") {
     if (P.atkCd <= 0) { P.atkCd = P.atkRate; hitDummy(cw(), P, t.s); }
   } else if (t.kind === "corpse") {
@@ -892,6 +938,24 @@ function render(): void {
 
   drawList.sort((a, b) => a.y - b.y);
   for (const d of drawList) d.fn();
+
+  // arrows in flight — drawn above the sorted scene since they arc overhead
+  for (const sh of world.shots) {
+    const t = sh.p < 1 ? sh.p : 1;
+    const cx = sh.fromX + (sh.toX - sh.fromX) * t;
+    const cy = sh.fromY + (sh.toY - sh.fromY) * t - Math.sin(t * Math.PI) * 6;
+    const ang = Math.atan2(sh.toY - sh.fromY, sh.toX - sh.fromX);
+    const dx = Math.cos(ang) * 3;
+    const dy = Math.sin(ang) * 3;
+    const px = Math.round(cx - cam.x);
+    const py = Math.round(cy - cam.y);
+    vctx.strokeStyle = sh.bone ? "#efe9d6" : "#cfd8da";
+    vctx.lineWidth = 1;
+    vctx.beginPath();
+    vctx.moveTo(px - dx, py - dy);
+    vctx.lineTo(px + dx, py + dy);
+    vctx.stroke();
+  }
 
   // target reticle
   if (P.target && (P.target.kind === "mob" || P.target.kind === "dummy")) {

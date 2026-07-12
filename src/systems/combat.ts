@@ -1,12 +1,13 @@
 /** Combat: player hits monsters, monsters hit the player, corpses & leveling. */
 import { rndi } from "../util.ts";
-import { expNeeded, MONSTER_RESPAWN_S, CORPSE_DECAY_S } from "../config.ts";
+import { expNeeded, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
-import { ITEMS } from "../items.ts";
+import { ITEMS, removeItem } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
-import { addSkillXp, attackPower, defensePower } from "./skills.ts";
+import { addSkillXp, attackPower, defensePower, distancePower } from "./skills.ts";
+import type { ItemKind } from "../items.ts";
 import { onMonsterKilled } from "./quests.ts";
 import type { Player } from "../entities/player.ts";
 import type { World, Monster, Structure } from "../world/types.ts";
@@ -20,6 +21,35 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
   addFloat(world, m.x, m.y - 16, String(dmg), "#ffe27a");
   addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
   beep(160, 0.07, "square", 0.05);
+  if (m.hp <= 0) {
+    killMonster(world, p, m);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Fire an arrow at a monster with the equipped bow. Consumes one `arrowKind`
+ * from the bag, trains Distance Fighting, spawns a cosmetic projectile and
+ * applies the hit instantly. Returns true if the monster died.
+ */
+export function playerShoot(world: World, p: Player, m: Monster, arrowKind: ItemKind): boolean {
+  const arrowDmg = ITEMS[arrowKind].ammo?.dmg ?? 0;
+  if (!removeItem(p.bag, arrowKind, 1)) return false;
+  const dp = distancePower(p.level, p.eq, arrowDmg);
+  const dmg = rndi(dp - 2, dp + 3);
+  m.hp -= dmg;
+  m.hurtT = 0.15;
+  const flight = Math.hypot(m.x - p.x, m.y - p.y) / SHOT_SPEED;
+  world.shots.push({
+    fromX: p.x, fromY: p.y - 8,
+    toX: m.x, toY: m.y - 6,
+    p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow",
+  });
+  addFloat(world, m.x, m.y - 16, String(dmg), "#bfe08a");
+  addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+  if (m.x < p.x) p.face = -1; else p.face = 1;
+  beep(430, 0.06, "triangle", 0.045, -120);
   if (m.hp <= 0) {
     killMonster(world, p, m);
     return true;

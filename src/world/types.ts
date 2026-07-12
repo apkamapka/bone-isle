@@ -148,6 +148,21 @@ export interface Npc {
   bob: number;
 }
 
+/**
+ * A flying arrow. Purely cosmetic — the hit is resolved instantly when fired;
+ * this just draws the projectile travelling from the shooter to where the
+ * target stood at release. `p` is 0→1 travel progress.
+ */
+export interface Shot {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  p: number;
+  dur: number;
+  bone: boolean;
+}
+
 /** A pending respawn (kind + countdown seconds). */
 export interface Respawn {
   kind: MonsterKind;
@@ -191,6 +206,7 @@ export interface World {
   ground: GroundItem[];
   npcs: Npc[];
   respawns: Respawn[];
+  shots: Shot[];
   structures: Structure[];
   buildSpots: BuildSpot[];
   portals: Portal[];

@@ -94,6 +94,7 @@ export function makeWorld(opts: WorldOpts): World {
     ground: [],
     npcs: [],
     respawns: [],
+    shots: [],
     structures: [],
     buildSpots: [],
     portals: [],

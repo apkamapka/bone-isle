@@ -13,6 +13,8 @@ export type ItemKind =
   | "healCrystal" | "fireCrystal" | "recallCrystal" | "spearCrystal"
   // rare research materials (gate the Alchemy Tower's tech tree)
   | "fireRuby"
+  // ranged: bows (two-handed weapons) + arrows (consumable ammo)
+  | "bow" | "longbow" | "arrow" | "boneArrow"
   // gear
   | "sword" | "ironSword" | "boneSword"
   | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet";
@@ -40,6 +42,10 @@ export interface ItemDef {
   heal?: number;
   /** True for charge-based crystals; each use consumes one from the stack. */
   crystal?: true;
+  /** Bows: two-handed ranged weapon. `range` px reach, `power` adds to shot dmg. */
+  bow?: { range: number; power: number };
+  /** Arrows: consumable ammo. `dmg` adds to each shot's damage. */
+  ammo?: { dmg: number };
 }
 
 export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
@@ -56,6 +62,10 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   recallCrystal: { name: "Recall Crystal", stack: 50, value: 6, weight: 2, crystal: true },
   spearCrystal:  { name: "Spear Crystal",  stack: 50, value: 14, weight: 2, crystal: true },
   fireRuby:      { name: "Fire Ruby",      stack: 10, value: 40, weight: 3 },
+  bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 110, power: 4 } },
+  longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 150, power: 9 } },
+  arrow:     { name: "Arrow",        stack: 99, value: 1, weight: 1, ammo: { dmg: 6 } },
+  boneArrow: { name: "Bone Arrow",   stack: 99, value: 2, weight: 1, ammo: { dmg: 12 } },
   sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 3 } },
   ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 7 } },
   boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 12 } },
@@ -176,6 +186,26 @@ export function removeAcross(bags: readonly Bag[], kind: ItemKind, n: number): b
   return true;
 }
 
+/** The bow stats of the equipped weapon, or null if it isn't a bow. */
+export function equippedBow(eq: Equipment): { range: number; power: number } | null {
+  const w = eq.weapon;
+  return w ? ITEMS[w].bow ?? null : null;
+}
+
+/**
+ * Pick the best arrow kind present in the bag (Bone > plain), or null if none.
+ * "Best" = highest ammo damage among kinds you actually carry.
+ */
+export function bestArrow(bag: Bag): ItemKind | null {
+  let best: ItemKind | null = null;
+  let bestDmg = -1;
+  for (const kind of ["boneArrow", "arrow"] as const) {
+    const def = ITEMS[kind].ammo;
+    if (def && bagCount(bag, kind) > 0 && def.dmg > bestDmg) { best = kind; bestDmg = def.dmg; }
+  }
+  return best;
+}
+
 /** Sum a gear stat across all equipped items. */
 export function gearStat(eq: Equipment, key: keyof GearStats): number {
   let v = 0;
@@ -205,6 +235,11 @@ export const RECIPES: readonly Recipe[] = [
   { out: "ring",       cost: { stone: 6, bones: 8 } },
   { out: "amulet",     cost: { bones: 12, silk: 6 } },
   { out: "hpPotion",   cost: { herb: 3, mushroom: 2 } },
+  // ranged: bows, then arrows in batches (the progression is in the ammo)
+  { out: "bow",        cost: { wood: 6, silk: 2 } },
+  { out: "longbow",    cost: { wood: 10, silk: 4, bones: 6 } },
+  { out: "arrow",      outN: 10, cost: { wood: 2 } },
+  { out: "boneArrow",  outN: 10, cost: { bones: 3, wood: 1 } },
 ];
 
 export function canCraft(bag: Bag, r: Recipe): boolean {

@@ -56,6 +56,9 @@ export function createPlayer(spawn: Vec): Player {
   addItem(bag, "healCrystal", 25);
   addItem(bag, "fireCrystal", 15);
   addItem(bag, "recallCrystal", 5);
+  // Starter bow + arrows so ranged combat is usable before the Forge.
+  addItem(bag, "bow", 1);
+  addItem(bag, "arrow", 30);
   return {
     x: spawn.x,
     y: spawn.y,
