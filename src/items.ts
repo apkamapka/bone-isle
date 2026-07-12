@@ -49,23 +49,23 @@ export interface ItemDef {
 }
 
 export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
-  wood:      { name: "Wood",         stack: 50, value: 1, weight: 10 },
-  stone:     { name: "Stone",        stack: 50, value: 1, weight: 14 },
-  bones:     { name: "Bones",        stack: 50, value: 2, weight: 8 },
-  herb:      { name: "Herb",         stack: 50, value: 3, weight: 3 },
-  silk:      { name: "Spider Silk",  stack: 50, value: 4, weight: 2 },
-  mushroom:  { name: "Mushroom",     stack: 20, value: 2, weight: 4, heal: 10 },
-  meat:      { name: "Raw Meat",     stack: 20, value: 3, weight: 8, heal: 6 },
-  hpPotion:  { name: "Health Potion", stack: 10, value: 12, weight: 5, heal: 45 },
-  healCrystal:   { name: "Life Crystal",   stack: 50, value: 8, weight: 2, crystal: true },
-  fireCrystal:   { name: "Fire Crystal",   stack: 50, value: 8, weight: 2, crystal: true },
-  recallCrystal: { name: "Recall Crystal", stack: 50, value: 6, weight: 2, crystal: true },
-  spearCrystal:  { name: "Spear Crystal",  stack: 50, value: 14, weight: 2, crystal: true },
-  fireRuby:      { name: "Fire Ruby",      stack: 10, value: 40, weight: 3 },
+  wood:      { name: "Wood",         stack: 9999, value: 1, weight: 10 },
+  stone:     { name: "Stone",        stack: 9999, value: 1, weight: 14 },
+  bones:     { name: "Bones",        stack: 9999, value: 2, weight: 8 },
+  herb:      { name: "Herb",         stack: 9999, value: 3, weight: 3 },
+  silk:      { name: "Spider Silk",  stack: 9999, value: 4, weight: 2 },
+  mushroom:  { name: "Mushroom",     stack: 999, value: 2, weight: 4, heal: 10 },
+  meat:      { name: "Raw Meat",     stack: 999, value: 3, weight: 8, heal: 6 },
+  hpPotion:  { name: "Health Potion", stack: 999, value: 12, weight: 5, heal: 45 },
+  healCrystal:   { name: "Life Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
+  fireCrystal:   { name: "Fire Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
+  recallCrystal: { name: "Recall Crystal", stack: 999, value: 6, weight: 2, crystal: true },
+  spearCrystal:  { name: "Spear Crystal",  stack: 999, value: 14, weight: 2, crystal: true },
+  fireRuby:      { name: "Fire Ruby",      stack: 999, value: 40, weight: 3 },
   bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 110, power: 4 } },
   longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 150, power: 9 } },
-  arrow:     { name: "Arrow",        stack: 99, value: 1, weight: 1, ammo: { dmg: 6 } },
-  boneArrow: { name: "Bone Arrow",   stack: 99, value: 2, weight: 1, ammo: { dmg: 12 } },
+  arrow:     { name: "Arrow",        stack: 999, value: 1, weight: 1, ammo: { dmg: 8 } },
+  boneArrow: { name: "Bone Arrow",   stack: 999, value: 2, weight: 1, ammo: { dmg: 14 } },
   sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 3 } },
   ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 7 } },
   boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 12 } },
@@ -250,6 +250,56 @@ export function craft(bag: Bag, r: Recipe): boolean {
   if (addItem(bag, r.out, r.outN ?? 1) > 0) return false; // bag full — don't consume
   for (const [k, v] of Object.entries(r.cost) as [ItemKind, number][]) removeItem(bag, k, v);
   return true;
+}
+
+/** Can this recipe be paid for using several bags combined (backpack + chest)? */
+export function canCraftAcross(bags: readonly Bag[], r: Recipe): boolean {
+  return (Object.entries(r.cost) as [ItemKind, number][]).every(([k, v]) => countAcross(bags, k) >= v);
+}
+/**
+ * Craft drawing materials from several bags (backpack first, then chest). The
+ * output always lands in bags[0] (the backpack). Returns false without spending
+ * anything if the materials are short or the backpack can't hold the result.
+ */
+export function craftAcross(bags: readonly Bag[], r: Recipe): boolean {
+  if (!canCraftAcross(bags, r)) return false;
+  if (addItem(bags[0], r.out, r.outN ?? 1) > 0) return false;
+  for (const [k, v] of Object.entries(r.cost) as [ItemKind, number][]) removeAcross(bags, k, v);
+  return true;
+}
+
+/**
+ * Merge duplicate partial stacks of the same kind into as few slots as possible
+ * (up to each item's stack limit), leaving freed slots null. Keeps the chest and
+ * backpack tidy and repairs older saves that fragmented before stack limits grew.
+ */
+export function compactBag(bag: Bag): void {
+  const total = new Map<ItemKind, number>();
+  const order: ItemKind[] = [];
+  for (const s of bag) {
+    if (!s) continue;
+    if (!total.has(s.kind)) order.push(s.kind);
+    total.set(s.kind, (total.get(s.kind) ?? 0) + s.n);
+  }
+  bag.fill(null);
+  for (const kind of order) addItem(bag, kind, total.get(kind) ?? 0);
+}
+
+/** Human-readable stat lines for the Look / inspect popup. */
+export function itemInfoLines(kind: ItemKind): string[] {
+  const d = ITEMS[kind];
+  const lines: string[] = [];
+  if (d.slot) lines.push(`Slot: ${d.slot}`);
+  if (d.bow) lines.push(`Ranged weapon (two-handed)`, `Attack ${d.bow.power} · Range ${d.bow.range}`);
+  if (d.ammo) lines.push(`Ammo · Attack ${d.ammo.dmg}`);
+  if (d.gear?.atk) lines.push(`Attack +${d.gear.atk}`);
+  if (d.gear?.def) lines.push(`Defense +${d.gear.def}`);
+  if (d.gear?.speed) lines.push(`Speed +${d.gear.speed}`);
+  if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
+  if (d.crystal) lines.push(`Charge item (1 use per unit)`);
+  if (d.heal) lines.push(`Restores ${d.heal} HP`);
+  lines.push(`Weight ${d.weight} oz · Value ${d.value} gp`);
+  return lines;
 }
 export function recipeCostText(r: Recipe): string {
   const out = (Object.entries(r.cost) as [ItemKind, number][])

@@ -31,6 +31,7 @@ export interface InputHandlers {
   onMove?: (sx: number, sy: number) => void;
   onPanel: (which: PanelName) => void;
   onSpell: (index: number) => void;
+  onLook: () => void;
   onEscape: () => void;
 }
 
@@ -53,6 +54,7 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     else if (k === "e") h.onPanel("equip");
     else if (k === "i") h.onPanel("bag");
     else if (k === "q") h.onPanel("quest");
+    else if (k === "l") h.onLook();
     else if (k === "1") h.onSpell(0);
     else if (k === "2") h.onSpell(1);
     else if (k === "3") h.onSpell(2);

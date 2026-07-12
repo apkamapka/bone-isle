@@ -1,9 +1,10 @@
 /** All toggleable UI panels. Each draws itself and pushes clickable hotspots. */
 import { SPR, itemSprite } from "../gfx/sprites.ts";
-import { skills, skillNeed, attackPower, defensePower } from "../systems/skills.ts";
+import { skills, skillNeed } from "../systems/skills.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText } from "../systems/building.ts";
 import { RESEARCH, isResearched } from "../systems/tower.ts";
-import { ITEMS, EQ_SLOT_KEYS, RECIPES, canCraft, recipeCostText, bagCount } from "../items.ts";
+import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, bestArrow, itemInfoLines } from "../items.ts";
+import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
 import { hudText, type HudCtx } from "./hud.ts";
@@ -45,6 +46,10 @@ export interface UiState {
   npc: Npc | null;
   shopTab: "buy" | "sell";
   dragging: boolean;
+  /** Look/inspect mode: taps describe items instead of using them. */
+  lookMode: boolean;
+  /** Item currently shown in the inspect popup, if any. */
+  inspect: ItemKind | null;
 }
 
 export interface PanelActions {
@@ -62,6 +67,8 @@ export interface PanelActions {
   claim: (id: string) => void;
   deposit: (index: number) => void;
   withdraw: (index: number) => void;
+  look: (kind: ItemKind) => void;
+  toggleLook: () => void;
   close: (kind: PanelKind) => void;
 }
 
@@ -128,6 +135,92 @@ function icon(p: PanelInput, spr: HTMLCanvasElement, x: number, y: number, sc: n
   p.hud.ctx.drawImage(spr, x, y, spr.width * sc, spr.height * sc);
 }
 
+/** Set each frame by whichever slot the mouse is over; drawn as a hover tooltip. */
+let tooltipKind: ItemKind | null = null;
+
+/** A small "Look" toggle in the panel body; taps describe items when it's on. */
+function lookToggle(p: PanelInput, x: number, y: number, w: number): void {
+  const { ctx, scale: S } = p.hud;
+  const bw = 40 * S;
+  const bh = 11 * S;
+  const bx = x + w - bw - 6 * S;
+  const by = y + 15 * S;
+  const on = p.ui.lookMode;
+  ctx.fillStyle = on ? "rgba(90,161,232,.85)" : "rgba(40,32,20,.9)";
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = on ? "#cfe8ff" : "#6e571f";
+  ctx.lineWidth = S;
+  ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, bh - S);
+  hudText(p.hud, on ? "Look ON" : "Look", bx + bw / 2, by + bh / 2, 7 * S, on ? "#0b2036" : "#cfa86a", "center", true);
+  p.hotspots.push({ x: bx - 2 * S, y: by - 2 * S, w: bw + 4 * S, h: bh + 4 * S, fn: () => p.act.toggleLook() });
+}
+
+/** Draw the queued hover tooltip (if any) near the cursor, then clear it. */
+function drawItemTooltip(base: Omit<PanelInput, "win">): void {
+  if (!tooltipKind) return;
+  const kind = tooltipKind;
+  tooltipKind = null;
+  const { ctx, scale: S, screenW, screenH } = base.hud;
+  const lines = itemInfoLines(kind);
+  const title = ITEMS[kind].name;
+  const fs = 7 * S;
+  ctx.font = `${fs}px monospace`;
+  let tw = ctx.measureText(title).width;
+  for (const l of lines) tw = Math.max(tw, ctx.measureText(l).width);
+  const pad = 6 * S;
+  const w = tw + pad * 2;
+  const h = pad * 2 + (lines.length + 1) * (fs + 2 * S);
+  let x = base.mouse.sx + 12 * S;
+  let y = base.mouse.sy + 12 * S;
+  if (x + w > screenW) x = screenW - w - 4 * S;
+  if (y + h > screenH) y = screenH - h - 4 * S;
+  ctx.fillStyle = "rgba(16,12,8,.96)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#caa23a";
+  ctx.lineWidth = S;
+  ctx.strokeRect(x + S / 2, y + S / 2, w - S, h - S);
+  let ly = y + pad + fs / 2;
+  hudText(base.hud, title, x + pad, ly, fs, "#ffe9a8", "left", true);
+  ly += fs + 2 * S;
+  for (const l of lines) {
+    hudText(base.hud, l, x + pad, ly, fs, "#d7d2c0", "left");
+    ly += fs + 2 * S;
+  }
+}
+
+/** Centered inspect popup (mobile/keyboard Look). Tap it or press Esc to close. */
+function drawInspect(base: Omit<PanelInput, "win">): void {
+  const kind = base.ui.inspect;
+  if (!kind) return;
+  const { ctx, scale: S, screenW, screenH } = base.hud;
+  const lines = itemInfoLines(kind);
+  const title = ITEMS[kind].name;
+  const fs = 9 * S;
+  ctx.font = `${fs}px monospace`;
+  let tw = ctx.measureText(title).width;
+  for (const l of lines) tw = Math.max(tw, ctx.measureText(l).width);
+  const pad = 10 * S;
+  const w = Math.max(140 * S, tw + pad * 2);
+  const h = pad * 2 + 16 * S + (lines.length) * (fs + 3 * S) + 14 * S;
+  const x = (screenW - w) / 2;
+  const y = (screenH - h) / 2;
+  ctx.fillStyle = "rgba(16,12,8,.97)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#caa23a";
+  ctx.lineWidth = S;
+  ctx.strokeRect(x + S / 2, y + S / 2, w - S, h - S);
+  const spr = itemSprite(kind);
+  icon(base as PanelInput, spr, x + pad, y + pad, 2 * S);
+  hudText(base.hud, title, x + pad + spr.width * 2 * S + 8 * S, y + pad + 8 * S, fs, "#ffe9a8", "left", true);
+  let ly = y + pad + 26 * S;
+  for (const l of lines) {
+    hudText(base.hud, l, x + pad, ly, fs, "#d7d2c0", "left");
+    ly += fs + 3 * S;
+  }
+  hudText(base.hud, "tap / Esc to close", x + w / 2, y + h - 8 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+  base.hotspots.push({ x, y, w, h, fn: () => { base.ui.inspect = null; } });
+}
+
 export function drawPanels(base: Omit<PanelInput, "win">): void {
   for (const win of base.ui.windows) {
     const p: PanelInput = { ...base, win };
@@ -146,6 +239,8 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
     }
   }
   if (base.ui.placing) drawPlacingHint(base);
+  drawItemTooltip(base);
+  drawInspect(base);
 }
 
 /* ---------------- Build ---------------- */
@@ -236,22 +331,63 @@ const SLOT_LABEL: Readonly<Record<EqSlot, string>> = {
   body: "Body", shield: "Shield", legs: "Legs", boots: "Boots",
 };
 
+/**
+ * Equipment grid arranged like Tibia's paperdoll: amulet & head up top, the two
+ * hands flanking the body, ring & legs below, boots at the foot, and a read-only
+ * ammo slot showing which arrows a bow would fire. Empty cells keep the diamond.
+ */
+type EqCell = EqSlot | "ammo" | null;
+const EQ_LAYOUT: readonly EqCell[] = [
+  "amulet", "head",   null,
+  "weapon", "body",   "shield",
+  "ring",   "legs",   "ammo",
+  null,     "boots",  null,
+];
+
 function drawEquip(p: PanelInput): void {
   const { hud, player } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
   const slot = 30 * S;
   const gap = 6 * S;
-  const gridW = slot * 3 + gap * 2;
+  const cols = 3;
+  const rows = 4;
+  const gridW = slot * cols + gap * (cols - 1);
   const w = gridW + 28 * S;
-  const h = 20 * S + slot * 3 + gap * 2 + 92 * S;
+  const h = 20 * S + slot * rows + gap * (rows - 1) + 60 * S;
   const x = screenW - w - 8 * S + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "EQUIPMENT");
+  lookToggle(p, x, y, w);
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
-  EQ_SLOT_KEYS.forEach((key, i) => {
-    const cx = gx + (i % 3) * (slot + gap);
-    const cy = gy + Math.floor(i / 3) * (slot + gap);
+  const ammoKind = bestArrow(player.bag);
+  EQ_LAYOUT.forEach((cell, i) => {
+    if (cell === null) return;
+    const cx = gx + (i % cols) * (slot + gap);
+    const cy = gy + Math.floor(i / cols) * (slot + gap);
+
+    if (cell === "ammo") {
+      ctx.fillStyle = "rgba(40,32,20,.9)";
+      ctx.fillRect(cx, cy, slot, slot);
+      ctx.strokeStyle = ammoKind ? "#ffe9a8" : "#6e571f";
+      ctx.lineWidth = S;
+      ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
+      const spr = ammoKind ? itemSprite(ammoKind) : SPR.arrow;
+      ctx.globalAlpha = ammoKind ? 1 : 0.4;
+      icon(p, spr, cx + (slot - spr.width * 2 * S) / 2, cy + (slot - spr.height * 2 * S) / 2 - 3 * S, 2 * S);
+      ctx.globalAlpha = 1;
+      if (ammoKind) {
+        const n = bagCount(player.bag, ammoKind);
+        hudText(hud, `${n}`, cx + slot - 3 * S, cy + slot - 6 * S, 7 * S, "#ffe9a8", "right");
+        if (hovering(p, cx, cy, slot, slot)) tooltipKind = ammoKind;
+        const k = ammoKind;
+        p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => p.act.look(k) });
+      }
+      hudText(hud, "Ammo", cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.7)", "center");
+      return;
+    }
+
+    const key = cell;
     const equipped = player.eq[key];
     ctx.fillStyle = "rgba(40,32,20,.9)";
     ctx.fillRect(cx, cy, slot, slot);
@@ -260,34 +396,32 @@ function drawEquip(p: PanelInput): void {
     ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
     if (equipped) {
       const spr = itemSprite(equipped);
-      const dw = spr.width * 2 * S;
-      const dh = spr.height * 2 * S;
-      icon(p, spr, cx + (slot - dw) / 2, cy + (slot - dh) / 2 - 3 * S, 2 * S);
-      p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => p.act.unequip(key) });
+      icon(p, spr, cx + (slot - spr.width * 2 * S) / 2, cy + (slot - spr.height * 2 * S) / 2 - 3 * S, 2 * S);
+      if (hovering(p, cx, cy, slot, slot)) tooltipKind = equipped;
+      const eqk = equipped;
+      p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => (p.ui.lookMode ? p.act.look(eqk) : p.act.unequip(key)) });
     } else {
       const spr = SLOT_ICONS[key];
       ctx.globalAlpha = 0.4;
-      const dw = spr.width * 2 * S;
-      const dh = spr.height * 2 * S;
-      icon(p, spr, cx + (slot - dw) / 2, cy + (slot - dh) / 2 - 3 * S, 2 * S);
+      icon(p, spr, cx + (slot - spr.width * 2 * S) / 2, cy + (slot - spr.height * 2 * S) / 2 - 3 * S, 2 * S);
       ctx.globalAlpha = 1;
     }
     hudText(hud, SLOT_LABEL[key], cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.7)", "center");
   });
-  let sy = gy + slot * 3 + gap * 2 + 8 * S;
-  hudText(hud, "Click an item to unequip · open Bag to equip", x + w / 2, sy, 7 * S, "#cfa86a", "center");
-  sy += 12 * S;
+
+  let sy = gy + slot * rows + gap * (rows - 1) + 10 * S;
   ctx.fillStyle = "#6e571f";
   ctx.fillRect(x + 8 * S, sy, w - 16 * S, S);
-  sy += 8 * S;
-  const stats: ReadonlyArray<readonly [string, string | number]> = [
+  sy += 9 * S;
+  const cap = carryCap(player);
+  const used = Math.round(carriedWeight(player));
+  const stats: ReadonlyArray<readonly [string, string]> = [
     ["HP", `${Math.ceil(player.hp)} / ${player.maxhp}`],
-    ["Attack", `~${attackPower(player.level, player.eq)}`],
-    ["Defense", defensePower(player.eq)],
+    ["Cap", `${used} / ${cap} oz`],
   ];
   for (const [k, v] of stats) {
     hudText(hud, k, x + 12 * S, sy, 8 * S, "#cfe8d2");
-    hudText(hud, String(v), x + w - 12 * S, sy, 8 * S, "#ffe9a8", "right");
+    hudText(hud, v, x + w - 12 * S, sy, 8 * S, "#ffe9a8", "right");
     sy += 11 * S;
   }
 }
@@ -301,14 +435,20 @@ function drawBag(p: PanelInput): void {
   const rows = 4;
   const cell = 32 * S;
   const gap = 4 * S;
+  const goldRow = 16 * S;
   const gridW = cols * cell + (cols - 1) * gap;
   const w = gridW + 24 * S;
-  const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S;
+  const h = 20 * S + goldRow + rows * cell + (rows - 1) * gap + 20 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "BACKPACK");
+  lookToggle(p, x, y, w);
+  // gold, shown here like any other carried item
   const gx = x + (w - gridW) / 2;
-  const gy = y + 20 * S;
+  const coin = SPR.coin;
+  icon(p, coin, gx, y + 18 * S, 2 * S);
+  hudText(hud, `${player.gold} gold`, gx + coin.width * 2 * S + 6 * S, y + 18 * S + coin.height * S, 8 * S, "#ffe9a8", "left", true);
+  const gy = y + 20 * S + goldRow;
   player.bag.forEach((stackSlot, i) => {
     const cx = gx + (i % cols) * (cell + gap);
     const cy = gy + Math.floor(i / cols) * (cell + gap);
@@ -324,17 +464,23 @@ function drawBag(p: PanelInput): void {
       const dh = spr.height * 2 * S;
       icon(p, spr, cx + (cell - dw) / 2, cy + (cell - dh) / 2 - 2 * S, 2 * S);
       if (stackSlot.n > 1) hudText(hud, `${stackSlot.n}`, cx + cell - 3 * S, cy + cell - 4 * S, 7 * S, "#ffe9a8", "right");
+      if (hov) tooltipKind = stackSlot.kind;
       const def = ITEMS[stackSlot.kind];
       const idx = i;
       const k = stackSlot.kind;
-      if (def.slot) {
+      if (p.ui.lookMode) {
+        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.look(k) });
+      } else if (def.slot) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.equipItem(k, idx) });
       } else if (def.heal || def.crystal) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.useItem(k, idx) });
+      } else {
+        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.look(k) });
       }
     }
   });
-  hudText(hud, "Click gear to equip · click a potion/food to use", x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+  const hint = p.ui.lookMode ? "Look mode — click any item to inspect it" : "Click gear to equip · potion/food to use · Look for stats";
+  hudText(hud, hint, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 
 /* ---------------- Forge (crafting) ---------------- */
@@ -348,9 +494,10 @@ function drawForge(p: PanelInput): void {
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "FORGE — craft gear");
+  const bags = [player.bag, p.game.stash];
   let ry = y + 18 * S;
   for (const r of RECIPES) {
-    const ok = canCraft(player.bag, r);
+    const ok = canCraftAcross(bags, r);
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && ok) {
       ctx.fillStyle = "rgba(202,162,58,.15)";
       ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
@@ -366,7 +513,7 @@ function drawForge(p: PanelInput): void {
     }
     ry += rowH;
   }
-  hudText(hud, "Click a recipe to craft (needs materials in your bag)", x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+  hudText(hud, "Click a recipe to craft (uses backpack + storage chest)", x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 
 /* ---------------- Alchemy Tower ---------------- */
@@ -589,8 +736,10 @@ function drawGrid(
       const dh = spr.height * 2 * S;
       icon(p, spr, cx + (cell - dw) / 2, cy + (cell - dh) / 2 - 2 * S, 2 * S);
       if (slot.n > 1) hudText(hud, `${slot.n}`, cx + cell - 3 * S, cy + cell - 4 * S, 7 * S, "#ffe9a8", "right");
+      if (hov) tooltipKind = slot.kind;
       const idx = i;
-      p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => onClick(idx) });
+      const kind = slot.kind;
+      p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => (p.ui.lookMode ? p.act.look(kind) : onClick(idx)) });
     }
   });
 }

@@ -13,7 +13,7 @@ import { useCrystal } from "./systems/crystals.ts";
 import { actionSlots } from "./systems/actions.ts";
 import { researchById, isResearched, markResearched } from "./systems/tower.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
-import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow } from "./items.ts";
+import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
@@ -88,6 +88,8 @@ const game: Game = loadGame() ?? createGame();
 // keep passive structure bonuses (Garden HP) in sync from the start
 setActiveBonus(structureBonuses(game.worlds.home));
 refreshDerived(game.player);
+// merge any stacks that older saves left fragmented (stack limits grew)
+compactBag(game.player.bag); compactBag(game.stash);
 const P = game.player;
 const cam = { x: 0, y: 0 };
 let moveMarker: { x: number; y: number; t: number } | null = null;
@@ -95,7 +97,7 @@ let waveT = 0;
 let saveTimer = 0;
 let last = performance.now();
 
-const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", dragging: false };
+const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", dragging: false, lookMode: false, inspect: null };
 const mouse = { sx: 0, sy: 0 };
 let hotspots: Hotspot[] = [];
 
@@ -225,6 +227,8 @@ const act: PanelActions = {
   },
   deposit: (index: number) => { depositToStash(index); },
   withdraw: (index: number) => { withdrawFromStash(index); },
+  look: (kind: ItemKind) => { ui.inspect = kind; },
+  toggleLook: () => { ui.lookMode = !ui.lookMode; if (!ui.lookMode) ui.inspect = null; },
   close: (kind: PanelKind) => { closeWindow(kind); },
 };
 
@@ -238,6 +242,7 @@ function depositToStash(index: number): void {
   if (moved <= 0) { flash("stash full"); return; }
   if (left > 0) slot.n = left;
   else P.bag[index] = null;
+  compactBag(game.stash); compactBag(P.bag);
   beep(360, 0.06, "sine", 0.04);
 }
 
@@ -249,13 +254,14 @@ function withdrawFromStash(index: number): void {
   if (moved <= 0) { flash("bag full"); return; }
   if (left > 0) slot.n = left;
   else game.stash[index] = null;
+  compactBag(P.bag); compactBag(game.stash);
   syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   beep(440, 0.06, "sine", 0.04);
 }
 
-import { craft as craftRecipe } from "./items.ts";
+import { craftAcross } from "./items.ts";
 function craftAt(r: Recipe): boolean {
-  if (craftRecipe(P.bag, r)) {
+  if (craftAcross([P.bag, game.stash], r)) {
     flash(`crafted ${ITEMS[r.out].name}`, "#b9e07f");
     return true;
   }
@@ -392,6 +398,8 @@ function handleWorldTap(sx: number, sy: number): void {
       return;
     }
   }
+  // an open inspect popup is dismissed by tapping empty space
+  if (ui.inspect) { ui.inspect = null; return; }
   // clicking anywhere on an open panel body (not a hotspot) is swallowed so it
   // doesn't walk the player; panels stay open (Tibia-style) until you close them.
   if (pointInOpenPanel(sx, sy)) return;
@@ -411,7 +419,13 @@ initInput(screen, {
   onMove: (sx, sy) => { mouse.sx = sx; mouse.sy = sy; },
   onPanel: togglePanel,
   onSpell: (i) => useAction(i),
+  onLook: () => {
+    ui.lookMode = !ui.lookMode;
+    if (!ui.lookMode) ui.inspect = null;
+    flash(ui.lookMode ? "look mode on" : "look mode off", "#8ab6ff");
+  },
   onEscape: () => {
+    if (ui.inspect) { ui.inspect = null; return; }
     if (ui.placing) { ui.placing = null; return; }
     // close the top-most open panel, one press at a time
     const top = ui.windows[ui.windows.length - 1];

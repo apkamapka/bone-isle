@@ -1,7 +1,7 @@
 /** Tibia-style skills: levels that climb as you use them, plus gear bonuses. */
 import { beep } from "../audio.ts";
 import { gearStat, equippedBow } from "../items.ts";
-import { DIST_BASE, DIST_PER_LEVEL } from "../config.ts";
+import { DIST_FACTOR_BASE, DIST_FACTOR_PER, DIST_LEVEL_BONUS } from "../config.ts";
 import type { Equipment } from "../items.ts";
 
 export type SkillKey = "sword" | "shield" | "dist" | "speed";
@@ -57,13 +57,17 @@ export function attackPower(level: number, eq: Equipment): number {
   return 6 + level + (skills.sword.lv - 10) + gearStat(eq, "atk");
 }
 /**
- * Damage of a single arrow shot: flat base + level + Distance skill + the bow's
- * power + the arrow's own damage. Distance Fighting scales this the way Sword
- * scales melee, so investing in the bow line is its own progression.
+ * Damage of a single arrow shot. The raw attack value (bow power + arrow) is
+ * scaled by a factor driven almost entirely by Distance Fighting: at skill 10
+ * you only land ~30% of it, but the multiplier climbs every level, so a maxed
+ * archer hits several times harder with the very same bow and arrows. This is
+ * the "damage is proportional to skill" behaviour — a fresh bow is deliberately
+ * weak until you train it up.
  */
-export function distancePower(level: number, eq: Equipment, arrowDmg: number): number {
-  const bowPower = equippedBow(eq)?.power ?? 0;
-  return DIST_BASE + Math.floor(level * DIST_PER_LEVEL) + (skills.dist.lv - 10) + bowPower + arrowDmg;
+export function distancePower(level: number, eq: Equipment, arrowAtk: number): number {
+  const attackValue = (equippedBow(eq)?.power ?? 0) + arrowAtk;
+  const factor = DIST_FACTOR_BASE + (skills.dist.lv - 10) * DIST_FACTOR_PER;
+  return Math.max(1, Math.round(attackValue * factor) + Math.floor(level * DIST_LEVEL_BONUS));
 }
 export function defensePower(eq: Equipment): number {
   return Math.floor((skills.shield.lv - 10) / 2) + gearStat(eq, "def");

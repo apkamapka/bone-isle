@@ -43,12 +43,14 @@ export const SPEAR_CRYSTAL_RANGE = 160; // longer reach than a Fire Crystal
 
 /**
  * Ranged combat. A bow is a two-handed weapon (locks out the shield) that
- * fires arrows — real ammo consumed one per shot. Reach/power live on the item
- * (see ITEMS.bow / ITEMS.longbow, ITEMS.arrow / ITEMS.boneArrow); these are the
- * shared knobs the formula in skills.ts builds on.
+ * fires arrows — real ammo consumed one per shot. A shot's damage is the
+ * combined attack value (bow power + arrow) scaled by a factor that grows with
+ * Distance Fighting, so early bows are weak and the skill grind is what makes
+ * them hit hard (Tibia-style). See distancePower() in skills.ts.
  */
-export const DIST_BASE = 4;             // flat base of a shot's damage
-export const DIST_PER_LEVEL = 0.5;      // + level * this (rounded down)
+export const DIST_FACTOR_BASE = 0.30;   // multiplier at skill 10 (start)
+export const DIST_FACTOR_PER = 0.025;   // + this per Distance level above 10
+export const DIST_LEVEL_BONUS = 0.25;   // small flat + level * this
 export const ARROW_MISS_WARN_S = 1.2;   // throttle for the "no arrows" nag
 export const SHOT_SPEED = 520;          // px/s the drawn arrow travels
 
