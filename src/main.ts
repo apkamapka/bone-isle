@@ -1,17 +1,19 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, GARDEN_MANA_PER_S, MANA_REGEN_PER_S, RECALL_COST } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S } from "./config.ts";
 import { moveEntity } from "./world/collision.ts";
 import { SPR } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
-import { playerSpeed, refreshDerived } from "./entities/player.ts";
+import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster } from "./entities/monsters.ts";
 import { playerAttack, hitDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, structSprite, structureBonuses, STRUCTS } from "./systems/building.ts";
+import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost } from "./systems/building.ts";
 import { setActiveBonus } from "./systems/derived.ts";
-import { castSpell, spellsUnlocked, SPELLS } from "./systems/magic.ts";
+import { useCrystal } from "./systems/crystals.ts";
+import { actionSlots } from "./systems/actions.ts";
+import { researchById, isResearched, markResearched } from "./systems/tower.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
-import { addItem, removeItem, ITEMS } from "./items.ts";
+import { addItem, removeItem, ITEMS, itemWeight, bagCount } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
@@ -83,7 +85,7 @@ addEventListener("orientationchange", () => setTimeout(resize, 100));
 resize();
 
 const game: Game = loadGame() ?? createGame();
-// keep passive structure bonuses (Library mana, Garden HP) in sync from the start
+// keep passive structure bonuses (Garden HP) in sync from the start
 setActiveBonus(structureBonuses(game.worlds.home));
 refreshDerived(game.player);
 const P = game.player;
@@ -100,7 +102,7 @@ let hotspots: Hotspot[] = [];
 const cw = (): World => game.current;
 const flash = (t: string, c = "#ffe9a8"): void => addFloat(cw(), P.x, P.y - 30, t, c);
 
-/** Recompute the player's max HP/mana from current owned structures. */
+/** Recompute the player's max HP from current owned structures. */
 function recomputeBonuses(): void {
   setActiveBonus(structureBonuses(game.worlds.home));
   refreshDerived(P);
@@ -124,7 +126,7 @@ function defaultOffset(kind: PanelKind): { x: number; y: number } {
     case "bag": return { x: -120 * S, y: 30 * S };
     case "quest": return { x: -30 * S, y: -40 * S };
     case "forge": return { x: 70 * S, y: 10 * S };
-    case "spell": return { x: 80 * S, y: -30 * S };
+    case "tower": return { x: 60 * S, y: -10 * S };
     case "build": return { x: -50 * S, y: -20 * S };
     case "stash": return { x: 40 * S, y: 20 * S };
     case "loot": return { x: 60 * S, y: 40 * S };
@@ -178,9 +180,9 @@ const act: PanelActions = {
   startPlacing: (key: StructKey) => { ui.placing = key; closeWindow("build"); },
   useItem: (kind: ItemKind) => {
     const def = ITEMS[kind];
+    if (def.crystal) { useCrystalItem(kind); return; }
     if (!removeItem(P.bag, kind, 1)) return;
     if (def.heal) { P.hp = Math.min(P.maxhp, P.hp + def.heal); flash(`+${def.heal} hp`, "#7dff9e"); }
-    if (def.mana) { P.mana = Math.min(P.maxmana, P.mana + def.mana); flash(`+${def.mana} mp`, "#8ab6ff"); }
     beep(500, 0.12, "sine", 0.05, 180);
   },
   equipItem: (kind: ItemKind) => {
@@ -205,7 +207,8 @@ const act: PanelActions = {
     // craft requires standing at a Forge; enforced by only opening forge there
     if (craftAt(r)) beep(360, 0.14, "square", 0.05);
   },
-  castSpell: (i: number) => { doSpell(i); },
+  research: (id: string) => { doResearch(id); },
+  buyCrystal: (id: string) => { doBuyCrystal(id); },
   takeLoot: (c: Corpse, index: number) => { takeOne(c, index); },
   takeAllLoot: (c: Corpse) => { takeAll(c); },
   buy: (kind: ItemKind) => { doBuy(kind); },
@@ -253,19 +256,48 @@ function craftAt(r: Recipe): boolean {
   return false;
 }
 
-function doSpell(index: number): void {
-  const spell = SPELLS[index];
-  if (!spell) return;
-  if (!spellsUnlocked(game.worlds.home)) { flash("build a Library first", "#8ab6ff"); return; }
-  if (spell.key === "recall") { doRecall(); return; }
-  castSpell(cw(), P, spell.key);
+function doResearch(id: string): void {
+  const r = researchById(id);
+  if (!r || isResearched(r.id)) return;
+  if (!canAfford(P.bag, r.researchCost, game.stash)) { flash("need materials"); return; }
+  payCost(P.bag, r.researchCost, game.stash);
+  markResearched(r.id);
+  flash(`researched ${r.name}`, "#c9a6ff");
+  beep(520, 0.18, "square", 0.06, 120);
+}
+
+function doBuyCrystal(id: string): void {
+  const r = researchById(id);
+  if (!r || !isResearched(r.id)) return;
+  if (!canAfford(P.bag, r.buyCost, game.stash)) { flash("need materials"); return; }
+  if (!canCarry(P, r.crystal, r.buyN)) { flash("too heavy"); return; }
+  const moved = r.buyN - addItem(P.bag, r.crystal, r.buyN);
+  if (moved < r.buyN) { if (moved > 0) removeItem(P.bag, r.crystal, moved); flash("bag full"); return; }
+  payCost(P.bag, r.buyCost, game.stash);
+  flash(`+${r.buyN} ${ITEMS[r.crystal].name}`, "#b9e07f");
+  beep(440, 0.12, "sine", 0.05, 120);
+}
+
+/** Trigger action slot `index` (keys 1–6 / on-screen buttons). */
+function useAction(index: number): void {
+  const slot = actionSlots[index];
+  if (!slot) return;
+  if (slot.type === "crystal") { useCrystalItem(slot.item); return; }
+  // "attack" / "swap" slot types are wired up in a later stage.
+}
+
+/** Apply a crystal by kind: Recall travels home, others hit self/target. */
+function useCrystalItem(kind: ItemKind): void {
+  if (P.dead) return;
+  if (kind === "recallCrystal") { doRecall(); return; }
+  useCrystal(cw(), P, kind);
 }
 
 function doRecall(): void {
   if (P.dead) return;
   if (cw() === game.worlds.home) { flash("already home", "#8ab6ff"); return; }
-  if (P.mana < RECALL_COST) { flash("no mana", "#8ab6ff"); return; }
-  P.mana -= RECALL_COST;
+  if (bagCount(P.bag, "recallCrystal") <= 0) { flash("no recall crystal", "#8ab6ff"); return; }
+  removeItem(P.bag, "recallCrystal", 1);
   travelTo(game, "home");
   flash("recalled home", "#c9a6ff");
 }
@@ -273,6 +305,7 @@ function doRecall(): void {
 function takeOne(c: Corpse, index: number): void {
   const it = c.items[index];
   if (!it) return;
+  if (!canCarry(P, it.kind)) { flash("too heavy"); return; }
   const left = addItem(P.bag, it.kind, it.n);
   const took = it.n - left;
   if (took > 0) {
@@ -287,12 +320,19 @@ function takeOne(c: Corpse, index: number): void {
 
 function takeAll(c: Corpse): void {
   if (c.gold > 0) { P.gold += c.gold; c.gold = 0; }
+  let heavy = false;
   for (let i = c.items.length - 1; i >= 0; i--) {
     const it = c.items[i];
-    const left = addItem(P.bag, it.kind, it.n);
-    if (left > 0) { it.n = left; break; }
+    const fitByWeight = Math.floor(freeCap(P) / itemWeight(it.kind, 1));
+    if (fitByWeight <= 0) { heavy = true; break; }
+    const want = Math.min(it.n, fitByWeight);
+    const notFitSlots = addItem(P.bag, it.kind, want);
+    const moved = want - notFitSlots;
+    const remaining = it.n - moved;
+    if (remaining > 0) { it.n = remaining; heavy = true; break; }
     c.items.splice(i, 1);
   }
+  if (heavy) flash("too heavy");
   syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   closeCorpseIfEmpty(c);
 }
@@ -311,6 +351,7 @@ function doBuy(kind: ItemKind): void {
   if (!ui.npc) return;
   const entry = SHOPS[ui.npc.key].entries.find((e) => e.kind === kind);
   if (!entry || entry.buy <= 0 || P.gold < entry.buy) return;
+  if (!canCarry(P, kind)) { flash("too heavy"); return; }
   if (addItem(P.bag, kind, 1) > 0) { flash("bag full"); return; }
   P.gold -= entry.buy;
   beep(440, 0.1, "sine", 0.05);
@@ -351,7 +392,7 @@ function handleWorldTap(sx: number, sy: number): void {
   const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
   if (ui.placing) {
     if (cw() === game.worlds.home) {
-      if (tryPlace(game.worlds.home, P, ui.placing, w.x, w.y)) recomputeBonuses();
+      if (tryPlace(game.worlds.home, P, ui.placing, w.x, w.y, game.stash)) recomputeBonuses();
     }
     ui.placing = null;
     return;
@@ -363,7 +404,7 @@ initInput(screen, {
   toWorld: (sx, sy): Vec => ({ x: sx / vScale + cam.x, y: sy / vScale + cam.y }),
   onMove: (sx, sy) => { mouse.sx = sx; mouse.sy = sy; },
   onPanel: togglePanel,
-  onSpell: (i) => doSpell(i),
+  onSpell: (i) => useAction(i),
   onEscape: () => {
     if (ui.placing) { ui.placing = null; return; }
     // close the top-most open panel, one press at a time
@@ -463,14 +504,14 @@ function worldClick(w: Vec): void {
       return;
     }
   }
-  // structures (dummy to hit, forge/library to use).
+  // structures (dummy to hit, forge/chest to use).
   // Sprites are drawn centered on the 2x2 pad, bottom at ty*TILE + 2*TILE,
   // so the hitbox must use that same anchor (generously sized).
   for (const s of world.structures) {
     const cx = s.tx * TILE + TILE;        // pad center x
     const baseY = s.ty * TILE + TILE * 2; // sprite base y
     if (Math.abs(w.x - cx) < 16 && w.y > baseY - 30 && w.y < baseY + 4) {
-      if (s.key === "dummy") P.target = { kind: "dummy", s };
+      if (s.key === "dummy" || s.key === "dummyII") P.target = { kind: "dummy", s };
       else if (s.key === "garden") { continue; } // walk-through: ignore clicks
       else P.target = { kind: "structure", s };
       P.dest = null; P.gather = null; moveMarker = null;
@@ -552,7 +593,6 @@ function update(dt: number): void {
   P.tpCd = Math.max(0, P.tpCd - dt);
   P.atkCd = Math.max(0, P.atkCd - dt);
   P.bob += dt;
-  P.mana = Math.min(P.maxmana, P.mana + MANA_REGEN_PER_S * dt);
 
   // death → respawn countdown
   if (P.dead) {
@@ -628,14 +668,13 @@ function update(dt: number): void {
     }
   }
 
-  // garden aura heal (HP + mana) on home
+  // garden aura heal (HP) on home
   for (const s of game.worlds.home.structures) {
     if (s.key === "garden" && cw() === game.worlds.home) {
       const gx = s.tx * TILE + TILE;
       const gy = s.ty * TILE + TILE;
       if (dist(P.x, P.y, gx, gy) < GARDEN_RADIUS) {
         if (P.hp < P.maxhp) P.hp = Math.min(P.maxhp, P.hp + GARDEN_HEAL_PER_S * dt);
-        if (P.mana < P.maxmana) P.mana = Math.min(P.maxmana, P.mana + GARDEN_MANA_PER_S * dt);
       }
     }
   }
@@ -665,7 +704,7 @@ function resolveTarget(): void {
     ui.npc = t.n; ui.shopTab = "buy"; openWindow("shop"); P.target = null;
   } else if (t.kind === "structure") {
     if (t.s.key === "forge") openWindow("forge");
-    else if (t.s.key === "library") openWindow("spell");
+    else if (t.s.key === "tower") openWindow("tower");
     else if (t.s.key === "chest") openWindow("stash");
     P.target = null;
   }
@@ -911,7 +950,7 @@ function render(): void {
   drawJoystick(sctx);
 }
 
-/** On-screen buttons (panel toggles + spells) for touch / small screens. */
+/** On-screen buttons (panel toggles + action crystals) for touch. */
 let touchButtons: { x: number; y: number; w: number; h: number }[] = [];
 
 function tButton(x: number, y: number, s: number, label: string, glyph: string, on: boolean, fn: () => void): void {
@@ -954,31 +993,34 @@ function drawTouchControls(): void {
     by += bs + gap;
   }
 
-  // spell buttons (bottom, left of the panel column) once the Library exists
-  if (spellsUnlocked(game.worlds.home)) {
-    const sw = bs * 1.15;
-    let sxp = screen.width - bs - m - gap - sw;
-    const syp = screen.height - bs - m;
-    SPELLS.forEach((sp, i) => {
-      const enough = P.mana >= sp.cost;
-      const x = sxp - i * (sw + gap);
-      sctx.fillStyle = enough ? "rgba(40,64,110,.9)" : "rgba(24,26,30,.8)";
-      sctx.fillRect(x, syp, sw, bs);
-      sctx.strokeStyle = enough ? "#6ea6ff" : "#3a4048";
-      sctx.lineWidth = Math.max(1, scale);
-      sctx.strokeRect(x + 0.5, syp + 0.5, sw - 1, bs - 1);
-      sctx.textAlign = "center";
-      sctx.textBaseline = "middle";
-      sctx.fillStyle = enough ? "#dfe8ff" : "#7a808a";
-      sctx.font = `bold ${Math.round(bs * 0.28)}px 'Courier New',monospace`;
-      sctx.fillText(sp.name, x + sw / 2, syp + bs * 0.4);
-      sctx.font = `${Math.round(bs * 0.2)}px 'Courier New',monospace`;
-      sctx.fillText(`${sp.cost} mp`, x + sw / 2, syp + bs * 0.74);
-      const idx = i;
-      hotspots.push({ x, y: syp, w: sw, h: bs, fn: () => doSpell(idx) });
-      touchButtons.push({ x, y: syp, w: sw, h: bs });
-    });
-  }
+  // action buttons (bottom, left of the panel column) — bound crystals
+  const sw = bs * 1.05;
+  let sxp = screen.width - bs - m - gap - sw;
+  const syp = screen.height - bs - m;
+  actionSlots.forEach((slot, i) => {
+    if (!slot || slot.type !== "crystal") return;
+    const item = slot.item;
+    const charges = bagCount(P.bag, item);
+    const usable = charges > 0;
+    const x = sxp;
+    sxp -= sw + gap;
+    sctx.fillStyle = usable ? "rgba(46,58,54,.92)" : "rgba(24,26,30,.8)";
+    sctx.fillRect(x, syp, sw, bs);
+    sctx.strokeStyle = usable ? "#caa15a" : "#3a4048";
+    sctx.lineWidth = Math.max(1, scale);
+    sctx.strokeRect(x + 0.5, syp + 0.5, sw - 1, bs - 1);
+    sctx.textAlign = "center";
+    sctx.textBaseline = "middle";
+    sctx.fillStyle = usable ? "#e9e2c8" : "#7a808a";
+    sctx.font = `bold ${Math.round(bs * 0.26)}px 'Courier New',monospace`;
+    sctx.fillText(ITEMS[item].name.split(" ")[0], x + sw / 2, syp + bs * 0.38);
+    sctx.font = `${Math.round(bs * 0.22)}px 'Courier New',monospace`;
+    sctx.fillStyle = usable ? "#ffe9a8" : "#7a808a";
+    sctx.fillText(`${i + 1}·${charges}`, x + sw / 2, syp + bs * 0.74);
+    const idx = i;
+    hotspots.push({ x, y: syp, w: sw, h: bs, fn: () => useAction(idx) });
+    touchButtons.push({ x, y: syp, w: sw, h: bs });
+  });
 }
 
 /** True if a screen point lies on any on-screen button (blocks the joystick). */

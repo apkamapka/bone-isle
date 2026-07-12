@@ -11,8 +11,6 @@ export const VIEW_H = 320;
 export const PLAYER_BASE_SPEED = 58;
 export const PLAYER_ATTACK_RATE = 0.7;
 export const PLAYER_BASE_HP = 100;
-export const PLAYER_BASE_MANA = 50;
-export const MANA_REGEN_PER_S = 1.6;
 
 /** Backpack capacity (slots). */
 export const BAG_SIZE = 16;
@@ -23,26 +21,40 @@ export const MONSTER_RESPAWN_S = 12;
 /** How long a lootable corpse stays on the ground (seconds). */
 export const CORPSE_DECAY_S = 75;
 
-/** Resource node regrowth (seconds). */
-export const TREE_REGROW_S = 30;
-export const ROCK_REGROW_S = 40;
-export const HERB_REGROW_S = 45;
+/** Resource node regrowth (seconds). Slow enough that you rotate between
+ *  nodes and islands rather than farming one spot — paired with denser nodes. */
+export const TREE_REGROW_S = 90;
+export const ROCK_REGROW_S = 120;
+export const HERB_REGROW_S = 75;
 
-/** Garden aura: heal radius (px) and HP/mana per second while standing near. */
+/** Garden aura: heal radius (px) and HP per second while standing near. */
 export const GARDEN_RADIUS = 40;
 export const GARDEN_HEAL_PER_S = 3;
-export const GARDEN_MANA_PER_S = 2.2;
 
-/** Passive max-stat bonuses granted while you own a structure on Home Isle. */
-export const LIBRARY_MANA_BONUS = 30; // +max mana per Library owned
-export const GARDEN_HP_BONUS = 15;    // +max HP per Garden owned
+/** Passive max-HP bonus granted while you own a Garden on Home Isle. */
+export const GARDEN_HP_BONUS = 15;
 
-/** Recall spell: mana cost to teleport back to Home Isle (Library-gated). */
-export const RECALL_COST = 20;
+/** Crystals (charge-based, replace spells). Values are per single charge. */
+export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level*3
+export const FIRE_CRYSTAL_DMG = 18;     // damage = this + level
+export const FIRE_CRYSTAL_RANGE = 120;  // px the fire crystal can reach
+export const SPEAR_CRYSTAL_DMG = 40;    // Spear Crystal (tower-researched) = this + level*2
+export const SPEAR_CRYSTAL_RANGE = 160; // longer reach than a Fire Crystal
 
 /** Chest storage capacity (slots). */
 export const STASH_SIZE = 20;
 
+/** Carry capacity (weight in oz). Grows with level, gates the backpack. */
+export const CAP_BASE = 500;
+export const CAP_PER_LEVEL = 12;
+
+/**
+ * Experience to advance from `level` to `level + 1`, using Tibia's classic
+ * curve. Total exp to reach L is (50/3)(L³ − 6L² + 17L − 12); the per-level
+ * step simplifies to the integer form below (= 100 for 1→2, 1600 for 7→8…).
+ * Cubic growth means high levels take a very long time — no level 100 in a week.
+ */
 export function expNeeded(level: number): number {
-  return 40 + level * 40 + level * level * 10;
+  const x = level + 1;
+  return 50 * (x * x - 5 * x + 8);
 }

@@ -4,8 +4,10 @@ import { dist } from "../util.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { addItem } from "../items.ts";
+import { canCarry } from "../entities/player.ts";
 import { onItemCollected, syncCollectQuests } from "./quests.ts";
 import type { Player, GatherTask } from "../entities/player.ts";
+import type { ItemKind } from "../items.ts";
 import type { World } from "../world/types.ts";
 
 /** A float callback for quest-completion popups. */
@@ -14,6 +16,13 @@ export type GatherFx = (text: string) => void;
 /** Perform one chop/mine/pick tick on the player's current gather target. */
 export function gatherTick(world: World, p: Player, g: GatherTask, fx?: GatherFx): void {
   p.atkCd = p.atkRate;
+  // Stop if the backpack is too full to hold what this node yields.
+  const yields: Record<GatherTask["kind"], ItemKind> = { tree: "wood", rock: "stone", herb: "herb" };
+  if (!canCarry(p, yields[g.kind])) {
+    addFloat(world, p.x, p.y - 26, "too heavy!", "#ff9a5e");
+    p.gather = null;
+    return;
+  }
   if (g.kind === "tree") {
     const tr = g.obj;
     tr.hp--;

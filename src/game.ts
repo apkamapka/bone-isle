@@ -3,6 +3,7 @@ import { makeWorld } from "./world/generate.ts";
 import { portalSpawn } from "./world/collision.ts";
 import { spawnMonster, MONSTER_KINDS } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
+import { loadResearchState } from "./systems/tower.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
@@ -34,19 +35,19 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   const home = makeWorld({
     key: "home", name: "Home Isle", safe: true, w: 40, h: 30,
     buildSpots: true, npcs: false,
-    trees: 5, rocks: 4, herbs: 3, mushrooms: 5, bones: 2,
+    trees: 11, rocks: 8, herbs: 6, mushrooms: 5, bones: 2,
     portals: [{ dest: "town", label: "to Bonetown" }],
   });
   const town = makeWorld({
     key: "town", name: "Bonetown", safe: true, w: 44, h: 32,
     buildSpots: false, npcs: true,
-    trees: 4, rocks: 3, herbs: 5, mushrooms: 4, bones: 3, grassShift: 4,
+    trees: 7, rocks: 6, herbs: 8, mushrooms: 4, bones: 3, grassShift: 4,
     portals: [{ dest: "home", label: "to Home Isle" }, { dest: "wild", label: "to the Wildlands" }],
   });
   const wild = makeWorld({
     key: "wild", name: "Wildlands", safe: false, w: 60, h: 46,
     buildSpots: false, npcs: false,
-    trees: 10, rocks: 9, herbs: 6, mushrooms: 4, bones: 9, grassShift: -14,
+    trees: 20, rocks: 18, herbs: 11, mushrooms: 4, bones: 9, grassShift: -14,
     portals: [{ dest: "town", label: "to Bonetown" }],
   });
   return { home, town, wild };
@@ -65,6 +66,7 @@ export function createGame(seed = (Math.random() * 1e9) | 0): Game {
   const worlds = buildWorlds(seed);
   populateWild(worlds.wild);
   const player = createPlayer(portalSpawn(worlds.home));
+  loadResearchState([]); // a fresh game has no research completed
   return {
     seed,
     worlds,
@@ -101,7 +103,6 @@ export function respawnAtHome(g: Game): void {
   g.player.x = p.x;
   g.player.y = p.y;
   g.player.hp = g.player.maxhp;
-  g.player.mana = g.player.maxmana;
   g.player.dead = false;
   g.zoneFlash = { text: "Home Isle  (safe)", t: 2 };
 }

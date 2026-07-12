@@ -35,6 +35,8 @@ export function hitDummy(world: World, p: Player, s: Structure): void {
   s.anim = 0;
   addFloat(world, s.tx * 16 + 8, s.ty * 16 - 4, String(dmg), "#d8d2c0");
   addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+  // The War Dummy hits back for training value: also trains Shielding.
+  if (s.key === "dummyII") addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 38, t, "#7dff9e"));
   beep(220, 0.05, "triangle", 0.05);
 }
 
@@ -48,7 +50,6 @@ export function grantExp(world: World, p: Player, exp: number): void {
     p.expNext = expNeeded(p.level);
     refreshDerived(p);
     p.hp = p.maxhp;
-    p.mana = p.maxmana;
     addFloat(world, p.x, p.y - 24, "LEVEL UP!", "#7dff9e");
     beep(440, 0.1, "square", 0.06);
   }

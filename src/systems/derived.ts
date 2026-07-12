@@ -5,9 +5,8 @@
  */
 import type { DerivedBonus } from "../entities/player.ts";
 
-export const activeBonus: Required<DerivedBonus> = { maxhp: 0, maxmana: 0 };
+export const activeBonus: Required<DerivedBonus> = { maxhp: 0 };
 
 export function setActiveBonus(b: DerivedBonus): void {
   activeBonus.maxhp = b.maxhp ?? 0;
-  activeBonus.maxmana = b.maxmana ?? 0;
 }

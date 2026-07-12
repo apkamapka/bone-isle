@@ -56,6 +56,9 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     else if (k === "1") h.onSpell(0);
     else if (k === "2") h.onSpell(1);
     else if (k === "3") h.onSpell(2);
+    else if (k === "4") h.onSpell(3);
+    else if (k === "5") h.onSpell(4);
+    else if (k === "6") h.onSpell(5);
     else if (k === "escape") h.onEscape();
     keys[k] = true;
   });

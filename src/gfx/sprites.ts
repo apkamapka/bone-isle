@@ -270,6 +270,45 @@ export const SPR = {
   ]),
   swordIron: bake(["...m", "..mm", ".mm.", "mm..", "kk..", "b..."]),
   swordBone: bake(["...w", "..ww", ".ww.", "ww..", "kk..", "c..."]),
+  crystalHeal: bake([
+    "..ww..",
+    ".wggw.",
+    "wggggw",
+    "gggggg",
+    ".gGGg.",
+    "..GG..",
+  ]),
+  crystalFire: bake([
+    "..yy..",
+    ".yrry.",
+    "yrrrry",
+    "rrrrrr",
+    ".rRRr.",
+    "..RR..",
+  ]),
+  crystalRecall: bake([
+    "..ww..",
+    ".wmmw.",
+    "wmmmmw",
+    "mmmmmm",
+    ".mMMm.",
+    "..MM..",
+  ]),
+  crystalSpear: bake([
+    "..c...",
+    ".ccy..",
+    ".rcc..",
+    "rrrc..",
+    "Rrr...",
+    "R.....",
+  ]),
+  fireRuby: bake([
+    ".rr..",
+    "rRRr.",
+    "rRcRr",
+    "rRRr.",
+    ".rr..",
+  ]),
 } as const;
 
 export type SpriteName = keyof typeof SPR;
@@ -426,10 +465,12 @@ export function bakeChest(): HTMLCanvasElement {
 import type { ItemKind } from "../items.ts";
 const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   wood: SPR.wood, stone: SPR.stoneIcon, bones: SPR.bones, herb: SPR.herb, silk: SPR.silkIcon,
-  mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed, mpPotion: SPR.potionBlue,
+  mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed,
   sword: SPR.sword, ironSword: SPR.swordIron, boneSword: SPR.swordBone,
   helmet: SPR.eqHead, armor: SPR.eqBody, shieldItem: SPR.eqShield,
   legs: SPR.eqLegs, boots: SPR.eqBoots, ring: SPR.eqRing, amulet: SPR.eqAmulet,
+  healCrystal: SPR.crystalHeal, fireCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
+  spearCrystal: SPR.crystalSpear, fireRuby: SPR.fireRuby,
 };
 export function itemSprite(kind: ItemKind): HTMLCanvasElement {
   return ITEM_SPR[kind];

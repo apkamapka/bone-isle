@@ -8,7 +8,11 @@ export type ItemKind =
   // resources
   | "wood" | "stone" | "bones" | "herb" | "silk"
   // consumables
-  | "mushroom" | "meat" | "hpPotion" | "mpPotion"
+  | "mushroom" | "meat" | "hpPotion"
+  // crystals (charge-based spell replacements — one "use" per charge)
+  | "healCrystal" | "fireCrystal" | "recallCrystal" | "spearCrystal"
+  // rare research materials (gate the Alchemy Tower's tech tree)
+  | "fireRuby"
   // gear
   | "sword" | "ironSword" | "boneSword"
   | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet";
@@ -20,7 +24,6 @@ export interface GearStats {
   def?: number;
   speed?: number;
   maxhp?: number;
-  maxmana?: number;
 }
 
 export interface ItemDef {
@@ -29,34 +32,53 @@ export interface ItemDef {
   stack: number;
   /** Base sale value at shops (buy price is ~2x). */
   value: number;
+  /** Weight in oz — counts against the player's carry capacity. */
+  weight: number;
   slot?: EqSlot;
   gear?: GearStats;
-  /** Consumable effect: hp/mana restored on use. */
+  /** Consumable effect: hp restored on use (potions, food). */
   heal?: number;
-  mana?: number;
+  /** True for charge-based crystals; each use consumes one from the stack. */
+  crystal?: true;
 }
 
 export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
-  wood:      { name: "Wood",         stack: 50, value: 1 },
-  stone:     { name: "Stone",        stack: 50, value: 1 },
-  bones:     { name: "Bones",        stack: 50, value: 2 },
-  herb:      { name: "Herb",         stack: 50, value: 3 },
-  silk:      { name: "Spider Silk",  stack: 50, value: 4 },
-  mushroom:  { name: "Mushroom",     stack: 20, value: 2, heal: 10 },
-  meat:      { name: "Raw Meat",     stack: 20, value: 3, heal: 6 },
-  hpPotion:  { name: "Health Potion", stack: 10, value: 12, heal: 45 },
-  mpPotion:  { name: "Mana Potion",   stack: 10, value: 12, mana: 35 },
-  sword:     { name: "Short Sword",  stack: 1, value: 15, slot: "weapon", gear: { atk: 3 } },
-  ironSword: { name: "Iron Sword",   stack: 1, value: 45, slot: "weapon", gear: { atk: 7 } },
-  boneSword: { name: "Bone Sword",   stack: 1, value: 120, slot: "weapon", gear: { atk: 12 } },
-  helmet:    { name: "Iron Helmet",  stack: 1, value: 30, slot: "head",   gear: { def: 2 } },
-  armor:     { name: "Plate Armor",  stack: 1, value: 70, slot: "body",   gear: { def: 4 } },
-  shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, slot: "shield", gear: { def: 3 } },
-  legs:      { name: "Iron Legs",    stack: 1, value: 40, slot: "legs",   gear: { def: 2 } },
-  boots:     { name: "Swift Boots",  stack: 1, value: 30, slot: "boots",  gear: { def: 1, speed: 6 } },
-  ring:      { name: "Power Ring",   stack: 1, value: 90, slot: "ring",   gear: { atk: 2 } },
-  amulet:    { name: "Bone Amulet",  stack: 1, value: 160, slot: "amulet", gear: { maxhp: 25, maxmana: 15 } },
+  wood:      { name: "Wood",         stack: 50, value: 1, weight: 10 },
+  stone:     { name: "Stone",        stack: 50, value: 1, weight: 14 },
+  bones:     { name: "Bones",        stack: 50, value: 2, weight: 8 },
+  herb:      { name: "Herb",         stack: 50, value: 3, weight: 3 },
+  silk:      { name: "Spider Silk",  stack: 50, value: 4, weight: 2 },
+  mushroom:  { name: "Mushroom",     stack: 20, value: 2, weight: 4, heal: 10 },
+  meat:      { name: "Raw Meat",     stack: 20, value: 3, weight: 8, heal: 6 },
+  hpPotion:  { name: "Health Potion", stack: 10, value: 12, weight: 5, heal: 45 },
+  healCrystal:   { name: "Life Crystal",   stack: 50, value: 8, weight: 2, crystal: true },
+  fireCrystal:   { name: "Fire Crystal",   stack: 50, value: 8, weight: 2, crystal: true },
+  recallCrystal: { name: "Recall Crystal", stack: 50, value: 6, weight: 2, crystal: true },
+  spearCrystal:  { name: "Spear Crystal",  stack: 50, value: 14, weight: 2, crystal: true },
+  fireRuby:      { name: "Fire Ruby",      stack: 10, value: 40, weight: 3 },
+  sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 3 } },
+  ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 7 } },
+  boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 12 } },
+  helmet:    { name: "Iron Helmet",  stack: 1, value: 30, weight: 55, slot: "head",   gear: { def: 2 } },
+  armor:     { name: "Plate Armor",  stack: 1, value: 70, weight: 120, slot: "body",  gear: { def: 4 } },
+  shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, weight: 60, slot: "shield", gear: { def: 3 } },
+  legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 2 } },
+  boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 6 } },
+  ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
+  amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
 };
+
+/** Weight of `n` of a given item kind, in oz. */
+export function itemWeight(kind: ItemKind, n = 1): number {
+  return ITEMS[kind].weight * n;
+}
+
+/** Total weight of everything in a bag, in oz. */
+export function bagWeight(bag: Bag): number {
+  let w = 0;
+  for (const s of bag) if (s) w += ITEMS[s.kind].weight * s.n;
+  return w;
+}
 
 /** One bag slot: an item kind and how many are stacked there. */
 export interface ItemStack {
@@ -131,6 +153,29 @@ export function removeItem(bag: Bag, kind: ItemKind, n: number): boolean {
   return true;
 }
 
+/** Total count of `kind` across several bags (e.g. backpack + storage chest). */
+export function countAcross(bags: readonly Bag[], kind: ItemKind): number {
+  let n = 0;
+  for (const b of bags) n += bagCount(b, kind);
+  return n;
+}
+
+/**
+ * Remove `n` of `kind` spread across several bags, in order (backpack first,
+ * then stash). Returns true only if the combined total was enough.
+ */
+export function removeAcross(bags: readonly Bag[], kind: ItemKind, n: number): boolean {
+  if (countAcross(bags, kind) < n) return false;
+  let left = n;
+  for (const b of bags) {
+    if (left <= 0) break;
+    const have = bagCount(b, kind);
+    const take = Math.min(have, left);
+    if (take > 0) { removeItem(b, kind, take); left -= take; }
+  }
+  return true;
+}
+
 /** Sum a gear stat across all equipped items. */
 export function gearStat(eq: Equipment, key: keyof GearStats): number {
   let v = 0;
@@ -144,6 +189,8 @@ export function gearStat(eq: Equipment, key: keyof GearStats): number {
 /** Forge crafting recipes. */
 export interface Recipe {
   out: ItemKind;
+  /** How many of `out` a single craft yields (default 1). Crystals batch charges. */
+  outN?: number;
   cost: Partial<Record<ItemKind, number>>;
 }
 export const RECIPES: readonly Recipe[] = [
@@ -158,7 +205,6 @@ export const RECIPES: readonly Recipe[] = [
   { out: "ring",       cost: { stone: 6, bones: 8 } },
   { out: "amulet",     cost: { bones: 12, silk: 6 } },
   { out: "hpPotion",   cost: { herb: 3, mushroom: 2 } },
-  { out: "mpPotion",   cost: { herb: 3, silk: 2 } },
 ];
 
 export function canCraft(bag: Bag, r: Recipe): boolean {
@@ -166,12 +212,13 @@ export function canCraft(bag: Bag, r: Recipe): boolean {
 }
 export function craft(bag: Bag, r: Recipe): boolean {
   if (!canCraft(bag, r)) return false;
-  if (addItem(bag, r.out, 1) > 0) return false; // bag full — don't consume
+  if (addItem(bag, r.out, r.outN ?? 1) > 0) return false; // bag full — don't consume
   for (const [k, v] of Object.entries(r.cost) as [ItemKind, number][]) removeItem(bag, k, v);
   return true;
 }
 export function recipeCostText(r: Recipe): string {
-  return (Object.entries(r.cost) as [ItemKind, number][])
+  const out = (Object.entries(r.cost) as [ItemKind, number][])
     .map(([k, v]) => `${v} ${ITEMS[k].name}`)
     .join(" + ");
+  return (r.outN ?? 1) > 1 ? `${out}  →  x${r.outN}` : out;
 }

@@ -1,11 +1,11 @@
 /** Building system: structure catalog, affordability, placement. */
-import { TILE, LIBRARY_MANA_BONUS, GARDEN_HP_BONUS } from "../config.ts";
+import { TILE, GARDEN_HP_BONUS } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeChest } from "../gfx/sprites.ts";
-import { bagCount, removeItem } from "../items.ts";
+import { countAcross, removeAcross } from "../items.ts";
 import { onStructureBuilt } from "./quests.ts";
-import type { ItemKind } from "../items.ts";
+import type { ItemKind, Bag } from "../items.ts";
 import type { Player } from "../entities/player.ts";
 import type { World } from "../world/types.ts";
 
@@ -19,36 +19,39 @@ export interface StructDef {
   desc: string;
   /** Solid structures block movement; gardens you can walk onto. */
   solid: boolean;
+  /** Occupies a single tile (like the dummies) instead of the full 2×2 pad. */
+  single?: boolean;
 }
 
-export type StructKey = "forge" | "library" | "garden" | "dummy" | "chest";
+export type StructKey = "forge" | "tower" | "garden" | "dummy" | "dummyII" | "chest";
 
 export const STRUCTS: Record<StructKey, StructDef> = {
-  forge: { name: "Forge", cost: { wood: 20, stone: 15 }, spr: bakeForge(), desc: "Craft weapons, armor & potions", solid: true },
-  library: { name: "Library", cost: { wood: 15, stone: 10 }, spr: bakeLibrary(), desc: "Learn spells · +30 max mana", solid: true },
-  garden: { name: "Garden", cost: { wood: 10, herb: 4 }, spr: bakeGarden(), desc: "Regen HP & mana nearby · +15 max HP", solid: false },
-  dummy: { name: "Training Dummy", cost: { wood: 8, stone: 5 }, spr: bakeDummy(), desc: "Attack it to train Sword Fighting", solid: true },
-  chest: { name: "Storage Chest", cost: { wood: 12, stone: 8 }, spr: bakeChest(), desc: "Stash items you don't want to carry", solid: true },
+  forge: { name: "Forge", cost: { wood: 40, stone: 30 }, spr: bakeForge(), desc: "Craft gear & potions", solid: true },
+  tower: { name: "Alchemy Tower", cost: { wood: 35, stone: 30, bones: 12 }, spr: bakeLibrary(), desc: "Research & buy charge crystals", solid: true },
+  garden: { name: "Garden", cost: { wood: 22, herb: 12, stone: 6 }, spr: bakeGarden(), desc: "Regen HP nearby · +15 max HP", solid: false },
+  dummy: { name: "Training Dummy", cost: { wood: 16, stone: 12 }, spr: bakeDummy(), desc: "Attack it to train Sword Fighting", solid: true, single: true },
+  dummyII: { name: "War Dummy", cost: { wood: 30, stone: 24, bones: 16 }, spr: bakeDummy(), desc: "Trains Sword Fighting + Shielding", solid: true, single: true },
+  chest: { name: "Storage Chest", cost: { wood: 24, stone: 16 }, spr: bakeChest(), desc: "Stash items you don't want to carry", solid: true },
 };
 
-export const STRUCT_KEYS: StructKey[] = ["forge", "library", "garden", "dummy", "chest"];
+export const STRUCT_KEYS: StructKey[] = ["forge", "tower", "garden", "dummy", "dummyII", "chest"];
 
-/** Passive max HP/mana bonuses from structures owned on Home Isle. */
-export function structureBonuses(home: World): { maxhp: number; maxmana: number } {
+/** Passive max-HP bonus from structures owned on Home Isle (Garden). */
+export function structureBonuses(home: World): { maxhp: number } {
   let maxhp = 0;
-  let maxmana = 0;
   for (const s of home.structures) {
-    if (s.key === "library") maxmana += LIBRARY_MANA_BONUS;
     if (s.key === "garden") maxhp += GARDEN_HP_BONUS;
   }
-  return { maxhp, maxmana };
+  return { maxhp };
 }
 
-export function canAfford(bag: Player["bag"], cost: Cost): boolean {
-  return (Object.entries(cost) as [ItemKind, number][]).every(([k, v]) => bagCount(bag, k) >= v);
+export function canAfford(bag: Bag, cost: Cost, stash?: Bag): boolean {
+  const bags = stash ? [bag, stash] : [bag];
+  return (Object.entries(cost) as [ItemKind, number][]).every(([k, v]) => countAcross(bags, k) >= v);
 }
-export function payCost(bag: Player["bag"], cost: Cost): void {
-  for (const [k, v] of Object.entries(cost) as [ItemKind, number][]) removeItem(bag, k, v);
+export function payCost(bag: Bag, cost: Cost, stash?: Bag): void {
+  const bags = stash ? [bag, stash] : [bag];
+  for (const [k, v] of Object.entries(cost) as [ItemKind, number][]) removeAcross(bags, k, v);
 }
 export function costText(cost: Cost): string {
   return (Object.entries(cost) as [string, number][]).map(([k, v]) => `${v} ${k}`).join(" + ");
@@ -58,20 +61,20 @@ export function costText(cost: Cost): string {
  * Try to place `key` at world pixel (wx,wy) on the home world. Returns true
  * if a structure was placed (cost paid, pad consumed, solidity applied).
  */
-export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy: number): boolean {
+export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy: number, stash?: Bag): boolean {
   const tx = Math.floor(wx / TILE);
   const ty = Math.floor(wy / TILE);
   const spot = home.buildSpots.find((s) => !s.built && tx >= s.tx && tx < s.tx + 2 && ty >= s.ty && ty < s.ty + 2);
   if (!spot) return false;
   const def = STRUCTS[key];
-  if (!canAfford(p.bag, def.cost)) return false;
+  if (!canAfford(p.bag, def.cost, stash)) return false;
 
-  payCost(p.bag, def.cost);
+  payCost(p.bag, def.cost, stash);
   spot.built = key;
   home.structures.push({ key, tx: spot.tx, ty: spot.ty, anim: Math.random() * 6, hurtT: 0 });
 
   if (def.solid) {
-    if (key === "dummy") {
+    if (def.single) {
       home.solid[spot.ty][spot.tx] = true;
     } else {
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) home.solid[spot.ty + j][spot.tx + i] = true;
@@ -88,7 +91,7 @@ export function applyStructureSolidity(home: World): void {
   for (const s of home.structures) {
     const def = STRUCTS[s.key as StructKey];
     if (!def || !def.solid) continue;
-    if (s.key === "dummy") {
+    if (def.single) {
       home.solid[s.ty][s.tx] = true;
     } else {
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) home.solid[s.ty + j][s.tx + i] = true;

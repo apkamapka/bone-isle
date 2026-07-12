@@ -40,15 +40,15 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   orc: {
     spr: SPR.orc, hp: 90, dmg: [8, 14], speed: 28, atkRate: 1.2, exp: 55, gold: [6, 14], danger: 0.6,
-    loot: [{ kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "ironSword", chance: 0.06, n: [1, 1] }],
+    loot: [{ kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "ironSword", chance: 0.06, n: [1, 1] }, { kind: "fireRuby", chance: 0.05, n: [1, 1] }],
   },
   ghost: {
     spr: SPR.ghost, hp: 60, dmg: [7, 12], speed: 42, atkRate: 1.4, exp: 48, gold: [4, 10], danger: 0.75,
-    loot: [{ kind: "mpPotion", chance: 0.3, n: [1, 1] }, { kind: "ring", chance: 0.04, n: [1, 1] }],
+    loot: [{ kind: "fireCrystal", chance: 0.35, n: [2, 4] }, { kind: "ring", chance: 0.04, n: [1, 1] }, { kind: "fireRuby", chance: 0.07, n: [1, 1] }],
   },
   troll: {
     spr: SPR.troll, hp: 160, dmg: [12, 20], speed: 24, atkRate: 1.5, exp: 110, gold: [12, 28], danger: 0.9,
-    loot: [{ kind: "bones", chance: 0.8, n: [2, 4] }, { kind: "boneSword", chance: 0.05, n: [1, 1] }, { kind: "amulet", chance: 0.03, n: [1, 1] }],
+    loot: [{ kind: "bones", chance: 0.8, n: [2, 4] }, { kind: "boneSword", chance: 0.05, n: [1, 1] }, { kind: "amulet", chance: 0.03, n: [1, 1] }, { kind: "fireRuby", chance: 0.12, n: [1, 1] }],
   },
 };
 
