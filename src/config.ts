@@ -3,6 +3,14 @@
 /** Tile size in internal (low-res) pixels. */
 export const TILE = 16;
 
+/**
+ * The one canonical world seed. Terrain generation is fully deterministic, so a
+ * fixed seed means every device — and every future online player — sees the
+ * exact same islands. When multiplayer arrives, a server can hand out its own
+ * seed instead; the generation code needs no changes.
+ */
+export const WORLD_SEED = 20260713;
+
 /** Internal viewport resolution (scaled up with pixelated rendering). */
 export const VIEW_W = 480;
 export const VIEW_H = 320;

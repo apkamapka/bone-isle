@@ -8,6 +8,7 @@ import { resetTasks } from "./systems/tasks.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
+import { WORLD_SEED } from "./config.ts";
 import type { World, WorldKey } from "./world/types.ts";
 import type { Player } from "./entities/player.ts";
 import type { Bag } from "./items.ts";
@@ -63,7 +64,7 @@ export function populateWild(wild: World): void {
   }
 }
 
-export function createGame(seed = (Math.random() * 1e9) | 0): Game {
+export function createGame(seed = WORLD_SEED): Game {
   const worlds = buildWorlds(seed);
   populateWild(worlds.wild);
   const player = createPlayer(portalSpawn(worlds.home));
