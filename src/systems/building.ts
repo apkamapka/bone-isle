@@ -5,6 +5,7 @@ import { addFloat } from "../fx.ts";
 import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeChest } from "../gfx/sprites.ts";
 import { countAcross, removeAcross } from "../items.ts";
 import { onStructureBuilt } from "./quests.ts";
+import { unstick } from "../world/collision.ts";
 import type { ItemKind, Bag } from "../items.ts";
 import type { Player } from "../entities/player.ts";
 import type { World } from "../world/types.ts";
@@ -80,6 +81,7 @@ export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy:
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) home.solid[spot.ty + j][spot.tx + i] = true;
     }
   }
+  unstick(home, p); // if you built on the tile you were standing on, step out of it
   onStructureBuilt(key, (t) => addFloat(home, spot.tx * TILE + TILE, spot.ty * TILE - 8, t, "#ffe9a8"));
   addFloat(home, spot.tx * TILE + TILE, spot.ty * TILE, `${def.name} built!`, "#ffe27a");
   beep(330, 0.1, "triangle", 0.06);

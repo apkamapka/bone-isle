@@ -1,6 +1,6 @@
 import "./style.css";
 import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S } from "./config.ts";
-import { moveEntity } from "./world/collision.ts";
+import { moveEntity, unstick } from "./world/collision.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
@@ -98,6 +98,7 @@ refreshDerived(game.player);
 // merge any stacks that older saves left fragmented (stack limits grew)
 compactBag(game.player.bag); compactBag(game.stash);
 const P = game.player;
+if (unstick(game.current, P)) { /* freed a player boxed in by an old build */ }
 const cam = { x: 0, y: 0 };
 let moveMarker: { x: number; y: number; t: number } | null = null;
 let waveT = 0;
@@ -1521,15 +1522,15 @@ function drawTouchControls(): void {
   }
   if (editing) drawGroupGrip("panels", panelPos.x, panelPos.y, bs, colH);
 
-  // --- action bar: 6 slots (group "actions") ---
+  // --- action slots: six independently-placeable squares (group "slot0..5") ---
   const sw6 = bs * 0.92;
-  const barW = 6 * sw6 + 5 * gap;
-  const actPos = placeHud("actions", barW, bs, sw, sh);
   for (let i = 0; i < 6; i++) {
     if (!editing && !actionSlots[i]) continue; // keep the play HUD tidy — empty slots only show in edit mode
-    drawActionSlot(i, actPos.x + i * (sw6 + gap), actPos.y, sw6, bs);
+    const gid = `slot${i}` as HudGroup;
+    const pos = placeHud(gid, sw6, bs, sw, sh);
+    drawActionSlot(i, pos.x, pos.y, sw6, bs);
+    if (editing) drawGroupGrip(gid, pos.x, pos.y, sw6, bs);
   }
-  if (editing) drawGroupGrip("actions", actPos.x, actPos.y, barW, bs);
 
   // --- quick weapon-swap button (group "swap") ---
   const swW = bs * 1.15, swH = bs * 0.62;
