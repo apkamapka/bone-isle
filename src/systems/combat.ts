@@ -9,6 +9,7 @@ import { refreshDerived } from "../entities/player.ts";
 import { addSkillXp, attackPower, defensePower, distancePower } from "./skills.ts";
 import type { ItemKind } from "../items.ts";
 import { onMonsterKilled } from "./quests.ts";
+import { onTaskKill } from "./tasks.ts";
 import type { Player } from "../entities/player.ts";
 import type { World, Monster, Structure } from "../world/types.ts";
 
@@ -123,6 +124,7 @@ export function killMonster(world: World, p: Player, m: Monster): void {
   });
 
   onMonsterKilled(m.kind, (t) => addFloat(world, p.x, p.y - 32, t, "#ffe9a8"));
+  onTaskKill(m.kind);
 
   const idx = world.monsters.indexOf(m);
   if (idx >= 0) world.monsters.splice(idx, 1);

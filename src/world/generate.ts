@@ -13,6 +13,7 @@ const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement]> = [
   ["smith", "Borin the Smith", SPR.npcSmith],
   ["herbalist", "Mira the Herbalist", SPR.npcHerbalist],
   ["elder", "Elder Oswin", SPR.npcElder],
+  ["taskmaster", "Grizelda the Huntress", SPR.npcTaskmaster],
 ];
 
 export function makeWorld(opts: WorldOpts): World {

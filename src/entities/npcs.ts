@@ -33,7 +33,8 @@ export interface NpcShop {
   entries: ShopEntry[];
 }
 
-export const SHOPS: Readonly<Record<NpcKey, NpcShop>> = {
+/** Shops keyed by NPC. The taskmaster has no shop — clicking them opens the task board. */
+export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
   smith: {
     greeting: "Fresh steel and a fair price. What'll it be?",
     entries: shop(

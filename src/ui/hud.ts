@@ -3,7 +3,9 @@ import { TILE } from "../config.ts";
 import { SPR, itemSprite } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
 import { actionSlots } from "../systems/actions.ts";
-import { bagCount } from "../items.ts";
+import { bagCount, ITEMS } from "../items.ts";
+import { activeTask, progressOf } from "../systems/tasks.ts";
+import { placeHud } from "../systems/hudLayout.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import type { Player } from "../entities/player.ts";
 import type { Game } from "../game.ts";
@@ -97,11 +99,12 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   const pad = 8 * S;
   ctx.textBaseline = "middle";
 
-  // bottom-left: HP + EXP + Cap
+  // bottom-left: HP + EXP + Cap  (draggable on touch via the customizable HUD)
   const pw = 190 * S;
   const ph = 54 * S;
-  const px = pad;
-  const py = screenH - ph - pad;
+  let px = pad;
+  let py = screenH - ph - pad;
+  if (h.touch) { const pos = placeHud("vitals", pw, ph, screenW, screenH); px = pos.x; py = pos.y; }
   panel(h, px, py, pw, ph);
   bar(h, px + 10 * S, py + 8 * S, 130 * S, 8 * S, p.hp / p.maxhp, "#e1483b", "#5d1a14");
   hudText(h, `HP ${Math.ceil(p.hp)}/${p.maxhp}`, px + 145 * S, py + 11 * S + 1, 8 * S, "#ffd9d4");
@@ -133,9 +136,32 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   hudText(h, goldStr, ix + 9 * S + cdw + 6 * S, iy + ih / 2, 9 * S, "#f3eedd", "left", true);
   hudText(h, "gold", ix + iw - 8 * S, iy + ih / 2, 8 * S, "rgba(220,214,190,.6)", "right");
 
+  // task points box, sitting just left of the gold box on the same row
+  const tpStr = `${p.taskPoints}`;
+  ctx.font = `bold ${9 * S}px monospace`;
+  const tpNumW = ctx.measureText(tpStr).width;
+  ctx.font = `${8 * S}px monospace`;
+  const tpLabW = ctx.measureText("TP").width;
+  const tpw = 12 * S + tpLabW + 6 * S + tpNumW + 10 * S;
+  const tpx = ix - tpw - 6 * S;
+  panel(h, tpx, iy, tpw, ih);
+  hudText(h, "TP", tpx + 10 * S, iy + ih / 2, 8 * S, "#9ad0ff", "left", true);
+  hudText(h, tpStr, tpx + tpw - 8 * S, iy + ih / 2, 9 * S, "#f3eedd", "right", true);
+
   // top-left: title + zone
   hudText(h, "BONE ISLE", pad + 2, pad + 7 * S, 11 * S, "#cfe8d2", "left", true);
   hudText(h, game.current.name + (game.current.safe ? " · safe" : " · danger"), pad + 2, pad + 18 * S, 8 * S, "rgba(207,232,210,.7)");
+
+  // active board-task tracker
+  const task = activeTask();
+  if (task) {
+    const prog = progressOf(task, p.bag);
+    const label = task.goal.kind === "kill"
+      ? `${task.goal.monster}`
+      : `${ITEMS[task.goal.item].name}`;
+    const done = prog >= task.goal.need;
+    hudText(h, `Task: ${prog}/${task.goal.need} ${label}`, pad + 2, pad + 29 * S, 8 * S, done ? "#9fe8a8" : "rgba(154,208,255,.85)");
+  }
 
   drawMinimap(h, game, p);
 
@@ -165,10 +191,12 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
         ctx.drawImage(spr, sx + (bw - spr.width * isc) / 2, sy + (bw - spr.height * isc) / 2 - S, spr.width * isc, spr.height * isc);
         ctx.globalAlpha = 1;
         hudText(h, `${charges}`, sx + bw - 3 * S, sy + bw - 4 * S, 7 * S, usable ? "#ffe9a8" : "#c86", "right");
+      } else if (slot && slot.type === "swap") {
+        hudText(h, "SWAP", sx + bw / 2, sy + bw / 2 + S, 7 * S, "#e9e2c8", "center", true);
       }
       sx += bw + gap;
     }
-    hudText(h, "1 Life · 2 Fire · 3 Recall", screenW / 2, sy - 6 * S, 7 * S, "rgba(220,214,190,.5)", "center");
+    hudText(h, "1–6 action slots · rebind on mobile", screenW / 2, sy - 6 * S, 7 * S, "rgba(220,214,190,.5)", "center");
   }
 
   // zone flash

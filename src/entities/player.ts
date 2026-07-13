@@ -31,6 +31,8 @@ export interface Player {
   hp: number;
   maxhp: number;
   gold: number;
+  /** Task points — a separate currency earned from repeatable board tasks. */
+  taskPoints: number;
   level: number;
   exp: number;
   expNext: number;
@@ -66,6 +68,7 @@ export function createPlayer(spawn: Vec): Player {
     hp: PLAYER_BASE_HP,
     maxhp: PLAYER_BASE_HP,
     gold: 0,
+    taskPoints: 0,
     level: 1,
     exp: 0,
     expNext: expNeeded(1),

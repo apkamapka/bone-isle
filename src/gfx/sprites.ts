@@ -235,6 +235,21 @@ export const SPR = {
     "..WW..WW..",
     "..kk..kk..",
   ]),
+  npcTaskmaster: bake([
+    "..tttttt..",
+    ".tttttttt.",
+    ".tsssssst.",
+    ".tsessest.",
+    "..sshhss..",
+    ".gGgGgGgG.",
+    "gGGGGGGGGg",
+    ".GGgGGgGG.",
+    ".GGGGGGGG.",
+    "..GGGGGG..",
+    ".GGGGGGGG.",
+    "..GG..GG..",
+    "..kk..kk..",
+  ]),
   // --- corpse + ground items ---
   corpse: bake([
     "...ww.....",

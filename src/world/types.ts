@@ -136,7 +136,7 @@ export interface Corpse {
 }
 
 /** Town NPC kinds. */
-export type NpcKey = "smith" | "herbalist" | "elder";
+export type NpcKey = "smith" | "herbalist" | "elder" | "taskmaster";
 
 /** A town NPC. */
 export interface Npc {

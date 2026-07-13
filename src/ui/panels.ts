@@ -3,6 +3,8 @@ import { SPR, itemSprite } from "../gfx/sprites.ts";
 import { skills, skillNeed } from "../systems/skills.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText } from "../systems/building.ts";
 import { RESEARCH, isResearched } from "../systems/tower.ts";
+import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
+import type { TaskReward } from "../systems/tasks.ts";
 import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, bestArrow, itemInfoLines } from "../items.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
@@ -16,7 +18,7 @@ import type { Game } from "../game.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
-  | "forge" | "tower" | "loot" | "shop" | "stash";
+  | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks";
 
 export interface Hotspot {
   x: number;
@@ -79,6 +81,10 @@ export interface PanelActions {
   buy: (kind: ItemKind) => void;
   sell: (kind: ItemKind) => void;
   claim: (id: string) => void;
+  acceptTask: (id: string) => void;
+  abandonTask: () => void;
+  handInTask: () => void;
+  buyExchange: (id: string) => void;
   moveStack: (src: "bag" | "stash", index: number) => void;
   look: (kind: ItemKind) => void;
   toggleLook: () => void;
@@ -321,6 +327,7 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
       case "loot": drawLoot(p); break;
       case "shop": drawShop(p); break;
       case "quest": drawQuests(p); break;
+      case "tasks": drawTasks(p); break;
       case "stash": drawStash(p); break;
       default: break;
     }
@@ -717,6 +724,7 @@ function drawShop(p: PanelInput): void {
   const npc = ui.npc;
   if (!npc) return;
   const shop = SHOPS[npc.key];
+  if (!shop) return;
   const { ctx, scale: S, screenW, screenH } = hud;
   const w = 300 * S;
   const rowH = 24 * S;
@@ -806,6 +814,132 @@ function drawQuests(p: PanelInput): void {
     }
     ry += rowH;
   }
+}
+
+/* ---------------- Task board (Grizzly Adams tasks) ---------------- */
+
+function rewardText(r: TaskReward): string {
+  const parts: string[] = [`${r.points} TP`];
+  if (r.gold) parts.push(`${r.gold}g`);
+  if (r.exp) parts.push(`${r.exp}xp`);
+  if (r.item) parts.push(`${r.itemN ?? 1}x ${ITEMS[r.item].name}`);
+  return parts.join(" · ");
+}
+
+function drawTasks(p: PanelInput): void {
+  const { hud, player } = p;
+  const { ctx, scale: S, screenW, screenH } = hud;
+  const active = activeTask();
+  const unlocked = TASKS.filter(isTaskUnlocked);
+  const lockedCount = TASKS.length - unlocked.length;
+  const taskRowH = 28 * S;
+  const exRowH = 22 * S;
+
+  const w = 330 * S;
+  const headerH = 24 * S;
+  const activeH = 48 * S;
+  const listLabelH = 12 * S;
+  const listH = unlocked.length * taskRowH + (lockedCount > 0 ? 12 * S : 0);
+  const exLabelH = 12 * S;
+  const exH = EXCHANGES.length * exRowH;
+  const h = 18 * S + headerH + activeH + listLabelH + listH + exLabelH + exH + 14 * S;
+
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
+  goldPanel(p, x, y, w, h, "TASK BOARD — Grizelda");
+
+  let ry = y + 18 * S;
+  // points header
+  hudText(hud, `Task Points: ${player.taskPoints}`, x + 12 * S, ry + 6 * S, 9 * S, "#9ad0ff", "left", true);
+  hudText(hud, `lifetime ${pointsEarned()}`, x + w - 12 * S, ry + 6 * S, 7 * S, "rgba(220,214,190,.55)", "right");
+  ry += headerH;
+
+  // active-task block
+  ctx.fillStyle = "rgba(20,30,40,.5)";
+  ctx.fillRect(x + 8 * S, ry, w - 16 * S, activeH - 6 * S);
+  if (active) {
+    const need = active.goal.need;
+    const prog = progressOf(active, player.bag);
+    const complete = isComplete(active, player.bag);
+    const fits = rewardFits(player.bag, active);
+    hudText(hud, active.title, x + 14 * S, ry + 9 * S, 9 * S, "#ffe9a8", "left", true);
+    hudText(hud, active.desc, x + 14 * S, ry + 20 * S, 6.5 * S, "rgba(220,214,190,.6)");
+    ctx.fillStyle = "#2a3a30";
+    ctx.fillRect(x + 14 * S, ry + 27 * S, w - 118 * S, 3 * S);
+    ctx.fillStyle = complete ? "#9fe8a8" : "#caa15a";
+    ctx.fillRect(x + 14 * S, ry + 27 * S, (w - 118 * S) * (prog / need), 3 * S);
+    hudText(hud, `${prog}/${need}`, x + 14 * S, ry + 38 * S, 7 * S, complete ? "#9fe8a8" : "#e8dcc0");
+    // hand-in button
+    const bw = 78 * S, bh = 24 * S, bx = x + w - bw - 10 * S, by = ry + 7 * S;
+    const canHand = complete && fits;
+    ctx.fillStyle = canHand ? "rgba(52,110,52,.92)" : "rgba(48,48,48,.7)";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = canHand ? "#9fe8a8" : "#556";
+    ctx.lineWidth = S;
+    ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, bh - S);
+    const label = canHand ? "HAND IN" : complete ? "bag full" : "in progress";
+    hudText(hud, label, bx + bw / 2, by + bh / 2, 8 * S, canHand ? "#eaffea" : "#9a9a9a", "center", true);
+    if (canHand) p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.handInTask() });
+    // abandon
+    hudText(hud, "[abandon]", x + 14 * S, ry + activeH - 10 * S, 6.5 * S, "rgba(230,130,110,.85)", "left");
+    p.hotspots.push({ x: x + 12 * S, y: ry + activeH - 16 * S, w: 58 * S, h: 12 * S, fn: () => p.act.abandonTask() });
+  } else {
+    hudText(hud, "No active task.", x + 14 * S, ry + 13 * S, 9 * S, "#e8dcc0", "left", true);
+    hudText(hud, "Pick one below to start hunting.", x + 14 * S, ry + 26 * S, 7 * S, "rgba(220,214,190,.6)");
+  }
+  ry += activeH;
+
+  // available list
+  hudText(hud, active ? "AVAILABLE — finish current first" : "AVAILABLE TASKS", x + 12 * S, ry + 6 * S, 7 * S, "rgba(255,233,168,.85)", "left", true);
+  ry += listLabelH;
+  for (const t of unlocked) {
+    const isActive = active?.id === t.id;
+    const canAccept = !active;
+    if (hovering(p, x + 6 * S, ry, w - 12 * S, taskRowH - 2 * S) && canAccept) {
+      ctx.fillStyle = "rgba(202,162,58,.15)";
+      ctx.fillRect(x + 6 * S, ry, w - 12 * S, taskRowH - 2 * S);
+    }
+    const goalTxt = t.goal.kind === "kill"
+      ? `Kill ${t.goal.need} ${t.goal.monster}`
+      : `Deliver ${t.goal.need} ${ITEMS[t.goal.item].name}`;
+    const col = isActive ? "#9fe8a8" : canAccept ? "#f3eedd" : "#8a8070";
+    hudText(hud, t.title + (isActive ? "  (active)" : ""), x + 12 * S, ry + 9 * S, 8.5 * S, col, "left", true);
+    hudText(hud, goalTxt, x + 12 * S, ry + 19 * S, 6.5 * S, "rgba(220,214,190,.6)");
+    hudText(hud, rewardText(t.reward), x + w - 12 * S, ry + 13 * S, 6.5 * S, "rgba(202,162,58,.9)", "right");
+    if (canAccept && !isActive) {
+      const id = t.id;
+      const yy = ry;
+      p.hotspots.push({ x: x + 6 * S, y: yy, w: w - 12 * S, h: taskRowH - 2 * S, fn: () => p.act.acceptTask(id) });
+    }
+    ry += taskRowH;
+  }
+  if (lockedCount > 0) {
+    hudText(hud, `+${lockedCount} more unlock at higher Task Points`, x + w / 2, ry + 6 * S, 6.5 * S, "rgba(200,138,90,.8)", "center");
+    ry += 12 * S;
+  }
+
+  // point exchange
+  hudText(hud, "SPEND POINTS", x + 12 * S, ry + 6 * S, 7 * S, "rgba(154,208,255,.85)", "left", true);
+  ry += exLabelH;
+  for (const e of EXCHANGES) {
+    const can = player.taskPoints >= e.cost;
+    if (hovering(p, x + 6 * S, ry, w - 12 * S, exRowH - 2 * S) && can) {
+      ctx.fillStyle = "rgba(154,208,255,.12)";
+      ctx.fillRect(x + 6 * S, ry, w - 12 * S, exRowH - 2 * S);
+    }
+    const spr = itemSprite(e.item);
+    icon(p, spr, x + 10 * S, ry + (exRowH - spr.height * 2 * S) / 2, 2 * S);
+    hudText(hud, `${e.itemN}x ${ITEMS[e.item].name}`, x + 34 * S, ry + 8 * S, 8 * S, can ? "#f3eedd" : "#8a8070", "left", true);
+    hudText(hud, e.desc, x + 34 * S, ry + 17 * S, 6 * S, "rgba(220,214,190,.5)");
+    hudText(hud, `${e.cost} TP`, x + w - 12 * S, ry + exRowH / 2, 8 * S, can ? "#9ad0ff" : "#d96a5a", "right");
+    if (can) {
+      const id = e.id;
+      const yy = ry;
+      p.hotspots.push({ x: x + 6 * S, y: yy, w: w - 12 * S, h: exRowH - 2 * S, fn: () => p.act.buyExchange(id) });
+    }
+    ry += exRowH;
+  }
+  hudText(hud, "One task at a time · kills count only while active", x + w / 2, y + h - 8 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
 }
 
 /* ---------------- Storage chest (stash) ---------------- */
