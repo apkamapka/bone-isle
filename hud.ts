@@ -5,6 +5,7 @@ import { clamp } from "../util.ts";
 import { actionSlots } from "../systems/actions.ts";
 import { bagCount, ITEMS } from "../items.ts";
 import { activeTask, progressOf } from "../systems/tasks.ts";
+import { placeHud } from "../systems/hudLayout.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import type { Player } from "../entities/player.ts";
 import type { Game } from "../game.ts";
@@ -98,11 +99,12 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   const pad = 8 * S;
   ctx.textBaseline = "middle";
 
-  // bottom-left: HP + EXP + Cap
+  // bottom-left: HP + EXP + Cap  (draggable on touch via the customizable HUD)
   const pw = 190 * S;
   const ph = 54 * S;
-  const px = pad;
-  const py = screenH - ph - pad;
+  let px = pad;
+  let py = screenH - ph - pad;
+  if (h.touch) { const pos = placeHud("vitals", pw, ph, screenW, screenH); px = pos.x; py = pos.y; }
   panel(h, px, py, pw, ph);
   bar(h, px + 10 * S, py + 8 * S, 130 * S, 8 * S, p.hp / p.maxhp, "#e1483b", "#5d1a14");
   hudText(h, `HP ${Math.ceil(p.hp)}/${p.maxhp}`, px + 145 * S, py + 11 * S + 1, 8 * S, "#ffd9d4");
@@ -189,10 +191,12 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
         ctx.drawImage(spr, sx + (bw - spr.width * isc) / 2, sy + (bw - spr.height * isc) / 2 - S, spr.width * isc, spr.height * isc);
         ctx.globalAlpha = 1;
         hudText(h, `${charges}`, sx + bw - 3 * S, sy + bw - 4 * S, 7 * S, usable ? "#ffe9a8" : "#c86", "right");
+      } else if (slot && slot.type === "swap") {
+        hudText(h, "SWAP", sx + bw / 2, sy + bw / 2 + S, 7 * S, "#e9e2c8", "center", true);
       }
       sx += bw + gap;
     }
-    hudText(h, "1 Life · 2 Fire · 3 Recall", screenW / 2, sy - 6 * S, 7 * S, "rgba(220,214,190,.5)", "center");
+    hudText(h, "1–6 action slots · rebind on mobile", screenW / 2, sy - 6 * S, 7 * S, "rgba(220,214,190,.5)", "center");
   }
 
   // zone flash

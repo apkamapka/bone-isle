@@ -1,6 +1,6 @@
 import "./style.css";
 import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S } from "./config.ts";
-import { moveEntity } from "./world/collision.ts";
+import { moveEntity, unstick } from "./world/collision.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
@@ -10,7 +10,11 @@ import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost } from "./systems/building.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { useCrystal } from "./systems/crystals.ts";
-import { actionSlots } from "./systems/actions.ts";
+import { actionSlots, setSlot, BINDABLE_CRYSTALS } from "./systems/actions.ts";
+import {
+  hudLocked, toggleHudLock, placeHud, moveHudGroup, saveHudLayout, resetHudLayout, loadHudLayout,
+  type HudGroup,
+} from "./systems/hudLayout.ts";
 import { researchById, isResearched, markResearched } from "./systems/tower.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
@@ -63,9 +67,15 @@ function resize(): void {
   const ch = Math.max(1, innerHeight);
   const dpr = Math.min(devicePixelRatio || 1, 2);
 
+  // Mobile (touch or narrow) keeps the tall, chunky, immersive framing.
+  // Desktop zooms out so tiles aren't giant and much more of the island is
+  // visible (a classic top-down feel) — HUD sizing is unaffected.
+  const mobile = isTouchDevice() || Math.min(cw, ch) < 620;
+
   // CSS px per internal world px. Larger => more zoomed in / chunkier pixels.
-  // Tuned so tiles land around 30-40 CSS px on phones and desktops alike.
-  const f = clamp(Math.round(Math.min(cw, ch) / 220), 2, 6);
+  const f = mobile
+    ? clamp(Math.round(Math.min(cw, ch) / 220), 2, 6)   // phones: unchanged
+    : clamp(Math.min(cw, ch) / 360, 2, 3.2);            // desktop: wider, finer view
   VW = Math.max(160, Math.ceil(cw / f));
   VH = Math.max(120, Math.ceil(ch / f));
   view.width = VW;
@@ -79,11 +89,13 @@ function resize(): void {
 
   vScale = screen.width / VW;          // device px per world px
   scale = screen.width / DESIGN_W;     // HUD design unit
-  touchUI = isTouchDevice() || Math.min(cw, ch) < 620;
+  touchUI = mobile;
 }
 addEventListener("resize", resize);
 addEventListener("orientationchange", () => setTimeout(resize, 100));
 resize();
+
+loadHudLayout(); // restore any customized mobile HUD positions + lock state
 
 const game: Game = loadGame() ?? createGame();
 // keep passive structure bonuses (Garden HP) in sync from the start
@@ -92,6 +104,7 @@ refreshDerived(game.player);
 // merge any stacks that older saves left fragmented (stack limits grew)
 compactBag(game.player.bag); compactBag(game.stash);
 const P = game.player;
+if (unstick(game.current, P)) { /* freed a player boxed in by an old build */ }
 const cam = { x: 0, y: 0 };
 let moveMarker: { x: number; y: number; t: number } | null = null;
 let waveT = 0;
@@ -105,6 +118,15 @@ let itemSlots: ItemSlot[] = [];
 // mouse drag-and-drop of inventory items
 let suppressClick = false;
 let itemDrag: { src: "bag" | "stash"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean } | null = null;
+
+// mobile HUD customization (Etap 7): rebind picker + group dragging
+let assignSlot: number | null = null;
+let hudDrag: { id: HudGroup; dx: number; dy: number; moved: boolean } | null = null;
+let hudGrips: { id: HudGroup; x: number; y: number; w: number; h: number; gx: number; gy: number }[] = [];
+/** True when the mobile HUD is in edit (unlocked) mode. */
+function hudEditing(): boolean {
+  return touchUI && !hudLocked();
+}
 
 const cw = (): World => game.current;
 const flash = (t: string, c = "#ffe9a8"): void => addFloat(cw(), P.x, P.y - 30, t, c);
@@ -443,7 +465,30 @@ function useAction(index: number): void {
   const slot = actionSlots[index];
   if (!slot) return;
   if (slot.type === "crystal") { useCrystalItem(slot.item); return; }
-  // "attack" / "swap" slot types are wired up in a later stage.
+  if (slot.type === "swap") { swapWeapon(); return; }
+  // "attack" slot type is reserved for a future basic-attack binding.
+}
+
+/**
+ * Quick weapon swap: toggles the equipped weapon between a bow and a melee
+ * weapon, pulling the best matching spare from the backpack. Reuses the normal
+ * equip path so the two-handed bow↔shield rule and bag stow-away still apply.
+ */
+function swapWeapon(): void {
+  if (P.dead) return;
+  const cur = P.eq.weapon;
+  const curIsBow = cur ? !!ITEMS[cur].bow : false;
+  const wantBow = !curIsBow; // if a bow is on, swap to melee; otherwise swap to a bow
+  let pick: ItemKind | null = null;
+  for (const s of P.bag) {
+    if (!s) continue;
+    const d = ITEMS[s.kind];
+    if (d.slot !== "weapon") continue;
+    if (!!d.bow === wantBow && (!pick || d.value > ITEMS[pick].value)) pick = s.kind;
+  }
+  if (!pick) { flash(wantBow ? "no bow in bag" : "no melee weapon in bag", "#e0a06a"); return; }
+  act.equipItem(pick, 0); // removes from bag, equips, stows the previous weapon
+  flash(`equipped ${ITEMS[pick].name}`, "#b9e07f");
 }
 
 /** Apply a crystal by kind: Recall travels home, others hit self/target. */
@@ -550,6 +595,8 @@ function handleWorldTap(sx: number, sy: number): void {
       return;
     }
   }
+  // in HUD edit mode only hotspots (slots / lock / reset / picker) act — no walking
+  if (hudEditing()) return;
   // an open inspect popup is dismissed by tapping empty space
   if (ui.inspect) { ui.inspect = null; return; }
   if (ui.split) { ui.split = null; return; }
@@ -578,6 +625,7 @@ initInput(screen, {
     flash(ui.lookMode ? "look mode on" : "look mode off", "#8ab6ff");
   },
   onEscape: () => {
+    if (assignSlot !== null) { assignSlot = null; return; }
     if (ui.split) { ui.split = null; return; }
     if (ui.inspect) { ui.inspect = null; return; }
     if (ui.placing) { ui.placing = null; return; }
@@ -637,6 +685,19 @@ screen.addEventListener("pointerdown", (e) => {
       return;
     }
   }
+  // mobile HUD edit: grab a group's drag grip to reposition it
+  if (hudEditing()) {
+    for (const g of hudGrips) {
+      if (s.x >= g.x && s.x < g.x + g.w && s.y >= g.y && s.y < g.y + g.h) {
+        hudDrag = { id: g.id, dx: s.x - g.gx, dy: s.y - g.gy, moved: false };
+        ui.dragging = true;
+        suppressClick = true;
+        try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+        e.preventDefault();
+        return;
+      }
+    }
+  }
   // item drag-and-drop (mouse only; touch uses the quantity chooser)
   if (e.pointerType === "mouse" && e.button === 0 && !ui.lookMode && !ui.split && !ui.inspect) {
     for (let i = itemSlots.length - 1; i >= 0; i--) {
@@ -658,6 +719,13 @@ screen.addEventListener("pointermove", (e) => {
     e.preventDefault();
     return;
   }
+  if (hudDrag) {
+    const s = toScreen(e);
+    hudDrag.moved = true;
+    moveHudGroup(hudDrag.id, s.x - hudDrag.dx, s.y - hudDrag.dy, screen.width, screen.height);
+    e.preventDefault();
+    return;
+  }
   if (!drag) return;
   const s = toScreen(e);
   let nx = drag.ox + (s.x - drag.gx);
@@ -674,6 +742,13 @@ screen.addEventListener("pointermove", (e) => {
 });
 const endDrag = (): void => { drag = null; ui.dragging = false; };
 addEventListener("pointerup", (e) => {
+  if (hudDrag) {
+    saveHudLayout();
+    hudDrag = null;
+    ui.dragging = false;
+    setTimeout(() => { suppressClick = false; }, 0);
+    return;
+  }
   if (itemDrag) {
     const s = toScreen(e as PointerEvent);
     if (itemDrag.active) resolveItemDrop(s.x, s.y);
@@ -684,7 +759,7 @@ addEventListener("pointerup", (e) => {
   }
   endDrag();
 });
-addEventListener("pointercancel", () => { itemDrag = null; suppressClick = false; endDrag(); });
+addEventListener("pointercancel", () => { hudDrag = null; itemDrag = null; suppressClick = false; endDrag(); });
 
 function worldClick(w: Vec): void {
   if (P.dead) return;
@@ -1328,6 +1403,7 @@ function render(): void {
   }
   if (touchUI) drawTouchControls();
   drawJoystick(sctx);
+  drawAssignPicker();
 }
 
 /** On-screen buttons (panel toggles + action crystals) for touch. */
@@ -1351,60 +1427,210 @@ function tButton(x: number, y: number, s: number, label: string, glyph: string, 
   touchButtons.push({ x, y, w: s, h: s });
 }
 
+/** Tap an action slot: bind it in edit mode, otherwise trigger it. */
+function slotTap(i: number): void {
+  if (hudEditing()) { assignSlot = i; beep(360, 0.05, "sine", 0.04); }
+  else useAction(i);
+}
+
+/** A flat rectangular HUD button with a single label. Registers a hotspot. */
+function hudBtn(x: number, y: number, w: number, h: number, label: string, on: boolean, fn: () => void): void {
+  const ctx = sctx;
+  ctx.fillStyle = on ? "rgba(202,162,58,.92)" : "rgba(16,26,24,.85)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = on ? "#ffe9a8" : "#3d5a50";
+  ctx.lineWidth = Math.max(1, scale);
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = on ? "#201a10" : "#e9e2c8";
+  ctx.font = `bold ${Math.round(h * 0.42)}px 'Courier New',monospace`;
+  ctx.fillText(label, x + w / 2, y + h / 2);
+  hotspots.push({ x, y, w, h, fn });
+  touchButtons.push({ x, y, w, h });
+}
+
+/** One action slot (crystal / swap / empty) in the mobile action bar. */
+function drawActionSlot(i: number, x: number, y: number, w: number, h: number): void {
+  const slot = actionSlots[i];
+  const ctx = sctx;
+  let label = "", sub = "", usable = false;
+  if (slot?.type === "crystal") {
+    const charges = bagCount(P.bag, slot.item);
+    usable = charges > 0;
+    label = ITEMS[slot.item].name.split(" ")[0];
+    sub = `${i + 1}·${charges}`;
+  } else if (slot?.type === "swap") {
+    usable = true;
+    label = "SWAP";
+    sub = `${i + 1}`;
+  } else {
+    label = hudEditing() ? "+" : "";
+    sub = hudEditing() ? "bind" : `${i + 1}`;
+  }
+  ctx.fillStyle = usable ? "rgba(46,58,54,.92)" : "rgba(24,26,30,.8)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = hudEditing() ? "#8ab6ff" : usable ? "#caa15a" : "#3a4048";
+  ctx.lineWidth = Math.max(1, scale);
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = usable ? "#e9e2c8" : hudEditing() ? "#8ab6ff" : "#7a808a";
+  ctx.font = `bold ${Math.round(h * 0.26)}px 'Courier New',monospace`;
+  ctx.fillText(label, x + w / 2, y + h * 0.38);
+  ctx.font = `${Math.round(h * 0.2)}px 'Courier New',monospace`;
+  ctx.fillStyle = usable ? "#ffe9a8" : "#7a808a";
+  ctx.fillText(sub, x + w / 2, y + h * 0.74);
+  const idx = i;
+  hotspots.push({ x, y, w, h, fn: () => slotTap(idx) });
+  touchButtons.push({ x, y, w, h });
+}
+
+/** Edit-mode outline + a drag handle (grip) for a movable HUD group. */
+function drawGroupGrip(id: HudGroup, gx: number, gy: number, gw: number, gh: number): void {
+  const ctx = sctx;
+  ctx.strokeStyle = "rgba(138,182,255,.9)";
+  ctx.lineWidth = Math.max(1, scale);
+  ctx.setLineDash([4 * scale, 3 * scale]);
+  ctx.strokeRect(gx + 0.5, gy + 0.5, gw - 1, gh - 1);
+  ctx.setLineDash([]);
+  const bs = clamp(Math.min(screen.width, screen.height) * 0.115, 54, 132);
+  const w = Math.min(gw, bs * 0.9);
+  const h = bs * 0.34;
+  let y = gy - h - 3 * scale;
+  if (y < 2 * scale) y = gy + gh + 3 * scale;
+  ctx.fillStyle = "rgba(138,182,255,.92)";
+  ctx.fillRect(gx, y, w, h);
+  ctx.fillStyle = "#0d1622";
+  for (let d = 0; d < 3; d++) ctx.fillRect(gx + w / 2 - 6 * scale + d * 5 * scale, y + h / 2 - 0.5 * scale, 3 * scale, scale);
+  hudGrips.push({ id, x: gx, y, w, h, gx, gy });
+}
+
 function drawTouchControls(): void {
   touchButtons = [];
+  hudGrips = [];
+  const editing = hudEditing();
   const bs = clamp(Math.min(screen.width, screen.height) * 0.115, 54, 132);
   const m = bs * 0.16;
   const gap = bs * 0.16;
+  const sw = screen.width, sh = screen.height;
 
-  // right-edge vertical column of panel toggles
-  const btns: [string, string, PanelKind][] = [
-    ["Build", "B", "build"],
-    ["Skills", "S", "skills"],
-    ["Equip", "E", "equip"],
-    ["Bag", "I", "bag"],
-    ["Quest", "Q", "quest"],
+  // --- panel-button column (group "panels") ---
+  const pbtns: [string, string, PanelKind][] = [
+    ["Build", "B", "build"], ["Skills", "S", "skills"], ["Equip", "E", "equip"], ["Bag", "I", "bag"], ["Quest", "Q", "quest"],
   ];
-  const colH = btns.length * bs + (btns.length - 1) * gap;
-  let by = clamp((screen.height - colH) / 2, screen.height * 0.14, screen.height - colH - m);
-  const bx = screen.width - bs - m;
-  for (const [label, glyph, panel] of btns) {
-    tButton(bx, by, bs, label, glyph, hasWindow(panel), () => togglePanel(panel));
+  const colH = pbtns.length * bs + (pbtns.length - 1) * gap;
+  const panelPos = placeHud("panels", bs, colH, sw, sh);
+  let by = panelPos.y;
+  for (const [label, glyph, panel] of pbtns) {
+    tButton(panelPos.x, by, bs, label, glyph, hasWindow(panel), () => togglePanel(panel));
     by += bs + gap;
   }
+  if (editing) drawGroupGrip("panels", panelPos.x, panelPos.y, bs, colH);
 
-  // action buttons (bottom, left of the panel column) — bound crystals
-  const sw = bs * 1.05;
-  let sxp = screen.width - bs - m - gap - sw;
-  const syp = screen.height - bs - m;
-  actionSlots.forEach((slot, i) => {
-    if (!slot || slot.type !== "crystal") return;
-    const item = slot.item;
-    const charges = bagCount(P.bag, item);
-    const usable = charges > 0;
-    const x = sxp;
-    sxp -= sw + gap;
-    sctx.fillStyle = usable ? "rgba(46,58,54,.92)" : "rgba(24,26,30,.8)";
-    sctx.fillRect(x, syp, sw, bs);
-    sctx.strokeStyle = usable ? "#caa15a" : "#3a4048";
-    sctx.lineWidth = Math.max(1, scale);
-    sctx.strokeRect(x + 0.5, syp + 0.5, sw - 1, bs - 1);
+  // --- action slots: six independently-placeable squares (group "slot0..5") ---
+  const sw6 = bs * 0.92;
+  for (let i = 0; i < 6; i++) {
+    if (!editing && !actionSlots[i]) continue; // keep the play HUD tidy — empty slots only show in edit mode
+    const gid = `slot${i}` as HudGroup;
+    const pos = placeHud(gid, sw6, bs, sw, sh);
+    drawActionSlot(i, pos.x, pos.y, sw6, bs);
+    if (editing) drawGroupGrip(gid, pos.x, pos.y, sw6, bs);
+  }
+
+  // --- quick weapon-swap button (group "swap") ---
+  const swW = bs * 1.15, swH = bs * 0.62;
+  const swapPos = placeHud("swap", swW, swH, sw, sh);
+  const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
+  hudBtn(swapPos.x, swapPos.y, swW, swH, bowOn ? "→MELEE" : "→BOW", false, () => { if (!editing) swapWeapon(); });
+  if (editing) drawGroupGrip("swap", swapPos.x, swapPos.y, swW, swH);
+
+  // --- vitals (HP/EXP/cap) bar is positioned by hud.ts from the same layout;
+  //     in edit mode we add its drag handle here so it can be repositioned too ---
+  if (editing) {
+    const vw = 190 * scale, vh = 54 * scale;
+    const vp = placeHud("vitals", vw, vh, sw, sh);
+    drawGroupGrip("vitals", vp.x, vp.y, vw, vh);
+  }
+
+  // --- lock / edit toggle (fixed, top-center) + edit helpers ---
+  const lockW = bs * 1.7, lockH = bs * 0.5;
+  const lockX = clamp(sw / 2 - lockW / 2, m, sw - lockW - m);
+  const lockY = clamp(58 * scale, 4 * scale, sh * 0.25);
+  hudBtn(lockX, lockY, lockW, lockH, editing ? "LOCK HUD" : "EDIT HUD", editing, () => {
+    toggleHudLock();
+    flash(hudLocked() ? "HUD locked" : "HUD unlocked — drag handles, tap slots", "#8ab6ff");
+  });
+  if (editing) {
+    const rY = lockY + lockH + gap * 0.4;
+    hudBtn(lockX, rY, lockW, lockH, "RESET", false, () => { resetHudLayout(); flash("HUD layout reset", "#8ab6ff"); });
     sctx.textAlign = "center";
     sctx.textBaseline = "middle";
-    sctx.fillStyle = usable ? "#e9e2c8" : "#7a808a";
-    sctx.font = `bold ${Math.round(bs * 0.26)}px 'Courier New',monospace`;
-    sctx.fillText(ITEMS[item].name.split(" ")[0], x + sw / 2, syp + bs * 0.38);
-    sctx.font = `${Math.round(bs * 0.22)}px 'Courier New',monospace`;
-    sctx.fillStyle = usable ? "#ffe9a8" : "#7a808a";
-    sctx.fillText(`${i + 1}·${charges}`, x + sw / 2, syp + bs * 0.74);
-    const idx = i;
-    hotspots.push({ x, y: syp, w: sw, h: bs, fn: () => useAction(idx) });
-    touchButtons.push({ x, y: syp, w: sw, h: bs });
-  });
+    sctx.fillStyle = "rgba(207,232,210,.85)";
+    sctx.font = `${Math.round(9 * scale)}px 'Courier New',monospace`;
+    sctx.fillText("drag ▤ handles · tap a slot to bind an action", sw / 2, rY + lockH + 10 * scale);
+  }
+}
+
+/** The rebind picker overlay: choose what an action slot triggers. */
+function drawAssignPicker(): void {
+  if (assignSlot === null) return;
+  const slotIdx = assignSlot;
+  const ctx = sctx;
+  const S = scale;
+  const sw = screen.width, sh = screen.height;
+  ctx.fillStyle = "rgba(0,0,0,.55)";
+  ctx.fillRect(0, 0, sw, sh);
+  // full-screen scrim closes the picker (pushed first, so rows below take priority)
+  hotspots.push({ x: 0, y: 0, w: sw, h: sh, fn: () => { assignSlot = null; } });
+
+  const rows: { label: string; sub: string; fn: () => void }[] = [];
+  for (const k of BINDABLE_CRYSTALS) {
+    rows.push({
+      label: ITEMS[k].name, sub: `${bagCount(P.bag, k)} charges`,
+      fn: () => { setSlot(slotIdx, { type: "crystal", item: k }); assignSlot = null; saveGame(game); },
+    });
+  }
+  rows.push({ label: "Swap Weapon", sub: "toggle bow / melee", fn: () => { setSlot(slotIdx, { type: "swap" }); assignSlot = null; saveGame(game); } });
+  rows.push({ label: "Clear slot", sub: "leave empty", fn: () => { setSlot(slotIdx, null); assignSlot = null; saveGame(game); } });
+
+  const w = clamp(sw * 0.66, 220 * S, 420 * S);
+  const rowH = 30 * S;
+  const h = 26 * S + rows.length * rowH + 10 * S;
+  const x = (sw - w) / 2, y = (sh - h) / 2;
+  ctx.fillStyle = "rgba(16,20,24,.97)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#caa23a";
+  ctx.lineWidth = Math.max(1, S);
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#ffe9a8";
+  ctx.font = `bold ${Math.round(11 * S)}px 'Courier New',monospace`;
+  ctx.fillText(`Bind slot ${slotIdx + 1}`, x + w / 2, y + 14 * S);
+  let ry = y + 26 * S;
+  for (const r of rows) {
+    ctx.fillStyle = "rgba(40,52,60,.92)";
+    ctx.fillRect(x + 6 * S, ry + 2 * S, w - 12 * S, rowH - 4 * S);
+    ctx.strokeStyle = "#3d5a50";
+    ctx.strokeRect(x + 6 * S + 0.5, ry + 2 * S + 0.5, w - 12 * S - 1, rowH - 4 * S - 1);
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#f3eedd";
+    ctx.font = `bold ${Math.round(9 * S)}px 'Courier New',monospace`;
+    ctx.fillText(r.label, x + 16 * S, ry + rowH * 0.4);
+    ctx.fillStyle = "rgba(220,214,190,.6)";
+    ctx.font = `${Math.round(7 * S)}px 'Courier New',monospace`;
+    ctx.fillText(r.sub, x + 16 * S, ry + rowH * 0.72);
+    const yy = ry, fn = r.fn;
+    hotspots.push({ x: x + 6 * S, y: yy + 2 * S, w: w - 12 * S, h: rowH - 4 * S, fn });
+    ry += rowH;
+  }
 }
 
 /** True if a screen point lies on any on-screen button (blocks the joystick). */
 function overTouchButton(sx: number, sy: number): boolean {
+  if (assignSlot !== null) return true; // rebind picker open — absorb all touches
+  if (hudEditing()) return true;        // edit mode — no walking while arranging
   for (const b of touchButtons) {
     if (sx >= b.x && sx < b.x + b.w && sy >= b.y && sy < b.y + b.h) return true;
   }

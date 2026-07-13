@@ -1,11 +1,13 @@
 /** localStorage persistence: full game snapshot keyed by a single slot. */
 import { buildWorlds, populateWild, type Game } from "./game.ts";
+import { WORLD_SEED } from "./config.ts";
 import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
-import { portalSpawn } from "./world/collision.ts";
+import { portalSpawn, feetBlocked } from "./world/collision.ts";
 import { applyStructureSolidity, structureBonuses } from "./systems/building.ts";
 import { researchState, loadResearchState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
+import { serializeSlots, loadSlots, type SlotAction } from "./systems/actions.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { quests } from "./systems/quests.ts";
@@ -31,6 +33,7 @@ interface SaveData {
   stash?: Bag;
   research?: string[];
   tasks?: TaskSave;
+  slots?: (SlotAction | null)[];
 }
 
 export function hasSave(): boolean {
@@ -67,6 +70,7 @@ export function saveGame(g: Game): void {
     stash: g.stash,
     research: researchState(),
     tasks: taskState(),
+    slots: serializeSlots(),
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -93,8 +97,10 @@ export function loadGame(): Game | null {
     return null;
   }
 
-  // rebuild the deterministic world from the seed, then overlay saved state
-  const worlds = buildWorlds(data.seed);
+  // rebuild the deterministic world. We force the canonical WORLD_SEED (rather
+  // than the seed stored in the save) so every device shows the same islands —
+  // older saves were rolled with a random per-device seed before this change.
+  const worlds = buildWorlds(WORLD_SEED);
   populateWild(worlds.wild);
 
   (Object.keys(worlds) as WorldKey[]).forEach((k) => {
@@ -130,14 +136,22 @@ export function loadGame(): Game | null {
 
   loadResearchState(data.research);
   loadTaskState(data.tasks);
+  loadSlots(data.slots);
 
   setActiveBonus(structureBonuses(worlds.home));
   refreshDerived(player, structureBonuses(worlds.home));
   player.hp = Math.min(sp.hp, player.maxhp);
 
   const current = worlds[data.current] ?? worlds.home;
+  // the saved position was on the old per-device island; if it now lands on
+  // water/solid on the canonical map, drop the player at a safe portal spawn
+  if (feetBlocked(current, player.x, player.y)) {
+    const safe = portalSpawn(current);
+    player.x = safe.x;
+    player.y = safe.y;
+  }
   return {
-    seed: data.seed,
+    seed: WORLD_SEED,
     worlds,
     current,
     player,
