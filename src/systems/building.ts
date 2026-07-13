@@ -92,14 +92,18 @@ export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy:
 export function applyStructureSolidity(home: World): void {
   for (const s of home.structures) {
     const def = STRUCTS[s.key as StructKey];
-    if (!def || !def.solid) continue;
+    if (!def) continue;
+    // Reconcile the pad's built flag first, regardless of solidity — otherwise a
+    // non-solid structure (e.g. a Garden) would load with its pad still marked
+    // free, letting a second structure be stacked on top of it.
+    const spot = home.buildSpots.find((b) => b.tx === s.tx && b.ty === s.ty);
+    if (spot) spot.built = s.key;
+    if (!def.solid) continue;
     if (def.single) {
       home.solid[s.ty][s.tx] = true;
     } else {
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) home.solid[s.ty + j][s.tx + i] = true;
     }
-    const spot = home.buildSpots.find((b) => b.tx === s.tx && b.ty === s.ty);
-    if (spot) spot.built = s.key;
   }
 }
 

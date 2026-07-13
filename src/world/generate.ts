@@ -9,7 +9,7 @@ import { SPR, bakeTree } from "../gfx/sprites.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldOpts, Vec, NpcKey } from "./types.ts";
 
-const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement]> = [
+export const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement]> = [
   ["smith", "Borin the Smith", SPR.npcSmith],
   ["herbalist", "Mira the Herbalist", SPR.npcHerbalist],
   ["elder", "Elder Oswin", SPR.npcElder],
@@ -214,7 +214,7 @@ export function makeWorld(opts: WorldOpts): World {
     if (p) { w.decos.push({ spr: SPR.bones, tx: p.x, ty: p.y }); reserve(p.x, p.y, 1.6); }
   }
 
-  bakeWorldCanvas(w, opts);
+  bakeWorldCanvas(w, opts.grassShift ?? 0);
   return w;
 }
 
@@ -224,17 +224,50 @@ function wrand2(): number {
   return wrand();
 }
 
-/** Render the static terrain + decorations into world.mapCanvas once. */
-function bakeWorldCanvas(w: World, opts: WorldOpts): void {
+/**
+ * Distance (in tiles) from every water cell to the nearest land, via a
+ * multi-source BFS seeded from all land tiles. Drives the deep-water colour
+ * gradient — works for any coastline shape, so hand-authored maps (which have
+ * no radial `landR`) get the same look as procedural islands.
+ */
+function landDistance(w: World): number[][] {
   const W = w.w;
   const H = w.h;
-  const CX = W / 2;
-  const CY = H / 2;
+  const depth: number[][] = Array.from({ length: H }, () => new Array<number>(W).fill(-1));
+  const qx: number[] = [];
+  const qy: number[] = [];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (w.tile[y][x] !== Tile.Water) { depth[y][x] = 0; qx.push(x); qy.push(y); }
+    }
+  }
+  for (let head = 0; head < qx.length; head++) {
+    const x = qx[head];
+    const y = qy[head];
+    const d = depth[y][x];
+    for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = x + ox;
+      const ny = y + oy;
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      if (depth[ny][nx] !== -1) continue;
+      depth[ny][nx] = d + 1;
+      qx.push(nx);
+      qy.push(ny);
+    }
+  }
+  return depth;
+}
+
+/** Render the static terrain + decorations into world.mapCanvas once. */
+export function bakeWorldCanvas(w: World, grassShift = 0): void {
+  const W = w.w;
+  const H = w.h;
   const mc = w.mapCanvas;
   mc.width = W * TILE;
   mc.height = H * TILE;
   const m = mc.getContext("2d")!;
-  const gj = opts.grassShift ?? 0;
+  const gj = grassShift;
+  const depth = landDistance(w);
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -242,9 +275,7 @@ function bakeWorldCanvas(w: World, opts: WorldOpts): void {
       const px = x * TILE;
       const py = y * TILE;
       if (t0 === Tile.Water) {
-        const dx = x - CX;
-        const dy = (y - CY) * 1.32;
-        const deep = clamp01((Math.hypot(dx, dy) - w.landR(Math.atan2(dy, dx))) / 6);
+        const deep = clamp01((depth[y][x] - 1) / 5);
         const c1 = [46, 143, 138];
         const c2 = [28, 96, 96];
         const c = c1.map((v, i) => Math.round(v + (c2[i] - v) * deep));

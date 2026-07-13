@@ -112,6 +112,17 @@ export function loadGame(): Game | null {
         .map((s) => ({ ...s }));
     }
   });
+
+  // Migration: Home Isle is now a hand-authored map, so the old procedural
+  // build-pad coordinates saved with each structure no longer line up. Relocate
+  // every owned structure onto an authored pad (in stable order) so nothing is
+  // left floating on water or detached from its pad.
+  const homeSpots = worlds.home.buildSpots;
+  worlds.home.structures.forEach((s, i) => {
+    const spot = homeSpots[i];
+    if (spot) { s.tx = spot.tx; s.ty = spot.ty; }
+  });
+
   applyStructureSolidity(worlds.home);
 
   const player = createPlayer(portalSpawn(worlds.home));

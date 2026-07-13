@@ -1,5 +1,6 @@
 /** Global game state: the three islands, the active one, and the player. */
 import { makeWorld } from "./world/generate.ts";
+import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC } from "./world/handmade.ts";
 import { portalSpawn } from "./world/collision.ts";
 import { spawnMonster, MONSTER_KINDS } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
@@ -33,19 +34,12 @@ const WILD_POPULATION: Readonly<Record<MonsterKind, number>> = {
 
 /** Build all three islands from a seed (deterministic terrain & layout). */
 export function buildWorlds(seed: number): Record<WorldKey, World> {
+  // Seed the world RNG for the procedural Wildlands. The hub islands below are
+  // hand-authored and consume no RNG, so the Wildlands stays deterministic from
+  // the seed alone — hub edits can never shift its layout.
   seedWorldRng(seed);
-  const home = makeWorld({
-    key: "home", name: "Home Isle", safe: true, w: 40, h: 30,
-    buildSpots: true, npcs: false,
-    trees: 11, rocks: 8, herbs: 6, mushrooms: 5, bones: 2,
-    portals: [{ dest: "town", label: "to Bonetown" }],
-  });
-  const town = makeWorld({
-    key: "town", name: "Bonetown", safe: true, w: 44, h: 32,
-    buildSpots: false, npcs: true,
-    trees: 7, rocks: 6, herbs: 8, mushrooms: 4, bones: 3, grassShift: 4,
-    portals: [{ dest: "home", label: "to Home Isle" }, { dest: "wild", label: "to the Wildlands" }],
-  });
+  const home = makeHandmadeWorld(HOME_SPEC);
+  const town = makeHandmadeWorld(TOWN_SPEC);
   const wild = makeWorld({
     key: "wild", name: "Wildlands", safe: false, w: 60, h: 46,
     buildSpots: false, npcs: false,
