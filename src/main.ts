@@ -67,9 +67,15 @@ function resize(): void {
   const ch = Math.max(1, innerHeight);
   const dpr = Math.min(devicePixelRatio || 1, 2);
 
+  // Mobile (touch or narrow) keeps the tall, chunky, immersive framing.
+  // Desktop zooms out so tiles aren't giant and much more of the island is
+  // visible (a classic top-down feel) — HUD sizing is unaffected.
+  const mobile = isTouchDevice() || Math.min(cw, ch) < 620;
+
   // CSS px per internal world px. Larger => more zoomed in / chunkier pixels.
-  // Tuned so tiles land around 30-40 CSS px on phones and desktops alike.
-  const f = clamp(Math.round(Math.min(cw, ch) / 220), 2, 6);
+  const f = mobile
+    ? clamp(Math.round(Math.min(cw, ch) / 220), 2, 6)   // phones: unchanged
+    : clamp(Math.min(cw, ch) / 360, 2, 3.2);            // desktop: wider, finer view
   VW = Math.max(160, Math.ceil(cw / f));
   VH = Math.max(120, Math.ceil(ch / f));
   view.width = VW;
@@ -83,7 +89,7 @@ function resize(): void {
 
   vScale = screen.width / VW;          // device px per world px
   scale = screen.width / DESIGN_W;     // HUD design unit
-  touchUI = isTouchDevice() || Math.min(cw, ch) < 620;
+  touchUI = mobile;
 }
 addEventListener("resize", resize);
 addEventListener("orientationchange", () => setTimeout(resize, 100));
