@@ -3,7 +3,8 @@ import { TILE } from "../config.ts";
 import { SPR, itemSprite } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
 import { actionSlots } from "../systems/actions.ts";
-import { bagCount } from "../items.ts";
+import { bagCount, ITEMS } from "../items.ts";
+import { activeTask, progressOf } from "../systems/tasks.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import type { Player } from "../entities/player.ts";
 import type { Game } from "../game.ts";
@@ -114,23 +115,51 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   bar(h, px + 34 * S, py + 37 * S, 106 * S, 6 * S, used / cap, capFull ? "#e06a4a" : "#caa15a", "#3a3222");
   hudText(h, `${used}/${cap}`, px + 145 * S, py + 40 * S, 8 * S, capFull ? "#ffb59a" : "#e8dcc0");
 
-  // top-right: gold + resource counts
-  const iw = 150 * S;
+  // top-right: gold (box auto-sizes so big amounts always fit the frame)
+  const cd = SPR.coin;
+  const cdw = cd.width * 2 * S;
+  const cdh = cd.height * 2 * S;
+  const goldStr = `${p.gold}`;
+  ctx.font = `bold ${9 * S}px monospace`;
+  const goldW = ctx.measureText(goldStr).width;
+  ctx.font = `${8 * S}px monospace`;
+  const labelW = ctx.measureText("gold").width;
+  const iw = Math.max(150 * S, 9 * S + cdw + 6 * S + goldW + 8 * S + labelW + 10 * S);
   const ih = 22 * S;
   const ix = screenW - iw - pad;
   const iy = pad;
   panel(h, ix, iy, iw, ih);
   ctx.imageSmoothingEnabled = false;
-  const cd = SPR.coin;
-  const cdw = cd.width * 2 * S;
-  const cdh = cd.height * 2 * S;
   ctx.drawImage(cd, ix + 9 * S, iy + (ih - cdh) / 2, cdw, cdh);
-  hudText(h, `${p.gold}`, ix + 9 * S + cdw + 4 * S, iy + ih / 2, 9 * S, "#f3eedd", "left", true);
+  hudText(h, goldStr, ix + 9 * S + cdw + 6 * S, iy + ih / 2, 9 * S, "#f3eedd", "left", true);
   hudText(h, "gold", ix + iw - 8 * S, iy + ih / 2, 8 * S, "rgba(220,214,190,.6)", "right");
+
+  // task points box, sitting just left of the gold box on the same row
+  const tpStr = `${p.taskPoints}`;
+  ctx.font = `bold ${9 * S}px monospace`;
+  const tpNumW = ctx.measureText(tpStr).width;
+  ctx.font = `${8 * S}px monospace`;
+  const tpLabW = ctx.measureText("TP").width;
+  const tpw = 12 * S + tpLabW + 6 * S + tpNumW + 10 * S;
+  const tpx = ix - tpw - 6 * S;
+  panel(h, tpx, iy, tpw, ih);
+  hudText(h, "TP", tpx + 10 * S, iy + ih / 2, 8 * S, "#9ad0ff", "left", true);
+  hudText(h, tpStr, tpx + tpw - 8 * S, iy + ih / 2, 9 * S, "#f3eedd", "right", true);
 
   // top-left: title + zone
   hudText(h, "BONE ISLE", pad + 2, pad + 7 * S, 11 * S, "#cfe8d2", "left", true);
   hudText(h, game.current.name + (game.current.safe ? " · safe" : " · danger"), pad + 2, pad + 18 * S, 8 * S, "rgba(207,232,210,.7)");
+
+  // active board-task tracker
+  const task = activeTask();
+  if (task) {
+    const prog = progressOf(task, p.bag);
+    const label = task.goal.kind === "kill"
+      ? `${task.goal.monster}`
+      : `${ITEMS[task.goal.item].name}`;
+    const done = prog >= task.goal.need;
+    hudText(h, `Task: ${prog}/${task.goal.need} ${label}`, pad + 2, pad + 29 * S, 8 * S, done ? "#9fe8a8" : "rgba(154,208,255,.85)");
+  }
 
   drawMinimap(h, game, p);
 

@@ -4,6 +4,8 @@ import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn } from "./world/collision.ts";
 import { applyStructureSolidity, structureBonuses } from "./systems/building.ts";
+import { researchState, loadResearchState } from "./systems/tower.ts";
+import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { quests } from "./systems/quests.ts";
@@ -20,13 +22,15 @@ interface SaveData {
   player: {
     x: number; y: number;
     hp: number; maxhp: number;
-    gold: number; level: number; exp: number; expNext: number;
+    gold: number; taskPoints?: number; level: number; exp: number; expNext: number;
     bag: Bag; eq: Equipment;
   };
   skills: Record<SkillKey, { lv: number; pts: number }>;
   quests: { id: string; progress: number; done: boolean; claimed: boolean }[];
   structures: Record<WorldKey, Structure[]>;
   stash?: Bag;
+  research?: string[];
+  tasks?: TaskSave;
 }
 
 export function hasSave(): boolean {
@@ -54,13 +58,15 @@ export function saveGame(g: Game): void {
     player: {
       x: p.x, y: p.y,
       hp: p.hp, maxhp: p.maxhp,
-      gold: p.gold, level: p.level, exp: p.exp, expNext: p.expNext,
+      gold: p.gold, taskPoints: p.taskPoints, level: p.level, exp: p.exp, expNext: p.expNext,
       bag: p.bag, eq: p.eq,
     },
     skills: skillDump,
     quests: quests.map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
     structures: structDump,
     stash: g.stash,
+    research: researchState(),
+    tasks: taskState(),
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -105,7 +111,7 @@ export function loadGame(): Game | null {
   const player = createPlayer(portalSpawn(worlds.home));
   const sp = data.player;
   player.x = sp.x; player.y = sp.y;
-  player.gold = sp.gold; player.level = sp.level;
+  player.gold = sp.gold; player.taskPoints = sp.taskPoints ?? 0; player.level = sp.level;
   // Recompute expNext from level so older saves adopt the current XP curve.
   player.exp = sp.exp; player.expNext = expNeeded(player.level);
   // rebuild bag/eq defensively (older/partial saves)
@@ -121,6 +127,9 @@ export function loadGame(): Game | null {
     const q = quests.find((x) => x.id === qs.id);
     if (q) { q.progress = qs.progress; q.done = qs.done; q.claimed = qs.claimed; }
   }
+
+  loadResearchState(data.research);
+  loadTaskState(data.tasks);
 
   setActiveBonus(structureBonuses(worlds.home));
   refreshDerived(player, structureBonuses(worlds.home));

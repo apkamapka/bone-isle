@@ -1,18 +1,20 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S } from "./config.ts";
 import { moveEntity } from "./world/collision.ts";
-import { SPR } from "./gfx/sprites.ts";
+import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster } from "./entities/monsters.ts";
-import { playerAttack, hitDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
+import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, structSprite, structureBonuses, STRUCTS } from "./systems/building.ts";
+import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost } from "./systems/building.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { useCrystal } from "./systems/crystals.ts";
 import { actionSlots } from "./systems/actions.ts";
+import { researchById, isResearched, markResearched } from "./systems/tower.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
-import { addItem, removeItem, ITEMS, itemWeight, bagCount } from "./items.ts";
+import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
+import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
@@ -20,8 +22,8 @@ import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, respawnAtHome, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
-import { drawPanels, type UiState, type Hotspot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
-import type { Vec, World, Corpse } from "./world/types.ts";
+import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
+import type { Vec, World, Corpse, GroundItem } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -87,6 +89,8 @@ const game: Game = loadGame() ?? createGame();
 // keep passive structure bonuses (Garden HP) in sync from the start
 setActiveBonus(structureBonuses(game.worlds.home));
 refreshDerived(game.player);
+// merge any stacks that older saves left fragmented (stack limits grew)
+compactBag(game.player.bag); compactBag(game.stash);
 const P = game.player;
 const cam = { x: 0, y: 0 };
 let moveMarker: { x: number; y: number; t: number } | null = null;
@@ -94,9 +98,13 @@ let waveT = 0;
 let saveTimer = 0;
 let last = performance.now();
 
-const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", dragging: false };
+const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", dragging: false, lookMode: false, inspect: null, split: null };
 const mouse = { sx: 0, sy: 0 };
 let hotspots: Hotspot[] = [];
+let itemSlots: ItemSlot[] = [];
+// mouse drag-and-drop of inventory items
+let suppressClick = false;
+let itemDrag: { src: "bag" | "stash"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean } | null = null;
 
 const cw = (): World => game.current;
 const flash = (t: string, c = "#ffe9a8"): void => addFloat(cw(), P.x, P.y - 30, t, c);
@@ -125,8 +133,10 @@ function defaultOffset(kind: PanelKind): { x: number; y: number } {
     case "bag": return { x: -120 * S, y: 30 * S };
     case "quest": return { x: -30 * S, y: -40 * S };
     case "forge": return { x: 70 * S, y: 10 * S };
+    case "tower": return { x: 60 * S, y: -10 * S };
     case "build": return { x: -50 * S, y: -20 * S };
     case "stash": return { x: 40 * S, y: 20 * S };
+    case "tasks": return { x: 20 * S, y: -20 * S };
     case "loot": return { x: 60 * S, y: 40 * S };
     default: return { x: 0, y: 0 };
   }
@@ -184,12 +194,18 @@ const act: PanelActions = {
     beep(500, 0.12, "sine", 0.05, 180);
   },
   equipItem: (kind: ItemKind) => {
-    const slot = ITEMS[kind].slot;
+    const def = ITEMS[kind];
+    const slot = def.slot;
     if (!slot) return;
     if (!removeItem(P.bag, kind, 1)) return;
     const prev = P.eq[slot];
     P.eq[slot] = kind;
     if (prev) addItem(P.bag, prev, 1);
+    // Two-handed rule: a bow occupies both hands, so it can't share with a shield.
+    if (def.bow && P.eq.shield) { addItem(P.bag, P.eq.shield, 1); P.eq.shield = null; }
+    if (slot === "shield" && P.eq.weapon && ITEMS[P.eq.weapon].bow) {
+      addItem(P.bag, P.eq.weapon, 1); P.eq.weapon = null;
+    }
     refreshDerived(P);
     beep(420, 0.1, "triangle", 0.05);
   },
@@ -205,6 +221,8 @@ const act: PanelActions = {
     // craft requires standing at a Forge; enforced by only opening forge there
     if (craftAt(r)) beep(360, 0.14, "square", 0.05);
   },
+  research: (id: string) => { doResearch(id); },
+  buyCrystal: (id: string) => { doBuyCrystal(id); },
   takeLoot: (c: Corpse, index: number) => { takeOne(c, index); },
   takeAllLoot: (c: Corpse) => { takeAll(c); },
   buy: (kind: ItemKind) => { doBuy(kind); },
@@ -213,43 +231,211 @@ const act: PanelActions = {
     const q = quests.find((x) => x.id === id);
     if (q && claimQuest(P, q, (t) => flash(t, "#ffe9a8"))) beep(560, 0.16, "square", 0.06);
   },
-  deposit: (index: number) => { depositToStash(index); },
-  withdraw: (index: number) => { withdrawFromStash(index); },
+  acceptTask: (id: string) => {
+    if (acceptTask(id)) { flash("task accepted", "#9ad0ff"); beep(440, 0.12, "sine", 0.05, 120); }
+    else flash("finish your current task first", "#e0a06a");
+  },
+  abandonTask: () => {
+    const a = activeTask();
+    if (a) { abandonTask(); flash("task abandoned", "#e0a06a"); beep(240, 0.1, "triangle", 0.05, -80); }
+  },
+  handInTask: () => {
+    const res = handInTask(P, (xp) => grantExp(cw(), P, xp));
+    if (res) {
+      flash(`+${res.reward.points} TP · task done!`, "#9fe8a8");
+      beep(560, 0.18, "square", 0.06, 140);
+    } else flash("not ready to hand in", "#e0a06a");
+  },
+  buyExchange: (id: string) => {
+    const r = buyExchange(P, id);
+    if (r === "ok") { flash("bought with Task Points", "#9ad0ff"); beep(440, 0.12, "sine", 0.05); }
+    else if (r === "poor") flash("not enough Task Points", "#d96a5a");
+    else if (r === "full") flash("no room in bag", "#e0a06a");
+  },
+  moveStack: (src: "bag" | "stash", index: number) => { openMoveChooser(src, index); },
+  splitConfirm: (mode: "store" | "take" | "drop") => { splitConfirm(mode); },
+  look: (kind: ItemKind) => { ui.inspect = kind; },
+  toggleLook: () => { ui.lookMode = !ui.lookMode; if (!ui.lookMode) ui.inspect = null; },
+  openBag: () => { openWindow("bag"); },
   close: (kind: PanelKind) => { closeWindow(kind); },
 };
 
 /* ---------------- storage chest ---------------- */
 
-function depositToStash(index: number): void {
+/** Store up to `n` of bag slot `index` into the chest. */
+function storePartial(index: number, n: number): void {
   const slot = P.bag[index];
   if (!slot) return;
-  const left = addItem(game.stash, slot.kind, slot.n);
-  const moved = slot.n - left;
+  const take = Math.min(n, slot.n);
+  const left = addItem(game.stash, slot.kind, take);
+  const moved = take - left;
   if (moved <= 0) { flash("stash full"); return; }
-  if (left > 0) slot.n = left;
-  else P.bag[index] = null;
+  slot.n -= moved;
+  if (slot.n <= 0) P.bag[index] = null;
+  compactBag(game.stash); compactBag(P.bag);
   beep(360, 0.06, "sine", 0.04);
 }
 
-function withdrawFromStash(index: number): void {
+/** Drop an item stack onto the ground at the player's feet (Tibia-style). */
+function dropToGround(kind: ItemKind, n: number): void {
+  if (n <= 0) return;
+  const world = cw();
+  const jitter = () => (Math.random() - 0.5) * 8;
+  const gx = P.x + jitter();
+  const gy = P.y + 2 + jitter();
+  // merge into a very close stack of the same kind to avoid clutter
+  const near = world.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 7);
+  if (near) near.n += n;
+  else world.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
+  flash(`dropped ${n} ${ITEMS[kind].name}`, "#cfa86a");
+  beep(200, 0.06, "sine", 0.04, -60);
+}
+
+/** Pick a dropped stack back up, as far as weight/space allow. */
+function pickupGround(gi: GroundItem): void {
+  const world = cw();
+  const fitByWeight = Math.floor(freeCap(P) / itemWeight(gi.kind, 1));
+  if (fitByWeight <= 0) { flash("too heavy"); return; }
+  const want = Math.min(gi.n, fitByWeight);
+  const left = addItem(P.bag, gi.kind, want) + (gi.n - want);
+  const took = gi.n - left;
+  if (took <= 0) { flash("bag full"); return; }
+  compactBag(P.bag);
+  syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
+  if (left > 0) gi.n = left;
+  else { const idx = world.ground.indexOf(gi); if (idx >= 0) world.ground.splice(idx, 1); }
+  beep(520, 0.06, "sine", 0.05, 80);
+}
+
+/** Take up to `n` of chest slot `index` into the backpack (weight-limited). */
+function takePartial(index: number, n: number): void {
   const slot = game.stash[index];
   if (!slot) return;
-  const left = addItem(P.bag, slot.kind, slot.n);
-  const moved = slot.n - left;
+  const wantByN = Math.min(n, slot.n);
+  const fitByWeight = Math.floor(freeCap(P) / itemWeight(slot.kind, 1));
+  const want = Math.min(wantByN, Math.max(0, fitByWeight));
+  if (want <= 0) { flash("too heavy"); return; }
+  const left = addItem(P.bag, slot.kind, want);
+  const moved = want - left;
   if (moved <= 0) { flash("bag full"); return; }
-  if (left > 0) slot.n = left;
-  else game.stash[index] = null;
+  slot.n -= moved;
+  if (slot.n <= 0) game.stash[index] = null;
+  compactBag(P.bag); compactBag(game.stash);
   syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   beep(440, 0.06, "sine", 0.04);
 }
 
-import { craft as craftRecipe } from "./items.ts";
+/** Drop up to `n` of bag slot `index` on the ground. */
+function dropFromBag(index: number, n: number): void {
+  const slot = P.bag[index];
+  if (!slot) return;
+  const take = Math.min(n, slot.n);
+  slot.n -= take;
+  if (slot.n <= 0) P.bag[index] = null;
+  compactBag(P.bag);
+  dropToGround(slot.kind, take);
+}
+
+type Slots = (({ kind: ItemKind; n: number }) | null)[];
+/** Rearrange within one container: fill empty, merge like kinds, else swap. */
+function swapOrMerge(arr: Slots, from: number, to: number): void {
+  if (from === to) return;
+  const a = arr[from];
+  if (!a) return;
+  const b = arr[to];
+  if (!b) { arr[to] = a; arr[from] = null; return; }
+  if (b.kind === a.kind) {
+    const space = ITEMS[a.kind].stack - b.n;
+    const mv = Math.min(space, a.n);
+    b.n += mv; a.n -= mv;
+    if (a.n <= 0) arr[from] = null;
+  } else {
+    arr[from] = b; arr[to] = a;
+  }
+}
+const currentN = (src: "bag" | "stash", index: number): number => {
+  const s = (src === "bag" ? P.bag : game.stash)[index];
+  return s ? s.n : 0;
+};
+
+/** Resolve where a dragged item was released: slot, chest window, or ground. */
+function resolveItemDrop(rx: number, ry: number): void {
+  const d = itemDrag;
+  if (!d) return;
+  // dropped onto another inventory cell?
+  for (let i = itemSlots.length - 1; i >= 0; i--) {
+    const it = itemSlots[i];
+    if (rx >= it.x && rx < it.x + it.w && ry >= it.y && ry < it.y + it.h) {
+      if (it.src === d.src) swapOrMerge(d.src === "bag" ? P.bag : game.stash, d.index, it.index);
+      else if (d.src === "bag") storePartial(d.index, currentN("bag", d.index));
+      else takePartial(d.index, currentN("stash", d.index));
+      return;
+    }
+  }
+  // dropped on an open panel (chest window → store), otherwise cancel
+  if (pointInOpenPanel(rx, ry)) {
+    const overStash = ui.windows.some((w) => w.kind === "stash" && w.rect &&
+      rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h);
+    if (overStash && d.src === "bag") storePartial(d.index, currentN("bag", d.index));
+    return;
+  }
+  // dropped on the world → drop to the ground (backpack items only)
+  if (d.src === "bag") dropFromBag(d.index, currentN("bag", d.index));
+}
+
+/** Open the quantity chooser for a bag/chest slot (or move a single item flat). */
+function openMoveChooser(src: "bag" | "stash", index: number): void {
+  const slot = src === "bag" ? P.bag[index] : game.stash[index];
+  if (!slot) return;
+  const canStore = ui.windows.some((w) => w.kind === "stash");
+  // one item, single obvious action → skip the chooser
+  if (slot.n <= 1) {
+    if (src === "stash") { takePartial(index, 1); return; }
+    if (canStore) { storePartial(index, 1); return; }
+    dropFromBag(index, 1); return;
+  }
+  ui.split = { kind: slot.kind, index, src, max: slot.n, n: slot.n, canStore };
+}
+
+function splitConfirm(mode: "store" | "take" | "drop"): void {
+  const sp = ui.split;
+  if (!sp) return;
+  const n = Math.max(1, Math.min(sp.max, sp.n));
+  if (mode === "store") storePartial(sp.index, n);
+  else if (mode === "take") takePartial(sp.index, n);
+  else dropFromBag(sp.index, n);
+  ui.split = null;
+}
+
+import { craftAcross } from "./items.ts";
 function craftAt(r: Recipe): boolean {
-  if (craftRecipe(P.bag, r)) {
+  if (craftAcross([P.bag, game.stash], r)) {
     flash(`crafted ${ITEMS[r.out].name}`, "#b9e07f");
     return true;
   }
   return false;
+}
+
+function doResearch(id: string): void {
+  const r = researchById(id);
+  if (!r || isResearched(r.id)) return;
+  if (!canAfford(P.bag, r.researchCost, game.stash)) { flash("need materials"); return; }
+  payCost(P.bag, r.researchCost, game.stash);
+  markResearched(r.id);
+  flash(`researched ${r.name}`, "#c9a6ff");
+  beep(520, 0.18, "square", 0.06, 120);
+}
+
+function doBuyCrystal(id: string): void {
+  const r = researchById(id);
+  if (!r || !isResearched(r.id)) return;
+  if (!canAfford(P.bag, r.buyCost, game.stash)) { flash("need materials"); return; }
+  if (!canCarry(P, r.crystal, r.buyN)) { flash("too heavy"); return; }
+  const moved = r.buyN - addItem(P.bag, r.crystal, r.buyN);
+  if (moved < r.buyN) { if (moved > 0) removeItem(P.bag, r.crystal, moved); flash("bag full"); return; }
+  payCost(P.bag, r.buyCost, game.stash);
+  flash(`+${r.buyN} ${ITEMS[r.crystal].name}`, "#b9e07f");
+  beep(440, 0.12, "sine", 0.05, 120);
 }
 
 /** Trigger action slot `index` (keys 1–6 / on-screen buttons). */
@@ -323,7 +509,9 @@ function closeCorpseIfEmpty(c: Corpse): void {
 import { SHOPS } from "./entities/npcs.ts";
 function doBuy(kind: ItemKind): void {
   if (!ui.npc) return;
-  const entry = SHOPS[ui.npc.key].entries.find((e) => e.kind === kind);
+  const shop = SHOPS[ui.npc.key];
+  if (!shop) return;
+  const entry = shop.entries.find((e) => e.kind === kind);
   if (!entry || entry.buy <= 0 || P.gold < entry.buy) return;
   if (!canCarry(P, kind)) { flash("too heavy"); return; }
   if (addItem(P.bag, kind, 1) > 0) { flash("bag full"); return; }
@@ -332,7 +520,9 @@ function doBuy(kind: ItemKind): void {
 }
 function doSell(kind: ItemKind): void {
   if (!ui.npc) return;
-  const entry = SHOPS[ui.npc.key].entries.find((e) => e.kind === kind);
+  const shop = SHOPS[ui.npc.key];
+  if (!shop) return;
+  const entry = shop.entries.find((e) => e.kind === kind);
   if (!entry || entry.sell <= 0) return;
   if (!removeItem(P.bag, kind, 1)) return;
   P.gold += entry.sell;
@@ -360,6 +550,9 @@ function handleWorldTap(sx: number, sy: number): void {
       return;
     }
   }
+  // an open inspect popup is dismissed by tapping empty space
+  if (ui.inspect) { ui.inspect = null; return; }
+  if (ui.split) { ui.split = null; return; }
   // clicking anywhere on an open panel body (not a hotspot) is swallowed so it
   // doesn't walk the player; panels stay open (Tibia-style) until you close them.
   if (pointInOpenPanel(sx, sy)) return;
@@ -379,13 +572,21 @@ initInput(screen, {
   onMove: (sx, sy) => { mouse.sx = sx; mouse.sy = sy; },
   onPanel: togglePanel,
   onSpell: (i) => useAction(i),
+  onLook: () => {
+    ui.lookMode = !ui.lookMode;
+    if (!ui.lookMode) ui.inspect = null;
+    flash(ui.lookMode ? "look mode on" : "look mode off", "#8ab6ff");
+  },
   onEscape: () => {
+    if (ui.split) { ui.split = null; return; }
+    if (ui.inspect) { ui.inspect = null; return; }
     if (ui.placing) { ui.placing = null; return; }
     // close the top-most open panel, one press at a time
     const top = ui.windows[ui.windows.length - 1];
     if (top) closeWindow(top.kind);
   },
   onClick: ({ sx, sy, button }) => {
+    if (suppressClick) return;
     if (button === 2) {
       // right-click: pure "walk here", ignore targets (Tibia-style)
       if (P.dead || ui.dragging) return;
@@ -394,7 +595,12 @@ initInput(screen, {
       if (pointInOpenPanel(sx, sy)) return;
       const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
       P.dest = { x: w.x, y: w.y };
-      P.target = null; P.gather = null;
+      P.gather = null;
+      // keep a ranged attack target so right-click "walk here" doubles as kiting
+      const keepShot = !!P.target
+        && (P.target.kind === "mob" || P.target.kind === "dummy")
+        && attackMode().ranged;
+      if (!keepShot) P.target = null;
       moveMarker = { x: w.x, y: w.y, t: 0.5 };
       return;
     }
@@ -431,8 +637,27 @@ screen.addEventListener("pointerdown", (e) => {
       return;
     }
   }
+  // item drag-and-drop (mouse only; touch uses the quantity chooser)
+  if (e.pointerType === "mouse" && e.button === 0 && !ui.lookMode && !ui.split && !ui.inspect) {
+    for (let i = itemSlots.length - 1; i >= 0; i--) {
+      const it = itemSlots[i];
+      if (s.x >= it.x && s.x < it.x + it.w && s.y >= it.y && s.y < it.y + it.h) {
+        itemDrag = { src: it.src, index: it.index, kind: it.kind, n: it.n, sx: s.x, sy: s.y, active: false };
+        suppressClick = true; // the item's click is resolved on release instead
+        try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+        return;
+      }
+    }
+  }
 });
 screen.addEventListener("pointermove", (e) => {
+  if (itemDrag) {
+    const s = toScreen(e);
+    mouse.sx = s.x; mouse.sy = s.y;
+    if (!itemDrag.active && Math.hypot(s.x - itemDrag.sx, s.y - itemDrag.sy) > 5 * scale) itemDrag.active = true;
+    e.preventDefault();
+    return;
+  }
   if (!drag) return;
   const s = toScreen(e);
   let nx = drag.ox + (s.x - drag.gx);
@@ -448,8 +673,18 @@ screen.addEventListener("pointermove", (e) => {
   e.preventDefault();
 });
 const endDrag = (): void => { drag = null; ui.dragging = false; };
-addEventListener("pointerup", endDrag);
-addEventListener("pointercancel", endDrag);
+addEventListener("pointerup", (e) => {
+  if (itemDrag) {
+    const s = toScreen(e as PointerEvent);
+    if (itemDrag.active) resolveItemDrop(s.x, s.y);
+    else handleWorldTap(itemDrag.sx, itemDrag.sy); // no real drag → treat as a click
+    itemDrag = null;
+    // clear the click suppression after this gesture completes
+    setTimeout(() => { suppressClick = false; }, 0);
+  }
+  endDrag();
+});
+addEventListener("pointercancel", () => { itemDrag = null; suppressClick = false; endDrag(); });
 
 function worldClick(w: Vec): void {
   if (P.dead) return;
@@ -458,6 +693,14 @@ function worldClick(w: Vec): void {
   for (const m of world.monsters) {
     if (Math.abs(w.x - m.x) < 9 && w.y > m.y - 16 && w.y < m.y + 5) {
       P.target = { kind: "mob", m };
+      P.dest = null; P.gather = null; moveMarker = null;
+      return;
+    }
+  }
+  // dropped ground items — pick up on click
+  for (const gi of world.ground) {
+    if (Math.abs(w.x - gi.x) < 9 && w.y > gi.y - 14 && w.y < gi.y + 4) {
+      pickupGround(gi);
       P.dest = null; P.gather = null; moveMarker = null;
       return;
     }
@@ -549,6 +792,55 @@ function gatherPoint(): Vec | null {
   return { x: o.tx * TILE + TILE / 2, y: o.ty * TILE + TILE / 2 };
 }
 
+/**
+ * How the player engages a monster right now. A bow with arrows shoots from
+ * afar (its own reach); anything else closes to melee range. A bow with no
+ * arrows falls back to a melee poke so you're never fully stuck.
+ */
+function attackMode(): { ranged: boolean; reach: number; arrow: ItemKind | null } {
+  const bow = equippedBow(P.eq);
+  if (bow) {
+    const arrow = bestArrow(P.bag);
+    if (arrow) return { ranged: true, reach: bow.range, arrow };
+  }
+  return { ranged: false, reach: 15, arrow: null };
+}
+
+let noArrowWarnT = 0;
+function warnNoArrows(): void {
+  if (noArrowWarnT > 0) return;
+  noArrowWarnT = ARROW_MISS_WARN_S;
+  flash("no arrows", "#ff9e6a");
+}
+
+/**
+ * Fire the currently-kept ranged target when it's within reach and the attack is
+ * off cooldown. Runs every frame while kiting, independent of movement, so you
+ * can walk away and still loose arrows. Faces the target and drops it on death.
+ */
+function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind | null }): void {
+  const t = P.target;
+  if (!t || !mode.arrow) return;
+  if (t.kind === "mob") {
+    const m = t.m;
+    // let go of a target that has died or left the current island
+    if (m.hp <= 0 || !cw().monsters.includes(m)) { P.target = null; return; }
+    P.face = m.x < P.x ? -1 : 1;
+    if (dist(P.x, P.y, m.x, m.y) <= mode.reach && P.atkCd <= 0) {
+      P.atkCd = P.atkRate;
+      if (playerShoot(cw(), P, m, mode.arrow)) P.target = null;
+    }
+  } else if (t.kind === "dummy") {
+    const tp = targetPoint();
+    if (!tp) return;
+    P.face = tp.x < P.x ? -1 : 1;
+    if (dist(P.x, P.y, tp.x, tp.y) <= mode.reach && P.atkCd <= 0) {
+      P.atkCd = P.atkRate;
+      shootDummy(cw(), P, t.s, mode.arrow);
+    }
+  }
+}
+
 /* ---------------- update ---------------- */
 
 function checkPortals(): void {
@@ -576,10 +868,18 @@ function update(dt: number): void {
     return;
   }
 
+  // With a bow equipped (and arrows), an attack target is a "kite" target:
+  // it survives manual movement so you can shoot and run (Tibia-style).
+  const mode = attackMode();
+  const kiting = !!P.target
+    && (P.target.kind === "mob" || P.target.kind === "dummy")
+    && mode.ranged;
+
   // movement: WASD/joystick overrides auto-actions
   const ax = moveAxis();
   if (ax.dx || ax.dy) {
-    P.dest = null; P.target = null; P.gather = null;
+    P.dest = null; P.gather = null;
+    if (!kiting) P.target = null; // melee movement still drops the target
     const len = Math.hypot(ax.dx, ax.dy) || 1;
     const sp = playerSpeed(P);
     moveEntity(world, P, (ax.dx / len) * sp * dt, (ax.dy / len) * sp * dt);
@@ -592,17 +892,30 @@ function update(dt: number): void {
       moveEntity(world, P, ((P.dest.x - P.x) / d) * sp * dt, ((P.dest.y - P.y) / d) * sp * dt);
       if (P.dest.x < P.x) P.face = -1; else P.face = 1;
     }
-  } else if (P.target) {
+  } else if (P.target && !kiting) {
+    // melee / walk-up targets: approach then act (unchanged behaviour)
     const tp = targetPoint();
     if (tp) {
       const d = dist(P.x, P.y, tp.x, tp.y);
-      const reach = P.target.kind === "mob" || P.target.kind === "dummy" ? 15 : 18;
+      let reach = 18;
+      if (P.target.kind === "dummy" || P.target.kind === "mob") reach = mode.reach;
       if (d > reach) {
         const sp = playerSpeed(P);
         moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt);
         if (tp.x < P.x) P.face = -1; else P.face = 1;
       } else {
         resolveTarget();
+      }
+    }
+  } else if (kiting) {
+    // idle bowman: only close the gap if the target drifted out of range
+    const tp = targetPoint();
+    if (tp) {
+      const d = dist(P.x, P.y, tp.x, tp.y);
+      if (d > mode.reach) {
+        const sp = playerSpeed(P);
+        moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt);
+        if (tp.x < P.x) P.face = -1; else P.face = 1;
       }
     }
   } else if (P.gather) {
@@ -618,6 +931,10 @@ function update(dt: number): void {
       }
     }
   }
+
+  // Ranged fire pass: with a bow, keep shooting the kept target whenever it's in
+  // range and off cooldown — whether we're standing still or kiting on the move.
+  if (kiting) tickRangedFire(mode);
 
   // monsters attack the player (only on dangerous islands)
   if (!world.safe) {
@@ -642,6 +959,12 @@ function update(dt: number): void {
     }
   }
 
+  // dropped items fade from the ground after their lifetime (1h)
+  for (let i = world.ground.length - 1; i >= 0; i--) {
+    world.ground[i].t -= dt;
+    if (world.ground[i].t <= 0) world.ground.splice(i, 1);
+  }
+
   // garden aura heal (HP) on home
   for (const s of game.worlds.home.structures) {
     if (s.key === "garden" && cw() === game.worlds.home) {
@@ -654,6 +977,14 @@ function update(dt: number): void {
   }
   // structure anim
   for (const s of world.structures) { s.anim = (s.anim ?? 0) + dt; if (s.hurtT) s.hurtT = Math.max(0, s.hurtT - dt); }
+
+  // arrows in flight (cosmetic — the hit already landed when fired)
+  if (noArrowWarnT > 0) noArrowWarnT = Math.max(0, noArrowWarnT - dt);
+  for (let i = world.shots.length - 1; i >= 0; i--) {
+    const sh = world.shots[i];
+    sh.p += dt / sh.dur;
+    if (sh.p >= 1) world.shots.splice(i, 1);
+  }
 
   tickRegrowth(world, dt, P.x, P.y, true);
   checkPortals();
@@ -669,15 +1000,32 @@ function resolveTarget(): void {
   const t = P.target;
   if (!t) return;
   if (t.kind === "mob") {
-    if (P.atkCd <= 0) { P.atkCd = P.atkRate; if (playerAttack(cw(), P, t.m)) P.target = null; }
+    if (P.atkCd <= 0) {
+      P.atkCd = P.atkRate;
+      const mode = attackMode();
+      if (mode.ranged && mode.arrow) {
+        if (playerShoot(cw(), P, t.m, mode.arrow)) P.target = null;
+      } else {
+        if (equippedBow(P.eq)) warnNoArrows();
+        if (playerAttack(cw(), P, t.m)) P.target = null;
+      }
+    }
   } else if (t.kind === "dummy") {
-    if (P.atkCd <= 0) { P.atkCd = P.atkRate; hitDummy(cw(), P, t.s); }
+    if (P.atkCd <= 0) {
+      P.atkCd = P.atkRate;
+      const mode = attackMode();
+      if (mode.ranged && mode.arrow) shootDummy(cw(), P, t.s, mode.arrow);
+      else { if (equippedBow(P.eq)) warnNoArrows(); hitDummy(cw(), P, t.s); }
+    }
   } else if (t.kind === "corpse") {
     ui.loot = t.c; openWindow("loot"); P.target = null;
   } else if (t.kind === "npc") {
-    ui.npc = t.n; ui.shopTab = "buy"; openWindow("shop"); P.target = null;
+    if (t.n.key === "taskmaster") { openWindow("tasks"); }
+    else { ui.npc = t.n; ui.shopTab = "buy"; openWindow("shop"); }
+    P.target = null;
   } else if (t.kind === "structure") {
     if (t.s.key === "forge") openWindow("forge");
+    else if (t.s.key === "tower") openWindow("tower");
     else if (t.s.key === "chest") openWindow("stash");
     P.target = null;
   }
@@ -828,6 +1176,28 @@ function render(): void {
       vctx.globalAlpha = 1;
     } });
   }
+  // dropped items on the ground
+  for (const gi of world.ground) {
+    const blink = gi.t < 30 ? (Math.sin(waveT * 8) > 0 ? 1 : 0.45) : 1;
+    const spr = itemSprite(gi.kind);
+    drawList.push({ y: gi.y, fn: () => {
+      vctx.globalAlpha = blink;
+      drawShadow(gi.x, gi.y, 6);
+      const px = Math.round(gi.x - cam.x - spr.width / 2);
+      const py = Math.round(gi.y - cam.y - spr.height);
+      vctx.imageSmoothingEnabled = false;
+      vctx.drawImage(spr, px, py);
+      if (gi.n > 1) {
+        vctx.font = "bold 6px monospace";
+        vctx.textAlign = "right";
+        vctx.fillStyle = "#000";
+        vctx.fillText(`${gi.n}`, px + spr.width + 1, py + spr.height + 1);
+        vctx.fillStyle = "#ffe9a8";
+        vctx.fillText(`${gi.n}`, px + spr.width, py + spr.height);
+      }
+      vctx.globalAlpha = 1;
+    } });
+  }
   // NPCs
   for (const n of world.npcs) {
     const bob = Math.sin(waveT * 2 + n.bob) * 1.2;
@@ -865,6 +1235,24 @@ function render(): void {
 
   drawList.sort((a, b) => a.y - b.y);
   for (const d of drawList) d.fn();
+
+  // arrows in flight — drawn above the sorted scene since they arc overhead
+  for (const sh of world.shots) {
+    const t = sh.p < 1 ? sh.p : 1;
+    const cx = sh.fromX + (sh.toX - sh.fromX) * t;
+    const cy = sh.fromY + (sh.toY - sh.fromY) * t - Math.sin(t * Math.PI) * 6;
+    const ang = Math.atan2(sh.toY - sh.fromY, sh.toX - sh.fromX);
+    const dx = Math.cos(ang) * 3;
+    const dy = Math.sin(ang) * 3;
+    const px = Math.round(cx - cam.x);
+    const py = Math.round(cy - cam.y);
+    vctx.strokeStyle = sh.bone ? "#efe9d6" : "#cfd8da";
+    vctx.lineWidth = 1;
+    vctx.beginPath();
+    vctx.moveTo(px - dx, py - dy);
+    vctx.lineTo(px + dx, py + dy);
+    vctx.stroke();
+  }
 
   // target reticle
   if (P.target && (P.target.kind === "mob" || P.target.kind === "dummy")) {
@@ -917,8 +1305,27 @@ function render(): void {
   const hud: HudCtx = { ctx: sctx, scale, screenW: screen.width, screenH: screen.height, touch: touchUI };
   drawHud(hud, game, P);
   hotspots = [];
+  itemSlots = [];
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; }
-  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots });
+  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots });
+  // ghost of the item being dragged, following the cursor
+  if (itemDrag && itemDrag.active) {
+    const spr = itemSprite(itemDrag.kind);
+    const gw = spr.width * 2 * scale;
+    const gh = spr.height * 2 * scale;
+    sctx.imageSmoothingEnabled = false;
+    sctx.globalAlpha = 0.85;
+    sctx.drawImage(spr, Math.round(mouse.sx - gw / 2), Math.round(mouse.sy - gh / 2), gw, gh);
+    sctx.globalAlpha = 1;
+    if (itemDrag.n > 1) {
+      sctx.font = `bold ${7 * scale}px monospace`;
+      sctx.textAlign = "right";
+      sctx.fillStyle = "#000";
+      sctx.fillText(`${currentN(itemDrag.src, itemDrag.index)}`, Math.round(mouse.sx + gw / 2) + 1, Math.round(mouse.sy + gh / 2) + 1);
+      sctx.fillStyle = "#ffe9a8";
+      sctx.fillText(`${currentN(itemDrag.src, itemDrag.index)}`, Math.round(mouse.sx + gw / 2), Math.round(mouse.sy + gh / 2));
+    }
+  }
   if (touchUI) drawTouchControls();
   drawJoystick(sctx);
 }
@@ -1026,4 +1433,3 @@ addEventListener("beforeunload", () => saveGame(game));
 
 // silence unused-import complaints for values referenced only in types/paths
 void STRUCTS;
-void grantExp;

@@ -3,6 +3,8 @@ import { makeWorld } from "./world/generate.ts";
 import { portalSpawn } from "./world/collision.ts";
 import { spawnMonster, MONSTER_KINDS } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
+import { loadResearchState } from "./systems/tower.ts";
+import { resetTasks } from "./systems/tasks.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
@@ -65,6 +67,8 @@ export function createGame(seed = (Math.random() * 1e9) | 0): Game {
   const worlds = buildWorlds(seed);
   populateWild(worlds.wild);
   const player = createPlayer(portalSpawn(worlds.home));
+  loadResearchState([]); // a fresh game has no research completed
+  resetTasks(); // no board tasks taken yet
   return {
     seed,
     worlds,
