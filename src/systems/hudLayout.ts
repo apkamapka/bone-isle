@@ -23,7 +23,7 @@ interface HudLayoutState {
 function defaults(): HudLayoutState {
   const pos = {
     vitals: { x: 0.012, y: 0.83 },
-    panels: { x: 0.85, y: 0.13 },
+    panels: { x: 0.86, y: 0.48 },
     swap: { x: 0.78, y: 0.72 },
   } as HudLayoutState["pos"];
   // the six action slots default to a bottom row (each is independently movable)

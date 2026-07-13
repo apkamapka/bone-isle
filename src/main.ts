@@ -89,7 +89,10 @@ function resize(): void {
 
   vScale = screen.width / VW;          // device px per world px
   scale = screen.width / DESIGN_W;     // HUD design unit
-  touchUI = mobile;
+  // The customizable HUD (on-screen buttons, draggable groups, EDIT HUD, rebind
+  // picker, quick-swap) is available everywhere — it works with mouse on desktop
+  // just as with touch on mobile. Only the world zoom above differs by device.
+  touchUI = true;
 }
 addEventListener("resize", resize);
 addEventListener("orientationchange", () => setTimeout(resize, 100));
