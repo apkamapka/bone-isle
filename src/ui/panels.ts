@@ -387,7 +387,7 @@ function drawSkills(p: PanelInput): void {
   const w = 216 * S;
   const rows = Object.keys(skills) as (keyof typeof skills)[];
   const h = 20 * S + rows.length * 26 * S + 10 * S;
-  const x = screenW - w - 8 * S + p.win.offset.x;
+  const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "SKILLS");
   let ry = y + 20 * S;
@@ -449,7 +449,7 @@ function drawEquip(p: PanelInput): void {
   const gridW = slot * cols + gap * (cols - 1);
   const w = gridW + 28 * S;
   const h = 20 * S + slot * rows + gap * (rows - 1) + 60 * S;
-  const x = screenW - w - 8 * S + p.win.offset.x;
+  const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "EQUIPMENT");
   const gx = x + (w - gridW) / 2;

@@ -157,8 +157,8 @@ function hasWindow(kind: PanelKind): boolean {
 function defaultOffset(kind: PanelKind): { x: number; y: number } {
   const S = scale;
   switch (kind) {
-    case "equip": return { x: 0, y: -70 * S };
-    case "skills": return { x: 0, y: 80 * S };
+    case "equip": return { x: 0, y: 0 };
+    case "skills": return { x: 0, y: 0 };
     case "bag": return { x: -120 * S, y: 30 * S };
     case "quest": return { x: -30 * S, y: -40 * S };
     case "forge": return { x: 70 * S, y: 10 * S };
