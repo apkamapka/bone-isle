@@ -9,7 +9,7 @@ import { resetTasks } from "./systems/tasks.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
-import { WORLD_SEED } from "./config.ts";
+import { WORLD_SEED, MONSTERS_ENABLED } from "./config.ts";
 import type { World, WorldKey } from "./world/types.ts";
 import type { Player } from "./entities/player.ts";
 import type { Bag } from "./items.ts";
@@ -54,6 +54,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
 export function populateWild(wild: World): void {
   wild.monsters.length = 0;
   wild.respawns.length = 0;
+  if (!MONSTERS_ENABLED) return; // peaceful mode: leave the map empty
   for (const kind of MONSTER_KINDS) {
     for (let i = 0; i < WILD_POPULATION[kind]; i++) spawnMonster(wild, kind);
   }

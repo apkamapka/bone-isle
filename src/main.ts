@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED } from "./config.ts";
 import { moveEntity, unstick } from "./world/collision.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
@@ -1025,10 +1025,12 @@ function update(dt: number): void {
       hurtPlayer(world, P, rndi(d.dmg[0], d.dmg[1]));
     });
     // respawns
-    for (let i = world.respawns.length - 1; i >= 0; i--) {
-      const r = world.respawns[i];
-      r.t -= dt;
-      if (r.t <= 0) { spawnMonster(world, r.kind); world.respawns.splice(i, 1); }
+    if (MONSTERS_ENABLED) {
+      for (let i = world.respawns.length - 1; i >= 0; i--) {
+        const r = world.respawns[i];
+        r.t -= dt;
+        if (r.t <= 0) { spawnMonster(world, r.kind); world.respawns.splice(i, 1); }
+      }
     }
   }
 
