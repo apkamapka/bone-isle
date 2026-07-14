@@ -1,5 +1,5 @@
 /** localStorage persistence: full game snapshot keyed by a single slot. */
-import { buildWorlds, populateWild, type Game } from "./game.ts";
+import { buildWorlds, populateAll, type Game } from "./game.ts";
 import { WORLD_SEED } from "./config.ts";
 import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
@@ -101,7 +101,7 @@ export function loadGame(): Game | null {
   // than the seed stored in the save) so every device shows the same islands —
   // older saves were rolled with a random per-device seed before this change.
   const worlds = buildWorlds(WORLD_SEED);
-  populateWild(worlds.wild);
+  populateAll(worlds);
 
   (Object.keys(worlds) as WorldKey[]).forEach((k) => {
     const saved = data.structures[k];
@@ -112,6 +112,17 @@ export function loadGame(): Game | null {
         .map((s) => ({ ...s }));
     }
   });
+
+  // Migration: Home Isle is now a hand-authored map, so the old procedural
+  // build-pad coordinates saved with each structure no longer line up. Relocate
+  // every owned structure onto an authored pad (in stable order) so nothing is
+  // left floating on water or detached from its pad.
+  const homeSpots = worlds.home.buildSpots;
+  worlds.home.structures.forEach((s, i) => {
+    const spot = homeSpots[i];
+    if (spot) { s.tx = spot.tx; s.ty = spot.ty; }
+  });
+
   applyStructureSolidity(worlds.home);
 
   const player = createPlayer(portalSpawn(worlds.home));

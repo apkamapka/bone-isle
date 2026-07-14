@@ -61,6 +61,7 @@ let scale = 2;
 let touchUI = false;
 
 const DESIGN_W = 480; // reference width the HUD is authored against
+const DESIGN_H = 320; // reference height — on wide desktops this caps HUD/panel size so tall panels fit
 
 function resize(): void {
   const cw = Math.max(1, innerWidth);
@@ -88,8 +89,14 @@ function resize(): void {
   sctx.imageSmoothingEnabled = false;
 
   vScale = screen.width / VW;          // device px per world px
-  scale = screen.width / DESIGN_W;     // HUD design unit
-  touchUI = mobile;
+  // HUD design unit. On a wide desktop the height is the tight constraint (tall
+  // panels must fit), so we take the smaller of the width/height ratios. On a
+  // portrait phone width still wins, so mobile sizing is unchanged.
+  scale = Math.min(screen.width / DESIGN_W, screen.height / DESIGN_H);
+  // The customizable HUD (on-screen buttons, draggable groups, EDIT HUD, rebind
+  // picker, quick-swap) is available everywhere — it works with mouse on desktop
+  // just as with touch on mobile. Only the world zoom above differs by device.
+  touchUI = true;
 }
 addEventListener("resize", resize);
 addEventListener("orientationchange", () => setTimeout(resize, 100));
@@ -150,8 +157,8 @@ function hasWindow(kind: PanelKind): boolean {
 function defaultOffset(kind: PanelKind): { x: number; y: number } {
   const S = scale;
   switch (kind) {
-    case "equip": return { x: 0, y: -70 * S };
-    case "skills": return { x: 0, y: 80 * S };
+    case "equip": return { x: 0, y: 0 };
+    case "skills": return { x: 0, y: 0 };
     case "bag": return { x: -120 * S, y: 30 * S };
     case "quest": return { x: -30 * S, y: -40 * S };
     case "forge": return { x: 70 * S, y: 10 * S };
@@ -1173,10 +1180,26 @@ function render(): void {
     }
   }
 
-  // portals (glowing swirl)
+  // portals — a glowing swirl between islands, a ladder between cave floors
   for (const pt of world.portals) {
     const sx = pt.x - cam.x;
     const sy = pt.y - cam.y;
+    if (pt.style) {
+      const lw = SPR.ladder.width;
+      const lh = SPR.ladder.height;
+      vctx.drawImage(SPR.ladder, Math.round(sx - lw / 2), Math.round(sy - lh / 2));
+      const down = pt.style === "ladderDown";
+      const dir = down ? 1 : -1;
+      const ay = down ? sy + lh / 2 + 3 : sy - lh / 2 - 3;
+      vctx.fillStyle = down ? "#e6b25a" : "#a6e6c4";
+      vctx.beginPath();
+      vctx.moveTo(sx - 3, ay);
+      vctx.lineTo(sx + 3, ay);
+      vctx.lineTo(sx, ay + dir * 3);
+      vctx.closePath();
+      vctx.fill();
+      continue;
+    }
     for (let r = 8; r > 0; r -= 2) {
       const a = 0.15 + 0.12 * Math.sin(waveT * 4 + r);
       vctx.fillStyle = `rgba(150,110,230,${a})`;
@@ -1545,30 +1568,29 @@ function drawTouchControls(): void {
   hudBtn(swapPos.x, swapPos.y, swW, swH, bowOn ? "→MELEE" : "→BOW", false, () => { if (!editing) swapWeapon(); });
   if (editing) drawGroupGrip("swap", swapPos.x, swapPos.y, swW, swH);
 
-  // --- vitals (HP/EXP/cap) bar is positioned by hud.ts from the same layout;
-  //     in edit mode we add its drag handle here so it can be repositioned too ---
-  if (editing) {
-    const vw = 190 * scale, vh = 54 * scale;
-    const vp = placeHud("vitals", vw, vh, sw, sh);
-    drawGroupGrip("vitals", vp.x, vp.y, vw, vh);
-  }
-
-  // --- lock / edit toggle (fixed, top-center) + edit helpers ---
-  const lockW = bs * 1.7, lockH = bs * 0.5;
-  const lockX = clamp(sw / 2 - lockW / 2, m, sw - lockW - m);
-  const lockY = clamp(58 * scale, 4 * scale, sh * 0.25);
+  // --- lock / edit toggle: sits just above the vitals (HP) frame, bottom-left ---
+  const vw = 190 * scale, vh = 54 * scale;
+  const vp = placeHud("vitals", vw, vh, sw, sh);
+  if (editing) drawGroupGrip("vitals", vp.x, vp.y, vw, vh);
+  const lockW = bs * 1.6, lockH = bs * 0.5;
+  const gripClear = bs * 0.34 + 6 * scale; // leave room for the vitals drag grip in edit mode
+  const lockX = clamp(vp.x, m, sw - lockW - m);
+  const lockY = clamp(vp.y - lockH - gripClear, m, sh - lockH - m);
   hudBtn(lockX, lockY, lockW, lockH, editing ? "LOCK HUD" : "EDIT HUD", editing, () => {
     toggleHudLock();
     flash(hudLocked() ? "HUD locked" : "HUD unlocked — drag handles, tap slots", "#8ab6ff");
   });
   if (editing) {
-    const rY = lockY + lockH + gap * 0.4;
-    hudBtn(lockX, rY, lockW, lockH, "RESET", false, () => { resetHudLayout(); flash("HUD layout reset", "#8ab6ff"); });
-    sctx.textAlign = "center";
+    hudBtn(lockX + lockW + gap * 0.5, lockY, lockW, lockH, "RESET", false, () => {
+      resetHudLayout();
+      flash("HUD layout reset", "#8ab6ff");
+    });
+    const hy = clamp(lockY - lockH * 0.6, m, sh - m);
+    sctx.textAlign = "left";
     sctx.textBaseline = "middle";
     sctx.fillStyle = "rgba(207,232,210,.85)";
     sctx.font = `${Math.round(9 * scale)}px 'Courier New',monospace`;
-    sctx.fillText("drag ▤ handles · tap a slot to bind an action", sw / 2, rY + lockH + 10 * scale);
+    sctx.fillText("drag handles · tap a slot to bind", lockX, hy);
   }
 }
 

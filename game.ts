@@ -1,7 +1,9 @@
 /** Global game state: the three islands, the active one, and the player. */
 import { makeWorld } from "./world/generate.ts";
+import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC } from "./world/handmade.ts";
+import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { portalSpawn } from "./world/collision.ts";
-import { spawnMonster, MONSTER_KINDS } from "./entities/monsters.ts";
+import { spawnMonster } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
 import { loadResearchState } from "./systems/tower.ts";
 import { resetTasks } from "./systems/tasks.ts";
@@ -26,47 +28,78 @@ export interface Game {
   tpFlash: number;
 }
 
-/** How many of each monster kind live on the Wildlands. */
-const WILD_POPULATION: Readonly<Record<MonsterKind, number>> = {
-  spider: 5, skeleton: 5, goblin: 4, orc: 3, ghost: 3, troll: 2,
+/**
+ * Monster rosters per dangerous world. Difficulty is the descent: the surface
+ * carries only the low tiers, and each Bone Caverns floor down adds heavier
+ * ones — so pushing deeper, not running laps, is how you meet tougher foes.
+ */
+type DangerKey = "wild" | "cave1" | "cave2" | "cave3";
+const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number>>>> = {
+  wild: { rat: 6, spider: 5, bat: 5, skeleton: 4, goblin: 4, wolf: 3 },
+  cave1: { skeleton: 5, goblin: 5, wolf: 4, ghost: 4, orc: 4, bear: 2 },
+  cave2: { orc: 5, bear: 4, minotaur: 4, ghost: 3, troll: 3 },
+  cave3: { minotaur: 3, troll: 4, cyclops: 4, boneLord: 2 },
 };
+const DANGER_KEYS = Object.keys(POPULATIONS) as DangerKey[];
 
-/** Build all three islands from a seed (deterministic terrain & layout). */
-export function buildWorlds(seed: number): Record<WorldKey, World> {
-  seedWorldRng(seed);
-  const home = makeWorld({
-    key: "home", name: "Home Isle", safe: true, w: 40, h: 30,
-    buildSpots: true, npcs: false,
-    trees: 11, rocks: 8, herbs: 6, mushrooms: 5, bones: 2,
-    portals: [{ dest: "town", label: "to Bonetown" }],
-  });
-  const town = makeWorld({
-    key: "town", name: "Bonetown", safe: true, w: 44, h: 32,
-    buildSpots: false, npcs: true,
-    trees: 7, rocks: 6, herbs: 8, mushrooms: 4, bones: 3, grassShift: 4,
-    portals: [{ dest: "home", label: "to Home Isle" }, { dest: "wild", label: "to the Wildlands" }],
-  });
-  const wild = makeWorld({
-    key: "wild", name: "Wildlands", safe: false, w: 60, h: 46,
-    buildSpots: false, npcs: false,
-    trees: 20, rocks: 18, herbs: 11, mushrooms: 4, bones: 9, grassShift: -14,
-    portals: [{ dest: "town", label: "to Bonetown" }],
-  });
-  return { home, town, wild };
+/** Stable per-key salt so each world's RNG stream is its own. */
+function keySalt(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return h;
 }
 
-/** Populate the Wildlands with its monster roster. */
-export function populateWild(wild: World): void {
-  wild.monsters.length = 0;
-  wild.respawns.length = 0;
-  for (const kind of MONSTER_KINDS) {
-    for (let i = 0; i < WILD_POPULATION[kind]; i++) spawnMonster(wild, kind);
+/** Build every map from a seed (deterministic terrain, layout & descent). */
+export function buildWorlds(seed: number): Record<WorldKey, World> {
+  // Seed the world RNG for the procedural Wildlands. The hub islands are
+  // hand-authored (no RNG) and each cave floor re-seeds itself, so the surface
+  // stays deterministic from the seed alone.
+  seedWorldRng(seed);
+  const home = makeHandmadeWorld(HOME_SPEC);
+  const town = makeHandmadeWorld(TOWN_SPEC);
+  const wild = makeWorld({
+    key: "wild", name: "Wildlands", safe: false, w: 104, h: 80,
+    buildSpots: false, npcs: false,
+    trees: 40, rocks: 34, herbs: 20, mushrooms: 8, bones: 18, grassShift: -14,
+    portals: [{ dest: "town", label: "to Bonetown" }],
+  });
+  // the cave mouth sits far out in the wilds; ladders chain the floors down
+  addCaveEntrance(wild, "cave1", seed ^ keySalt("caveEntrance"));
+  const cave1 = makeCaveWorld({
+    key: "cave1", name: "Bone Caverns -1", w: 72, h: 56, seed: seed ^ keySalt("cave1"),
+    up: "wild", down: "cave2", rocks: 16, bones: 12,
+  });
+  const cave2 = makeCaveWorld({
+    key: "cave2", name: "Bone Caverns -2", w: 76, h: 60, seed: seed ^ keySalt("cave2"),
+    up: "cave1", down: "cave3", rocks: 18, bones: 12,
+  });
+  const cave3 = makeCaveWorld({
+    key: "cave3", name: "Bone Caverns -3", w: 80, h: 64, seed: seed ^ keySalt("cave3"),
+    up: "cave2", rocks: 20, bones: 14,
+  });
+  return { home, town, wild, cave1, cave2, cave3 };
+}
+
+/** Populate one dangerous world from its own deterministic RNG stream. */
+export function populateWorld(w: World): void {
+  const pop = POPULATIONS[w.key as DangerKey];
+  if (!pop) return;
+  w.monsters.length = 0;
+  w.respawns.length = 0;
+  seedWorldRng(WORLD_SEED ^ keySalt(w.key));
+  for (const kind of Object.keys(pop) as MonsterKind[]) {
+    for (let i = 0; i < (pop[kind] ?? 0); i++) spawnMonster(w, kind);
   }
+}
+
+/** Populate the Wildlands and every cave floor. */
+export function populateAll(worlds: Record<WorldKey, World>): void {
+  for (const k of DANGER_KEYS) populateWorld(worlds[k]);
 }
 
 export function createGame(seed = WORLD_SEED): Game {
   const worlds = buildWorlds(seed);
-  populateWild(worlds.wild);
+  populateAll(worlds);
   const player = createPlayer(portalSpawn(worlds.home));
   loadResearchState([]); // a fresh game has no research completed
   resetTasks(); // no board tasks taken yet
