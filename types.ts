@@ -26,7 +26,7 @@ export interface Portal {
   y: number;
   dest: WorldKey;
   label: string;
-  style?: "ladderDown" | "ladderUp";
+  style?: "ladderDown" | "ladderUp" | "caveMouth";
 }
 
 /** Choppable tree node, occupies one tile. */

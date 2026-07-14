@@ -1184,6 +1184,22 @@ function render(): void {
   for (const pt of world.portals) {
     const sx = pt.x - cam.x;
     const sy = pt.y - cam.y;
+    if (pt.style === "caveMouth") {
+      // a big, unmistakable cave-mouth landmark: shadow, pulsing ring, sprite
+      const pulse = 0.5 + 0.5 * Math.sin(waveT * 3);
+      vctx.fillStyle = `rgba(20,16,14,0.35)`;
+      vctx.beginPath();
+      vctx.ellipse(sx, sy + 6, 15, 6, 0, 0, 6.2832);
+      vctx.fill();
+      vctx.strokeStyle = `rgba(230,178,90,${0.25 + 0.35 * pulse})`;
+      vctx.lineWidth = 1.5;
+      vctx.beginPath();
+      vctx.ellipse(sx, sy + 2, 13 + pulse * 3, 9 + pulse * 2, 0, 0, 6.2832);
+      vctx.stroke();
+      const cm = SPR.caveMouth;
+      vctx.drawImage(cm, Math.round(sx - cm.width / 2), Math.round(sy - cm.height + 6));
+      continue;
+    }
     if (pt.style) {
       const lw = SPR.ladder.width;
       const lh = SPR.ladder.height;

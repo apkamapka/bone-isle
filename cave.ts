@@ -270,5 +270,5 @@ export function addCaveEntrance(w: World, dest: WorldKey, seed: number): void {
   m.fillStyle = "#26241f";
   m.beginPath(); m.ellipse(cx, cy + 2, 8, 6, 0, 0, 6.2832); m.fill();
 
-  w.portals.push({ x: cx, y: cy, dest, label: "descend into the caverns", style: "ladderDown" });
+  w.portals.push({ x: cx, y: cy, dest, label: "descend into the caverns", style: "caveMouth" });
 }
