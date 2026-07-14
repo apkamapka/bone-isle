@@ -7,11 +7,12 @@ export const Tile = {
   Grass: 1,
   Sand: 2,
   Wall: 3,
+  Cave: 4,
 } as const;
 export type Tile = (typeof Tile)[keyof typeof Tile];
 
-/** The three islands. */
-export type WorldKey = "home" | "town" | "wild";
+/** The surface islands plus the descending Bone Caverns floors (-1..-3). */
+export type WorldKey = "home" | "town" | "wild" | "cave1" | "cave2" | "cave3";
 
 /** A point in world (pixel) space. */
 export interface Vec {
@@ -19,12 +20,14 @@ export interface Vec {
   y: number;
 }
 
-/** A teleport pad linking to another island. */
+/** A teleport pad linking to another map. A `style` renders it as a ladder or
+ * a prominent cave mouth instead of the default swirl. */
 export interface Portal {
   x: number;
   y: number;
   dest: WorldKey;
   label: string;
+  style?: "ladderDown" | "ladderUp" | "caveMouth";
 }
 
 /** Choppable tree node, occupies one tile. */

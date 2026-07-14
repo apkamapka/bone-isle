@@ -304,6 +304,16 @@ export function bakeWorldCanvas(w: World, grassShift = 0): void {
         m.fillRect(px, py, TILE, TILE);
         m.fillStyle = "rgba(150,125,70,.8)";
         for (let i = 0, n = rndi(3, 6); i < n; i++) m.fillRect(px + rndi(1, 14), py + rndi(1, 14), 1, 1);
+      } else if (t0 === Tile.Cave) {
+        const j = rndi(-6, 6);
+        m.fillStyle = `rgb(${92 + j},${88 + j},${84 + j})`;
+        m.fillRect(px, py, TILE, TILE);
+        m.fillStyle = "rgba(58,54,50,.85)";
+        for (let i = 0, n = rndi(3, 6); i < n; i++) m.fillRect(px + rndi(1, 14), py + rndi(1, 14), 1, 1);
+        if (Math.random() < 0.22) {
+          m.fillStyle = "rgba(140,134,126,.4)";
+          m.fillRect(px + rndi(2, 11), py + rndi(2, 11), rndi(2, 3), 1);
+        }
       } else if (t0 === Tile.Wall) {
         m.fillStyle = "#7d8487"; m.fillRect(px, py, TILE, TILE);
         m.fillStyle = "#999fa2";
