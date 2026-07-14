@@ -26,6 +26,15 @@ export const BAG_SIZE = 16;
 /** Monster respawn delay on the Wildlands (seconds). */
 export const MONSTER_RESPAWN_S = 12;
 
+/**
+ * Wildlands difficulty gradient. Monsters spawn biased by how far they are from
+ * the entrance portal (0 = the coast you arrive on, 1 = the farthest reaches),
+ * so the weakest creatures ring the entrance and the deadliest lurk in the far
+ * corners — Rookgaard-style discovery. No monster spawns within this radius of
+ * the entrance, so arriving is never an instant ambush.
+ */
+export const WILD_ENTRANCE_SAFE_PX = 96;
+
 /** How long a lootable corpse stays on the ground (seconds). */
 export const CORPSE_DECAY_S = 75;
 

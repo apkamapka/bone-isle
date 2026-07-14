@@ -105,7 +105,9 @@ export interface GroundItem {
 }
 
 /** Monster kinds present on the Wildlands. */
-export type MonsterKind = "spider" | "skeleton" | "goblin" | "orc" | "ghost" | "troll";
+export type MonsterKind =
+  | "rat" | "spider" | "bat" | "skeleton" | "goblin" | "wolf"
+  | "ghost" | "orc" | "bear" | "minotaur" | "troll" | "cyclops" | "boneLord";
 
 /** A live monster instance. */
 export interface Monster {

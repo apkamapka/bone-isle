@@ -29,7 +29,8 @@ export interface Game {
 
 /** How many of each monster kind live on the Wildlands. */
 const WILD_POPULATION: Readonly<Record<MonsterKind, number>> = {
-  spider: 5, skeleton: 5, goblin: 4, orc: 3, ghost: 3, troll: 2,
+  rat: 8, spider: 6, bat: 6, skeleton: 6, goblin: 5, wolf: 5,
+  ghost: 4, orc: 4, bear: 3, minotaur: 3, troll: 2, cyclops: 2, boneLord: 1,
 };
 
 /** Build all three islands from a seed (deterministic terrain & layout). */
@@ -41,9 +42,9 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   const home = makeHandmadeWorld(HOME_SPEC);
   const town = makeHandmadeWorld(TOWN_SPEC);
   const wild = makeWorld({
-    key: "wild", name: "Wildlands", safe: false, w: 60, h: 46,
+    key: "wild", name: "Wildlands", safe: false, w: 104, h: 80,
     buildSpots: false, npcs: false,
-    trees: 20, rocks: 18, herbs: 11, mushrooms: 4, bones: 9, grassShift: -14,
+    trees: 40, rocks: 34, herbs: 20, mushrooms: 8, bones: 18, grassShift: -14,
     portals: [{ dest: "town", label: "to Bonetown" }],
   });
   return { home, town, wild };
