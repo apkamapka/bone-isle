@@ -1,5 +1,5 @@
 /** localStorage persistence: full game snapshot keyed by a single slot. */
-import { buildWorlds, populateWild, type Game } from "./game.ts";
+import { buildWorlds, populateAll, type Game } from "./game.ts";
 import { WORLD_SEED } from "./config.ts";
 import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
@@ -101,7 +101,7 @@ export function loadGame(): Game | null {
   // than the seed stored in the save) so every device shows the same islands —
   // older saves were rolled with a random per-device seed before this change.
   const worlds = buildWorlds(WORLD_SEED);
-  populateWild(worlds.wild);
+  populateAll(worlds);
 
   (Object.keys(worlds) as WorldKey[]).forEach((k) => {
     const saved = data.structures[k];

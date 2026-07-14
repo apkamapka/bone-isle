@@ -1182,10 +1182,42 @@ function render(): void {
     }
   }
 
-  // portals (glowing swirl)
+  // portals — a swirl between islands, a cave mouth / ladder for the caverns
   for (const pt of world.portals) {
     const sx = pt.x - cam.x;
     const sy = pt.y - cam.y;
+    if (pt.style === "caveMouth") {
+      // a big, unmistakable cave-mouth landmark: shadow, pulsing ring, sprite
+      const pulse = 0.5 + 0.5 * Math.sin(waveT * 3);
+      vctx.fillStyle = "rgba(20,16,14,0.35)";
+      vctx.beginPath();
+      vctx.ellipse(sx, sy + 6, 15, 6, 0, 0, 6.2832);
+      vctx.fill();
+      vctx.strokeStyle = `rgba(230,178,90,${0.25 + 0.35 * pulse})`;
+      vctx.lineWidth = 1.5;
+      vctx.beginPath();
+      vctx.ellipse(sx, sy + 2, 13 + pulse * 3, 9 + pulse * 2, 0, 0, 6.2832);
+      vctx.stroke();
+      const cmp = SPR.caveMouth;
+      vctx.drawImage(cmp, Math.round(sx - cmp.width / 2), Math.round(sy - cmp.height + 6));
+      continue;
+    }
+    if (pt.style) {
+      const lw = SPR.ladder.width;
+      const lh = SPR.ladder.height;
+      vctx.drawImage(SPR.ladder, Math.round(sx - lw / 2), Math.round(sy - lh / 2));
+      const down = pt.style === "ladderDown";
+      const dir = down ? 1 : -1;
+      const ay = down ? sy + lh / 2 + 3 : sy - lh / 2 - 3;
+      vctx.fillStyle = down ? "#e6b25a" : "#a6e6c4";
+      vctx.beginPath();
+      vctx.moveTo(sx - 3, ay);
+      vctx.lineTo(sx + 3, ay);
+      vctx.lineTo(sx, ay + dir * 3);
+      vctx.closePath();
+      vctx.fill();
+      continue;
+    }
     for (let r = 8; r > 0; r -= 2) {
       const a = 0.15 + 0.12 * Math.sin(waveT * 4 + r);
       vctx.fillStyle = `rgba(150,110,230,${a})`;
