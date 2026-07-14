@@ -1,8 +1,8 @@
 /** Monster definitions, danger-band spawning and the wander/chase/attack AI. */
-import { rnd, wrnd, wrndi, dist } from "../util.ts";
+import { rnd, rndi, wrnd, dist } from "../util.ts";
 import { WILD_ENTRANCE_SAFE_PX } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
-import { moveEntity, randomWalkable } from "../world/collision.ts";
+import { moveEntity, randomWalkable, lineOfSight } from "../world/collision.ts";
 import type { World, Monster, MonsterKind } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
 
@@ -136,17 +136,19 @@ export function spawnMonster(w: World, kind: MonsterKind): void {
   });
 }
 
-/** Roll a monster's loot into concrete stacks + gold. */
+/** Roll a monster's loot into concrete stacks + gold. Runtime randomness —
+ *  deliberately NOT the deterministic world RNG, so kills never perturb the
+ *  world-generation stream and drop chances/amounts share one RNG source. */
 export function rollLoot(kind: MonsterKind): { items: { kind: ItemKind; n: number }[]; gold: number } {
   const d = MONSTER_DEFS[kind];
   const items: { kind: ItemKind; n: number }[] = [];
   for (const e of d.loot) {
     if (Math.random() < e.chance) {
-      const n = wrndi(e.n[0], e.n[1]);
+      const n = rndi(e.n[0], e.n[1]);
       if (n > 0) items.push({ kind: e.kind, n });
     }
   }
-  const gold = wrndi(d.gold[0], d.gold[1]);
+  const gold = rndi(d.gold[0], d.gold[1]);
   return { items, gold };
 }
 
@@ -171,7 +173,9 @@ export function updateMonsters(
     m.hurtT = Math.max(0, m.hurtT - dt);
     m.atkCd -= dt;
     const d = dist(m.x, m.y, target.x, target.y);
-    if (!target.dead && d < 82 && d > 13) {
+    // chase only what it can actually see — cave walls break line of sight,
+    // so creatures in the next chamber stay put instead of chasing through rock
+    if (!target.dead && d < 82 && d > 13 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
       const vx = (target.x - m.x) / d;
       const vy = (target.y - m.y) / d;
       moveEntity(w, m, vx * m.speed * dt, vy * m.speed * dt);

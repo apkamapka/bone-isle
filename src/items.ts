@@ -113,6 +113,22 @@ export function emptyEquipment(): Equipment {
   return { head: null, body: null, legs: null, boots: null, weapon: null, shield: null, ring: null, amulet: null };
 }
 
+/**
+ * Whether the bag has room (slots + stacking) for `n` more of `kind`,
+ * WITHOUT modifying anything. Used to pre-check quest/task item rewards so
+ * they are never silently lost to a full backpack.
+ */
+export function bagRoomFor(bag: Bag, kind: ItemKind, n: number): boolean {
+  const def = ITEMS[kind];
+  let room = 0;
+  for (const s of bag) {
+    if (s === null) room += def.stack;
+    else if (s.kind === kind && def.stack > 1) room += def.stack - s.n;
+    if (room >= n) return true;
+  }
+  return room >= n;
+}
+
 /** Total count of `kind` across the bag. */
 export function bagCount(bag: Bag, kind: ItemKind): number {
   let n = 0;

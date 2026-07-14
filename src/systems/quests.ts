@@ -1,7 +1,7 @@
 /** A small quest chain. Quests advance on game events and reward the player. */
 import type { MonsterKind } from "../world/types.ts";
 import type { Player } from "../entities/player.ts";
-import { addItem, bagCount } from "../items.ts";
+import { addItem, bagCount, bagRoomFor } from "../items.ts";
 import type { ItemKind } from "../items.ts";
 
 export type QuestGoal =
@@ -106,13 +106,31 @@ export function syncCollectQuests(p: Player, fx?: QuestFx): void {
   }
 }
 
-/** Claim a finished quest's reward. Returns true on success. */
-export function claimQuest(p: Player, q: Quest, fx?: QuestFx): boolean {
-  if (!q.done || q.claimed) return false;
+export type ClaimResult = "ok" | "full" | "no";
+
+/**
+ * Claim a finished quest's reward. Returns "full" (and changes nothing) if an
+ * item reward wouldn't fit in the bag, so rewards are never silently lost.
+ * Experience is granted through `giveExp` so level-ups run through the normal
+ * combat path (refreshDerived, level-up fanfare, etc.).
+ */
+export function claimQuest(p: Player, q: Quest, giveExp?: (n: number) => void, fx?: QuestFx): ClaimResult {
+  if (!q.done || q.claimed) return "no";
   const r = q.reward;
+  if (r.item && !bagRoomFor(p.bag, r.item, r.itemN ?? 1)) return "full";
   if (r.gold) p.gold += r.gold;
   if (r.item) addItem(p.bag, r.item, r.itemN ?? 1);
   q.claimed = true;
   fx?.(`Reward claimed: ${q.title}`);
-  return true;
+  if (r.exp) giveExp?.(r.exp);
+  return "ok";
+}
+
+/** Reset the whole chain to its pristine state (used when starting a new game). */
+export function resetQuests(): void {
+  for (const q of quests) {
+    q.progress = 0;
+    q.done = false;
+    q.claimed = false;
+  }
 }

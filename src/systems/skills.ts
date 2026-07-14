@@ -40,6 +40,17 @@ export function skillNeed(s: Skill): number {
   return Math.round(s.base * Math.pow(s.factor, Math.max(0, s.lv - s.offset)));
 }
 
+/** Reset every skill to its starting level (used when starting a new game —
+ *  skills live in module state, so without this a fresh game after an old one
+ *  would inherit the previous character's training). */
+export function resetSkills(): void {
+  for (const key of Object.keys(skills) as SkillKey[]) {
+    const s = skills[key];
+    s.lv = s.offset;
+    s.pts = 0;
+  }
+}
+
 export type SkillUpFx = (text: string) => void;
 
 /** Award xp to a skill; may trigger one or more level-ups. */

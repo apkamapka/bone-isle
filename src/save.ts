@@ -113,15 +113,26 @@ export function loadGame(): Game | null {
     }
   });
 
-  // Migration: Home Isle is now a hand-authored map, so the old procedural
-  // build-pad coordinates saved with each structure no longer line up. Relocate
-  // every owned structure onto an authored pad (in stable order) so nothing is
-  // left floating on water or detached from its pad.
+  // Migration: Home Isle is now a hand-authored map, so structures saved with
+  // old procedural build-pad coordinates may no longer sit on any pad. Relocate
+  // ONLY those orphans onto free authored pads; a structure already standing on
+  // an authored pad keeps its place (otherwise every load would reshuffle fresh
+  // placements onto pads by array order).
   const homeSpots = worlds.home.buildSpots;
-  worlds.home.structures.forEach((s, i) => {
-    const spot = homeSpots[i];
-    if (spot) { s.tx = spot.tx; s.ty = spot.ty; }
-  });
+  const onPad = (tx: number, ty: number): boolean =>
+    homeSpots.some((b) => b.tx === tx && b.ty === ty);
+  const taken = new Set<string>(
+    worlds.home.structures.filter((s) => onPad(s.tx, s.ty)).map((s) => `${s.tx},${s.ty}`),
+  );
+  for (const s of worlds.home.structures) {
+    if (onPad(s.tx, s.ty)) continue; // already on an authored pad — leave it
+    const spot = homeSpots.find((b) => !taken.has(`${b.tx},${b.ty}`));
+    if (spot) {
+      s.tx = spot.tx;
+      s.ty = spot.ty;
+      taken.add(`${spot.tx},${spot.ty}`);
+    }
+  }
 
   applyStructureSolidity(worlds.home);
 

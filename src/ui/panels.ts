@@ -77,6 +77,7 @@ export interface PanelActions {
   research: (id: string) => void;
   buyCrystal: (id: string) => void;
   takeLoot: (c: Corpse, index: number) => void;
+  takeGold: (c: Corpse) => void;
   takeAllLoot: (c: Corpse) => void;
   buy: (kind: ItemKind) => void;
   sell: (kind: ItemKind) => void;
@@ -689,8 +690,14 @@ function drawLoot(p: PanelInput): void {
     ry += rowH;
   }
   if (c.gold > 0) {
+    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S)) {
+      ctx.fillStyle = "rgba(202,162,58,.15)";
+      ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
+    }
     icon(p, SPR.coin, x + 10 * S, ry + 2 * S, 2 * S);
     hudText(hud, `${c.gold} gold`, x + 34 * S, ry + 8 * S, 9 * S, "#ffe9a8", "left", true);
+    const gyy = ry;
+    p.hotspots.push({ x: x + 4 * S, y: gyy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.takeGold(c) });
     ry += rowH;
   }
   c.items.forEach((it, i) => {
@@ -861,7 +868,7 @@ function drawTasks(p: PanelInput): void {
     const need = active.goal.need;
     const prog = progressOf(active, player.bag);
     const complete = isComplete(active, player.bag);
-    const fits = rewardFits(player.bag, active);
+    const fits = rewardFits(player, active);
     hudText(hud, active.title, x + 14 * S, ry + 9 * S, 9 * S, "#ffe9a8", "left", true);
     hudText(hud, active.desc, x + 14 * S, ry + 20 * S, 6.5 * S, "rgba(220,214,190,.6)");
     ctx.fillStyle = "#2a3a30";

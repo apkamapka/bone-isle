@@ -9,7 +9,8 @@
  * active). Collect tasks are deliveries: the items are consumed on hand-in.
  * Only one task is active at a time — a deliberate, easily-expanded choice.
  */
-import { ITEMS, addItem, removeItem, bagCount } from "../items.ts";
+import { addItem, removeItem, bagCount, bagRoomFor } from "../items.ts";
+import { canCarry } from "../entities/player.ts";
 import type { ItemKind, Bag } from "../items.ts";
 import type { MonsterKind } from "../world/types.ts";
 import type { Player } from "../entities/player.ts";
@@ -162,23 +163,17 @@ export function onTaskKill(monster: MonsterKind): void {
   }
 }
 
-/** Does the reward item (if any) have room in the bag right now? */
-function canFit(bag: Bag, kind: ItemKind, n: number): boolean {
-  const def = ITEMS[kind];
-  let room = 0;
-  for (const s of bag) {
-    if (s === null) room += def.stack;
-    else if (s.kind === kind && def.stack > 1) room += def.stack - s.n;
-  }
-  return room >= n;
-}
-/** Whether the active task can be handed in without losing its item reward. */
-export function rewardFits(bag: Bag, def: TaskDef): boolean {
+/**
+ * Whether the active task can be handed in without losing its item reward —
+ * checks both bag slots and carry weight. Collect-tasks skip the checks: the
+ * delivered items are consumed first, which frees slots and weight.
+ */
+export function rewardFits(p: Player, def: TaskDef): boolean {
   const r = def.reward;
   if (!r.item) return true;
-  // collect-tasks free space when the delivered items are consumed
   if (def.goal.kind === "collect") return true;
-  return canFit(bag, r.item, r.itemN ?? 1);
+  const n = r.itemN ?? 1;
+  return bagRoomFor(p.bag, r.item, n) && canCarry(p, r.item, n);
 }
 
 export interface HandInResult {
@@ -193,7 +188,7 @@ export interface HandInResult {
 export function handInTask(p: Player, giveExp: (n: number) => void): HandInResult | null {
   const def = activeTask();
   if (!def || !isComplete(def, p.bag)) return null;
-  if (!rewardFits(p.bag, def)) return null;
+  if (!rewardFits(p, def)) return null;
   if (def.goal.kind === "collect") removeItem(p.bag, def.goal.item, def.goal.need);
   const r = def.reward;
   p.taskPoints += r.points;
@@ -206,13 +201,14 @@ export function handInTask(p: Player, giveExp: (n: number) => void): HandInResul
   return { title: def.title, reward: r };
 }
 
-export type ExchangeResult = "ok" | "poor" | "full" | "none";
+export type ExchangeResult = "ok" | "poor" | "full" | "heavy" | "none";
 /** Spend Task Points on a rare-material bundle. */
 export function buyExchange(p: Player, id: string): ExchangeResult {
   const e = EXCHANGES.find((x) => x.id === id);
   if (!e) return "none";
   if (p.taskPoints < e.cost) return "poor";
-  if (!canFit(p.bag, e.item, e.itemN)) return "full";
+  if (!canCarry(p, e.item, e.itemN)) return "heavy";
+  if (!bagRoomFor(p.bag, e.item, e.itemN)) return "full";
   p.taskPoints -= e.cost;
   addItem(p.bag, e.item, e.itemN);
   return "ok";

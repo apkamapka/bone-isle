@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX } from "./config.ts";
 import { moveEntity, unstick } from "./world/collision.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
@@ -27,7 +27,7 @@ import { createGame, travelTo, respawnAtHome, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
 import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
-import type { Vec, World, Corpse, GroundItem } from "./world/types.ts";
+import type { Vec, World, Corpse, GroundItem, Npc } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -218,6 +218,8 @@ const act: PanelActions = {
   useItem: (kind: ItemKind) => {
     const def = ITEMS[kind];
     if (def.crystal) { useCrystalItem(kind); return; }
+    // don't waste a potion/food charge when already at full health
+    if (def.heal && P.hp >= P.maxhp) { flash("full hp", "#7dff9e"); return; }
     if (!removeItem(P.bag, kind, 1)) return;
     if (def.heal) { P.hp = Math.min(P.maxhp, P.hp + def.heal); flash(`+${def.heal} hp`, "#7dff9e"); }
     beep(500, 0.12, "sine", 0.05, 180);
@@ -227,13 +229,18 @@ const act: PanelActions = {
     const slot = def.slot;
     if (!slot) return;
     if (!removeItem(P.bag, kind, 1)) return;
+    // stow a displaced piece into the bag; if the bag is somehow full, drop it
+    // at the player's feet instead of silently destroying it
+    const stowOrDrop = (k: ItemKind): void => {
+      if (addItem(P.bag, k, 1) > 0) dropToGround(k, 1);
+    };
     const prev = P.eq[slot];
     P.eq[slot] = kind;
-    if (prev) addItem(P.bag, prev, 1);
+    if (prev) stowOrDrop(prev);
     // Two-handed rule: a bow occupies both hands, so it can't share with a shield.
-    if (def.bow && P.eq.shield) { addItem(P.bag, P.eq.shield, 1); P.eq.shield = null; }
+    if (def.bow && P.eq.shield) { stowOrDrop(P.eq.shield); P.eq.shield = null; }
     if (slot === "shield" && P.eq.weapon && ITEMS[P.eq.weapon].bow) {
-      addItem(P.bag, P.eq.weapon, 1); P.eq.weapon = null;
+      stowOrDrop(P.eq.weapon); P.eq.weapon = null;
     }
     refreshDerived(P);
     beep(420, 0.1, "triangle", 0.05);
@@ -241,6 +248,9 @@ const act: PanelActions = {
   unequip: (slot: EqSlot) => {
     const cur = P.eq[slot];
     if (!cur) return;
+    // worn gear doesn't count toward carry cap, so moving it into the bag adds
+    // weight — respect the cap the same way every other pickup does
+    if (!canCarry(P, cur)) { flash("too heavy"); return; }
     if (addItem(P.bag, cur, 1) > 0) { flash("bag full"); return; }
     P.eq[slot] = null;
     refreshDerived(P);
@@ -253,12 +263,25 @@ const act: PanelActions = {
   research: (id: string) => { doResearch(id); },
   buyCrystal: (id: string) => { doBuyCrystal(id); },
   takeLoot: (c: Corpse, index: number) => { takeOne(c, index); },
+  takeGold: (c: Corpse) => {
+    if (c.gold > 0) {
+      P.gold += c.gold;
+      c.gold = 0;
+      beep(520, 0.08, "sine", 0.05, 80);
+    }
+    closeCorpseIfEmpty(c);
+  },
   takeAllLoot: (c: Corpse) => { takeAll(c); },
   buy: (kind: ItemKind) => { doBuy(kind); },
   sell: (kind: ItemKind) => { doSell(kind); },
   claim: (id: string) => {
     const q = quests.find((x) => x.id === id);
-    if (q && claimQuest(P, q, (t) => flash(t, "#ffe9a8"))) beep(560, 0.16, "square", 0.06);
+    if (!q) return;
+    const r = q.reward;
+    if (r.item && !canCarry(P, r.item, r.itemN ?? 1)) { flash("too heavy"); return; }
+    const res = claimQuest(P, q, (xp) => grantExp(cw(), P, xp), (t) => flash(t, "#ffe9a8"));
+    if (res === "ok") beep(560, 0.16, "square", 0.06);
+    else if (res === "full") flash("bag full");
   },
   acceptTask: (id: string) => {
     if (acceptTask(id)) { flash("task accepted", "#9ad0ff"); beep(440, 0.12, "sine", 0.05, 120); }
@@ -280,6 +303,7 @@ const act: PanelActions = {
     if (r === "ok") { flash("bought with Task Points", "#9ad0ff"); beep(440, 0.12, "sine", 0.05); }
     else if (r === "poor") flash("not enough Task Points", "#d96a5a");
     else if (r === "full") flash("no room in bag", "#e0a06a");
+    else if (r === "heavy") flash("too heavy", "#e0a06a");
   },
   moveStack: (src: "bag" | "stash", index: number) => { openMoveChooser(src, index); },
   splitConfirm: (mode: "store" | "take" | "drop") => { splitConfirm(mode); },
@@ -429,6 +453,9 @@ function openMoveChooser(src: "bag" | "stash", index: number): void {
 function splitConfirm(mode: "store" | "take" | "drop"): void {
   const sp = ui.split;
   if (!sp) return;
+  // the chest window may have auto-closed (walked out of range) while the
+  // chooser was open — a chest transfer without the chest present is invalid
+  if ((mode === "store" || mode === "take") && !hasWindow("stash")) { ui.split = null; return; }
   const n = Math.max(1, Math.min(sp.max, sp.n));
   if (mode === "store") storePartial(sp.index, n);
   else if (mode === "take") takePartial(sp.index, n);
@@ -517,8 +544,11 @@ function doRecall(): void {
 function takeOne(c: Corpse, index: number): void {
   const it = c.items[index];
   if (!it) return;
-  if (!canCarry(P, it.kind)) { flash("too heavy"); return; }
-  const left = addItem(P.bag, it.kind, it.n);
+  // limit the whole stack by free carry weight (not just a single item's worth)
+  const fitByWeight = Math.floor(freeCap(P) / itemWeight(it.kind, 1));
+  if (fitByWeight <= 0) { flash("too heavy"); return; }
+  const want = Math.min(it.n, fitByWeight);
+  const left = addItem(P.bag, it.kind, want) + (it.n - want);
   const took = it.n - left;
   if (took > 0) {
     syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
@@ -925,6 +955,53 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
 
 /* ---------------- update ---------------- */
 
+/* ---------------- proximity panels (Tibia-style auto-close) ---------------- */
+
+/** Is the player near any owned Home-Isle structure of the given kinds? */
+function nearStructure(...keys: string[]): boolean {
+  if (cw() !== game.worlds.home) return false;
+  for (const s of game.worlds.home.structures) {
+    if (!keys.includes(s.key)) continue;
+    // sprite centre of the 2×2 pad
+    if (dist(P.x, P.y, s.tx * TILE + TILE, s.ty * TILE + TILE) < USE_RANGE_PX) return true;
+  }
+  return false;
+}
+
+/** Is the player near an NPC accepted by `match` on the current island? */
+function nearNpc(match: (n: Npc) => boolean): boolean {
+  return cw().npcs.some((n) => match(n) && dist(P.x, P.y, n.x, n.y) < USE_RANGE_PX);
+}
+
+let proximityT = 0;
+/**
+ * Interaction panels stay open while dragging other windows around (Tibia-style
+ * — clicking elsewhere never closes them), but they DO close when the player
+ * walks away from their source. Without this, an open Storage Chest would allow
+ * remote deposits from the Wildlands, sidestepping the carry-cap design, and
+ * shops / the Forge / the task board could be used from anywhere.
+ */
+function tickProximityPanels(dt: number): void {
+  proximityT -= dt;
+  if (proximityT > 0) return;
+  proximityT = 0.25;
+  const checks: ReadonlyArray<readonly [PanelKind, () => boolean]> = [
+    ["forge", () => nearStructure("forge")],
+    ["tower", () => nearStructure("tower")],
+    ["stash", () => nearStructure("chest")],
+    ["shop", () => !!ui.npc && cw().npcs.includes(ui.npc) && nearNpc((n) => n === ui.npc)],
+    ["tasks", () => nearNpc((n) => n.key === "taskmaster")],
+    ["loot", () => !!ui.loot && cw().corpses.includes(ui.loot)
+      && dist(P.x, P.y, ui.loot.x, ui.loot.y) < USE_RANGE_PX],
+  ];
+  for (const [kind, inRange] of checks) {
+    if (hasWindow(kind) && !inRange()) {
+      closeWindow(kind);
+      flash("too far away", "#e0a06a");
+    }
+  }
+}
+
 function checkPortals(): void {
   if (P.tpCd > 0) return;
   for (const pt of cw().portals) {
@@ -1071,6 +1148,7 @@ function update(dt: number): void {
   }
 
   tickRegrowth(world, dt, P.x, P.y, true);
+  tickProximityPanels(dt);
   checkPortals();
   updateFloats(dt);
   if (moveMarker) { moveMarker.t -= dt; if (moveMarker.t <= 0) moveMarker = null; }

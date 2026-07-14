@@ -46,6 +46,15 @@ export const WILD_ENTRANCE_SAFE_PX = 96;
 /** How long a lootable corpse stays on the ground (seconds). */
 export const CORPSE_DECAY_S = 75;
 
+/**
+ * How close (px) the player must stay to keep using an opened interaction
+ * panel (Forge, Alchemy Tower, Storage Chest, NPC shop, task board, corpse
+ * loot). Walking further away auto-closes the panel, Tibia-style — otherwise
+ * an open chest window would allow remote deposits from anywhere, which would
+ * defeat the whole carry-capacity / multi-trip design.
+ */
+export const USE_RANGE_PX = 56;
+
 /** Resource node regrowth (seconds). Slow enough that you rotate between
  *  nodes and islands rather than farming one spot — paired with denser nodes. */
 export const TREE_REGROW_S = 90;

@@ -1,6 +1,7 @@
 /** Tile collision and movement helpers operating on a World grid. */
 import { TILE } from "../config.ts";
 import { wrndi } from "../util.ts";
+import { Tile } from "./types.ts";
 import type { World, Vec, Portal } from "./types.ts";
 
 /** Anything with a mutable world position. */
@@ -15,6 +16,30 @@ export function blockedAt(w: World, px: number, py: number): boolean {
   const y = Math.floor(py / TILE);
   if (x < 0 || y < 0 || x >= w.w || y >= w.h) return true;
   return w.solid[y][x];
+}
+
+/** True if the pixel sits on a sight-blocking tile (Wall) or off-map. Trees,
+ *  rocks and water don't block sight — only proper walls do, so cave chambers
+ *  and ruins genuinely break line of sight the way the cave design intends. */
+function sightBlockedAt(w: World, px: number, py: number): boolean {
+  const x = Math.floor(px / TILE);
+  const y = Math.floor(py / TILE);
+  if (x < 0 || y < 0 || x >= w.w || y >= w.h) return true;
+  return w.tile[y][x] === Tile.Wall;
+}
+
+/**
+ * Straight-line visibility between two points, sampled every ~6px. Used to
+ * gate monster aggro so creatures behind cave walls don't chase you through
+ * solid rock — you fight the caverns room by room instead of pulling a floor.
+ */
+export function lineOfSight(w: World, x1: number, y1: number, x2: number, y2: number): boolean {
+  const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 6));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (sightBlockedAt(w, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)) return false;
+  }
+  return true;
 }
 
 /** Feet-box half extents used for entity collision. */

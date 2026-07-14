@@ -115,7 +115,7 @@ export function killMonster(world: World, p: Player, m: Monster): void {
 
   const { items, gold } = rollLoot(m.kind);
   world.corpses.push({
-    name: ITEMS[m.kind as keyof typeof ITEMS] ? m.kind : m.kind,
+    name: m.kind,
     x: m.x,
     y: m.y,
     items,

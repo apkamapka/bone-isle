@@ -7,6 +7,8 @@ import { spawnMonster } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
 import { loadResearchState } from "./systems/tower.ts";
 import { resetTasks } from "./systems/tasks.ts";
+import { resetSkills } from "./systems/skills.ts";
+import { resetQuests } from "./systems/quests.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
@@ -81,29 +83,31 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
 }
 
 /** Populate one dangerous world from its own deterministic RNG stream. */
-export function populateWorld(w: World): void {
+export function populateWorld(w: World, seed = WORLD_SEED): void {
   const pop = POPULATIONS[w.key as DangerKey];
   if (!pop) return;
   w.monsters.length = 0;
   w.respawns.length = 0;
   if (!MONSTERS_ENABLED) return; // peaceful mode: leave every floor empty
-  seedWorldRng(WORLD_SEED ^ keySalt(w.key));
+  seedWorldRng(seed ^ keySalt(w.key));
   for (const kind of Object.keys(pop) as MonsterKind[]) {
     for (let i = 0; i < (pop[kind] ?? 0); i++) spawnMonster(w, kind);
   }
 }
 
 /** Populate the Wildlands and every cave floor. */
-export function populateAll(worlds: Record<WorldKey, World>): void {
-  for (const k of DANGER_KEYS) populateWorld(worlds[k]);
+export function populateAll(worlds: Record<WorldKey, World>, seed = WORLD_SEED): void {
+  for (const k of DANGER_KEYS) populateWorld(worlds[k], seed);
 }
 
 export function createGame(seed = WORLD_SEED): Game {
   const worlds = buildWorlds(seed);
-  populateAll(worlds);
+  populateAll(worlds, seed);
   const player = createPlayer(portalSpawn(worlds.home));
   loadResearchState([]); // a fresh game has no research completed
   resetTasks(); // no board tasks taken yet
+  resetSkills(); // module state — wipe any training from a previous session
+  resetQuests(); // likewise, quest progress lives in module state
   return {
     seed,
     worlds,
