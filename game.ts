@@ -114,12 +114,25 @@ export function createGame(seed = WORLD_SEED): Game {
   };
 }
 
+/** 8-way compass word for a direction vector (screen space: +y is south). */
+function compass(dx: number, dy: number): string {
+  const ns = dy < -8 ? "north" : dy > 8 ? "south" : "";
+  const ew = dx < -8 ? "west" : dx > 8 ? "east" : "";
+  return (ns + ew) || "east";
+}
+
 /** Teleport the player through a portal to `dest`. */
 export function travelTo(g: Game, dest: WorldKey): void {
   const target = g.worlds[dest];
   // spawn beside the return portal that points back to where we came from
   const back = target.portals.find((pt) => pt.dest === g.current.key) ?? target.portals[0];
   const p = portalSpawn(target, back);
+  // arriving on the surface: point the way to the cave mouth so it's findable
+  let extra = "";
+  if (dest === "wild") {
+    const mouth = target.portals.find((pt) => pt.dest === "cave1");
+    if (mouth) extra = "  ·  cave mouth to the " + compass(mouth.x - p.x, mouth.y - p.y);
+  }
   g.current = target;
   g.player.x = p.x;
   g.player.y = p.y;
@@ -128,7 +141,7 @@ export function travelTo(g: Game, dest: WorldKey): void {
   g.player.gather = null;
   g.player.tpCd = 1.6;
   g.tpFlash = 1;
-  g.zoneFlash = { text: target.name + (target.safe ? "  (safe)" : "  (dangerous)"), t: 2.2 };
+  g.zoneFlash = { text: target.name + (target.safe ? "  (safe)" : "  (dangerous)") + extra, t: 2.8 };
   beep(520, 0.25, "sine", 0.07, 420);
 }
 

@@ -191,23 +191,84 @@ export function makeCaveWorld(opts: CaveOpts): World {
 /**
  * Add a downward ladder to an already-built surface world, placed on a walkable
  * tile far from its existing entrance so the cave mouth sits out in the wilds.
+ * Carves a stone clearing and paints it onto the map canvas so the entrance
+ * reads as an obvious dark "cave mouth" from a distance — not a lone ladder.
  */
 export function addCaveEntrance(w: World, dest: WorldKey, seed: number): void {
   seedWorldRng(seed);
   const entrance = w.portals[0];
   const ex = entrance ? entrance.x : (w.w / 2) * TILE;
   const ey = entrance ? entrance.y : (w.h / 2) * TILE;
-  let best: { x: number; y: number } | null = null;
+  const R = 3;
+  // require the whole clearing to sit on land, so the cave mouth isn't jammed
+  // against the coast; among those spots pick the one farthest into the wilds.
+  const landAround = (tx: number, ty: number): boolean => {
+    for (let oy = -R; oy <= R; oy++) {
+      for (let ox = -R; ox <= R; ox++) {
+        if (Math.hypot(ox, oy) > R + 0.3) continue;
+        const nx = tx + ox;
+        const ny = ty + oy;
+        if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h || w.tile[ny][nx] === Tile.Water) return false;
+      }
+    }
+    return true;
+  };
+  let best: { tx: number; ty: number } | null = null;
   let bestD = -1;
-  for (let i = 0; i < 600; i++) {
-    const tx = wrndi(2, w.w - 3);
-    const ty = wrndi(2, w.h - 3);
+  let anyWalkable: { tx: number; ty: number } | null = null;
+  for (let i = 0; i < 1200; i++) {
+    const tx = wrndi(R + 2, w.w - R - 3);
+    const ty = wrndi(R + 2, w.h - R - 3);
     if (w.solid[ty][tx] || w.tile[ty][tx] <= 0) continue;
-    const cx = tx * TILE + TILE / 2;
-    const cy = ty * TILE + TILE / 2;
-    const d = dist(cx, cy, ex, ey);
-    if (d > bestD) { bestD = d; best = { x: cx, y: cy }; }
+    anyWalkable = { tx, ty };
+    if (!landAround(tx, ty)) continue;
+    const d = dist(tx * TILE, ty * TILE, ex, ey);
+    if (d > bestD) { bestD = d; best = { tx, ty }; }
   }
-  const spot = best ?? { x: (w.w / 2) * TILE, y: (w.h / 2) * TILE };
-  w.portals.push({ x: spot.x, y: spot.y, dest, label: "descend into the caverns", style: "ladderDown" });
+  const spot = best ?? anyWalkable ?? { tx: (w.w / 2) | 0, ty: (w.h / 2) | 0 };
+  const cx = spot.tx * TILE + TILE / 2;
+  const cy = spot.ty * TILE + TILE / 2;
+
+  // carve a round stone clearing: walkable Cave tiles, cleared of nodes/decos
+  for (let oy = -R; oy <= R; oy++) {
+    for (let ox = -R; ox <= R; ox++) {
+      const tx = spot.tx + ox;
+      const ty = spot.ty + oy;
+      if (tx < 0 || ty < 0 || tx >= w.w || ty >= w.h) continue;
+      if (Math.hypot(ox, oy) > R + 0.3) continue;
+      if (w.tile[ty][tx] === Tile.Water) continue;
+      w.tile[ty][tx] = Tile.Cave;
+      w.solid[ty][tx] = false;
+    }
+  }
+  const inClearing = (tx: number, ty: number) => Math.hypot(tx - spot.tx, ty - spot.ty) <= R + 0.3;
+  w.trees = w.trees.filter((t) => !inClearing(t.tx, t.ty));
+  w.rocks = w.rocks.filter((r) => !inClearing(r.tx, r.ty));
+  w.herbs = w.herbs.filter((h) => !inClearing(h.tx, h.ty));
+  w.decos = w.decos.filter((d) => !inClearing(d.tx, d.ty));
+
+  // paint the clearing onto the already-baked map canvas so it shows up
+  const m = w.mapCanvas.getContext("2d")!;
+  for (let oy = -R; oy <= R; oy++) {
+    for (let ox = -R; ox <= R; ox++) {
+      if (Math.hypot(ox, oy) > R + 0.3) continue;
+      const tx = spot.tx + ox;
+      const ty = spot.ty + oy;
+      if (tx < 0 || ty < 0 || tx >= w.w || ty >= w.h || w.tile[ty][tx] === Tile.Water) continue;
+      const px = tx * TILE;
+      const py = ty * TILE;
+      const j = ((tx * 7 + ty * 13) % 9) - 4;
+      m.fillStyle = `rgb(${92 + j},${88 + j},${84 + j})`;
+      m.fillRect(px, py, TILE, TILE);
+      m.fillStyle = "rgba(58,54,50,.6)";
+      m.fillRect(px + ((tx * 5) % 12), py + ((ty * 3) % 12), 2, 1);
+    }
+  }
+  // dark descent hole + rocky rim under the ladder
+  m.fillStyle = "#54504a";
+  m.beginPath(); m.ellipse(cx, cy + 1, 12, 9, 0, 0, 6.2832); m.fill();
+  m.fillStyle = "#26241f";
+  m.beginPath(); m.ellipse(cx, cy + 2, 8, 6, 0, 0, 6.2832); m.fill();
+
+  w.portals.push({ x: cx, y: cy, dest, label: "descend into the caverns", style: "ladderDown" });
 }
