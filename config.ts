@@ -27,6 +27,14 @@ export const BAG_SIZE = 16;
 export const MONSTER_RESPAWN_S = 12;
 
 /**
+ * Master monster switch. When `false`, no creatures are placed on the map and
+ * none respawn — the world is walkable and peaceful for free exploration. The
+ * whole combat/AI/respawn machinery stays intact; flip back to `true` to bring
+ * the bestiary straight back with no other changes.
+ */
+export const MONSTERS_ENABLED = false;
+
+/**
  * Wildlands difficulty gradient. Monsters spawn biased by how far they are from
  * the entrance portal (0 = the coast you arrive on, 1 = the farthest reaches),
  * so the weakest creatures ring the entrance and the deadliest lurk in the far

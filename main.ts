@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED } from "./config.ts";
 import { moveEntity, unstick } from "./world/collision.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
@@ -1025,10 +1025,12 @@ function update(dt: number): void {
       hurtPlayer(world, P, rndi(d.dmg[0], d.dmg[1]));
     });
     // respawns
-    for (let i = world.respawns.length - 1; i >= 0; i--) {
-      const r = world.respawns[i];
-      r.t -= dt;
-      if (r.t <= 0) { spawnMonster(world, r.kind); world.respawns.splice(i, 1); }
+    if (MONSTERS_ENABLED) {
+      for (let i = world.respawns.length - 1; i >= 0; i--) {
+        const r = world.respawns[i];
+        r.t -= dt;
+        if (r.t <= 0) { spawnMonster(world, r.kind); world.respawns.splice(i, 1); }
+      }
     }
   }
 
@@ -1180,42 +1182,10 @@ function render(): void {
     }
   }
 
-  // portals — a glowing swirl between islands, a ladder between cave floors
+  // portals (glowing swirl)
   for (const pt of world.portals) {
     const sx = pt.x - cam.x;
     const sy = pt.y - cam.y;
-    if (pt.style === "caveMouth") {
-      // a big, unmistakable cave-mouth landmark: shadow, pulsing ring, sprite
-      const pulse = 0.5 + 0.5 * Math.sin(waveT * 3);
-      vctx.fillStyle = `rgba(20,16,14,0.35)`;
-      vctx.beginPath();
-      vctx.ellipse(sx, sy + 6, 15, 6, 0, 0, 6.2832);
-      vctx.fill();
-      vctx.strokeStyle = `rgba(230,178,90,${0.25 + 0.35 * pulse})`;
-      vctx.lineWidth = 1.5;
-      vctx.beginPath();
-      vctx.ellipse(sx, sy + 2, 13 + pulse * 3, 9 + pulse * 2, 0, 0, 6.2832);
-      vctx.stroke();
-      const cm = SPR.caveMouth;
-      vctx.drawImage(cm, Math.round(sx - cm.width / 2), Math.round(sy - cm.height + 6));
-      continue;
-    }
-    if (pt.style) {
-      const lw = SPR.ladder.width;
-      const lh = SPR.ladder.height;
-      vctx.drawImage(SPR.ladder, Math.round(sx - lw / 2), Math.round(sy - lh / 2));
-      const down = pt.style === "ladderDown";
-      const dir = down ? 1 : -1;
-      const ay = down ? sy + lh / 2 + 3 : sy - lh / 2 - 3;
-      vctx.fillStyle = down ? "#e6b25a" : "#a6e6c4";
-      vctx.beginPath();
-      vctx.moveTo(sx - 3, ay);
-      vctx.lineTo(sx + 3, ay);
-      vctx.lineTo(sx, ay + dir * 3);
-      vctx.closePath();
-      vctx.fill();
-      continue;
-    }
     for (let r = 8; r > 0; r -= 2) {
       const a = 0.15 + 0.12 * Math.sin(waveT * 4 + r);
       vctx.fillStyle = `rgba(150,110,230,${a})`;
