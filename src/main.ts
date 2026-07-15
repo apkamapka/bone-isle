@@ -127,9 +127,23 @@ let hotspots: Hotspot[] = [];
 let itemSlots: ItemSlot[] = [];
 // mouse drag-and-drop of inventory items
 let suppressClick = false;
-let itemDrag: { src: "bag" | "stash" | "ground"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean; gi?: GroundItem } | null = null;
+let itemDrag: { src: "bag" | "stash" | "ground"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean; gi?: GroundItem; touch?: boolean } | null = null;
 /** Pending mobile throw (chosen in the quantity popup): next world tap aims it. */
 let throwPending: { kind: ItemKind; n: number } | null = null;
+
+/** Begin a (not yet active) item drag if (sx,sy) lands on an inventory slot.
+ *  Shared by mouse pointerdown and the touch drag hooks. */
+function probeSlotDrag(sx: number, sy: number, isTouch: boolean): boolean {
+  if (ui.lookMode || ui.split || ui.inspect) return false;
+  for (let i = itemSlots.length - 1; i >= 0; i--) {
+    const it = itemSlots[i];
+    if (sx >= it.x && sx < it.x + it.w && sy >= it.y && sy < it.y + it.h) {
+      itemDrag = { src: it.src, index: it.index, kind: it.kind, n: it.n, sx, sy, active: false, touch: isTouch };
+      return true;
+    }
+  }
+  return false;
+}
 
 // mobile HUD customization (Etap 7): rebind picker + group dragging
 let assignSlot: number | null = null;
@@ -799,7 +813,23 @@ initInput(screen, {
     handleWorldTap(sx, sy);
   },
 });
-if (isTouchDevice()) initTouch(screen, handleWorldTap, overTouchButton);
+if (isTouchDevice()) initTouch(screen, handleWorldTap, overTouchButton, {
+  // finger drag-and-drop from inventory panels: still finger = tap (use/
+  // equip/chooser as before), moving finger = drag with the same drop rules
+  // as the mouse (swap/merge, store, pick up, throw onto the world)
+  probe: (sx, sy) => probeSlotDrag(sx, sy, true),
+  move: (sx, sy) => {
+    if (!itemDrag) return;
+    mouse.sx = sx; mouse.sy = sy;
+    if (!itemDrag.active && Math.hypot(sx - itemDrag.sx, sy - itemDrag.sy) > 8 * scale) itemDrag.active = true;
+  },
+  end: (sx, sy, moved) => {
+    if (!itemDrag) { if (!moved) handleWorldTap(sx, sy); return; }
+    if (itemDrag.active) resolveItemDrop(sx, sy);
+    else if (!moved) handleWorldTap(itemDrag.sx, itemDrag.sy); // a plain tap
+    itemDrag = null;
+  },
+});
 
 // Right-click: suppress the browser's context menu so it never interrupts play.
 screen.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -842,16 +872,12 @@ screen.addEventListener("pointerdown", (e) => {
       }
     }
   }
-  // item drag-and-drop (mouse only; touch uses the quantity chooser)
+  // item drag-and-drop (mouse; touch drags run through the touch.ts hooks)
   if (e.pointerType === "mouse" && e.button === 0 && !ui.lookMode && !ui.split && !ui.inspect) {
-    for (let i = itemSlots.length - 1; i >= 0; i--) {
-      const it = itemSlots[i];
-      if (s.x >= it.x && s.x < it.x + it.w && s.y >= it.y && s.y < it.y + it.h) {
-        itemDrag = { src: it.src, index: it.index, kind: it.kind, n: it.n, sx: s.x, sy: s.y, active: false };
-        suppressClick = true; // the item's click is resolved on release instead
-        try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
-        return;
-      }
+    if (probeSlotDrag(s.x, s.y, false)) {
+      suppressClick = true; // the item's click is resolved on release instead
+      try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+      return;
     }
     // ground items can be grabbed too: drag to another tile to push them
     // around (Tibia-style) or onto the bag panel to pick them up. A plain
@@ -872,7 +898,7 @@ screen.addEventListener("pointerdown", (e) => {
   }
 });
 screen.addEventListener("pointermove", (e) => {
-  if (itemDrag) {
+  if (itemDrag && !itemDrag.touch) {
     const s = toScreen(e);
     mouse.sx = s.x; mouse.sy = s.y;
     if (!itemDrag.active && Math.hypot(s.x - itemDrag.sx, s.y - itemDrag.sy) > 5 * scale) itemDrag.active = true;
@@ -909,7 +935,7 @@ addEventListener("pointerup", (e) => {
     setTimeout(() => { suppressClick = false; }, 0);
     return;
   }
-  if (itemDrag) {
+  if (itemDrag && !itemDrag.touch) {
     const s = toScreen(e as PointerEvent);
     if (itemDrag.active) resolveItemDrop(s.x, s.y);
     else handleWorldTap(itemDrag.sx, itemDrag.sy); // no real drag → treat as a click
@@ -919,7 +945,7 @@ addEventListener("pointerup", (e) => {
   }
   endDrag();
 });
-addEventListener("pointercancel", () => { hudDrag = null; itemDrag = null; suppressClick = false; endDrag(); });
+addEventListener("pointercancel", () => { hudDrag = null; if (itemDrag && !itemDrag.touch) itemDrag = null; suppressClick = false; endDrag(); });
 
 function worldClick(w: Vec): void {
   if (P.dead) return;
@@ -1904,6 +1930,7 @@ function drawAssignPicker(): void {
 function overTouchButton(sx: number, sy: number): boolean {
   if (assignSlot !== null) return true; // rebind picker open — absorb all touches
   if (hudEditing()) return true;        // edit mode — no walking while arranging
+  if (throwPending) return true;        // aiming a throw — the tap must land, not steer
   for (const b of touchButtons) {
     if (sx >= b.x && sx < b.x + b.w && sy >= b.y && sy < b.y + b.h) return true;
   }

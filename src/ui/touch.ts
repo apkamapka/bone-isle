@@ -21,6 +21,18 @@ export function isTouchDevice(): boolean {
   return typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 }
 
+/** Hooks that let the caller run finger drag-and-drop for inventory items.
+ *  `probe` runs at touch-start: returning true claims that touch as a drag
+ *  candidate and DEFERS its tap to touch-end (so a still finger is still a
+ *  tap, but a moving one becomes a drag instead of instantly firing the
+ *  slot's tap action, which is what makes dragging possible at all). */
+export interface TouchDragHooks {
+  probe(sx: number, sy: number): boolean;
+  move(sx: number, sy: number): void;
+  /** Finger lifted. `moved` is false when the touch never travelled — a tap. */
+  end(sx: number, sy: number, moved: boolean): void;
+}
+
 /**
  * Wire touch handlers. A touch that starts on the left ~45% and lower ~65% of
  * the screen drives a floating joystick (its base appears where you press);
@@ -33,9 +45,13 @@ export function initTouch(
   canvas: HTMLCanvasElement,
   onTap: (sx: number, sy: number) => void,
   blocked?: (sx: number, sy: number) => boolean,
+  drag?: TouchDragHooks,
 ): void {
   let joyId: number | null = null;
   let joyStart = { x: 0, y: 0, t: 0, moved: false };
+  let dragId: number | null = null;
+  let dragFrom = { x: 0, y: 0 };
+  let dragMoved = false;
 
   const toDevice = (t: Touch): { x: number; y: number } => {
     const r = canvas.getBoundingClientRect();
@@ -47,6 +63,14 @@ export function initTouch(
   canvas.addEventListener("touchstart", (e) => {
     for (const t of Array.from(e.changedTouches)) {
       const { x, y } = toDevice(t);
+      // an inventory slot under the finger claims this touch as a possible
+      // drag; its tap (use/equip/chooser) fires on release if it never moves
+      if (dragId === null && drag && drag.probe(x, y)) {
+        dragId = t.identifier;
+        dragFrom = { x, y };
+        dragMoved = false;
+        continue;
+      }
       const inJoyZone = x < canvas.width * 0.45 && y > canvas.height * 0.35;
       if (joyId === null && inJoyZone && !(blocked && blocked(x, y))) {
         joyId = t.identifier;
@@ -68,6 +92,12 @@ export function initTouch(
 
   canvas.addEventListener("touchmove", (e) => {
     for (const t of Array.from(e.changedTouches)) {
+      if (t.identifier === dragId && drag) {
+        const { x, y } = toDevice(t);
+        if (Math.hypot(x - dragFrom.x, y - dragFrom.y) > 12) dragMoved = true;
+        drag.move(x, y);
+        continue;
+      }
       if (t.identifier !== joyId) continue;
       const { x, y } = toDevice(t);
       let dx = x - touch.baseX;
@@ -86,6 +116,12 @@ export function initTouch(
 
   const end = (e: TouchEvent): void => {
     for (const t of Array.from(e.changedTouches)) {
+      if (t.identifier === dragId && drag) {
+        const { x, y } = toDevice(t);
+        drag.end(x, y, dragMoved);
+        dragId = null;
+        continue;
+      }
       if (t.identifier === joyId) {
         // a quick, still press in the joystick zone counts as a tap-to-interact
         if (!joyStart.moved && Date.now() - joyStart.t < 250) onTap(joyStart.x, joyStart.y);
