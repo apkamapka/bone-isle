@@ -1,6 +1,6 @@
 /** Monster definitions, danger-band spawning and the wander/chase/attack AI. */
 import { rnd, rndi, wrnd, dist } from "../util.ts";
-import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX } from "../config.ts";
+import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { moveEntity, randomWalkable, lineOfSight, stepAllowed } from "../world/collision.ts";
 import type { World, Monster, MonsterKind } from "../world/types.ts";
@@ -149,6 +149,7 @@ export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y
     wy: 0,
     bob: wrnd(0, 3),
     hurtT: 0,
+    aggroT: 0,
     orbit: wrnd(0, 1) < 0.5 ? 1 : -1,
   });
   return true;
@@ -191,11 +192,15 @@ export function updateMonsters(
   const blockers: { x: number; y: number }[] = [target, ...w.monsters];
   for (const m of w.monsters) {
     m.hurtT = Math.max(0, m.hurtT - dt);
+    m.aggroT = Math.max(0, m.aggroT - dt);
     m.atkCd -= dt;
     const d = dist(m.x, m.y, target.x, target.y);
     // chase only what it can actually see — cave walls break line of sight,
-    // so creatures in the next chamber stay put instead of chasing through rock
-    if (!target.dead && d < 82 && d > 13 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
+    // so creatures in the next chamber stay put instead of chasing through rock.
+    // Sight range covers every bow (+1 tile), and a creature that was HIT stays
+    // aggressive beyond it (aggroT) — plinking arrows never goes unanswered.
+    const provoked = d < MONSTER_AGGRO_RANGE || m.aggroT > 0;
+    if (!target.dead && provoked && d > 13 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
       // Steered chase: try the direct step first; if a body (usually the pack
       // mate in front) blocks it, probe steps at growing angles, preferring
       // the monster's own detour side. The last pair sits just past 90° —

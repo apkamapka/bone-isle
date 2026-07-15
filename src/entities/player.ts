@@ -1,7 +1,6 @@
 /** The player: state, backpack, equipment and derived stats. */
-import { PLAYER_BASE_HP, PLAYER_BASE_SPEED, PLAYER_ATTACK_RATE, expNeeded, CAP_BASE, CAP_PER_LEVEL } from "../config.ts";
+import { PLAYER_BASE_HP, PLAYER_BASE_SPEED, SPEED_PER_LEVEL, PLAYER_ATTACK_RATE, expNeeded, CAP_BASE, CAP_PER_LEVEL } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
-import { moveSpeedBonus } from "../systems/skills.ts";
 import { activeBonus } from "../systems/derived.ts";
 import { emptyBag, emptyEquipment, gearStat, itemWeight, bagWeight, addItem } from "../items.ts";
 import type { Bag, Equipment, ItemKind } from "../items.ts";
@@ -100,9 +99,9 @@ export function refreshDerived(p: Player, bonus: DerivedBonus = activeBonus): vo
   if (p.hp > p.maxhp) p.hp = p.maxhp;
 }
 
-/** Movement speed in px/s, including Speed skill + boots. */
+/** Movement speed in px/s: base + character level (Tibia 8.6 style) + boots. */
 export function playerSpeed(p: Player): number {
-  return PLAYER_BASE_SPEED + moveSpeedBonus() + gearStat(p.eq, "speed");
+  return PLAYER_BASE_SPEED + (p.level - 1) * SPEED_PER_LEVEL + gearStat(p.eq, "speed");
 }
 
 /** Maximum weight (oz) the player can carry in the backpack. Grows with level. */
