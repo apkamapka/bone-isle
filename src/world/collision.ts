@@ -101,6 +101,27 @@ export function moveEntity(w: World, e: Movable, dx: number, dy: number, blocker
 }
 
 /**
+ * Whole-vector step test used by monster steering: is a single step by (dx,dy)
+ * fully allowed — tile-wise (same "never deeper into solids" rule as
+ * moveEntity) AND body-wise (never pushing closer into any listed body)?
+ * Unlike moveEntity's per-axis sliding this checks the exact destination, so
+ * the AI can probe several candidate directions and pick the first clear one.
+ */
+export function stepAllowed(w: World, e: Movable, dx: number, dy: number, blockers?: readonly Movable[]): boolean {
+  const nx = e.x + dx;
+  const ny = e.y + dy;
+  if (feetCorners(w, nx, ny) > feetCorners(w, e.x, e.y)) return false;
+  if (blockers) {
+    for (const b of blockers) {
+      if (b === e) continue;
+      const nd = Math.hypot(nx - b.x, ny - b.y);
+      if (nd < BODY_SEPARATION_PX && nd < Math.hypot(e.x - b.x, e.y - b.y)) return false;
+    }
+  }
+  return true;
+}
+
+/**
  * If an entity is sitting inside a solid tile, teleport it to the nearest open
  * tile centre (spiral search). Returns true if it had to move. Used to rescue
  * a player boxed in by a structure placed on their tile, and on load for old

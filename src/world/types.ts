@@ -128,6 +128,10 @@ export interface Monster {
   wy: number;
   bob: number;
   hurtT: number;
+  /** Preferred detour side (+1/-1) when the direct path to the target is
+   *  body-blocked — half the pack circles left, half right, so they surround
+   *  the player instead of queueing in a single line behind each other. */
+  orbit: 1 | -1;
 }
 
 /** A lootable corpse left behind when a monster dies. */
