@@ -279,6 +279,44 @@ async function main(): Promise<void> {
     ok(sigM(wild2) === sigM(wild3), "populate stays deterministic with spacing rules");
   }
 
+  console.log("surround AI (steering around pack mates):");
+  {
+    const { spawnMonster, updateMonsters } = await import("../src/entities/monsters.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    const arena = worlds.home; // big open grass fields — a clean test arena
+    let cx = -1, cy = -1;
+    outer4: for (let y = 2; y < arena.h - 10; y++) {
+      for (let x = 2; x < arena.w - 10; x++) {
+        let clear = true;
+        for (let j = 0; j < 8 && clear; j++) for (let i = 0; i < 8; i++) {
+          if (arena.solid[y + j][x + i] || arena.tile[y + j][x + i] === 0) { clear = false; break; }
+        }
+        if (clear) { cx = (x + 4) * 16; cy = (y + 4) * 16; break outer4; }
+      }
+    }
+    ok(cx > 0, "found a clear 8x8 arena");
+    arena.monsters.length = 0;
+    for (let i = 0; i < 4; i++) spawnMonster(arena, "rat");
+    // line them up single-file due west of the target — the worst case
+    arena.monsters.forEach((m, i) => {
+      m.x = cx - 40 - i * 11;
+      m.y = cy;
+      m.orbit = i % 2 === 0 ? 1 : -1;
+    });
+    const targetP = { x: cx, y: cy, dead: false };
+    for (let t = 0; t < 480; t++) updateMonsters(arena, 1 / 60, targetP, () => { /* hits ignored */ });
+    const near = arena.monsters.filter((m) => Math.hypot(m.x - cx, m.y - cy) <= 14);
+    ok(near.length === 4, `all 4 reached attack range instead of queueing (${near.length}/4)`);
+    const angles = near.map((m) => Math.atan2(m.y - cy, m.x - cx));
+    let spread = 0;
+    for (let i = 0; i < angles.length; i++) for (let j = i + 1; j < angles.length; j++) {
+      let da = Math.abs(angles[i] - angles[j]);
+      if (da > Math.PI) da = 2 * Math.PI - da;
+      spread = Math.max(spread, da);
+    }
+    ok(spread > 1.5, `they fan out around the target (max angular spread ${spread.toFixed(2)} rad)`);
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
