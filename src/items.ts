@@ -16,7 +16,7 @@ export type ItemKind =
   // ranged: bows (two-handed weapons) + arrows (consumable ammo)
   | "bow" | "longbow" | "arrow" | "boneArrow"
   // gear
-  | "sword" | "ironSword" | "boneSword"
+  | "sword" | "ironSword" | "boneSword" | "marrowBlade"
   | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet";
@@ -40,7 +40,9 @@ export interface ItemDef {
   weight: number;
   slot?: EqSlot;
   gear?: GearStats;
-  /** Consumable effect: hp restored on use (potions, food). */
+  /** Food: eating banks this many seconds of HP regeneration (Tibia-style). */
+  food?: number;
+  /** Consumable effect: hp restored on use (potions). */
   heal?: number;
   /** True for charge-based crystals; each use consumes one from the stack. */
   crystal?: true;
@@ -59,8 +61,8 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   bones:     { name: "Bones",        stack: 9999, value: 2, weight: 8 },
   herb:      { name: "Herb",         stack: 9999, value: 3, weight: 3 },
   silk:      { name: "Spider Silk",  stack: 9999, value: 4, weight: 2 },
-  mushroom:  { name: "Mushroom",     stack: 999, value: 2, weight: 4, heal: 10 },
-  meat:      { name: "Raw Meat",     stack: 999, value: 3, weight: 8, heal: 6 },
+  mushroom:  { name: "Mushroom",     stack: 999, value: 2, weight: 4, food: 60 },
+  meat:      { name: "Raw Meat",     stack: 999, value: 3, weight: 8, food: 180 },
   hpPotion:  { name: "Health Potion", stack: 999, value: 12, weight: 5, heal: 45 },
   healCrystal:   { name: "Life Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
   fireCrystal:   { name: "Fire Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
@@ -74,6 +76,9 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 3 } },
   ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 7 } },
   boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 12 } },
+  // Unique treasure: found only in the chest at the bottom of the Bone
+  // Caverns (-3). Deliberately absent from every shop and every loot table.
+  marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 20 } },
   helmet:    { name: "Iron Helmet",  stack: 1, value: 30, weight: 55, slot: "head",   gear: { def: 2 } },
   armor:     { name: "Plate Armor",  stack: 1, value: 70, weight: 120, slot: "body",  gear: { def: 4 } },
   shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, weight: 60, slot: "shield", gear: { def: 3 } },
@@ -329,6 +334,7 @@ export function itemInfoLines(kind: ItemKind): string[] {
   if (d.slot) lines.push(`Slot: ${d.slot}`);
   if (d.bow) lines.push(`Ranged weapon (two-handed)`, `Attack ${d.bow.power} · Range ${d.bow.range}`);
   if (d.ammo) lines.push(`Ammo · Attack ${d.ammo.dmg}`);
+  if (d.food) lines.push(`Feeds you for ${d.food}s`);
   if (d.gear?.atk) lines.push(`Attack +${d.gear.atk}`);
   if (d.gear?.def) lines.push(`Defense +${d.gear.def}`);
   if (d.gear?.speed) lines.push(`Speed +${d.gear.speed}`);

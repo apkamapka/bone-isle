@@ -45,7 +45,7 @@ export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
   herbalist: {
     greeting: "Potions, herbs, remedies — all freshly picked.",
     entries: shop(
-      ["hpPotion", "healCrystal", "boots"],
+      ["hpPotion", "healCrystal", "boots", "meat", "mushroom"],
       ["herb", "mushroom", "silk", "meat"],
     ),
   },

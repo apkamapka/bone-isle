@@ -37,6 +37,9 @@ export interface Player {
   exp: number;
   expNext: number;
   atkCd: number;
+  /** Seconds of "fed" time left — HP regenerates only while this is > 0.
+   *  Eating food banks more, capped at FED_MAX_S (Tibia's 20 minutes). */
+  fedS: number;
   atkRate: number;
   regen: number;
   dest: Vec | null;
@@ -73,6 +76,7 @@ export function createPlayer(spawn: Vec): Player {
     exp: 0,
     expNext: expNeeded(1),
     atkCd: 0,
+    fedS: 0,
     atkRate: PLAYER_ATTACK_RATE,
     regen: 0,
     dest: null,

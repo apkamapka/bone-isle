@@ -3,7 +3,7 @@ import { TILE, GARDEN_HP_BONUS } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
-import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeChest } from "../gfx/sprites.ts";
+import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeChest, bakeTreasureChest } from "../gfx/sprites.ts";
 import { countAcross, removeAcross } from "../items.ts";
 import { onStructureBuilt } from "./quests.ts";
 import { unstick } from "../world/collision.ts";
@@ -62,6 +62,7 @@ export function costText(cost: Cost): string {
 
 /** Footprint side length in tiles: 1 for `single` structures, else 2. */
 export function footprint(key: string): number {
+  if (key === "treasure") return 1; // world-placed chest, not a buildable
   return STRUCTS[key as StructKey]?.single ? 1 : 2;
 }
 
@@ -148,7 +149,10 @@ export function applyStructureSolidity(home: World): void {
   }
 }
 
+let treasureSpr: HTMLCanvasElement | null = null;
+
 /** Look up the sprite for a placed structure key. */
 export function structSprite(key: string): HTMLCanvasElement {
+  if (key === "treasure") return (treasureSpr ??= bakeTreasureChest());
   return STRUCTS[key as StructKey]?.spr ?? SPR.rock;
 }

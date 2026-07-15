@@ -24,6 +24,15 @@ export const PLAYER_BASE_SPEED = 58;
  * so a level-50 character moves ~42% faster, matching the 8.6 curve.
  */
 export const SPEED_PER_LEVEL = 0.5;
+
+/**
+ * Food & regeneration, Tibia 8.6 style: eating banks "fed" seconds and HP only
+ * regenerates while fed. The bank caps at 20 minutes — trying to eat past it
+ * refuses with "You are full" (exactly the classic rule), so food can't be
+ * hoarded into an infinite buffer.
+ */
+export const FED_MAX_S = 1200;
+export const FED_HP_PER_S = 1;
 /**
  * One swing/shot every 2 seconds — the standard weapon speed of Tibia 8.6.
  * Monsters attack at the same cadence (see MONSTER_DEFS), so a duel is

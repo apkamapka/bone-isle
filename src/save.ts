@@ -26,6 +26,7 @@ interface SaveData {
     x: number; y: number;
     hp: number; maxhp: number;
     gold: number; taskPoints?: number; level: number; exp: number; expNext: number;
+    fedS?: number;
     bag: Bag; eq: Equipment;
   };
   skills: Record<SkillKey, { lv: number; pts: number }>;
@@ -39,6 +40,8 @@ interface SaveData {
   research?: string[];
   tasks?: TaskSave;
   slots?: (SlotAction | null)[];
+  /** One-time treasure chests already opened. */
+  opened?: string[];
 }
 
 export function hasSave(): boolean {
@@ -71,6 +74,7 @@ export function saveGame(g: Game): void {
       x: p.x, y: p.y,
       hp: p.hp, maxhp: p.maxhp,
       gold: p.gold, taskPoints: p.taskPoints, level: p.level, exp: p.exp, expNext: p.expNext,
+      fedS: p.fedS,
       bag: p.bag, eq: p.eq,
     },
     skills: skillDump,
@@ -82,6 +86,7 @@ export function saveGame(g: Game): void {
     research: researchState(),
     tasks: taskState(),
     slots: serializeSlots(),
+    opened: g.opened,
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -171,6 +176,7 @@ export function loadGame(): Game | null {
   const sp = data.player;
   player.x = sp.x; player.y = sp.y;
   player.gold = sp.gold; player.taskPoints = sp.taskPoints ?? 0; player.level = sp.level;
+  player.fedS = sp.fedS ?? 0; // older saves start hungry
   // Recompute expNext from level so older saves adopt the current XP curve.
   player.exp = sp.exp; player.expNext = expNeeded(player.level);
   // rebuild bag/eq defensively (older/partial saves)
@@ -211,6 +217,7 @@ export function loadGame(): Game | null {
     stash: normalizeStash(data.stash),
     zoneFlash: { text: current.name + (current.safe ? "  (safe)" : "  (dangerous)"), t: 2 },
     tpFlash: 0,
+    opened: Array.isArray(data.opened) ? data.opened.filter((x) => typeof x === "string") : [],
   };
 }
 

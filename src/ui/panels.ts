@@ -410,7 +410,7 @@ function drawSkills(p: PanelInput): void {
   const { scale: S, screenW, screenH } = hud;
   const w = 216 * S;
   const rows = Object.keys(skills) as (keyof typeof skills)[];
-  const h = 20 * S + rows.length * 26 * S + 10 * S;
+  const h = 20 * S + rows.length * 26 * S + 22 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "SKILLS");
@@ -425,6 +425,15 @@ function drawSkills(p: PanelInput): void {
     skillBar(p, x + 10 * S, ry + 11 * S, w - 22 * S, 6 * S, s.active ? s.pts / need : 0, s.color);
     if (!s.active) hudText(hud, "(coming soon)", x + 12 * S, ry + 14 * S, 6 * S, "rgba(220,214,190,.45)");
     ry += 26 * S;
+  }
+  // fed status (Tibia-style regeneration): time left, or a nudge to eat
+  const fed = p.player.fedS;
+  if (fed > 0) {
+    const mm = Math.floor(fed / 60);
+    const ss = Math.floor(fed % 60).toString().padStart(2, "0");
+    hudText(hud, `Fed ${mm}:${ss} — regenerating`, x + 10 * S, ry + 4 * S, 7 * S, "#9ad08a");
+  } else {
+    hudText(hud, "Hungry — eat food to regenerate", x + 10 * S, ry + 4 * S, 7 * S, "rgba(224,160,106,.9)");
   }
 }
 
@@ -604,7 +613,7 @@ function drawBag(p: PanelInput): void {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.look(k) });
       } else if (def.slot) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.equipItem(k, idx) });
-      } else if (def.heal || def.crystal) {
+      } else if (def.heal || def.food || def.crystal) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.useItem(k, idx) });
       } else {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.moveStack("bag", idx) });

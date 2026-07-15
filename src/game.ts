@@ -28,6 +28,8 @@ export interface Game {
   stash: Bag;
   zoneFlash: { text: string; t: number };
   tpFlash: number;
+  /** IDs of one-time treasure chests already opened (persisted in the save). */
+  opened: string[];
 }
 
 /**
@@ -81,6 +83,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   const cave3 = makeCaveWorld({
     key: "cave3", name: "Bone Caverns -3", w: 80, h: 64, seed: seed ^ keySalt("cave3"),
     up: "cave2", rocks: 20, bones: 14,
+    treasure: true, // the Marrow Blade chest waits at the very bottom
   });
   return { home, town, wild, cave1, cave2, cave3 };
 }
@@ -119,6 +122,7 @@ export function createGame(seed = WORLD_SEED): Game {
     stash: emptyStash(),
     zoneFlash: { text: "Home Isle  (safe)", t: 2.2 },
     tpFlash: 0,
+    opened: [],
   };
 }
 

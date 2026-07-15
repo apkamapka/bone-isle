@@ -414,6 +414,9 @@ export const SPR = {
   ]),
   swordIron: bake(["...m", "..mm", ".mm.", "mm..", "kk..", "b..."]),
   swordBone: bake(["...w", "..ww", ".ww.", "ww..", "kk..", "c..."]),
+  // Marrow Blade — the unique cave-bottom treasure: pale bone blade with a
+  // silver sheen, gold cross-guard, dark grip. A touch taller than the rest.
+  swordMarrow: bake(["....w", "...wm", "..wm.", ".wm..", "cc...", "k....", "e...."]),
   crystalHeal: bake([
     "..ww..",
     ".wggw.",
@@ -636,12 +639,39 @@ export function bakeChest(): HTMLCanvasElement {
   return c;
 }
 
+/** The cave-treasure chest: the storage chest's silhouette with a golden lid,
+ *  so it reads instantly as "loot", not "stash". */
+export function bakeTreasureChest(): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = 18;
+  c.height = 14;
+  const x = c.getContext("2d")!;
+  // body
+  x.fillStyle = "#5b3b22"; x.fillRect(1, 5, 16, 8);
+  x.fillStyle = "#7a4a28"; x.fillRect(2, 6, 14, 6);
+  // golden lid
+  x.fillStyle = "#c9a23a"; x.fillRect(1, 2, 16, 4);
+  x.fillStyle = "#e3b341"; x.fillRect(2, 2, 14, 2);
+  // iron bands
+  x.fillStyle = "#3a2a1a";
+  x.fillRect(1, 5, 16, 1);
+  x.fillRect(4, 2, 1, 11); x.fillRect(13, 2, 1, 11);
+  // corners
+  x.fillStyle = "#c9c2a8";
+  x.fillRect(1, 12, 1, 1); x.fillRect(16, 12, 1, 1);
+  x.fillRect(1, 2, 1, 1); x.fillRect(16, 2, 1, 1);
+  // lock
+  x.fillStyle = "#efe9d6"; x.fillRect(8, 6, 2, 3);
+  x.fillStyle = "#9a7424"; x.fillRect(8, 7, 2, 1);
+  return c;
+}
+
 /** Icon lookup for item kinds (bag, corpse loot, shops). */
 import type { ItemKind } from "../items.ts";
 const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   wood: SPR.wood, stone: SPR.stoneIcon, bones: SPR.bones, herb: SPR.herb, silk: SPR.silkIcon,
   mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed,
-  sword: SPR.sword, ironSword: SPR.swordIron, boneSword: SPR.swordBone,
+  sword: SPR.sword, ironSword: SPR.swordIron, boneSword: SPR.swordBone, marrowBlade: SPR.swordMarrow,
   helmet: SPR.eqHead, armor: SPR.eqBody, shieldItem: SPR.eqShield,
   legs: SPR.eqLegs, boots: SPR.eqBoots, ring: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
   healCrystal: SPR.crystalHeal, fireCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,

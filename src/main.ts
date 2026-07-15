@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S } from "./config.ts";
 import { moveEntity, unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
@@ -27,7 +27,7 @@ import { createGame, travelTo, respawnAtHome, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
 import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
-import type { Vec, World, Corpse, GroundItem, Npc } from "./world/types.ts";
+import type { Vec, World, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -255,7 +255,17 @@ const act: PanelActions = {
   useItem: (kind: ItemKind) => {
     const def = ITEMS[kind];
     if (def.crystal) { useCrystalItem(kind); return; }
-    // don't waste a potion/food charge when already at full health
+    if (def.food) {
+      // Tibia rule: you can bank at most 20 minutes of fed time — eating past
+      // it is refused (and the food is NOT consumed)
+      if (P.fedS + def.food > FED_MAX_S) { flash("you are full", "#e0a06a"); return; }
+      if (!removeItem(P.bag, kind, 1)) return;
+      P.fedS += def.food;
+      flash(["Munch.", "Gulp.", "Mmmh."][rndi(0, 2)], "#e8dcc0");
+      beep(360, 0.08, "sine", 0.05, 60);
+      return;
+    }
+    // don't waste a potion charge when already at full health
     if (def.heal && P.hp >= P.maxhp) { flash("full hp", "#7dff9e"); return; }
     if (!removeItem(P.bag, kind, 1)) return;
     if (def.heal) { P.hp = Math.min(P.maxhp, P.hp + def.heal); flash(`+${def.heal} hp`, "#7dff9e"); }
@@ -978,6 +988,24 @@ addEventListener("pointerup", (e) => {
 });
 addEventListener("pointercancel", () => { hudDrag = null; if (itemDrag && !itemDrag.touch) itemDrag = null; suppressClick = false; endDrag(); });
 
+/**
+ * One-time treasure chests, Tibia-style: the first open yields the prize with
+ * the classic "You have found a ...", every later open is just an empty chest.
+ * Opened IDs persist in the save. If the reward doesn't fit the bag (weight or
+ * slots), it drops at the player's feet instead of being lost.
+ */
+function openTreasure(s: Structure): void {
+  const id = `treasure:${cw().key}:${s.tx},${s.ty}`;
+  if (game.opened.includes(id)) { flash("the chest is empty", "#bdb59c"); return; }
+  game.opened.push(id);
+  const prize: ItemKind = "marrowBlade";
+  const fits = freeCap(P) >= itemWeight(prize, 1) && addItem(P.bag, prize, 1) === 0;
+  if (!fits) dropToGround(prize, 1);
+  flash(`You have found a ${ITEMS[prize].name}.`, "#ffe9a8");
+  beep(660, 0.18, "sine", 0.06, 220);
+  saveGame(game);
+}
+
 function worldClick(w: Vec): void {
   if (P.dead) return;
   const world = cw();
@@ -1324,6 +1352,13 @@ function update(dt: number): void {
     if (world.ground[i].t <= 0) world.ground.splice(i, 1);
   }
 
+  // fed regeneration (Tibia-style): HP trickles back only while fed. The fed
+  // clock ticks down regardless of HP, exactly like the original.
+  if (P.fedS > 0) {
+    P.fedS = Math.max(0, P.fedS - dt);
+    if (!P.dead && P.hp < P.maxhp) P.hp = Math.min(P.maxhp, P.hp + FED_HP_PER_S * dt);
+  }
+
   // garden aura heal (HP) on home
   for (const s of game.worlds.home.structures) {
     if (s.key === "garden" && cw() === game.worlds.home) {
@@ -1389,6 +1424,7 @@ function resolveTarget(): void {
     if (t.s.key === "forge") openWindow("forge");
     else if (t.s.key === "tower") openWindow("tower");
     else if (t.s.key === "chest") openWindow("stash");
+    else if (t.s.key === "treasure") openTreasure(t.s);
     P.target = null;
   }
 }

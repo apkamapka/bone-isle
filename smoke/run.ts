@@ -399,6 +399,52 @@ async function main(): Promise<void> {
     ok(m.aggroT === MONSTER_AGGRO_HIT_S, "being shot at (hit or miss) provokes the monster");
   }
 
+  console.log("food & regeneration (Tibia fed system):");
+  {
+    const { FED_MAX_S, FED_HP_PER_S } = await import("../src/config.ts");
+    ok((items.ITEMS.meat.food ?? 0) > 0 && items.ITEMS.meat.heal === undefined, "raw meat feeds instead of instant-healing");
+    ok((items.ITEMS.mushroom.food ?? 0) > 0, "mushroom is food too");
+    ok((items.ITEMS.hpPotion.heal ?? 0) > 0 && items.ITEMS.hpPotion.food === undefined, "health potion stays an instant heal");
+    ok(FED_MAX_S === 1200, "fed time caps at 20 minutes like Tibia");
+    ok(FED_HP_PER_S > 0, "being fed regenerates HP");
+    const p = createPlayer({ x: 0, y: 0 });
+    ok(p.fedS === 0, "a fresh character starts hungry");
+  }
+
+  console.log("Marrow Blade treasure (cave -3 chest):");
+  {
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const { SHOPS } = await import("../src/entities/npcs.ts");
+    const blade = items.ITEMS.marrowBlade;
+    ok(blade.gear?.atk === 20 && blade.slot === "weapon", "Marrow Blade is a 20-attack weapon");
+    // unobtainable anywhere but the chest: no loot table and no shop sells it
+    let inLoot = false;
+    for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
+      if (MONSTER_DEFS[k].loot.some((e: { kind: string }) => e.kind === "marrowBlade")) inLoot = true;
+    }
+    ok(!inLoot, "no monster drops the Marrow Blade");
+    let inShop = false;
+    for (const shop of Object.values(SHOPS)) {
+      if (shop && shop.entries.some((e) => e.kind === "marrowBlade" && e.buy > 0)) inShop = true;
+    }
+    ok(!inShop, "no shop sells the Marrow Blade");
+    // the chest sits on the bottom floor, far from the ladder, deterministically
+    const worlds = buildWorlds(WORLD_SEED);
+    const c3 = worlds.cave3;
+    const chest = c3.structures.find((st) => st.key === "treasure");
+    ok(!!chest, "Bone Caverns -3 contains the treasure chest");
+    ok(!worlds.cave1.structures.some((st) => st.key === "treasure")
+      && !worlds.cave2.structures.some((st) => st.key === "treasure"), "upper floors have no chest");
+    if (chest) {
+      ok(c3.solid[chest.ty][chest.tx] === true, "the chest tile is solid (can't stand on it)");
+      const up = c3.portals.find((pt) => pt.style === "ladderUp")!;
+      const dChest = Math.hypot(chest.tx * 16 + 8 - up.x, chest.ty * 16 + 8 - up.y);
+      ok(dChest > 16 * 20, `chest is deep in the cavern (${Math.round(dChest / 16)} tiles from the ladder)`);
+      const again = buildWorlds(WORLD_SEED).cave3.structures.find((st) => st.key === "treasure")!;
+      ok(again.tx === chest.tx && again.ty === chest.ty, "chest position is deterministic from the seed");
+    }
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

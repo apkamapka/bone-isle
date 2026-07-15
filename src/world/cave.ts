@@ -30,6 +30,8 @@ export interface CaveOpts {
   down?: WorldKey;
   rocks?: number;
   bones?: number;
+  /** Place a one-time treasure chest on this floor (the bottom of the caverns). */
+  treasure?: boolean;
 }
 
 /** Count wall cells within Chebyshev radius `r`; out-of-bounds counts as wall. */
@@ -186,6 +188,28 @@ export function makeCaveWorld(opts: CaveOpts): World {
   }
 
   bakeWorldCanvas(w, 0);
+
+  // 7. optional treasure chest — on the floor cell FARTHEST from the up-ladder,
+  // so the whole cavern must be crossed to reach it. Chosen by pure computation
+  // (no RNG draws) and placed after the canvas bake, so adding it never
+  // perturbs the generation stream: old saves regenerate identical floors.
+  if (opts.treasure) {
+    const upLadder = w.portals.find((pt) => pt.style === "ladderUp");
+    const ux = upLadder ? upLadder.x : 0;
+    const uy = upLadder ? upLadder.y : 0;
+    let best: [number, number] | null = null;
+    let bestD = -1;
+    for (const [tx, ty] of region) {
+      if (used.has(ty * W + tx)) continue;
+      const d = dist(tx * TILE + TILE / 2, ty * TILE + TILE / 2, ux, uy);
+      if (d > bestD) { bestD = d; best = [tx, ty]; }
+    }
+    if (best) {
+      const [tx, ty] = best;
+      w.structures.push({ key: "treasure", tx, ty, anim: 0 });
+      solid[ty][tx] = true; // a chest is furniture, not floor
+    }
+  }
   return w;
 }
 
