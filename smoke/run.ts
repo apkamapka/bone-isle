@@ -359,6 +359,46 @@ async function main(): Promise<void> {
     resetSkills();
   }
 
+  console.log("speed from level (no Speed skill — Tibia 8.6):");
+  {
+    const { playerSpeed } = await import("../src/entities/player.ts");
+    const { PLAYER_BASE_SPEED, SPEED_PER_LEVEL } = await import("../src/config.ts");
+    ok(!("speed" in skills), "skills panel no longer contains a Speed skill");
+    const p = createPlayer({ x: 0, y: 0 });
+    ok(playerSpeed(p) === PLAYER_BASE_SPEED, "level 1 moves at base speed");
+    p.level = 50;
+    ok(playerSpeed(p) === PLAYER_BASE_SPEED + 49 * SPEED_PER_LEVEL, "level 50 gains the per-level bonus");
+    const boots = createPlayer({ x: 0, y: 0 });
+    boots.eq.boots = "boots"; // Swift Boots: gear speed +6
+    ok(playerSpeed(boots) === PLAYER_BASE_SPEED + 6, "gear speed bonus still applies on top");
+  }
+
+  console.log("monster aggro (sight covers every bow + hit provokes):");
+  {
+    const { MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HIT_S, TILE } = await import("../src/config.ts");
+    const { playerShoot } = await import("../src/systems/combat.ts");
+    const { spawnMonster } = await import("../src/entities/monsters.ts");
+    // no bow may outrange monster awareness — the whole point of the change
+    let longestBow = 0;
+    for (const k of Object.keys(items.ITEMS) as (keyof typeof items.ITEMS)[]) {
+      const d = items.ITEMS[k] as { bow?: { range: number } };
+      if (d.bow) longestBow = Math.max(longestBow, d.bow.range);
+    }
+    ok(MONSTER_AGGRO_RANGE >= longestBow + TILE, `aggro range ${MONSTER_AGGRO_RANGE} ≥ longest bow ${longestBow} + 1 tile`);
+    // a fresh spawn is calm; an arrow (hit OR miss) provokes it
+    const worlds = buildWorlds(WORLD_SEED);
+    const wild = worlds.wild;
+    ok(spawnMonster(wild, "goblin"), "goblin spawns on the Wildlands");
+    const m = wild.monsters[wild.monsters.length - 1];
+    ok(m.aggroT === 0, "freshly spawned monster starts calm");
+    const p = createPlayer({ x: m.x - 100, y: m.y });
+    p.bag = items.emptyBag();
+    items.addItem(p.bag, "arrow", 10);
+    p.eq.weapon = "bow";
+    playerShoot(wild, p, m, "arrow");
+    ok(m.aggroT === MONSTER_AGGRO_HIT_S, "being shot at (hit or miss) provokes the monster");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
