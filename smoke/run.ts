@@ -317,6 +317,48 @@ async function main(): Promise<void> {
     ok(spread > 1.5, `they fan out around the target (max angular spread ${spread.toFixed(2)} rad)`);
   }
 
+  console.log("Tibia-style combat balance:");
+  {
+    const { rollMeleeDamage, rollDistanceDamage, distanceHitChance, attackPower } = await import("../src/systems/skills.ts");
+    const { PLAYER_ATTACK_RATE, DIST_HITCHANCE_MAX } = await import("../src/config.ts");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    ok(PLAYER_ATTACK_RATE === 2.0, "player swings every 2.0s (Tibia weapon speed)");
+    ok(Object.values(MONSTER_DEFS).every((d) => d.atkRate === 2.0), "every monster attacks every 2.0s — blow for blow");
+    // damage rolls span the whole Tibia range
+    resetSkills();
+    let sawZero = false, sawMax = false, sum = 0;
+    const N = 20000;
+    for (let i = 0; i < N; i++) {
+      const r = rollMeleeDamage(40);
+      if (r === 0) sawZero = true;
+      if (r === 40) sawMax = true;
+      sum += r;
+      if (r < 0 || r > 40) { sawZero = false; break; }
+    }
+    ok(sawZero && sawMax, "melee rolls cover 0 ('poof') through max");
+    ok(Math.abs(sum / N - 20) < 1, `average melee hit ≈ half of max (${(sum / N).toFixed(1)}/40)`);
+    const dr = rollDistanceDamage(50, 10);
+    ok(dr >= 2 && dr <= 50, "distance roll floors at level/5");
+    // accuracy: 60% at skill 10, capped at 90%
+    ok(Math.abs(distanceHitChance() - 0.60) < 1e-9, "bow accuracy 60% at Distance 10");
+    skills.dist.lv = 90;
+    ok(distanceHitChance() === DIST_HITCHANCE_MAX, "…capped at 90% like Tibia bows");
+    resetSkills();
+    // exp pacing: lvl-10 melee char, iron sword, sword skill 20 vs a goblin —
+    // avg dmg = max/2, so time-to-kill lands in Tibia territory
+    skills.sword.lv = 20;
+    const p = createPlayer({ x: 0, y: 0 });
+    p.level = 10;
+    p.eq.weapon = "ironSword";
+    const maxHit = attackPower(p.level, p.eq);
+    const avg = maxHit / 2;
+    const goblin = MONSTER_DEFS.goblin;
+    const swings = Math.ceil(goblin.hp / avg);
+    const ttk = swings * 2.0;
+    ok(ttk >= 8 && ttk <= 30, `lvl-10 goblin kill ≈ ${ttk.toFixed(0)}s (${swings} swings, max hit ${maxHit}) — was ~2-3s before`);
+    resetSkills();
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
