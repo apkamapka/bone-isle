@@ -92,7 +92,7 @@ export interface PanelActions {
   look: (kind: ItemKind) => void;
   toggleLook: () => void;
   openBag: () => void;
-  splitConfirm: (mode: "store" | "take" | "drop") => void;
+  splitConfirm: (mode: "store" | "take" | "drop" | "throw") => void;
   close: (kind: PanelKind) => void;
 }
 
@@ -292,16 +292,20 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   stepBtn(hx, hy, hw, "Half", () => { sp.n = clampN(Math.floor(sp.max / 2) || 1); }); hx += hw + 8 * S;
   stepBtn(hx, hy, hw, "All", () => { sp.n = sp.max; });
 
-  const acts: [string, "store" | "take" | "drop"][] = [];
+  const acts: [string, "store" | "take" | "drop" | "throw"][] = [];
   if (sp.src === "stash") acts.push(["Take", "take"]);
-  else { if (sp.canStore) acts.push(["Store", "store"]); acts.push(["Drop", "drop"]); }
+  else {
+    if (sp.canStore) acts.push(["Store", "store"]);
+    acts.push(["Drop", "drop"]);
+    acts.push(["Throw", "throw"]); // arm a throw: the next map tap is the target
+  }
   acts.push(["Cancel", "drop"]);
   const aw = (w - 20 * S - (acts.length - 1) * 6 * S) / acts.length;
   let ax = x + 10 * S;
   const ay = y + h - 20 * S;
   for (const [lbl, mode] of acts) {
     const isCancel = lbl === "Cancel";
-    const col = isCancel ? "#d08a7a" : lbl === "Drop" ? "#d0a24a" : "#8fd08a";
+    const col = isCancel ? "#d08a7a" : lbl === "Drop" ? "#d0a24a" : lbl === "Throw" ? "#8ab6ff" : "#8fd08a";
     ctx.fillStyle = isCancel ? "rgba(60,30,26,.95)" : "rgba(30,44,30,.95)";
     ctx.fillRect(ax, ay, aw, 15 * S);
     ctx.strokeStyle = col;
