@@ -128,6 +128,10 @@ export interface Monster {
   wy: number;
   bob: number;
   hurtT: number;
+  /** Seconds of forced aggression left after taking a hit — the creature
+   *  chases even beyond its normal sight range (LoS still required), so
+   *  shooting anything always provokes it regardless of bow reach. */
+  aggroT: number;
   /** Preferred detour side (+1/-1) when the direct path to the target is
    *  body-blocked — half the pack circles left, half right, so they surround
    *  the player instead of queueing in a single line behind each other. */
