@@ -67,7 +67,7 @@ export interface UiState {
   /** Item currently shown in the inspect popup, if any. */
   inspect: ItemKind | null;
   /** Quantity chooser for moving/dropping part of a stack. */
-  split: { kind: ItemKind; index: number; src: "bag" | "stash"; max: number; n: number; canStore: boolean } | null;
+  split: { kind: ItemKind; index: number; src: "bag" | "stash"; max: number; n: number; canStore: boolean; at?: { x: number; y: number } } | null;
 }
 
 export interface PanelActions {
@@ -293,7 +293,8 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   stepBtn(hx, hy, hw, "All", () => { sp.n = sp.max; });
 
   const acts: [string, "store" | "take" | "drop" | "throw"][] = [];
-  if (sp.src === "stash") acts.push(["Take", "take"]);
+  if (sp.at) acts.push(["Throw", "throw"]); // target already aimed by the drag
+  else if (sp.src === "stash") acts.push(["Take", "take"]);
   else {
     if (sp.canStore) acts.push(["Store", "store"]);
     acts.push(["Drop", "drop"]);

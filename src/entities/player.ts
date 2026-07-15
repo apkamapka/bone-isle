@@ -4,7 +4,7 @@ import { SPR } from "../gfx/sprites.ts";
 import { activeBonus } from "../systems/derived.ts";
 import { emptyBag, emptyEquipment, gearStat, itemWeight, bagWeight, addItem } from "../items.ts";
 import type { Bag, Equipment, ItemKind } from "../items.ts";
-import type { Vec, Monster, Tree, RockNode, HerbNode, Structure, Corpse, Npc } from "../world/types.ts";
+import type { Vec, Monster, Tree, RockNode, HerbNode, Structure, Corpse, Npc, GroundItem } from "../world/types.ts";
 
 /**
  * What the player is currently auto-acting on. A discriminated union so the
@@ -15,7 +15,8 @@ export type Target =
   | { kind: "dummy"; s: Structure }
   | { kind: "corpse"; c: Corpse }
   | { kind: "npc"; n: Npc }
-  | { kind: "structure"; s: Structure };
+  | { kind: "structure"; s: Structure }
+  | { kind: "ground"; gi: GroundItem };
 
 /** Resource node the player is walking up to and harvesting. */
 export type GatherTask =

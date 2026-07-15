@@ -131,6 +131,24 @@ let itemDrag: { src: "bag" | "stash" | "ground"; index: number; kind: ItemKind; 
 /** Pending mobile throw (chosen in the quantity popup): next world tap aims it. */
 let throwPending: { kind: ItemKind; n: number } | null = null;
 
+/** Begin a (not yet active) drag of a loose ground item under (sx,sy).
+ *  Shared by mouse pointerdown and the touch drag hooks. A plain tap/click
+ *  (release without movement) still resolves as walk-over-and-pick-up. */
+function probeGroundDrag(sx: number, sy: number, isTouch: boolean): boolean {
+  if (P.dead || ui.lookMode || ui.split || ui.inspect) return false;
+  if (pointInOpenPanel(sx, sy) || ui.placing || hudEditing()) return false;
+  const wx = sx / vScale + cam.x;
+  const wy = sy / vScale + cam.y;
+  const world = cw();
+  for (const gi of world.ground) {
+    if (Math.abs(wx - gi.x) < 9 && wy > gi.y - 14 && wy < gi.y + 4) {
+      itemDrag = { src: "ground", index: -1, kind: gi.kind, n: gi.n, sx, sy, active: false, gi, touch: isTouch };
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Begin a (not yet active) item drag if (sx,sy) lands on an inventory slot.
  *  Shared by mouse pointerdown and the touch drag hooks. */
 function probeSlotDrag(sx: number, sy: number, isTouch: boolean): boolean {
@@ -490,7 +508,11 @@ function resolveItemDrop(rx: number, ry: number): void {
   for (let i = itemSlots.length - 1; i >= 0; i--) {
     const it = itemSlots[i];
     if (rx >= it.x && rx < it.x + it.w && ry >= it.y && ry < it.y + it.h) {
-      if (d.src === "ground") { if (d.gi) pickupGround(d.gi); }
+      if (d.src === "ground") {
+        if (!d.gi) return;
+        if (dist(P.x, P.y, d.gi.x, d.gi.y) > THROW_RANGE_PX) { flash("too far away", "#d96a5a"); return; }
+        pickupGround(d.gi);
+      }
       else if (it.src === d.src) swapOrMerge(d.src === "bag" ? P.bag : game.stash, d.index, it.index);
       else if (d.src === "bag") storePartial(d.index, currentN("bag", d.index));
       else takePartial(d.index, currentN("stash", d.index));
@@ -505,15 +527,29 @@ function resolveItemDrop(rx: number, ry: number): void {
     else if (d.src === "ground" && d.gi) {
       const overBag = ui.windows.some((w) => w.kind === "bag" && w.rect &&
         rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h);
-      if (overBag) pickupGround(d.gi);
+      if (overBag) {
+        if (dist(P.x, P.y, d.gi.x, d.gi.y) > THROW_RANGE_PX) { flash("too far away", "#d96a5a"); return; }
+        pickupGround(d.gi);
+      }
     }
     return;
   }
   // dropped on the world → throw it to that spot (Tibia-style)
   const wx = rx / vScale + cam.x;
   const wy = ry / vScale + cam.y;
-  if (d.src === "bag") dropFromBag(d.index, currentN("bag", d.index), wx, wy);
-  else if (d.src === "ground" && d.gi) throwGroundItem(d.gi, wx, wy);
+  if (d.src === "bag") {
+    const n = currentN("bag", d.index);
+    if (n > 1) {
+      // a stack asks how many to throw; the aimed spot rides along in `at`
+      ui.split = { kind: d.kind, index: d.index, src: "bag", max: n, n, canStore: false, at: { x: wx, y: wy } };
+    } else if (n === 1) {
+      dropFromBag(d.index, 1, wx, wy);
+    }
+  } else if (d.src === "ground" && d.gi) {
+    // no telekinesis: pushing loot around requires standing near it
+    if (dist(P.x, P.y, d.gi.x, d.gi.y) > THROW_RANGE_PX) { flash("too far away", "#d96a5a"); return; }
+    throwGroundItem(d.gi, wx, wy);
+  }
 }
 
 /** Open the quantity chooser for a bag/chest slot (or move a single item flat). */
@@ -542,9 +578,12 @@ function splitConfirm(mode: "store" | "take" | "drop" | "throw"): void {
   if (mode === "store") storePartial(sp.index, n);
   else if (mode === "take") takePartial(sp.index, n);
   else if (mode === "throw") {
-    // arm the throw: the NEXT tap on the map is the target tile
-    throwPending = { kind: sp.kind, n };
-    flash("tap the ground to throw", "#8ab6ff");
+    if (sp.at) dropFromBag(sp.index, n, sp.at.x, sp.at.y); // aimed by the drag
+    else {
+      // arm the throw: the NEXT tap on the map is the target tile
+      throwPending = { kind: sp.kind, n };
+      flash("tap the ground to throw", "#8ab6ff");
+    }
   }
   else dropFromBag(sp.index, n);
   ui.split = null;
@@ -817,7 +856,7 @@ if (isTouchDevice()) initTouch(screen, handleWorldTap, overTouchButton, {
   // finger drag-and-drop from inventory panels: still finger = tap (use/
   // equip/chooser as before), moving finger = drag with the same drop rules
   // as the mouse (swap/merge, store, pick up, throw onto the world)
-  probe: (sx, sy) => probeSlotDrag(sx, sy, true),
+  probe: (sx, sy) => probeSlotDrag(sx, sy, true) || probeGroundDrag(sx, sy, true),
   move: (sx, sy) => {
     if (!itemDrag) return;
     mouse.sx = sx; mouse.sy = sy;
@@ -881,19 +920,11 @@ screen.addEventListener("pointerdown", (e) => {
     }
     // ground items can be grabbed too: drag to another tile to push them
     // around (Tibia-style) or onto the bag panel to pick them up. A plain
-    // click (no movement) still picks up, resolved on release as before.
-    if (!P.dead && !pointInOpenPanel(s.x, s.y) && !ui.placing && !hudEditing()) {
-      const wx = s.x / vScale + cam.x;
-      const wy = s.y / vScale + cam.y;
-      const world = cw();
-      for (const gi of world.ground) {
-        if (Math.abs(wx - gi.x) < 9 && wy > gi.y - 14 && wy < gi.y + 4) {
-          itemDrag = { src: "ground", index: -1, kind: gi.kind, n: gi.n, sx: s.x, sy: s.y, active: false, gi };
-          suppressClick = true;
-          try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
-          return;
-        }
-      }
+    // click (no movement) walks over and picks up, resolved on release.
+    if (probeGroundDrag(s.x, s.y, false)) {
+      suppressClick = true;
+      try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+      return;
     }
   }
 });
@@ -964,10 +995,10 @@ function worldClick(w: Vec): void {
       return;
     }
   }
-  // dropped ground items — pick up on click
+  // dropped ground items — walk over and pick up (Tibia-style, no telekinesis)
   for (const gi of world.ground) {
     if (Math.abs(w.x - gi.x) < 9 && w.y > gi.y - 14 && w.y < gi.y + 4) {
-      pickupGround(gi);
+      P.target = { kind: "ground", gi };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
     }
@@ -1053,6 +1084,7 @@ function targetPoint(): Vec | null {
   if (!t) return null;
   if (t.kind === "mob") return { x: t.m.x, y: t.m.y };
   if (t.kind === "corpse") return { x: t.c.x, y: t.c.y };
+  if (t.kind === "ground") return { x: t.gi.x, y: t.gi.y };
   if (t.kind === "npc") return { x: t.n.x, y: t.n.y };
   // structure: stand just below the sprite base (footprint-aware anchor)
   const c = structCenter(t.s);
@@ -1346,6 +1378,9 @@ function resolveTarget(): void {
     }
   } else if (t.kind === "corpse") {
     ui.loot = t.c; openWindow("loot"); P.target = null;
+  } else if (t.kind === "ground") {
+    if (cw().ground.includes(t.gi)) pickupGround(t.gi);
+    P.target = null;
   } else if (t.kind === "npc") {
     if (t.n.key === "taskmaster") { openWindow("tasks"); }
     else { ui.npc = t.n; ui.shopTab = "buy"; openWindow("shop"); }
