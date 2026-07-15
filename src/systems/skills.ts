@@ -4,6 +4,7 @@ import { gearStat, gearStatOf, equippedBow } from "../items.ts";
 import {
   DIST_FACTOR_BASE, DIST_FACTOR_PER, DIST_LEVEL_BONUS,
   MELEE_FIST_ATK, MELEE_FACTOR_BASE, MELEE_FACTOR_PER, MELEE_LEVEL_BONUS,
+  DIST_HITCHANCE_BASE, DIST_HITCHANCE_PER, DIST_HITCHANCE_MAX,
 } from "../config.ts";
 import type { Equipment } from "../items.ts";
 
@@ -109,6 +110,25 @@ export function distancePower(level: number, eq: Equipment, arrowAtk: number): n
   const factor = DIST_FACTOR_BASE + (skills.dist.lv - 10) * DIST_FACTOR_PER;
   return Math.max(1, Math.round(attackValue * factor) + Math.floor(level * DIST_LEVEL_BONUS));
 }
+/**
+ * Tibia 8.6 damage rolls. attackPower/distancePower above compute the MAX hit;
+ * an actual melee blow is uniform 0..max (a 0 is the classic whiffed "poof"),
+ * and an arrow that passes its accuracy roll lands for uniform lvl/5..max.
+ * Average damage is therefore about HALF the max — the single biggest reason
+ * leveling now paces like the real game instead of every hit being a crit.
+ */
+export function rollMeleeDamage(max: number): number {
+  return Math.floor(Math.random() * (max + 1));
+}
+export function rollDistanceDamage(max: number, level: number): number {
+  const min = Math.min(max, Math.floor(level / 5));
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+/** Accuracy of one bow shot at the current Distance Fighting skill. */
+export function distanceHitChance(): number {
+  return Math.min(DIST_HITCHANCE_MAX, DIST_HITCHANCE_BASE + (skills.dist.lv - 10) * DIST_HITCHANCE_PER);
+}
+
 /**
  * Shield-side defense: the Shielding skill plus the def of what's in your
  * hands (shield, or a weapon's def bonus). This part only applies to hits
