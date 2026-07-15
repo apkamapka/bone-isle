@@ -2,7 +2,7 @@
 import { rnd, rndi, wrnd, dist } from "../util.ts";
 import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
-import { moveEntity, randomWalkable, lineOfSight } from "../world/collision.ts";
+import { moveEntity, randomWalkable, lineOfSight, stepAllowed } from "../world/collision.ts";
 import type { World, Monster, MonsterKind } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
 
@@ -142,6 +142,7 @@ export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y
     wy: 0,
     bob: wrnd(0, 3),
     hurtT: 0,
+    orbit: wrnd(0, 1) < 0.5 ? 1 : -1,
   });
   return true;
 }
@@ -188,9 +189,31 @@ export function updateMonsters(
     // chase only what it can actually see — cave walls break line of sight,
     // so creatures in the next chamber stay put instead of chasing through rock
     if (!target.dead && d < 82 && d > 13 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
-      const vx = (target.x - m.x) / d;
-      const vy = (target.y - m.y) / d;
-      moveEntity(w, m, vx * m.speed * dt, vy * m.speed * dt, blockers);
+      // Steered chase: try the direct step first; if a body (usually the pack
+      // mate in front) blocks it, probe steps at growing angles, preferring
+      // the monster's own detour side. The last pair sits just past 90° —
+      // a purely tangential orbit around the blocker (any smaller angle still
+      // closes the distance to it and is rightly refused by body blocking).
+      // Half the pack circles left, half right, so instead of queueing in a
+      // line they flow around each other and SURROUND the target, exactly the
+      // Tibia feel. In a walled corridor every angle is blocked and they
+      // correctly queue single-file.
+      const base = Math.atan2(target.y - m.y, target.x - m.x);
+      const step = m.speed * dt;
+      const s = m.orbit;
+      let stepped = false;
+      for (const a of [0, 0.5 * s, -0.5 * s, 0.95 * s, -0.95 * s, 1.35 * s, -1.35 * s, 1.7 * s, -1.7 * s]) {
+        const dx = Math.cos(base + a) * step;
+        const dy = Math.sin(base + a) * step;
+        if (stepAllowed(w, m, dx, dy, blockers)) {
+          m.x += dx;
+          m.y += dy;
+          stepped = true;
+          break;
+        }
+      }
+      // axis-sliding fallback keeps the old wall-hugging behaviour near terrain
+      if (!stepped) moveEntity(w, m, Math.cos(base) * step, Math.sin(base) * step, blockers);
       m.bob += dt * 9;
     } else if (!target.dead && d <= 13) {
       if (m.atkCd <= 0) {
@@ -218,14 +241,19 @@ export function updateMonsters(
   }
 
   // positional correction: resolve any residual overlaps (spawns, portals,
-  // legacy saves) by pushing pairs apart until they respect the body distance
+  // legacy saves) by pushing pairs apart. Between monsters the soft target is
+  // slightly WIDER than the hard body distance — this evens out the attack
+  // ring (opening gaps newcomers can join through) and frees a chaser wedged
+  // in the "V" between two ring members, where every step would otherwise be
+  // body-blocked.
+  const SOFT = BODY_SEPARATION_PX + 1.5;
   for (let i = 0; i < w.monsters.length; i++) {
     for (let j = i + 1; j < w.monsters.length; j++) {
       const a = w.monsters[i];
       const b = w.monsters[j];
       const d = dist(a.x, a.y, b.x, b.y);
-      if (d < BODY_SEPARATION_PX && d > 0.01) {
-        const push = (BODY_SEPARATION_PX - d) * 2.5 * dt + 2 * dt;
+      if (d < SOFT && d > 0.01) {
+        const push = (SOFT - d) * 2.5 * dt + 2 * dt;
         const px = (a.x - b.x) / d;
         const py = (a.y - b.y) / d;
         moveEntity(w, a, px * push, py * push);
