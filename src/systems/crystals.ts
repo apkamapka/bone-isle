@@ -8,7 +8,7 @@ import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
 import { bagCount, removeItem } from "../items.ts";
-import { HEAL_CRYSTAL_BASE, FIRE_CRYSTAL_DMG, FIRE_CRYSTAL_RANGE, SPEAR_CRYSTAL_DMG, SPEAR_CRYSTAL_RANGE } from "../config.ts";
+import { HEAL_CRYSTAL_BASE, FIRE_CRYSTAL_DMG, FIRE_CRYSTAL_RANGE, SPEAR_CRYSTAL_DMG, SPEAR_CRYSTAL_RANGE, MONSTER_AGGRO_HIT_S } from "../config.ts";
 import { killMonster } from "./combat.ts";
 import type { Player } from "../entities/player.ts";
 import type { World } from "../world/types.ts";
@@ -67,6 +67,7 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
     removeItem(p.bag, kind, 1);
     best.hp -= off.dmg;
     best.hurtT = 0.2;
+    best.aggroT = MONSTER_AGGRO_HIT_S;
     const col = kind === "spearCrystal" ? "#ffce4a" : "#ff8a3a";
     addFloat(world, best.x, best.y - 16, String(off.dmg), col);
     beep(kind === "spearCrystal" ? 240 : 300, 0.2, "sawtooth", 0.06, -140);

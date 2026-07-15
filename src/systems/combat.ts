@@ -1,6 +1,6 @@
 /** Combat: player hits monsters, monsters hit the player, corpses & leveling. */
 import {
-  expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED,
+  expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED, MONSTER_AGGRO_HIT_S,
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
   SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S,
 } from "../config.ts";
@@ -32,6 +32,7 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
   }
   m.hp -= dmg;
   m.hurtT = 0.15;
+  m.aggroT = MONSTER_AGGRO_HIT_S;
   addFloat(world, m.x, m.y - 16, String(dmg), "#ffe27a");
   beep(160, 0.07, "square", 0.05);
   if (m.hp <= 0) {
@@ -60,6 +61,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   // accuracy first, Tibia-style: the arrow is spent either way, a miss trains
   // Distance once, a hit trains it DOUBLE (as in the real skill system)
   if (Math.random() > distanceHitChance()) {
+    m.aggroT = MONSTER_AGGRO_HIT_S; // even a whizzing miss provokes the target
     addFloat(world, m.x, m.y - 16, "miss", "#9aa0a8");
     addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
     return false;
@@ -67,6 +69,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   const dmg = rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg), p.level);
   m.hp -= dmg;
   m.hurtT = 0.15;
+  m.aggroT = MONSTER_AGGRO_HIT_S;
   addFloat(world, m.x, m.y - 16, String(dmg), "#bfe08a");
   addSkillXp("dist", 2, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
   if (m.hp <= 0) {

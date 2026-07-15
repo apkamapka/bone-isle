@@ -8,7 +8,7 @@ import {
 } from "../config.ts";
 import type { Equipment } from "../items.ts";
 
-export type SkillKey = "sword" | "shield" | "dist" | "speed";
+export type SkillKey = "sword" | "shield" | "dist";
 
 export interface Skill {
   name: string;
@@ -28,8 +28,10 @@ export const skills: Record<SkillKey, Skill> = {
   sword: { name: "Sword Fighting", lv: 10, pts: 0, color: "#e1483b", active: true, offset: 10, factor: 1.1, base: 50 },
   shield: { name: "Shielding", lv: 10, pts: 0, color: "#5aa1e8", active: true, offset: 10, factor: 1.1, base: 50 },
   dist: { name: "Distance Fighting", lv: 10, pts: 0, color: "#6fc06a", active: true, offset: 10, factor: 1.1, base: 50 },
-  speed: { name: "Speed", lv: 10, pts: 0, color: "#e3b341", active: true, offset: 10, factor: 1.4, base: 40 },
 };
+// NOTE: there is deliberately no "speed" skill — Tibia 8.6 has none. Movement
+// speed grows with the character LEVEL instead (SPEED_PER_LEVEL in config.ts,
+// applied in playerSpeed()). A "speed" entry in old saves is simply ignored.
 
 /**
  * Tries/points needed to advance from the skill's current level to the next.
@@ -148,6 +150,4 @@ export function defenseArmor(eq: Equipment): number {
 export function defensePower(eq: Equipment): number {
   return defenseShield(eq) + defenseArmor(eq);
 }
-export function moveSpeedBonus(): number {
-  return (skills.speed.lv - 10) * 2;
-}
+
