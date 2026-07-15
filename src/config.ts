@@ -17,7 +17,22 @@ export const VIEW_H = 320;
 
 /** Player balance. */
 export const PLAYER_BASE_SPEED = 58;
-export const PLAYER_ATTACK_RATE = 0.7;
+/**
+ * One swing/shot every 2 seconds — the standard weapon speed of Tibia 8.6.
+ * Monsters attack at the same cadence (see MONSTER_DEFS), so a duel is
+ * blow-for-blow instead of the player attacking three times per monster hit.
+ */
+export const PLAYER_ATTACK_RATE = 2.0;
+
+/**
+ * Distance-weapon accuracy, Tibia-style: every shot first rolls to hit.
+ * Chance = BASE + (Distance skill − 10) · PER, capped at MAX (bows in Tibia
+ * top out at 90% and only around skill ~70+). A miss still spends the arrow
+ * and still trains the skill — but a HIT trains it double, as in Tibia.
+ */
+export const DIST_HITCHANCE_BASE = 0.60;
+export const DIST_HITCHANCE_PER = 0.005;
+export const DIST_HITCHANCE_MAX = 0.90;
 export const PLAYER_BASE_HP = 100;
 
 /** Backpack capacity (slots). */
