@@ -18,6 +18,13 @@ export const VIEW_H = 320;
 /** Player balance. */
 export const PLAYER_BASE_SPEED = 58;
 /**
+ * Movement speed gained per character level above 1 (px/s). Tibia 8.6 has no
+ * Speed skill — haste comes from the character level itself (+2 speed/level on
+ * a 220 base, ~0.9%). Scaled to our 58 px/s base that's ~0.5 px/s per level,
+ * so a level-50 character moves ~42% faster, matching the 8.6 curve.
+ */
+export const SPEED_PER_LEVEL = 0.5;
+/**
  * One swing/shot every 2 seconds — the standard weapon speed of Tibia 8.6.
  * Monsters attack at the same cadence (see MONSTER_DEFS), so a duel is
  * blow-for-blow instead of the player attacking three times per monster hit.
@@ -145,6 +152,29 @@ export const MELEE_LEVEL_BONUS = 0.5;   // + level * this (rounded down)
 
 /** Dropped items linger on the ground this long (seconds) before vanishing. */
 export const GROUND_DESPAWN_S = 3600;
+
+/**
+ * How far (px) an item can be thrown from the backpack onto the ground —
+ * about 7½ tiles, roughly the Tibia feel of tossing loot across the screen.
+ * Throws also require line of sight and a walkable landing tile; an illegal
+ * target slides back along the throw line toward the player until legal.
+ */
+export const THROW_RANGE_PX = 120;
+
+/**
+ * Monster sight range (px). Deliberately one tile MORE than the longest bow
+ * in the game (Hunter's Bow, 150 px), so no bow can shoot from outside every
+ * creature's awareness — archers can still kite, but never plink at a target
+ * that won't react. If a longer weapon is ever added, bump this with it (the
+ * aggro-on-hit timer below is the safety net if it's forgotten).
+ */
+export const MONSTER_AGGRO_RANGE = 166;
+/**
+ * After taking a hit a monster stays aggressive for this many seconds even
+ * beyond its sight range (line of sight still required) — shooting something
+ * always makes it come for you, Tibia-style, regardless of bow reach.
+ */
+export const MONSTER_AGGRO_HIT_S = 6;
 
 /** Chest storage capacity (slots). */
 export const STASH_SIZE = 20;

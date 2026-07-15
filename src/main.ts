@@ -1,6 +1,6 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S } from "./config.ts";
-import { moveEntity, unstick } from "./world/collision.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX } from "./config.ts";
+import { moveEntity, unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
@@ -127,7 +127,9 @@ let hotspots: Hotspot[] = [];
 let itemSlots: ItemSlot[] = [];
 // mouse drag-and-drop of inventory items
 let suppressClick = false;
-let itemDrag: { src: "bag" | "stash"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean } | null = null;
+let itemDrag: { src: "bag" | "stash" | "ground"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean; gi?: GroundItem } | null = null;
+/** Pending mobile throw (chosen in the quantity popup): next world tap aims it. */
+let throwPending: { kind: ItemKind; n: number } | null = null;
 
 // mobile HUD customization (Etap 7): rebind picker + group dragging
 let assignSlot: number | null = null;
@@ -309,7 +311,7 @@ const act: PanelActions = {
     else if (r === "heavy") flash("too heavy", "#e0a06a");
   },
   moveStack: (src: "bag" | "stash", index: number) => { openMoveChooser(src, index); },
-  splitConfirm: (mode: "store" | "take" | "drop") => { splitConfirm(mode); },
+  splitConfirm: (mode: "store" | "take" | "drop" | "throw") => { splitConfirm(mode); },
   look: (kind: ItemKind) => { ui.inspect = kind; },
   toggleLook: () => { ui.lookMode = !ui.lookMode; if (!ui.lookMode) ui.inspect = null; },
   openBag: () => { openWindow("bag"); },
@@ -332,18 +334,69 @@ function storePartial(index: number, n: number): void {
   beep(360, 0.06, "sine", 0.04);
 }
 
-/** Drop an item stack onto the ground at the player's feet (Tibia-style). */
-function dropToGround(kind: ItemKind, n: number): void {
+/**
+ * Where a throw aimed at (tx,ty) actually lands. The target is clamped to
+ * THROW_RANGE_PX from the player, snapped to the tile centre, then — if that
+ * tile is solid or out of sight — slides back along the throw line toward the
+ * player half a tile at a time until it's legal (Tibia does the same: an item
+ * thrown at a wall falls at its foot). Worst case it lands at your feet.
+ */
+function resolveThrowTarget(tx: number, ty: number): { x: number; y: number } {
+  const world = cw();
+  let dx = tx - P.x;
+  let dy = ty - P.y;
+  const d = Math.hypot(dx, dy);
+  if (d > THROW_RANGE_PX) { dx *= THROW_RANGE_PX / d; dy *= THROW_RANGE_PX / d; }
+  const steps = Math.ceil(Math.hypot(dx, dy) / (TILE / 2));
+  for (let i = steps; i >= 1; i--) {
+    const px = P.x + dx * (i / steps);
+    const py = P.y + dy * (i / steps);
+    // snap to the tile centre so thrown loot sits tidily on the grid
+    const cx = Math.floor(px / TILE) * TILE + TILE / 2;
+    const cy = Math.floor(py / TILE) * TILE + TILE / 2;
+    if (!blockedAt(world, cx, cy) && lineOfSight(world, P.x, P.y, cx, cy)) return { x: cx, y: cy };
+  }
+  return { x: P.x, y: P.y + 2 };
+}
+
+/** Drop an item stack onto the ground — at the player's feet, or thrown to a
+ *  target spot (Tibia-style) when (tx,ty) is given. */
+function dropToGround(kind: ItemKind, n: number, tx?: number, ty?: number): void {
   if (n <= 0) return;
   const world = cw();
-  const jitter = () => (Math.random() - 0.5) * 8;
-  const gx = P.x + jitter();
-  const gy = P.y + 2 + jitter();
+  let gx: number;
+  let gy: number;
+  if (tx !== undefined && ty !== undefined) {
+    const t = resolveThrowTarget(tx, ty);
+    gx = t.x; gy = t.y;
+  } else {
+    const jitter = () => (Math.random() - 0.5) * 8;
+    gx = P.x + jitter();
+    gy = P.y + 2 + jitter();
+  }
   // merge into a very close stack of the same kind to avoid clutter
   const near = world.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 7);
   if (near) near.n += n;
   else world.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
   flash(`dropped ${n} ${ITEMS[kind].name}`, "#cfa86a");
+  beep(200, 0.06, "sine", 0.04, -60);
+}
+
+/** Move an already-dropped ground stack to another spot (drag-throw). Same
+ *  legality rules as a bag throw; merges into a near stack at the landing. */
+function throwGroundItem(gi: GroundItem, tx: number, ty: number): void {
+  const world = cw();
+  if (!world.ground.includes(gi)) return;
+  const t = resolveThrowTarget(tx, ty);
+  const near = world.ground.find((g) => g !== gi && g.kind === gi.kind && Math.hypot(g.x - t.x, g.y - t.y) < 7);
+  if (near) {
+    near.n += gi.n;
+    const idx = world.ground.indexOf(gi);
+    if (idx >= 0) world.ground.splice(idx, 1);
+  } else {
+    gi.x = t.x;
+    gi.y = t.y;
+  }
   beep(200, 0.06, "sine", 0.04, -60);
 }
 
@@ -382,14 +435,14 @@ function takePartial(index: number, n: number): void {
 }
 
 /** Drop up to `n` of bag slot `index` on the ground. */
-function dropFromBag(index: number, n: number): void {
+function dropFromBag(index: number, n: number, tx?: number, ty?: number): void {
   const slot = P.bag[index];
   if (!slot) return;
   const take = Math.min(n, slot.n);
   slot.n -= take;
   if (slot.n <= 0) P.bag[index] = null;
   compactBag(P.bag);
-  dropToGround(slot.kind, take);
+  dropToGround(slot.kind, take, tx, ty);
 }
 
 type Slots = (({ kind: ItemKind; n: number }) | null)[];
@@ -409,7 +462,8 @@ function swapOrMerge(arr: Slots, from: number, to: number): void {
     arr[from] = b; arr[to] = a;
   }
 }
-const currentN = (src: "bag" | "stash", index: number): number => {
+const currentN = (src: "bag" | "stash" | "ground", index: number): number => {
+  if (src === "ground") return itemDrag?.gi?.n ?? 0;
   const s = (src === "bag" ? P.bag : game.stash)[index];
   return s ? s.n : 0;
 };
@@ -422,21 +476,30 @@ function resolveItemDrop(rx: number, ry: number): void {
   for (let i = itemSlots.length - 1; i >= 0; i--) {
     const it = itemSlots[i];
     if (rx >= it.x && rx < it.x + it.w && ry >= it.y && ry < it.y + it.h) {
-      if (it.src === d.src) swapOrMerge(d.src === "bag" ? P.bag : game.stash, d.index, it.index);
+      if (d.src === "ground") { if (d.gi) pickupGround(d.gi); }
+      else if (it.src === d.src) swapOrMerge(d.src === "bag" ? P.bag : game.stash, d.index, it.index);
       else if (d.src === "bag") storePartial(d.index, currentN("bag", d.index));
       else takePartial(d.index, currentN("stash", d.index));
       return;
     }
   }
-  // dropped on an open panel (chest window → store), otherwise cancel
+  // dropped on an open panel (chest window → store, bag panel → pick up), else cancel
   if (pointInOpenPanel(rx, ry)) {
     const overStash = ui.windows.some((w) => w.kind === "stash" && w.rect &&
       rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h);
     if (overStash && d.src === "bag") storePartial(d.index, currentN("bag", d.index));
+    else if (d.src === "ground" && d.gi) {
+      const overBag = ui.windows.some((w) => w.kind === "bag" && w.rect &&
+        rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h);
+      if (overBag) pickupGround(d.gi);
+    }
     return;
   }
-  // dropped on the world → drop to the ground (backpack items only)
-  if (d.src === "bag") dropFromBag(d.index, currentN("bag", d.index));
+  // dropped on the world → throw it to that spot (Tibia-style)
+  const wx = rx / vScale + cam.x;
+  const wy = ry / vScale + cam.y;
+  if (d.src === "bag") dropFromBag(d.index, currentN("bag", d.index), wx, wy);
+  else if (d.src === "ground" && d.gi) throwGroundItem(d.gi, wx, wy);
 }
 
 /** Open the quantity chooser for a bag/chest slot (or move a single item flat). */
@@ -444,16 +507,18 @@ function openMoveChooser(src: "bag" | "stash", index: number): void {
   const slot = src === "bag" ? P.bag[index] : game.stash[index];
   if (!slot) return;
   const canStore = ui.windows.some((w) => w.kind === "stash");
-  // one item, single obvious action → skip the chooser
+  // one item, single obvious action → skip the chooser. On touch a bag item
+  // still opens it, because Drop vs Throw is a real choice there (no mouse
+  // drag exists to aim a throw with).
   if (slot.n <= 1) {
     if (src === "stash") { takePartial(index, 1); return; }
     if (canStore) { storePartial(index, 1); return; }
-    dropFromBag(index, 1); return;
+    if (!touchUI) { dropFromBag(index, 1); return; }
   }
   ui.split = { kind: slot.kind, index, src, max: slot.n, n: slot.n, canStore };
 }
 
-function splitConfirm(mode: "store" | "take" | "drop"): void {
+function splitConfirm(mode: "store" | "take" | "drop" | "throw"): void {
   const sp = ui.split;
   if (!sp) return;
   // the chest window may have auto-closed (walked out of range) while the
@@ -462,6 +527,11 @@ function splitConfirm(mode: "store" | "take" | "drop"): void {
   const n = Math.max(1, Math.min(sp.max, sp.n));
   if (mode === "store") storePartial(sp.index, n);
   else if (mode === "take") takePartial(sp.index, n);
+  else if (mode === "throw") {
+    // arm the throw: the NEXT tap on the map is the target tile
+    throwPending = { kind: sp.kind, n };
+    flash("tap the ground to throw", "#8ab6ff");
+  }
   else dropFromBag(sp.index, n);
   ui.split = null;
 }
@@ -658,6 +728,14 @@ function handleWorldTap(sx: number, sy: number): void {
   // doesn't walk the player; panels stay open (Tibia-style) until you close them.
   if (pointInOpenPanel(sx, sy)) return;
   const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
+  // an armed throw (mobile quantity chooser) aims at this tap and resolves it
+  if (throwPending) {
+    const t = throwPending;
+    throwPending = null;
+    const idx = P.bag.findIndex((s) => s !== null && s.kind === t.kind);
+    if (idx >= 0) dropFromBag(idx, t.n, w.x, w.y);
+    return;
+  }
   if (ui.placing) {
     if (cw() !== game.worlds.home) {
       flash("you can only build on Home Isle", "#e0a06a");
@@ -690,6 +768,7 @@ initInput(screen, {
     flash(ui.lookMode ? "look mode on" : "look mode off", "#8ab6ff");
   },
   onEscape: () => {
+    if (throwPending) { throwPending = null; flash("throw cancelled", "#8ab6ff"); return; }
     if (assignSlot !== null) { assignSlot = null; return; }
     if (ui.split) { ui.split = null; return; }
     if (ui.inspect) { ui.inspect = null; return; }
@@ -772,6 +851,22 @@ screen.addEventListener("pointerdown", (e) => {
         suppressClick = true; // the item's click is resolved on release instead
         try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
         return;
+      }
+    }
+    // ground items can be grabbed too: drag to another tile to push them
+    // around (Tibia-style) or onto the bag panel to pick them up. A plain
+    // click (no movement) still picks up, resolved on release as before.
+    if (!P.dead && !pointInOpenPanel(s.x, s.y) && !ui.placing && !hudEditing()) {
+      const wx = s.x / vScale + cam.x;
+      const wy = s.y / vScale + cam.y;
+      const world = cw();
+      for (const gi of world.ground) {
+        if (Math.abs(wx - gi.x) < 9 && wy > gi.y - 14 && wy < gi.y + 4) {
+          itemDrag = { src: "ground", index: -1, kind: gi.kind, n: gi.n, sx: s.x, sy: s.y, active: false, gi };
+          suppressClick = true;
+          try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+          return;
+        }
       }
     }
   }
