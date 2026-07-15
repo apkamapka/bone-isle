@@ -32,7 +32,25 @@ export const MONSTER_RESPAWN_S = 12;
  * whole combat/AI/respawn machinery stays intact; flip back to `true` to bring
  * the bestiary straight back with no other changes.
  */
-export const MONSTERS_ENABLED = false;
+export const MONSTERS_ENABLED = true;
+
+/**
+ * Body blocking (Tibia's "one creature per square", adapted to free pixel
+ * movement): no two creatures — player included — may come closer than this
+ * many pixels centre-to-centre. Creatures physically block each other and the
+ * player, so only ~6 melee bodies fit around you, narrow cave corridors are
+ * real chokepoints, and getting cornered is genuinely dangerous.
+ */
+export const BODY_SEPARATION_PX = 11;
+
+/**
+ * Shielding cap, straight from Tibia: your shield blocks at most this many
+ * attackers per combat round (window below) — hits from any further attackers
+ * bypass the shield entirely and are reduced by worn armor only. This is what
+ * makes a swarm dangerous no matter how high your Shielding skill is.
+ */
+export const SHIELD_BLOCK_MAX = 2;
+export const SHIELD_BLOCK_WINDOW_S = 2;
 
 /**
  * Wildlands difficulty gradient. Monsters spawn biased by how far they are from

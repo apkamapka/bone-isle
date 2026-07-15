@@ -3,6 +3,7 @@ import { rndi } from "../util.ts";
 import {
   expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED,
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
+  SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S,
 } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
@@ -10,7 +11,7 @@ import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
 import { ITEMS, removeItem, emptyBag } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
 import { structCenter } from "./building.ts";
-import { addSkillXp, applySkillDeathLoss, attackPower, defensePower, distancePower } from "./skills.ts";
+import { addSkillXp, applySkillDeathLoss, attackPower, defenseShield, defenseArmor, distancePower } from "./skills.ts";
 import type { ItemKind } from "../items.ts";
 import { onMonsterKilled } from "./quests.ts";
 import { onTaskKill } from "./tasks.ts";
@@ -189,13 +190,34 @@ export function applyDeathPenalty(world: World, p: Player): void {
   refreshDerived(p);
 }
 
+/**
+ * Rolling record of when the shield engaged a hit. Only SHIELD_BLOCK_MAX hits
+ * per SHIELD_BLOCK_WINDOW_S get shield defense (Tibia's "your shield can only
+ * block two creatures"); any further hit inside the window bypasses the shield
+ * and is reduced by worn armor alone. Module state — resets naturally as the
+ * window slides, and explicitly via resetShieldWindow (tests, respawn).
+ */
+let shieldBlockTimes: number[] = [];
+
+export function resetShieldWindow(): void {
+  shieldBlockTimes = [];
+}
+
 /** Apply raw damage to the player. Returns true if this killed them. */
 export function hurtPlayer(world: World, p: Player, raw: number): boolean {
   if (p.dead) return false;
-  const dmg = Math.max(1, raw - defensePower(p.eq));
+  const now = performance.now() / 1000;
+  shieldBlockTimes = shieldBlockTimes.filter((t) => now - t < SHIELD_BLOCK_WINDOW_S);
+  const blocked = shieldBlockTimes.length < SHIELD_BLOCK_MAX;
+  if (blocked) shieldBlockTimes.push(now);
+  const def = blocked ? defenseShield(p.eq) + defenseArmor(p.eq) : defenseArmor(p.eq);
+  const dmg = Math.max(1, raw - def);
   p.hp -= dmg;
-  addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
-  addFloat(world, p.x, p.y - 18, `-${dmg}`, "#ff6a5e");
+  // Shielding trains only on hits the shield actually engaged — more than
+  // SHIELD_BLOCK_MAX attackers won't train it faster, exactly like Tibia.
+  if (blocked) addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+  // pierced hits (past the shield cap) glow hotter so a swarm reads as danger
+  addFloat(world, p.x, p.y - 18, `-${dmg}`, blocked ? "#ff6a5e" : "#ff9e3a");
   beep(90, 0.1, "sawtooth", 0.05);
   if (p.hp <= 0) {
     p.hp = 0;
@@ -204,6 +226,7 @@ export function hurtPlayer(world: World, p: Player, raw: number): boolean {
     p.target = null;
     p.dest = null;
     p.gather = null;
+    resetShieldWindow();
     applyDeathPenalty(world, p);
     beep(120, 0.5, "sawtooth", 0.07, -90);
     return true;

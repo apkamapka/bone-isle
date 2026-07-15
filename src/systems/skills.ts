@@ -1,6 +1,6 @@
 /** Tibia-style skills: levels that climb as you use them, plus gear bonuses. */
 import { beep } from "../audio.ts";
-import { gearStat, equippedBow } from "../items.ts";
+import { gearStat, gearStatOf, equippedBow } from "../items.ts";
 import {
   DIST_FACTOR_BASE, DIST_FACTOR_PER, DIST_LEVEL_BONUS,
   MELEE_FIST_ATK, MELEE_FACTOR_BASE, MELEE_FACTOR_PER, MELEE_LEVEL_BONUS,
@@ -109,8 +109,24 @@ export function distancePower(level: number, eq: Equipment, arrowAtk: number): n
   const factor = DIST_FACTOR_BASE + (skills.dist.lv - 10) * DIST_FACTOR_PER;
   return Math.max(1, Math.round(attackValue * factor) + Math.floor(level * DIST_LEVEL_BONUS));
 }
+/**
+ * Shield-side defense: the Shielding skill plus the def of what's in your
+ * hands (shield, or a weapon's def bonus). This part only applies to hits
+ * your shield actually engages — at most SHIELD_BLOCK_MAX attackers per round.
+ */
+export function defenseShield(eq: Equipment): number {
+  return Math.floor((skills.shield.lv - 10) / 2) + gearStatOf(eq, "def", ["shield", "weapon"]);
+}
+
+/** Armor-side defense: worn pieces (helmet, armor, legs, boots, jewellery).
+ *  Always applies, to every hit, no matter how many creatures are on you. */
+export function defenseArmor(eq: Equipment): number {
+  return gearStatOf(eq, "def", ["head", "body", "legs", "boots", "ring", "amulet"]);
+}
+
+/** Full defense (shield + armor) — what a blocked hit is reduced by. */
 export function defensePower(eq: Equipment): number {
-  return Math.floor((skills.shield.lv - 10) / 2) + gearStat(eq, "def");
+  return defenseShield(eq) + defenseArmor(eq);
 }
 export function moveSpeedBonus(): number {
   return (skills.speed.lv - 10) * 2;

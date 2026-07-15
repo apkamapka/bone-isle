@@ -1,6 +1,6 @@
 /** Monster definitions, danger-band spawning and the wander/chase/attack AI. */
 import { rnd, rndi, wrnd, dist } from "../util.ts";
-import { WILD_ENTRANCE_SAFE_PX } from "../config.ts";
+import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { moveEntity, randomWalkable, lineOfSight } from "../world/collision.ts";
 import type { World, Monster, MonsterKind } from "../world/types.ts";
@@ -169,6 +169,8 @@ export function updateMonsters(
   target: AttackTarget,
   onHit: (m: Monster) => void,
 ): void {
+  // every creature body-blocks every other one, and the player blocks them all
+  const blockers: { x: number; y: number }[] = [target, ...w.monsters];
   for (const m of w.monsters) {
     m.hurtT = Math.max(0, m.hurtT - dt);
     m.atkCd -= dt;
@@ -178,7 +180,7 @@ export function updateMonsters(
     if (!target.dead && d < 82 && d > 13 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
       const vx = (target.x - m.x) / d;
       const vy = (target.y - m.y) / d;
-      moveEntity(w, m, vx * m.speed * dt, vy * m.speed * dt);
+      moveEntity(w, m, vx * m.speed * dt, vy * m.speed * dt, blockers);
       m.bob += dt * 9;
     } else if (!target.dead && d <= 13) {
       if (m.atkCd <= 0) {
@@ -199,24 +201,33 @@ export function updateMonsters(
         }
       }
       if (m.wx || m.wy) {
-        moveEntity(w, m, m.wx * m.speed * 0.5 * dt, m.wy * m.speed * 0.5 * dt);
+        moveEntity(w, m, m.wx * m.speed * 0.5 * dt, m.wy * m.speed * 0.5 * dt, blockers);
         m.bob += dt * 6;
       }
     }
   }
 
-  // gentle separation so monsters don't stack on one tile
+  // positional correction: resolve any residual overlaps (spawns, portals,
+  // legacy saves) by pushing pairs apart until they respect the body distance
   for (let i = 0; i < w.monsters.length; i++) {
     for (let j = i + 1; j < w.monsters.length; j++) {
       const a = w.monsters[i];
       const b = w.monsters[j];
       const d = dist(a.x, a.y, b.x, b.y);
-      if (d < 8 && d > 0.01) {
+      if (d < BODY_SEPARATION_PX && d > 0.01) {
+        const push = (BODY_SEPARATION_PX - d) * 2.5 * dt + 2 * dt;
         const px = (a.x - b.x) / d;
         const py = (a.y - b.y) / d;
-        moveEntity(w, a, px * 8 * dt, py * 8 * dt);
-        moveEntity(w, b, -px * 8 * dt, -py * 8 * dt);
+        moveEntity(w, a, px * push, py * push);
+        moveEntity(w, b, -px * push, -py * push);
       }
+    }
+    // …and never let a creature rest on top of the player
+    const m = w.monsters[i];
+    const dp = dist(m.x, m.y, target.x, target.y);
+    if (dp < BODY_SEPARATION_PX && dp > 0.01) {
+      const push = (BODY_SEPARATION_PX - dp) * 3 * dt + 2 * dt;
+      moveEntity(w, m, ((m.x - target.x) / dp) * push, ((m.y - target.y) / dp) * push);
     }
   }
 }

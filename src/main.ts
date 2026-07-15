@@ -1082,14 +1082,14 @@ function update(dt: number): void {
     if (!kiting) P.target = null; // melee movement still drops the target
     const len = Math.hypot(ax.dx, ax.dy) || 1;
     const sp = playerSpeed(P);
-    moveEntity(world, P, (ax.dx / len) * sp * dt, (ax.dy / len) * sp * dt);
+    moveEntity(world, P, (ax.dx / len) * sp * dt, (ax.dy / len) * sp * dt, world.monsters);
     if (ax.dx) P.face = ax.dx < 0 ? -1 : 1;
   } else if (P.dest) {
     const d = dist(P.x, P.y, P.dest.x, P.dest.y);
     if (d < 3) P.dest = null;
     else {
       const sp = playerSpeed(P);
-      moveEntity(world, P, ((P.dest.x - P.x) / d) * sp * dt, ((P.dest.y - P.y) / d) * sp * dt);
+      moveEntity(world, P, ((P.dest.x - P.x) / d) * sp * dt, ((P.dest.y - P.y) / d) * sp * dt, world.monsters);
       if (P.dest.x < P.x) P.face = -1; else P.face = 1;
     }
   } else if (P.target && !kiting) {
@@ -1101,7 +1101,7 @@ function update(dt: number): void {
       if (P.target.kind === "dummy" || P.target.kind === "mob") reach = mode.reach;
       if (d > reach) {
         const sp = playerSpeed(P);
-        moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt);
+        moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt, world.monsters);
         if (tp.x < P.x) P.face = -1; else P.face = 1;
       } else {
         resolveTarget();
@@ -1114,7 +1114,7 @@ function update(dt: number): void {
       const d = dist(P.x, P.y, tp.x, tp.y);
       if (d > mode.reach) {
         const sp = playerSpeed(P);
-        moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt);
+        moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt, world.monsters);
         if (tp.x < P.x) P.face = -1; else P.face = 1;
       }
     }
@@ -1124,7 +1124,7 @@ function update(dt: number): void {
       const d = dist(P.x, P.y, gp.x, gp.y);
       if (d > 17) {
         const sp = playerSpeed(P);
-        moveEntity(world, P, ((gp.x - P.x) / d) * sp * dt, ((gp.y - P.y) / d) * sp * dt);
+        moveEntity(world, P, ((gp.x - P.x) / d) * sp * dt, ((gp.y - P.y) / d) * sp * dt, world.monsters);
         if (gp.x < P.x) P.face = -1; else P.face = 1;
       } else if (P.atkCd <= 0 && P.gather) {
         gatherTick(world, P, P.gather, (t) => flash(t, "#ffe9a8"));

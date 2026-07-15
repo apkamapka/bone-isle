@@ -172,6 +172,62 @@ async function main(): Promise<void> {
     ok(DEATH_PENALTY_LEVEL === 10, "penalty threshold is level 10");
   }
 
+  console.log("body blocking (one creature per 'square'):");
+  {
+    const { moveEntity } = await import("../src/world/collision.ts");
+    const { BODY_SEPARATION_PX } = await import("../src/config.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    const home = worlds.home;
+    // open spot on grass
+    let ox = 0, oy = 0;
+    outer3: for (let y = 4; y < home.h - 4; y++) {
+      for (let x = 4; x < home.w - 4; x++) {
+        if (!home.solid[y][x] && home.tile[y][x] > 0
+          && !home.solid[y][x + 1] && home.tile[y][x + 1] > 0
+          && !home.solid[y][x + 2] && home.tile[y][x + 2] > 0) { ox = x * 16 + 8; oy = y * 16 + 8; break outer3; }
+      }
+    }
+    ok(ox > 0, "found an open 3-tile strip");
+    const mover = { x: ox, y: oy };
+    const wall = { x: ox + BODY_SEPARATION_PX + 4, y: oy };
+    // walking toward the body stops at the separation distance
+    for (let i = 0; i < 60; i++) moveEntity(home, mover, 1, 0, [wall]);
+    const gap = Math.hypot(mover.x - wall.x, mover.y - wall.y);
+    ok(gap >= BODY_SEPARATION_PX - 0.001, `blocked at body distance (gap ${gap.toFixed(1)}px)`);
+    // …but an overlapping entity can always walk OUT (escape rule)
+    const stuck = { x: wall.x - 2, y: wall.y };
+    moveEntity(home, stuck, -3, 0, [wall]);
+    ok(stuck.x === wall.x - 5, "overlapping body may move away, never locks");
+    moveEntity(home, stuck, +3, 0, [wall]);
+    ok(stuck.x === wall.x - 5, "…and still can't push back INTO the body");
+  }
+
+  console.log("shield block cap (max 2 attackers per round):");
+  {
+    const { hurtPlayer, resetShieldWindow } = await import("../src/systems/combat.ts");
+    const { defenseShield, defenseArmor } = await import("../src/systems/skills.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    resetSkills();
+    resetShieldWindow();
+    const p = createPlayer({ x: 200, y: 200 });
+    p.level = 1; // no death-drop side effects
+    p.maxhp = 1000; p.hp = 1000;
+    p.eq.shield = "shieldItem"; // def 3 (shield side)
+    p.eq.body = "armor";        // def 4 (armor side)
+    ok(defenseShield(p.eq) === 3 && defenseArmor(p.eq) === 4, "defense split: shield 3 / armor 4");
+    // three hits in one round, raw 20: first two blocked (20-7=13), third pierces (20-4=16)
+    hurtPlayer(worlds.home, p, 20);
+    hurtPlayer(worlds.home, p, 20);
+    hurtPlayer(worlds.home, p, 20);
+    ok(p.hp === 1000 - 13 - 13 - 16, `3rd attacker bypasses the shield (hp ${p.hp})`);
+    ok(skills.shield.pts === 2, "shielding trained only by the 2 blocked hits");
+    resetShieldWindow();
+    hurtPlayer(worlds.home, p, 20);
+    ok(p.hp === 1000 - 13 - 13 - 16 - 13, "new round: shield engages again");
+    resetShieldWindow();
+    resetSkills();
+  }
+
   console.log("Amulet of Loss recipe (gold cost):");
   {
     const r = items.RECIPES.find((x) => x.out === "aolAmulet")!;

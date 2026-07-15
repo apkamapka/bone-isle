@@ -238,6 +238,17 @@ export function gearStat(eq: Equipment, key: keyof GearStats): number {
   return v;
 }
 
+/** Like gearStat, but summed over the given slots only. Lets combat split
+ *  defense into its shield part (blockable) and its armor part (always on). */
+export function gearStatOf(eq: Equipment, key: keyof GearStats, slots: readonly EqSlot[]): number {
+  let v = 0;
+  for (const slot of slots) {
+    const k = eq[slot];
+    if (k) v += ITEMS[k].gear?.[key] ?? 0;
+  }
+  return v;
+}
+
 /** Forge crafting recipes. */
 export interface Recipe {
   out: ItemKind;

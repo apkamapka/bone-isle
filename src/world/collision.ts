@@ -1,5 +1,5 @@
 /** Tile collision and movement helpers operating on a World grid. */
-import { TILE } from "../config.ts";
+import { TILE, BODY_SEPARATION_PX } from "../config.ts";
 import { wrndi } from "../util.ts";
 import { Tile } from "./types.ts";
 import type { World, Vec, Portal } from "./types.ts";
@@ -67,19 +67,36 @@ export function feetBlocked(w: World, px: number, py: number): boolean {
  * clear, OR when it reduces how much the feet overlap solid tiles — so an entity
  * that ended up inside a wall (e.g. a house built on its tile) can always walk
  * back out, but can't walk deeper into one.
+ *
+ * `blockers` adds Tibia-style body blocking: the move is also refused if it
+ * would bring the entity closer than BODY_SEPARATION_PX to any listed body
+ * (the entity itself is skipped). Moves that INCREASE the distance to an
+ * already-overlapping body are always allowed, so nothing can get stuck fused
+ * together — overlaps resolve, they never lock.
  */
-export function moveEntity(w: World, e: Movable, dx: number, dy: number): void {
+export function moveEntity(w: World, e: Movable, dx: number, dy: number, blockers?: readonly Movable[]): void {
+  const bodyBlocked = (nx: number, ny: number): boolean => {
+    if (!blockers) return false;
+    for (const b of blockers) {
+      if (b === e) continue;
+      const nd = Math.hypot(nx - b.x, ny - b.y);
+      if (nd >= BODY_SEPARATION_PX) continue;
+      const cur = Math.hypot(e.x - b.x, e.y - b.y);
+      if (nd < cur) return true; // refuses only moves that push INTO the body
+    }
+    return false;
+  };
   if (dx !== 0) {
     const cur = feetCorners(w, e.x, e.y);
     const nb = feetCorners(w, e.x + dx, e.y);
     // when clear (cur=0) this requires nb=0 as before; when embedded it just
     // forbids going *deeper*, so a trapped entity can always escape any direction
-    if (nb <= cur) e.x += dx;
+    if (nb <= cur && !bodyBlocked(e.x + dx, e.y)) e.x += dx;
   }
   if (dy !== 0) {
     const cur = feetCorners(w, e.x, e.y);
     const nb = feetCorners(w, e.x, e.y + dy);
-    if (nb <= cur) e.y += dy;
+    if (nb <= cur && !bodyBlocked(e.x, e.y + dy)) e.y += dy;
   }
 }
 
