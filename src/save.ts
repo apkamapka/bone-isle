@@ -1,10 +1,11 @@
 /** localStorage persistence: full game snapshot keyed by a single slot. */
 import { buildWorlds, populateAll, type Game } from "./game.ts";
-import { WORLD_SEED } from "./config.ts";
+import { WORLD_SEED, GROUND_DESPAWN_S } from "./config.ts";
 import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn, feetBlocked } from "./world/collision.ts";
-import { applyStructureSolidity, structureBonuses } from "./systems/building.ts";
+import { applyStructureSolidity, structureBonuses, canPlaceAt, STRUCTS } from "./systems/building.ts";
+import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
 import { serializeSlots, loadSlots, type SlotAction } from "./systems/actions.ts";
@@ -13,7 +14,7 @@ import { skills, type SkillKey } from "./systems/skills.ts";
 import { quests } from "./systems/quests.ts";
 import { emptyBag, emptyStash, emptyEquipment, ITEMS } from "./items.ts";
 import type { Bag, Equipment, ItemKind } from "./items.ts";
-import type { WorldKey, Structure } from "./world/types.ts";
+import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
 
 const KEY = "bone-isle-save-v2";
 
@@ -30,6 +31,10 @@ interface SaveData {
   skills: Record<SkillKey, { lv: number; pts: number }>;
   quests: { id: string; progress: number; done: boolean; claimed: boolean }[];
   structures: Record<WorldKey, Structure[]>;
+  /** Items lying on the ground, per world (incl. a death-dropped backpack). */
+  ground?: Partial<Record<WorldKey, GroundItem[]>>;
+  /** Lootable corpses per world — notably the player's own body after death. */
+  corpses?: Partial<Record<WorldKey, Corpse[]>>;
   stash?: Bag;
   research?: string[];
   tasks?: TaskSave;
@@ -51,8 +56,12 @@ export function saveGame(g: Game): void {
     skillDump[k] = { lv: skills[k].lv, pts: skills[k].pts };
   });
   const structDump = {} as SaveData["structures"];
+  const groundDump: SaveData["ground"] = {};
+  const corpseDump: SaveData["corpses"] = {};
   (Object.keys(g.worlds) as WorldKey[]).forEach((k) => {
     structDump[k] = g.worlds[k].structures;
+    if (g.worlds[k].ground.length) groundDump[k] = g.worlds[k].ground;
+    if (g.worlds[k].corpses.length) corpseDump[k] = g.worlds[k].corpses;
   });
   const data: SaveData = {
     v: 2,
@@ -67,6 +76,8 @@ export function saveGame(g: Game): void {
     skills: skillDump,
     quests: quests.map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
     structures: structDump,
+    ground: groundDump,
+    corpses: corpseDump,
     stash: g.stash,
     research: researchState(),
     tasks: taskState(),
@@ -111,26 +122,46 @@ export function loadGame(): Game | null {
         .filter((s) => s.key !== "library")
         .map((s) => ({ ...s }));
     }
+    // Restore ground items + corpses (defensively — items validated by kind).
+    const gr = data.ground?.[k];
+    if (Array.isArray(gr)) {
+      worlds[k].ground = gr
+        .filter((gi) => validItem(gi) && typeof gi.x === "number" && typeof gi.y === "number")
+        .map((gi) => ({ kind: gi.kind, n: gi.n, x: gi.x, y: gi.y, t: typeof gi.t === "number" ? gi.t : GROUND_DESPAWN_S }));
+    }
+    const cs = data.corpses?.[k];
+    if (Array.isArray(cs)) {
+      worlds[k].corpses = cs
+        .filter((c) => c && typeof c.x === "number" && typeof c.y === "number" && Array.isArray(c.items))
+        .map((c) => ({
+          name: typeof c.name === "string" ? c.name : "corpse",
+          x: c.x, y: c.y,
+          items: c.items.map(validItem).filter((it): it is NonNullable<ReturnType<typeof validItem>> => it !== null),
+          gold: typeof c.gold === "number" ? Math.max(0, c.gold) : 0,
+          t: typeof c.t === "number" ? c.t : 60,
+        }));
+    }
   });
 
-  // Migration: Home Isle is now a hand-authored map, so structures saved with
-  // old procedural build-pad coordinates may no longer sit on any pad. Relocate
-  // ONLY those orphans onto free authored pads; a structure already standing on
-  // an authored pad keeps its place (otherwise every load would reshuffle fresh
-  // placements onto pads by array order).
-  const homeSpots = worlds.home.buildSpots;
-  const onPad = (tx: number, ty: number): boolean =>
-    homeSpots.some((b) => b.tx === tx && b.ty === ty);
-  const taken = new Set<string>(
-    worlds.home.structures.filter((s) => onPad(s.tx, s.ty)).map((s) => `${s.tx},${s.ty}`),
-  );
+  // Migration: structures from very old saves (procedural Home Isle) may sit
+  // on tiles that are no longer valid (water, trees, overlaps). Any structure
+  // whose footprint is invalid on the current map slides to the nearest clear
+  // spot (spiral search); valid placements are left exactly where they are.
   for (const s of worlds.home.structures) {
-    if (onPad(s.tx, s.ty)) continue; // already on an authored pad — leave it
-    const spot = homeSpots.find((b) => !taken.has(`${b.tx},${b.ty}`));
-    if (spot) {
-      s.tx = spot.tx;
-      s.ty = spot.ty;
-      taken.add(`${spot.tx},${spot.ty}`);
+    const key = s.key as StructKey;
+    if (!STRUCTS[key]) continue;
+    if (canPlaceAt(worlds.home, key, s.tx, s.ty, s)) continue;
+    outer: for (let r = 1; r < 24; r++) {
+      for (let oy = -r; oy <= r; oy++) {
+        for (let ox = -r; ox <= r; ox++) {
+          if (Math.max(Math.abs(ox), Math.abs(oy)) !== r) continue; // ring only
+          if (canPlaceAt(worlds.home, key, s.tx + ox, s.ty + oy, s)) {
+            s.tx += ox;
+            s.ty += oy;
+            break outer;
+          }
+        }
+      }
     }
   }
 

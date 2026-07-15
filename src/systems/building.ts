@@ -1,14 +1,16 @@
-/** Building system: structure catalog, affordability, placement. */
+/** Building system: structure catalog, affordability, free-form placement. */
 import { TILE, GARDEN_HP_BONUS } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
+import { dist } from "../util.ts";
 import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeChest } from "../gfx/sprites.ts";
 import { countAcross, removeAcross } from "../items.ts";
 import { onStructureBuilt } from "./quests.ts";
 import { unstick } from "../world/collision.ts";
+import { Tile } from "../world/types.ts";
 import type { ItemKind, Bag } from "../items.ts";
 import type { Player } from "../entities/player.ts";
-import type { World } from "../world/types.ts";
+import type { World, Structure } from "../world/types.ts";
 
 /** Which bag items a structure costs. */
 export type Cost = Partial<Record<ItemKind, number>>;
@@ -58,52 +60,91 @@ export function costText(cost: Cost): string {
   return (Object.entries(cost) as [string, number][]).map(([k, v]) => `${v} ${k}`).join(" + ");
 }
 
+/** Footprint side length in tiles: 1 for `single` structures, else 2. */
+export function footprint(key: string): number {
+  return STRUCTS[key as StructKey]?.single ? 1 : 2;
+}
+
+/** Visual anchor of a placed structure: centre + sprite-base Y (world px). */
+export function structCenter(s: Structure): { x: number; y: number; baseY: number } {
+  const n = footprint(s.key);
+  return {
+    x: s.tx * TILE + (n * TILE) / 2,
+    y: s.ty * TILE + (n * TILE) / 2,
+    baseY: s.ty * TILE + n * TILE,
+  };
+}
+
 /**
- * Try to place `key` at world pixel (wx,wy) on the home world. Returns true
- * if a structure was placed (cost paid, pad consumed, solidity applied).
+ * Free-form placement check: can `key` stand with its top-left tile at
+ * (tx,ty)? Every footprint tile must be clear grass (no water/sand/walls, no
+ * trees/rocks via solidity, no herb patches or baked decor underneath), the
+ * spot must keep clear of portals' stone rings, and it can't overlap any
+ * existing structure. `ignore` lets save-migration validate a structure
+ * against the others without tripping over itself.
+ */
+export function canPlaceAt(home: World, key: StructKey, tx: number, ty: number, ignore?: Structure): boolean {
+  const n = footprint(key);
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const x = tx + i;
+      const y = ty + j;
+      if (x < 1 || y < 1 || x >= home.w - 1 || y >= home.h - 1) return false;
+      if (home.tile[y][x] !== Tile.Grass) return false;
+      if (home.solid[y][x]) return false;
+      if (home.herbs.some((hb) => hb.tx === x && hb.ty === y)) return false;
+      if (home.decos.some((d) => d.tx === x && d.ty === y)) return false;
+    }
+  }
+  const cx = (tx + n / 2) * TILE;
+  const cy = (ty + n / 2) * TILE;
+  for (const pt of home.portals) {
+    if (dist(pt.x, pt.y, cx, cy) < 22 + n * 8) return false;
+  }
+  for (const s of home.structures) {
+    if (s === ignore) continue;
+    const m = footprint(s.key);
+    if (tx < s.tx + m && s.tx < tx + n && ty < s.ty + m && s.ty < ty + n) return false;
+  }
+  return true;
+}
+
+/** Apply a structure's footprint to the solidity grid. */
+function markSolid(home: World, key: string, tx: number, ty: number): void {
+  const def = STRUCTS[key as StructKey];
+  if (!def?.solid) return;
+  const n = footprint(key);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) home.solid[ty + j][tx + i] = true;
+}
+
+/**
+ * Try to place `key` with its footprint centred on world pixel (wx,wy),
+ * anywhere on Home Isle the ground allows — no fixed build pads. Returns true
+ * if the structure was placed (cost paid, solidity applied).
  */
 export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy: number, stash?: Bag): boolean {
-  const tx = Math.floor(wx / TILE);
-  const ty = Math.floor(wy / TILE);
-  const spot = home.buildSpots.find((s) => !s.built && tx >= s.tx && tx < s.tx + 2 && ty >= s.ty && ty < s.ty + 2);
-  if (!spot) return false;
   const def = STRUCTS[key];
+  const n = def.single ? 1 : 2;
+  const tx = Math.round(wx / TILE - n / 2);
+  const ty = Math.round(wy / TILE - n / 2);
+  if (!canPlaceAt(home, key, tx, ty)) return false;
   if (!canAfford(p.bag, def.cost, stash)) return false;
 
   payCost(p.bag, def.cost, stash);
-  spot.built = key;
-  home.structures.push({ key, tx: spot.tx, ty: spot.ty, anim: Math.random() * 6, hurtT: 0 });
-
-  if (def.solid) {
-    if (def.single) {
-      home.solid[spot.ty][spot.tx] = true;
-    } else {
-      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) home.solid[spot.ty + j][spot.tx + i] = true;
-    }
-  }
+  home.structures.push({ key, tx, ty, anim: Math.random() * 6, hurtT: 0 });
+  markSolid(home, key, tx, ty);
   unstick(home, p); // if you built on the tile you were standing on, step out of it
-  onStructureBuilt(key, (t) => addFloat(home, spot.tx * TILE + TILE, spot.ty * TILE - 8, t, "#ffe9a8"));
-  addFloat(home, spot.tx * TILE + TILE, spot.ty * TILE, `${def.name} built!`, "#ffe27a");
+  onStructureBuilt(key, (t) => addFloat(home, tx * TILE + TILE, ty * TILE - 8, t, "#ffe9a8"));
+  addFloat(home, tx * TILE + TILE, ty * TILE, `${def.name} built!`, "#ffe27a");
   beep(330, 0.1, "triangle", 0.06);
   return true;
 }
 
-/** Rebuild solidity + pad state from saved structures (used on load). */
+/** Rebuild solidity from saved structures (used on load). */
 export function applyStructureSolidity(home: World): void {
   for (const s of home.structures) {
-    const def = STRUCTS[s.key as StructKey];
-    if (!def) continue;
-    // Reconcile the pad's built flag first, regardless of solidity — otherwise a
-    // non-solid structure (e.g. a Garden) would load with its pad still marked
-    // free, letting a second structure be stacked on top of it.
-    const spot = home.buildSpots.find((b) => b.tx === s.tx && b.ty === s.ty);
-    if (spot) spot.built = s.key;
-    if (!def.solid) continue;
-    if (def.single) {
-      home.solid[s.ty][s.tx] = true;
-    } else {
-      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) home.solid[s.ty + j][s.tx + i] = true;
-    }
+    if (!STRUCTS[s.key as StructKey]) continue;
+    markSolid(home, s.key, s.tx, s.ty);
   }
 }
 

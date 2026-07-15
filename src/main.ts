@@ -7,7 +7,7 @@ import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/playe
 import { updateMonsters, MONSTER_DEFS, spawnMonster } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost } from "./systems/building.ts";
+import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost, structCenter, canPlaceAt } from "./systems/building.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { useCrystal } from "./systems/crystals.ts";
 import { actionSlots, setSlot, BINDABLE_CRYSTALS } from "./systems/actions.ts";
@@ -59,6 +59,8 @@ let VH = VIEW_H;
 let vScale = 2;
 let scale = 2;
 let touchUI = false;
+/** True on a desktop-sized layout — panels render smaller there. */
+let desktopUI = false;
 
 const DESIGN_W = 480; // reference width the HUD is authored against
 const DESIGN_H = 320; // reference height — on wide desktops this caps HUD/panel size so tall panels fit
@@ -72,6 +74,7 @@ function resize(): void {
   // Desktop zooms out so tiles aren't giant and much more of the island is
   // visible (a classic top-down feel) — HUD sizing is unaffected.
   const mobile = isTouchDevice() || Math.min(cw, ch) < 620;
+  desktopUI = !mobile;
 
   // CSS px per internal world px. Larger => more zoomed in / chunkier pixels.
   const f = mobile
@@ -465,7 +468,10 @@ function splitConfirm(mode: "store" | "take" | "drop"): void {
 
 import { craftAcross } from "./items.ts";
 function craftAt(r: Recipe): boolean {
+  const goldCost = r.gold ?? 0;
+  if (P.gold < goldCost) { flash("not enough gold", "#d96a5a"); return false; }
   if (craftAcross([P.bag, game.stash], r)) {
+    P.gold -= goldCost;
     flash(`crafted ${ITEMS[r.out].name}`, "#b9e07f");
     return true;
   }
@@ -522,6 +528,17 @@ function swapWeapon(): void {
   }
   if (!pick) { flash(wantBow ? "no bow in bag" : "no melee weapon in bag", "#e0a06a"); return; }
   act.equipItem(pick, 0); // removes from bag, equips, stows the previous weapon
+  // switching back to melee also restores a shield: the bow forced it into the
+  // bag, so a full swap means weapon AND shield come back together
+  if (!wantBow && !P.eq.shield) {
+    let sh: ItemKind | null = null;
+    for (const s of P.bag) {
+      if (!s) continue;
+      const d = ITEMS[s.kind];
+      if (d.slot === "shield" && (!sh || d.value > ITEMS[sh].value)) sh = s.kind;
+    }
+    if (sh) act.equipItem(sh, 0);
+  }
   flash(`equipped ${ITEMS[pick].name}`, "#b9e07f");
 }
 
@@ -642,10 +659,21 @@ function handleWorldTap(sx: number, sy: number): void {
   if (pointInOpenPanel(sx, sy)) return;
   const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
   if (ui.placing) {
-    if (cw() === game.worlds.home) {
-      if (tryPlace(game.worlds.home, P, ui.placing, w.x, w.y, game.stash)) recomputeBonuses();
+    if (cw() !== game.worlds.home) {
+      flash("you can only build on Home Isle", "#e0a06a");
+      ui.placing = null;
+      return;
     }
-    ui.placing = null;
+    if (tryPlace(game.worlds.home, P, ui.placing, w.x, w.y, game.stash)) {
+      recomputeBonuses();
+      ui.placing = null; // placed — leave build mode
+    } else if (!canAfford(P.bag, STRUCTS[ui.placing].cost, game.stash)) {
+      flash("not enough materials", "#d96a5a");
+      ui.placing = null;
+    } else {
+      // invalid spot — stay in placing mode so the player can try elsewhere
+      flash("can't build here", "#e0a06a");
+    }
     return;
   }
   worldClick(w);
@@ -804,6 +832,12 @@ function worldClick(w: Vec): void {
   // monsters
   for (const m of world.monsters) {
     if (Math.abs(w.x - m.x) < 9 && w.y > m.y - 16 && w.y < m.y + 5) {
+      // clicking the monster you're already attacking STOPS the attack (Tibia-style toggle)
+      if (P.target?.kind === "mob" && P.target.m === m) {
+        P.target = null;
+        flash("attack stopped", "#8ab6ff");
+        return;
+      }
       P.target = { kind: "mob", m };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
@@ -833,14 +867,20 @@ function worldClick(w: Vec): void {
       return;
     }
   }
-  // structures (dummy to hit, forge/chest to use).
-  // Sprites are drawn centered on the 2x2 pad, bottom at ty*TILE + 2*TILE,
-  // so the hitbox must use that same anchor (generously sized).
+  // structures (dummy to hit, forge/chest to use). Hitbox anchored to the
+  // structure's real footprint centre (1×1 dummies vs 2×2 buildings).
   for (const s of world.structures) {
-    const cx = s.tx * TILE + TILE;        // pad center x
-    const baseY = s.ty * TILE + TILE * 2; // sprite base y
-    if (Math.abs(w.x - cx) < 16 && w.y > baseY - 30 && w.y < baseY + 4) {
-      if (s.key === "dummy" || s.key === "dummyII") P.target = { kind: "dummy", s };
+    const c = structCenter(s);
+    if (Math.abs(w.x - c.x) < 16 && w.y > c.baseY - 30 && w.y < c.baseY + 4) {
+      if (s.key === "dummy" || s.key === "dummyII") {
+        // re-clicking the dummy you're training on stops the attack (toggle)
+        if (P.target?.kind === "dummy" && P.target.s === s) {
+          P.target = null;
+          flash("attack stopped", "#8ab6ff");
+          return;
+        }
+        P.target = { kind: "dummy", s };
+      }
       else if (s.key === "garden") { continue; } // walk-through: ignore clicks
       else P.target = { kind: "structure", s };
       P.dest = null; P.gather = null; moveMarker = null;
@@ -893,8 +933,9 @@ function targetPoint(): Vec | null {
   if (t.kind === "mob") return { x: t.m.x, y: t.m.y };
   if (t.kind === "corpse") return { x: t.c.x, y: t.c.y };
   if (t.kind === "npc") return { x: t.n.x, y: t.n.y };
-  // structure: stand just below the sprite base (the pad's lower edge)
-  return { x: t.s.tx * TILE + TILE, y: t.s.ty * TILE + TILE * 2 - 2 };
+  // structure: stand just below the sprite base (footprint-aware anchor)
+  const c = structCenter(t.s);
+  return { x: c.x, y: c.baseY - 2 };
 }
 
 function gatherPoint(): Vec | null {
@@ -962,8 +1003,8 @@ function nearStructure(...keys: string[]): boolean {
   if (cw() !== game.worlds.home) return false;
   for (const s of game.worlds.home.structures) {
     if (!keys.includes(s.key)) continue;
-    // sprite centre of the 2×2 pad
-    if (dist(P.x, P.y, s.tx * TILE + TILE, s.ty * TILE + TILE) < USE_RANGE_PX) return true;
+    const c = structCenter(s);
+    if (dist(P.x, P.y, c.x, c.y) < USE_RANGE_PX) return true;
   }
   return false;
 }
@@ -1129,9 +1170,8 @@ function update(dt: number): void {
   // garden aura heal (HP) on home
   for (const s of game.worlds.home.structures) {
     if (s.key === "garden" && cw() === game.worlds.home) {
-      const gx = s.tx * TILE + TILE;
-      const gy = s.ty * TILE + TILE;
-      if (dist(P.x, P.y, gx, gy) < GARDEN_RADIUS) {
+      const c = structCenter(s);
+      if (dist(P.x, P.y, c.x, c.y) < GARDEN_RADIUS) {
         if (P.hp < P.maxhp) P.hp = Math.min(P.maxhp, P.hp + GARDEN_HEAL_PER_S * dt);
       }
     }
@@ -1246,18 +1286,28 @@ function render(): void {
     if (a > 0.6) vctx.fillRect(Math.round(sx + 2), Math.round(sy + 6), 6, 1);
   }
 
-  // build pads (home) glow
-  if (world === game.worlds.home) {
-    for (const b of world.buildSpots) {
-      if (b.built) continue;
-      const gx = b.tx * TILE - cam.x;
-      const gy = b.ty * TILE - cam.y;
-      const a = 0.35 + 0.2 * Math.sin(waveT * 3);
-      vctx.fillStyle = `rgba(255,220,120,${a})`;
-      vctx.fillRect(gx, gy, TILE * 2, TILE * 2);
-      vctx.strokeStyle = "rgba(255,235,160,.8)";
-      vctx.strokeRect(gx + 0.5, gy + 0.5, TILE * 2 - 1, TILE * 2 - 1);
-    }
+  // building ghost: while placing, preview the structure under the cursor
+  // (green = valid spot, red = blocked) anywhere on Home Isle
+  if (ui.placing && world === game.worlds.home) {
+    const key = ui.placing;
+    const n = STRUCTS[key].single ? 1 : 2;
+    const wx = mouse.sx / vScale + cam.x;
+    const wy = mouse.sy / vScale + cam.y;
+    const tx = Math.round(wx / TILE - n / 2);
+    const ty = Math.round(wy / TILE - n / 2);
+    const ok = canPlaceAt(world, key, tx, ty);
+    const gx = tx * TILE - cam.x;
+    const gy = ty * TILE - cam.y;
+    const a = 0.3 + 0.15 * Math.sin(waveT * 4);
+    vctx.fillStyle = ok ? `rgba(120,230,140,${a})` : `rgba(230,90,70,${a})`;
+    vctx.fillRect(gx, gy, TILE * n, TILE * n);
+    vctx.strokeStyle = ok ? "rgba(180,255,190,.9)" : "rgba(255,140,120,.9)";
+    vctx.strokeRect(gx + 0.5, gy + 0.5, TILE * n - 1, TILE * n - 1);
+    const spr = structSprite(key);
+    vctx.globalAlpha = 0.6;
+    vctx.imageSmoothingEnabled = false;
+    vctx.drawImage(spr, Math.round(gx + (TILE * n - spr.width) / 2), Math.round(gy + TILE * n - spr.height));
+    vctx.globalAlpha = 1;
   }
 
   // portals — a swirl between islands, a cave mouth / ladder for the caverns
@@ -1348,8 +1398,9 @@ function render(): void {
   // structures
   for (const s of world.structures) {
     const spr = structSprite(s.key);
-    const bx = s.tx * TILE + TILE;
-    const by = s.ty * TILE + TILE * 2;
+    const c = structCenter(s);
+    const bx = c.x;
+    const by = c.baseY;
     drawList.push({ y: by, fn: () => {
       drawShadow(bx, by, spr.width / 2);
       const shake = s.hurtT ? Math.round(Math.sin(s.hurtT * 40) * 1.5) : 0;
@@ -1495,8 +1546,13 @@ function render(): void {
   // scale up to screen
   sctx.drawImage(view, 0, 0, VW, VH, 0, 0, screen.width, screen.height);
 
-  // HUD + panels (screen space)
-  const hud: HudCtx = { ctx: sctx, scale, screenW: screen.width, screenH: screen.height, touch: touchUI };
+  // HUD + panels (screen space). On desktop the panel windows render at ~70%
+  // of the HUD scale (they were comically large on big monitors) and each one
+  // additionally auto-shrinks if it would still spill off-screen.
+  const hud: HudCtx = {
+    ctx: sctx, scale, panelScale: desktopUI ? scale * 0.7 : scale,
+    screenW: screen.width, screenH: screen.height, touch: touchUI,
+  };
   drawHud(hud, game, P);
   hotspots = [];
   itemSlots = [];
@@ -1636,7 +1692,7 @@ function drawTouchControls(): void {
 
   // --- panel-button column (group "panels") ---
   const pbtns: [string, string, PanelKind][] = [
-    ["Build", "B", "build"], ["Skills", "S", "skills"], ["Equip", "E", "equip"], ["Bag", "I", "bag"], ["Quest", "Q", "quest"],
+    ["Build", "B", "build"], ["Skills", "K", "skills"], ["Equip", "E", "equip"], ["Bag", "I", "bag"], ["Quest", "Q", "quest"],
   ];
   const colH = pbtns.length * bs + (pbtns.length - 1) * gap;
   const panelPos = placeHud("panels", bs, colH, sw, sh);

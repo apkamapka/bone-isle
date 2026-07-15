@@ -1,12 +1,16 @@
 /** Combat: player hits monsters, monsters hit the player, corpses & leveling. */
 import { rndi } from "../util.ts";
-import { expNeeded, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED } from "../config.ts";
+import {
+  expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED,
+  DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
+} from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
-import { ITEMS, removeItem } from "../items.ts";
+import { ITEMS, removeItem, emptyBag } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
-import { addSkillXp, attackPower, defensePower, distancePower } from "./skills.ts";
+import { structCenter } from "./building.ts";
+import { addSkillXp, applySkillDeathLoss, attackPower, defensePower, distancePower } from "./skills.ts";
 import type { ItemKind } from "../items.ts";
 import { onMonsterKilled } from "./quests.ts";
 import { onTaskKill } from "./tasks.ts";
@@ -67,13 +71,14 @@ export function shootDummy(world: World, p: Player, s: Structure, arrowKind: Ite
   if (!removeItem(p.bag, arrowKind, 1)) return false;
   const dp = distancePower(p.level, p.eq, arrowAtk);
   const dmg = rndi(dp - 2, dp + 3);
-  const tx = s.tx * 16 + 16;
-  const ty = s.ty * 16 + 24;
+  const c = structCenter(s);
+  const tx = c.x;
+  const ty = c.baseY - 8;
   s.hurtT = 0.2;
   s.anim = 0;
   const flight = Math.hypot(tx - p.x, ty - p.y) / SHOT_SPEED;
   world.shots.push({ fromX: p.x, fromY: p.y - 8, toX: tx, toY: ty - 6, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow" });
-  addFloat(world, s.tx * 16 + 8, s.ty * 16 - 4, String(dmg), "#bfe08a");
+  addFloat(world, c.x, s.ty * 16 - 4, String(dmg), "#bfe08a");
   addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
   beep(430, 0.06, "triangle", 0.045, -120);
   return true;
@@ -85,7 +90,7 @@ export function hitDummy(world: World, p: Player, s: Structure): void {
   const dmg = rndi(ap - 2, ap + 4);
   s.hurtT = 0.2;
   s.anim = 0;
-  addFloat(world, s.tx * 16 + 8, s.ty * 16 - 4, String(dmg), "#d8d2c0");
+  addFloat(world, structCenter(s).x, s.ty * 16 - 4, String(dmg), "#d8d2c0");
   addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
   // The War Dummy hits back for training value: also trains Shielding.
   if (s.key === "dummyII") addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 38, t, "#7dff9e"));
@@ -131,6 +136,59 @@ export function killMonster(world: World, p: Player, m: Monster): void {
   world.respawns.push({ kind: m.kind, t: MONSTER_RESPAWN_S });
 }
 
+/**
+ * Tibia-style death penalty. Below DEATH_PENALTY_LEVEL: only a sliver of
+ * current-level progress is lost (the old gentle rule). From that level on:
+ *  - your whole backpack drops into a lootable "your body" corpse where you
+ *    fell, and each equipped piece has a chance to drop with it,
+ *  - UNLESS an Amulet of Loss is worn — it shatters and saves the items,
+ *  - you lose a fraction of TOTAL experience (you can de-level),
+ *  - every skill loses a fraction of its current tries (can drop a level).
+ * The amulet never protects experience or skills — exactly like in Tibia.
+ */
+export function applyDeathPenalty(world: World, p: Player): void {
+  if (p.level < DEATH_PENALTY_LEVEL) {
+    p.exp = Math.floor(p.exp * 0.9);
+    return;
+  }
+
+  // --- items ---
+  const aol = p.eq.amulet && ITEMS[p.eq.amulet].deathProtect ? p.eq.amulet : null;
+  if (aol) {
+    p.eq.amulet = null; // consumed
+    addFloat(world, p.x, p.y - 30, "Amulet of Loss shattered!", "#c9a6ff");
+  } else {
+    const dropped: { kind: ItemKind; n: number }[] = [];
+    for (const s of p.bag) if (s) dropped.push({ kind: s.kind, n: s.n });
+    p.bag = emptyBag();
+    for (const slot of Object.keys(p.eq) as (keyof typeof p.eq)[]) {
+      const it = p.eq[slot];
+      if (it && Math.random() < DEATH_EQ_DROP_CHANCE) {
+        dropped.push({ kind: it, n: 1 });
+        p.eq[slot] = null;
+      }
+    }
+    if (dropped.length) {
+      world.corpses.push({ name: "your body", x: p.x, y: p.y, items: dropped, gold: 0, t: PLAYER_CORPSE_DECAY_S });
+      addFloat(world, p.x, p.y - 30, "you dropped your backpack!", "#ff9e6a");
+    }
+  }
+
+  // --- experience (10% of TOTAL — can de-level) ---
+  const total = totalExpFor(p.level) + p.exp;
+  const newTotal = Math.max(0, Math.floor(total * (1 - DEATH_EXP_LOSS)));
+  let lv = p.level;
+  while (lv > 1 && newTotal < totalExpFor(lv)) lv--;
+  p.level = lv;
+  p.exp = newTotal - totalExpFor(lv);
+  p.expNext = expNeeded(lv);
+
+  // --- skills ---
+  applySkillDeathLoss(DEATH_SKILL_LOSS);
+
+  refreshDerived(p);
+}
+
 /** Apply raw damage to the player. Returns true if this killed them. */
 export function hurtPlayer(world: World, p: Player, raw: number): boolean {
   if (p.dead) return false;
@@ -146,7 +204,7 @@ export function hurtPlayer(world: World, p: Player, raw: number): boolean {
     p.target = null;
     p.dest = null;
     p.gather = null;
-    p.exp = Math.floor(p.exp * 0.9);
+    applyDeathPenalty(world, p);
     beep(120, 0.5, "sawtooth", 0.07, -90);
     return true;
   }

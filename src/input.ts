@@ -36,12 +36,11 @@ export interface InputHandlers {
 }
 
 /**
- * Wire up listeners. The `S` key is shared with downward movement, so a quick
- * tap toggles the Skills panel while holding it walks the player down.
+ * Wire up listeners. Movement keys (WASD/arrows) never double as panel
+ * hotkeys — Skills lives on `K`, so holding `S` to walk south never pops
+ * the panel.
  */
 export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
-  let sDownAt = 0;
-
   addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
@@ -50,7 +49,7 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
       return;
     }
     if (k === "b") h.onPanel("build");
-    else if (k === "s") sDownAt = performance.now();
+    else if (k === "k") h.onPanel("skills");
     else if (k === "e") h.onPanel("equip");
     else if (k === "i") h.onPanel("bag");
     else if (k === "q") h.onPanel("quest");
@@ -66,12 +65,7 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
   });
 
   addEventListener("keyup", (e) => {
-    const k = e.key.toLowerCase();
-    if (k === "s") {
-      if (sDownAt && performance.now() - sDownAt < 250) h.onPanel("skills");
-      sDownAt = 0;
-    }
-    keys[k] = false;
+    keys[e.key.toLowerCase()] = false;
   });
 
   const toDevice = (clientX: number, clientY: number): { sx: number; sy: number } => {

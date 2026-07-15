@@ -13,6 +13,10 @@ import type { Game } from "../game.ts";
 export interface HudCtx {
   ctx: CanvasRenderingContext2D;
   scale: number;
+  /** Base scale for panel windows; smaller than `scale` on desktop so big
+   *  panels (Forge, task board) don't swallow the screen. Panels additionally
+   *  auto-shrink per window if they'd still spill off-screen. */
+  panelScale?: number;
   screenW: number;
   screenH: number;
   touch?: boolean;

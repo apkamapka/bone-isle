@@ -49,6 +49,8 @@ export interface PanelWindow {
   rect: { x: number; y: number; w: number; h: number } | null;
   /** Draggable title-bar hitbox this frame (screen px); set during draw. */
   titleBar: { x: number; y: number; w: number; h: number } | null;
+  /** Auto-fit factor (≤1) applied to this window so it never spills off-screen. */
+  fit?: number;
 }
 
 export interface UiState {
@@ -316,7 +318,12 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
 }
 
 export function drawPanels(base: Omit<PanelInput, "win">): void {
+  const hud = base.hud;
+  const origScale = hud.scale;
+  const baseScale = hud.panelScale ?? hud.scale;
   for (const win of base.ui.windows) {
+    // draw each window at the panel scale, shrunk by its auto-fit factor
+    hud.scale = baseScale * (win.fit ?? 1);
     const p: PanelInput = { ...base, win };
     switch (win.kind) {
       case "build": drawBuild(p); break;
@@ -332,7 +339,18 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
       case "stash": drawStash(p); break;
       default: break;
     }
+    // Auto-fit: if the window (at fit=1) wouldn't fit on screen, compute the
+    // exact factor that makes it fit. Corrects on the next frame (invisible
+    // at 60fps) and adapts both ways when the window's contents change.
+    if (win.rect) {
+      const cur = win.fit ?? 1;
+      const natW = win.rect.w / cur;
+      const natH = win.rect.h / cur;
+      const f = Math.min(1, (hud.screenW * 0.96) / natW, (hud.screenH * 0.96) / natH);
+      win.fit = Math.max(0.35, f);
+    }
   }
+  hud.scale = origScale;
   if (base.ui.placing) drawPlacingHint(base);
   drawItemTooltip(base);
   drawInspect(base);
@@ -377,7 +395,7 @@ function drawPlacingHint(p: { hud: HudCtx; ui: UiState }): void {
   const { hud, ui } = p;
   const key = ui.placing;
   if (!key) return;
-  hudText(hud, `Placing: ${STRUCTS[key].name} — click a glowing pad ([Esc] to cancel)`, hud.screenW / 2, 18 * hud.scale, 9 * hud.scale, "#9fe8a8", "center", true);
+  hudText(hud, `Placing: ${STRUCTS[key].name} — click any clear grass on Home Isle ([Esc] cancel)`, hud.screenW / 2, 18 * hud.scale, 9 * hud.scale, "#9fe8a8", "center", true);
 }
 
 /* ---------------- Skills ---------------- */
@@ -606,7 +624,7 @@ function drawForge(p: PanelInput): void {
   const bags = [player.bag, p.game.stash];
   let ry = y + 18 * S;
   for (const r of RECIPES) {
-    const ok = canCraftAcross(bags, r);
+    const ok = canCraftAcross(bags, r) && player.gold >= (r.gold ?? 0);
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && ok) {
       ctx.fillStyle = "rgba(202,162,58,.15)";
       ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);

@@ -17,7 +17,9 @@ export type ItemKind =
   | "bow" | "longbow" | "arrow" | "boneArrow"
   // gear
   | "sword" | "ironSword" | "boneSword"
-  | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet";
+  | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet"
+  // Amulet of Loss: protects your items on death (consumed), Tibia-style
+  | "aolAmulet";
 
 export type EqSlot = "head" | "body" | "legs" | "boots" | "weapon" | "shield" | "ring" | "amulet";
 
@@ -46,6 +48,9 @@ export interface ItemDef {
   bow?: { range: number; power: number };
   /** Arrows: consumable ammo. `dmg` adds to each shot's damage. */
   ammo?: { dmg: number };
+  /** Amulet of Loss: worn in the amulet slot, consumed on death, protects
+   *  your backpack + equipment from dropping (never exp or skills). */
+  deathProtect?: true;
 }
 
 export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
@@ -76,6 +81,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 6 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
+  aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
 };
 
 /** Weight of `n` of a given item kind, in oz. */
@@ -238,6 +244,8 @@ export interface Recipe {
   /** How many of `out` a single craft yields (default 1). Crystals batch charges. */
   outN?: number;
   cost: Partial<Record<ItemKind, number>>;
+  /** Optional gold cost on top of materials (checked/paid by the caller). */
+  gold?: number;
 }
 export const RECIPES: readonly Recipe[] = [
   { out: "sword",      cost: { wood: 3, stone: 4 } },
@@ -250,6 +258,8 @@ export const RECIPES: readonly Recipe[] = [
   { out: "boots",      cost: { wood: 6, silk: 4 } },
   { out: "ring",       cost: { stone: 6, bones: 8 } },
   { out: "amulet",     cost: { bones: 12, silk: 6 } },
+  // Amulet of Loss — pure gold sink; protects items (not exp/skills) on death
+  { out: "aolAmulet",  cost: {}, gold: 500 },
   { out: "hpPotion",   cost: { herb: 3, mushroom: 2 } },
   // ranged: bows, then arrows in batches (the progression is in the ammo)
   { out: "bow",        cost: { wood: 6, silk: 2 } },
@@ -313,13 +323,15 @@ export function itemInfoLines(kind: ItemKind): string[] {
   if (d.gear?.speed) lines.push(`Speed +${d.gear.speed}`);
   if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
   if (d.crystal) lines.push(`Charge item (1 use per unit)`);
+  if (d.deathProtect) lines.push(`Protects your items on death`, `(one use — the amulet shatters)`);
   if (d.heal) lines.push(`Restores ${d.heal} HP`);
   lines.push(`Weight ${d.weight} oz · Value ${d.value} gp`);
   return lines;
 }
 export function recipeCostText(r: Recipe): string {
-  const out = (Object.entries(r.cost) as [ItemKind, number][])
-    .map(([k, v]) => `${v} ${ITEMS[k].name}`)
-    .join(" + ");
+  const parts = (Object.entries(r.cost) as [ItemKind, number][])
+    .map(([k, v]) => `${v} ${ITEMS[k].name}`);
+  if (r.gold) parts.push(`${r.gold} gold`);
+  const out = parts.join(" + ");
   return (r.outN ?? 1) > 1 ? `${out}  →  x${r.outN}` : out;
 }

@@ -16,7 +16,7 @@ export const PAL: Readonly<Record<string, string>> = {
   c: "#e3b341", C: "#9a7424",
   b: "#5b3b22", t: "#7a4a28",
   y: "#d8b75a",
-  u: "#8a6cff", x: "#4a4a52",
+  u: "#8a6cff", U: "#5a3fd0", x: "#4a4a52",
 };
 
 /** Bake a string pixel-map into an offscreen canvas ('.' = transparent). */
@@ -134,6 +134,7 @@ export const SPR = {
   // equipment slot glyphs
   eqHead: bake(["..mmmm..", ".mmmmmm.", ".mMmmMm.", ".mmmmmm.", "..m..m.."]),
   eqAmulet: bake([".c....c.", "c......c", "c......c", ".c....c.", "..cCCc..", "...cc..."]),
+  eqAol: bake([".c....c.", "c......c", "c......c", ".c....c.", "..uuuu..", "..uUUu..", "...uu..."]),
   eqArrow: bake(["......mm", ".....mmm", "....mm..", "b..mm...", ".bmm....", "..b....."]),
   eqBody: bake(["m.mmmm.m", "mmmmmmmm", ".mMmmMm.", ".mmmmmm.", ".mmmmmm."]),
   eqShield: bake([".mmmmmm.", ".mMmmMm.", ".mmmmmm.", "..mmmm..", "...mm..."]),
@@ -642,7 +643,7 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed,
   sword: SPR.sword, ironSword: SPR.swordIron, boneSword: SPR.swordBone,
   helmet: SPR.eqHead, armor: SPR.eqBody, shieldItem: SPR.eqShield,
-  legs: SPR.eqLegs, boots: SPR.eqBoots, ring: SPR.eqRing, amulet: SPR.eqAmulet,
+  legs: SPR.eqLegs, boots: SPR.eqBoots, ring: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
   healCrystal: SPR.crystalHeal, fireCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
   spearCrystal: SPR.crystalSpear, fireRuby: SPR.fireRuby,
   bow: SPR.bow, longbow: SPR.longbow, arrow: SPR.arrow, boneArrow: SPR.boneArrow,

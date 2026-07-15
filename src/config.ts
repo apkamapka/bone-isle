@@ -119,3 +119,23 @@ export function expNeeded(level: number): number {
   const x = level + 1;
   return 50 * (x * x - 5 * x + 8);
 }
+
+/** Total experience required to *reach* `level` (Tibia's cubic curve). The
+ *  cubic is always divisible by 3 for integer levels; round kills float dust. */
+export function totalExpFor(level: number): number {
+  return Math.round((50 / 3) * (level ** 3 - 6 * level ** 2 + 17 * level - 12));
+}
+
+/**
+ * Death penalty (Tibia 8.6-style), active from this level up. Below it a death
+ * only costs a sliver of current-level progress. From this level on you drop
+ * your whole backpack (lootable from your body where you fell), each equipped
+ * piece has a chance to drop too, and you lose experience (can de-level) and
+ * skill progress. An equipped Amulet of Loss is consumed instead and protects
+ * ONLY the items — never the experience or skills.
+ */
+export const DEATH_PENALTY_LEVEL = 10;
+export const DEATH_EXP_LOSS = 0.10;      // fraction of TOTAL exp lost
+export const DEATH_SKILL_LOSS = 0.10;    // fraction of current skill tries lost
+export const DEATH_EQ_DROP_CHANCE = 0.10; // per equipped piece
+export const PLAYER_CORPSE_DECAY_S = 300; // your dropped body waits this long

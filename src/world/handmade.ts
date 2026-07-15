@@ -12,7 +12,7 @@
  * Glyph legend (shared):
  *   ~ water    . grass    , sand    # ruined wall
  *   T tree     R rock     H herb    M mushroom (decor)   o bones (decor)
- *   B build-pad anchor (2×2; the anchor's other three tiles must be grass)
+ *   (structures are placed free-form at runtime — no build-pad glyphs)
  * Per-map glyphs (portals & NPCs) are resolved through the spec's own maps, so
  * the same letter can mean different things on different islands.
  *
@@ -167,14 +167,14 @@ const HOME_ROWS: readonly string[] = [
   "~~~~~~~~~~~~,,,,,,.....,,,,,,~~~~~~~~~~~",
   "~~~~~~~~~~~,,,T.....o..T...,,,~~~~~~~~~~",
   "~~~~~~~~~,,,.................,,,~~~~~~~~",
-  "~~~~~~~~,,,B.......B.......B.T,,,~~~~~~~",
+  "~~~~~~~~,,,..................T,,,~~~~~~~",
   "~~~~~~~,,,.....................,,,~~~~~~",
   "~~~~~~,,,.......................,,,~~~~~",
   "~~~~~~,,R.M...................T..,,~~~~~",
   "~~~~~~,,T.......H.......H........,,~~~~~",
   "~~~~~,,R........................TR,,~~~~",
   "~~~~~,,...........................,,~~~~",
-  "~~~~~,,R...B.......B.......B....TR,,~~~~",
+  "~~~~~,,R........................TR,,~~~~",
   "~~~~~,,...........................,,~~~~",
   "~~~~~,,R.......................T..,,~~~~",
   "~~~~~~,,T....M............M.....R,,~~~~~",

@@ -51,6 +51,24 @@ export function resetSkills(): void {
   }
 }
 
+/**
+ * Death penalty for skills (Tibia-style): every skill loses `frac` of the
+ * tries needed for its current level. If that dips below zero the skill
+ * level itself drops. Called from combat when the player dies at high level.
+ */
+export function applySkillDeathLoss(frac: number): void {
+  for (const key of Object.keys(skills) as SkillKey[]) {
+    const s = skills[key];
+    if (!s.active) continue;
+    s.pts -= Math.round(skillNeed(s) * frac);
+    while (s.pts < 0 && s.lv > s.offset) {
+      s.lv--;
+      s.pts += skillNeed(s);
+    }
+    if (s.pts < 0) s.pts = 0;
+  }
+}
+
 export type SkillUpFx = (text: string) => void;
 
 /** Award xp to a skill; may trigger one or more level-ups. */

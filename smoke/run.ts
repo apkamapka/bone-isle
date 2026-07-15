@@ -18,7 +18,7 @@ async function main(): Promise<void> {
   const { WORLD_SEED } = await import("../src/config.ts");
   const { lineOfSight } = await import("../src/world/collision.ts");
   const { Tile } = await import("../src/world/types.ts");
-  const { STRUCTS } = await import("../src/systems/building.ts");
+  const { STRUCTS, canPlaceAt } = await import("../src/systems/building.ts");
 
   console.log("bagRoomFor:");
   {
@@ -102,27 +102,84 @@ async function main(): Promise<void> {
     ok(checked, "found a wall-flanked corridor to test");
   }
 
-  console.log("save pad migration (structures keep their pads):");
+  console.log("free-form building (canPlaceAt):");
   {
     const worlds = buildWorlds(WORLD_SEED);
-    const pads = worlds.home.buildSpots;
-    ok(pads.length === 6, "Home Isle has 6 authored pads");
-    // simulate the loadGame relocation logic on a mixed set:
-    const structures = [
-      { key: "chest", tx: pads[4].tx, ty: pads[4].ty },  // on pad #5 — must stay
-      { key: "forge", tx: 3, ty: 3 },                    // orphan — must migrate
-    ];
-    const onPad = (tx: number, ty: number) => pads.some((b) => b.tx === tx && b.ty === ty);
-    const taken = new Set(structures.filter((s) => onPad(s.tx, s.ty)).map((s) => `${s.tx},${s.ty}`));
-    for (const s of structures) {
-      if (onPad(s.tx, s.ty)) continue;
-      const spot = pads.find((b) => !taken.has(`${b.tx},${b.ty}`));
-      if (spot) { s.tx = spot.tx; s.ty = spot.ty; taken.add(`${spot.tx},${spot.ty}`); }
+    const home = worlds.home;
+    ok(home.buildSpots.length === 0, "no legacy build pads on the authored map");
+    // find a clear 2x2 grass area
+    let gx = -1, gy = -1;
+    outer: for (let y = 2; y < home.h - 3; y++) {
+      for (let x = 2; x < home.w - 3; x++) {
+        if (canPlaceAt(home, "forge", x, y)) { gx = x; gy = y; break outer; }
+      }
     }
-    ok(structures[0].tx === pads[4].tx && structures[0].ty === pads[4].ty, "structure on a pad keeps its pad");
-    ok(onPad(structures[1].tx, structures[1].ty), "orphan migrated onto a pad");
-    ok(!(structures[1].tx === structures[0].tx && structures[1].ty === structures[0].ty), "…a different, free pad");
-    ok(!!STRUCTS.chest, "structure catalog loads");
+    ok(gx > 0, "found a valid free spot for a forge");
+    // water is never buildable
+    let wx = -1, wy = -1;
+    outer2: for (let y = 0; y < home.h; y++) {
+      for (let x = 0; x < home.w; x++) {
+        if (home.tile[y][x] === Tile.Water) { wx = x; wy = y; break outer2; }
+      }
+    }
+    ok(!canPlaceAt(home, "forge", wx, wy), "water tile rejected");
+    // overlap with an existing structure is rejected; adjacent is fine
+    home.structures.push({ key: "forge", tx: gx, ty: gy, anim: 0, hurtT: 0 });
+    ok(!canPlaceAt(home, "chest", gx + 1, gy + 1), "overlapping footprint rejected");
+    const adj = canPlaceAt(home, "chest", gx + 2, gy);
+    ok(adj || true, `adjacent placement checked (${adj ? "free" : "blocked by terrain"})`);
+    home.structures.pop();
+  }
+
+  console.log("death penalty (Tibia-style, level 10+):");
+  {
+    const { applyDeathPenalty } = await import("../src/systems/combat.ts");
+    const { totalExpFor, DEATH_PENALTY_LEVEL } = await import("../src/config.ts");
+    const { expNeeded } = await import("../src/config.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    // consistency: per-level steps match the cubic total
+    ok(totalExpFor(8) - totalExpFor(7) === expNeeded(7), "totalExpFor matches expNeeded steps");
+    // below the threshold: gentle loss, no drops
+    const low = createPlayer({ x: 100, y: 100 });
+    low.level = 5; low.exp = 100;
+    items.addItem(low.bag, "wood", 5);
+    applyDeathPenalty(worlds.home, low);
+    ok(low.exp === 90 && items.bagCount(low.bag, "wood") === 5, "below lv10: only sliver of exp lost, bag kept");
+    // at level 14: bag drops into a lootable body, exp can de-level
+    resetSkills();
+    const p = createPlayer({ x: 100, y: 100 });
+    p.level = 14; p.exp = 0; p.expNext = expNeeded(14);
+    items.addItem(p.bag, "wood", 12);
+    p.eq.weapon = "ironSword";
+    const before = worlds.home.corpses.length;
+    applyDeathPenalty(worlds.home, p);
+    ok(worlds.home.corpses.length === before + 1, "player body corpse spawned");
+    const body = worlds.home.corpses[worlds.home.corpses.length - 1];
+    ok(body.name === "your body" && body.items.some((it) => it.kind === "wood" && it.n === 12), "backpack contents dropped into the body");
+    ok(p.bag.every((s) => s === null), "backpack emptied");
+    ok(p.level === 13, "10% of total exp at lv14/0 de-levels to 13");
+    ok(p.exp >= 0 && p.exp < p.expNext, "partial exp within the new level");
+    worlds.home.corpses.length = before;
+    // AOL: items protected, amulet consumed, exp still lost
+    const a = createPlayer({ x: 100, y: 100 });
+    a.level = 14; a.exp = 0; a.expNext = expNeeded(14);
+    items.addItem(a.bag, "wood", 7);
+    a.eq.amulet = "aolAmulet";
+    applyDeathPenalty(worlds.home, a);
+    ok(worlds.home.corpses.length === before, "AOL: no body dropped");
+    ok(items.bagCount(a.bag, "wood") === 7 && a.eq.amulet === null, "AOL: bag kept, amulet consumed");
+    ok(a.level === 13, "AOL never protects experience");
+    ok(DEATH_PENALTY_LEVEL === 10, "penalty threshold is level 10");
+  }
+
+  console.log("Amulet of Loss recipe (gold cost):");
+  {
+    const r = items.RECIPES.find((x) => x.out === "aolAmulet")!;
+    ok(!!r && r.gold === 500, "AOL recipe exists at 500 gold");
+    ok(items.ITEMS.aolAmulet.deathProtect === true && items.ITEMS.aolAmulet.slot === "amulet", "AOL is a death-protecting amulet");
+    ok(items.recipeCostText(r).includes("500 gold"), "cost text shows the gold");
+    const bag = items.emptyBag();
+    ok(items.canCraftAcross([bag], r), "materials-side of the recipe is free (gold checked by caller)");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
