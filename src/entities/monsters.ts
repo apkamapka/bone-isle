@@ -33,57 +33,64 @@ export interface MonsterDef {
  * re-tuned to the new distance-from-entrance gradient; the other seven fill and
  * extend the difficulty curve so tougher foes are discovered further in.
  */
+/**
+ * The bestiary. All creatures attack on the same 2.0 s cadence as the player
+ * (Tibia 8.6's standard weapon speed — duels are blow-for-blow); their damage
+ * ranges were scaled up from the old faster cadence so DPS stayed the same:
+ * rarer, heavier hits, exactly the old-Tibia feel. A monster's actual hit is
+ * rolled uniformly inside `dmg` and then reduced by the player's defense.
+ */
 export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   rat: {
-    spr: SPR.rat, hp: 10, dmg: [1, 3], speed: 30, atkRate: 1.1, exp: 5, gold: [0, 1], danger: 0.06,
+    spr: SPR.rat, hp: 10, dmg: [1, 5], speed: 30, atkRate: 2.0, exp: 5, gold: [0, 1], danger: 0.06,
     loot: [{ kind: "meat", chance: 0.15, n: [1, 1] }],
   },
   spider: {
-    spr: SPR.spider, hp: 22, dmg: [2, 5], speed: 40, atkRate: 1.1, exp: 12, gold: [0, 2], danger: 0.14,
+    spr: SPR.spider, hp: 22, dmg: [3, 9], speed: 40, atkRate: 2.0, exp: 12, gold: [0, 2], danger: 0.14,
     loot: [{ kind: "silk", chance: 0.7, n: [1, 2] }],
   },
   bat: {
-    spr: SPR.bat, hp: 16, dmg: [2, 4], speed: 54, atkRate: 1.0, exp: 10, gold: [0, 2], danger: 0.2,
+    spr: SPR.bat, hp: 16, dmg: [3, 8], speed: 54, atkRate: 2.0, exp: 10, gold: [0, 2], danger: 0.2,
     loot: [{ kind: "meat", chance: 0.2, n: [1, 1] }],
   },
   skeleton: {
-    spr: SPR.skeleton, hp: 34, dmg: [4, 7], speed: 20, atkRate: 1.3, exp: 18, gold: [1, 4], danger: 0.3,
+    spr: SPR.skeleton, hp: 34, dmg: [4, 11], speed: 20, atkRate: 2.0, exp: 18, gold: [1, 4], danger: 0.3,
     loot: [{ kind: "bones", chance: 0.9, n: [1, 3] }],
   },
   goblin: {
-    spr: SPR.goblin, hp: 52, dmg: [5, 9], speed: 34, atkRate: 1.0, exp: 30, gold: [3, 8], danger: 0.4,
+    spr: SPR.goblin, hp: 52, dmg: [6, 18], speed: 34, atkRate: 2.0, exp: 30, gold: [3, 8], danger: 0.4,
     loot: [{ kind: "meat", chance: 0.4, n: [1, 1] }, { kind: "hpPotion", chance: 0.12, n: [1, 1] }],
   },
   wolf: {
-    spr: SPR.wolf, hp: 44, dmg: [5, 9], speed: 48, atkRate: 0.9, exp: 26, gold: [1, 4], danger: 0.5,
+    spr: SPR.wolf, hp: 44, dmg: [7, 20], speed: 48, atkRate: 2.0, exp: 26, gold: [1, 4], danger: 0.5,
     loot: [{ kind: "meat", chance: 0.6, n: [1, 2] }],
   },
   ghost: {
-    spr: SPR.ghost, hp: 60, dmg: [7, 12], speed: 42, atkRate: 1.4, exp: 48, gold: [4, 10], danger: 0.56,
+    spr: SPR.ghost, hp: 60, dmg: [6, 17], speed: 42, atkRate: 2.0, exp: 48, gold: [4, 10], danger: 0.56,
     loot: [{ kind: "fireCrystal", chance: 0.35, n: [2, 4] }, { kind: "ring", chance: 0.04, n: [1, 1] }, { kind: "fireRuby", chance: 0.07, n: [1, 1] }],
   },
   orc: {
-    spr: SPR.orc, hp: 90, dmg: [8, 14], speed: 28, atkRate: 1.2, exp: 55, gold: [6, 14], danger: 0.62,
+    spr: SPR.orc, hp: 90, dmg: [8, 23], speed: 28, atkRate: 2.0, exp: 55, gold: [6, 14], danger: 0.62,
     loot: [{ kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "ironSword", chance: 0.06, n: [1, 1] }, { kind: "fireRuby", chance: 0.05, n: [1, 1] }],
   },
   bear: {
-    spr: SPR.bear, hp: 120, dmg: [9, 15], speed: 30, atkRate: 1.2, exp: 70, gold: [4, 10], danger: 0.7,
+    spr: SPR.bear, hp: 120, dmg: [9, 25], speed: 30, atkRate: 2.0, exp: 70, gold: [4, 10], danger: 0.7,
     loot: [{ kind: "meat", chance: 0.7, n: [1, 3] }],
   },
   minotaur: {
-    spr: SPR.minotaur, hp: 140, dmg: [11, 18], speed: 30, atkRate: 1.1, exp: 95, gold: [8, 18], danger: 0.8,
+    spr: SPR.minotaur, hp: 140, dmg: [12, 33], speed: 30, atkRate: 2.0, exp: 95, gold: [8, 18], danger: 0.8,
     loot: [{ kind: "bones", chance: 0.6, n: [1, 3] }, { kind: "meat", chance: 0.4, n: [1, 2] }, { kind: "ironSword", chance: 0.05, n: [1, 1] }],
   },
   troll: {
-    spr: SPR.troll, hp: 160, dmg: [12, 20], speed: 24, atkRate: 1.5, exp: 110, gold: [12, 28], danger: 0.9,
+    spr: SPR.troll, hp: 160, dmg: [10, 27], speed: 24, atkRate: 2.0, exp: 110, gold: [12, 28], danger: 0.9,
     loot: [{ kind: "bones", chance: 0.8, n: [2, 4] }, { kind: "boneSword", chance: 0.05, n: [1, 1] }, { kind: "amulet", chance: 0.03, n: [1, 1] }, { kind: "fireRuby", chance: 0.12, n: [1, 1] }],
   },
   cyclops: {
-    spr: SPR.cyclops, hp: 240, dmg: [16, 26], speed: 26, atkRate: 1.3, exp: 180, gold: [14, 30], danger: 0.95,
+    spr: SPR.cyclops, hp: 240, dmg: [14, 40], speed: 26, atkRate: 2.0, exp: 180, gold: [14, 30], danger: 0.95,
     loot: [{ kind: "bones", chance: 0.7, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] }, { kind: "boneSword", chance: 0.06, n: [1, 1] }, { kind: "amulet", chance: 0.05, n: [1, 1] }],
   },
   boneLord: {
-    spr: SPR.boneLord, hp: 340, dmg: [20, 34], speed: 22, atkRate: 1.4, exp: 300, gold: [25, 50], danger: 0.99,
+    spr: SPR.boneLord, hp: 340, dmg: [18, 49], speed: 22, atkRate: 2.0, exp: 300, gold: [25, 50], danger: 0.99,
     loot: [{ kind: "fireRuby", chance: 0.3, n: [1, 2] }, { kind: "boneSword", chance: 0.12, n: [1, 1] }, { kind: "amulet", chance: 0.08, n: [1, 1] }, { kind: "ring", chance: 0.06, n: [1, 1] }],
   },
 };
