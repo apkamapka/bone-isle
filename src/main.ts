@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX } from "./config.ts";
 import { moveEntity, unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
@@ -510,7 +510,7 @@ function resolveItemDrop(rx: number, ry: number): void {
     if (rx >= it.x && rx < it.x + it.w && ry >= it.y && ry < it.y + it.h) {
       if (d.src === "ground") {
         if (!d.gi) return;
-        if (dist(P.x, P.y, d.gi.x, d.gi.y) > THROW_RANGE_PX) { flash("too far away", "#d96a5a"); return; }
+        if (dist(P.x, P.y, d.gi.x, d.gi.y) > ITEM_MOVE_REACH_PX) { flash("too far away", "#d96a5a"); return; }
         pickupGround(d.gi);
       }
       else if (it.src === d.src) swapOrMerge(d.src === "bag" ? P.bag : game.stash, d.index, it.index);
@@ -528,7 +528,7 @@ function resolveItemDrop(rx: number, ry: number): void {
       const overBag = ui.windows.some((w) => w.kind === "bag" && w.rect &&
         rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h);
       if (overBag) {
-        if (dist(P.x, P.y, d.gi.x, d.gi.y) > THROW_RANGE_PX) { flash("too far away", "#d96a5a"); return; }
+        if (dist(P.x, P.y, d.gi.x, d.gi.y) > ITEM_MOVE_REACH_PX) { flash("too far away", "#d96a5a"); return; }
         pickupGround(d.gi);
       }
     }
@@ -547,7 +547,7 @@ function resolveItemDrop(rx: number, ry: number): void {
     }
   } else if (d.src === "ground" && d.gi) {
     // no telekinesis: pushing loot around requires standing near it
-    if (dist(P.x, P.y, d.gi.x, d.gi.y) > THROW_RANGE_PX) { flash("too far away", "#d96a5a"); return; }
+    if (dist(P.x, P.y, d.gi.x, d.gi.y) > ITEM_MOVE_REACH_PX) { flash("too far away", "#d96a5a"); return; }
     throwGroundItem(d.gi, wx, wy);
   }
 }

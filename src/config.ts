@@ -162,6 +162,14 @@ export const GROUND_DESPAWN_S = 3600;
 export const THROW_RANGE_PX = 120;
 
 /**
+ * How close (px) the player must STAND to a loose ground item to grab it —
+ * push it to another tile or drag it into the bag. One diagonal tile
+ * (√2·16 ≈ 23), the Tibia adjacency rule: you can throw far, but you can't
+ * manipulate loot from across the room ("You are too far away").
+ */
+export const ITEM_MOVE_REACH_PX = 24;
+
+/**
  * Monster sight range (px). Deliberately one tile MORE than the longest bow
  * in the game (Hunter's Bow, 150 px), so no bow can shoot from outside every
  * creature's awareness — archers can still kite, but never plink at a target
