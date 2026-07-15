@@ -36,11 +36,14 @@ export interface Game {
  * ones — so pushing deeper, not running laps, is how you meet tougher foes.
  */
 type DangerKey = "wild" | "cave1" | "cave2" | "cave3";
+// Per-floor populations. THE tuning knob for crowd pressure: with body
+// blocking + the 2-attacker shield cap, every extra creature in a pack now
+// matters (3rd+ hits pierce the shield), so adjust counts here after playtests.
 const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number>>>> = {
   wild: { rat: 6, spider: 5, bat: 5, skeleton: 4, goblin: 4, wolf: 3 },
   cave1: { skeleton: 5, goblin: 5, wolf: 4, ghost: 4, orc: 4, bear: 2 },
   cave2: { orc: 5, bear: 4, minotaur: 4, ghost: 3, troll: 3 },
-  cave3: { minotaur: 3, troll: 4, cyclops: 4, boneLord: 2 },
+  cave3: { minotaur: 3, troll: 4, cyclops: 3, boneLord: 2 }, // cyclops 4→3: bottom-floor packs pierce shields now
 };
 const DANGER_KEYS = Object.keys(POPULATIONS) as DangerKey[];
 

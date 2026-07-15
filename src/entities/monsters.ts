@@ -1,6 +1,6 @@
 /** Monster definitions, danger-band spawning and the wander/chase/attack AI. */
 import { rnd, rndi, wrnd, dist } from "../util.ts";
-import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX } from "../config.ts";
+import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { moveEntity, randomWalkable, lineOfSight } from "../world/collision.ts";
 import type { World, Monster, MonsterKind } from "../world/types.ts";
@@ -93,10 +93,12 @@ export const MONSTER_KINDS = Object.keys(MONSTER_DEFS) as MonsterKind[];
 /**
  * Spawn one monster of `kind`, placed by its danger band: distance from the
  * Wildlands entrance portal, normalised so 0 is the arrival coast and ~1 the
- * farthest reaches. Nothing spawns within the entrance safe radius, so weak
- * creatures ring the landing and the deadliest lurk deep in the far corners.
+ * farthest reaches. Nothing spawns within the entrance safe radius, spawns
+ * keep SPAWN_SPACING_PX apart (no day-one blobs), and when `avoid` is given
+ * (the player, on respawns) nothing pops within SPAWN_AVOID_PLAYER_PX of it —
+ * returns false in that case so the caller can retry later, Tibia-style.
  */
-export function spawnMonster(w: World, kind: MonsterKind): void {
+export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y: number }): boolean {
   const d = MONSTER_DEFS[kind];
   const entrance = w.portals[0];
   const ex = entrance ? entrance.x : (w.w / 2) * 16;
@@ -107,16 +109,23 @@ export function spawnMonster(w: World, kind: MonsterKind): void {
     dist(ex, ey, 0, w.h * 16), dist(ex, ey, w.w * 16, w.h * 16),
   ) || 1;
 
-  let match: { x: number; y: number } | null = null;
-  let fallback = randomWalkable(w);
-  for (let tries = 0; tries < 28 && !match; tries++) {
+  let match: { x: number; y: number } | null = null;   // spaced + right danger band
+  let spaced: { x: number; y: number } | null = null;  // spaced, wrong band
+  let fallback: { x: number; y: number } | null = null; // passes hard constraints only
+  for (let tries = 0; tries < 40 && !match; tries++) {
     const cand = randomWalkable(w);
     const dd = dist(cand.x, cand.y, ex, ey);
     if (dd < WILD_ENTRANCE_SAFE_PX) continue; // keep the arrival area clear
-    fallback = cand;
+    if (avoid && dist(cand.x, cand.y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
+    fallback ??= cand;
+    if (!w.monsters.every((m) => dist(m.x, m.y, cand.x, cand.y) >= SPAWN_SPACING_PX)) continue;
+    spaced ??= cand;
     if (Math.abs(dd / maxD - d.danger) < 0.16) match = cand;
   }
-  const p = match ?? fallback;
+  // a fresh populate must never lose a creature — but a respawn near a camping
+  // player simply reports failure and gets retried by the caller
+  const p = match ?? spaced ?? (avoid ? null : fallback ?? randomWalkable(w));
+  if (!p) return false;
 
   w.monsters.push({
     kind,
@@ -134,6 +143,7 @@ export function spawnMonster(w: World, kind: MonsterKind): void {
     bob: wrnd(0, 3),
     hurtT: 0,
   });
+  return true;
 }
 
 /** Roll a monster's loot into concrete stacks + gold. Runtime randomness —

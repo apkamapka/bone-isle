@@ -238,6 +238,47 @@ async function main(): Promise<void> {
     ok(items.canCraftAcross([bag], r), "materials-side of the recipe is free (gold checked by caller)");
   }
 
+  console.log("spawn placement (spacing + never on the player):");
+  {
+    const { spawnMonster } = await import("../src/entities/monsters.ts");
+    const { populateWorld } = await import("../src/game.ts");
+    const { SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX } = await import("../src/config.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    const wild = worlds.wild;
+    populateWorld(wild, WORLD_SEED);
+    ok(wild.monsters.length === 27, `wild fully populated (${wild.monsters.length}/27)`);
+    let minGap = Infinity;
+    for (let i = 0; i < wild.monsters.length; i++) {
+      for (let j = i + 1; j < wild.monsters.length; j++) {
+        const a = wild.monsters[i], b = wild.monsters[j];
+        minGap = Math.min(minGap, Math.hypot(a.x - b.x, a.y - b.y));
+      }
+    }
+    ok(minGap >= SPAWN_SPACING_PX, `no day-one blobs (closest pair ${minGap.toFixed(0)}px ≥ ${SPAWN_SPACING_PX})`);
+    // respawn avoids the player: everything spawned with `avoid` keeps its distance
+    const px = (wild.w / 2) * 16, py = (wild.h / 2) * 16;
+    let okDist = true, spawned = 0;
+    for (let i = 0; i < 8; i++) {
+      const n0 = wild.monsters.length;
+      if (spawnMonster(wild, "rat", { x: px, y: py })) {
+        spawned++;
+        const m = wild.monsters[wild.monsters.length - 1];
+        if (Math.hypot(m.x - px, m.y - py) < SPAWN_AVOID_PLAYER_PX) okDist = false;
+      } else {
+        ok(wild.monsters.length === n0, "failed respawn adds nothing");
+      }
+    }
+    ok(spawned > 0, `respawns landed (${spawned}/8)`);
+    ok(okDist, "no respawn within the player-avoid radius");
+    // deterministic double-populate: same seed → same monster layout
+    const wild2 = buildWorlds(WORLD_SEED).wild;
+    populateWorld(wild2, WORLD_SEED);
+    const sigM = (w: typeof wild) => JSON.stringify(w.monsters.map((m) => [m.kind, Math.round(m.x), Math.round(m.y)]));
+    const wild3 = buildWorlds(WORLD_SEED).wild;
+    populateWorld(wild3, WORLD_SEED);
+    ok(sigM(wild2) === sigM(wild3), "populate stays deterministic with spacing rules");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

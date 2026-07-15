@@ -53,6 +53,17 @@ export const SHIELD_BLOCK_MAX = 2;
 export const SHIELD_BLOCK_WINDOW_S = 2;
 
 /**
+ * Spawn placement quality. SPAWN_SPACING_PX keeps freshly placed monsters
+ * spread out instead of starting the world in pre-formed blobs (with body
+ * blocking a blob instantly becomes a deadly surround). SPAWN_AVOID_PLAYER_PX
+ * is Tibia's "creatures don't spawn on screen": a respawn never pops within
+ * this radius of the player — if the area is camped, it retries a bit later.
+ */
+export const SPAWN_SPACING_PX = 28;
+export const SPAWN_AVOID_PLAYER_PX = 120;
+export const RESPAWN_RETRY_S = 3;
+
+/**
  * Wildlands difficulty gradient. Monsters spawn biased by how far they are from
  * the entrance portal (0 = the coast you arrive on, 1 = the farthest reaches),
  * so the weakest creatures ring the entrance and the deadliest lurk in the far
