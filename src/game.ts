@@ -2,6 +2,7 @@
 import { makeWorld } from "./world/generate.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC } from "./world/handmade.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
+import { makeDeepWildWorld } from "./world/deepwild.ts";
 import { portalSpawn } from "./world/collision.ts";
 import { spawnMonster } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
@@ -104,7 +105,12 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
     up: "cave2", rocks: 20, bones: 14,
     treasure: true, // the Marrow Blade chest waits at the very bottom
   });
-  return { home, town, wild, cave1, cave2, cave3 };
+  // The Deep Wildlands rolls from its own salted stream AFTER everything else,
+  // so adding it changes not a single tile of the older islands (old saves see
+  // the exact same Wildlands/caverns they were rolled on).
+  seedWorldRng(seed ^ keySalt("deepwild"));
+  const deepwild = makeDeepWildWorld();
+  return { home, town, wild, deepwild, cave1, cave2, cave3 };
 }
 
 /** Populate one dangerous world from its own deterministic RNG stream. */
@@ -163,6 +169,14 @@ export function travelTo(g: Game, dest: WorldKey): void {
   if (dest === "wild") {
     const mouth = target.portals.find((pt) => pt.dest === "cave1");
     if (mouth) extra = "  ·  cave mouth to the " + compass(mouth.x - p.x, mouth.y - p.y);
+  }
+  // arriving on the Deep Wildlands: point the way to the nearest camp
+  if (dest === "deepwild" && target.camps.length) {
+    let best = target.camps[0];
+    for (const c of target.camps) {
+      if (Math.hypot(c.x - p.x, c.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y)) best = c;
+    }
+    extra = "  ·  " + best.name + " to the " + compass(best.x - p.x, best.y - p.y);
   }
   g.current = target;
   g.player.x = p.x;
