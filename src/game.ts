@@ -21,14 +21,26 @@ import type { Player } from "./entities/player.ts";
 import type { Bag } from "./items.ts";
 import type { MonsterKind } from "./world/types.ts";
 
+/**
+ * Every Storage Chest's inventory on Home Isle, backpack-excluded. Crafting,
+ * research and building costs draw from the backpack plus ALL of these — the
+ * chests are independent containers, but your resources are still your
+ * resources wherever you banked them (Etap 11).
+ */
+export function homeChests(g: Game): Bag[] {
+  const out: Bag[] = [];
+  for (const s of g.worlds.home.structures) {
+    if (s.key === "chest") out.push((s.inv ??= emptyStash()));
+  }
+  return out;
+}
+
 export interface Game {
   seed: number;
   worlds: Record<WorldKey, World>;
   /** The world the player is currently standing in. */
   current: World;
   player: Player;
-  /** Storage-chest contents, shared across all chests. */
-  stash: Bag;
   zoneFlash: { text: string; t: number };
   tpFlash: number;
   /** IDs of one-time treasure chests already opened (persisted in the save). */
@@ -266,7 +278,6 @@ export function createGame(seed = WORLD_SEED): Game {
     worlds,
     current: worlds.home,
     player,
-    stash: emptyStash(),
     zoneFlash: { text: "Home Isle  (safe)", t: 2.2 },
     tpFlash: 0,
     opened: [],

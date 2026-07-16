@@ -781,6 +781,87 @@ async function main(): Promise<void> {
       "the smith sells training arrows for 1g and never buys them back");
   }
 
+  console.log("Etap 11 — independent Storage Chests (50 slots each):");
+  {
+    const { tryPlace, canAfford } = await import("../src/systems/building.ts");
+    const { createGame, homeChests } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.gold = 0;
+    items.addItem(g.player.bag, "wood", 200);
+    items.addItem(g.player.bag, "stone", 100);
+    // find two clear spots and raise two chests
+    const home = g.worlds.home;
+    let built = 0;
+    for (let ty = 1; ty < home.h - 1 && built < 2; ty++)
+      for (let tx = 1; tx < home.w - 1 && built < 2; tx++)
+        if (canPlaceAt(home, "chest", tx, ty))
+          if (tryPlace(home, g.player, "chest", tx * 16 + 16, ty * 16 + 16, homeChests(g))) built++;
+    ok(built === 2, "two chests raised on Home Isle");
+    const invs = homeChests(g);
+    ok(invs.length === 2 && invs[0] !== invs[1], "each chest owns a separate inventory");
+    ok(invs[0].length === 50 && invs[1].length === 50, "every chest has 50 slots");
+    items.addItem(invs[0], "bones", 30);
+    ok(items.bagCount(invs[0], "bones") === 30 && items.bagCount(invs[1], "bones") === 0,
+      "items stored in one chest never appear in the other");
+    // costs still draw from the backpack + EVERY chest combined
+    items.addItem(invs[1], "herb", 12);
+    const bagWood = items.bagCount(g.player.bag, "wood");
+    items.removeItem(g.player.bag, "wood", bagWood);
+    items.addItem(invs[0], "wood", 22);
+    items.addItem(g.player.bag, "stone", 6);
+    ok(canAfford(g.player.bag, STRUCTS.garden.cost, homeChests(g)),
+      "a build cost split across bag + two chests still affords");
+  }
+
+  console.log("Etap 11 — chest persistence & legacy shared-stash migration:");
+  {
+    const { createGame, homeChests } = await import("../src/game.ts");
+    const { saveGame, loadGame, deleteSave } = await import("../src/save.ts");
+    const { tryPlace } = await import("../src/systems/building.ts");
+    const g = createGame();
+    items.addItem(g.player.bag, "wood", 60);
+    items.addItem(g.player.bag, "stone", 40);
+    const home = g.worlds.home;
+    outer: for (let ty = 1; ty < home.h - 1; ty++)
+      for (let tx = 1; tx < home.w - 1; tx++)
+        if (canPlaceAt(home, "chest", tx, ty)) {
+          tryPlace(home, g.player, "chest", tx * 16 + 16, ty * 16 + 16, homeChests(g));
+          break outer;
+        }
+    items.addItem(homeChests(g)[0], "silk", 44);
+    saveGame(g);
+    const g2 = loadGame();
+    ok(!!g2 && items.bagCount(homeChests(g2!)[0], "silk") === 44,
+      "a chest's own inventory survives the save round-trip");
+    // legacy: strip the chest inv and plant the pre-Etap-11 shared stash field
+    const raw = JSON.parse(localStorage.getItem("bone-isle-save-v2")!);
+    for (const st of raw.structures.home) delete st.inv;
+    raw.stash = [{ kind: "bones", n: 17 }, { kind: "wood", n: 5 }];
+    localStorage.setItem("bone-isle-save-v2", JSON.stringify(raw));
+    const g3 = loadGame();
+    ok(!!g3 && items.bagCount(homeChests(g3!)[0], "bones") === 17
+      && items.bagCount(homeChests(g3!)[0], "wood") === 5,
+      "the old shared stash pours into the first chest on load");
+    deleteSave();
+  }
+
+  console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");
+  {
+    ok(items.ITEMS.backpack.pack?.slots === 8 && items.ITEMS.backpack.stack === 1,
+      "a carried Backpack is worth +8 bag slots");
+    ok(items.ITEMS.booster.boost === true, "the Dopalacz carries the boost flag");
+    const br = items.RECIPES.find((r) => r.out === "booster")!;
+    ok(!!br && br.gold === 1 && Object.keys(br.cost).length === 0,
+      "the Dopalacz forges for 1 gold and nothing else");
+    const bag = items.emptyBag();
+    ok(items.craft(bag, br) && items.bagCount(bag, "booster") === 1,
+      "crafting it lands one in the bag (gold is charged by the forge)");
+    const { SHOPS } = await import("../src/entities/npcs.ts");
+    ok(!!SHOPS.smith?.entries.find((e) => e.kind === "backpack" && e.buy === 40),
+      "the smith sells Backpacks for 40g");
+    ok(items.emptyStash().length === 50, "a fresh chest inventory is 50 slots");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

@@ -20,6 +20,8 @@ export interface HudCtx {
   screenW: number;
   screenH: number;
   touch?: boolean;
+  /** True only on a REAL touch device (touchUI above is on everywhere). */
+  touchInput?: boolean;
 }
 
 function panel(h: HudCtx, x: number, y: number, w: number, ph: number): void {

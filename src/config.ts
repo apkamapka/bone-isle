@@ -193,8 +193,19 @@ export const MONSTER_AGGRO_RANGE = 166;
  */
 export const MONSTER_AGGRO_HIT_S = 6;
 
-/** Chest storage capacity (slots). */
-export const STASH_SIZE = 20;
+/** Chest storage capacity (slots) — PER CHEST. Every Storage Chest built on
+ *  Home Isle carries its own independent inventory (Etap 11); building more
+ *  chests means more total storage, not a second window onto the same one. */
+export const STASH_SIZE = 50;
+
+/**
+ * Carried backpacks (Etap 11): each Backpack item in your bag adds this many
+ * extra bag slots, up to PACK_MAX packs. Dropping/selling/stashing a pack
+ * shrinks the bag again — anything sitting in the lost slots spills to the
+ * ground at your feet (Tibia would drop the container with its contents).
+ */
+export const PACK_BONUS_SLOTS = 8;
+export const PACK_MAX = 2;
 
 /** Carry capacity (weight in oz). Grows with level, gates the backpack. */
 export const CAP_BASE = 500;

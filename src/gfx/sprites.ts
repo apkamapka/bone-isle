@@ -603,6 +603,15 @@ export const SPR = {
     "..uU..Uu..",
     "..kk..kk..",
   ]),
+  // TEST item: the Dopalacz — a fizzing violet-gold brew, unmistakable in the bag
+  boosterPotion: bake([
+    "..y..",
+    ".kyk.",
+    ".uuu.",
+    "uUuuu",
+    "uuyuu",
+    ".uuu.",
+  ]),
   npcTaskmaster: bake([
     "..tttttt..",
     ".tttttttt.",
@@ -1100,6 +1109,7 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   spearCrystal: SPR.crystalSpear, fireRuby: SPR.fireRuby,
   bow: SPR.bow, longbow: SPR.longbow, arrow: SPR.arrow, boneArrow: SPR.boneArrow,
   trainingArrow: SPR.trainingArrow,
+  backpack: SPR.pack, booster: SPR.boosterPotion,
 };
 export function itemSprite(kind: ItemKind): HTMLCanvasElement {
   return ITEM_SPR[kind];

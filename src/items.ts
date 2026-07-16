@@ -29,7 +29,9 @@ export type ItemKind =
   // Blade — each piece hoarded on a different camp's deepest lair floor
   | "marrowShield" | "marrowArmor" | "marrowHelmet" | "marrowLegs" | "marrowBoots"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
-  | "aolAmulet";
+  | "aolAmulet"
+  // containers & test gear (Etap 11)
+  | "backpack" | "booster";
 
 export type EqSlot = "head" | "body" | "legs" | "boots" | "weapon" | "shield" | "ring" | "amulet";
 
@@ -66,6 +68,10 @@ export interface ItemDef {
   /** Amulet of Loss: worn in the amulet slot, consumed on death, protects
    *  your backpack + equipment from dropping (never exp or skills). */
   deathProtect?: true;
+  /** Backpack: while carried, adds this many bag slots (see PACK_MAX). */
+  pack?: { slots: number };
+  /** TEST item: eating grants +5 levels and +20 to every skill. */
+  boost?: true;
 }
 
 export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
@@ -125,6 +131,12 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
+  // Backpack: buy it at the smith, keep it IN your bag — each one carried adds
+  // 8 slots (up to 2 packs). Gear never stacks, so two packs take two slots.
+  backpack:  { name: "Backpack",     stack: 1, value: 20, weight: 18, pack: { slots: 8 } },
+  // TEST ONLY (Radek): a 1-gold forge brew that force-feeds levels & skills so
+  // late-game content can be reached instantly. Slated for removal.
+  booster:   { name: "Dopalacz",     stack: 999, value: 0, weight: 1, boost: true },
 };
 
 /** Weight of `n` of a given item kind, in oz. */
@@ -325,6 +337,8 @@ export const RECIPES: readonly Recipe[] = [
   { out: "amulet",     cost: { bones: 12, silk: 6 } },
   // Amulet of Loss — pure gold sink; protects items (not exp/skills) on death
   { out: "aolAmulet",  cost: {}, gold: 500 },
+  // TEST ONLY: the Dopalacz — 1 gold, +5 levels, +20 every skill (see above)
+  { out: "booster",    cost: {}, gold: 1 },
   { out: "hpPotion",   cost: { herb: 3, mushroom: 2 } },
   // ranged: bows, then arrows in batches (the progression is in the ammo)
   { out: "bow",        cost: { wood: 6, silk: 2 } },
@@ -393,6 +407,8 @@ export function itemInfoLines(kind: ItemKind): string[] {
   if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
   if (d.crystal) lines.push(`Charge item (1 use per unit)`);
   if (d.deathProtect) lines.push(`Protects your items on death`, `(one use — the amulet shatters)`);
+  if (d.pack) lines.push(`Carried in the bag: +${d.pack.slots} bag slots`, `(up to 2 backpacks count)`);
+  if (d.boost) lines.push(`TEST: +5 levels, +20 every skill`);
   if (d.heal) lines.push(`Restores ${d.heal} HP`);
   lines.push(`Weight ${d.weight} oz · Value ${d.value} gp`);
   return lines;

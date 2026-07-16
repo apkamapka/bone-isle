@@ -96,6 +96,9 @@ export interface Structure {
   ty: number;
   anim: number;
   hurtT?: number;
+  /** Storage Chests only: this chest's own inventory (Etap 11). Rides inside
+   *  the structure dump in the save, so persistence needs no extra field. */
+  inv?: (ItemStack | null)[];
 }
 
 /** Reserved circular area kept clear during procedural placement. */

@@ -1,5 +1,6 @@
 import "./style.css";
 import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S } from "./config.ts";
+import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { moveEntity, unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
@@ -17,6 +18,8 @@ import {
   type HudGroup,
 } from "./systems/hudLayout.ts";
 import { researchById, isResearched, markResearched } from "./systems/tower.ts";
+import { skills, type SkillKey } from "./systems/skills.ts";
+import { totalExpFor } from "./config.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
 import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow, bestPracticeArrow, compactBag } from "./items.ts";
@@ -24,11 +27,11 @@ import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
-import { createGame, travelTo, respawnAtHome, CHEST_PRIZES, type Game } from "./game.ts";
+import { createGame, travelTo, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
 import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
-import type { Vec, World, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
+import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -113,17 +116,33 @@ const game: Game = loadGame() ?? createGame();
 setActiveBonus(structureBonuses(game.worlds.home));
 refreshDerived(game.player);
 // merge any stacks that older saves left fragmented (stack limits grew)
-compactBag(game.player.bag); compactBag(game.stash);
+compactBag(game.player.bag);
+for (const inv of homeChests(game)) compactBag(inv);
 const P = game.player;
 applyOutfit(P); // wear the saved dyes (or the classic look) from frame one
 if (unstick(game.current, P)) { /* freed a player boxed in by an old build */ }
 const cam = { x: 0, y: 0 };
+/**
+ * Mobile build placement (Etap 11): touch has no hover, so the ghost preview
+ * was invisible and every tap tried to place blind. Two-tap flow instead —
+ * the first tap PARKS the green/red ghost on that tile, a second tap on the
+ * same tile confirms. Desktop keeps the classic hover-and-click.
+ */
+let placeGhost: { tx: number; ty: number } | null = null;
 let moveMarker: { x: number; y: number; t: number } | null = null;
 let waveT = 0;
 let saveTimer = 0;
 let last = performance.now();
 
-const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, shopTab: "buy", dragging: false, lookMode: false, inspect: null, split: null };
+const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, stash: null, shopTab: "buy", dragging: false, lookMode: false, inspect: null, split: null };
+
+/** The inventory of the chest whose window is open, or null. Every stash
+ *  operation routes through here — chests are independent now (Etap 11). */
+function openStash(): (typeof P.bag) | null {
+  const s = ui.stash;
+  if (!s || !hasWindow("stash")) return null;
+  return s.inv ?? null;
+}
 const mouse = { sx: 0, sy: 0 };
 let hotspots: Hotspot[] = [];
 let itemSlots: ItemSlot[] = [];
@@ -238,6 +257,7 @@ function closeWindow(kind: PanelKind): void {
   if (i >= 0) ui.windows.splice(i, 1);
   if (kind === "loot") ui.loot = null;
   if (kind === "shop") ui.npc = null;
+  if (kind === "stash") ui.stash = null;
   beep(300, 0.05, "sine", 0.04);
 }
 
@@ -254,7 +274,7 @@ function togglePanel(which: PanelKind): void {
 /* ---------------- panel actions ---------------- */
 
 const act: PanelActions = {
-  startPlacing: (key: StructKey) => { ui.placing = key; closeWindow("build"); },
+  startPlacing: (key: StructKey) => { ui.placing = key; placeGhost = null; closeWindow("build"); },
   useItem: (kind: ItemKind) => {
     const def = ITEMS[kind];
     if (def.crystal) { useCrystalItem(kind); return; }
@@ -266,6 +286,24 @@ const act: PanelActions = {
       P.fedS += def.food;
       flash(["Munch.", "Gulp.", "Mmmh."][rndi(0, 2)], "#e8dcc0");
       beep(360, 0.08, "sine", 0.05, 60);
+      return;
+    }
+    if (def.boost) {
+      // TEST item (Dopalacz): +5 levels and +20 to every skill, instantly.
+      if (!removeItem(P.bag, kind, 1)) return;
+      const targetLv = P.level + 5;
+      const missing = totalExpFor(targetLv) - (totalExpFor(P.level) + P.exp);
+      if (missing > 0) grantExp(cw(), P, missing);
+      for (const k of Object.keys(skills) as SkillKey[]) {
+        const sk = skills[k];
+        if (!sk.active) continue;
+        sk.lv += 20;
+        sk.pts = 0;
+      }
+      refreshDerived(P);
+      P.hp = P.maxhp;
+      flash("DOPALACZ! +5 levels, +20 skills", "#ff9e3a");
+      beep(700, 0.25, "square", 0.07, 200);
       return;
     }
     // don't waste a potion charge when already at full health
@@ -376,15 +414,16 @@ const act: PanelActions = {
 
 /** Store up to `n` of bag slot `index` into the chest. */
 function storePartial(index: number, n: number): void {
+  const inv = openStash();
   const slot = P.bag[index];
-  if (!slot) return;
+  if (!inv || !slot) return;
   const take = Math.min(n, slot.n);
-  const left = addItem(game.stash, slot.kind, take);
+  const left = addItem(inv, slot.kind, take);
   const moved = take - left;
-  if (moved <= 0) { flash("stash full"); return; }
+  if (moved <= 0) { flash("chest full"); return; }
   slot.n -= moved;
   if (slot.n <= 0) P.bag[index] = null;
-  compactBag(game.stash); compactBag(P.bag);
+  compactBag(inv); compactBag(P.bag);
   beep(360, 0.06, "sine", 0.04);
 }
 
@@ -413,6 +452,32 @@ function resolveThrowTarget(tx: number, ty: number): { x: number; y: number } {
   return { x: P.x, y: P.y + 2 };
 }
 
+/**
+ * A thrown stack that lands on a portal travels THROUGH it (Etap 11) — the
+ * classic loot-bag trick: pitch your haul into the teleport and it drops out
+ * beside the matching portal on the far side, exactly where you'd arrive.
+ */
+function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }): void {
+  const from = cw();
+  const dest = game.worlds[pt.dest];
+  const back = dest.portals.find((p2) => p2.dest === from.key) ?? dest.portals[0];
+  const gx = (back?.x ?? dest.w * TILE / 2) + (Math.random() - 0.5) * 8;
+  const gy = (back?.y ?? dest.h * TILE / 2) + 14;
+  const near = dest.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 7);
+  if (near) near.n += n;
+  else dest.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
+  flash(`whoosh — ${n} ${ITEMS[kind].name} through the portal!`, "#8ab6ff");
+  beep(600, 0.12, "sine", 0.05, -220);
+}
+
+/** The portal (if any) whose swirl covers world point (x,y). */
+function portalAt(x: number, y: number): { dest: WorldKey } | null {
+  for (const pt of cw().portals) {
+    if (dist(x, y, pt.x, pt.y) < 12) return pt;
+  }
+  return null;
+}
+
 /** Drop an item stack onto the ground — at the player's feet, or thrown to a
  *  target spot (Tibia-style) when (tx,ty) is given. */
 function dropToGround(kind: ItemKind, n: number, tx?: number, ty?: number): void {
@@ -422,6 +487,9 @@ function dropToGround(kind: ItemKind, n: number, tx?: number, ty?: number): void
   let gy: number;
   if (tx !== undefined && ty !== undefined) {
     const t = resolveThrowTarget(tx, ty);
+    // aimed at a portal → the stack takes the trip instead of landing
+    const pt = portalAt(t.x, t.y);
+    if (pt) { sendThroughPortal(kind, n, pt); return; }
     gx = t.x; gy = t.y;
   } else {
     const jitter = () => (Math.random() - 0.5) * 8;
@@ -442,6 +510,14 @@ function throwGroundItem(gi: GroundItem, tx: number, ty: number): void {
   const world = cw();
   if (!world.ground.includes(gi)) return;
   const t = resolveThrowTarget(tx, ty);
+  // shoving a ground stack into a portal sends it through too
+  const pt = portalAt(t.x, t.y);
+  if (pt) {
+    const idx = world.ground.indexOf(gi);
+    if (idx >= 0) world.ground.splice(idx, 1);
+    sendThroughPortal(gi.kind, gi.n, pt);
+    return;
+  }
   const near = world.ground.find((g) => g !== gi && g.kind === gi.kind && Math.hypot(g.x - t.x, g.y - t.y) < 7);
   if (near) {
     near.n += gi.n;
@@ -472,7 +548,9 @@ function pickupGround(gi: GroundItem): void {
 
 /** Take up to `n` of chest slot `index` into the backpack (weight-limited). */
 function takePartial(index: number, n: number): void {
-  const slot = game.stash[index];
+  const inv = openStash();
+  if (!inv) return;
+  const slot = inv[index];
   if (!slot) return;
   const wantByN = Math.min(n, slot.n);
   const fitByWeight = Math.floor(freeCap(P) / itemWeight(slot.kind, 1));
@@ -482,8 +560,8 @@ function takePartial(index: number, n: number): void {
   const moved = want - left;
   if (moved <= 0) { flash("bag full"); return; }
   slot.n -= moved;
-  if (slot.n <= 0) game.stash[index] = null;
-  compactBag(P.bag); compactBag(game.stash);
+  if (slot.n <= 0) inv[index] = null;
+  compactBag(P.bag); compactBag(inv);
   syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   beep(440, 0.06, "sine", 0.04);
 }
@@ -518,7 +596,8 @@ function swapOrMerge(arr: Slots, from: number, to: number): void {
 }
 const currentN = (src: "bag" | "stash" | "ground", index: number): number => {
   if (src === "ground") return itemDrag?.gi?.n ?? 0;
-  const s = (src === "bag" ? P.bag : game.stash)[index];
+  const arr = src === "bag" ? P.bag : openStash();
+  const s = arr ? arr[index] : null;
   return s ? s.n : 0;
 };
 
@@ -535,7 +614,10 @@ function resolveItemDrop(rx: number, ry: number): void {
         if (dist(P.x, P.y, d.gi.x, d.gi.y) > ITEM_MOVE_REACH_PX) { flash("too far away", "#d96a5a"); return; }
         pickupGround(d.gi);
       }
-      else if (it.src === d.src) swapOrMerge(d.src === "bag" ? P.bag : game.stash, d.index, it.index);
+      else if (it.src === d.src) {
+        const arr = d.src === "bag" ? P.bag : openStash();
+        if (arr) swapOrMerge(arr, d.index, it.index);
+      }
       else if (d.src === "bag") storePartial(d.index, currentN("bag", d.index));
       else takePartial(d.index, currentN("stash", d.index));
       return;
@@ -576,7 +658,8 @@ function resolveItemDrop(rx: number, ry: number): void {
 
 /** Open the quantity chooser for a bag/chest slot (or move a single item flat). */
 function openMoveChooser(src: "bag" | "stash", index: number): void {
-  const slot = src === "bag" ? P.bag[index] : game.stash[index];
+  const arr = src === "bag" ? P.bag : openStash();
+  const slot = arr ? arr[index] : null;
   if (!slot) return;
   const canStore = ui.windows.some((w) => w.kind === "stash");
   // one item, single obvious action → skip the chooser. On touch a bag item
@@ -615,7 +698,7 @@ import { craftAcross } from "./items.ts";
 function craftAt(r: Recipe): boolean {
   const goldCost = r.gold ?? 0;
   if (P.gold < goldCost) { flash("not enough gold", "#d96a5a"); return false; }
-  if (craftAcross([P.bag, game.stash], r)) {
+  if (craftAcross([P.bag, ...homeChests(game)], r)) {
     P.gold -= goldCost;
     flash(`crafted ${ITEMS[r.out].name}`, "#b9e07f");
     return true;
@@ -626,8 +709,8 @@ function craftAt(r: Recipe): boolean {
 function doResearch(id: string): void {
   const r = researchById(id);
   if (!r || isResearched(r.id)) return;
-  if (!canAfford(P.bag, r.researchCost, game.stash)) { flash("need materials"); return; }
-  payCost(P.bag, r.researchCost, game.stash);
+  if (!canAfford(P.bag, r.researchCost, homeChests(game))) { flash("need materials"); return; }
+  payCost(P.bag, r.researchCost, homeChests(game));
   markResearched(r.id);
   flash(`researched ${r.name}`, "#c9a6ff");
   beep(520, 0.18, "square", 0.06, 120);
@@ -636,11 +719,11 @@ function doResearch(id: string): void {
 function doBuyCrystal(id: string): void {
   const r = researchById(id);
   if (!r || !isResearched(r.id)) return;
-  if (!canAfford(P.bag, r.buyCost, game.stash)) { flash("need materials"); return; }
+  if (!canAfford(P.bag, r.buyCost, homeChests(game))) { flash("need materials"); return; }
   if (!canCarry(P, r.crystal, r.buyN)) { flash("too heavy"); return; }
   const moved = r.buyN - addItem(P.bag, r.crystal, r.buyN);
   if (moved < r.buyN) { if (moved > 0) removeItem(P.bag, r.crystal, moved); flash("bag full"); return; }
-  payCost(P.bag, r.buyCost, game.stash);
+  payCost(P.bag, r.buyCost, homeChests(game));
   flash(`+${r.buyN} ${ITEMS[r.crystal].name}`, "#b9e07f");
   beep(440, 0.12, "sine", 0.05, 120);
 }
@@ -815,14 +898,29 @@ function handleWorldTap(sx: number, sy: number): void {
     if (cw() !== game.worlds.home) {
       flash("you can only build on Home Isle", "#e0a06a");
       ui.placing = null;
+      placeGhost = null;
       return;
     }
-    if (tryPlace(game.worlds.home, P, ui.placing, w.x, w.y, game.stash)) {
+    const key = ui.placing;
+    const n = STRUCTS[key].single ? 1 : 2;
+    const tx = Math.round(w.x / TILE - n / 2);
+    const ty = Math.round(w.y / TILE - n / 2);
+    // Touch: first tap parks the ghost, a second tap on the SAME tile builds.
+    // (No hover on a phone — without this the preview never showed at all.)
+    if (isTouchDevice() && !(placeGhost && placeGhost.tx === tx && placeGhost.ty === ty)) {
+      placeGhost = { tx, ty };
+      if (!canPlaceAt(game.worlds.home, key, tx, ty)) flash("can't build here — pick another tile", "#e0a06a");
+      else flash("tap again to build", "#9fe8a8");
+      return;
+    }
+    if (tryPlace(game.worlds.home, P, key, w.x, w.y, homeChests(game))) {
       recomputeBonuses();
       ui.placing = null; // placed — leave build mode
-    } else if (!canAfford(P.bag, STRUCTS[ui.placing].cost, game.stash)) {
+      placeGhost = null;
+    } else if (!canAfford(P.bag, STRUCTS[key].cost, homeChests(game))) {
       flash("not enough materials", "#d96a5a");
       ui.placing = null;
+      placeGhost = null;
     } else {
       // invalid spot — stay in placing mode so the player can try elsewhere
       flash("can't build here", "#e0a06a");
@@ -847,7 +945,7 @@ initInput(screen, {
     if (assignSlot !== null) { assignSlot = null; return; }
     if (ui.split) { ui.split = null; return; }
     if (ui.inspect) { ui.inspect = null; return; }
-    if (ui.placing) { ui.placing = null; return; }
+    if (ui.placing) { ui.placing = null; placeGhost = null; return; }
     // close the top-most open panel, one press at a time
     const top = ui.windows[ui.windows.length - 1];
     if (top) closeWindow(top.kind);
@@ -1229,7 +1327,12 @@ function tickProximityPanels(dt: number): void {
   const checks: ReadonlyArray<readonly [PanelKind, () => boolean]> = [
     ["forge", () => nearStructure("forge")],
     ["tower", () => nearStructure("tower")],
-    ["stash", () => nearStructure("chest")],
+    ["stash", () => {
+      const st = ui.stash;
+      if (!st || cw() !== game.worlds.home || !game.worlds.home.structures.includes(st)) return false;
+      const c = structCenter(st);
+      return dist(P.x, P.y, c.x, c.y) < USE_RANGE_PX;
+    }],
     ["shop", () => !!ui.npc && cw().npcs.includes(ui.npc) && nearNpc((n) => n === ui.npc)],
     ["tasks", () => nearNpc((n) => n.key === "taskmaster")],
     ["wardrobe", () => nearNpc((n) => n.key === "tailor")],
@@ -1254,7 +1357,27 @@ function checkPortals(): void {
   }
 }
 
+/**
+ * Keep the bag's slot count in step with carried Backpacks: 16 base + 8 per
+ * pack (max 2). Shrinking spills anything stranded in the lost slots onto the
+ * ground at your feet — Tibia would drop the container with its contents.
+ */
+function syncBagSize(): void {
+  const packs = Math.min(PACK_MAX, bagCount(P.bag, "backpack"));
+  const target = BAG_SIZE + packs * PACK_BONUS_SLOTS;
+  if (P.bag.length < target) {
+    while (P.bag.length < target) P.bag.push(null);
+  } else if (P.bag.length > target) {
+    for (let i = target; i < P.bag.length; i++) {
+      const st = P.bag[i];
+      if (st) dropToGround(st.kind, st.n);
+    }
+    P.bag.length = target;
+  }
+}
+
 function update(dt: number): void {
+  syncBagSize();
   const world = cw();
   waveT += dt;
   P.tpCd = Math.max(0, P.tpCd - dt);
@@ -1458,7 +1581,7 @@ function resolveTarget(): void {
   } else if (t.kind === "structure") {
     if (t.s.key === "forge") openWindow("forge");
     else if (t.s.key === "tower") openWindow("tower");
-    else if (t.s.key === "chest") openWindow("stash");
+    else if (t.s.key === "chest") { ui.stash = t.s; openWindow("stash"); }
     else if (t.s.key === "treasure") openTreasure(t.s);
     P.target = null;
   }
@@ -1522,10 +1645,22 @@ function render(): void {
   if (ui.placing && world === game.worlds.home) {
     const key = ui.placing;
     const n = STRUCTS[key].single ? 1 : 2;
-    const wx = mouse.sx / vScale + cam.x;
-    const wy = mouse.sy / vScale + cam.y;
-    const tx = Math.round(wx / TILE - n / 2);
-    const ty = Math.round(wy / TILE - n / 2);
+    let tx: number;
+    let ty: number;
+    if (isTouchDevice()) {
+      // no hover on touch: draw the ghost parked by the last tap, or (before
+      // any tap) preview it one tile below the player so it's always visible
+      if (placeGhost) { tx = placeGhost.tx; ty = placeGhost.ty; }
+      else {
+        tx = Math.round(P.x / TILE - n / 2);
+        ty = Math.round((P.y + TILE) / TILE - n / 2) + 1;
+      }
+    } else {
+      const wx = mouse.sx / vScale + cam.x;
+      const wy = mouse.sy / vScale + cam.y;
+      tx = Math.round(wx / TILE - n / 2);
+      ty = Math.round(wy / TILE - n / 2);
+    }
     const ok = canPlaceAt(world, key, tx, ty);
     const gx = tx * TILE - cam.x;
     const gy = ty * TILE - cam.y;
@@ -1783,6 +1918,7 @@ function render(): void {
   const hud: HudCtx = {
     ctx: sctx, scale, panelScale: desktopUI ? scale * 0.7 : scale,
     screenW: screen.width, screenH: screen.height, touch: touchUI,
+    touchInput: isTouchDevice(),
   };
   drawHud(hud, game, P);
   hotspots = [];

@@ -38,7 +38,7 @@ export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
   smith: {
     greeting: "Fresh steel and a fair price. What'll it be?",
     entries: shop(
-      ["sword", "ironSword", "leatherArmor", "chainArmor", "helmet", "armor", "shieldItem", "legs", "trainingArrow"],
+      ["sword", "ironSword", "leatherArmor", "chainArmor", "helmet", "armor", "shieldItem", "legs", "trainingArrow", "backpack"],
       ["wood", "stone", "bones", "ironSword", "boneSword", "sword", "leatherArmor", "chainArmor",
         "battleAxe", "steelShield", "fireSword", "dragonShield", "dragonScaleArmor", "shell"],
     ),

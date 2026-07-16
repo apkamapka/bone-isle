@@ -14,7 +14,8 @@ import { hudText, type HudCtx } from "./hud.ts";
 import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
 import type { EqSlot, ItemKind, Recipe } from "../items.ts";
-import type { Corpse, Npc } from "../world/types.ts";
+import type { Corpse, Npc, Structure } from "../world/types.ts";
+import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
 
 export type PanelKind =
@@ -61,6 +62,8 @@ export interface UiState {
   selSlot: EqSlot | null;
   loot: Corpse | null;
   npc: Npc | null;
+  /** The Storage Chest whose window is open (chests are independent now). */
+  stash: Structure | null;
   shopTab: "buy" | "sell";
   dragging: boolean;
   /** Look/inspect mode: taps describe items instead of using them. */
@@ -380,7 +383,7 @@ function drawBuild(p: PanelInput): void {
   let ry = y + 18 * S;
   for (const key of STRUCT_KEYS) {
     const def = STRUCTS[key];
-    const afford = canAfford(player.bag, def.cost, p.game.stash);
+    const afford = canAfford(player.bag, def.cost, homeChests(p.game));
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && afford) {
       hud.ctx.fillStyle = "rgba(202,162,58,.15)";
       hud.ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
@@ -404,7 +407,10 @@ function drawPlacingHint(p: { hud: HudCtx; ui: UiState }): void {
   const { hud, ui } = p;
   const key = ui.placing;
   if (!key) return;
-  hudText(hud, `Placing: ${STRUCTS[key].name} — click any clear grass on Home Isle ([Esc] cancel)`, hud.screenW / 2, 18 * hud.scale, 9 * hud.scale, "#9fe8a8", "center", true);
+  const msg = hud.touchInput
+    ? `Placing: ${STRUCTS[key].name} — tap a tile to aim, tap it again to build`
+    : `Placing: ${STRUCTS[key].name} — click any clear grass on Home Isle ([Esc] cancel)`;
+  hudText(hud, msg, hud.screenW / 2, 18 * hud.scale, 9 * hud.scale, "#9fe8a8", "center", true);
 }
 
 /* ---------------- Skills ---------------- */
@@ -576,7 +582,7 @@ function drawBag(p: PanelInput): void {
   const { hud, player } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
   const cols = 4;
-  const rows = 4;
+  const rows = Math.ceil(player.bag.length / cols); // grows with carried Backpacks
   const cell = 32 * S;
   const gap = 4 * S;
   const goldRow = 16 * S;
@@ -617,7 +623,7 @@ function drawBag(p: PanelInput): void {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.look(k) });
       } else if (def.slot) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.equipItem(k, idx) });
-      } else if (def.heal || def.food || def.crystal) {
+      } else if (def.heal || def.food || def.crystal || def.boost) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.useItem(k, idx) });
       } else {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.moveStack("bag", idx) });
@@ -639,7 +645,7 @@ function drawForge(p: PanelInput): void {
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   goldPanel(p, x, y, w, h, "FORGE — craft gear");
-  const bags = [player.bag, p.game.stash];
+  const bags = [player.bag, ...homeChests(p.game)];
   let ry = y + 18 * S;
   for (const r of RECIPES) {
     const ok = canCraftAcross(bags, r) && player.gold >= (r.gold ?? 0);
@@ -676,7 +682,7 @@ function drawTower(p: PanelInput): void {
   for (const r of RESEARCH) {
     const researched = isResearched(r.id);
     const cost = researched ? r.buyCost : r.researchCost;
-    const affordable = canAfford(player.bag, cost, game.stash);
+    const affordable = canAfford(player.bag, cost, homeChests(game));
     const clickable = affordable; // research or buy both need materials
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable) {
       ctx.fillStyle = "rgba(202,162,58,.15)";
@@ -1025,13 +1031,15 @@ function drawGrid(
 }
 
 function drawStash(p: PanelInput): void {
-  const { hud, player, game } = p;
+  const { hud, player } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
-  const cols = 5;
-  const cell = 30 * S;
-  const gap = 4 * S;
+  const inv = p.ui.stash?.inv;
+  if (!inv) return;
+  const cols = 10;
+  const cell = 26 * S;
+  const gap = 3 * S;
   const gridW = cols * cell + (cols - 1) * gap;
-  const stashRows = Math.ceil(game.stash.length / cols);
+  const stashRows = Math.ceil(inv.length / cols);
   const bagRows = Math.ceil(player.bag.length / cols);
   const w = gridW + 24 * S;
   const headH = 12 * S;
@@ -1042,9 +1050,10 @@ function drawStash(p: PanelInput): void {
   const gx = x + (w - gridW) / 2;
   let gy = y + 18 * S;
 
-  hudText(hud, "Chest — click to take", x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
+  const used = inv.filter((s) => s !== null).length;
+  hudText(hud, `Chest — click to take  (${used}/${inv.length})`, x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
   gy += headH;
-  drawGrid(p, game.stash, gx, gy, cols, cell, gap, (i) => p.act.moveStack("stash", i), "stash");
+  drawGrid(p, inv, gx, gy, cols, cell, gap, (i) => p.act.moveStack("stash", i), "stash");
   gy += stashRows * (cell + gap) + 8 * S;
 
   ctx.fillStyle = "#6e571f";

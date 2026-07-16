@@ -1,6 +1,6 @@
 /** localStorage persistence: full game snapshot keyed by a single slot. */
 import { buildWorlds, populateAll, type Game } from "./game.ts";
-import { WORLD_SEED, GROUND_DESPAWN_S } from "./config.ts";
+import { WORLD_SEED, GROUND_DESPAWN_S, PACK_BONUS_SLOTS, PACK_MAX } from "./config.ts";
 import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn, feetBlocked } from "./world/collision.ts";
@@ -13,7 +13,7 @@ import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./syst
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { quests } from "./systems/quests.ts";
-import { emptyBag, emptyStash, emptyEquipment, ITEMS } from "./items.ts";
+import { emptyBag, emptyStash, emptyEquipment, addItem, ITEMS } from "./items.ts";
 import type { Bag, Equipment, ItemKind } from "./items.ts";
 import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
 
@@ -37,6 +37,8 @@ interface SaveData {
   ground?: Partial<Record<WorldKey, GroundItem[]>>;
   /** Lootable corpses per world — notably the player's own body after death. */
   corpses?: Partial<Record<WorldKey, Corpse[]>>;
+  /** LEGACY (pre-Etap 11): the old shared chest inventory. No longer written;
+   *  read once on load and poured into the first Storage Chest. */
   stash?: Bag;
   research?: string[];
   tasks?: TaskSave;
@@ -85,7 +87,6 @@ export function saveGame(g: Game): void {
     structures: structDump,
     ground: groundDump,
     corpses: corpseDump,
-    stash: g.stash,
     research: researchState(),
     tasks: taskState(),
     slots: serializeSlots(),
@@ -129,7 +130,7 @@ export function loadGame(): Game | null {
       // Drop structures whose kind no longer exists (e.g. the old Library).
       worlds[k].structures = saved
         .filter((s) => s.key !== "library")
-        .map((s) => ({ ...s }));
+        .map((s) => ({ ...s, ...(s.key === "chest" ? { inv: normalizeStash(s.inv) } : {}) }));
     }
     // Restore ground items + corpses (defensively — items validated by kind).
     const gr = data.ground?.[k];
@@ -215,12 +216,27 @@ export function loadGame(): Game | null {
     player.x = safe.x;
     player.y = safe.y;
   }
+  // LEGACY stash migration (pre-Etap 11 shared chest): pour the old shared
+  // inventory into the first Storage Chest — its 50 slots swallow the old 20
+  // whole. In the (theoretically impossible) chestless case the items drop on
+  // the ground at the home spawn rather than silently vanishing.
+  const legacy = normalizeStash(data.stash);
+  const firstChest = worlds.home.structures.find((s) => s.key === "chest");
+  for (const st of legacy) {
+    if (!st) continue;
+    let left = st.n;
+    if (firstChest) left = addItem((firstChest.inv ??= emptyStash()), st.kind, st.n);
+    if (left > 0) {
+      const at = portalSpawn(worlds.home);
+      worlds.home.ground.push({ kind: st.kind, n: left, x: at.x + (Math.random() - 0.5) * 12, y: at.y + 8, t: GROUND_DESPAWN_S });
+    }
+  }
+
   return {
     seed: WORLD_SEED,
     worlds,
     current,
     player,
-    stash: normalizeStash(data.stash),
     zoneFlash: { text: current.name + (current.safe ? "  (safe)" : "  (dangerous)"), t: 2 },
     tpFlash: 0,
     opened: Array.isArray(data.opened) ? data.opened.filter((x) => typeof x === "string") : [],
@@ -246,6 +262,10 @@ function validItem(s: unknown): { kind: ItemKind; n: number } | null {
 function normalizeBag(bag: unknown): Bag {
   const out = emptyBag();
   if (Array.isArray(bag)) {
+    // carried Backpacks enlarge the bag (Etap 11): keep the saved length, up
+    // to the hard ceiling — the per-frame size sync re-validates it in play
+    const maxLen = out.length + PACK_BONUS_SLOTS * PACK_MAX;
+    while (out.length < Math.min(maxLen, bag.length)) out.push(null);
     for (let i = 0; i < out.length && i < bag.length; i++) {
       out[i] = validItem(bag[i]);
     }

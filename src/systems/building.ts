@@ -4,7 +4,7 @@ import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
 import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeRange, bakeChest, bakeTreasureChest } from "../gfx/sprites.ts";
-import { countAcross, removeAcross } from "../items.ts";
+import { countAcross, removeAcross, emptyStash } from "../items.ts";
 import { onStructureBuilt } from "./quests.ts";
 import { unstick } from "../world/collision.ts";
 import { Tile } from "../world/types.ts";
@@ -49,12 +49,14 @@ export function structureBonuses(home: World): { maxhp: number } {
   return { maxhp };
 }
 
-export function canAfford(bag: Bag, cost: Cost, stash?: Bag): boolean {
-  const bags = stash ? [bag, stash] : [bag];
+/** Costs draw from the backpack plus EVERY Storage Chest (each chest now has
+ *  its own inventory, so the "stash" side is a list of bags — Etap 11). */
+export function canAfford(bag: Bag, cost: Cost, stash?: readonly Bag[]): boolean {
+  const bags = stash ? [bag, ...stash] : [bag];
   return (Object.entries(cost) as [ItemKind, number][]).every(([k, v]) => countAcross(bags, k) >= v);
 }
-export function payCost(bag: Bag, cost: Cost, stash?: Bag): void {
-  const bags = stash ? [bag, stash] : [bag];
+export function payCost(bag: Bag, cost: Cost, stash?: readonly Bag[]): void {
+  const bags = stash ? [bag, ...stash] : [bag];
   for (const [k, v] of Object.entries(cost) as [ItemKind, number][]) removeAcross(bags, k, v);
 }
 export function costText(cost: Cost): string {
@@ -124,7 +126,7 @@ function markSolid(home: World, key: string, tx: number, ty: number): void {
  * anywhere on Home Isle the ground allows — no fixed build pads. Returns true
  * if the structure was placed (cost paid, solidity applied).
  */
-export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy: number, stash?: Bag): boolean {
+export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy: number, stash?: readonly Bag[]): boolean {
   const def = STRUCTS[key];
   const n = def.single ? 1 : 2;
   const tx = Math.round(wx / TILE - n / 2);
@@ -133,7 +135,8 @@ export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy:
   if (!canAfford(p.bag, def.cost, stash)) return false;
 
   payCost(p.bag, def.cost, stash);
-  home.structures.push({ key, tx, ty, anim: Math.random() * 6, hurtT: 0 });
+  // a fresh Storage Chest is born with its own empty 50-slot inventory
+  home.structures.push({ key, tx, ty, anim: Math.random() * 6, hurtT: 0, ...(key === "chest" ? { inv: emptyStash() } : {}) });
   markSolid(home, key, tx, ty);
   unstick(home, p); // if you built on the tile you were standing on, step out of it
   onStructureBuilt(key, (t) => addFloat(home, tx * TILE + TILE, ty * TILE - 8, t, "#ffe9a8"));
