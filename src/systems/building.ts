@@ -35,7 +35,7 @@ export const STRUCTS: Record<StructKey, StructDef> = {
   dummy: { name: "Training Dummy", cost: { wood: 16, stone: 12 }, spr: bakeDummy(), desc: "Attack it to train Sword Fighting", solid: true, single: true },
   dummyII: { name: "War Dummy", cost: { wood: 30, stone: 24, bones: 16 }, spr: bakeDummy(), desc: "Trains Sword Fighting + Shielding", solid: true, single: true },
   range: { name: "Archery Range", cost: { wood: 18, stone: 8 }, spr: bakeRange(), desc: "Shoot it to train Distance Fighting", solid: true, single: true },
-  chest: { name: "Storage Chest", cost: { wood: 24, stone: 16 }, spr: bakeChest(), desc: "Stash items you don't want to carry", solid: true },
+  chest: { name: "Storage Chest", cost: { wood: 10, stone: 5 }, spr: bakeChest(), desc: "Stash items you don't want to carry", solid: true },
 };
 
 export const STRUCT_KEYS: StructKey[] = ["forge", "tower", "garden", "dummy", "dummyII", "range", "chest"];
