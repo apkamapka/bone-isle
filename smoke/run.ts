@@ -708,6 +708,79 @@ async function main(): Promise<void> {
       "no chest leaks onto shallower floors");
   }
 
+  console.log("Etap 10 — Archery Range & training arrows:");
+  {
+    const bag = items.emptyBag();
+    items.addItem(bag, "trainingArrow", 40);
+    ok(items.bestArrow(bag) === null, "combat pick ignores training arrows");
+    ok(items.bestPracticeArrow(bag) === "trainingArrow", "range pick takes training arrows");
+    items.addItem(bag, "boneArrow", 5);
+    ok(items.bestArrow(bag) === "boneArrow", "combat pick still finds real ammo");
+    ok(items.bestPracticeArrow(bag) === "trainingArrow", "…but the range keeps preferring practice shafts");
+    items.removeItem(bag, "trainingArrow", 40);
+    ok(items.bestPracticeArrow(bag) === "boneArrow", "no practice shafts → range falls back to combat ammo");
+    // the recipe: one log, a whole quiver
+    const r = items.RECIPES.find((rc) => rc.out === "trainingArrow")!;
+    const cbag = items.emptyBag();
+    items.addItem(cbag, "wood", 1);
+    ok(items.craft(cbag, r), "1 wood crafts the batch");
+    ok(items.bagCount(cbag, "trainingArrow") === 25 && items.bagCount(cbag, "wood") === 0,
+      "…and yields 25 training arrows");
+    ok((items.ITEMS.trainingArrow.ammo?.dmg ?? -1) === 0 && items.ITEMS.trainingArrow.practice === true,
+      "training arrows carry zero attack and the practice flag");
+    // the structure itself
+    ok(!!STRUCTS.range && STRUCTS.range.single === true, "Archery Range exists on a 1-tile footprint");
+    const home = buildWorlds(WORLD_SEED).home;
+    let placeable = false;
+    for (let ty = 1; ty < home.h - 1 && !placeable; ty++)
+      for (let tx = 1; tx < home.w - 1 && !placeable; tx++)
+        if (canPlaceAt(home, "range", tx, ty)) placeable = true;
+    ok(placeable, "the range finds clear grass on Home Isle");
+  }
+
+  console.log("Etap 10 — Wardrobe (outfit dyes):");
+  {
+    const outfit = await import("../src/systems/outfit.ts");
+    const p = createPlayer({ x: 0, y: 0 });
+    outfit.resetOutfit();
+    const d0 = outfit.outfitState();
+    ok(d0.hair === 0 && d0.primary === 1 && d0.secondary === 2 && d0.current === "adventurer",
+      "fresh state is the classic look");
+    outfit.setOutfitColor(p, "hair", 11);
+    outfit.setOutfitColor(p, "primary", 4);
+    ok(outfit.outfitState().hair === 11 && outfit.outfitState().primary === 4, "dye picks stick");
+    outfit.setOutfitColor(p, "secondary", 999);
+    ok(outfit.outfitState().secondary === 2, "an out-of-range dye is refused");
+    // save round-trip
+    const snap = outfit.outfitSave();
+    outfit.resetOutfit();
+    ok(outfit.outfitState().hair === 0, "reset back to defaults");
+    outfit.loadOutfitSave(snap);
+    const d1 = outfit.outfitState();
+    ok(d1.hair === 11 && d1.primary === 4 && d1.secondary === 2, "save snapshot restores the dyes");
+    // hostile / legacy data → defaults, owned always keeps the starter
+    outfit.loadOutfitSave({ hair: "purple", current: "dragonKing", owned: ["dragonKing", 7] });
+    const d2 = outfit.outfitState();
+    ok(d2.hair === 0 && d2.current === "adventurer" && d2.owned.includes("adventurer"),
+      "corrupt save data falls back to the classic look");
+    outfit.loadOutfitSave(undefined);
+    ok(outfit.outfitState().primary === 1, "pre-wardrobe saves (no outfit field) load clean");
+    outfit.resetOutfit();
+  }
+
+  console.log("Etap 10 — the tailor stands in Bonetown:");
+  {
+    const { makeHandmadeWorld, TOWN_SPEC } = await import("../src/world/handmade.ts");
+    const town = makeHandmadeWorld(TOWN_SPEC);
+    const tailor = town.npcs.find((n) => n.key === "tailor");
+    ok(!!tailor, "Vesper is placed on the town map");
+    ok(town.npcs.length === 5, "all five town NPCs parse from the grid");
+    const { SHOPS } = await import("../src/entities/npcs.ts");
+    ok(!SHOPS.tailor, "the tailor runs the wardrobe, not a shop");
+    ok(!!SHOPS.smith?.entries.find((e) => e.kind === "trainingArrow" && e.buy === 1 && e.sell === 0),
+      "the smith sells training arrows for 1g and never buys them back");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
