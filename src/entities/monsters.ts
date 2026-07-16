@@ -3,7 +3,8 @@ import { rnd, rndi, wrnd, dist } from "../util.ts";
 import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, SHOT_SPEED } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { moveEntity, randomWalkable, lineOfSight, stepAllowed } from "../world/collision.ts";
-import type { World, Monster, MonsterKind } from "../world/types.ts";
+import { Tile } from "../world/types.ts";
+import type { World, Monster, MonsterKind, Camp } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
 
 /** A weighted loot entry: item, drop chance, and min/max quantity. */
@@ -217,6 +218,88 @@ export const MONSTER_KINDS = Object.keys(MONSTER_DEFS) as MonsterKind[];
  * (the player, on respawns) nothing pops within SPAWN_AVOID_PLAYER_PX of it —
  * returns false in that case so the caller can retry later, Tibia-style.
  */
+/** Shared constructor for a freshly spawned creature. */
+function pushMonster(
+  w: World,
+  kind: MonsterKind,
+  p: { x: number; y: number },
+  home?: { camp: string; x: number; y: number; r: number },
+): void {
+  const d = MONSTER_DEFS[kind];
+  w.monsters.push({
+    kind,
+    x: p.x,
+    y: p.y,
+    spr: d.spr,
+    hp: d.hp,
+    maxhp: d.hp,
+    speed: d.speed,
+    atkRate: d.atkRate,
+    atkCd: wrnd(0, 1),
+    wanderT: wrnd(0, 2),
+    wx: 0,
+    wy: 0,
+    bob: wrnd(0, 3),
+    hurtT: 0,
+    aggroT: 0,
+    orbit: wrnd(0, 1) < 0.5 ? 1 : -1,
+    camp: home?.camp,
+    hx: home?.x,
+    hy: home?.y,
+    hr: home?.r,
+  });
+}
+
+/**
+ * Spawn a creature inside its settlement: a uniform point in the camp disc,
+ * walkable, spaced from its packmates, off the lair mouth, and never beside a
+ * player standing in the camp. Camp dwellers carry a home leash so they idle
+ * around their village instead of drifting across the continent.
+ */
+export function spawnMonsterInCamp(
+  w: World,
+  kind: MonsterKind,
+  camp: Camp,
+  avoid?: { x: number; y: number },
+): boolean {
+  for (let tries = 0; tries < 60; tries++) {
+    const a = wrnd(0, Math.PI * 2);
+    const rr = (camp.r - 20) * Math.sqrt(wrnd(0, 1));
+    const x = camp.x + Math.cos(a) * rr;
+    const y = camp.y + Math.sin(a) * rr;
+    const tx = Math.floor(x / 16);
+    const ty = Math.floor(y / 16);
+    if (w.solid[ty]?.[tx] !== false || w.tile[ty][tx] === Tile.Water) continue;
+    if (avoid && dist(x, y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
+    // keep the descent hole clear so arrivals from the lair aren't body-blocked
+    if (w.portals.some((pt) => dist(pt.x, pt.y, x, y) < 24)) continue;
+    if (!w.monsters.every((m) => dist(m.x, m.y, x, y) >= SPAWN_SPACING_PX)) continue;
+    pushMonster(w, kind, { x, y }, { camp: camp.key, x: camp.x, y: camp.y, r: camp.r });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Spawn a free roamer in the open wilderness — anywhere walkable on the
+ * continent EXCEPT inside settlements and the dock's arrival area. These are
+ * the wolves loping through the forests between camps; they carry no home
+ * leash and wander wherever the woods take them.
+ */
+export function spawnWilderness(w: World, kind: MonsterKind, avoid?: { x: number; y: number }): boolean {
+  const dock = w.portals.find((pt) => pt.dest === "town");
+  for (let tries = 0; tries < 60; tries++) {
+    const cand = randomWalkable(w);
+    if (dock && dist(cand.x, cand.y, dock.x, dock.y) < WILD_ENTRANCE_SAFE_PX) continue;
+    if (w.camps.some((c) => dist(c.x, c.y, cand.x, cand.y) < c.r + 48)) continue;
+    if (avoid && dist(cand.x, cand.y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
+    if (!w.monsters.every((m) => dist(m.x, m.y, cand.x, cand.y) >= SPAWN_SPACING_PX)) continue;
+    pushMonster(w, kind, cand);
+    return true;
+  }
+  return false;
+}
+
 export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y: number }): boolean {
   const d = MONSTER_DEFS[kind];
   const entrance = w.portals[0];
@@ -245,25 +328,7 @@ export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y
   // player simply reports failure and gets retried by the caller
   const p = match ?? spaced ?? (avoid ? null : fallback ?? randomWalkable(w));
   if (!p) return false;
-
-  w.monsters.push({
-    kind,
-    x: p.x,
-    y: p.y,
-    spr: d.spr,
-    hp: d.hp,
-    maxhp: d.hp,
-    speed: d.speed,
-    atkRate: d.atkRate,
-    atkCd: wrnd(0, 1),
-    wanderT: wrnd(0, 2),
-    wx: 0,
-    wy: 0,
-    bob: wrnd(0, 3),
-    hurtT: 0,
-    aggroT: 0,
-    orbit: wrnd(0, 1) < 0.5 ? 1 : -1,
-  });
+  pushMonster(w, kind, p);
   return true;
 }
 
@@ -396,6 +461,16 @@ export function updateMonsters(
           const a = rnd(0, 6.28);
           m.wx = Math.cos(a);
           m.wy = Math.sin(a);
+        }
+      }
+      // home leash: a villager that drifted (or chased) beyond its camp turns
+      // back toward home — settlements keep their populations without fences
+      if (m.hr && m.hx !== undefined && m.hy !== undefined) {
+        const dh = dist(m.x, m.y, m.hx, m.hy);
+        if (dh > m.hr) {
+          m.wx = (m.hx - m.x) / dh;
+          m.wy = (m.hy - m.y) / dh;
+          m.wanderT = Math.max(m.wanderT, 0.8);
         }
       }
       if (m.wx || m.wy) {
