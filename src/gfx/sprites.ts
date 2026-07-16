@@ -19,8 +19,10 @@ export const PAL: Readonly<Record<string, string>> = {
   u: "#8a6cff", U: "#5a3fd0", x: "#4a4a52",
 };
 
-/** Bake a string pixel-map into an offscreen canvas ('.' = transparent). */
-export function bake(map: readonly string[]): HTMLCanvasElement {
+/** Bake a string pixel-map into an offscreen canvas ('.' = transparent).
+ *  `over` remaps selected palette glyphs to custom colors — the outfit system
+ *  uses it to re-tint the player sprite without a second pixel map. */
+export function bake(map: readonly string[], over?: Readonly<Record<string, string>>): HTMLCanvasElement {
   const h = map.length;
   const w = map[0].length;
   const c = document.createElement("canvas");
@@ -31,29 +33,36 @@ export function bake(map: readonly string[]): HTMLCanvasElement {
     for (let i = 0; i < w; i++) {
       const ch = map[j][i];
       if (ch === ".") continue;
-      x.fillStyle = PAL[ch] ?? ch;
+      x.fillStyle = over?.[ch] ?? PAL[ch] ?? ch;
       x.fillRect(i, j, 1, 1);
     }
   }
   return c;
 }
 
+/**
+ * The player's pixel map, exported so the outfit system can re-bake it with
+ * custom colors. Glyph roles the Wardrobe re-tints:
+ *   h = hair · r/R = tunic (primary, R = shaded) · p/P = legs (secondary).
+ */
+export const PLAYER_MAP: readonly string[] = [
+  "..hhhhhh..",
+  ".hhhhhhhh.",
+  ".hssssssh.",
+  ".hsessesh.",
+  "..ssssss..",
+  ".rrrrrrrr.",
+  "srrrrrrrrs",
+  ".rRrrrrRr.",
+  ".rrrrrrrr.",
+  "..kkkkkk..",
+  ".pppppppp.",
+  "..pP..Pp..",
+  "..kk..kk..",
+];
+
 export const SPR = {
-  player: bake([
-    "..hhhhhh..",
-    ".hhhhhhhh.",
-    ".hssssssh.",
-    ".hsessesh.",
-    "..ssssss..",
-    ".rrrrrrrr.",
-    "srrrrrrrrs",
-    ".rRrrrrRr.",
-    ".rrrrrrrr.",
-    "..kkkkkk..",
-    ".pppppppp.",
-    "..pP..Pp..",
-    "..kk..kk..",
-  ]),
+  player: bake(PLAYER_MAP),
   sword: bake(["..m", ".mm", ".m.", "mm.", "kk.", ".b."]),
   skeleton: bake([
     "...wwww...",
@@ -577,6 +586,23 @@ export const SPR = {
     "..WW..WW..",
     "..kk..kk..",
   ]),
+  // Vesper the Tailor — Bonetown's outfitter. Violet robe (the u/U dyes she
+  // sells), a measuring band across the chest, pins in her dark hair.
+  npcTailor: bake([
+    "..kkkkkk..",
+    ".kkkkkkkk.",
+    ".kssssssk.",
+    ".ksessesk.",
+    "..ssssss..",
+    ".uuuuuuuu.",
+    "suuywyuuus",
+    ".uUuuuuUu.",
+    ".uuuuuuuu.",
+    "..UUUUUU..",
+    ".uuuuuuuu.",
+    "..uU..Uu..",
+    "..kk..kk..",
+  ]),
   npcTaskmaster: bake([
     "..tttttt..",
     ".tttttttt.",
@@ -843,6 +869,15 @@ export const SPR = {
     ".W.",
     "cWc",
   ]),
+  // Training arrow: a blunt wooden practice shaft — no steel head, straw
+  // fletching. Only the Archery Range's straw butt can catch it.
+  trainingArrow: bake([
+    ".t.",
+    ".b.",
+    ".b.",
+    ".b.",
+    "yby",
+  ]),
 } as const;
 
 export type SpriteName = keyof typeof SPR;
@@ -954,6 +989,30 @@ export function bakeGarden(): HTMLCanvasElement {
   return c;
 }
 
+/** Archery Range: a round straw butt with painted rings on a wooden post.
+ *  Same 1-tile footprint family as the training dummies. */
+export function bakeRange(): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = 15;
+  c.height = 21;
+  const x = c.getContext("2d")!;
+  // post + foot
+  x.fillStyle = PAL.t; x.fillRect(7, 12, 2, 8);
+  x.fillStyle = "#4a2c16"; x.fillRect(4, 19, 8, 1);
+  // straw butt (round-ish disc)
+  x.fillStyle = PAL.y;
+  x.fillRect(4, 2, 8, 12); x.fillRect(3, 4, 10, 8); x.fillRect(2, 6, 12, 4);
+  // straw shading (bottom-left)
+  x.fillStyle = "#b8964a";
+  x.fillRect(3, 10, 4, 2); x.fillRect(4, 12, 4, 1);
+  // painted rings: white ring, red bull
+  x.fillStyle = PAL.w;
+  x.fillRect(6, 4, 4, 1); x.fillRect(5, 5, 1, 6); x.fillRect(10, 5, 1, 6); x.fillRect(6, 11, 4, 1);
+  x.fillStyle = PAL.r;
+  x.fillRect(7, 7, 2, 2);
+  return c;
+}
+
 export function bakeDummy(): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = 14;
@@ -1040,6 +1099,7 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   healCrystal: SPR.crystalHeal, fireCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
   spearCrystal: SPR.crystalSpear, fireRuby: SPR.fireRuby,
   bow: SPR.bow, longbow: SPR.longbow, arrow: SPR.arrow, boneArrow: SPR.boneArrow,
+  trainingArrow: SPR.trainingArrow,
 };
 export function itemSprite(kind: ItemKind): HTMLCanvasElement {
   return ITEM_SPR[kind];
