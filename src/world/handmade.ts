@@ -221,7 +221,7 @@ const TOWN_ROWS: readonly string[] = [
   "~~~~~,,R...T......,,,,,,,,,......T....,,~~~~",
   "~~~~~,,...........,,,,,,,,,...........,,~~~~",
   "~~~~~,,......H....,,,,,,,,,....H....R.,,~~~~",
-  "~~~~~,,..T........,,,,,,,,,...........,,~~~~",
+  "~~~~~,,..T........,,,,,,,,,..t........,,~~~~",
   "~~~~~,,...........,,,,,,,,,........T..,,~~~~",
   "~~~~~,,,..........,,,,,,,,,.........R,,,~~~~",
   "~~~~~~,,R........e,,,,,,,,,g......D..,,~~~~~",
@@ -249,5 +249,5 @@ export const TOWN_SPEC: HandmadeSpec = {
     W: { dest: "wild", label: "to the Wildlands" },
     D: { dest: "deepwild", label: "to the Deep Wildlands" },
   },
-  npcs: { s: "smith", h: "herbalist", e: "elder", g: "taskmaster" },
+  npcs: { s: "smith", h: "herbalist", e: "elder", g: "taskmaster", t: "tailor" },
 };
