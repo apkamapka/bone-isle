@@ -9,6 +9,7 @@ import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
 import { serializeSlots, loadSlots, type SlotAction } from "./systems/actions.ts";
+import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./systems/outfit.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { quests } from "./systems/quests.ts";
@@ -40,6 +41,8 @@ interface SaveData {
   research?: string[];
   tasks?: TaskSave;
   slots?: (SlotAction | null)[];
+  /** Wardrobe: dye choices + owned/current outfit (Etap 10). */
+  outfit?: OutfitSave;
   /** One-time treasure chests already opened. */
   opened?: string[];
 }
@@ -86,6 +89,7 @@ export function saveGame(g: Game): void {
     research: researchState(),
     tasks: taskState(),
     slots: serializeSlots(),
+    outfit: outfitSave(),
     opened: g.opened,
   };
   try {
@@ -196,6 +200,8 @@ export function loadGame(): Game | null {
   loadResearchState(data.research);
   loadTaskState(data.tasks);
   loadSlots(data.slots);
+  loadOutfitSave(data.outfit); // absent in older saves → classic look
+  applyOutfit(player);
 
   setActiveBonus(structureBonuses(worlds.home));
   refreshDerived(player, structureBonuses(worlds.home));

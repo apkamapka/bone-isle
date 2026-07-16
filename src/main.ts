@@ -9,6 +9,7 @@ import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp }
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost, structCenter, canPlaceAt } from "./systems/building.ts";
 import { setActiveBonus } from "./systems/derived.ts";
+import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
 import { useCrystal } from "./systems/crystals.ts";
 import { actionSlots, setSlot, BINDABLE_CRYSTALS } from "./systems/actions.ts";
 import {
@@ -18,7 +19,7 @@ import {
 import { researchById, isResearched, markResearched } from "./systems/tower.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
-import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow, compactBag } from "./items.ts";
+import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow, bestPracticeArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
@@ -114,6 +115,7 @@ refreshDerived(game.player);
 // merge any stacks that older saves left fragmented (stack limits grew)
 compactBag(game.player.bag); compactBag(game.stash);
 const P = game.player;
+applyOutfit(P); // wear the saved dyes (or the classic look) from frame one
 if (unstick(game.current, P)) { /* freed a player boxed in by an old build */ }
 const cam = { x: 0, y: 0 };
 let moveMarker: { x: number; y: number; t: number } | null = null;
@@ -203,6 +205,7 @@ function defaultOffset(kind: PanelKind): { x: number; y: number } {
     case "build": return { x: -50 * S, y: -20 * S };
     case "stash": return { x: 40 * S, y: 20 * S };
     case "tasks": return { x: 20 * S, y: -20 * S };
+    case "wardrobe": return { x: 0, y: 10 * S };
     case "loot": return { x: 60 * S, y: 40 * S };
     default: return { x: 0, y: 0 };
   }
@@ -357,6 +360,15 @@ const act: PanelActions = {
   look: (kind: ItemKind) => { ui.inspect = kind; },
   toggleLook: () => { ui.lookMode = !ui.lookMode; if (!ui.lookMode) ui.inspect = null; },
   openBag: () => { openWindow("bag"); },
+  setOutfitColor: (zone: OutfitZone, idx: number) => {
+    setOutfitColor(P, zone, idx);
+    beep(480, 0.05, "sine", 0.04, 60);
+  },
+  resetOutfitColors: () => {
+    resetOutfitColors(P);
+    flash("back to the classic look", "#e8dcc0");
+    beep(360, 0.08, "sine", 0.04);
+  },
   close: (kind: PanelKind) => { closeWindow(kind); },
 };
 
@@ -1054,7 +1066,7 @@ function worldClick(w: Vec): void {
   for (const s of world.structures) {
     const c = structCenter(s);
     if (Math.abs(w.x - c.x) < 16 && w.y > c.baseY - 30 && w.y < c.baseY + 4) {
-      if (s.key === "dummy" || s.key === "dummyII") {
+      if (s.key === "dummy" || s.key === "dummyII" || s.key === "range") {
         // re-clicking the dummy you're training on stops the attack (toggle)
         if (P.target?.kind === "dummy" && P.target.s === s) {
           P.target = null;
@@ -1136,7 +1148,12 @@ function gatherPoint(): Vec | null {
 function attackMode(): { ranged: boolean; reach: number; arrow: ItemKind | null } {
   const bow = equippedBow(P.eq);
   if (bow) {
-    const arrow = bestArrow(P.bag);
+    // at the Archery Range practice arrows fire first (that's their job);
+    // against anything else only combat arrows count.
+    const t = P.target;
+    const arrow = t?.kind === "dummy" && t.s.key === "range"
+      ? bestPracticeArrow(P.bag)
+      : bestArrow(P.bag);
     if (arrow) return { ranged: true, reach: bow.range, arrow };
   }
   return { ranged: false, reach: 15, arrow: null };
@@ -1215,6 +1232,7 @@ function tickProximityPanels(dt: number): void {
     ["stash", () => nearStructure("chest")],
     ["shop", () => !!ui.npc && cw().npcs.includes(ui.npc) && nearNpc((n) => n === ui.npc)],
     ["tasks", () => nearNpc((n) => n.key === "taskmaster")],
+    ["wardrobe", () => nearNpc((n) => n.key === "tailor")],
     ["loot", () => !!ui.loot && cw().corpses.includes(ui.loot)
       && dist(P.x, P.y, ui.loot.x, ui.loot.y) < USE_RANGE_PX],
   ];
@@ -1419,6 +1437,12 @@ function resolveTarget(): void {
       P.atkCd = P.atkRate;
       const mode = attackMode();
       if (mode.ranged && mode.arrow) shootDummy(cw(), P, t.s, mode.arrow);
+      else if (t.s.key === "range") {
+        // the straw butt only takes arrows — no bow (or an empty quiver)
+        // means nothing to train with, so let go instead of punching it
+        flash("you need a bow and arrows", "#e0a06a");
+        P.target = null;
+      }
       else { if (equippedBow(P.eq)) warnNoArrows(); hitDummy(cw(), P, t.s); }
     }
   } else if (t.kind === "corpse") {
@@ -1428,6 +1452,7 @@ function resolveTarget(): void {
     P.target = null;
   } else if (t.kind === "npc") {
     if (t.n.key === "taskmaster") { openWindow("tasks"); }
+    else if (t.n.key === "tailor") { openWindow("wardrobe"); }
     else { ui.npc = t.n; ui.shopTab = "buy"; openWindow("shop"); }
     P.target = null;
   } else if (t.kind === "structure") {

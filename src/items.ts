@@ -17,6 +17,8 @@ export type ItemKind =
   | "fireRuby"
   // ranged: bows (two-handed weapons) + arrows (consumable ammo)
   | "bow" | "longbow" | "arrow" | "boneArrow"
+  // practice ammo: blunt shafts fired only at the Archery Range (Etap 10)
+  | "trainingArrow"
   // gear
   | "sword" | "ironSword" | "boneSword" | "marrowBlade"
   | "battleAxe" | "fireSword"
@@ -58,6 +60,9 @@ export interface ItemDef {
   bow?: { range: number; power: number };
   /** Arrows: consumable ammo. `dmg` adds to each shot's damage. */
   ammo?: { dmg: number };
+  /** Practice ammo: never picked for combat; fired only at the Archery
+   *  Range's straw butt (the target that can actually catch a blunt shaft). */
+  practice?: true;
   /** Amulet of Loss: worn in the amulet slot, consumed on death, protects
    *  your backpack + equipment from dropping (never exp or skills). */
   deathProtect?: true;
@@ -86,6 +91,9 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 110, power: 4 } },
   longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 150, power: 9 } },
   arrow:     { name: "Arrow",        stack: 999, value: 1, weight: 1, ammo: { dmg: 8 } },
+  // Blunt practice shafts: dirt-cheap (1g at the smith, or bulk-crafted from
+  // wood), zero attack — pure Distance training fodder for the Archery Range.
+  trainingArrow: { name: "Training Arrow", stack: 9999, value: 0, weight: 1, ammo: { dmg: 0 }, practice: true },
   boneArrow: { name: "Bone Arrow",   stack: 999, value: 2, weight: 1, ammo: { dmg: 14 } },
   sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 3 } },
   ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 7 } },
@@ -250,8 +258,9 @@ export function equippedBow(eq: Equipment): { range: number; power: number } | n
 }
 
 /**
- * Pick the best arrow kind present in the bag (Bone > plain), or null if none.
- * "Best" = highest ammo damage among kinds you actually carry.
+ * Pick the best COMBAT arrow kind present in the bag (Bone > plain), or null
+ * if none. "Best" = highest ammo damage among kinds you actually carry.
+ * Practice arrows are deliberately excluded — they never fire at monsters.
  */
 export function bestArrow(bag: Bag): ItemKind | null {
   let best: ItemKind | null = null;
@@ -261,6 +270,16 @@ export function bestArrow(bag: Bag): ItemKind | null {
     if (def && bagCount(bag, kind) > 0 && def.dmg > bestDmg) { best = kind; bestDmg = def.dmg; }
   }
   return best;
+}
+
+/**
+ * Arrow pick when shooting the Archery Range: training arrows first (that's
+ * what they're for — save the real ammo), falling back to combat arrows so a
+ * hunter without practice shafts can still use the butt.
+ */
+export function bestPracticeArrow(bag: Bag): ItemKind | null {
+  if (bagCount(bag, "trainingArrow") > 0) return "trainingArrow";
+  return bestArrow(bag);
 }
 
 /** Sum a gear stat across all equipped items. */
@@ -311,6 +330,8 @@ export const RECIPES: readonly Recipe[] = [
   { out: "bow",        cost: { wood: 6, silk: 2 } },
   { out: "longbow",    cost: { wood: 10, silk: 4, bones: 6 } },
   { out: "arrow",      outN: 10, cost: { wood: 2 } },
+  // practice ammo is deliberately dirt cheap: one log → a whole quiver
+  { out: "trainingArrow", outN: 25, cost: { wood: 1 } },
   { out: "boneArrow",  outN: 10, cost: { bones: 3, wood: 1 } },
 ];
 
@@ -363,7 +384,8 @@ export function itemInfoLines(kind: ItemKind): string[] {
   const lines: string[] = [];
   if (d.slot) lines.push(`Slot: ${d.slot}`);
   if (d.bow) lines.push(`Ranged weapon (two-handed)`, `Attack ${d.bow.power} · Range ${d.bow.range}`);
-  if (d.ammo) lines.push(`Ammo · Attack ${d.ammo.dmg}`);
+  if (d.ammo && d.practice) lines.push(`Practice ammo — Archery Range only`);
+  else if (d.ammo) lines.push(`Ammo · Attack ${d.ammo.dmg}`);
   if (d.food) lines.push(`Feeds you for ${d.food}s`);
   if (d.gear?.atk) lines.push(`Attack +${d.gear.atk}`);
   if (d.gear?.def) lines.push(`Defense +${d.gear.def}`);
