@@ -2,7 +2,7 @@
 import { makeWorld } from "./world/generate.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC } from "./world/handmade.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
-import { makeDeepWildWorld } from "./world/deepwild.ts";
+import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn } from "./world/collision.ts";
 import { spawnMonster } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
@@ -110,7 +110,17 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   // the exact same Wildlands/caverns they were rolled on).
   seedWorldRng(seed ^ keySalt("deepwild"));
   const deepwild = makeDeepWildWorld();
-  return { home, town, wild, deepwild, cave1, cave2, cave3 };
+  // …and every camp's lair floors, each from its own salted seed. The record
+  // is completed by the loop below, hence the cast: TypeScript can't see that
+  // LAIRS covers exactly the remaining WorldKey members.
+  const worlds = { home, town, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
+  for (const l of LAIRS) {
+    worlds[l.key] = makeCaveWorld({
+      key: l.key, name: l.name, w: l.w, h: l.h, seed: seed ^ keySalt(l.key),
+      up: l.up, down: l.down, rocks: l.rocks, bones: l.bones,
+    });
+  }
+  return worlds;
 }
 
 /** Populate one dangerous world from its own deterministic RNG stream. */
