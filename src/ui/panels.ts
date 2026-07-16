@@ -9,6 +9,7 @@ import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, bestArrow, it
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
+import { OUTFIT_COLORS, ZONE_LABEL, outfitState, type OutfitZone } from "../systems/outfit.ts";
 import { hudText, type HudCtx } from "./hud.ts";
 import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
@@ -18,7 +19,7 @@ import type { Game } from "../game.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
-  | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks";
+  | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks" | "wardrobe";
 
 export interface Hotspot {
   x: number;
@@ -89,6 +90,8 @@ export interface PanelActions {
   handInTask: () => void;
   buyExchange: (id: string) => void;
   moveStack: (src: "bag" | "stash", index: number) => void;
+  setOutfitColor: (zone: OutfitZone, idx: number) => void;
+  resetOutfitColors: () => void;
   look: (kind: ItemKind) => void;
   toggleLook: () => void;
   openBag: () => void;
@@ -342,6 +345,7 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
       case "quest": drawQuests(p); break;
       case "tasks": drawTasks(p); break;
       case "stash": drawStash(p); break;
+      case "wardrobe": drawWardrobe(p); break;
       default: break;
     }
     // Auto-fit: if the window (at fit=1) wouldn't fit on screen, compute the
@@ -1050,4 +1054,75 @@ function drawStash(p: PanelInput): void {
   hudText(hud, "Backpack — click to store", x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
   gy += headH;
   drawGrid(p, player.bag, gx, gy, cols, cell, gap, (i) => p.act.moveStack("bag", i), "bag");
+}
+
+/* ---------------- Wardrobe (outfit dyes) ---------------- */
+
+/**
+ * Vesper's dressing room: a live preview of the player plus one dye row per
+ * zone (hair / tunic / legs). Clicking a swatch re-tints instantly — the
+ * preview IS the player sprite, so it always matches what walks out the door.
+ * Outfit SHAPES (loot-box unlocks) plug in here later; for now colors only.
+ */
+function drawWardrobe(p: PanelInput): void {
+  const { hud, player } = p;
+  const { ctx, scale: S, screenW, screenH } = hud;
+  const st = outfitState();
+  const zones: readonly OutfitZone[] = ["hair", "primary", "secondary"];
+  const sw = 12 * S;        // swatch size
+  const sg = 2 * S;         // swatch gap
+  const rowW = OUTFIT_COLORS.length * (sw + sg) - sg;
+  const w = rowW + 28 * S;
+  const previewH = 66 * S;
+  const zoneH = 26 * S;
+  const h = 20 * S + previewH + zones.length * zoneH + 30 * S;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
+  goldPanel(p, x, y, w, h, "WARDROBE — Vesper");
+
+  // live preview: the actual player sprite, big
+  const spr = player.spr;
+  const psc = 4 * S;
+  const px = x + (w - spr.width * psc) / 2;
+  const py = y + 18 * S + (previewH - spr.height * psc) / 2;
+  ctx.fillStyle = "rgba(40,32,20,.9)";
+  ctx.fillRect(x + w / 2 - 34 * S, y + 18 * S, 68 * S, previewH - 6 * S);
+  ctx.strokeStyle = "#6e571f";
+  ctx.lineWidth = S;
+  ctx.strokeRect(x + w / 2 - 34 * S + S / 2, y + 18 * S + S / 2, 68 * S - S, previewH - 6 * S - S);
+  icon(p, spr, px, py, psc);
+
+  let ry = y + 18 * S + previewH;
+  for (const zone of zones) {
+    hudText(hud, ZONE_LABEL[zone], x + 14 * S, ry + 5 * S, 8 * S, "#cfe8d2", "left", true);
+    const sy = ry + 10 * S;
+    const sx0 = x + (w - rowW) / 2;
+    OUTFIT_COLORS.forEach((col, i) => {
+      const sx = sx0 + i * (sw + sg);
+      const sel = st[zone] === i;
+      ctx.fillStyle = col;
+      ctx.fillRect(sx, sy, sw, sw);
+      ctx.strokeStyle = sel ? "#ffe9a8" : "rgba(0,0,0,.55)";
+      ctx.lineWidth = sel ? Math.max(1, 1.5 * S) : S;
+      ctx.strokeRect(sx + S / 2, sy + S / 2, sw - S, sw - S);
+      const zi = zone;
+      const ii = i;
+      p.hotspots.push({ x: sx, y: sy, w: sw, h: sw, fn: () => p.act.setOutfitColor(zi, ii) });
+    });
+    ry += zoneH;
+  }
+
+  // reset to the classic look
+  const bw = 90 * S;
+  const bh = 13 * S;
+  const bx = x + (w - bw) / 2;
+  const by = y + h - 22 * S;
+  ctx.fillStyle = "rgba(40,32,20,.95)";
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = "#6e571f";
+  ctx.lineWidth = S;
+  ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, bh - S);
+  hudText(hud, "Classic look", bx + bw / 2, by + bh / 2, 7 * S, "#e8dcc0", "center", true);
+  p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.resetOutfitColors() });
+  hudText(hud, "Tap a dye to wear it — free, any time", x + w / 2, y + h - 6 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
 }
