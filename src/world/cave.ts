@@ -146,6 +146,7 @@ export function makeCaveWorld(opts: CaveOpts): World {
     structures: [],
     buildSpots: [],
     portals: [],
+    camps: [],
     coastWater: [],
     // Authored/procedural caves have no radial silhouette; the baker computes
     // water depth from tile distance, so this is only a harmless stub.

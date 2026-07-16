@@ -8,11 +8,15 @@ export const Tile = {
   Sand: 2,
   Wall: 3,
   Cave: 4,
+  /** Packed-earth camp floors and trails (walkable). */
+  Dirt: 5,
+  /** Wooden camp palisade (solid) — goblin & orc settlements. */
+  Palisade: 6,
 } as const;
 export type Tile = (typeof Tile)[keyof typeof Tile];
 
-/** The surface islands plus the descending Bone Caverns floors (-1..-3). */
-export type WorldKey = "home" | "town" | "wild" | "cave1" | "cave2" | "cave3";
+/** The surface islands, the Deep Wildlands, and the Bone Caverns (-1..-3). */
+export type WorldKey = "home" | "town" | "wild" | "deepwild" | "cave1" | "cave2" | "cave3";
 
 /** A point in world (pixel) space. */
 export interface Vec {
@@ -88,6 +92,22 @@ export interface Structure {
 export interface Reserved {
   x: number;
   y: number;
+  r: number;
+}
+
+/**
+ * A themed monster settlement on the Deep Wildlands (orc fort, graveyard,
+ * dragon roost…). Purely descriptive for now: it marks a circle of terrain
+ * and decoration; a later stage attaches per-camp rosters and respawns so
+ * creatures live in their villages instead of roaming in bands.
+ */
+export interface Camp {
+  key: string;
+  name: string;
+  /** Centre in world px. */
+  x: number;
+  y: number;
+  /** Radius in px. */
   r: number;
 }
 
@@ -235,6 +255,8 @@ export interface World {
   structures: Structure[];
   buildSpots: BuildSpot[];
   portals: Portal[];
+  /** Themed settlements (Deep Wildlands); empty elsewhere. */
+  camps: Camp[];
   coastWater: CoastWater[];
   landR: (theta: number) => number;
   mapCanvas: HTMLCanvasElement;

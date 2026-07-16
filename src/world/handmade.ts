@@ -100,6 +100,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     structures: [],
     buildSpots: [],
     portals: [],
+    camps: [],
     coastWater: [],
     // Authored maps have no radial silhouette; the baker no longer needs one.
     landR: () => Math.max(W, H),
@@ -223,7 +224,7 @@ const TOWN_ROWS: readonly string[] = [
   "~~~~~,,..T........,,,,,,,,,...........,,~~~~",
   "~~~~~,,...........,,,,,,,,,........T..,,~~~~",
   "~~~~~,,,..........,,,,,,,,,.........R,,,~~~~",
-  "~~~~~~,,R........e,,,,,,,,,g.........,,~~~~~",
+  "~~~~~~,,R........e,,,,,,,,,g......D..,,~~~~~",
   "~~~~~~,,,...........................,,,~~~~~",
   "~~~~~~~,,...T.....................##,,~~~~~~",
   "~~~~~~~~,,.........................#,~~~~~~~",
@@ -246,6 +247,7 @@ export const TOWN_SPEC: HandmadeSpec = {
   portals: {
     P: { dest: "home", label: "to Home Isle" },
     W: { dest: "wild", label: "to the Wildlands" },
+    D: { dest: "deepwild", label: "to the Deep Wildlands" },
   },
   npcs: { s: "smith", h: "herbalist", e: "elder", g: "taskmaster" },
 };

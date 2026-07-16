@@ -73,7 +73,7 @@ export function makeWorld(opts: WorldOpts): World {
   }
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      solid[y][x] = tile[y][x] === Tile.Water || tile[y][x] === Tile.Wall;
+      solid[y][x] = tile[y][x] === Tile.Water || tile[y][x] === Tile.Wall || tile[y][x] === Tile.Palisade;
     }
   }
 
@@ -99,6 +99,7 @@ export function makeWorld(opts: WorldOpts): World {
     structures: [],
     buildSpots: [],
     portals: [],
+    camps: [],
     coastWater: [],
     landR,
     mapCanvas: document.createElement("canvas"),
@@ -314,6 +315,27 @@ export function bakeWorldCanvas(w: World, grassShift = 0): void {
           m.fillStyle = "rgba(140,134,126,.4)";
           m.fillRect(px + rndi(2, 11), py + rndi(2, 11), rndi(2, 3), 1);
         }
+      } else if (t0 === Tile.Dirt) {
+        // packed camp earth / trodden trail — warm brown with darker speckle
+        const j = rndi(-6, 6);
+        m.fillStyle = `rgb(${146 + j},${112 + j},${72 + j})`;
+        m.fillRect(px, py, TILE, TILE);
+        m.fillStyle = "rgba(84,60,36,.8)";
+        for (let i = 0, n = rndi(3, 6); i < n; i++) m.fillRect(px + rndi(1, 13), py + rndi(1, 13), 2, 1);
+        if (Math.random() < 0.2) {
+          m.fillStyle = "rgba(190,160,110,.45)";
+          m.fillRect(px + rndi(2, 10), py + rndi(2, 10), rndi(2, 4), 1);
+        }
+      } else if (t0 === Tile.Palisade) {
+        // sharpened wooden posts — three planks per tile, dark seams, spiked top
+        m.fillStyle = "#5b3b22"; m.fillRect(px, py, TILE, TILE);
+        m.fillStyle = "#8a5c34";
+        m.fillRect(px + 1, py + 2, 4, 13); m.fillRect(px + 6, py + 1, 4, 14); m.fillRect(px + 11, py + 2, 4, 13);
+        m.fillStyle = "#a8743f";
+        m.fillRect(px + 2, py + 3, 1, 11); m.fillRect(px + 7, py + 2, 1, 12); m.fillRect(px + 12, py + 3, 1, 11);
+        m.fillStyle = "#2b2017";
+        m.fillRect(px, py, TILE, 2); m.fillRect(px + 5, py + 1, 1, 15); m.fillRect(px + 10, py + 1, 1, 15);
+        m.fillRect(px + 3, py, 2, 2); m.fillRect(px + 8, py, 2, 2); m.fillRect(px + 13, py, 2, 2);
       } else if (t0 === Tile.Wall) {
         m.fillStyle = "#7d8487"; m.fillRect(px, py, TILE, TILE);
         m.fillStyle = "#999fa2";
@@ -352,7 +374,8 @@ export function bakeWorldCanvas(w: World, grassShift = 0): void {
         [-1, 0, 0, 0, 1, TILE], [1, 0, TILE - 1, 0, 1, TILE], [0, -1, 0, 0, TILE, 1], [0, 1, 0, TILE - 1, TILE, 1],
       ];
       for (const [ox, oy, ex, ey, ww, hh] of edges) {
-        if (w.tile[y + oy]?.[x + ox] === Tile.Sand)
+        const nb = w.tile[y + oy]?.[x + ox];
+        if (nb === Tile.Sand || nb === Tile.Dirt)
           for (let i = 0; i < TILE; i += 3) m.fillRect(px + ex + (ww === 1 ? 0 : i), py + ey + (hh === 1 ? 0 : i), 1, 1);
       }
     }
