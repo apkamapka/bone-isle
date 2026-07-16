@@ -16,7 +16,17 @@ export const Tile = {
 export type Tile = (typeof Tile)[keyof typeof Tile];
 
 /** The surface islands, the Deep Wildlands, and the Bone Caverns (-1..-3). */
-export type WorldKey = "home" | "town" | "wild" | "deepwild" | "cave1" | "cave2" | "cave3";
+export type WorldKey = "home" | "town" | "wild" | "deepwild" | "cave1" | "cave2" | "cave3"
+  // Deep Wildlands camp lairs — each settlement descends into its own dungeon
+  // (one to three floors; deeper floors are larger and will carry harder tiers)
+  | "warren1"
+  | "cove1"
+  | "hollow1" | "hollow2"
+  | "goblin1" | "goblin2"
+  | "orcfort1" | "orcfort2"
+  | "bastion1" | "bastion2"
+  | "grave1" | "grave2"
+  | "roost1" | "roost2" | "roost3";
 
 /** A point in world (pixel) space. */
 export interface Vec {
@@ -230,6 +240,14 @@ export interface WorldOpts {
   bones: number;
   grassShift?: number;
   portals: readonly { dest: WorldKey; label: string }[];
+  /**
+   * Optional land mask (tile space): when present the coastline comes from
+   * this predicate instead of the radial island silhouette — noise-shaped
+   * continents with bays, peninsulas and inland lakes (the Deep Wildlands).
+   * The radial path below is untouched, so every older island still rolls
+   * byte-identically.
+   */
+  mask?: (tx: number, ty: number) => boolean;
 }
 
 /** A full island world. */

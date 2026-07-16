@@ -31,17 +31,25 @@ export function makeWorld(opts: WorldOpts): World {
   const tile: Tile[][] = [];
   const solid: boolean[][] = [];
 
-  // base terrain ring
-  for (let y = 0; y < H; y++) {
-    tile[y] = [];
-    solid[y] = [];
-    for (let x = 0; x < W; x++) {
-      const dx = x - CX;
-      const dy = (y - CY) * 1.32;
-      const d = Math.hypot(dx, dy);
-      const th = Math.atan2(dy, dx);
-      const r = landR(th);
-      tile[y][x] = d < r ? (d > r - 2.1 ? Tile.Sand : Tile.Grass) : Tile.Water;
+  // base terrain: either the classic radial island, or a caller-supplied mask
+  if (opts.mask) {
+    for (let y = 0; y < H; y++) {
+      tile[y] = [];
+      solid[y] = [];
+      for (let x = 0; x < W; x++) tile[y][x] = opts.mask(x, y) ? Tile.Grass : Tile.Water;
+    }
+  } else {
+    for (let y = 0; y < H; y++) {
+      tile[y] = [];
+      solid[y] = [];
+      for (let x = 0; x < W; x++) {
+        const dx = x - CX;
+        const dy = (y - CY) * 1.32;
+        const d = Math.hypot(dx, dy);
+        const th = Math.atan2(dy, dx);
+        const r = landR(th);
+        tile[y][x] = d < r ? (d > r - 2.1 ? Tile.Sand : Tile.Grass) : Tile.Water;
+      }
     }
   }
   // grass touching water becomes sand (clean coastline)
@@ -56,11 +64,29 @@ export function makeWorld(opts: WorldOpts): World {
       }
     }
   }
+  // masked worlds get a second beach pass (the radial path bakes its own
+  // 2-tile ring above) so the coast reads at the bigger map scale
+  if (opts.mask) {
+    const widen: [number, number][] = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (tile[y][x] !== Tile.Grass) continue;
+        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          if ((tile[y + oy]?.[x + ox] ?? Tile.Grass) === Tile.Sand) { widen.push([x, y]); break; }
+        }
+      }
+    }
+    for (const [x, y] of widen) tile[y][x] = Tile.Sand;
+  }
   // ruined stone walls, count scaled with island area
   const wallCount = Math.max(2, Math.round((W * H) / 700));
   for (let wsi = 0; wsi < wallCount; wsi++) {
-    const ox = Math.floor(CX) + wrndi(-Math.floor(r0 * 0.7), Math.floor(r0 * 0.7));
-    const oy = Math.floor(CY) + wrndi(-Math.floor(r0 * 0.5), Math.floor(r0 * 0.5));
+    const ox = opts.mask
+      ? wrndi(3, W - 6)
+      : Math.floor(CX) + wrndi(-Math.floor(r0 * 0.7), Math.floor(r0 * 0.7));
+    const oy = opts.mask
+      ? wrndi(3, H - 6)
+      : Math.floor(CY) + wrndi(-Math.floor(r0 * 0.5), Math.floor(r0 * 0.5));
     const cells: ReadonlyArray<readonly [number, number]> =
       wrand2() < 0.5
         ? [[0, 0], [1, 0], [2, 0], [3, 0], [3, 1], [3, 2], [0, 1]]
