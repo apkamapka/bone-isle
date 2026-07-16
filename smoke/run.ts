@@ -529,35 +529,36 @@ async function main(): Promise<void> {
     ok((items.ITEMS.dragonHam.food ?? 0) > (items.ITEMS.meat.food ?? 0), "dragon ham out-feeds raw meat");
   }
 
-  console.log("Deep Wildlands (Etap 9a — the empty frontier):");
+  console.log("Deep Wildlands (Etap 9a v2 — the continent & the camp lairs):");
   {
     const { populateAll } = await import("../src/game.ts");
+    const { LAIRS } = await import("../src/world/deepwild.ts");
     const { Tile } = await import("../src/world/types.ts");
     const { dist } = await import("../src/util.ts");
     const worlds = buildWorlds(WORLD_SEED);
     const dw = worlds.deepwild;
-    ok(dw.w === 208 && dw.h === 160, `the frontier is 208x160 (4x the Wildlands' area), got ${dw.w}x${dw.h}`);
+    ok(dw.w === 368 && dw.h === 272, `the continent is 368x272, got ${dw.w}x${dw.h}`);
+    ok(dw.w * dw.h >= 3 * 208 * 160, "three times the area of the first frontier cut");
     ok(!dw.safe, "the Deep Wildlands is flagged dangerous (ready for future rosters)");
+    // an irregular, noise-carved coast — a real landmass share, not a blob's
+    let landN = 0;
+    for (let y = 0; y < dw.h; y++)
+      for (let x = 0; x < dw.w; x++)
+        if (dw.tile[y][x] !== Tile.Water) landN++;
+    const landFrac = landN / (dw.w * dw.h);
+    ok(landFrac > 0.35 && landFrac < 0.55, `mainland covers a continental share of the map (${(landFrac * 100).toFixed(1)}%)`);
     // travel loop: a boat in Bonetown, a dock back home on the frontier
     ok(worlds.town.portals.some((p) => p.dest === "deepwild"), "Bonetown has the boat to the Deep Wildlands");
     ok(dw.portals.some((p) => p.dest === "town"), "the frontier dock leads back to Bonetown");
-    // eight themed camps, all anchored on walkable ground
+    // eight themed camps, far apart, all anchored on walkable ground
     ok(dw.camps.length === 8, `eight camps are recorded, got ${dw.camps.length}`);
     ok(new Set(dw.camps.map((c) => c.key)).size === 8, "camp keys are unique");
-    ok(dw.camps.every((c) => {
-      const tx = Math.floor(c.x / 16);
-      const ty = Math.floor(c.y / 16);
-      return !dw.solid[ty][tx];
-    }), "every camp centre is walkable");
-    // camps keep their distance — no two settlements melt into one
-    let spaced = true;
+    ok(dw.camps.every((c) => !dw.solid[Math.floor(c.y / 16)][Math.floor(c.x / 16)]), "every camp centre is walkable");
+    let minGap = Infinity;
     for (let i = 0; i < dw.camps.length; i++)
-      for (let j = i + 1; j < dw.camps.length; j++) {
-        const a = dw.camps[i];
-        const b = dw.camps[j];
-        if (dist(a.x, a.y, b.x, b.y) < a.r + b.r) spaced = false;
-      }
-    ok(spaced, "no two camps overlap");
+      for (let j = i + 1; j < dw.camps.length; j++)
+        minGap = Math.min(minGap, dist(dw.camps[i].x, dw.camps[i].y, dw.camps[j].x, dw.camps[j].y) / 16);
+    ok(minGap >= 48, `settlements keep their distance (nearest pair ${Math.round(minGap)} tiles apart)`);
     // carved terrain actually exists: dirt floors/trails, solid palisades
     let dirt = 0, pal = 0, palSolid = true;
     for (let y = 0; y < dw.h; y++)
@@ -565,14 +566,61 @@ async function main(): Promise<void> {
         if (dw.tile[y][x] === Tile.Dirt) dirt++;
         if (dw.tile[y][x] === Tile.Palisade) { pal++; if (!dw.solid[y][x]) palSolid = false; }
       }
-    ok(dirt > 300, `camp floors + trails carved in dirt (${dirt} tiles)`);
-    ok(pal > 30 && palSolid, `palisade rings raised and solid (${pal} posts)`);
-    // camp interiors were cleared — no tree stands inside a settlement
+    ok(dirt > 600, `camp floors + trails carved in dirt (${dirt} tiles)`);
+    ok(pal > 40 && palSolid, `palisade rings raised and solid (${pal} posts)`);
     ok(dw.camps.every((c) => dw.trees.every((t) =>
       dist(t.tx * 16 + 8, t.ty * 16 + 8, c.x, c.y) > c.r - 16)), "camp interiors are clear of trees");
-    // THE point of this stage: the island generates completely empty
+    // every camp reaches the dock on foot — one connected mainland, no islets
+    {
+      const dock = dw.portals.find((p) => p.dest === "town")!;
+      const W = dw.w;
+      const seen = new Uint8Array(W * dw.h);
+      const q: number[] = [Math.floor(dock.y / 16) * W + Math.floor(dock.x / 16)];
+      seen[q[0]] = 1;
+      for (let h = 0; h < q.length; h++) {
+        const x = q[h] % W;
+        const y = Math.floor(q[h] / W);
+        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + ox;
+          const ny = y + oy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= dw.h) continue;
+          const id = ny * W + nx;
+          if (seen[id] || dw.solid[ny][nx] || dw.tile[ny][nx] === Tile.Water) continue;
+          seen[id] = 1;
+          q.push(id);
+        }
+      }
+      ok(dw.camps.every((c) => seen[Math.floor(c.y / 16) * W + Math.floor(c.x / 16)] === 1),
+        "every settlement is reachable on foot from the dock");
+    }
+    // THE point of this stage: the whole region generates completely empty
     populateAll(worlds, WORLD_SEED);
-    ok(dw.monsters.length === 0 && dw.respawns.length === 0, "no monsters spawn on the frontier yet");
+    ok(dw.monsters.length === 0 && dw.respawns.length === 0, "no monsters roam the frontier yet");
+    // the lairs: every camp descends underground, deeper floors are larger
+    ok(LAIRS.length === 15, `fifteen lair floors are cataloged, got ${LAIRS.length}`);
+    ok(dw.camps.every((c) => dw.portals.some((p) =>
+      p.style === "caveMouth" && dist(p.x, p.y, c.x, c.y) <= c.r)),
+      "every camp has a cave mouth inside its ring");
+    let chainsOk = true, emptyOk = true, growOk = true;
+    for (const l of LAIRS) {
+      const lw = worlds[l.key];
+      if (!lw) { chainsOk = false; continue; }
+      if (!lw.portals.some((p) => p.style === "ladderUp" && p.dest === l.up)) chainsOk = false;
+      if (l.down && !lw.portals.some((p) => p.style === "ladderDown" && p.dest === l.down)) chainsOk = false;
+      if (!l.down && lw.portals.some((p) => p.style === "ladderDown")) chainsOk = false;
+      if (lw.monsters.length !== 0) emptyOk = false;
+    }
+    ok(chainsOk, "every lair floor's ladders chain correctly (up to the camp, down to the next)");
+    ok(emptyOk, "every lair floor generates empty of monsters");
+    // deeper = larger (the future difficulty ramp has room to breathe)
+    for (const spec of [["roost1", "roost2", "roost3"], ["goblin1", "goblin2"]] as const) {
+      for (let i = 1; i < spec.length; i++) {
+        const a = worlds[spec[i - 1] as keyof typeof worlds];
+        const b = worlds[spec[i] as keyof typeof worlds];
+        if (!(b.w * b.h > a.w * a.h)) growOk = false;
+      }
+    }
+    ok(growOk, "deeper lair floors are larger than the ones above");
     // determinism: a second build carves the exact same settlements
     const again = buildWorlds(WORLD_SEED).deepwild;
     ok(again.camps.every((c, i) => c.x === dw.camps[i].x && c.y === dw.camps[i].y && c.key === dw.camps[i].key),
