@@ -665,6 +665,47 @@ async function main(): Promise<void> {
     const chest = worlds.cave3.structures.find((st) => st.key === "treasure")!;
     const chestAgain = buildWorlds(WORLD_SEED).cave3.structures.find((st) => st.key === "treasure")!;
     ok(chest.tx === chestAgain.tx && chest.ty === chestAgain.ty, "existing islands still roll identically");
+
+    // ---- Etap 9c: the Marrow set — five chests, five deepest floors ----
+    console.log("the Marrow set & the hoard guards (Etap 9c):");
+    const { CHEST_PRIZES } = await import("../src/game.ts");
+    const marrow = ["marrowShield", "marrowArmor", "marrowHelmet", "marrowLegs", "marrowBoots"] as const;
+    ok(marrow.every((k) => items.ITEMS[k]?.gear?.def), "all five Marrow pieces exist as gear");
+    ok((items.ITEMS.marrowShield.gear?.def ?? 0) > (items.ITEMS.dragonShield.gear?.def ?? 0)
+      && (items.ITEMS.marrowArmor.gear?.def ?? 0) > (items.ITEMS.dragonScaleArmor.gear?.def ?? 0)
+      && (items.ITEMS.marrowHelmet.gear?.def ?? 0) > (items.ITEMS.helmet.gear?.def ?? 0)
+      && (items.ITEMS.marrowLegs.gear?.def ?? 0) > (items.ITEMS.legs.gear?.def ?? 0)
+      && (items.ITEMS.marrowBoots.gear?.def ?? 0) > (items.ITEMS.boots.gear?.def ?? 0),
+      "every Marrow piece tops its slot's ladder");
+    ok(new Set(items.ITEMS && marrow.map((k) => items.ITEMS[k].slot)).size === 5,
+      "the set covers five distinct equipment slots");
+    // exactly six chest worlds, each with a distinct prize; the blade stays home
+    const prizeWorlds = Object.keys(CHEST_PRIZES) as (keyof typeof CHEST_PRIZES)[];
+    ok(prizeWorlds.length === 6 && CHEST_PRIZES.cave3 === "marrowBlade",
+      "six chest worlds are mapped; the caverns still hold the blade");
+    ok(new Set(Object.values(CHEST_PRIZES)).size === 6, "every chest holds a different prize");
+    const treasureLairs = ["goblin2", "orcfort2", "bastion2", "grave2", "roost3"] as const;
+    let chestsOk = true, hoardOk = true, guardsOk = true, postedOk = true;
+    for (const k of treasureLairs) {
+      const lw = worlds[k];
+      const ch = lw.structures.find((st) => st.key === "treasure");
+      if (!ch) { chestsOk = false; continue; }
+      const hoard = lw.camps.find((c) => c.key === "hoard");
+      if (!hoard || dist(hoard.x, hoard.y, ch.tx * 16 + 8, ch.ty * 16 + 8) > 1) hoardOk = false;
+      const detail = lw.monsters.filter((m) => m.camp === "hoard");
+      if (detail.length < 2) guardsOk = false;
+      if (!detail.every((m) => hoard && dist(m.x, m.y, hoard.x, hoard.y) <= hoard.r && m.hr)) postedOk = false;
+    }
+    ok(chestsOk, "every martial camp's deepest floor holds a Marrow chest");
+    ok(hoardOk, "each chest is wrapped in a hoard zone");
+    ok(guardsOk, "an elite guard detail is posted at every hoard");
+    ok(postedOk, "the guards stand leashed to their chest");
+    ok(worlds.grave2.monsters.filter((m) => m.kind === "boneLord").length >= 3,
+      "the deep graveyard now fields bone lords beyond its roster (chest detail)");
+    // the shallow lairs and the mild camps stay chest-free
+    ok((["warren1", "cove1", "hollow1", "hollow2", "goblin1", "orcfort1", "bastion1", "grave1", "roost1", "roost2"] as const)
+      .every((k) => !worlds[k].structures.some((st) => st.key === "treasure")),
+      "no chest leaks onto shallower floors");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
