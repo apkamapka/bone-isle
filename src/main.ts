@@ -23,7 +23,7 @@ import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
-import { createGame, travelTo, respawnAtHome, type Game } from "./game.ts";
+import { createGame, travelTo, respawnAtHome, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
 import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
@@ -998,7 +998,9 @@ function openTreasure(s: Structure): void {
   const id = `treasure:${cw().key}:${s.tx},${s.ty}`;
   if (game.opened.includes(id)) { flash("the chest is empty", "#bdb59c"); return; }
   game.opened.push(id);
-  const prize: ItemKind = "marrowBlade";
+  // world-keyed prizes (the Marrow set on the deepest lair floors); anything
+  // unmapped falls back to the classic blade, so old saves behave identically
+  const prize: ItemKind = CHEST_PRIZES[cw().key] ?? "marrowBlade";
   const fits = freeCap(P) >= itemWeight(prize, 1) && addItem(P.bag, prize, 1) === 0;
   if (!fits) dropToGround(prize, 1);
   flash(`You have found a ${ITEMS[prize].name}.`, "#ffe9a8");

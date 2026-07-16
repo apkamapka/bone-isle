@@ -23,6 +23,9 @@ export type ItemKind =
   | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet"
   | "leatherArmor" | "chainArmor" | "dragonScaleArmor"
   | "steelShield" | "dragonShield"
+  // the Marrow set (Etap 9c): five one-time chest prizes matching the Marrow
+  // Blade — each piece hoarded on a different camp's deepest lair floor
+  | "marrowShield" | "marrowArmor" | "marrowHelmet" | "marrowLegs" | "marrowBoots"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet";
 
@@ -102,6 +105,13 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, weight: 60, slot: "shield", gear: { def: 3 } },
   steelShield:{ name: "Steel Shield", stack: 1, value: 70, weight: 65, slot: "shield", gear: { def: 5 } },
   dragonShield:{ name: "Dragon Shield", stack: 1, value: 300, weight: 70, slot: "shield", gear: { def: 8 } },
+  // ---- the Marrow set: pale bone plate with a silver sheen and gold trim,
+  // ---- the armour counterpart of the Marrow Blade. One-time chest prizes.
+  marrowShield:{ name: "Marrow Shield",  stack: 1, value: 520, weight: 68, slot: "shield", gear: { def: 10 } },
+  marrowArmor: { name: "Marrow Plate",   stack: 1, value: 620, weight: 110, slot: "body",  gear: { def: 9 } },
+  marrowHelmet:{ name: "Marrow Helm",    stack: 1, value: 420, weight: 52, slot: "head",   gear: { def: 5 } },
+  marrowLegs:  { name: "Marrow Greaves", stack: 1, value: 460, weight: 84, slot: "legs",   gear: { def: 6 } },
+  marrowBoots: { name: "Marrow Boots",   stack: 1, value: 380, weight: 26, slot: "boots",  gear: { def: 3, speed: 8 } },
   legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 2 } },
   boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 6 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },

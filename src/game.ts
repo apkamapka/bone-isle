@@ -6,6 +6,7 @@ import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn } from "./world/collision.ts";
 import { spawnMonster, spawnMonsterInCamp, spawnWilderness } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
+import type { ItemKind } from "./items.ts";
 import { loadResearchState } from "./systems/tower.ts";
 import { resetTasks } from "./systems/tasks.ts";
 import { resetSkills } from "./systems/skills.ts";
@@ -107,6 +108,35 @@ const CAMP_POPULATIONS: Readonly<Record<string, Partial<Record<MonsterKind, numb
   roost:   { warWolf: 3 },
 };
 const WILDERNESS_ROAMERS: Partial<Record<MonsterKind, number>> = { wolf: 14, warWolf: 6 };
+
+/**
+ * One-time chest prizes by world (Etap 9c): the Marrow Blade's chest at the
+ * bottom of the Bone Caverns, and the five Marrow-set pieces hoarded on the
+ * deepest floors of the martial camps — difficulty rising with the prize.
+ * main.ts reads this map in openTreasure; worlds absent here fall back to the
+ * classic blade, so old saves behave exactly as before.
+ */
+export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, ItemKind>>> = {
+  cave3: "marrowBlade",
+  goblin2: "marrowBoots",   // the gentlest heist
+  orcfort2: "marrowLegs",
+  bastion2: "marrowShield",
+  grave2: "marrowHelmet",
+  roost3: "marrowArmor",    // pried from under the dragon
+};
+
+/**
+ * The elite guard details posted around each Marrow chest — a tier above the
+ * floor's regular roster, leashed to the hoard so they never abandon their
+ * post and respawning right back beside it.
+ */
+const HOARD_GUARDS: Readonly<Partial<Record<WorldKey, Partial<Record<MonsterKind, number>>>>> = {
+  goblin2: { warWolf: 3 },
+  orcfort2: { orcBerserker: 2, orcShaman: 1 },
+  bastion2: { minotaurGuard: 2, minotaurMage: 1 },
+  grave2: { boneLord: 2 },
+  roost3: { cyclops: 2, minotaurGuard: 1 },
+};
 const DANGER_KEYS = Object.keys(POPULATIONS) as DangerKey[];
 
 /** Stable per-key salt so each world's RNG stream is its own. */
@@ -155,10 +185,22 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   // LAIRS covers exactly the remaining WorldKey members.
   const worlds = { home, town, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
   for (const l of LAIRS) {
-    worlds[l.key] = makeCaveWorld({
+    const lw = makeCaveWorld({
       key: l.key, name: l.name, w: l.w, h: l.h, seed: seed ^ keySalt(l.key),
-      up: l.up, down: l.down, rocks: l.rocks, bones: l.bones,
+      up: l.up, down: l.down, rocks: l.rocks, bones: l.bones, treasure: l.treasure,
     });
+    // a Marrow-set chest gets a virtual "hoard" camp around it: the elite
+    // guard detail spawns inside that circle, stands leashed to the chest,
+    // and — via the same camp-respawn path as the villages — returns to its
+    // post when slain
+    const chest = lw.structures.find((st) => st.key === "treasure");
+    if (chest) {
+      lw.camps.push({
+        key: "hoard", name: `${l.name} hoard`,
+        x: chest.tx * 16 + 8, y: chest.ty * 16 + 8, r: 96,
+      });
+    }
+    worlds[l.key] = lw;
   }
   return worlds;
 }
@@ -191,6 +233,14 @@ export function populateWorld(w: World, seed = WORLD_SEED): void {
   seedWorldRng(seed ^ keySalt(w.key));
   for (const kind of Object.keys(pop) as MonsterKind[]) {
     for (let i = 0; i < (pop[kind] ?? 0); i++) spawnMonster(w, kind);
+  }
+  // the Marrow chest's elite guard detail, posted around the hoard
+  const guards = HOARD_GUARDS[w.key];
+  const hoard = w.camps.find((c) => c.key === "hoard");
+  if (guards && hoard) {
+    for (const kind of Object.keys(guards) as MonsterKind[]) {
+      for (let i = 0; i < (guards[kind] ?? 0); i++) spawnMonsterInCamp(w, kind, hoard);
+    }
   }
 }
 
