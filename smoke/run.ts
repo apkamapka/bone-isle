@@ -593,25 +593,60 @@ async function main(): Promise<void> {
       ok(dw.camps.every((c) => seen[Math.floor(c.y / 16) * W + Math.floor(c.x / 16)] === 1),
         "every settlement is reachable on foot from the dock");
     }
-    // THE point of this stage: the whole region generates completely empty
+    // Etap 9b: the region is ALIVE — every settlement fields its themed
+    // garrison inside the ring, leashed to home
     populateAll(worlds, WORLD_SEED);
-    ok(dw.monsters.length === 0 && dw.respawns.length === 0, "no monsters roam the frontier yet");
+    {
+      const inCamp = (key: string) => dw.monsters.filter((m) => m.camp === key);
+      ok(dw.camps.every((c) => inCamp(c.key).length > 0), "every settlement fields a garrison");
+      ok(dw.monsters.filter((m) => m.camp).every((m) => {
+        const c = dw.camps.find((cc) => cc.key === m.camp)!;
+        return dist(m.x, m.y, c.x, c.y) <= c.r;
+      }), "every garrison member spawns inside its own ring");
+      ok(dw.monsters.filter((m) => m.camp).every((m) => m.hr !== undefined && m.hx !== undefined),
+        "camp dwellers carry a home leash");
+      ok(inCamp("goblin").some((m) => m.kind === "goblin")
+        && inCamp("orcfort").some((m) => m.kind === "orcSpearman")
+        && inCamp("grave").some((m) => m.kind === "ghoul")
+        && inCamp("bastion").some((m) => m.kind === "minotaur"), "garrisons match their settlement themes");
+      // the forest between camps belongs to the wolves — free roamers
+      const roamers = dw.monsters.filter((m) => !m.camp);
+      ok(roamers.length >= 15 && roamers.every((m) => m.kind === "wolf" || m.kind === "warWolf"),
+        `wolves lope through the open forest (${roamers.length} roamers)`);
+      ok(roamers.every((m) => dw.camps.every((c) => dist(m.x, m.y, c.x, c.y) > c.r)),
+        "roamers spawn outside every settlement");
+      ok(roamers.every((m) => !m.hr), "roamers carry no leash — the woods are theirs");
+      // a slain villager respawns back home, not across the continent
+      const { killMonster } = await import("../src/systems/combat.ts");
+      const { spawnMonsterInCamp } = await import("../src/entities/monsters.ts");
+      const gob = inCamp("goblin").find((m) => m.kind === "goblin")!;
+      const before = dw.monsters.length;
+      killMonster(dw, createPlayer({ x: 0, y: 0 }), gob);
+      ok(dw.monsters.length === before - 1 && dw.respawns.some((r) => r.camp === "goblin"),
+        "a slain villager queues a respawn bound to its home camp");
+      const goblinCamp = dw.camps.find((c) => c.key === "goblin")!;
+      ok(spawnMonsterInCamp(dw, "goblin", goblinCamp), "the respawn lands back inside the village");
+      const back = dw.monsters[dw.monsters.length - 1];
+      ok(dist(back.x, back.y, goblinCamp.x, goblinCamp.y) <= goblinCamp.r, "…within the ring");
+    }
     // the lairs: every camp descends underground, deeper floors are larger
     ok(LAIRS.length === 15, `fifteen lair floors are cataloged, got ${LAIRS.length}`);
     ok(dw.camps.every((c) => dw.portals.some((p) =>
       p.style === "caveMouth" && dist(p.x, p.y, c.x, c.y) <= c.r)),
       "every camp has a cave mouth inside its ring");
-    let chainsOk = true, emptyOk = true, growOk = true;
+    let chainsOk = true, filledOk = true, growOk = true;
     for (const l of LAIRS) {
       const lw = worlds[l.key];
       if (!lw) { chainsOk = false; continue; }
       if (!lw.portals.some((p) => p.style === "ladderUp" && p.dest === l.up)) chainsOk = false;
       if (l.down && !lw.portals.some((p) => p.style === "ladderDown" && p.dest === l.down)) chainsOk = false;
       if (!l.down && lw.portals.some((p) => p.style === "ladderDown")) chainsOk = false;
-      if (lw.monsters.length !== 0) emptyOk = false;
+      if (lw.monsters.length === 0) filledOk = false;
     }
     ok(chainsOk, "every lair floor's ladders chain correctly (up to the camp, down to the next)");
-    ok(emptyOk, "every lair floor generates empty of monsters");
+    ok(filledOk, "every lair floor is populated (Etap 9b)");
+    ok(worlds.roost3.monsters.some((m) => m.kind === "dragon"), "the second dragon nests at the Roost's heart");
+    ok(worlds.grave2.monsters.some((m) => m.kind === "mummy"), "the deep graveyard wakes its mummies");
     // deeper = larger (the future difficulty ramp has room to breathe)
     for (const spec of [["roost1", "roost2", "roost3"], ["goblin1", "goblin2"]] as const) {
       for (let i = 1; i < spec.length; i++) {
