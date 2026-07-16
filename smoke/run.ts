@@ -246,7 +246,7 @@ async function main(): Promise<void> {
     const worlds = buildWorlds(WORLD_SEED);
     const wild = worlds.wild;
     populateWorld(wild, WORLD_SEED);
-    ok(wild.monsters.length === 27, `wild fully populated (${wild.monsters.length}/27)`);
+    ok(wild.monsters.length === 41, `wild fully populated (${wild.monsters.length}/41 — the Etap 8 tier-1/2 roster)`);
     let minGap = Infinity;
     for (let i = 0; i < wild.monsters.length; i++) {
       for (let j = i + 1; j < wild.monsters.length; j++) {
@@ -443,6 +443,90 @@ async function main(): Promise<void> {
       const again = buildWorlds(WORLD_SEED).cave3.structures.find((st) => st.key === "treasure")!;
       ok(again.tx === chest.tx && again.ty === chest.ty, "chest position is deterministic from the seed");
     }
+  }
+
+  console.log("Etap 8 — extended bestiary:");
+  {
+    const { MONSTER_DEFS, MONSTER_KINDS, spawnMonster, updateMonsters } = await import("../src/entities/monsters.ts");
+    const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S } = await import("../src/config.ts");
+    const { killMonster } = await import("../src/systems/combat.ts");
+    ok(MONSTER_KINDS.length === 31, `bestiary holds 31 kinds (30 + the dragon), got ${MONSTER_KINDS.length}`);
+    // every loot entry references a real item, every def carries a live sprite
+    let lootOk = true, sprOk = true;
+    for (const k of MONSTER_KINDS) {
+      const d = MONSTER_DEFS[k];
+      if (!d.spr) sprOk = false;
+      for (const e of d.loot) if (!items.ITEMS[e.kind]) lootOk = false;
+    }
+    ok(lootOk, "every loot entry maps to a real item");
+    ok(sprOk, "every monster kind has a baked sprite");
+    // shooters never outrange their own awareness
+    const shooters = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].ranged);
+    ok(shooters.length === 8, `eight distance fighters in the bestiary, got ${shooters.length}`);
+    ok(shooters.every((k) => MONSTER_DEFS[k].ranged!.range < MONSTER_AGGRO_RANGE),
+      "every shooter's range stays under the aggro range");
+    // the orc spearman drops bone arrows (spears were cut per design review)
+    const spearman = MONSTER_DEFS.orcSpearman;
+    ok(spearman.loot.some((e) => e.kind === "boneArrow"), "orc spearman drops bone arrows");
+    ok(!MONSTER_KINDS.some((k) => MONSTER_DEFS[k].loot.some((e) => (e.kind as string) === "spear")),
+      "no monster drops a 'spear' item (it does not exist)");
+    // the dragon: boss stats, long respawn, exclusive gear drops
+    const dragon = MONSTER_DEFS.dragon;
+    ok(dragon.hp === 1000 && dragon.exp === 900, "dragon is the 1000 hp / 900 exp boss");
+    ok((dragon.respawnS ?? 0) >= 600, "the dragon's lair refills on a long clock");
+    ok(MONSTER_KINDS.every((k) => (MONSTER_DEFS[k].respawnS ?? MONSTER_RESPAWN_S) === (k === "dragon" ? 600 : MONSTER_RESPAWN_S)),
+      "only the dragon overrides the standard respawn");
+    for (const rare of ["dragonShield", "fireSword", "dragonScaleArmor"] as const) {
+      const only = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].loot.some((e) => e.kind === rare));
+      ok(only.length === 1 && only[0] === "dragon", `${rare} drops from the dragon alone`);
+    }
+    // killMonster schedules the dragon's respawn on its own clock
+    {
+      const worlds = buildWorlds(WORLD_SEED);
+      const c3 = worlds.cave3;
+      c3.monsters.length = 0; c3.respawns.length = 0;
+      ok(spawnMonster(c3, "dragon"), "the dragon spawns on Bone Caverns -3");
+      const p = createPlayer({ x: 0, y: 0 });
+      killMonster(c3, p, c3.monsters[0]);
+      ok(c3.respawns.length === 1 && c3.respawns[0].t === 600, "a slain dragon respawns after 600 s");
+      ok(c3.corpses.length === 1 && c3.corpses[0].name === "dragon", "the dragon leaves a lootable corpse");
+    }
+    // a shooter holds its ground and fires: park a hunter mid-range and step
+    // the AI — it must land ranged hits without ever closing to melee reach
+    {
+      const worlds = buildWorlds(WORLD_SEED);
+      const wild = worlds.wild;
+      wild.monsters.length = 0;
+      ok(spawnMonster(wild, "hunter"), "a hunter spawns for the AI test");
+      const h = wild.monsters[0];
+      const targetP = { x: h.x + 100, y: h.y, dead: false };
+      let rangedHits = 0, meleeHits = 0, minD = Infinity;
+      for (let t = 0; t < 600; t++) {
+        updateMonsters(wild, 1 / 60, targetP, (_m, ranged) => { if (ranged) rangedHits++; else meleeHits++; });
+        minD = Math.min(minD, Math.hypot(h.x - targetP.x, h.y - targetP.y));
+      }
+      ok(rangedHits >= 4 && meleeHits === 0, `the hunter fires from range (${rangedHits} shots, ${meleeHits} melee)`);
+      ok(minD > 13, `the hunter never closes to melee reach (min ${Math.round(minD)} px)`);
+      ok(wild.shots.length > 0 || rangedHits > 0, "monster shots spawn cosmetic projectiles");
+    }
+    // populations: every floor's roster references only defined kinds — and a
+    // fresh populate actually places the dragon
+    {
+      const { populateAll } = await import("../src/game.ts");
+      const worlds = buildWorlds(WORLD_SEED);
+      populateAll(worlds, WORLD_SEED);
+      ok(worlds.cave3.monsters.filter((mm) => mm.kind === "dragon").length === 1,
+        "exactly one dragon nests in Bone Caverns -3");
+      ok(worlds.wild.monsters.some((mm) => mm.kind === "snake")
+        && worlds.wild.monsters.some((mm) => mm.kind === "amazon"), "the surface carries the new tier-1/2 kinds");
+      ok(worlds.cave2.monsters.some((mm) => mm.kind === "minotaurArcher"), "cavern -2 fields minotaur archers");
+    }
+    // new gear sanity: the progression slots between existing pieces
+    ok(items.ITEMS.battleAxe.gear?.atk === 9 && items.ITEMS.fireSword.gear?.atk === 16,
+      "battle axe (9) and fire sword (16) slot into the weapon ladder");
+    ok((items.ITEMS.dragonShield.gear?.def ?? 0) > (items.ITEMS.steelShield.gear?.def ?? 0),
+      "dragon shield out-defends steel shield");
+    ok((items.ITEMS.dragonHam.food ?? 0) > (items.ITEMS.meat.food ?? 0), "dragon ham out-feeds raw meat");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

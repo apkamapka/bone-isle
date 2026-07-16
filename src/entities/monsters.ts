@@ -1,6 +1,6 @@
 /** Monster definitions, danger-band spawning and the wander/chase/attack AI. */
 import { rnd, rndi, wrnd, dist } from "../util.ts";
-import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE } from "../config.ts";
+import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, SHOT_SPEED } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { moveEntity, randomWalkable, lineOfSight, stepAllowed } from "../world/collision.ts";
 import type { World, Monster, MonsterKind } from "../world/types.ts";
@@ -13,17 +13,36 @@ export interface LootEntry {
   n: readonly [number, number];
 }
 
+/** A monster's ranged attack (archers, shamans, dragon fire). */
+export interface RangedDef {
+  /** Firing reach in px. Must stay under MONSTER_AGGRO_RANGE so a shooter
+   *  never plinks the player from beyond its own awareness. */
+  range: number;
+  /** Ranged damage roll — separate from `dmg`, which stays the melee roll. */
+  dmg: readonly [number, number];
+  /** Projectile tint; omit for the classic steel-gray arrow. */
+  color?: string;
+  /** Thicker projectile stroke (fireballs). */
+  wide?: boolean;
+}
+
 export interface MonsterDef {
   spr: HTMLCanvasElement;
   hp: number;
+  /** MELEE damage roll (shooters stab weakly when cornered). */
   dmg: readonly [number, number];
   speed: number;
   atkRate: number;
   exp: number;
   gold: readonly [number, number];
   loot: readonly LootEntry[];
-  /** Danger band: how far from the town-side coast it spawns (0..1). */
+  /** Danger band: how far from the world's entrance it spawns (0..1). */
   danger: number;
+  /** Present on distance fighters: they hold ground and shoot (Tibia-style),
+   *  back away when the player closes in, and fall back to `dmg` in melee. */
+  ranged?: RangedDef;
+  /** Respawn override in seconds (the dragon's lair refills slowly). */
+  respawnS?: number;
 }
 
 /**
@@ -45,6 +64,24 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.rat, hp: 10, dmg: [1, 5], speed: 30, atkRate: 2.0, exp: 5, gold: [0, 1], danger: 0.06,
     loot: [{ kind: "meat", chance: 0.15, n: [1, 1] }],
   },
+  snake: {
+    spr: SPR.snake, hp: 14, dmg: [2, 7], speed: 34, atkRate: 2.0, exp: 8, gold: [0, 1], danger: 0.1,
+    loot: [{ kind: "venomGland", chance: 0.25, n: [1, 1] }],
+  },
+  crab: {
+    spr: SPR.crab, hp: 26, dmg: [2, 8], speed: 22, atkRate: 2.0, exp: 11, gold: [0, 2], danger: 0.12,
+    loot: [{ kind: "meat", chance: 0.4, n: [1, 1] }, { kind: "shell", chance: 0.3, n: [1, 1] }],
+  },
+  wasp: {
+    spr: SPR.wasp, hp: 18, dmg: [4, 11], speed: 60, atkRate: 2.0, exp: 15, gold: [0, 0], danger: 0.18,
+    loot: [{ kind: "venomGland", chance: 0.15, n: [1, 1] }],
+  },
+  poisonSpider: {
+    // the first shooter you meet: spits venom, then bites weakly if cornered
+    spr: SPR.poisonSpider, hp: 30, dmg: [2, 6], speed: 40, atkRate: 2.0, exp: 20, gold: [0, 3], danger: 0.35,
+    ranged: { range: 90, dmg: [4, 9], color: "#7dbb3f" },
+    loot: [{ kind: "silk", chance: 0.6, n: [1, 2] }, { kind: "venomGland", chance: 0.35, n: [1, 1] }],
+  },
   spider: {
     spr: SPR.spider, hp: 22, dmg: [3, 9], speed: 40, atkRate: 2.0, exp: 12, gold: [0, 2], danger: 0.14,
     loot: [{ kind: "silk", chance: 0.7, n: [1, 2] }],
@@ -65,6 +102,23 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.wolf, hp: 44, dmg: [7, 20], speed: 48, atkRate: 2.0, exp: 26, gold: [1, 4], danger: 0.5,
     loot: [{ kind: "meat", chance: 0.6, n: [1, 2] }],
   },
+  rotworm: {
+    spr: SPR.rotworm, hp: 55, dmg: [4, 13], speed: 16, atkRate: 2.0, exp: 24, gold: [1, 5], danger: 0.33,
+    loot: [{ kind: "meat", chance: 0.6, n: [1, 2] }, { kind: "hpPotion", chance: 0.08, n: [1, 1] }],
+  },
+  amazon: {
+    spr: SPR.amazon, hp: 60, dmg: [4, 10], speed: 36, atkRate: 2.0, exp: 35, gold: [4, 10], danger: 0.5,
+    ranged: { range: 95, dmg: [5, 14] }, // thrown knives
+    loot: [{ kind: "leatherArmor", chance: 0.05, n: [1, 1] }, { kind: "hpPotion", chance: 0.1, n: [1, 1] }],
+  },
+  warWolf: {
+    spr: SPR.warWolf, hp: 70, dmg: [9, 24], speed: 52, atkRate: 2.0, exp: 40, gold: [1, 5], danger: 0.45,
+    loot: [{ kind: "meat", chance: 0.7, n: [1, 2] }, { kind: "wolfFur", chance: 0.4, n: [1, 1] }],
+  },
+  ghoul: {
+    spr: SPR.ghoul, hp: 85, dmg: [7, 19], speed: 30, atkRate: 2.0, exp: 45, gold: [2, 8], danger: 0.5,
+    loot: [{ kind: "bones", chance: 0.8, n: [1, 3] }, { kind: "ghoulClaw", chance: 0.2, n: [1, 1] }],
+  },
   ghost: {
     spr: SPR.ghost, hp: 60, dmg: [6, 17], speed: 42, atkRate: 2.0, exp: 48, gold: [4, 10], danger: 0.56,
     loot: [{ kind: "fireCrystal", chance: 0.35, n: [2, 4] }, { kind: "ring", chance: 0.04, n: [1, 1] }, { kind: "fireRuby", chance: 0.07, n: [1, 1] }],
@@ -73,25 +127,83 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.orc, hp: 90, dmg: [8, 23], speed: 28, atkRate: 2.0, exp: 55, gold: [6, 14], danger: 0.62,
     loot: [{ kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "ironSword", chance: 0.06, n: [1, 1] }, { kind: "fireRuby", chance: 0.05, n: [1, 1] }],
   },
+  orcSpearman: {
+    spr: SPR.orcSpearman, hp: 80, dmg: [5, 13], speed: 32, atkRate: 2.0, exp: 58, gold: [5, 12], danger: 0.55,
+    ranged: { range: 110, dmg: [6, 17], color: "#b98a4e" }, // hurled spears
+    loot: [{ kind: "boneArrow", chance: 0.4, n: [2, 6] }, { kind: "meat", chance: 0.3, n: [1, 1] }],
+  },
   bear: {
     spr: SPR.bear, hp: 120, dmg: [9, 25], speed: 30, atkRate: 2.0, exp: 70, gold: [4, 10], danger: 0.7,
     loot: [{ kind: "meat", chance: 0.7, n: [1, 3] }],
+  },
+  orcWarrior: {
+    spr: SPR.orcWarrior, hp: 125, dmg: [10, 28], speed: 30, atkRate: 2.0, exp: 78, gold: [8, 18], danger: 0.6,
+    loot: [{ kind: "chainArmor", chance: 0.04, n: [1, 1] }, { kind: "ironSword", chance: 0.08, n: [1, 1] }, { kind: "meat", chance: 0.4, n: [1, 1] }],
+  },
+  hunter: {
+    spr: SPR.hunter, hp: 100, dmg: [5, 14], speed: 34, atkRate: 2.0, exp: 85, gold: [6, 15], danger: 0.62,
+    ranged: { range: 140, dmg: [8, 22] },
+    loot: [{ kind: "arrow", chance: 0.7, n: [5, 15] }, { kind: "bow", chance: 0.04, n: [1, 1] }, { kind: "meat", chance: 0.3, n: [1, 1] }],
   },
   minotaur: {
     spr: SPR.minotaur, hp: 140, dmg: [12, 33], speed: 30, atkRate: 2.0, exp: 95, gold: [8, 18], danger: 0.8,
     loot: [{ kind: "bones", chance: 0.6, n: [1, 3] }, { kind: "meat", chance: 0.4, n: [1, 2] }, { kind: "ironSword", chance: 0.05, n: [1, 1] }],
   },
+  minotaurArcher: {
+    spr: SPR.minotaurArcher, hp: 130, dmg: [6, 16], speed: 30, atkRate: 2.0, exp: 100, gold: [8, 16], danger: 0.68,
+    ranged: { range: 150, dmg: [9, 26], color: "#efe9d6" }, // bone-tipped bolts
+    loot: [{ kind: "boneArrow", chance: 0.6, n: [3, 10] }, { kind: "longbow", chance: 0.03, n: [1, 1] }],
+  },
+  orcShaman: {
+    spr: SPR.orcShaman, hp: 110, dmg: [5, 13], speed: 26, atkRate: 2.0, exp: 115, gold: [10, 22], danger: 0.72,
+    ranged: { range: 130, dmg: [8, 20], color: "#8a6cff" }, // crackling magic bolt
+    loot: [{ kind: "fireCrystal", chance: 0.4, n: [1, 3] }, { kind: "healCrystal", chance: 0.2, n: [1, 2] }, { kind: "fireRuby", chance: 0.1, n: [1, 1] }],
+  },
   troll: {
     spr: SPR.troll, hp: 160, dmg: [10, 27], speed: 24, atkRate: 2.0, exp: 110, gold: [12, 28], danger: 0.9,
     loot: [{ kind: "bones", chance: 0.8, n: [2, 4] }, { kind: "boneSword", chance: 0.05, n: [1, 1] }, { kind: "amulet", chance: 0.03, n: [1, 1] }, { kind: "fireRuby", chance: 0.12, n: [1, 1] }],
+  },
+  mummy: {
+    spr: SPR.mummy, hp: 180, dmg: [12, 30], speed: 22, atkRate: 2.0, exp: 130, gold: [10, 24], danger: 0.75,
+    loot: [{ kind: "bones", chance: 0.7, n: [1, 3] }, { kind: "amulet", chance: 0.05, n: [1, 1] }, { kind: "ring", chance: 0.05, n: [1, 1] }, { kind: "fireRuby", chance: 0.1, n: [1, 1] }],
+  },
+  orcBerserker: {
+    spr: SPR.orcBerserker, hp: 210, dmg: [15, 38], speed: 44, atkRate: 2.0, exp: 155, gold: [12, 26], danger: 0.8,
+    loot: [{ kind: "battleAxe", chance: 0.06, n: [1, 1] }, { kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "fireRuby", chance: 0.12, n: [1, 1] }],
   },
   cyclops: {
     spr: SPR.cyclops, hp: 240, dmg: [14, 40], speed: 26, atkRate: 2.0, exp: 180, gold: [14, 30], danger: 0.95,
     loot: [{ kind: "bones", chance: 0.7, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] }, { kind: "boneSword", chance: 0.06, n: [1, 1] }, { kind: "amulet", chance: 0.05, n: [1, 1] }],
   },
+  minotaurGuard: {
+    spr: SPR.minotaurGuard, hp: 280, dmg: [16, 42], speed: 28, atkRate: 2.0, exp: 210, gold: [16, 34], danger: 0.85,
+    loot: [{ kind: "steelShield", chance: 0.05, n: [1, 1] }, { kind: "chainArmor", chance: 0.06, n: [1, 1] }, { kind: "bones", chance: 0.6, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] }],
+  },
+  minotaurMage: {
+    spr: SPR.minotaurMage, hp: 220, dmg: [8, 20], speed: 26, atkRate: 2.0, exp: 240, gold: [18, 38], danger: 0.9,
+    ranged: { range: 140, dmg: [12, 32], color: "#ff8a3a", wide: true }, // fire bolt
+    loot: [{ kind: "fireCrystal", chance: 0.6, n: [2, 5] }, { kind: "fireRuby", chance: 0.2, n: [1, 1] }, { kind: "ring", chance: 0.06, n: [1, 1] }],
+  },
   boneLord: {
     spr: SPR.boneLord, hp: 340, dmg: [18, 49], speed: 22, atkRate: 2.0, exp: 300, gold: [25, 50], danger: 0.99,
     loot: [{ kind: "fireRuby", chance: 0.3, n: [1, 2] }, { kind: "boneSword", chance: 0.12, n: [1, 1] }, { kind: "amulet", chance: 0.08, n: [1, 1] }, { kind: "ring", chance: 0.06, n: [1, 1] }],
+  },
+  // The boss. One dragon nests in the deepest reaches of Bone Caverns -3
+  // (Tibia's Dragon Lair feel): a wall for anyone under ~level 15, a real but
+  // winnable fight at 18-20 with good gear and kite-and-shoot. Its lair refills
+  // on a long clock instead of the standard 12 s trickle.
+  dragon: {
+    spr: SPR.dragon, hp: 1000, dmg: [25, 70], speed: 30, atkRate: 2.0, exp: 900, gold: [60, 140], danger: 0.99,
+    ranged: { range: 160, dmg: [20, 55], color: "#ff5a2a", wide: true }, // dragon fire
+    respawnS: 600,
+    loot: [
+      { kind: "dragonHam", chance: 0.9, n: [2, 5] },
+      { kind: "dragonScale", chance: 0.6, n: [1, 3] },
+      { kind: "fireRuby", chance: 0.5, n: [2, 4] },
+      { kind: "dragonShield", chance: 0.08, n: [1, 1] },
+      { kind: "fireSword", chance: 0.06, n: [1, 1] },
+      { kind: "dragonScaleArmor", chance: 0.04, n: [1, 1] },
+    ],
   },
 };
 
@@ -179,14 +291,15 @@ export interface AttackTarget {
 }
 
 /**
- * Advance every monster in `w`. When a monster reaches the target it calls
- * `onHit(monster)` so the caller (combat system) applies damage to the player.
+ * Advance every monster in `w`. When a monster lands a hit it calls
+ * `onHit(monster, ranged)` so the caller (combat system) applies damage to the
+ * player — `ranged` picks between the melee and the ranged damage roll.
  */
 export function updateMonsters(
   w: World,
   dt: number,
   target: AttackTarget,
-  onHit: (m: Monster) => void,
+  onHit: (m: Monster, ranged: boolean) => void,
 ): void {
   // every creature body-blocks every other one, and the player blocks them all
   const blockers: { x: number; y: number }[] = [target, ...w.monsters];
@@ -200,6 +313,46 @@ export function updateMonsters(
     // Sight range covers every bow (+1 tile), and a creature that was HIT stays
     // aggressive beyond it (aggroT) — plinking arrows never goes unanswered.
     const provoked = d < MONSTER_AGGRO_RANGE || m.aggroT > 0;
+    const rd = MONSTER_DEFS[m.kind].ranged;
+    // Distance fighters (Tibia-style): inside firing range with a clear line
+    // they STOP advancing, loose a projectile on their normal 2.0 s cadence,
+    // and back away when the player closes in — the mirror of the player's
+    // own kite-and-shoot. With the path of retreat blocked (walls, pack mates)
+    // they simply stand and keep firing; and once the player reaches melee
+    // reach (d <= 13) this branch is skipped, so the ordinary melee exchange
+    // below takes over with their (weaker) melee roll.
+    if (rd && !target.dead && provoked && d > 13 && d <= rd.range
+      && lineOfSight(w, m.x, m.y, target.x, target.y)) {
+      const keep = Math.min(rd.range * 0.5, 64);
+      if (d < keep) {
+        // too close for comfort — probe retreat steps like the chase steering
+        const away = Math.atan2(m.y - target.y, m.x - target.x);
+        const step = m.speed * dt;
+        const s = m.orbit;
+        for (const a of [0, 0.6 * s, -0.6 * s, 1.1 * s, -1.1 * s]) {
+          const dx = Math.cos(away + a) * step;
+          const dy = Math.sin(away + a) * step;
+          if (stepAllowed(w, m, dx, dy, blockers)) {
+            m.x += dx;
+            m.y += dy;
+            m.bob += dt * 9;
+            break;
+          }
+        }
+      }
+      if (m.atkCd <= 0) {
+        m.atkCd = m.atkRate;
+        // cosmetic projectile, instant hit — same contract as the player's bow
+        w.shots.push({
+          fromX: m.x, fromY: m.y - 8,
+          toX: target.x, toY: target.y - 6,
+          p: 0, dur: Math.max(0.06, d / SHOT_SPEED),
+          bone: false, color: rd.color ?? "#cfd8da", wide: rd.wide,
+        });
+        onHit(m, true);
+      }
+      continue;
+    }
     if (!target.dead && provoked && d > 13 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
       // Steered chase: try the direct step first; if a body (usually the pack
       // mate in front) blocks it, probe steps at growing angles, preferring
@@ -230,7 +383,7 @@ export function updateMonsters(
     } else if (!target.dead && d <= 13) {
       if (m.atkCd <= 0) {
         m.atkCd = m.atkRate;
-        onHit(m);
+        onHit(m, false);
       }
     } else {
       m.wanderT -= dt;

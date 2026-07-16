@@ -7,8 +7,10 @@ import { BAG_SIZE, STASH_SIZE } from "./config.ts";
 export type ItemKind =
   // resources
   | "wood" | "stone" | "bones" | "herb" | "silk"
+  // creature materials (Etap 8): loot-only, sold to shops / future research & tasks
+  | "venomGland" | "shell" | "wolfFur" | "ghoulClaw" | "dragonScale"
   // consumables
-  | "mushroom" | "meat" | "hpPotion"
+  | "mushroom" | "meat" | "hpPotion" | "dragonHam"
   // crystals (charge-based spell replacements — one "use" per charge)
   | "healCrystal" | "fireCrystal" | "recallCrystal" | "spearCrystal"
   // rare research materials (gate the Alchemy Tower's tech tree)
@@ -17,7 +19,10 @@ export type ItemKind =
   | "bow" | "longbow" | "arrow" | "boneArrow"
   // gear
   | "sword" | "ironSword" | "boneSword" | "marrowBlade"
+  | "battleAxe" | "fireSword"
   | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet"
+  | "leatherArmor" | "chainArmor" | "dragonScaleArmor"
+  | "steelShield" | "dragonShield"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet";
 
@@ -61,8 +66,14 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   bones:     { name: "Bones",        stack: 9999, value: 2, weight: 8 },
   herb:      { name: "Herb",         stack: 9999, value: 3, weight: 3 },
   silk:      { name: "Spider Silk",  stack: 9999, value: 4, weight: 2 },
+  venomGland:{ name: "Venom Gland",  stack: 9999, value: 5, weight: 2 },
+  shell:     { name: "Crab Shell",   stack: 9999, value: 3, weight: 6 },
+  wolfFur:   { name: "Wolf Fur",     stack: 9999, value: 6, weight: 5 },
+  ghoulClaw: { name: "Ghoul Claw",   stack: 9999, value: 8, weight: 3 },
+  dragonScale:{ name: "Dragon Scale", stack: 999, value: 60, weight: 4 },
   mushroom:  { name: "Mushroom",     stack: 999, value: 2, weight: 4, food: 60 },
   meat:      { name: "Raw Meat",     stack: 999, value: 3, weight: 8, food: 180 },
+  dragonHam: { name: "Dragon Ham",   stack: 999, value: 8, weight: 10, food: 360 },
   hpPotion:  { name: "Health Potion", stack: 999, value: 12, weight: 5, heal: 45 },
   healCrystal:   { name: "Life Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
   fireCrystal:   { name: "Fire Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
@@ -75,13 +86,22 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   boneArrow: { name: "Bone Arrow",   stack: 999, value: 2, weight: 1, ammo: { dmg: 14 } },
   sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 3 } },
   ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 7 } },
+  battleAxe: { name: "Battle Axe",   stack: 1, value: 80, weight: 45, slot: "weapon", gear: { atk: 9 } },
   boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 12 } },
+  // Fire Sword — the dragon's rare blade: below the Marrow Blade (20) but
+  // obtainable without the cave-bottom chest run.
+  fireSword: { name: "Fire Sword",   stack: 1, value: 350, weight: 46, slot: "weapon", gear: { atk: 16 } },
   // Unique treasure: found only in the chest at the bottom of the Bone
   // Caverns (-3). Deliberately absent from every shop and every loot table.
   marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 20 } },
   helmet:    { name: "Iron Helmet",  stack: 1, value: 30, weight: 55, slot: "head",   gear: { def: 2 } },
+  leatherArmor:{ name: "Leather Armor", stack: 1, value: 25, weight: 70, slot: "body", gear: { def: 2 } },
+  chainArmor:{ name: "Chain Armor",  stack: 1, value: 45, weight: 95, slot: "body",  gear: { def: 3 } },
   armor:     { name: "Plate Armor",  stack: 1, value: 70, weight: 120, slot: "body",  gear: { def: 4 } },
+  dragonScaleArmor:{ name: "Dragon Scale Armor", stack: 1, value: 400, weight: 100, slot: "body", gear: { def: 7 } },
   shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, weight: 60, slot: "shield", gear: { def: 3 } },
+  steelShield:{ name: "Steel Shield", stack: 1, value: 70, weight: 65, slot: "shield", gear: { def: 5 } },
+  dragonShield:{ name: "Dragon Shield", stack: 1, value: 300, weight: 70, slot: "shield", gear: { def: 8 } },
   legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 2 } },
   boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 6 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },

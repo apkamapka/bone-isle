@@ -107,10 +107,17 @@ export interface GroundItem {
   t: number;
 }
 
-/** Monster kinds present on the Wildlands. */
+/** Monster kinds present on the Wildlands and down the Bone Caverns. */
 export type MonsterKind =
   | "rat" | "spider" | "bat" | "skeleton" | "goblin" | "wolf"
-  | "ghost" | "orc" | "bear" | "minotaur" | "troll" | "cyclops" | "boneLord";
+  | "ghost" | "orc" | "bear" | "minotaur" | "troll" | "cyclops" | "boneLord"
+  // Etap 8 — the extended bestiary (Tibia 8.6-inspired tiers to ~level 20)
+  | "snake" | "crab" | "wasp" | "poisonSpider" | "rotworm" | "amazon"
+  | "warWolf" | "ghoul" | "orcSpearman" | "orcWarrior" | "hunter"
+  | "minotaurArcher" | "orcShaman" | "mummy" | "orcBerserker"
+  | "minotaurGuard" | "minotaurMage"
+  // the boss: one lair at the bottom of the Bone Caverns, long respawn
+  | "dragon";
 
 /** A live monster instance. */
 export interface Monster {
@@ -174,6 +181,11 @@ export interface Shot {
   p: number;
   dur: number;
   bone: boolean;
+  /** Optional projectile tint (monster spit, magic bolts, dragon fire).
+   *  When absent the classic arrow colors apply (bone-white / steel-gray). */
+  color?: string;
+  /** Thicker stroke for heavy projectiles (fireballs). */
+  wide?: boolean;
 }
 
 /** A pending respawn (kind + countdown seconds). */

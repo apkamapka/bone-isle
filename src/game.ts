@@ -42,10 +42,29 @@ type DangerKey = "wild" | "cave1" | "cave2" | "cave3";
 // blocking + the 2-attacker shield cap, every extra creature in a pack now
 // matters (3rd+ hits pierce the shield), so adjust counts here after playtests.
 const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number>>>> = {
-  wild: { rat: 6, spider: 5, bat: 5, skeleton: 4, goblin: 4, wolf: 3 },
-  cave1: { skeleton: 5, goblin: 5, wolf: 4, ghost: 4, orc: 4, bear: 2 },
-  cave2: { orc: 5, bear: 4, minotaur: 4, ghost: 3, troll: 3 },
-  cave3: { minotaur: 3, troll: 4, cyclops: 3, boneLord: 2 }, // cyclops 4→3: bottom-floor packs pierce shields now
+  // Surface: tiers 1-2, the ~level 1-8 hunting grounds. Shooters debut gently
+  // (poison spider spit, amazon knives) before the cavern archers below.
+  wild: {
+    rat: 5, snake: 4, crab: 4, bat: 4, spider: 4, wasp: 3,
+    skeleton: 3, rotworm: 3, poisonSpider: 3, wolf: 3, goblin: 3, amazon: 2,
+  },
+  // -1: tiers 2-3 (~level 8-13). The first spear-throwing orcs appear.
+  cave1: {
+    skeleton: 3, rotworm: 3, goblin: 3, wolf: 3, warWolf: 3,
+    ghoul: 3, ghost: 3, orc: 3, orcSpearman: 3, bear: 2,
+  },
+  // -2: tiers 3-4 (~level 12-17). The orc war camp and the minotaur outposts.
+  cave2: {
+    orc: 3, orcSpearman: 2, bear: 2, orcWarrior: 3, hunter: 2, ghost: 2,
+    minotaur: 3, minotaurArcher: 2, troll: 2, orcShaman: 2, mummy: 2,
+  },
+  // -3: tier 5 (~level 17-20+) and the dragon's lair — ONE dragon nests in
+  // the deepest band (danger 0.99, same as the Bone Lord) on a 10-minute
+  // respawn, guarding the way to the Marrow Blade chest.
+  cave3: {
+    troll: 2, mummy: 2, orcBerserker: 3, cyclops: 3,
+    minotaurGuard: 2, minotaurMage: 2, boneLord: 2, dragon: 1,
+  },
 };
 const DANGER_KEYS = Object.keys(POPULATIONS) as DangerKey[];
 

@@ -1319,9 +1319,10 @@ function update(dt: number): void {
 
   // monsters attack the player (only on dangerous islands)
   if (!world.safe) {
-    updateMonsters(world, dt, { x: P.x, y: P.y, dead: P.dead }, (m) => {
+    updateMonsters(world, dt, { x: P.x, y: P.y, dead: P.dead }, (m, ranged) => {
       const d = MONSTER_DEFS[m.kind];
-      hurtPlayer(world, P, rndi(d.dmg[0], d.dmg[1]));
+      const roll = ranged && d.ranged ? d.ranged.dmg : d.dmg;
+      hurtPlayer(world, P, rndi(roll[0], roll[1]));
     });
     // respawns — never on top of the player (Tibia: nothing spawns on screen);
     // if the whole area is camped, the respawn retries a few seconds later
@@ -1687,8 +1688,8 @@ function render(): void {
     const dy = Math.sin(ang) * 3;
     const px = Math.round(cx - cam.x);
     const py = Math.round(cy - cam.y);
-    vctx.strokeStyle = sh.bone ? "#efe9d6" : "#cfd8da";
-    vctx.lineWidth = 1;
+    vctx.strokeStyle = sh.color ?? (sh.bone ? "#efe9d6" : "#cfd8da");
+    vctx.lineWidth = sh.wide ? 2 : 1;
     vctx.beginPath();
     vctx.moveTo(px - dx, py - dy);
     vctx.lineTo(px + dx, py + dy);

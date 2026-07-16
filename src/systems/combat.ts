@@ -154,7 +154,8 @@ export function killMonster(world: World, p: Player, m: Monster): void {
 
   const idx = world.monsters.indexOf(m);
   if (idx >= 0) world.monsters.splice(idx, 1);
-  world.respawns.push({ kind: m.kind, t: MONSTER_RESPAWN_S });
+  // per-kind respawn override: the dragon's lair refills on a long clock
+  world.respawns.push({ kind: m.kind, t: d.respawnS ?? MONSTER_RESPAWN_S });
 }
 
 /**
