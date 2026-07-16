@@ -65,7 +65,14 @@ export interface LairFloor {
   h: number;
   rocks: number;
   bones: number;
+  /** A one-time Marrow-set chest waits on this floor (bottom floors of the
+   *  five martial camps), placed farthest from the ladder and ringed by an
+   *  elite guard detail. */
+  treasure?: boolean;
 }
+
+/** The camps whose deepest floor hoards a piece of the Marrow set. */
+const TREASURE_FLOORS: ReadonlySet<string> = new Set(["goblin2", "orcfort2", "bastion2", "grave2", "roost3"]);
 
 /**
  * The full lair catalog, derived from the camp chains. Floor sizes grow with
@@ -82,6 +89,7 @@ export const LAIRS: readonly LairFloor[] = CAMP_SPECS.flatMap((c) =>
     h: 40 + i * 8,
     rocks: 10 + i * 4,
     bones: 8 + i * 3,
+    treasure: TREASURE_FLOORS.has(key) || undefined,
   })),
 );
 
