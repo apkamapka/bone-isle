@@ -173,6 +173,15 @@ export interface Monster {
    *  body-blocked — half the pack circles left, half right, so they surround
    *  the player instead of queueing in a single line behind each other. */
   orbit: 1 | -1;
+  /** Camp this creature belongs to (Deep Wildlands settlements). A slain
+   *  camp dweller respawns back home instead of anywhere on the continent. */
+  camp?: string;
+  /** Home point + leash radius in px: wandering beyond it turns the creature
+   *  back toward home, so villagers idle around their village. Roamers
+   *  (wilderness wolves) simply have no home set. */
+  hx?: number;
+  hy?: number;
+  hr?: number;
 }
 
 /** A lootable corpse left behind when a monster dies. */
@@ -222,6 +231,8 @@ export interface Shot {
 export interface Respawn {
   kind: MonsterKind;
   t: number;
+  /** Camp the slain creature came from — it respawns back there. */
+  camp?: string;
 }
 
 /** Options for generating a world. */
