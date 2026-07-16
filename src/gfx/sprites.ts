@@ -806,6 +806,12 @@ export const SPR = {
   eqBodyDragon: bake(["g.gggg.g", "gggggggg", ".gGggGg.", ".gggggg.", ".gGggGg."]),
   eqShieldSteel: bake([".MMMMMM.", ".MmmmmM.", ".MmMMmM.", "..MmmM..", "...MM..."]),
   eqShieldDragon: bake([".gggggg.", ".gGggGg.", ".gggggg.", "..gGGg..", "...gg..."]),
+  // the Marrow set: bone-white plate, silver sheen, gold trim (see swordMarrow)
+  eqShieldMarrow: bake([".wwwwww.", ".wmccmw.", ".wwmmww.", "..wwww..", "...ww..."]),
+  eqBodyMarrow: bake(["w.wwww.w", "wwmwwmww", ".wcwwcw.", ".wwmmww.", ".wwwwww."]),
+  eqHeadMarrow: bake(["..wwww..", ".wwmmww.", ".wcwwcw.", ".ww..ww."]),
+  eqLegsMarrow: bake([".wwwwww.", ".wm..mw.", ".wc..cw.", ".ww..ww."]),
+  eqBootsMarrow: bake(["ww..ww..", "wm..wm..", "wwc.wwc.", "wwwwwwww"]),
   bow: bake([
     ".hh.",
     "h..M",
@@ -1028,6 +1034,8 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   helmet: SPR.eqHead, armor: SPR.eqBody, shieldItem: SPR.eqShield,
   leatherArmor: SPR.eqBodyLeather, chainArmor: SPR.eqBodyChain, dragonScaleArmor: SPR.eqBodyDragon,
   steelShield: SPR.eqShieldSteel, dragonShield: SPR.eqShieldDragon,
+  marrowShield: SPR.eqShieldMarrow, marrowArmor: SPR.eqBodyMarrow, marrowHelmet: SPR.eqHeadMarrow,
+  marrowLegs: SPR.eqLegsMarrow, marrowBoots: SPR.eqBootsMarrow,
   legs: SPR.eqLegs, boots: SPR.eqBoots, ring: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
   healCrystal: SPR.crystalHeal, fireCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
   spearCrystal: SPR.crystalSpear, fireRuby: SPR.fireRuby,
