@@ -4,7 +4,7 @@ import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC } from "./world/handmade.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn } from "./world/collision.ts";
-import { spawnMonster } from "./entities/monsters.ts";
+import { spawnMonster, spawnMonsterInCamp, spawnWilderness } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
 import { loadResearchState } from "./systems/tower.ts";
 import { resetTasks } from "./systems/tasks.ts";
@@ -38,7 +38,10 @@ export interface Game {
  * carries only the low tiers, and each Bone Caverns floor down adds heavier
  * ones — so pushing deeper, not running laps, is how you meet tougher foes.
  */
-type DangerKey = "wild" | "cave1" | "cave2" | "cave3";
+type DangerKey = "wild" | "cave1" | "cave2" | "cave3"
+  | "warren1" | "cove1" | "hollow1" | "hollow2" | "goblin1" | "goblin2"
+  | "orcfort1" | "orcfort2" | "bastion1" | "bastion2" | "grave1" | "grave2"
+  | "roost1" | "roost2" | "roost3";
 // Per-floor populations. THE tuning knob for crowd pressure: with body
 // blocking + the 2-attacker shield cap, every extra creature in a pack now
 // matters (3rd+ hits pierce the shield), so adjust counts here after playtests.
@@ -66,7 +69,44 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
     troll: 2, mummy: 2, orcBerserker: 3, cyclops: 3,
     minotaurGuard: 2, minotaurMage: 2, boneLord: 2, dragon: 1,
   },
+  // ---- Deep Wildlands camp lairs: each settlement's dungeon, difficulty ----
+  // ---- rising floor by floor (Etap 9b)                                  ----
+  warren1:  { rat: 5, bat: 4, snake: 3 },
+  cove1:    { crab: 7, wasp: 3 },
+  hollow1:  { spider: 5, poisonSpider: 4 },
+  hollow2:  { poisonSpider: 6, wasp: 4 },
+  goblin1:  { goblin: 6, rotworm: 3 },
+  goblin2:  { goblin: 6, warWolf: 3 },
+  orcfort1: { orc: 4, orcSpearman: 3, orcWarrior: 3 },
+  orcfort2: { orcWarrior: 4, orcShaman: 3, orcBerserker: 2 },
+  bastion1: { minotaur: 4, minotaurArcher: 3 },
+  bastion2: { minotaurGuard: 3, minotaurMage: 2, minotaur: 3 },
+  grave1:   { skeleton: 4, ghoul: 4, ghost: 3 },
+  grave2:   { mummy: 4, ghost: 3, boneLord: 1 },
+  roost1:   { bear: 3, warWolf: 3 },
+  roost2:   { cyclops: 3, orcBerserker: 2 },
+  // the Roost's heart: the SECOND dragon (the cavern one guards the chest;
+  // this one guards nothing but its hoard) with the same 10-minute clock
+  roost3:   { dragon: 1, cyclops: 2 },
 };
+
+/**
+ * Deep Wildlands SURFACE population (Etap 9b). Settlements carry themed
+ * garrisons that spawn inside the camp ring and stay leashed to it; the open
+ * forest between camps belongs to the wolves — free roamers with no leash,
+ * spawned anywhere on the mainland outside settlements and the dock area.
+ */
+const CAMP_POPULATIONS: Readonly<Record<string, Partial<Record<MonsterKind, number>>>> = {
+  warren:  { rat: 5, snake: 3 },
+  cove:    { crab: 6 },
+  hollow:  { spider: 4, poisonSpider: 3, wasp: 2 },
+  goblin:  { goblin: 5, warWolf: 2 },
+  orcfort: { orc: 4, orcSpearman: 3, orcWarrior: 2 },
+  bastion: { minotaur: 4, minotaurArcher: 2, minotaurGuard: 1 },
+  grave:   { skeleton: 4, ghoul: 3, ghost: 2 },
+  roost:   { warWolf: 3 },
+};
+const WILDERNESS_ROAMERS: Partial<Record<MonsterKind, number>> = { wolf: 14, warWolf: 6 };
 const DANGER_KEYS = Object.keys(POPULATIONS) as DangerKey[];
 
 /** Stable per-key salt so each world's RNG stream is its own. */
@@ -125,6 +165,24 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
 
 /** Populate one dangerous world from its own deterministic RNG stream. */
 export function populateWorld(w: World, seed = WORLD_SEED): void {
+  // the continent populates by settlement, not by danger band
+  if (w.key === "deepwild") {
+    w.monsters.length = 0;
+    w.respawns.length = 0;
+    if (!MONSTERS_ENABLED) return;
+    seedWorldRng(seed ^ keySalt(w.key));
+    for (const camp of w.camps) {
+      const pop = CAMP_POPULATIONS[camp.key];
+      if (!pop) continue;
+      for (const kind of Object.keys(pop) as MonsterKind[]) {
+        for (let i = 0; i < (pop[kind] ?? 0); i++) spawnMonsterInCamp(w, kind, camp);
+      }
+    }
+    for (const kind of Object.keys(WILDERNESS_ROAMERS) as MonsterKind[]) {
+      for (let i = 0; i < (WILDERNESS_ROAMERS[kind] ?? 0); i++) spawnWilderness(w, kind);
+    }
+    return;
+  }
   const pop = POPULATIONS[w.key as DangerKey];
   if (!pop) return;
   w.monsters.length = 0;
@@ -136,9 +194,10 @@ export function populateWorld(w: World, seed = WORLD_SEED): void {
   }
 }
 
-/** Populate the Wildlands and every cave floor. */
+/** Populate the Wildlands, the caverns, the continent, and every lair floor. */
 export function populateAll(worlds: Record<WorldKey, World>, seed = WORLD_SEED): void {
   for (const k of DANGER_KEYS) populateWorld(worlds[k], seed);
+  populateWorld(worlds.deepwild, seed);
 }
 
 export function createGame(seed = WORLD_SEED): Game {

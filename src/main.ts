@@ -4,7 +4,7 @@ import { moveEntity, unstick, blockedAt, lineOfSight } from "./world/collision.t
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
-import { updateMonsters, MONSTER_DEFS, spawnMonster } from "./entities/monsters.ts";
+import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost, structCenter, canPlaceAt } from "./systems/building.ts";
@@ -1325,13 +1325,20 @@ function update(dt: number): void {
       hurtPlayer(world, P, rndi(roll[0], roll[1]));
     });
     // respawns — never on top of the player (Tibia: nothing spawns on screen);
-    // if the whole area is camped, the respawn retries a few seconds later
+    // if the whole area is camped, the respawn retries a few seconds later.
+    // Camp dwellers return to their settlement; frontier roamers to the wilds.
     if (MONSTERS_ENABLED) {
       for (let i = world.respawns.length - 1; i >= 0; i--) {
         const r = world.respawns[i];
         r.t -= dt;
         if (r.t <= 0) {
-          if (spawnMonster(world, r.kind, P)) world.respawns.splice(i, 1);
+          const camp = r.camp ? world.camps.find((c) => c.key === r.camp) : undefined;
+          const done = camp
+            ? spawnMonsterInCamp(world, r.kind, camp, P)
+            : world.key === "deepwild"
+              ? spawnWilderness(world, r.kind, P)
+              : spawnMonster(world, r.kind, P);
+          if (done) world.respawns.splice(i, 1);
           else r.t = RESPAWN_RETRY_S;
         }
       }
