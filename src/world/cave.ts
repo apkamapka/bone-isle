@@ -108,6 +108,20 @@ export function makeCaveWorld(opts: CaveOpts): World {
     }
     wall = next;
   }
+  // 2b. seal a solid 4-tile wall frame around the whole floor. The smoothing
+  //     could otherwise let the cavern (and therefore the up-ladder placed at
+  //     its top-left extreme) run right up to the 1-tile edge, jamming the
+  //     ladder into the corner behind the HUD. A thick margin pushes the whole
+  //     region inward so the ladder is always visible and the cavern sits more
+  //     centred on the map. This overwrites already-drawn cells, so it consumes
+  //     no extra RNG — the generation stream (and thus save determinism) is
+  //     unchanged; only the layout shifts in from the border.
+  const BORDER = 4;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (x < BORDER || y < BORDER || x >= W - BORDER || y >= H - BORDER) wall[y][x] = true;
+    }
+  }
   // 3. guarantee one connected cavern
   const region = keepLargestRegion(wall, W, H);
 
