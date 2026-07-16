@@ -3,7 +3,7 @@ import { TILE, GARDEN_HP_BONUS } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
-import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeChest, bakeTreasureChest } from "../gfx/sprites.ts";
+import { SPR, bakeForge, bakeLibrary, bakeGarden, bakeDummy, bakeRange, bakeChest, bakeTreasureChest } from "../gfx/sprites.ts";
 import { countAcross, removeAcross } from "../items.ts";
 import { onStructureBuilt } from "./quests.ts";
 import { unstick } from "../world/collision.ts";
@@ -26,7 +26,7 @@ export interface StructDef {
   single?: boolean;
 }
 
-export type StructKey = "forge" | "tower" | "garden" | "dummy" | "dummyII" | "chest";
+export type StructKey = "forge" | "tower" | "garden" | "dummy" | "dummyII" | "range" | "chest";
 
 export const STRUCTS: Record<StructKey, StructDef> = {
   forge: { name: "Forge", cost: { wood: 40, stone: 30 }, spr: bakeForge(), desc: "Craft gear & potions", solid: true },
@@ -34,10 +34,11 @@ export const STRUCTS: Record<StructKey, StructDef> = {
   garden: { name: "Garden", cost: { wood: 22, herb: 12, stone: 6 }, spr: bakeGarden(), desc: "Regen HP nearby · +15 max HP", solid: false },
   dummy: { name: "Training Dummy", cost: { wood: 16, stone: 12 }, spr: bakeDummy(), desc: "Attack it to train Sword Fighting", solid: true, single: true },
   dummyII: { name: "War Dummy", cost: { wood: 30, stone: 24, bones: 16 }, spr: bakeDummy(), desc: "Trains Sword Fighting + Shielding", solid: true, single: true },
+  range: { name: "Archery Range", cost: { wood: 18, stone: 8 }, spr: bakeRange(), desc: "Shoot it to train Distance Fighting", solid: true, single: true },
   chest: { name: "Storage Chest", cost: { wood: 24, stone: 16 }, spr: bakeChest(), desc: "Stash items you don't want to carry", solid: true },
 };
 
-export const STRUCT_KEYS: StructKey[] = ["forge", "tower", "garden", "dummy", "dummyII", "chest"];
+export const STRUCT_KEYS: StructKey[] = ["forge", "tower", "garden", "dummy", "dummyII", "range", "chest"];
 
 /** Passive max-HP bonus from structures owned on Home Isle (Garden). */
 export function structureBonuses(home: World): { maxhp: number } {
