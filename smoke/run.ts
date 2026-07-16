@@ -529,6 +529,61 @@ async function main(): Promise<void> {
     ok((items.ITEMS.dragonHam.food ?? 0) > (items.ITEMS.meat.food ?? 0), "dragon ham out-feeds raw meat");
   }
 
+  console.log("Deep Wildlands (Etap 9a — the empty frontier):");
+  {
+    const { populateAll } = await import("../src/game.ts");
+    const { Tile } = await import("../src/world/types.ts");
+    const { dist } = await import("../src/util.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    const dw = worlds.deepwild;
+    ok(dw.w === 208 && dw.h === 160, `the frontier is 208x160 (4x the Wildlands' area), got ${dw.w}x${dw.h}`);
+    ok(!dw.safe, "the Deep Wildlands is flagged dangerous (ready for future rosters)");
+    // travel loop: a boat in Bonetown, a dock back home on the frontier
+    ok(worlds.town.portals.some((p) => p.dest === "deepwild"), "Bonetown has the boat to the Deep Wildlands");
+    ok(dw.portals.some((p) => p.dest === "town"), "the frontier dock leads back to Bonetown");
+    // eight themed camps, all anchored on walkable ground
+    ok(dw.camps.length === 8, `eight camps are recorded, got ${dw.camps.length}`);
+    ok(new Set(dw.camps.map((c) => c.key)).size === 8, "camp keys are unique");
+    ok(dw.camps.every((c) => {
+      const tx = Math.floor(c.x / 16);
+      const ty = Math.floor(c.y / 16);
+      return !dw.solid[ty][tx];
+    }), "every camp centre is walkable");
+    // camps keep their distance — no two settlements melt into one
+    let spaced = true;
+    for (let i = 0; i < dw.camps.length; i++)
+      for (let j = i + 1; j < dw.camps.length; j++) {
+        const a = dw.camps[i];
+        const b = dw.camps[j];
+        if (dist(a.x, a.y, b.x, b.y) < a.r + b.r) spaced = false;
+      }
+    ok(spaced, "no two camps overlap");
+    // carved terrain actually exists: dirt floors/trails, solid palisades
+    let dirt = 0, pal = 0, palSolid = true;
+    for (let y = 0; y < dw.h; y++)
+      for (let x = 0; x < dw.w; x++) {
+        if (dw.tile[y][x] === Tile.Dirt) dirt++;
+        if (dw.tile[y][x] === Tile.Palisade) { pal++; if (!dw.solid[y][x]) palSolid = false; }
+      }
+    ok(dirt > 300, `camp floors + trails carved in dirt (${dirt} tiles)`);
+    ok(pal > 30 && palSolid, `palisade rings raised and solid (${pal} posts)`);
+    // camp interiors were cleared — no tree stands inside a settlement
+    ok(dw.camps.every((c) => dw.trees.every((t) =>
+      dist(t.tx * 16 + 8, t.ty * 16 + 8, c.x, c.y) > c.r - 16)), "camp interiors are clear of trees");
+    // THE point of this stage: the island generates completely empty
+    populateAll(worlds, WORLD_SEED);
+    ok(dw.monsters.length === 0 && dw.respawns.length === 0, "no monsters spawn on the frontier yet");
+    // determinism: a second build carves the exact same settlements
+    const again = buildWorlds(WORLD_SEED).deepwild;
+    ok(again.camps.every((c, i) => c.x === dw.camps[i].x && c.y === dw.camps[i].y && c.key === dw.camps[i].key),
+      "camp layout is deterministic from the seed");
+    // ...and the older islands were untouched by the addition (their streams
+    // are salted separately): the cave-3 chest sits where it always did
+    const chest = worlds.cave3.structures.find((st) => st.key === "treasure")!;
+    const chestAgain = buildWorlds(WORLD_SEED).cave3.structures.find((st) => st.key === "treasure")!;
+    ok(chest.tx === chestAgain.tx && chest.ty === chestAgain.ty, "existing islands still roll identically");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
