@@ -246,7 +246,7 @@ async function main(): Promise<void> {
     const worlds = buildWorlds(WORLD_SEED);
     const wild = worlds.wild;
     populateWorld(wild, WORLD_SEED);
-    ok(wild.monsters.length === 41, `wild fully populated (${wild.monsters.length}/41 — the Etap 8 tier-1/2 roster)`);
+    ok(wild.monsters.length === 30, `wild fully populated (${wild.monsters.length}/30 — the trimmed surface roster)`);
     let minGap = Infinity;
     for (let i = 0; i < wild.monsters.length; i++) {
       for (let j = i + 1; j < wild.monsters.length; j++) {
