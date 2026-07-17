@@ -932,6 +932,34 @@ async function main(): Promise<void> {
     ok(hl.hudUserScale() === 1 && hl.hudMenuOpen(), "reset restores scale and menu");
   }
 
+  console.log("Etap 12b — per-window zoom & collapse (panelPrefs):");
+  {
+    const pp = await import("../src/systems/panelPrefs.ts");
+    pp.resetPanelPrefs();
+    ok(pp.panelZoom("equip") === 1 && !pp.panelCollapsed("equip"), "fresh window: 100%, expanded");
+    pp.stepPanelZoom("equip", 1);
+    pp.stepPanelZoom("equip", 1);
+    ok(Math.abs(pp.panelZoom("equip") - 1.2) < 1e-9, "two + steps → 120%");
+    ok(pp.panelZoom("skills") === 1, "zooming Equip leaves Skills alone");
+    for (let i = 0; i < 30; i++) pp.stepPanelZoom("bag", -1);
+    ok(pp.panelZoom("bag") === 0.5, "zoom clamps at 50%");
+    for (let i = 0; i < 30; i++) pp.stepPanelZoom("bag", 1);
+    ok(pp.panelZoom("bag") === 1.5, "zoom clamps at 150%");
+    pp.togglePanelCollapsed("skills");
+    ok(pp.panelCollapsed("skills") && !pp.panelCollapsed("equip"), "collapse is per-window too");
+    // persistence round-trip: prefs survive a reload
+    pp.loadPanelPrefs();
+    ok(Math.abs(pp.panelZoom("equip") - 1.2) < 1e-9 && pp.panelCollapsed("skills"),
+      "zoom + collapse survive the save/load round-trip");
+    // corrupt storage never crashes and falls back to defaults
+    localStorage.setItem("bone-isle-panels-v1", "{oops");
+    pp.resetPanelPrefs();
+    localStorage.setItem("bone-isle-panels-v1", "{oops");
+    pp.loadPanelPrefs();
+    ok(pp.panelZoom("equip") === 1, "corrupt prefs fall back to defaults");
+    pp.resetPanelPrefs();
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
