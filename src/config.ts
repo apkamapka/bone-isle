@@ -144,6 +144,9 @@ export const FIRE_CRYSTAL_DMG = 18;     // damage = this + level
 export const FIRE_CRYSTAL_RANGE = 120;  // px the fire crystal can reach
 export const SPEAR_CRYSTAL_DMG = 40;    // Spear Crystal (tower-researched) = this + level*2
 export const SPEAR_CRYSTAL_RANGE = 160; // longer reach than a Fire Crystal
+/** Shared cooldown for OFFENSIVE crystals (Fire, Spear) — they were spammable
+ *  into a machine-gun burst; one bolt per this many seconds now. */
+export const CRYSTAL_COOLDOWN_S = 1.5;
 
 /**
  * Ranged combat. A bow is a two-handed weapon (locks out the shield) that

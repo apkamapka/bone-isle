@@ -11,7 +11,7 @@ import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost, structCenter, canPlaceAt } from "./systems/building.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
-import { useCrystal } from "./systems/crystals.ts";
+import { useCrystal, tickCrystalCooldown } from "./systems/crystals.ts";
 import { actionSlots, setSlot, BINDABLE_CRYSTALS } from "./systems/actions.ts";
 import {
   hudLocked, toggleHudLock, placeHud, moveHudGroup, saveHudLayout, resetHudLayout, loadHudLayout,
@@ -130,6 +130,9 @@ const cam = { x: 0, y: 0 };
  */
 let placeGhost: { tx: number; ty: number } | null = null;
 let moveMarker: { x: number; y: number; t: number } | null = null;
+/** A corpse clicked mid-fight: we walk over WITHOUT dropping the attack
+ *  target, and the loot window pops the moment it's in use range. */
+let pendingLoot: Corpse | null = null;
 let waveT = 0;
 let saveTimer = 0;
 let last = performance.now();
@@ -1143,9 +1146,22 @@ function worldClick(w: Vec): void {
       return;
     }
   }
-  // corpses
+  // corpses. While an ATTACK is held (melee or bow), looting must not break
+  // it: in range the loot window opens straight away, out of range we walk
+  // over (pendingLoot pops it on arrival) — the marked monster stays marked
+  // and tickMeleeFire / tickRangedFire keep the blows coming the whole time.
   for (const c of world.corpses) {
     if (Math.abs(w.x - c.x) < 10 && Math.abs(w.y - c.y) < 8) {
+      if (P.target?.kind === "mob") {
+        if (dist(P.x, P.y, c.x, c.y) < USE_RANGE_PX) {
+          ui.loot = c; openWindow("loot");
+        } else {
+          pendingLoot = c;
+          P.dest = { x: c.x, y: c.y };
+        }
+        moveMarker = null;
+        return;
+      }
       P.target = { kind: "corpse", c };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
@@ -1185,7 +1201,7 @@ function worldClick(w: Vec): void {
     const cx = tr.tx * TILE + TILE / 2;
     if (Math.abs(w.x - cx) < 8 && w.y > tr.ty * TILE + TILE - 27 && w.y < tr.ty * TILE + TILE + 2) {
       P.gather = { kind: "tree", obj: tr };
-      P.target = null; P.dest = null; moveMarker = null;
+      P.target = null; P.dest = null; moveMarker = null; pendingLoot = null;
       return;
     }
   }
@@ -1196,7 +1212,7 @@ function worldClick(w: Vec): void {
     const cy = rk.ty * TILE + TILE / 2;
     if (Math.abs(w.x - cx) < 8 && Math.abs(w.y - cy) < 8) {
       P.gather = { kind: "rock", obj: rk };
-      P.target = null; P.dest = null; moveMarker = null;
+      P.target = null; P.dest = null; moveMarker = null; pendingLoot = null;
       return;
     }
   }
@@ -1207,13 +1223,13 @@ function worldClick(w: Vec): void {
     const cy = hb.ty * TILE + TILE / 2;
     if (Math.abs(w.x - cx) < 8 && Math.abs(w.y - cy) < 8) {
       P.gather = { kind: "herb", obj: hb };
-      P.target = null; P.dest = null; moveMarker = null;
+      P.target = null; P.dest = null; moveMarker = null; pendingLoot = null;
       return;
     }
   }
   // otherwise: walk there
   P.dest = { x: w.x, y: w.y };
-  P.target = null; P.gather = null;
+  P.target = null; P.gather = null; pendingLoot = null;
   moveMarker = { x: w.x, y: w.y, t: 0.5 };
 }
 
@@ -1277,7 +1293,10 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
     // let go of a target that has died or left the current island
     if (m.hp <= 0 || !cw().monsters.includes(m)) { P.target = null; return; }
     P.face = m.x < P.x ? -1 : 1;
-    if (dist(P.x, P.y, m.x, m.y) <= mode.reach && P.atkCd <= 0) {
+    // range AND a clear line of fire — arrows no longer thread cave walls
+    // (which made the dragon a shooting-gallery target from total safety)
+    if (dist(P.x, P.y, m.x, m.y) <= mode.reach && P.atkCd <= 0
+      && lineOfSight(cw(), P.x, P.y, m.x, m.y)) {
       P.atkCd = P.atkRate;
       if (playerShoot(cw(), P, m, mode.arrow)) P.target = null;
     }
@@ -1289,6 +1308,26 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
       P.atkCd = P.atkRate;
       shootDummy(cw(), P, t.s, mode.arrow);
     }
+  }
+}
+
+/**
+ * Swing at the currently-kept MELEE target whenever it's within arm's reach
+ * and the attack is off cooldown. Runs every frame (like tickRangedFire), so
+ * the attack persists through manual movement and looting. Slightly more
+ * reach slack than the approach stop-distance so a wiggling monster doesn't
+ * stutter in and out of range.
+ */
+function tickMeleeFire(): void {
+  const t = P.target;
+  if (!t || t.kind !== "mob") return;
+  const m = t.m;
+  if (m.hp <= 0 || !cw().monsters.includes(m)) { P.target = null; return; }
+  if (dist(P.x, P.y, m.x, m.y) <= 18 && P.atkCd <= 0) {
+    P.atkCd = P.atkRate;
+    P.face = m.x < P.x ? -1 : 1;
+    if (equippedBow(P.eq)) warnNoArrows(); // bow with an empty quiver pokes, but nags
+    if (playerAttack(cw(), P, m)) P.target = null;
   }
 }
 
@@ -1382,6 +1421,18 @@ function update(dt: number): void {
   waveT += dt;
   P.tpCd = Math.max(0, P.tpCd - dt);
   P.atkCd = Math.max(0, P.atkCd - dt);
+  tickCrystalCooldown(dt);
+  // mid-fight loot walk: the corpse clicked during combat pops open the
+  // moment we're in range (or is forgotten if it despawned / got looted away)
+  if (pendingLoot) {
+    if (!world.corpses.includes(pendingLoot)) pendingLoot = null;
+    else if (dist(P.x, P.y, pendingLoot.x, pendingLoot.y) < USE_RANGE_PX) {
+      ui.loot = pendingLoot;
+      openWindow("loot");
+      pendingLoot = null;
+      P.dest = null;
+    }
+  }
   P.bob += dt;
 
   // death → respawn countdown
@@ -1398,12 +1449,16 @@ function update(dt: number): void {
   const kiting = !!P.target
     && (P.target.kind === "mob" || P.target.kind === "dummy")
     && mode.ranged;
+  // A MELEE attack on a monster is just as sticky now: the marked target
+  // survives manual movement, and tickMeleeFire below swings whenever the
+  // monster is in reach — so you can step around, loot, and keep fighting.
+  const holdMelee = !!P.target && P.target.kind === "mob" && !mode.ranged;
 
   // movement: WASD/joystick overrides auto-actions
   const ax = moveAxis();
   if (ax.dx || ax.dy) {
-    P.dest = null; P.gather = null;
-    if (!kiting) P.target = null; // melee movement still drops the target
+    P.dest = null; P.gather = null; pendingLoot = null;
+    if (!kiting && !holdMelee) P.target = null; // non-combat targets still drop
     const len = Math.hypot(ax.dx, ax.dy) || 1;
     const sp = playerSpeed(P);
     moveEntity(world, P, (ax.dx / len) * sp * dt, (ax.dy / len) * sp * dt, world.monsters);
@@ -1432,11 +1487,13 @@ function update(dt: number): void {
       }
     }
   } else if (kiting) {
-    // idle bowman: only close the gap if the target drifted out of range
+    // idle bowman: close the gap when the target drifted out of range OR a
+    // wall blocks the shot (walk around the corner instead of standing dumb)
     const tp = targetPoint();
     if (tp) {
       const d = dist(P.x, P.y, tp.x, tp.y);
-      if (d > mode.reach) {
+      const blocked = P.target?.kind === "mob" && !lineOfSight(world, P.x, P.y, tp.x, tp.y);
+      if (d > mode.reach || blocked) {
         const sp = playerSpeed(P);
         moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt, world.monsters);
         if (tp.x < P.x) P.face = -1; else P.face = 1;
@@ -1459,6 +1516,10 @@ function update(dt: number): void {
   // Ranged fire pass: with a bow, keep shooting the kept target whenever it's in
   // range and off cooldown — whether we're standing still or kiting on the move.
   if (kiting) tickRangedFire(mode);
+  // Melee fire pass — the sword-arm mirror of the above: the marked monster
+  // eats a swing whenever it's within reach and the attack is off cooldown,
+  // even while the player is walking or has a loot window open.
+  else if (holdMelee) tickMeleeFire();
 
   // monsters attack the player (only on dangerous islands)
   if (!world.safe) {
