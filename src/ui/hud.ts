@@ -1,11 +1,10 @@
 /** Screen-space HUD: HP/EXP bars, cap, gold, minimap, action bar, overlays. */
 import { TILE } from "../config.ts";
-import { SPR, itemSprite } from "../gfx/sprites.ts";
+import { SPR } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
-import { actionSlots } from "../systems/actions.ts";
-import { bagCount, ITEMS } from "../items.ts";
+import { ITEMS } from "../items.ts";
 import { activeTask, progressOf } from "../systems/tasks.ts";
-import { placeHud } from "../systems/hudLayout.ts";
+import { placeHud, hudUserScale } from "../systems/hudLayout.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import type { Player } from "../entities/player.ts";
 import type { Game } from "../game.ts";
@@ -22,6 +21,10 @@ export interface HudCtx {
   touch?: boolean;
   /** True only on a REAL touch device (touchUI above is on everywhere). */
   touchInput?: boolean;
+  /** Width (device px) of the docked desktop sidebar; 0/undefined = none.
+   *  When set, the floating vitals/gold/TP/minimap are skipped (the sidebar
+   *  draws its own) and centered overlays center on the visible area. */
+  sidebarW?: number;
 }
 
 function panel(h: HudCtx, x: number, y: number, w: number, ph: number): void {
@@ -102,12 +105,10 @@ function minimapTerrain(w: Game["current"]): HTMLCanvasElement {
   return c;
 }
 
-function drawMinimap(h: HudCtx, game: Game, p: Player): void {
-  const { ctx, scale: S, screenW } = h;
+/** Minimap blitted at an arbitrary (x,y) with a given pixel size. */
+export function drawMinimapAt(h: HudCtx, game: Game, p: Player, x: number, y: number, size: number): void {
+  const { ctx, scale: S } = h;
   const w = game.current;
-  const size = 70 * S;
-  const x = screenW - size - 8 * S;
-  const y = 40 * S;
   const sx = size / (w.w * TILE);
   const sy = size / (w.h * TILE);
   ctx.fillStyle = "rgba(6,14,13,.85)";
@@ -133,59 +134,93 @@ function drawMinimap(h: HudCtx, game: Game, p: Player): void {
   ctx.fillRect(x + p.x * sx - 1.5, y + p.y * sy - 1.5, 3, 3);
 }
 
-export function drawHud(h: HudCtx, game: Game, p: Player): void {
-  const { ctx, scale: S, screenW, screenH } = h;
-  const pad = 8 * S;
-  ctx.textBaseline = "middle";
+/** Reference vitals-panel size (design px) — multiply by a scale to place it. */
+export const VITALS_W = 190;
+export const VITALS_H = 54;
 
-  // bottom-left: HP + EXP + Cap  (draggable on touch via the customizable HUD)
-  const pw = 190 * S;
-  const ph = 54 * S;
-  let px = pad;
-  let py = screenH - ph - pad;
-  if (h.touch) { const pos = placeHud("vitals", pw, ph, screenW, screenH); px = pos.x; py = pos.y; }
-  panel(h, px, py, pw, ph);
-  bar(h, px + 10 * S, py + 8 * S, 130 * S, 8 * S, p.hp / p.maxhp, "#e1483b", "#5d1a14");
+/** The HP / EXP / Cap panel at an arbitrary top-left with its own scale. */
+export function drawVitals(h: HudCtx, p: Player, px: number, py: number, S: number): void {
+  panel({ ...h, scale: S }, px, py, VITALS_W * S, VITALS_H * S);
+  bar({ ...h, scale: S }, px + 10 * S, py + 8 * S, 130 * S, 8 * S, p.hp / p.maxhp, "#e1483b", "#5d1a14");
   hudText(h, `HP ${Math.ceil(p.hp)}/${p.maxhp}`, px + 145 * S, py + 11 * S + 1, 8 * S, "#ffd9d4");
-  bar(h, px + 10 * S, py + 22 * S, 130 * S, 8 * S, p.exp / p.expNext, "#b07fe8", "#3c2752");
+  bar({ ...h, scale: S }, px + 10 * S, py + 22 * S, 130 * S, 8 * S, p.exp / p.expNext, "#b07fe8", "#3c2752");
   hudText(h, `Lv ${p.level}`, px + 145 * S, py + 25 * S + 1, 8 * S, "#e6d4ff");
   const cap = carryCap(p);
   const used = Math.round(carriedWeight(p));
   const capFull = used >= cap;
   hudText(h, "Cap", px + 10 * S, py + 40 * S, 8 * S, "rgba(220,214,190,.7)");
-  bar(h, px + 34 * S, py + 37 * S, 106 * S, 6 * S, used / cap, capFull ? "#e06a4a" : "#caa15a", "#3a3222");
+  bar({ ...h, scale: S }, px + 34 * S, py + 37 * S, 106 * S, 6 * S, used / cap, capFull ? "#e06a4a" : "#caa15a", "#3a3222");
   hudText(h, `${used}/${cap}`, px + 145 * S, py + 40 * S, 8 * S, capFull ? "#ffb59a" : "#e8dcc0");
+}
 
-  // top-right: gold (box auto-sizes so big amounts always fit the frame)
+/** Compact gold + TP row (used by the desktop sidebar). */
+export function drawGoldTP(h: HudCtx, p: Player, x: number, y: number, w: number, rowH: number): void {
+  const { ctx, scale: S } = h;
+  panel(h, x, y, w, rowH);
   const cd = SPR.coin;
-  const cdw = cd.width * 2 * S;
-  const cdh = cd.height * 2 * S;
-  const goldStr = `${p.gold}`;
-  ctx.font = `bold ${9 * S}px monospace`;
-  const goldW = ctx.measureText(goldStr).width;
-  ctx.font = `${8 * S}px monospace`;
-  const labelW = ctx.measureText("gold").width;
-  const iw = Math.max(150 * S, 9 * S + cdw + 6 * S + goldW + 8 * S + labelW + 10 * S);
-  const ih = 22 * S;
-  const ix = screenW - iw - pad;
-  const iy = pad;
-  panel(h, ix, iy, iw, ih);
+  const cdw = cd.width * 1.5 * S;
+  const cdh = cd.height * 1.5 * S;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(cd, ix + 9 * S, iy + (ih - cdh) / 2, cdw, cdh);
-  hudText(h, goldStr, ix + 9 * S + cdw + 6 * S, iy + ih / 2, 9 * S, "#f3eedd", "left", true);
-  hudText(h, "gold", ix + iw - 8 * S, iy + ih / 2, 8 * S, "rgba(220,214,190,.6)", "right");
+  ctx.drawImage(cd, x + 5 * S, y + (rowH - cdh) / 2, cdw, cdh);
+  hudText(h, `${p.gold}`, x + 5 * S + cdw + 4 * S, y + rowH / 2, 8 * S, "#f3eedd", "left", true);
+  hudText(h, "TP", x + w - 8 * S - 24 * S, y + rowH / 2, 7 * S, "#9ad0ff", "left", true);
+  hudText(h, `${p.taskPoints}`, x + w - 6 * S, y + rowH / 2, 8 * S, "#f3eedd", "right", true);
+}
 
-  // task points box, sitting just left of the gold box on the same row
-  const tpStr = `${p.taskPoints}`;
-  ctx.font = `bold ${9 * S}px monospace`;
-  const tpNumW = ctx.measureText(tpStr).width;
-  ctx.font = `${8 * S}px monospace`;
-  const tpLabW = ctx.measureText("TP").width;
-  const tpw = 12 * S + tpLabW + 6 * S + tpNumW + 10 * S;
-  const tpx = ix - tpw - 6 * S;
-  panel(h, tpx, iy, tpw, ih);
-  hudText(h, "TP", tpx + 10 * S, iy + ih / 2, 8 * S, "#9ad0ff", "left", true);
-  hudText(h, tpStr, tpx + tpw - 8 * S, iy + ih / 2, 9 * S, "#f3eedd", "right", true);
+export function drawHud(h: HudCtx, game: Game, p: Player): void {
+  const { ctx, scale: S, screenW, screenH } = h;
+  const pad = 8 * S;
+  const sidebar = (h.sidebarW ?? 0) > 0;
+  /** Horizontal center of the VISIBLE (non-sidebar) area for overlays. */
+  const cx = (screenW - (h.sidebarW ?? 0)) / 2;
+  ctx.textBaseline = "middle";
+
+  // bottom-left: HP + EXP + Cap  (draggable on touch via the customizable HUD;
+  // scaled by the user's HUD-scale preference; drawn by the sidebar on desktop)
+  if (!sidebar) {
+    const u = h.touch ? hudUserScale() : 1;
+    const Sv = S * u;
+    const pw = VITALS_W * Sv;
+    const ph = VITALS_H * Sv;
+    let px = pad;
+    let py = screenH - ph - pad;
+    if (h.touch) { const pos = placeHud("vitals", pw, ph, screenW, screenH); px = pos.x; py = pos.y; }
+    drawVitals(h, p, px, py, Sv);
+  }
+
+  // top-right: gold (box auto-sizes so big amounts always fit the frame);
+  // in sidebar mode the sidebar draws its own compact gold + TP row
+  if (!sidebar) {
+    const cd = SPR.coin;
+    const cdw = cd.width * 2 * S;
+    const cdh = cd.height * 2 * S;
+    const goldStr = `${p.gold}`;
+    ctx.font = `bold ${9 * S}px monospace`;
+    const goldW = ctx.measureText(goldStr).width;
+    ctx.font = `${8 * S}px monospace`;
+    const labelW = ctx.measureText("gold").width;
+    const iw = Math.max(150 * S, 9 * S + cdw + 6 * S + goldW + 8 * S + labelW + 10 * S);
+    const ih = 22 * S;
+    const ix = screenW - iw - pad;
+    const iy = pad;
+    panel(h, ix, iy, iw, ih);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(cd, ix + 9 * S, iy + (ih - cdh) / 2, cdw, cdh);
+    hudText(h, goldStr, ix + 9 * S + cdw + 6 * S, iy + ih / 2, 9 * S, "#f3eedd", "left", true);
+    hudText(h, "gold", ix + iw - 8 * S, iy + ih / 2, 8 * S, "rgba(220,214,190,.6)", "right");
+
+    // task points box, sitting just left of the gold box on the same row
+    const tpStr = `${p.taskPoints}`;
+    ctx.font = `bold ${9 * S}px monospace`;
+    const tpNumW = ctx.measureText(tpStr).width;
+    ctx.font = `${8 * S}px monospace`;
+    const tpLabW = ctx.measureText("TP").width;
+    const tpw = 12 * S + tpLabW + 6 * S + tpNumW + 10 * S;
+    const tpx = ix - tpw - 6 * S;
+    panel(h, tpx, iy, tpw, ih);
+    hudText(h, "TP", tpx + 10 * S, iy + ih / 2, 8 * S, "#9ad0ff", "left", true);
+    hudText(h, tpStr, tpx + tpw - 8 * S, iy + ih / 2, 9 * S, "#f3eedd", "right", true);
+  }
 
   // top-left: title + zone
   hudText(h, "BONE ISLE", pad + 2, pad + 7 * S, 11 * S, "#cfe8d2", "left", true);
@@ -202,46 +237,16 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
     hudText(h, `Task: ${prog}/${task.goal.need} ${label}`, pad + 2, pad + 29 * S, 8 * S, done ? "#9fe8a8" : "rgba(154,208,255,.85)");
   }
 
-  drawMinimap(h, game, p);
-
-  // action bar (bottom-center) — desktop only; touch uses on-screen buttons
-  if (!h.touch) {
-    const bw = 34 * S;
-    const gap = 6 * S;
-    const n = actionSlots.length;
-    let sx = screenW / 2 - (n * bw + (n - 1) * gap) / 2;
-    const sy = screenH - pad - 22 * S;
-    for (let i = 0; i < n; i++) {
-      const slot = actionSlots[i];
-      const item = slot && slot.type === "crystal" ? slot.item : null;
-      const charges = item ? bagCount(p.bag, item) : 0;
-      const usable = item != null && charges > 0;
-      ctx.fillStyle = slot ? "rgba(30,40,50,.85)" : "rgba(24,24,24,.6)";
-      ctx.fillRect(sx, sy, bw, bw);
-      ctx.strokeStyle = usable ? "#caa15a" : "#455";
-      ctx.lineWidth = S;
-      ctx.strokeRect(sx + S / 2, sy + S / 2, bw - S, bw - S);
-      hudText(h, `${i + 1}`, sx + 3 * S, sy + 6 * S, 7 * S, "rgba(220,214,190,.6)");
-      if (item) {
-        const spr = itemSprite(item);
-        const isc = 2 * S;
-        ctx.imageSmoothingEnabled = false;
-        ctx.globalAlpha = usable ? 1 : 0.35;
-        ctx.drawImage(spr, sx + (bw - spr.width * isc) / 2, sy + (bw - spr.height * isc) / 2 - S, spr.width * isc, spr.height * isc);
-        ctx.globalAlpha = 1;
-        hudText(h, `${charges}`, sx + bw - 3 * S, sy + bw - 4 * S, 7 * S, usable ? "#ffe9a8" : "#c86", "right");
-      } else if (slot && slot.type === "swap") {
-        hudText(h, "SWAP", sx + bw / 2, sy + bw / 2 + S, 7 * S, "#e9e2c8", "center", true);
-      }
-      sx += bw + gap;
-    }
-    hudText(h, "1–6 action slots · rebind on mobile", screenW / 2, sy - 6 * S, 7 * S, "rgba(220,214,190,.5)", "center");
+  // floating minimap top-right — the sidebar hosts its own copy on desktop
+  if (!sidebar) {
+    const size = 70 * S;
+    drawMinimapAt(h, game, p, screenW - size - 8 * S, 40 * S, size);
   }
 
-  // zone flash
+  // zone flash (centered on the visible, non-sidebar area)
   if (game.zoneFlash.t > 0) {
     ctx.globalAlpha = clamp(game.zoneFlash.t, 0, 1);
-    hudText(h, game.zoneFlash.text, screenW / 2, 40 * S, 16 * S, "#ffe9a8", "center", true);
+    hudText(h, game.zoneFlash.text, cx, 40 * S, 16 * S, "#ffe9a8", "center", true);
     ctx.globalAlpha = 1;
   }
 
@@ -249,7 +254,7 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   if (p.dead) {
     ctx.fillStyle = "rgba(20,10,10,.45)";
     ctx.fillRect(0, 0, screenW, screenH);
-    hudText(h, "You died", screenW / 2, screenH / 2 - 8 * S, 22 * S, "#ff6a5e", "center", true);
-    hudText(h, `respawning at Home Isle in ${Math.ceil(p.deadT)}...`, screenW / 2, screenH / 2 + 12 * S, 10 * S, "#f3eedd", "center");
+    hudText(h, "You died", cx, screenH / 2 - 8 * S, 22 * S, "#ff6a5e", "center", true);
+    hudText(h, `respawning at Home Isle in ${Math.ceil(p.deadT)}...`, cx, screenH / 2 + 12 * S, 10 * S, "#f3eedd", "center");
   }
 }
