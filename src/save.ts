@@ -128,10 +128,15 @@ export function loadGame(): Game | null {
   (Object.keys(worlds) as WorldKey[]).forEach((k) => {
     const saved = data.structures[k];
     if (saved && saved.length) {
-      // Drop structures whose kind no longer exists (e.g. the old Library).
+      // Drop structures whose kind no longer exists (e.g. the old Library), AND
+      // treasure chests — those are regenerated fresh so they always sit in the
+      // open, carved alcove (a fix for old saves that stored a chest walled in
+      // against the rock). The freshly-built world already placed the correct
+      // treasure chest; the opened-state is migrated to its coords below.
       worlds[k].structures = saved
-        .filter((s) => s.key !== "library")
-        .map((s) => ({ ...s, ...(s.key === "chest" ? { inv: normalizeStash(s.inv) } : {}) }));
+        .filter((s) => s.key !== "library" && s.key !== "treasure")
+        .map((s) => ({ ...s, ...(s.key === "chest" ? { inv: normalizeStash(s.inv) } : {}) }))
+        .concat(worlds[k].structures.filter((s) => s.key === "treasure"));
     }
     // Restore ground items + corpses (defensively — items validated by kind).
     const gr = data.ground?.[k];
@@ -152,6 +157,19 @@ export function loadGame(): Game | null {
           t: typeof c.t === "number" ? c.t : 60,
         }));
     }
+  });
+
+  // Migrate the one-time-chest "opened" flags to the regenerated chest coords.
+  // Old saves stored `treasure:{world}:{oldTx},{oldTy}` from the pre-fix chest
+  // position; now that each world's single treasure chest is regenerated (in
+  // its carved alcove), re-point every opened id to the new coords so a chest
+  // already looted stays looted — no duplicate Marrow-set pieces.
+  const openedRaw = Array.isArray(data.opened) ? data.opened.filter((x): x is string => typeof x === "string") : [];
+  const opened = openedRaw.map((id) => {
+    const m = /^treasure:([^:]+):/.exec(id);
+    if (!m) return id;
+    const chest = worlds[m[1] as WorldKey]?.structures.find((s) => s.key === "treasure");
+    return chest ? `treasure:${m[1]}:${chest.tx},${chest.ty}` : id;
   });
 
   // Migration: structures from very old saves (procedural Home Isle) may sit
@@ -239,7 +257,7 @@ export function loadGame(): Game | null {
     player,
     zoneFlash: { text: current.name + (current.safe ? "  (safe)" : "  (dangerous)"), t: 2 },
     tpFlash: 0,
-    opened: Array.isArray(data.opened) ? data.opened.filter((x) => typeof x === "string") : [],
+    opened,
   };
 }
 
