@@ -15,7 +15,7 @@ import { resetOutfit, applyOutfit } from "./systems/outfit.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
-import { WORLD_SEED, MONSTERS_ENABLED } from "./config.ts";
+import { WORLD_SEED, MONSTERS_ENABLED, CAVE_CROWD_MULT } from "./config.ts";
 import type { World, WorldKey } from "./world/types.ts";
 import type { Player } from "./entities/player.ts";
 import type { Bag } from "./items.ts";
@@ -244,8 +244,14 @@ export function populateWorld(w: World, seed = WORLD_SEED): void {
   w.respawns.length = 0;
   if (!MONSTERS_ENABLED) return; // peaceful mode: leave every floor empty
   seedWorldRng(seed ^ keySalt(w.key));
+  // Undergrounds (every dangerous floor except the surface Wildlands) get the
+  // crowd multiplier so their big, sparse caverns fill in. The dragon is a
+  // boss and stays at its authored count — a lair nests exactly one.
+  const crowded = w.key !== "wild";
   for (const kind of Object.keys(pop) as MonsterKind[]) {
-    for (let i = 0; i < (pop[kind] ?? 0); i++) spawnMonster(w, kind);
+    let n = pop[kind] ?? 0;
+    if (crowded && kind !== "dragon") n = Math.round(n * CAVE_CROWD_MULT);
+    for (let i = 0; i < n; i++) spawnMonster(w, kind);
   }
   // the Marrow chest's elite guard detail, posted around the hoard
   const guards = HOARD_GUARDS[w.key];

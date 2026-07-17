@@ -58,6 +58,16 @@ export const BAG_SIZE = 16;
 export const MONSTER_RESPAWN_S = 12;
 
 /**
+ * Crowd multiplier for the undergrounds (every dangerous floor except the
+ * surface Wildlands). The cave/lair floors are large and were reading as empty
+ * between packs, so their per-kind spawn counts are scaled up by this factor;
+ * because each kill schedules exactly one same-kind respawn, this raises the
+ * steady-state population too, not just the opening one. Bosses (the dragon)
+ * are exempt so a lair still nests exactly one. Tune here after playtests.
+ */
+export const CAVE_CROWD_MULT = 1.8;
+
+/**
  * Master monster switch. When `false`, no creatures are placed on the map and
  * none respawn — the world is walkable and peaceful for free exploration. The
  * whole combat/AI/respawn machinery stays intact; flip back to `true` to bring
@@ -142,9 +152,15 @@ export const SPEAR_CRYSTAL_RANGE = 160; // longer reach than a Fire Crystal
  * Distance Fighting, so early bows are weak and the skill grind is what makes
  * them hit hard (Tibia-style). See distancePower() in skills.ts.
  */
-export const DIST_FACTOR_BASE = 0.30;   // multiplier at skill 10 (start)
-export const DIST_FACTOR_PER = 0.025;   // + this per Distance level above 10
-export const DIST_LEVEL_BONUS = 0.25;   // small flat + level * this
+// Distance was lagging badly behind melee at high skill: at Distance 70 the old
+// multiplier reached only ~1.8x, so a longbow + bone arrow topped out near 45
+// while a same-skill sword pushed past 100. The base, per-level and flat-level
+// terms are all raised so a trained archer's shots climb into the same league
+// as a blade (still a touch below, since ranged fights from safety and burns
+// ammo). Roughly: at Distance 70 a bone-arrow shot now maxes ~90 instead of ~45.
+export const DIST_FACTOR_BASE = 0.45;   // multiplier at skill 10 (start)
+export const DIST_FACTOR_PER = 0.055;   // + this per Distance level above 10
+export const DIST_LEVEL_BONUS = 0.30;   // small flat + level * this
 export const ARROW_MISS_WARN_S = 1.2;   // throttle for the "no arrows" nag
 export const SHOT_SPEED = 520;          // px/s the drawn arrow travels
 

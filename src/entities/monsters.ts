@@ -25,6 +25,11 @@ export interface RangedDef {
   color?: string;
   /** Thicker projectile stroke (fireballs). */
   wide?: boolean;
+  /** Brute shooter (the dragon): does NOT kite. It keeps advancing like a
+   *  melee monster, breathes at range, then switches to its paw (the melee
+   *  `dmg` roll) once it reaches you — so it both closes in AND blasts fire,
+   *  instead of backing away and only spitting. */
+  brute?: boolean;
 }
 
 export interface MonsterDef {
@@ -194,8 +199,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // winnable fight at 18-20 with good gear and kite-and-shoot. Its lair refills
   // on a long clock instead of the standard 12 s trickle.
   dragon: {
-    spr: SPR.dragon, hp: 1000, dmg: [25, 70], speed: 30, atkRate: 2.0, exp: 900, gold: [60, 140], danger: 0.99,
-    ranged: { range: 160, dmg: [20, 55], color: "#ff5a2a", wide: true }, // dragon fire
+    // The hardest thing in the game and now it plays like it: a brute that
+    // charges in, mauls with its paw (melee) for heavy hits, and breathes fire
+    // at range — no more backing away and plinking. Both rolls reach past 100
+    // on the high end, so a careless approach genuinely hurts.
+    spr: SPR.dragon, hp: 1000, dmg: [45, 120], speed: 30, atkRate: 2.0, exp: 900, gold: [60, 140], danger: 0.99,
+    ranged: { range: 160, dmg: [38, 100], color: "#ff5a2a", wide: true, brute: true }, // dragon fire
     respawnS: 600,
     loot: [
       { kind: "dragonHam", chance: 0.9, n: [2, 5] },
@@ -386,10 +395,15 @@ export function updateMonsters(
     // they simply stand and keep firing; and once the player reaches melee
     // reach (d <= 13) this branch is skipped, so the ordinary melee exchange
     // below takes over with their (weaker) melee roll.
+    //
+    // A `brute` shooter (the dragon) is the exception: it does NOT kite. It
+    // skips the retreat entirely and falls through to the chase branch, so it
+    // keeps charging in — breathing fire on the way, then mauling with its paw
+    // once it's on top of you.
     if (rd && !target.dead && provoked && d > 13 && d <= rd.range
       && lineOfSight(w, m.x, m.y, target.x, target.y)) {
       const keep = Math.min(rd.range * 0.5, 64);
-      if (d < keep) {
+      if (!rd.brute && d < keep) {
         // too close for comfort — probe retreat steps like the chase steering
         const away = Math.atan2(m.y - target.y, m.x - target.x);
         const step = m.speed * dt;
@@ -416,7 +430,9 @@ export function updateMonsters(
         });
         onHit(m, true);
       }
-      continue;
+      // Kiters hold their ground here; a brute keeps coming, so let it fall
+      // through to the chase branch and close the distance while it burns.
+      if (!rd.brute) continue;
     }
     if (!target.dead && provoked && d > 13 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
       // Steered chase: try the direct step first; if a body (usually the pack
