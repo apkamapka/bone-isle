@@ -862,6 +862,76 @@ async function main(): Promise<void> {
     ok(items.emptyStash().length === 50, "a fresh chest inventory is 50 slots");
   }
 
+  console.log("Etap 12 — HUD v2 (orientations, scale, presets, snapping):");
+  {
+    const hl = await import("../src/systems/hudLayout.ts");
+    // per-orientation positions: moving a group in portrait leaves landscape alone
+    hl.resetHudLayout();
+    hl.moveHudGroup("swap", 100, 200, 400, 800);            // portrait screen
+    const port = hl.placeHud("swap", 10, 10, 400, 800);
+    ok(Math.abs(port.x - 100) < 1 && Math.abs(port.y - 200) < 1, "portrait move lands where dropped");
+    const land = hl.placeHud("swap", 10, 10, 800, 400);     // landscape untouched
+    ok(Math.abs(land.x - 0.78 * 800) < 1, "landscape keeps its own default");
+
+    // snapping: grid rounding + edge magnet with margin
+    hl.moveHudGroup("slot0", 101, 203, 400, 800);
+    hl.snapHudGroup("slot0", 40, 40, 400, 800, 8, 16, 6);
+    const s0 = hl.placeHud("slot0", 40, 40, 400, 800);
+    ok(s0.x % 8 < 0.5 || 8 - (s0.x % 8) < 0.5, "x snapped to the 8px grid");
+    ok(s0.y % 8 < 0.5 || 8 - (s0.y % 8) < 0.5, "y snapped to the 8px grid");
+    hl.moveHudGroup("slot1", 395, 5, 400, 800);             // hugging the right/top edge
+    hl.snapHudGroup("slot1", 40, 40, 400, 800, 8, 16, 6);
+    const s1 = hl.placeHud("slot1", 40, 40, 400, 800);
+    ok(Math.abs(s1.x - (400 - 40 - 6)) < 0.5, "right-edge magnet pulls flush to the margin");
+    ok(Math.abs(s1.y - 6) < 0.5, "top-edge magnet pulls flush to the margin");
+
+    // user scale clamps to its range and persists through save/load
+    hl.setHudUserScale(9);
+    ok(hl.hudUserScale() === 1.6, "scale clamps at the max");
+    hl.setHudUserScale(0.1);
+    ok(hl.hudUserScale() === 0.7, "scale clamps at the min");
+    hl.stepHudUserScale(1);
+    ok(Math.abs(hl.hudUserScale() - 0.8) < 1e-9, "step raises by 10%");
+
+    // presets: compact collapses the menu, classic reopens it,
+    // and portrait/landscape get DIFFERENT slot arrangements
+    hl.applyHudPreset("compact");
+    ok(!hl.hudMenuOpen(), "compact preset collapses the panel menu");
+    const cp = hl.placeHud("slot0", 10, 10, 400, 800);
+    const cl = hl.placeHud("slot0", 10, 10, 800, 400);
+    ok(Math.abs(cp.x / 400 - cl.x / 800) > 0.001, "compact differs per orientation");
+    hl.applyHudPreset("classic");
+    ok(hl.hudMenuOpen(), "classic preset reopens the menu");
+
+    // v1 → v2 migration: an old single-orientation layout seeds BOTH
+    localStorage.removeItem("bone-isle-hud-v2");
+    localStorage.setItem("bone-isle-hud-v1", JSON.stringify({
+      locked: false,
+      pos: { swap: { x: 0.25, y: 0.5 } },
+    }));
+    hl.loadHudLayout();
+    const mp = hl.placeHud("swap", 10, 10, 400, 800);
+    const ml = hl.placeHud("swap", 10, 10, 800, 400);
+    ok(Math.abs(mp.x - 0.25 * 400) < 1 && Math.abs(ml.x - 0.25 * 800) < 1,
+      "a v1 layout migrates into both orientations");
+    ok(!hl.hudLocked(), "the v1 lock state migrates too");
+    ok(localStorage.getItem("bone-isle-hud-v2") !== null, "migration writes the v2 key");
+
+    // full round-trip: layout, scale and menu state survive a reload
+    hl.setHudUserScale(1.2);
+    hl.toggleHudMenu();
+    const menuBefore = hl.hudMenuOpen();
+    hl.moveHudGroup("vitals", 40, 60, 400, 800);
+    hl.saveHudLayout();
+    const raw = localStorage.getItem("bone-isle-hud-v2")!;
+    const data = JSON.parse(raw);
+    ok(data.scale === 1.2 && data.menuOpen === menuBefore
+      && Math.abs(data.pos.portrait.vitals.x - 0.1) < 1e-6,
+      "scale + menu + per-orientation positions all persist");
+    hl.resetHudLayout();
+    ok(hl.hudUserScale() === 1 && hl.hudMenuOpen(), "reset restores scale and menu");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
