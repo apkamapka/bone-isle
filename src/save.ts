@@ -4,6 +4,7 @@ import { WORLD_SEED, GROUND_DESPAWN_S, PACK_BONUS_SLOTS, PACK_MAX } from "./conf
 import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn, feetBlocked } from "./world/collision.ts";
+import { placeWalker } from "./world/grid.ts";
 import { applyStructureSolidity, structureBonuses, canPlaceAt, STRUCTS } from "./systems/building.ts";
 import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState } from "./systems/tower.ts";
@@ -179,7 +180,7 @@ export function loadGame(): Game | null {
 
   const player = createPlayer(portalSpawn(worlds.home));
   const sp = data.player;
-  player.x = sp.x; player.y = sp.y;
+  placeWalker(player, sp.x, sp.y); // grid migration: snap old free positions to a tile centre
   player.gold = sp.gold; player.taskPoints = sp.taskPoints ?? 0; player.level = sp.level;
   player.fedS = sp.fedS ?? 0; // older saves start hungry
   // Recompute expNext from level so older saves adopt the current XP curve.
@@ -213,8 +214,7 @@ export function loadGame(): Game | null {
   // water/solid on the canonical map, drop the player at a safe portal spawn
   if (feetBlocked(current, player.x, player.y)) {
     const safe = portalSpawn(current);
-    player.x = safe.x;
-    player.y = safe.y;
+    placeWalker(player, safe.x, safe.y);
   }
   // LEGACY stash migration (pre-Etap 11 shared chest): pour the old shared
   // inventory into the first Storage Chest — its 50 slots swallow the old 20

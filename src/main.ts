@@ -1,7 +1,8 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX } from "./config.ts";
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
-import { moveEntity, unstick, blockedAt, lineOfSight } from "./world/collision.ts";
+import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
+import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
@@ -1296,7 +1297,7 @@ function attackMode(): { ranged: boolean; reach: number; arrow: ItemKind | null 
       : bestArrow(P.bag);
     if (arrow) return { ranged: true, reach: bow.range, arrow };
   }
-  return { ranged: false, reach: 15, arrow: null };
+  return { ranged: false, reach: MELEE_REACH_PX, arrow: null };
 }
 
 let noArrowWarnT = 0;
@@ -1349,12 +1350,74 @@ function tickMeleeFire(): void {
   if (!t || t.kind !== "mob") return;
   const m = t.m;
   if (m.hp <= 0 || !cw().monsters.includes(m)) { P.target = null; return; }
-  if (dist(P.x, P.y, m.x, m.y) <= 18 && P.atkCd <= 0) {
+  if (dist(P.x, P.y, m.x, m.y) <= MELEE_REACH_PX && P.atkCd <= 0) {
     P.atkCd = P.atkRate;
     P.face = m.x < P.x ? -1 : 1;
     if (equippedBow(P.eq)) warnNoArrows(); // bow with an empty quiver pokes, but nags
     if (playerAttack(cw(), P, m)) P.target = null;
   }
+}
+
+/* ---------------- grid walking (player) ---------------- */
+
+/** Cached A* route the player is currently following (tile coords). */
+let walkRoute: { x: number; y: number }[] = [];
+let walkKey = "";
+
+/** Tiles claimed by creatures — the player can never step onto one. */
+function playerOcc(world: World): Occupied {
+  return (tx, ty) => world.monsters.some((m) => m.tx === tx && m.ty === ty);
+}
+
+/**
+ * Walk the player toward the goal tile along an A*-planned route, spending up
+ * to `budget` px of movement this frame. The route is cached and replanned
+ * only when the goal changes or a monster steps into the next square, so the
+ * cost stays negligible. Returns true while genuinely progressing — false
+ * means "stuck or arrived", letting callers clear their destination.
+ */
+function walkGrid(world: World, gx: number, gy: number, budget: number): boolean {
+  const occ = playerOcc(world);
+  const key = world.key + ":" + gx + "," + gy;
+  if (key !== walkKey) {
+    walkKey = key;
+    walkRoute = [];
+  }
+  let moved = false;
+  for (;;) {
+    const left = glideWalker(P, budget);
+    if (left < budget) moved = true; // some glide happened
+    budget = left;
+    if (budget <= 0) break;
+    if (P.tx === gx && P.ty === gy) break;
+    if (!walkRoute.length) {
+      walkRoute = findPath(world, P.tx, P.ty, gx, gy, occ);
+      if (!walkRoute.length) break;
+    }
+    const n = walkRoute[0];
+    const sx = n.x - P.tx;
+    const sy = n.y - P.ty;
+    const ok = Math.abs(sx) <= 1 && Math.abs(sy) <= 1 && tryStep(world, P, sx, sy, occ);
+    if (ok) {
+      walkRoute.shift();
+      if (sx) P.face = sx < 0 ? -1 : 1;
+      moved = true;
+      continue;
+    }
+    // a monster claimed the next square (or the route went stale): replan once
+    walkRoute = findPath(world, P.tx, P.ty, gx, gy, occ);
+    const n2 = walkRoute[0];
+    const s2x = n2 ? n2.x - P.tx : 0;
+    const s2y = n2 ? n2.y - P.ty : 0;
+    if (n2 && tryStep(world, P, s2x, s2y, occ)) {
+      walkRoute.shift();
+      if (s2x) P.face = s2x < 0 ? -1 : 1;
+      moved = true;
+      continue;
+    }
+    break; // boxed in this frame — try again next frame
+  }
+  return moved;
 }
 
 /* ---------------- update ---------------- */
@@ -1480,37 +1543,47 @@ function update(dt: number): void {
   // monster is in reach — so you can step around, loot, and keep fighting.
   const holdMelee = !!P.target && P.target.kind === "mob" && !mode.ranged;
 
-  // movement: WASD/joystick overrides auto-actions
+  // movement: WASD/joystick overrides auto-actions. All walking is grid
+  // walking now (Tibia-style): the player stands on ONE tile, glides toward
+  // its centre, and only from the centre claims an adjacent square. Monsters
+  // hard-block their tiles — a free square is always a real escape route.
   const ax = moveAxis();
   if (ax.dx || ax.dy) {
     P.dest = null; P.gather = null; pendingLoot = null;
     if (!kiting && !holdMelee) P.target = null; // non-combat targets still drop
-    const len = Math.hypot(ax.dx, ax.dy) || 1;
-    const sp = playerSpeed(P);
-    moveEntity(world, P, (ax.dx / len) * sp * dt, (ax.dy / len) * sp * dt, world.monsters);
+    const occ = playerOcc(world);
+    let budget = playerSpeed(P) * dt;
+    for (;;) {
+      budget = glideWalker(P, budget);
+      if (budget <= 0) break;
+      const { sx, sy } = stepDir(ax.dx, ax.dy);
+      if (!sx && !sy) break;
+      // diagonal blocked → slide along whichever axis is free (wall hugging)
+      if (!tryStep(world, P, sx, sy, occ)
+        && !(sx && sy && (tryStep(world, P, sx, 0, occ) || tryStep(world, P, 0, sy, occ)))) break;
+    }
+    walkKey = ""; // manual steps invalidate any cached auto-route
     if (ax.dx) P.face = ax.dx < 0 ? -1 : 1;
   } else if (P.dest) {
-    const d = dist(P.x, P.y, P.dest.x, P.dest.y);
-    if (d < 3) P.dest = null;
+    const gx = toTile(P.dest.x);
+    const gy = toTile(P.dest.y);
+    const there = P.tx === gx && P.ty === gy && atCenter(P);
+    if (there) P.dest = null;
     else {
-      const sp = playerSpeed(P);
-      moveEntity(world, P, ((P.dest.x - P.x) / d) * sp * dt, ((P.dest.y - P.y) / d) * sp * dt, world.monsters);
-      if (P.dest.x < P.x) P.face = -1; else P.face = 1;
+      const moved = walkGrid(world, gx, gy, playerSpeed(P) * dt);
+      if (P.tx === gx && P.ty === gy && atCenter(P)) P.dest = null;
+      // unreachable click (water, rock): the best-effort route ended — stop
+      else if (!moved && atCenter(P)) P.dest = null;
     }
   } else if (P.target && !kiting) {
-    // melee / walk-up targets: approach then act (unchanged behaviour)
+    // melee / walk-up targets: approach along the grid, then act
     const tp = targetPoint();
     if (tp) {
       const d = dist(P.x, P.y, tp.x, tp.y);
-      let reach = 18;
+      let reach = MELEE_REACH_PX;
       if (P.target.kind === "dummy" || P.target.kind === "mob") reach = mode.reach;
-      if (d > reach) {
-        const sp = playerSpeed(P);
-        moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt, world.monsters);
-        if (tp.x < P.x) P.face = -1; else P.face = 1;
-      } else {
-        resolveTarget();
-      }
+      if (d > reach) walkGrid(world, toTile(tp.x), toTile(tp.y), playerSpeed(P) * dt);
+      else resolveTarget();
     }
   } else if (kiting) {
     // idle bowman: close the gap when the target drifted out of range OR a
@@ -1519,21 +1592,14 @@ function update(dt: number): void {
     if (tp) {
       const d = dist(P.x, P.y, tp.x, tp.y);
       const blocked = P.target?.kind === "mob" && !lineOfSight(world, P.x, P.y, tp.x, tp.y);
-      if (d > mode.reach || blocked) {
-        const sp = playerSpeed(P);
-        moveEntity(world, P, ((tp.x - P.x) / d) * sp * dt, ((tp.y - P.y) / d) * sp * dt, world.monsters);
-        if (tp.x < P.x) P.face = -1; else P.face = 1;
-      }
+      if (d > mode.reach || blocked) walkGrid(world, toTile(tp.x), toTile(tp.y), playerSpeed(P) * dt);
     }
   } else if (P.gather) {
     const gp = gatherPoint();
     if (gp) {
       const d = dist(P.x, P.y, gp.x, gp.y);
-      if (d > 17) {
-        const sp = playerSpeed(P);
-        moveEntity(world, P, ((gp.x - P.x) / d) * sp * dt, ((gp.y - P.y) / d) * sp * dt, world.monsters);
-        if (gp.x < P.x) P.face = -1; else P.face = 1;
-      } else if (P.atkCd <= 0 && P.gather) {
+      if (d > MELEE_REACH_PX) walkGrid(world, toTile(gp.x), toTile(gp.y), playerSpeed(P) * dt);
+      else if (P.atkCd <= 0 && P.gather) {
         gatherTick(world, P, P.gather, (t) => flash(t, "#ffe9a8"));
       }
     }
@@ -1549,7 +1615,7 @@ function update(dt: number): void {
 
   // monsters attack the player (only on dangerous islands)
   if (!world.safe) {
-    updateMonsters(world, dt, { x: P.x, y: P.y, dead: P.dead }, (m, ranged) => {
+    updateMonsters(world, dt, { x: P.x, y: P.y, tx: P.tx, ty: P.ty, dead: P.dead }, (m, ranged) => {
       const d = MONSTER_DEFS[m.kind];
       const roll = ranged && d.ranged ? d.ranged.dmg : d.dmg;
       hurtPlayer(world, P, rndi(roll[0], roll[1]));
@@ -1949,7 +2015,7 @@ function render(): void {
     } });
   }
   // player
-  const pbob = (P.dest || P.target || P.gather || moveAxisNonZero()) ? Math.sin(P.bob * 10) * 1.2 : 0;
+  const pbob = (P.dest || P.target || P.gather || moveAxisNonZero() || !atCenter(P)) ? Math.sin(P.bob * 10) * 1.2 : 0;
   drawList.push({ y: P.y, fn: () => {
     drawShadow(P.x, P.y);
     vctx.globalAlpha = P.dead ? 0.4 : 1;

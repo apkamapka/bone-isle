@@ -1,5 +1,6 @@
 /** Global game state: the three islands, the active one, and the player. */
 import { makeWorld } from "./world/generate.ts";
+import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC } from "./world/handmade.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
@@ -322,8 +323,7 @@ export function travelTo(g: Game, dest: WorldKey): void {
     extra = "  ·  " + best.name + " to the " + compass(best.x - p.x, best.y - p.y);
   }
   g.current = target;
-  g.player.x = p.x;
-  g.player.y = p.y;
+  placeWalker(g.player, p.x, p.y);
   g.player.dest = null;
   g.player.target = null;
   g.player.gather = null;
@@ -337,8 +337,7 @@ export function travelTo(g: Game, dest: WorldKey): void {
 export function respawnAtHome(g: Game): void {
   g.current = g.worlds.home;
   const p = portalSpawn(g.worlds.home);
-  g.player.x = p.x;
-  g.player.y = p.y;
+  placeWalker(g.player, p.x, p.y);
   g.player.hp = g.player.maxhp;
   g.player.dead = false;
   g.zoneFlash = { text: "Home Isle  (safe)", t: 2 };

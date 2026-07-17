@@ -82,7 +82,9 @@ export const MONSTERS_ENABLED = true;
  * player, so only ~6 melee bodies fit around you, narrow cave corridors are
  * real chokepoints, and getting cornered is genuinely dangerous.
  */
-export const BODY_SEPARATION_PX = 11;
+/** Melee/interaction reach in px: covers the 8 adjacent tile centres
+ *  (diagonal ≈ 22.6px) but never a tile two squares away (32px). */
+export const MELEE_REACH_PX = 24;
 
 /**
  * Shielding cap, straight from Tibia: your shield blocks at most this many
