@@ -1915,7 +1915,10 @@ function render(): void {
   }
   for (const rk of world.rocks) {
     const bx = rk.tx * TILE + TILE / 2;
-    const by = rk.ty * TILE + TILE;
+    // anchor the sprite so it sits CENTRED in its square (a rock is a squat
+    // 10x6 sprite — bottom-of-tile anchoring made it hug the tile edge and
+    // look like it belonged to the boundary, not the square it blocks)
+    const by = rk.ty * TILE + ((TILE + (rk.depleted ? SPR.rubble : SPR.rock).height) >> 1);
     if (!inView(bx, by)) continue;
     if (rk.depleted) {
       drawList.push({ y: by, fn: () => { drawShadow(bx, by); drawSprite(SPR.rubble, bx, by); } });
