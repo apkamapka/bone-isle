@@ -204,11 +204,16 @@ export function makeCaveWorld(opts: CaveOpts): World {
     const openNeighbors = (tx: number, ty: number): number =>
       [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([ox, oy]) =>
         inRegion.has((ty + oy) * W + (tx + ox)) && !used.has((ty + oy) * W + (tx + ox))).length;
+    // the whole 3x3 alcove must be carvable interior (not touching the sealed
+    // stone frame), otherwise the border leaves the chest visually walled-in
+    const interiorAlcove = (tx: number, ty: number): boolean =>
+      tx - 1 >= CAVE_BORDER && ty - 1 >= CAVE_BORDER && tx + 1 < W - CAVE_BORDER && ty + 1 < H - CAVE_BORDER;
     let bestD = -1;
     let fallback: [number, number] | null = null;
     let fbD = -1;
     for (const [tx, ty] of region) {
       if (used.has(ty * W + tx)) continue;
+      if (!interiorAlcove(tx, ty)) continue;
       const d = dist(tx * TILE + TILE / 2, ty * TILE + TILE / 2, ux, uy);
       if (d > fbD) { fbD = d; fallback = [tx, ty]; }
       if (openNeighbors(tx, ty) < 3) continue;
@@ -218,7 +223,24 @@ export function makeCaveWorld(opts: CaveOpts): World {
     if (treasureCell) {
       const [tx, ty] = treasureCell;
       used.add(ty * W + tx);
-      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) used.add((ty + oy) * W + (tx + ox));
+      // Carve a small open alcove around the chest (the whole 3x3) to FLOOR
+      // BEFORE the bake, and reserve every one of those cells so no rock/bone
+      // can seal them. This guarantees the chest sits in clearly-open ground
+      // with a walkable approach from several sides — it can never read as
+      // "embedded in the wall", even in the fallback dead-end case. Pure
+      // computation (no RNG draws), so world determinism is untouched.
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const nx = tx + ox;
+          const ny = ty + oy;
+          // never breach the sealed stone frame around the floor
+          if (nx < CAVE_BORDER || ny < CAVE_BORDER || nx >= W - CAVE_BORDER || ny >= H - CAVE_BORDER) continue;
+          wall[ny][nx] = false;
+          tile[ny][nx] = Tile.Cave;
+          solid[ny][nx] = false;
+          used.add(ny * W + nx);
+        }
+      }
     }
   }
 

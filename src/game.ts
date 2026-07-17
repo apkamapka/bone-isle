@@ -251,13 +251,15 @@ export function populateWorld(w: World, seed = WORLD_SEED): void {
   if (!MONSTERS_ENABLED) return; // peaceful mode: leave every floor empty
   seedWorldRng(seed ^ keySalt(w.key));
   // Undergrounds (every dangerous floor except the surface Wildlands) get the
-  // crowd multiplier so their big, sparse caverns fill in. The dragon is a
-  // boss and stays at its authored count — a lair nests exactly one.
+  // crowd multiplier so their big, sparse caverns fill in, AND spawn uniformly
+  // across the whole floor rather than in a danger-band ring — so the entire
+  // cavern is populated instead of clumping at the entrance/exit. The surface
+  // Wildlands is a radial island and keeps its distance-from-beach danger band.
   const crowded = w.key !== "wild";
   for (const kind of Object.keys(pop) as MonsterKind[]) {
     let n = pop[kind] ?? 0;
     if (crowded && kind !== "dragon") n = Math.round(n * CAVE_CROWD_MULT);
-    for (let i = 0; i < n; i++) spawnMonster(w, kind);
+    for (let i = 0; i < n; i++) spawnMonster(w, kind, undefined, crowded);
   }
   // the Marrow chest's elite guard detail, posted around the hoard
   const guards = HOARD_GUARDS[w.key];

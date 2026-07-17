@@ -315,7 +315,7 @@ export function spawnWilderness(w: World, kind: MonsterKind, avoid?: { x: number
   return false;
 }
 
-export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y: number }): boolean {
+export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y: number }, uniform = false): boolean {
   const d = MONSTER_DEFS[kind];
   const entrance = w.portals[0];
   const ex = entrance ? entrance.x : (w.w / 2) * 16;
@@ -325,6 +325,44 @@ export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y
     dist(ex, ey, 0, 0), dist(ex, ey, w.w * 16, 0),
     dist(ex, ey, 0, w.h * 16), dist(ex, ey, w.w * 16, w.h * 16),
   ) || 1;
+
+  // UNIFORM mode (caves/undergrounds): the danger band is a radial-island idea
+  // — spawn distance from the entrance ∝ danger — which in a rectangular cavern
+  // packs every same-tier creature into one far corner and leaves the other
+  // half empty. Underground floors instead spread their roster evenly across
+  // ALL walkable rock, so the whole cavern is populated (Etap 13). We still
+  // keep the entrance clear and honour spacing so it isn't a wall-to-wall blob.
+  if (uniform) {
+    // Prefer a genuinely OPEN cavern tile (most orthogonal neighbours walkable)
+    // so creatures — especially the lone dragon — never end up jammed in a
+    // one-tile rock pocket that reads as "spawned in the wall".
+    const openness = (x: number, y: number): number => {
+      const tx = toTile(x), ty = toTile(y);
+      let open = 0;
+      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = tx + ox, ny = ty + oy;
+        if (w.solid[ny]?.[nx] === false && w.tile[ny]?.[nx] > 0) open++;
+      }
+      return open;
+    };
+    let best: { x: number; y: number } | null = null;
+    let bestOpen = -1;
+    let fb: { x: number; y: number } | null = null;
+    for (let tries = 0; tries < 100; tries++) {
+      const cand = randomWalkable(w);
+      if (dist(cand.x, cand.y, ex, ey) < WILD_ENTRANCE_SAFE_PX) continue;
+      if (avoid && dist(cand.x, cand.y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
+      if (w.monsters.some((m) => m.tx === toTile(cand.x) && m.ty === toTile(cand.y))) continue;
+      fb ??= cand;
+      if (!w.monsters.every((m) => dist(m.x, m.y, cand.x, cand.y) >= SPAWN_SPACING_PX)) continue;
+      const o = openness(cand.x, cand.y);
+      if (o >= 3) { best = cand; break; }        // wide-open tile: take it
+      if (o > bestOpen) { bestOpen = o; best = cand; } // otherwise keep the most open one
+    }
+    const p = best ?? (avoid ? null : fb);
+    if (!p) return false;
+    return pushMonster(w, kind, p);
+  }
 
   let match: { x: number; y: number } | null = null;   // spaced + right danger band
   let spaced: { x: number; y: number } | null = null;  // spaced, wrong band

@@ -1636,11 +1636,14 @@ function update(dt: number): void {
         r.t -= dt;
         if (r.t <= 0) {
           const camp = r.camp ? world.camps.find((c) => c.key === r.camp) : undefined;
+          // caves respawn uniformly across the floor (same as populate), so
+          // kills don't slowly re-clump every creature back into one corner.
+          const caveUniform = world.key !== "wild" && world.key !== "deepwild";
           const done = camp
             ? spawnMonsterInCamp(world, r.kind, camp, P)
             : world.key === "deepwild"
               ? spawnWilderness(world, r.kind, P)
-              : spawnMonster(world, r.kind, P);
+              : spawnMonster(world, r.kind, P, caveUniform);
           if (done) world.respawns.splice(i, 1);
           else r.t = RESPAWN_RETRY_S;
         }
