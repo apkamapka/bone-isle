@@ -62,9 +62,11 @@ type DangerKey = "wild" | "cave1" | "cave2" | "cave3"
 const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number>>>> = {
   // Surface: tiers 1-2, the ~level 1-8 hunting grounds. Shooters debut gently
   // (poison spider spit, amazon knives) before the cavern archers below.
+  // Trimmed ~25% after playtests — the open round island concentrated packs
+  // into one big crowd; the undergrounds are where the density lives now.
   wild: {
-    rat: 5, snake: 4, crab: 4, bat: 4, spider: 4, wasp: 3,
-    skeleton: 3, rotworm: 3, poisonSpider: 3, wolf: 3, goblin: 3, amazon: 2,
+    rat: 4, snake: 3, crab: 3, bat: 3, spider: 3, wasp: 2,
+    skeleton: 2, rotworm: 2, poisonSpider: 2, wolf: 2, goblin: 2, amazon: 2,
   },
   // -1: tiers 2-3 (~level 8-13). The first spear-throwing orcs appear.
   cave1: {
@@ -72,36 +74,38 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
     ghoul: 3, ghost: 3, orc: 3, orcSpearman: 3, bear: 2,
   },
   // -2: tiers 3-4 (~level 12-17). The orc war camp and the minotaur outposts.
+  // Bumped after playtests: the floor is bigger than -1 but read as sparse.
   cave2: {
-    orc: 3, orcSpearman: 2, bear: 2, orcWarrior: 3, hunter: 2, ghost: 2,
-    minotaur: 3, minotaurArcher: 2, troll: 2, orcShaman: 2, mummy: 2,
+    orc: 4, orcSpearman: 3, bear: 3, orcWarrior: 5, hunter: 3, ghost: 3,
+    minotaur: 5, minotaurArcher: 3, troll: 3, orcShaman: 3, mummy: 3,
   },
   // -3: tier 5 (~level 17-20+) and the dragon's lair — ONE dragon nests in
   // the deepest band (danger 0.99, same as the Bone Lord) on a 10-minute
-  // respawn, guarding the way to the Marrow Blade chest.
+  // respawn, guarding the way to the Marrow Blade chest. Bumped like -2.
   cave3: {
-    troll: 2, mummy: 2, orcBerserker: 3, cyclops: 3,
-    minotaurGuard: 2, minotaurMage: 2, boneLord: 2, dragon: 1,
+    troll: 3, mummy: 3, orcBerserker: 4, cyclops: 4,
+    minotaurGuard: 3, minotaurMage: 3, boneLord: 3, dragon: 1,
   },
   // ---- Deep Wildlands camp lairs: each settlement's dungeon, difficulty ----
-  // ---- rising floor by floor (Etap 9b)                                  ----
+  // ---- rising floor by floor (Etap 9b). Floor -1s tested as "ok"; the    ----
+  // ---- deeper floors are bigger and read as empty, so -2/-3 run ~double. ----
   warren1:  { rat: 5, bat: 4, snake: 3 },
   cove1:    { crab: 7, wasp: 3 },
   hollow1:  { spider: 5, poisonSpider: 4 },
-  hollow2:  { poisonSpider: 6, wasp: 4 },
+  hollow2:  { poisonSpider: 9, wasp: 7 },
   goblin1:  { goblin: 6, rotworm: 3 },
-  goblin2:  { goblin: 6, warWolf: 3 },
+  goblin2:  { goblin: 10, warWolf: 6 },
   orcfort1: { orc: 4, orcSpearman: 3, orcWarrior: 3 },
-  orcfort2: { orcWarrior: 4, orcShaman: 3, orcBerserker: 2 },
+  orcfort2: { orcWarrior: 7, orcShaman: 5, orcBerserker: 4 },
   bastion1: { minotaur: 4, minotaurArcher: 3 },
-  bastion2: { minotaurGuard: 3, minotaurMage: 2, minotaur: 3 },
+  bastion2: { minotaurGuard: 5, minotaurMage: 4, minotaur: 6 },
   grave1:   { skeleton: 4, ghoul: 4, ghost: 3 },
-  grave2:   { mummy: 4, ghost: 3, boneLord: 1 },
+  grave2:   { mummy: 8, ghost: 6, boneLord: 2 },
   roost1:   { bear: 3, warWolf: 3 },
-  roost2:   { cyclops: 3, orcBerserker: 2 },
+  roost2:   { cyclops: 5, orcBerserker: 4 },
   // the Roost's heart: the SECOND dragon (the cavern one guards the chest;
   // this one guards nothing but its hoard) with the same 10-minute clock
-  roost3:   { dragon: 1, cyclops: 2 },
+  roost3:   { dragon: 1, cyclops: 5 },
 };
 
 /**
@@ -120,7 +124,7 @@ const CAMP_POPULATIONS: Readonly<Record<string, Partial<Record<MonsterKind, numb
   grave:   { skeleton: 4, ghoul: 3, ghost: 2 },
   roost:   { warWolf: 3 },
 };
-const WILDERNESS_ROAMERS: Partial<Record<MonsterKind, number>> = { wolf: 14, warWolf: 6 };
+const WILDERNESS_ROAMERS: Partial<Record<MonsterKind, number>> = { wolf: 26, warWolf: 10 };
 
 /**
  * One-time chest prizes by world (Etap 9c): the Marrow Blade's chest at the
