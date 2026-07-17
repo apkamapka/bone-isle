@@ -172,34 +172,47 @@ async function main(): Promise<void> {
     ok(DEATH_PENALTY_LEVEL === 10, "penalty threshold is level 10");
   }
 
-  console.log("body blocking (one creature per 'square'):");
+  console.log("grid movement (one creature per square, Tibia-style):");
   {
-    const { moveEntity } = await import("../src/world/collision.ts");
-    const { BODY_SEPARATION_PX } = await import("../src/config.ts");
+    const { tryStep, glideWalker, tileCenter, findPath, chebTiles, walkable } = await import("../src/world/grid.ts");
     const worlds = buildWorlds(WORLD_SEED);
     const home = worlds.home;
-    // open spot on grass
+    // open 3x3 patch of grass
     let ox = 0, oy = 0;
     outer3: for (let y = 4; y < home.h - 4; y++) {
       for (let x = 4; x < home.w - 4; x++) {
-        if (!home.solid[y][x] && home.tile[y][x] > 0
-          && !home.solid[y][x + 1] && home.tile[y][x + 1] > 0
-          && !home.solid[y][x + 2] && home.tile[y][x + 2] > 0) { ox = x * 16 + 8; oy = y * 16 + 8; break outer3; }
+        let clear = true;
+        for (let j = 0; j < 3 && clear; j++) for (let i = 0; i < 3; i++) {
+          if (home.solid[y + j][x + i] || home.tile[y + j][x + i] === 0) { clear = false; break; }
+        }
+        if (clear) { ox = x; oy = y; break outer3; }
       }
     }
-    ok(ox > 0, "found an open 3-tile strip");
-    const mover = { x: ox, y: oy };
-    const wall = { x: ox + BODY_SEPARATION_PX + 4, y: oy };
-    // walking toward the body stops at the separation distance
-    for (let i = 0; i < 60; i++) moveEntity(home, mover, 1, 0, [wall]);
-    const gap = Math.hypot(mover.x - wall.x, mover.y - wall.y);
-    ok(gap >= BODY_SEPARATION_PX - 0.001, `blocked at body distance (gap ${gap.toFixed(1)}px)`);
-    // …but an overlapping entity can always walk OUT (escape rule)
-    const stuck = { x: wall.x - 2, y: wall.y };
-    moveEntity(home, stuck, -3, 0, [wall]);
-    ok(stuck.x === wall.x - 5, "overlapping body may move away, never locks");
-    moveEntity(home, stuck, +3, 0, [wall]);
-    ok(stuck.x === wall.x - 5, "…and still can't push back INTO the body");
+    ok(ox > 0, "found an open 3x3 patch");
+    const mk = (tx: number, ty: number) => ({ x: tileCenter(tx), y: tileCenter(ty), tx, ty });
+    const mover = mk(ox, oy + 1);
+    const body = mk(ox + 1, oy + 1);
+    const occ = (tx: number, ty: number) => tx === body.tx && ty === body.ty;
+    // a claimed square is a hard wall: you cannot step onto another creature
+    ok(!tryStep(home, mover, 1, 0, occ), "cannot step onto an occupied square");
+    ok(mover.tx === ox && mover.ty === oy + 1, "refused step leaves the walker in place");
+    // ...but the diagonal PAST it is a genuine escape route (Tibia rule)
+    ok(tryStep(home, mover, 1, 1, occ), "diagonal slip past an adjacent body works");
+    ok(mover.tx === ox + 1 && mover.ty === oy + 2, "step claims the destination tile at once");
+    // glide: render position travels to the claimed centre and snaps exactly
+    let guard = 0;
+    while (glideWalker(mover, 3) === 0 && guard++ < 32) { /* glide */ }
+    ok(mover.x === tileCenter(mover.tx) && mover.y === tileCenter(mover.ty), "glide arrives exactly on the tile centre");
+    // A* routes around the occupied square instead of through it
+    const path = findPath(home, ox, oy + 1, ox + 2, oy + 1, occ);
+    ok(path.length > 0, "A* finds a route to the far side");
+    ok(path.every((t) => !occ(t.x, t.y) && walkable(home, t.x, t.y)), "route never crosses the occupied square");
+    const last = path[path.length - 1];
+    ok(last.x === ox + 2 && last.y === oy + 1, "route ends on the goal tile");
+    ok(path.every((t, i) => {
+      const prev = i === 0 ? { x: ox, y: oy + 1 } : path[i - 1];
+      return chebTiles(prev.x, prev.y, t.x, t.y) === 1;
+    }), "route is a chain of single-tile steps");
   }
 
   console.log("shield block cap (max 2 attackers per round):");
@@ -295,19 +308,26 @@ async function main(): Promise<void> {
       }
     }
     ok(cx > 0, "found a clear 8x8 arena");
+    const { toTile, tileCenter, chebTiles } = await import("../src/world/grid.ts");
+    const ptx = toTile(cx);
+    const pty = toTile(cy);
     arena.monsters.length = 0;
     for (let i = 0; i < 4; i++) spawnMonster(arena, "rat");
     // line them up single-file due west of the target — the worst case
     arena.monsters.forEach((m, i) => {
-      m.x = cx - 40 - i * 11;
-      m.y = cy;
+      m.tx = ptx - 2 - i;
+      m.ty = pty;
+      m.x = tileCenter(m.tx);
+      m.y = tileCenter(m.ty);
       m.orbit = i % 2 === 0 ? 1 : -1;
     });
-    const targetP = { x: cx, y: cy, dead: false };
+    const targetP = { x: tileCenter(ptx), y: tileCenter(pty), dead: false };
     for (let t = 0; t < 480; t++) updateMonsters(arena, 1 / 60, targetP, () => { /* hits ignored */ });
-    const near = arena.monsters.filter((m) => Math.hypot(m.x - cx, m.y - cy) <= 14);
-    ok(near.length === 4, `all 4 reached attack range instead of queueing (${near.length}/4)`);
-    const angles = near.map((m) => Math.atan2(m.y - cy, m.x - cx));
+    const near = arena.monsters.filter((m) => chebTiles(m.tx, m.ty, ptx, pty) <= 1);
+    ok(near.length === 4, `all 4 reached the attack ring instead of queueing (${near.length}/4)`);
+    const tiles = new Set(near.map((m) => m.tx + "," + m.ty));
+    ok(tiles.size === near.length, "each ring member claims its OWN square (1 creature = 1 tile)");
+    const angles = near.map((m) => Math.atan2(m.ty - pty, m.tx - ptx));
     let spread = 0;
     for (let i = 0; i < angles.length; i++) for (let j = i + 1; j < angles.length; j++) {
       let da = Math.abs(angles[i] - angles[j]);
