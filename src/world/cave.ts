@@ -82,9 +82,19 @@ function keepLargestRegion(wall: boolean[][], W: number, H: number): [number, nu
   return best;
 }
 
+/**
+ * Thickness of the solid stone frame (Tile.Wall) sealed around every
+ * underground floor. It is added OUTSIDE the authored dimensions — the map
+ * grows by 2x this per axis — so the playable cavern keeps its full authored
+ * w x h instead of being squeezed inward. The thick margin keeps ladders well
+ * away from the screen edge / HUD and makes the cavern read as centred.
+ */
+const CAVE_BORDER = 8;
+
 export function makeCaveWorld(opts: CaveOpts): World {
-  const W = opts.w;
-  const H = opts.h;
+  // Expand OUTWARD: the authored opts.w/h stay the interior (carvable) size.
+  const W = opts.w + CAVE_BORDER * 2;
+  const H = opts.h + CAVE_BORDER * 2;
   seedWorldRng(opts.seed);
 
   // 1. random fill (border always wall)
@@ -108,18 +118,12 @@ export function makeCaveWorld(opts: CaveOpts): World {
     }
     wall = next;
   }
-  // 2b. seal a solid 3-tile stone frame (Tile.Wall) around the whole floor.
-  //     The smoothing could otherwise let the cavern (and therefore the up-
-  //     ladder placed at its top-left extreme) run right up to the 1-tile edge,
-  //     jamming the ladder into the corner behind the HUD. A thick margin pushes
-  //     the whole region inward so the ladder is always visible and the cavern
-  //     sits more centred on the map. This overwrites already-drawn cells, so it
-  //     consumes no extra RNG — the generation stream (and thus save
-  //     determinism) is unchanged; only the layout shifts in from the border.
-  const BORDER = 3;
+  // 2b. seal the CAVE_BORDER-thick stone frame. This overwrites already-drawn
+  //     cells, so it consumes no extra RNG — the generation stream (and thus
+  //     save determinism) is unchanged by the frame itself.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      if (x < BORDER || y < BORDER || x >= W - BORDER || y >= H - BORDER) wall[y][x] = true;
+      if (x < CAVE_BORDER || y < CAVE_BORDER || x >= W - CAVE_BORDER || y >= H - CAVE_BORDER) wall[y][x] = true;
     }
   }
   // 3. guarantee one connected cavern
@@ -180,7 +184,45 @@ export function makeCaveWorld(opts: CaveOpts): World {
   if (opts.up) pushLadder(byCorner(-1), opts.up, "ladderUp", "climb up");   // top-left extreme
   if (opts.down) pushLadder(byCorner(1), opts.down, "ladderDown", "descend"); // bottom-right extreme
 
+  // 5b. treasure chest CELL — chosen now, BEFORE the rocks, so its approach can
+  // be reserved. The old code picked the cell last: the farthest floor cell was
+  // often a one-tile dead-end nook, and a rock could then seal its only
+  // corridor — the chest ended up visually "in the wall" and unreachable.
+  // Now: farthest-from-the-up-ladder region cell that has at least 3 of its 4
+  // orthogonal neighbours on open floor (an open pocket, walkable from several
+  // sides); the cell AND its neighbours go into `used`, so no rock or bone
+  // pile can ever block the approach. Pure computation, no RNG draws — the
+  // generation stream is unperturbed. Falls back to the old farthest-any rule
+  // if no cell qualifies (practically impossible on these caverns).
+  let treasureCell: [number, number] | null = null;
+  if (opts.treasure) {
+    const upLadder = w.portals.find((pt) => pt.style === "ladderUp");
+    const ux = upLadder ? upLadder.x : 0;
+    const uy = upLadder ? upLadder.y : 0;
+    const inRegion = new Set(region.map(([x, y]) => y * W + x));
+    const openNeighbors = (tx: number, ty: number): number =>
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([ox, oy]) =>
+        inRegion.has((ty + oy) * W + (tx + ox)) && !used.has((ty + oy) * W + (tx + ox))).length;
+    let bestD = -1;
+    let fallback: [number, number] | null = null;
+    let fbD = -1;
+    for (const [tx, ty] of region) {
+      if (used.has(ty * W + tx)) continue;
+      const d = dist(tx * TILE + TILE / 2, ty * TILE + TILE / 2, ux, uy);
+      if (d > fbD) { fbD = d; fallback = [tx, ty]; }
+      if (openNeighbors(tx, ty) < 3) continue;
+      if (d > bestD) { bestD = d; treasureCell = [tx, ty]; }
+    }
+    treasureCell ??= fallback;
+    if (treasureCell) {
+      const [tx, ty] = treasureCell;
+      used.add(ty * W + tx);
+      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) used.add((ty + oy) * W + (tx + ox));
+    }
+  }
+
   // 6. ore veins + bones, scattered on floor tiles away from the ladders
+  // (and away from the treasure chest's reserved approach)
   const floor = region.filter(([x, y]) => !used.has(y * W + x));
   const pick = (): [number, number] | null =>
     floor.length ? floor[wrndi(0, floor.length - 1)] : null;
@@ -204,26 +246,12 @@ export function makeCaveWorld(opts: CaveOpts): World {
 
   bakeWorldCanvas(w, 0);
 
-  // 7. optional treasure chest — on the floor cell FARTHEST from the up-ladder,
-  // so the whole cavern must be crossed to reach it. Chosen by pure computation
-  // (no RNG draws) and placed after the canvas bake, so adding it never
-  // perturbs the generation stream: old saves regenerate identical floors.
-  if (opts.treasure) {
-    const upLadder = w.portals.find((pt) => pt.style === "ladderUp");
-    const ux = upLadder ? upLadder.x : 0;
-    const uy = upLadder ? upLadder.y : 0;
-    let best: [number, number] | null = null;
-    let bestD = -1;
-    for (const [tx, ty] of region) {
-      if (used.has(ty * W + tx)) continue;
-      const d = dist(tx * TILE + TILE / 2, ty * TILE + TILE / 2, ux, uy);
-      if (d > bestD) { bestD = d; best = [tx, ty]; }
-    }
-    if (best) {
-      const [tx, ty] = best;
-      w.structures.push({ key: "treasure", tx, ty, anim: 0 });
-      solid[ty][tx] = true; // a chest is furniture, not floor
-    }
+  // 7. place the treasure chest on its pre-reserved open-pocket cell (chosen in
+  // step 5b), after the canvas bake so the sprite draws as a structure.
+  if (treasureCell) {
+    const [tx, ty] = treasureCell;
+    w.structures.push({ key: "treasure", tx, ty, anim: 0 });
+    solid[ty][tx] = true; // a chest is furniture, not floor
   }
   return w;
 }
