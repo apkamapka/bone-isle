@@ -19,6 +19,7 @@ import {
   type HudGroup,
 } from "./systems/hudLayout.ts";
 import { researchById, isResearched, markResearched } from "./systems/tower.ts";
+import { loadPanelPrefs } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { totalExpFor } from "./config.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
@@ -111,6 +112,7 @@ addEventListener("orientationchange", () => setTimeout(resize, 100));
 resize();
 
 loadHudLayout(); // restore any customized mobile HUD positions + lock state
+loadPanelPrefs(); // restore per-window zoom + collapse preferences
 
 const game: Game = loadGame() ?? createGame();
 // keep passive structure bonuses (Garden HP) in sync from the start
