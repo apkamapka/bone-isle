@@ -15,6 +15,7 @@ import { useCrystal, tickCrystalCooldown } from "./systems/crystals.ts";
 import { actionSlots, setSlot, BINDABLE_CRYSTALS } from "./systems/actions.ts";
 import {
   hudLocked, toggleHudLock, placeHud, moveHudGroup, saveHudLayout, resetHudLayout, loadHudLayout,
+  hudUserScale, stepHudUserScale, hudMenuOpen, toggleHudMenu, applyHudPreset, snapHudGroup,
   type HudGroup,
 } from "./systems/hudLayout.ts";
 import { researchById, isResearched, markResearched } from "./systems/tower.ts";
@@ -29,7 +30,7 @@ import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
-import { drawHud, type HudCtx } from "./ui/hud.ts";
+import { drawHud, drawVitals, drawMinimapAt, drawGoldTP, hudText, VITALS_W, VITALS_H, type HudCtx } from "./ui/hud.ts";
 import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
@@ -189,11 +190,17 @@ function probeSlotDrag(sx: number, sy: number, isTouch: boolean): boolean {
 
 // mobile HUD customization (Etap 7): rebind picker + group dragging
 let assignSlot: number | null = null;
-let hudDrag: { id: HudGroup; dx: number; dy: number; moved: boolean } | null = null;
-let hudGrips: { id: HudGroup; x: number; y: number; w: number; h: number; gx: number; gy: number }[] = [];
-/** True when the mobile HUD is in edit (unlocked) mode. */
+let hudDrag: { id: HudGroup; dx: number; dy: number; moved: boolean; gw: number; gh: number } | null = null;
+let hudGrips: { id: HudGroup; x: number; y: number; w: number; h: number; gx: number; gy: number; gw: number; gh: number }[] = [];
+/** True when the mobile HUD is in edit (unlocked) mode. The desktop uses the
+ *  fixed docked sidebar instead, so edit mode never applies there. */
 function hudEditing(): boolean {
-  return touchUI && !hudLocked();
+  return touchUI && !desktopUI && !hudLocked();
+}
+
+/** Width (device px) of the docked desktop sidebar; 0 on mobile. */
+function sidebarWidth(): number {
+  return desktopUI ? Math.round(64 * scale) : 0;
 }
 
 const cw = (): World => game.current;
@@ -1006,6 +1013,16 @@ const toScreen = (e: PointerEvent): { x: number; y: number } => {
 };
 screen.addEventListener("pointerdown", (e) => {
   const s = toScreen(e);
+  // desktop sidebar: right-click an action slot to open the rebind picker
+  if (desktopUI && e.button === 2) {
+    for (const r of sidebarSlotRects) {
+      if (s.x >= r.x && s.x < r.x + r.w && s.y >= r.y && s.y < r.y + r.h) {
+        assignSlot = r.i;
+        e.preventDefault();
+        return;
+      }
+    }
+  }
   // search top-most first so the visually-front window wins the grab
   for (let i = ui.windows.length - 1; i >= 0; i--) {
     const win = ui.windows[i];
@@ -1025,7 +1042,7 @@ screen.addEventListener("pointerdown", (e) => {
   if (hudEditing()) {
     for (const g of hudGrips) {
       if (s.x >= g.x && s.x < g.x + g.w && s.y >= g.y && s.y < g.y + g.h) {
-        hudDrag = { id: g.id, dx: s.x - g.gx, dy: s.y - g.gy, moved: false };
+        hudDrag = { id: g.id, dx: s.x - g.gx, dy: s.y - g.gy, moved: false, gw: g.gw, gh: g.gh };
         ui.dragging = true;
         suppressClick = true;
         try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
@@ -1083,6 +1100,13 @@ screen.addEventListener("pointermove", (e) => {
 const endDrag = (): void => { drag = null; ui.dragging = false; };
 addEventListener("pointerup", (e) => {
   if (hudDrag) {
+    // tidy up: snap to a pixel grid, magnetize to nearby screen edges
+    if (hudDrag.moved) {
+      snapHudGroup(
+        hudDrag.id, hudDrag.gw, hudDrag.gh, screen.width, screen.height,
+        8 * scale, 16 * scale, 6 * scale,
+      );
+    }
     saveHudLayout();
     hudDrag = null;
     ui.dragging = false;
@@ -1682,8 +1706,11 @@ function hpBar(x: number, y: number, frac: number, w = 14): void {
 
 function render(): void {
   const world = cw();
-  // camera follows player, clamped to island
-  cam.x = clamp(P.x - VW / 2, 0, Math.max(0, world.w * TILE - VW));
+  // camera follows player, clamped to island. On desktop the docked sidebar
+  // covers the right edge, so the camera shifts by half its width to keep the
+  // player centered in the VISIBLE part of the screen.
+  const sbWorld = sidebarWidth() / vScale;
+  cam.x = clamp(P.x - (VW - sbWorld) / 2, 0, Math.max(0, world.w * TILE - VW));
   cam.y = clamp(P.y - VH / 2, 0, Math.max(0, world.h * TILE - VH));
 
   vctx.fillStyle = "#1c6060";
@@ -1999,16 +2026,20 @@ function render(): void {
   // HUD + panels (screen space). On desktop the panel windows render at ~70%
   // of the HUD scale (they were comically large on big monitors) and each one
   // additionally auto-shrinks if it would still spill off-screen.
+  const sbW = sidebarWidth();
   const hud: HudCtx = {
     ctx: sctx, scale, panelScale: desktopUI ? scale * 0.7 : scale,
     screenW: screen.width, screenH: screen.height, touch: touchUI,
-    touchInput: isTouchDevice(),
+    touchInput: isTouchDevice(), sidebarW: sbW,
   };
   drawHud(hud, game, P);
   hotspots = [];
   itemSlots = [];
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; }
-  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots });
+  // panels center themselves on hud.screenW — hand them the VISIBLE width so
+  // they open beside the desktop sidebar instead of underneath it
+  const hudPanels: HudCtx = sbW > 0 ? { ...hud, screenW: screen.width - sbW } : hud;
+  drawPanels({ hud: hudPanels, ui, game, player: P, mouse, act, hotspots, itemSlots });
   // ghost of the item being dragged, following the cursor
   if (itemDrag && itemDrag.active) {
     const spr = itemSprite(itemDrag.kind);
@@ -2129,28 +2160,110 @@ function drawGroupGrip(id: HudGroup, gx: number, gy: number, gw: number, gh: num
   ctx.fillRect(gx, y, w, h);
   ctx.fillStyle = "#0d1622";
   for (let d = 0; d < 3; d++) ctx.fillRect(gx + w / 2 - 6 * scale + d * 5 * scale, y + h / 2 - 0.5 * scale, 3 * scale, scale);
-  hudGrips.push({ id, x: gx, y, w, h, gx, gy });
+  hudGrips.push({ id, x: gx, y, w, h, gx, gy, gw, gh });
+}
+
+/** Slot rects in the desktop sidebar this frame (right-click = rebind). */
+let sidebarSlotRects: { i: number; x: number; y: number; w: number; h: number }[] = [];
+
+/** The docked, Tibia-style desktop sidebar: minimap, vitals, gold/TP, panel
+ *  buttons, the six action slots and the weapon-swap button in one fixed
+ *  opaque column on the right edge. */
+function drawSidebar(): void {
+  const ctx = sctx;
+  const S = scale;
+  const sw = screen.width, sh = screen.height;
+  const sbW = sidebarWidth();
+  const x0 = sw - sbW;
+  const pad = 4 * S;
+  const inner = sbW - 2 * pad;
+  const hud: HudCtx = { ctx, scale: S, screenW: sw, screenH: sh, touch: true, touchInput: isTouchDevice() };
+  ctx.textBaseline = "middle";
+
+  // opaque backdrop + left divider (Tibia-style: UI never overlaps the world)
+  ctx.fillStyle = "#101c19";
+  ctx.fillRect(x0, 0, sbW, sh);
+  ctx.fillStyle = "#3d5a50";
+  ctx.fillRect(x0, 0, Math.max(1, S), sh);
+  // swallow every tap/click on the sidebar so it never walks the player
+  // (pushed FIRST so the buttons below win; hotspots are checked in reverse)
+  hotspots.push({ x: x0, y: 0, w: sbW, h: sh, fn: () => { /* absorb */ } });
+  touchButtons.push({ x: x0, y: 0, w: sbW, h: sh });
+
+  let y = pad;
+  // minimap
+  drawMinimapAt(hud, game, P, x0 + pad + 2 * S, y + 2 * S, inner - 4 * S);
+  y += inner;
+  // vitals (HP / EXP / Cap), scaled to the column width
+  const Sv = inner / VITALS_W;
+  drawVitals(hud, P, x0 + pad, y, Sv);
+  y += VITALS_H * Sv + 3 * S;
+  // gold + TP
+  drawGoldTP(hud, P, x0 + pad, y, inner, 14 * S);
+  y += 14 * S + 4 * S;
+
+  // panel toggle buttons (one row of five)
+  const pbtns: [string, string, PanelKind][] = [
+    ["Build", "B", "build"], ["Skill", "K", "skills"], ["Equip", "E", "equip"], ["Bag", "I", "bag"], ["Quest", "Q", "quest"],
+  ];
+  const bgap = 1.5 * S;
+  const bsz = (inner - (pbtns.length - 1) * bgap) / pbtns.length;
+  let bx = x0 + pad;
+  for (const [label, glyph, panel] of pbtns) {
+    tButton(bx, y, bsz, label, glyph, hasWindow(panel), () => togglePanel(panel));
+    bx += bsz + bgap;
+  }
+  y += bsz + 4 * S;
+
+  // action slots 1–6 in a 3x2 grid (right-click a slot to rebind it)
+  sidebarSlotRects = [];
+  const cell = (inner - 2 * bgap) / 3;
+  for (let i = 0; i < 6; i++) {
+    const cxp = x0 + pad + (i % 3) * (cell + bgap);
+    const cyp = y + Math.floor(i / 3) * (cell + bgap);
+    drawActionSlot(i, cxp, cyp, cell, cell);
+    sidebarSlotRects.push({ i, x: cxp, y: cyp, w: cell, h: cell });
+  }
+  y += 2 * cell + bgap + 4 * S;
+
+  // weapon swap, full width
+  const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
+  hudBtn(x0 + pad, y, inner, 11 * S, bowOn ? "→MELEE" : "→BOW", false, () => swapWeapon());
+  y += 11 * S + 3 * S;
+
+  hudText(hud, "1–6 use · right-click = bind", x0 + sbW / 2, y + 3 * S, 5 * S, "rgba(220,214,190,.5)", "center");
 }
 
 function drawTouchControls(): void {
   touchButtons = [];
   hudGrips = [];
+  if (desktopUI) { drawSidebar(); return; }
+
   const editing = hudEditing();
-  const bs = clamp(Math.min(screen.width, screen.height) * 0.115, 54, 132);
+  const u = hudUserScale();
+  const bs = clamp(Math.min(screen.width, screen.height) * 0.115, 54, 132) * u;
   const m = bs * 0.16;
   const gap = bs * 0.16;
   const sw = screen.width, sh = screen.height;
 
-  // --- panel-button column (group "panels") ---
+  // --- panel-button column (group "panels"), collapsible behind a ≡ button ---
   const pbtns: [string, string, PanelKind][] = [
     ["Build", "B", "build"], ["Skills", "K", "skills"], ["Equip", "E", "equip"], ["Bag", "I", "bag"], ["Quest", "Q", "quest"],
   ];
-  const colH = pbtns.length * bs + (pbtns.length - 1) * gap;
+  const menuOpen = hudMenuOpen() || editing; // edit mode always shows the column
+  const togH = bs * 0.5;
+  const colH = togH + (menuOpen ? gap + pbtns.length * bs + (pbtns.length - 1) * gap : 0);
   const panelPos = placeHud("panels", bs, colH, sw, sh);
-  let by = panelPos.y;
-  for (const [label, glyph, panel] of pbtns) {
-    tButton(panelPos.x, by, bs, label, glyph, hasWindow(panel), () => togglePanel(panel));
-    by += bs + gap;
+  const anyOpen = pbtns.some(([, , k]) => hasWindow(k));
+  hudBtn(panelPos.x, panelPos.y, bs, togH, menuOpen ? "≡ ×" : "≡", !menuOpen && anyOpen, () => {
+    if (!editing) toggleHudMenu();
+  });
+  if (menuOpen) {
+    let by = panelPos.y + togH + gap;
+    for (const [label, glyph, panel] of pbtns) {
+      tButton(panelPos.x, by, bs, label, glyph, hasWindow(panel), () => togglePanel(panel));
+      by += bs + gap;
+    }
   }
   if (editing) drawGroupGrip("panels", panelPos.x, panelPos.y, bs, colH);
 
@@ -2171,8 +2284,8 @@ function drawTouchControls(): void {
   hudBtn(swapPos.x, swapPos.y, swW, swH, bowOn ? "→MELEE" : "→BOW", false, () => { if (!editing) swapWeapon(); });
   if (editing) drawGroupGrip("swap", swapPos.x, swapPos.y, swW, swH);
 
-  // --- lock / edit toggle: sits just above the vitals (HP) frame, bottom-left ---
-  const vw = 190 * scale, vh = 54 * scale;
+  // --- lock / edit toggle: sits just above the vitals (HP) frame ---
+  const vw = 190 * scale * u, vh = 54 * scale * u;
   const vp = placeHud("vitals", vw, vh, sw, sh);
   if (editing) drawGroupGrip("vitals", vp.x, vp.y, vw, vh);
   const lockW = bs * 1.6, lockH = bs * 0.5;
@@ -2183,17 +2296,52 @@ function drawTouchControls(): void {
     toggleHudLock();
     flash(hudLocked() ? "HUD locked" : "HUD unlocked — drag handles, tap slots", "#8ab6ff");
   });
+
+  // --- edit strip: scale, presets, reset — pinned top-center while editing ---
   if (editing) {
-    hudBtn(lockX + lockW + gap * 0.5, lockY, lockW, lockH, "RESET", false, () => {
+    const btnH = bs * 0.5;
+    const sq = bs * 0.55;
+    const pctW = bs * 1.1;
+    const row1W = sq * 2 + pctW + bs * 1.3 + gap * 3;
+    let ex = clamp((sw - row1W) / 2, m, sw - row1W - m);
+    const ey = m + 2 * scale;
+    hudBtn(ex, ey, sq, btnH, "−", false, () => { stepHudUserScale(-1); saveHudLayout(); });
+    ex += sq + gap;
+    sctx.fillStyle = "rgba(16,26,24,.85)";
+    sctx.fillRect(ex, ey, pctW, btnH);
+    sctx.strokeStyle = "#3d5a50";
+    sctx.lineWidth = Math.max(1, scale);
+    sctx.strokeRect(ex + 0.5, ey + 0.5, pctW - 1, btnH - 1);
+    sctx.textAlign = "center";
+    sctx.textBaseline = "middle";
+    sctx.fillStyle = "#e9e2c8";
+    sctx.font = `bold ${Math.round(btnH * 0.42)}px 'Courier New',monospace`;
+    sctx.fillText(`${Math.round(u * 100)}%`, ex + pctW / 2, ey + btnH / 2);
+    ex += pctW + gap;
+    hudBtn(ex, ey, sq, btnH, "+", false, () => { stepHudUserScale(1); saveHudLayout(); });
+    ex += sq + gap;
+    hudBtn(ex, ey, bs * 1.3, btnH, "RESET", false, () => {
       resetHudLayout();
       flash("HUD layout reset", "#8ab6ff");
     });
-    const hy = clamp(lockY - lockH * 0.6, m, sh - m);
-    sctx.textAlign = "left";
+    // presets row
+    const pw3 = bs * 1.5;
+    const row2W = pw3 * 3 + gap * 2;
+    let px2 = clamp((sw - row2W) / 2, m, sw - row2W - m);
+    const py2 = ey + btnH + gap;
+    for (const [label, name] of [["CLASSIC", "classic"], ["COMPACT", "compact"], ["LEFTY", "lefty"]] as const) {
+      hudBtn(px2, py2, pw3, btnH, label, false, () => {
+        applyHudPreset(name);
+        flash(`preset: ${label.toLowerCase()}`, "#8ab6ff");
+      });
+      px2 += pw3 + gap;
+    }
+    const hy = clamp(py2 + btnH + gap, m, sh - m);
+    sctx.textAlign = "center";
     sctx.textBaseline = "middle";
     sctx.fillStyle = "rgba(207,232,210,.85)";
     sctx.font = `${Math.round(9 * scale)}px 'Courier New',monospace`;
-    sctx.fillText("drag handles · tap a slot to bind", lockX, hy);
+    sctx.fillText("drag handles · tap a slot to bind · groups snap to a grid", sw / 2, hy);
   }
 }
 
