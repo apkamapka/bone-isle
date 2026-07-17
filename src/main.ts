@@ -32,7 +32,7 @@ import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
-import { drawHud, drawVitals, drawMinimapAt, drawGoldTP, hudText, VITALS_W, VITALS_H, type HudCtx } from "./ui/hud.ts";
+import { drawHud, type HudCtx } from "./ui/hud.ts";
 import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
@@ -66,8 +66,6 @@ let VH = VIEW_H;
 let vScale = 2;
 let scale = 2;
 let touchUI = false;
-/** True on a desktop-sized layout — panels render smaller there. */
-let desktopUI = false;
 
 const DESIGN_W = 480; // reference width the HUD is authored against
 const DESIGN_H = 320; // reference height — on wide desktops this caps HUD/panel size so tall panels fit
@@ -81,7 +79,6 @@ function resize(): void {
   // Desktop zooms out so tiles aren't giant and much more of the island is
   // visible (a classic top-down feel) — HUD sizing is unaffected.
   const mobile = isTouchDevice() || Math.min(cw, ch) < 620;
-  desktopUI = !mobile;
 
   // CSS px per internal world px. Larger => more zoomed in / chunkier pixels.
   const f = mobile
@@ -195,15 +192,10 @@ function probeSlotDrag(sx: number, sy: number, isTouch: boolean): boolean {
 let assignSlot: number | null = null;
 let hudDrag: { id: HudGroup; dx: number; dy: number; moved: boolean; gw: number; gh: number } | null = null;
 let hudGrips: { id: HudGroup; x: number; y: number; w: number; h: number; gx: number; gy: number; gw: number; gh: number }[] = [];
-/** True when the mobile HUD is in edit (unlocked) mode. The desktop uses the
- *  fixed docked sidebar instead, so edit mode never applies there. */
+/** True when the customizable HUD is in edit (unlocked) mode. The same
+ *  drag-and-drop HUD is used everywhere — desktop included (Etap 13). */
 function hudEditing(): boolean {
-  return touchUI && !desktopUI && !hudLocked();
-}
-
-/** Width (device px) of the docked desktop sidebar; 0 on mobile. */
-function sidebarWidth(): number {
-  return desktopUI ? Math.round(64 * scale) : 0;
+  return touchUI && !hudLocked();
 }
 
 const cw = (): World => game.current;
@@ -1016,9 +1008,9 @@ const toScreen = (e: PointerEvent): { x: number; y: number } => {
 };
 screen.addEventListener("pointerdown", (e) => {
   const s = toScreen(e);
-  // desktop sidebar: right-click an action slot to open the rebind picker
-  if (desktopUI && e.button === 2) {
-    for (const r of sidebarSlotRects) {
+  // mouse convenience: right-click an action slot to open the rebind picker
+  if (e.button === 2) {
+    for (const r of actionSlotRects) {
       if (s.x >= r.x && s.x < r.x + r.w && s.y >= r.y && s.y < r.y + r.h) {
         assignSlot = r.i;
         e.preventDefault();
@@ -1789,11 +1781,8 @@ function hpBar(x: number, y: number, frac: number, w = 14): void {
 
 function render(): void {
   const world = cw();
-  // camera follows player, clamped to island. On desktop the docked sidebar
-  // covers the right edge, so the camera shifts by half its width to keep the
-  // player centered in the VISIBLE part of the screen.
-  const sbWorld = sidebarWidth() / vScale;
-  cam.x = clamp(P.x - (VW - sbWorld) / 2, 0, Math.max(0, world.w * TILE - VW));
+  // camera follows player, clamped to island
+  cam.x = clamp(P.x - VW / 2, 0, Math.max(0, world.w * TILE - VW));
   cam.y = clamp(P.y - VH / 2, 0, Math.max(0, world.h * TILE - VH));
 
   vctx.fillStyle = "#1c6060";
@@ -2127,23 +2116,19 @@ function render(): void {
   // scale up to screen
   sctx.drawImage(view, 0, 0, VW, VH, 0, 0, screen.width, screen.height);
 
-  // HUD + panels (screen space). On desktop the panel windows render at ~70%
-  // of the HUD scale (they were comically large on big monitors) and each one
-  // additionally auto-shrinks if it would still spill off-screen.
-  const sbW = sidebarWidth();
+  // HUD + panels (screen space). One UI everywhere (Etap 13): desktop uses the
+  // same customizable HUD and panel sizing as mobile; each panel still
+  // auto-shrinks per window if it would spill off-screen.
   const hud: HudCtx = {
-    ctx: sctx, scale, panelScale: desktopUI ? scale * 0.7 : scale,
+    ctx: sctx, scale,
     screenW: screen.width, screenH: screen.height, touch: touchUI,
-    touchInput: isTouchDevice(), sidebarW: sbW,
+    touchInput: isTouchDevice(),
   };
   drawHud(hud, game, P);
   hotspots = [];
   itemSlots = [];
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; }
-  // panels center themselves on hud.screenW — hand them the VISIBLE width so
-  // they open beside the desktop sidebar instead of underneath it
-  const hudPanels: HudCtx = sbW > 0 ? { ...hud, screenW: screen.width - sbW } : hud;
-  drawPanels({ hud: hudPanels, ui, game, player: P, mouse, act, hotspots, itemSlots });
+  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots });
   // ghost of the item being dragged, following the cursor
   if (itemDrag && itemDrag.active) {
     const spr = itemSprite(itemDrag.kind);
@@ -2245,6 +2230,7 @@ function drawActionSlot(i: number, x: number, y: number, w: number, h: number): 
   const idx = i;
   hotspots.push({ x, y, w, h, fn: () => slotTap(idx) });
   touchButtons.push({ x, y, w, h });
+  actionSlotRects.push({ i: idx, x, y, w, h });
 }
 
 /** Edit-mode outline + a drag handle (grip) for a movable HUD group. */
@@ -2267,81 +2253,13 @@ function drawGroupGrip(id: HudGroup, gx: number, gy: number, gw: number, gh: num
   hudGrips.push({ id, x: gx, y, w, h, gx, gy, gw, gh });
 }
 
-/** Slot rects in the desktop sidebar this frame (right-click = rebind). */
-let sidebarSlotRects: { i: number; x: number; y: number; w: number; h: number }[] = [];
-
-/** The docked, Tibia-style desktop sidebar: minimap, vitals, gold/TP, panel
- *  buttons, the six action slots and the weapon-swap button in one fixed
- *  opaque column on the right edge. */
-function drawSidebar(): void {
-  const ctx = sctx;
-  const S = scale;
-  const sw = screen.width, sh = screen.height;
-  const sbW = sidebarWidth();
-  const x0 = sw - sbW;
-  const pad = 4 * S;
-  const inner = sbW - 2 * pad;
-  const hud: HudCtx = { ctx, scale: S, screenW: sw, screenH: sh, touch: true, touchInput: isTouchDevice() };
-  ctx.textBaseline = "middle";
-
-  // opaque backdrop + left divider (Tibia-style: UI never overlaps the world)
-  ctx.fillStyle = "#101c19";
-  ctx.fillRect(x0, 0, sbW, sh);
-  ctx.fillStyle = "#3d5a50";
-  ctx.fillRect(x0, 0, Math.max(1, S), sh);
-  // swallow every tap/click on the sidebar so it never walks the player
-  // (pushed FIRST so the buttons below win; hotspots are checked in reverse)
-  hotspots.push({ x: x0, y: 0, w: sbW, h: sh, fn: () => { /* absorb */ } });
-  touchButtons.push({ x: x0, y: 0, w: sbW, h: sh });
-
-  let y = pad;
-  // minimap
-  drawMinimapAt(hud, game, P, x0 + pad + 2 * S, y + 2 * S, inner - 4 * S);
-  y += inner;
-  // vitals (HP / EXP / Cap), scaled to the column width
-  const Sv = inner / VITALS_W;
-  drawVitals(hud, P, x0 + pad, y, Sv);
-  y += VITALS_H * Sv + 3 * S;
-  // gold + TP
-  drawGoldTP(hud, P, x0 + pad, y, inner, 14 * S);
-  y += 14 * S + 4 * S;
-
-  // panel toggle buttons (one row of five)
-  const pbtns: [string, string, PanelKind][] = [
-    ["Build", "B", "build"], ["Skill", "K", "skills"], ["Equip", "E", "equip"], ["Bag", "I", "bag"], ["Quest", "Q", "quest"],
-  ];
-  const bgap = 1.5 * S;
-  const bsz = (inner - (pbtns.length - 1) * bgap) / pbtns.length;
-  let bx = x0 + pad;
-  for (const [label, glyph, panel] of pbtns) {
-    tButton(bx, y, bsz, label, glyph, hasWindow(panel), () => togglePanel(panel));
-    bx += bsz + bgap;
-  }
-  y += bsz + 4 * S;
-
-  // action slots 1–6 in a 3x2 grid (right-click a slot to rebind it)
-  sidebarSlotRects = [];
-  const cell = (inner - 2 * bgap) / 3;
-  for (let i = 0; i < 6; i++) {
-    const cxp = x0 + pad + (i % 3) * (cell + bgap);
-    const cyp = y + Math.floor(i / 3) * (cell + bgap);
-    drawActionSlot(i, cxp, cyp, cell, cell);
-    sidebarSlotRects.push({ i, x: cxp, y: cyp, w: cell, h: cell });
-  }
-  y += 2 * cell + bgap + 4 * S;
-
-  // weapon swap, full width
-  const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
-  hudBtn(x0 + pad, y, inner, 11 * S, bowOn ? "→MELEE" : "→BOW", false, () => swapWeapon());
-  y += 11 * S + 3 * S;
-
-  hudText(hud, "1–6 use · right-click = bind", x0 + sbW / 2, y + 3 * S, 5 * S, "rgba(220,214,190,.5)", "center");
-}
+/** Action-slot rects this frame (mouse right-click = open the rebind picker). */
+let actionSlotRects: { i: number; x: number; y: number; w: number; h: number }[] = [];
 
 function drawTouchControls(): void {
   touchButtons = [];
   hudGrips = [];
-  if (desktopUI) { drawSidebar(); return; }
+  actionSlotRects = [];
 
   const editing = hudEditing();
   const u = hudUserScale();
