@@ -17,6 +17,7 @@ import type { EqSlot, ItemKind, Recipe } from "../items.ts";
 import type { Corpse, Npc, Structure } from "../world/types.ts";
 import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
+import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed } from "../systems/panelPrefs.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
@@ -116,15 +117,45 @@ export interface PanelInput {
   win: PanelWindow;
 }
 
-function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, title: string): void {
+/** A small square title-bar button; returns nothing, pushes its hotspot. */
+function titleBtn(
+  p: PanelInput, bx: number, by: number, bs: number,
+  glyph: string, fill: string, border: string, fg: string, fn: () => void,
+): void {
   const { ctx, scale: S } = p.hud;
+  ctx.fillStyle = fill;
+  ctx.fillRect(bx, by, bs, bs);
+  ctx.strokeStyle = border;
+  ctx.lineWidth = S;
+  ctx.strokeRect(bx + S / 2, by + S / 2, bs - S, bs - S);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = fg;
+  ctx.font = `bold ${Math.round(9 * S)}px 'Courier New',monospace`;
+  ctx.fillText(glyph, bx + bs / 2, by + bs / 2 + 0.5 * S);
+  p.hotspots.push({ x: bx - 1.5 * S, y: by - 2 * S, w: bs + 3 * S, h: bs + 4 * S, fn });
+}
+
+/**
+ * Panel chrome: frame, title bar with drag grip and the [−][+][▾][X] buttons.
+ * Returns TRUE when the body should be drawn; FALSE when the window is rolled
+ * up to its title bar (Tibia-style), in which case only the bar was drawn.
+ */
+function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, title: string): boolean {
+  const { ctx, scale: S } = p.hud;
+  const kind = p.win.kind;
+  const collapsed = panelCollapsed(kind);
+  const barH = 14 * S;
+  const ph = collapsed ? barH + 2 * S : h; // rolled up: just the bar + border
   ctx.fillStyle = "rgba(16,12,8,.94)";
-  ctx.fillRect(x, y, w, h);
+  ctx.fillRect(x, y, w, ph);
   ctx.strokeStyle = "#caa23a";
   ctx.lineWidth = S;
-  ctx.strokeRect(x + S / 2, y + S / 2, w - S, h - S);
-  ctx.strokeStyle = "#6e571f";
-  ctx.strokeRect(x + 2.5 * S, y + 2.5 * S, w - 5 * S, h - 5 * S);
+  ctx.strokeRect(x + S / 2, y + S / 2, w - S, ph - S);
+  if (!collapsed) {
+    ctx.strokeStyle = "#6e571f";
+    ctx.strokeRect(x + 2.5 * S, y + 2.5 * S, w - 5 * S, ph - 5 * S);
+  }
   ctx.fillStyle = "#caa23a";
   ctx.fillRect(x, y + 13 * S, w, S);
   hudText(p.hud, title, x + w / 2, y + 7 * S, 9 * S, "#ffe9a8", "center", true);
@@ -134,18 +165,14 @@ function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, ti
     ctx.fillRect(x + 6 * S + i * 3 * S, y + 4 * S, S, S);
     ctx.fillRect(x + 6 * S + i * 3 * S, y + 8 * S, S, S);
   }
-  p.win.rect = { x, y, w, h };
-  // close (X) button in the top-right of the title bar
+  p.win.rect = { x, y, w, h: ph };
+  // title-bar buttons, right to left: [X] [▾/▸] and, when expanded, [+] [−]
   const bs = 13 * S;
-  const bx = x + w - bs - 2 * S;
-  const by = y + (14 * S - bs) / 2;
-  // draggable region is the title bar minus the close button
-  p.win.titleBar = { x, y, w: w - bs - 6 * S, h: 14 * S };
-  ctx.fillStyle = "rgba(160,40,30,.9)";
-  ctx.fillRect(bx, by, bs, bs);
-  ctx.strokeStyle = "#ffcabf";
-  ctx.lineWidth = S;
-  ctx.strokeRect(bx + S / 2, by + S / 2, bs - S, bs - S);
+  const gap = 2 * S;
+  const by = y + (barH - bs) / 2;
+  let bx = x + w - bs - 2 * S;
+  // close (X)
+  titleBtn(p, bx, by, bs, "", "rgba(160,40,30,.9)", "#ffcabf", "#fff", () => p.act.close(kind));
   ctx.strokeStyle = "#fff";
   ctx.lineWidth = Math.max(1, 1.4 * S);
   ctx.beginPath();
@@ -154,8 +181,20 @@ function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, ti
   ctx.moveTo(bx + bs - 3.5 * S, by + 3.5 * S);
   ctx.lineTo(bx + 3.5 * S, by + bs - 3.5 * S);
   ctx.stroke();
-  const kind = p.win.kind;
-  p.hotspots.push({ x: bx - 2 * S, y: by - 2 * S, w: bs + 4 * S, h: bs + 4 * S, fn: () => p.act.close(kind) });
+  // collapse / expand toggle
+  bx -= bs + gap;
+  titleBtn(p, bx, by, bs, collapsed ? "▸" : "▾", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a",
+    () => togglePanelCollapsed(kind));
+  if (!collapsed) {
+    // zoom + / −  (per-window, persisted)
+    bx -= bs + gap;
+    titleBtn(p, bx, by, bs, "+", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a", () => stepPanelZoom(kind, 1));
+    bx -= bs + gap;
+    titleBtn(p, bx, by, bs, "−", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a", () => stepPanelZoom(kind, -1));
+  }
+  // draggable region is the title bar minus the button cluster
+  p.win.titleBar = { x, y, w: Math.max(20 * S, bx - x - 4 * S), h: barH };
+  return !collapsed;
 }
 
 function hovering(p: PanelInput, x: number, y: number, w: number, h: number): boolean {
@@ -333,8 +372,9 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
   const origScale = hud.scale;
   const baseScale = hud.panelScale ?? hud.scale;
   for (const win of base.ui.windows) {
-    // draw each window at the panel scale, shrunk by its auto-fit factor
-    hud.scale = baseScale * (win.fit ?? 1);
+    // draw each window at the panel scale, times the user's per-window zoom,
+    // shrunk by its auto-fit factor so it can never spill off-screen
+    hud.scale = baseScale * panelZoom(win.kind) * (win.fit ?? 1);
     const p: PanelInput = { ...base, win };
     switch (win.kind) {
       case "build": drawBuild(p); break;
@@ -379,7 +419,7 @@ function drawBuild(p: PanelInput): void {
   const h = 20 * S + STRUCT_KEYS.length * rowH + 22 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "BUILD — choose a structure");
+  if (!goldPanel(p, x, y, w, h, "BUILD — choose a structure")) return;
   let ry = y + 18 * S;
   for (const key of STRUCT_KEYS) {
     const def = STRUCTS[key];
@@ -423,7 +463,7 @@ function drawSkills(p: PanelInput): void {
   const h = 20 * S + rows.length * 26 * S + 22 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "SKILLS");
+  if (!goldPanel(p, x, y, w, h, "SKILLS")) return;
   let ry = y + 20 * S;
   for (const key of rows) {
     const s = skills[key];
@@ -494,7 +534,7 @@ function drawEquip(p: PanelInput): void {
   const h = 20 * S + slot * rows + gap * (rows - 1) + 60 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "EQUIPMENT");
+  if (!goldPanel(p, x, y, w, h, "EQUIPMENT")) return;
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
   const ammoKind = bestArrow(player.bag);
@@ -591,7 +631,7 @@ function drawBag(p: PanelInput): void {
   const h = 20 * S + goldRow + rows * cell + (rows - 1) * gap + 20 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "BACKPACK");
+  if (!goldPanel(p, x, y, w, h, "BACKPACK")) return;
   lookToggle(p, x, y, w);
   // gold, shown here like any other carried item
   const gx = x + (w - gridW) / 2;
@@ -644,7 +684,7 @@ function drawForge(p: PanelInput): void {
   const h = 20 * S + RECIPES.length * rowH + 20 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "FORGE — craft gear");
+  if (!goldPanel(p, x, y, w, h, "FORGE — craft gear")) return;
   const bags = [player.bag, ...homeChests(p.game)];
   let ry = y + 18 * S;
   for (const r of RECIPES) {
@@ -677,7 +717,7 @@ function drawTower(p: PanelInput): void {
   const h = 20 * S + RESEARCH.length * rowH + 22 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "ALCHEMY TOWER");
+  if (!goldPanel(p, x, y, w, h, "ALCHEMY TOWER")) return;
   let ry = y + 18 * S;
   for (const r of RESEARCH) {
     const researched = isResearched(r.id);
@@ -725,7 +765,7 @@ function drawLoot(p: PanelInput): void {
   const h = 20 * S + Math.max(1, nRows) * rowH + 26 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "CORPSE — loot");
+  if (!goldPanel(p, x, y, w, h, "CORPSE — loot")) return;
   let ry = y + 18 * S;
   if (nRows === 0) {
     hudText(hud, "(empty)", x + w / 2, ry + 8 * S, 8 * S, "rgba(220,214,190,.5)", "center");
@@ -781,7 +821,7 @@ function drawShop(p: PanelInput): void {
   const h = 34 * S + Math.max(1, rows.length) * rowH + 24 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, npc.name);
+  if (!goldPanel(p, x, y, w, h, npc.name)) return;
   const tabW = 60 * S;
   (["buy", "sell"] as const).forEach((tab, i) => {
     const tx = x + 12 * S + i * (tabW + 6 * S);
@@ -836,7 +876,7 @@ function drawQuests(p: PanelInput): void {
   const h = 20 * S + quests.length * rowH + 16 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "QUEST LOG");
+  if (!goldPanel(p, x, y, w, h, "QUEST LOG")) return;
   let ry = y + 18 * S;
   for (const q of quests) {
     const need = q.goal.kind === "build" ? 1 : q.goal.need;
@@ -895,7 +935,7 @@ function drawTasks(p: PanelInput): void {
 
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "TASK BOARD — Grizelda");
+  if (!goldPanel(p, x, y, w, h, "TASK BOARD — Grizelda")) return;
 
   let ry = y + 18 * S;
   // points header
@@ -1046,7 +1086,7 @@ function drawStash(p: PanelInput): void {
   const h = 20 * S + headH + stashRows * (cell + gap) + 14 * S + headH + bagRows * (cell + gap) + 10 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "STORAGE CHEST");
+  if (!goldPanel(p, x, y, w, h, "STORAGE CHEST")) return;
   const gx = x + (w - gridW) / 2;
   let gy = y + 18 * S;
 
@@ -1087,7 +1127,7 @@ function drawWardrobe(p: PanelInput): void {
   const h = 20 * S + previewH + zones.length * zoneH + 30 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  goldPanel(p, x, y, w, h, "WARDROBE — Vesper");
+  if (!goldPanel(p, x, y, w, h, "WARDROBE — Vesper")) return;
 
   // live preview: the actual player sprite, big
   const spr = player.spr;
