@@ -164,6 +164,7 @@ export function makeCaveWorld(opts: CaveOpts): World {
     structures: [],
     buildSpots: [],
     portals: [],
+    gates: [],
     camps: [],
     coastWater: [],
     // Authored/procedural caves have no radial silhouette; the baker computes

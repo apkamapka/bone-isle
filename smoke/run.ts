@@ -801,6 +801,49 @@ async function main(): Promise<void> {
       "the smith sells training arrows for 1g and never buys them back");
   }
 
+  console.log("Bone Sanctum — temple road, level gates, dormant pads:");
+  {
+    const { makeHandmadeWorld, TOWN_SPEC, SANCTUM_SPEC } = await import("../src/world/handmade.ts");
+    const { applyGates } = await import("../src/game.ts");
+    const { findPath, toTile } = await import("../src/world/grid.ts");
+    const town = makeHandmadeWorld(TOWN_SPEC);
+    const stairs = town.portals.find((p) => p.dest === "sanctum");
+    ok(!!stairs && stairs.style === "ladderDown", "the temple stairs stand west of Bonetown");
+    const plaza = town.portals.find((p) => p.dest === "home")!;
+    const road = findPath(town, toTile(plaza.x), toTile(plaza.y), toTile(stairs!.x), toTile(stairs!.y));
+    ok(road.length > 0, `the temple road walks all the way from the plaza (${road.length} steps)`);
+    ok(town.npcs.length === 5, "the western extension shifted no NPC off the map");
+
+    const s = makeHandmadeWorld(SANCTUM_SPEC);
+    ok(s.gates.length === 10, "five doorways, two gate tiles each");
+    const lvs = [...new Set(s.gates.map((g) => g.lv))].sort((a, b) => a - b);
+    ok(lvs.join(",") === "10,15,20,25,30", `gate levels are 10/15/20/25/30 (${lvs.join("/")})`);
+    const pads = s.portals.filter((p) => p.inactive);
+    ok(pads.length === 5, "each chamber holds one dormant teleport pad");
+    const up = s.portals.find((p) => p.dest === "town");
+    ok(!!up && up.style === "ladderUp", "the ladder back to Bonetown is in the nave");
+
+    // sealed at level 9: no pad reachable from the ladder
+    applyGates(s, 9);
+    const from = { x: toTile(up!.x), y: toTile(up!.y) };
+    const reaches = (p: { x: number; y: number }): boolean => {
+      const path = findPath(s, from.x, from.y, toTile(p.x), toTile(p.y));
+      const last = path[path.length - 1];
+      return !!last && last.x === toTile(p.x) && last.y === toTile(p.y);
+    };
+    ok(pads.every((p) => !reaches(p)), "at level 9 every chamber is sealed");
+    // level 10 opens EXACTLY the first gate
+    applyGates(s, 10);
+    const open10 = pads.filter((p) => reaches(p));
+    ok(open10.length === 1, "level 10 opens exactly one chamber");
+    // level 30 opens them all
+    applyGates(s, 30);
+    ok(pads.every((p) => reaches(p)), "level 30 walks into all five chambers");
+    // gates re-seal if applied with a lower level again (pure function of level)
+    applyGates(s, 12);
+    ok(pads.filter((p) => reaches(p)).length === 1, "applyGates is a pure function of level");
+  }
+
   console.log("Etap 11 — independent Storage Chests (50 slots each):");
   {
     const { tryPlace, canAfford } = await import("../src/systems/building.ts");

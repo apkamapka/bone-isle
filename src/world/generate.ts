@@ -126,6 +126,7 @@ export function makeWorld(opts: WorldOpts): World {
     structures: [],
     buildSpots: [],
     portals: [],
+    gates: [],
     camps: [],
     coastWater: [],
     landR,

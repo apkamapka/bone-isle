@@ -1,7 +1,7 @@
 /** Global game state: the three islands, the active one, and the player. */
 import { makeWorld } from "./world/generate.ts";
 import { placeWalker } from "./world/grid.ts";
-import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC } from "./world/handmade.ts";
+import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC } from "./world/handmade.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn } from "./world/collision.ts";
@@ -172,6 +172,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   seedWorldRng(seed);
   const home = makeHandmadeWorld(HOME_SPEC);
   const town = makeHandmadeWorld(TOWN_SPEC);
+  const sanctum = makeHandmadeWorld(SANCTUM_SPEC);
   const wild = makeWorld({
     key: "wild", name: "Wildlands", safe: false, w: 104, h: 80,
     buildSpots: false, npcs: false,
@@ -201,7 +202,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   // …and every camp's lair floors, each from its own salted seed. The record
   // is completed by the loop below, hence the cast: TypeScript can't see that
   // LAIRS covers exactly the remaining WorldKey members.
-  const worlds = { home, town, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
+  const worlds = { home, town, sanctum, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
   for (const l of LAIRS) {
     const lw = makeCaveWorld({
       key: l.key, name: l.name, w: l.w, h: l.h, seed: seed ^ keySalt(l.key),
@@ -303,6 +304,17 @@ function compass(dx: number, dy: number): string {
 }
 
 /** Teleport the player through a portal to `dest`. */
+/**
+ * Seal or open every level gate in `w` against the player's level. A gate is
+ * simply a solid tile while locked, so grid movement, pathfinding and monster
+ * AI all respect it with zero special cases. Called every frame for the
+ * current world (a handful of gates — negligible) so a mid-session level-up
+ * swings the portcullis open the moment the fanfare plays.
+ */
+export function applyGates(w: World, level: number): void {
+  for (const gt of w.gates) w.solid[gt.ty][gt.tx] = level < gt.lv;
+}
+
 export function travelTo(g: Game, dest: WorldKey): void {
   const target = g.worlds[dest];
   // spawn beside the return portal that points back to where we came from

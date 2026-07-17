@@ -138,6 +138,20 @@ export const SPR = {
     "MMmmmmmMM.",
     ".MMMMMMM..",
   ]),
+  /** Level-gate portcullis: iron bars sealing a Sanctum doorway. */
+  gate: bake([
+    "dddddddddddddddd",
+    ".I..I..I..I..I..",
+    ".I..I..I..I..I..",
+    "dddddddddddddddd",
+    ".I..I..I..I..I..",
+    ".I..I..I..I..I..",
+    ".I..I..I..I..I..",
+    "dddddddddddddddd",
+    ".I..I..I..I..I..",
+    ".I..I..I..I..I..",
+    ".v..v..v..v..v..",
+  ], { d: "#2f3436", I: "#6b7276", v: "#1f2325" }),
   stump: bake([".tttttt.", "tWWwWWtt", "ttttttt.", ".tt..tt."]),
   rubble: bake(["..M..m..", ".mm.MM.m", "M.mm..m."]),
   // equipment slot glyphs

@@ -30,7 +30,7 @@ import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
-import { createGame, travelTo, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
+import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawMinimapAt, drawGoldTP, hudText, VITALS_W, VITALS_H, type HudCtx } from "./ui/hud.ts";
 import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
@@ -1222,6 +1222,13 @@ function worldClick(w: Vec): void {
       return;
     }
   }
+  // sealed level gates — a click tells you what it takes to pass
+  for (const gt of world.gates) {
+    if (P.level < gt.lv && toTile(w.x) === gt.tx && toTile(w.y) === gt.ty) {
+      flash(`sealed — requires level ${gt.lv}`, "#e0a06a");
+      return;
+    }
+  }
   // trees
   for (const tr of world.trees) {
     if (tr.stump) continue;
@@ -1479,6 +1486,12 @@ function checkPortals(): void {
   if (P.tpCd > 0) return;
   for (const pt of cw().portals) {
     if (dist(P.x, P.y, pt.x, pt.y) < 11) {
+      if (pt.inactive) {
+        // a dormant quest pad: hum, but do not travel (yet)
+        flash("the portal is dormant… for now", "#b9a6d8");
+        P.tpCd = 1.6; // don't spam the flash while standing on the pad
+        return;
+      }
       travelTo(game, pt.dest);
       return;
     }
@@ -1507,6 +1520,8 @@ function syncBagSize(): void {
 function update(dt: number): void {
   syncBagSize();
   const world = cw();
+  // level gates: seal/open against the current level (also right after level-ups)
+  applyGates(world, P.level);
   waveT += dt;
   P.tpCd = Math.max(0, P.tpCd - dt);
   P.atkCd = Math.max(0, P.atkCd - dt);
@@ -1876,15 +1891,33 @@ function render(): void {
       vctx.fill();
       continue;
     }
+    const dormant = !!pt.inactive;
     for (let r = 8; r > 0; r -= 2) {
-      const a = 0.15 + 0.12 * Math.sin(waveT * 4 + r);
-      vctx.fillStyle = `rgba(150,110,230,${a})`;
+      // a dormant pad smoulders ash-grey and barely breathes; a live portal
+      // pulses violet — the state reads at a glance from across the hall
+      const a = dormant ? 0.10 + 0.04 * Math.sin(waveT * 1.5 + r) : 0.15 + 0.12 * Math.sin(waveT * 4 + r);
+      vctx.fillStyle = dormant ? `rgba(140,140,148,${a})` : `rgba(150,110,230,${a})`;
       vctx.beginPath();
       vctx.ellipse(sx, sy, r, r * 0.6, 0, 0, 6.2832);
       vctx.fill();
     }
-    vctx.fillStyle = "#c9a6ff";
-    vctx.fillRect(Math.round(sx) - 1, Math.round(sy - 4 + Math.sin(waveT * 5) * 2), 2, 8);
+    vctx.fillStyle = dormant ? "#8d939a" : "#c9a6ff";
+    vctx.fillRect(Math.round(sx) - 1, Math.round(sy - 4 + (dormant ? 0 : Math.sin(waveT * 5) * 2)), 2, 8);
+  }
+
+
+  // level gates — a portcullis seals the doorway until the level is reached;
+  // an open gate leaves bare doorway (the bars withdrew into the ceiling)
+  for (const gt of world.gates) {
+    if (P.level >= gt.lv) continue;
+    const gx = gt.tx * TILE + TILE / 2 - cam.x;
+    const gy = gt.ty * TILE + TILE - cam.y;
+    vctx.drawImage(SPR.gate, Math.round(gx - SPR.gate.width / 2), Math.round(gy - SPR.gate.height - 2));
+    vctx.font = "bold 6px monospace";
+    vctx.fillStyle = "#14171a";
+    vctx.fillText(`${gt.lv}`, Math.round(gx) - 3 + 1, Math.round(gy) - 5 + 1);
+    vctx.fillStyle = "#ffd98a";
+    vctx.fillText(`${gt.lv}`, Math.round(gx) - 3, Math.round(gy) - 5);
   }
 
   // gather nodes: trees, rocks, herbs (sorted by y with actors below)

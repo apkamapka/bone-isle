@@ -12,6 +12,7 @@
  * Glyph legend (shared):
  *   ~ water    . grass    , sand    # ruined wall
  *   T tree     R rock     H herb    M mushroom (decor)   o bones (decor)
+ *   : dirt trail (walkable)   = cave floor (underground maps)
  *   (structures are placed free-form at runtime — no build-pad glyphs)
  * Per-map glyphs (portals & NPCs) are resolved through the spec's own maps, so
  * the same letter can mean different things on different islands.
@@ -29,6 +30,11 @@ import type { World, WorldKey, NpcKey } from "./types.ts";
 interface PortalDef {
   dest: WorldKey;
   label: string;
+  style?: "ladderDown" | "ladderUp" | "caveMouth";
+  /** Dormant pad — rendered ashen, refuses travel (quest realms come later). */
+  inactive?: boolean;
+  /** Terrain painted under the portal glyph (default grass). */
+  floor?: Tile;
 }
 
 export interface HandmadeSpec {
@@ -41,6 +47,9 @@ export interface HandmadeSpec {
   portals: Readonly<Record<string, PortalDef>>;
   /** Glyph → town NPC key. */
   npcs?: Readonly<Record<string, NpcKey>>;
+  /** Glyph → required level for a sealed doorway (rendered as a portcullis,
+   *  solid until the player reaches the level; floor beneath is cave). */
+  gates?: Readonly<Record<string, number>>;
 }
 
 /** NPC display name + sprite, keyed for O(1) lookup while parsing. */
@@ -52,6 +61,8 @@ const baseTileOf = (ch: string): Tile => {
   if (ch === "~") return Tile.Water;
   if (ch === ",") return Tile.Sand;
   if (ch === "#") return Tile.Wall;
+  if (ch === ":") return Tile.Dirt;
+  if (ch === "=") return Tile.Cave;
   return Tile.Grass; // '.' and every feature glyph sit on grass
 };
 
@@ -100,6 +111,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     structures: [],
     buildSpots: [],
     portals: [],
+    gates: [],
     camps: [],
     coastWater: [],
     // Authored maps have no radial silhouette; the baker no longer needs one.
@@ -136,9 +148,23 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           w.buildSpots.push({ tx: x, ty: y, built: null });
           break;
         default: {
+          const gateLv = spec.gates?.[ch];
+          if (gateLv !== undefined) {
+            // a sealed doorway: cave floor beneath, solid until unlocked
+            tile[y][x] = Tile.Cave;
+            solid[y][x] = true;
+            w.gates.push({ tx: x, ty: y, lv: gateLv });
+            break;
+          }
           const pdef = spec.portals[ch];
           if (pdef) {
-            w.portals.push({ x: cx, y: cy, dest: pdef.dest, label: pdef.label });
+            if (pdef.floor !== undefined) {
+              tile[y][x] = pdef.floor;
+              solid[y][x] = false;
+            }
+            w.portals.push({ x: cx, y: cy, dest: pdef.dest, label: pdef.label,
+              ...(pdef.style ? { style: pdef.style } : {}),
+              ...(pdef.inactive ? { inactive: true } : {}) });
             break;
           }
           const nkey = spec.npcs?.[ch];
@@ -204,38 +230,38 @@ export const HOME_SPEC: HandmadeSpec = {
 /*  BONETOWN — the hub. NPCs round a plaza; two portals (home / wild).  */
 /* ------------------------------------------------------------------ */
 const TOWN_ROWS: readonly string[] = [
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~,,,,,,,~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~,,,,,,,,,,,,,,,~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~,,,,.....T.....,,,,~~~~~~~~~~~~",
-  "~~~~~~~~~~~,,,,...............,,,,~~~~~~~~~~",
-  "~~~~~~~~~~,,,..H.............H..,,,~~~~~~~~~",
-  "~~~~~~~~~,,...................W...,,~~~~~~~~",
-  "~~~~~~~~,,.......................##,,~~~~~~~",
-  "~~~~~~~,,##...o.....................,,~~~~~~",
-  "~~~~~~,,,.#.................o.......,,,~~~~~",
-  "~~~~~~,,...M.....s,,,,,,,,,h.....M...,,~~~~~",
-  "~~~~~,,,..........,,,,,,,,,..........,,,~~~~",
-  "~~~~~,,R...T......,,,,,,,,,......T....,,~~~~",
-  "~~~~~,,...........,,,,,,,,,...........,,~~~~",
-  "~~~~~,,......H....,,,,,,,,,....H....R.,,~~~~",
-  "~~~~~,,..T........,,,,,,,,,..t........,,~~~~",
-  "~~~~~,,...........,,,,,,,,,........T..,,~~~~",
-  "~~~~~,,,..........,,,,,,,,,.........R,,,~~~~",
-  "~~~~~~,,R........e,,,,,,,,,g......D..,,~~~~~",
-  "~~~~~~,,,...........................,,,~~~~~",
-  "~~~~~~~,,...T.....................##,,~~~~~~",
-  "~~~~~~~~,,.........................#,~~~~~~~",
-  "~~~~~~~~~,,R..P...............o.TR,,~~~~~~~~",
-  "~~~~~~~~~~,,,M................M.,,,~~~~~~~~~",
-  "~~~~~~~~~~~,,,,H.............H,,,,~~~~~~~~~~",
-  "~~~~~~~~~~~~~,,,,...H...H...,,,,~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~,,,,,,,,,,,,,,,~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~,,,,,,,~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~,,,,,,,~~~~~~~~~~~~~~~~~~",
+  "~~~~~~~,,,,,,,,,,,~~~~~~~~~~~~~~~~~~~~~~~,,,,,,,,,,,,,,,~~~~~~~~~~~~~~",
+  "~~~~~,,,,.........,,~~~~~~~~~~~~~~~~~~~,,,,.....T.....,,,,~~~~~~~~~~~~",
+  "~~~~,,...T.....T...,,~~~~~~~~~~~~~~~~,,,,...............,,,,~~~~~~~~~~",
+  "~~~,,.....o...o.....,,~~~~~~~~~~~~~~,,,..H.............H..,,,~~~~~~~~~",
+  "~~~,,.###########...,,~~~~~~~~~~~~~,,...................W...,,~~~~~~~~",
+  "~~,,..#,,,,,,,,,#....,,~~~~~~~~~~~,,.......................##,,~~~~~~~",
+  "~~,,.o#,,,,,,,,,#o...,,~~~~~~~~~~,,##...o.....................,,~~~~~~",
+  "~~,,..#,,,,,,,,,#..T..,,~~~~~~~~,,,.#.................o.......,,,~~~~~",
+  "~~,,..#,,,S,,,,,#.....,,~~~~~~~~,,...M.....s,,,,,,,,,h.....M...,,~~~~~",
+  "~~,,.o#,,,,,,,,,#o...,,,,,,,,,,,,,..........,,,,,,,,,..........,,,~~~~",
+  "~~,,..#,,,,,,,,,:::::::::::::::,,R...T......,,,,,,,,,......T....,,~~~~",
+  "~~,,.o#,,,,,,,,,:::::::::::::::,,...........,,,,,,,,,...........,,~~~~",
+  "~~,,..#,,,,,,,,,#..,,,,,,,,,,,,,,......H....,,,,,,,,,....H....R.,,~~~~",
+  "~~,,.o#,,,,,,,,,#o...,,,~~~,,,,,,..T........,,,,,,,,,..t........,,~~~~",
+  "~~,,..#,,,,,,,,,#..T..,,~~~~~~~,,...........,,,,,,,,,........T..,,~~~~",
+  "~~~,,.###########.....,,~~~~~~~,,,..........,,,,,,,,,.........R,,,~~~~",
+  "~~~,,......o.........,,~~~~~~~~~,,R........e,,,,,,,,,g......D..,,~~~~~",
+  "~~~~,,...T.....T....,,~~~~~~~~~~,,,...........................,,,~~~~~",
+  "~~~~~,,,,.........,,,~~~~~~~~~~~~,,...T.....................##,,~~~~~~",
+  "~~~~~~~,,,,,,,,,,,,~~~~~~~~~~~~~~~,,.........................#,~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~,,R..P...............o.TR,,~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~,,,M................M.,,,~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~,,,,H.............H,,,,~~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~,,,,...H...H...,,,,~~~~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~,,,,,,,,,,,,,,,~~~~~~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~,,,,,,,~~~~~~~~~~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
 ];
 
 export const TOWN_SPEC: HandmadeSpec = {
@@ -248,6 +274,58 @@ export const TOWN_SPEC: HandmadeSpec = {
     P: { dest: "home", label: "to Home Isle" },
     W: { dest: "wild", label: "to the Wildlands" },
     D: { dest: "deepwild", label: "to the Deep Wildlands" },
+    S: { dest: "sanctum", label: "to the Bone Sanctum", style: "ladderDown", floor: Tile.Sand },
   },
   npcs: { s: "smith", h: "herbalist", e: "elder", g: "taskmaster", t: "tailor" },
+};
+
+/* ------------------------------------------------------------------ */
+/*  BONE SANCTUM — the crypt beneath the western temple. Five chambers */
+/*  sealed by level gates (10/15/20/25/30); each holds a dormant       */
+/*  teleport pad that will link to a quest realm in a future stage.    */
+/* ------------------------------------------------------------------ */
+const SANCTUM_ROWS: readonly string[] = [
+  "##############################",
+  "##############################",
+  "##############################",
+  "##############################",
+  "###o===#====#====#====#===o###",
+  "###====#====#====#====#====###",
+  "###=a==#=b==#=c==#=d==#=e==###",
+  "###====#====#====#====#====###",
+  "###====#====#====#====#====###",
+  "###====#====#====#====#====###",
+  "####11###22###33###44###55####",
+  "###========================###",
+  "###==========o==o==========###",
+  "###==o==================o==###",
+  "###====#==============#====###",
+  "###========================###",
+  "###========================###",
+  "###========================###",
+  "###====#==============#====###",
+  "###===========U============###",
+  "###=o====================o=###",
+  "##############################",
+  "##############################",
+  "##############################",
+];
+
+const dormant = (label: string) =>
+  ({ dest: "sanctum", label, inactive: true, floor: Tile.Cave } as const);
+
+export const SANCTUM_SPEC: HandmadeSpec = {
+  key: "sanctum",
+  name: "Bone Sanctum",
+  safe: true,
+  rows: SANCTUM_ROWS,
+  portals: {
+    U: { dest: "town", label: "to Bonetown", style: "ladderUp", floor: Tile.Cave },
+    a: dormant("Dormant Portal I"),
+    b: dormant("Dormant Portal II"),
+    c: dormant("Dormant Portal III"),
+    d: dormant("Dormant Portal IV"),
+    e: dormant("Dormant Portal V"),
+  },
+  gates: { "1": 10, "2": 15, "3": 20, "4": 25, "5": 30 },
 };
