@@ -157,6 +157,9 @@ export interface Monster {
   kind: MonsterKind;
   x: number;
   y: number;
+  /** Logical tile the creature stands on (claims) — grid movement core. */
+  tx: number;
+  ty: number;
   spr: HTMLCanvasElement;
   hp: number;
   maxhp: number;
@@ -164,8 +167,6 @@ export interface Monster {
   atkRate: number;
   atkCd: number;
   wanderT: number;
-  wx: number;
-  wy: number;
   bob: number;
   hurtT: number;
   /** Seconds of forced aggression left after taking a hit — the creature

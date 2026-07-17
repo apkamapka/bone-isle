@@ -1,21 +1,21 @@
-/** Tile collision and movement helpers operating on a World grid. */
-import { TILE, BODY_SEPARATION_PX } from "../config.ts";
+/** Tile collision helpers operating on a World grid (pure per-tile rules). */
+import { TILE } from "../config.ts";
 import { wrndi } from "../util.ts";
+import { walkable, tileCenter, toTile } from "./grid.ts";
 import { Tile } from "./types.ts";
 import type { World, Vec, Portal } from "./types.ts";
 
-/** Anything with a mutable world position. */
+/** Anything with a mutable world position (may also carry a logical tile). */
 export interface Movable {
   x: number;
   y: number;
+  tx?: number;
+  ty?: number;
 }
 
 /** True if the pixel (px,py) sits on a solid tile or off-map. */
 export function blockedAt(w: World, px: number, py: number): boolean {
-  const x = Math.floor(px / TILE);
-  const y = Math.floor(py / TILE);
-  if (x < 0 || y < 0 || x >= w.w || y >= w.h) return true;
-  return w.solid[y][x];
+  return !walkable(w, Math.floor(px / TILE), Math.floor(py / TILE));
 }
 
 /** True if the pixel sits on a sight-blocking tile (Wall) or off-map. Trees,
@@ -42,102 +42,34 @@ export function lineOfSight(w: World, x1: number, y1: number, x2: number, y2: nu
   return true;
 }
 
-/** Feet-box half extents used for entity collision. */
-const HW = 4;
-const HH = 2;
-
-/** How many of the feet-box corners at (px,py) sit on solid tiles (0–4). */
-function feetCorners(w: World, px: number, py: number): number {
-  let n = 0;
-  if (blockedAt(w, px - HW, py - HH)) n++;
-  if (blockedAt(w, px + HW, py - HH)) n++;
-  if (blockedAt(w, px - HW, py + HH)) n++;
-  if (blockedAt(w, px + HW, py + HH)) n++;
-  return n;
-}
-
-/** True if the entity's feet-box at (px,py) overlaps any solid tile. */
+/** With grid movement a body occupies exactly its own tile: "feet blocked"
+ *  simply means "standing on a solid tile". Kept under the old name so save
+ *  migration and placement checks read the same as before. */
 export function feetBlocked(w: World, px: number, py: number): boolean {
-  return feetCorners(w, px, py) > 0;
+  return blockedAt(w, px, py);
 }
 
 /**
- * Move an entity by (dx,dy), resolving each axis separately so it slides along
- * walls instead of sticking. A move is allowed when the destination is fully
- * clear, OR when it reduces how much the feet overlap solid tiles — so an entity
- * that ended up inside a wall (e.g. a house built on its tile) can always walk
- * back out, but can't walk deeper into one.
- *
- * `blockers` adds Tibia-style body blocking: the move is also refused if it
- * would bring the entity closer than BODY_SEPARATION_PX to any listed body
- * (the entity itself is skipped). Moves that INCREASE the distance to an
- * already-overlapping body are always allowed, so nothing can get stuck fused
- * together — overlaps resolve, they never lock.
- */
-export function moveEntity(w: World, e: Movable, dx: number, dy: number, blockers?: readonly Movable[]): void {
-  const bodyBlocked = (nx: number, ny: number): boolean => {
-    if (!blockers) return false;
-    for (const b of blockers) {
-      if (b === e) continue;
-      const nd = Math.hypot(nx - b.x, ny - b.y);
-      if (nd >= BODY_SEPARATION_PX) continue;
-      const cur = Math.hypot(e.x - b.x, e.y - b.y);
-      if (nd < cur) return true; // refuses only moves that push INTO the body
-    }
-    return false;
-  };
-  if (dx !== 0) {
-    const cur = feetCorners(w, e.x, e.y);
-    const nb = feetCorners(w, e.x + dx, e.y);
-    // when clear (cur=0) this requires nb=0 as before; when embedded it just
-    // forbids going *deeper*, so a trapped entity can always escape any direction
-    if (nb <= cur && !bodyBlocked(e.x + dx, e.y)) e.x += dx;
-  }
-  if (dy !== 0) {
-    const cur = feetCorners(w, e.x, e.y);
-    const nb = feetCorners(w, e.x, e.y + dy);
-    if (nb <= cur && !bodyBlocked(e.x, e.y + dy)) e.y += dy;
-  }
-}
-
-/**
- * Whole-vector step test used by monster steering: is a single step by (dx,dy)
- * fully allowed — tile-wise (same "never deeper into solids" rule as
- * moveEntity) AND body-wise (never pushing closer into any listed body)?
- * Unlike moveEntity's per-axis sliding this checks the exact destination, so
- * the AI can probe several candidate directions and pick the first clear one.
- */
-export function stepAllowed(w: World, e: Movable, dx: number, dy: number, blockers?: readonly Movable[]): boolean {
-  const nx = e.x + dx;
-  const ny = e.y + dy;
-  if (feetCorners(w, nx, ny) > feetCorners(w, e.x, e.y)) return false;
-  if (blockers) {
-    for (const b of blockers) {
-      if (b === e) continue;
-      const nd = Math.hypot(nx - b.x, ny - b.y);
-      if (nd < BODY_SEPARATION_PX && nd < Math.hypot(e.x - b.x, e.y - b.y)) return false;
-    }
-  }
-  return true;
-}
-
-/**
- * If an entity is sitting inside a solid tile, teleport it to the nearest open
- * tile centre (spiral search). Returns true if it had to move. Used to rescue
- * a player boxed in by a structure placed on their tile, and on load for old
- * saves that were left stuck.
+ * If an entity is sitting on a solid tile (e.g. a house was built on it),
+ * teleport it to the nearest open tile centre (spiral search) and re-sync its
+ * logical tile. Returns true if it had to move. Used to rescue a player boxed
+ * in by a structure placed on their tile, and on load for old saves.
  */
 export function unstick(w: World, e: Movable): boolean {
   if (!feetBlocked(w, e.x, e.y)) return false;
-  const cx = Math.floor(e.x / TILE);
-  const cy = Math.floor(e.y / TILE);
+  const cx = toTile(e.x);
+  const cy = toTile(e.y);
   for (let r = 1; r < 16; r++) {
     for (let oy = -r; oy <= r; oy++) {
       for (let ox = -r; ox <= r; ox++) {
         if (Math.max(Math.abs(ox), Math.abs(oy)) !== r) continue; // ring only
-        const px = (cx + ox) * TILE + TILE / 2;
-        const py = (cy + oy) * TILE + TILE / 2;
-        if (!feetBlocked(w, px, py)) { e.x = px; e.y = py; return true; }
+        if (walkable(w, cx + ox, cy + oy)) {
+          e.x = tileCenter(cx + ox);
+          e.y = tileCenter(cy + oy);
+          e.tx = cx + ox;
+          e.ty = cy + oy;
+          return true;
+        }
       }
     }
   }
@@ -150,25 +82,26 @@ export function randomWalkable(w: World): Vec {
     const x = wrndi(2, w.w - 3);
     const y = wrndi(2, w.h - 3);
     if (!w.solid[y][x] && w.tile[y][x] > 0) {
-      return { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 };
+      return { x: tileCenter(x), y: tileCenter(y) };
     }
   }
   return { x: (w.w / 2) * TILE, y: (w.h / 2) * TILE };
 }
 
-/** A guaranteed-walkable spot just beside a portal. */
+/** A guaranteed-walkable tile centre just beside a portal (ring search). */
 export function portalSpawn(w: World, portal?: Portal): Vec {
   const pt = portal ?? w.portals[0];
-  const cand: ReadonlyArray<readonly [number, number]> = [
-    [0, 14], [0, -14], [14, 0], [-14, 0], [10, 12], [-10, 12], [0, 22],
+  const ptx = toTile(pt.x);
+  const pty = toTile(pt.y);
+  // south first (classic "step off the stairs"), then the rest of ring 1, then ring 2
+  const order: ReadonlyArray<readonly [number, number]> = [
+    [0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1],
+    [0, 2], [2, 0], [-2, 0], [0, -2], [1, 2], [-1, 2], [2, 1], [-2, 1],
   ];
-  for (const [ox, oy] of cand) {
-    const x = pt.x + ox;
-    const y = pt.y + oy;
-    if (
-      !blockedAt(w, x - 4, y - 2) && !blockedAt(w, x + 4, y - 2) &&
-      !blockedAt(w, x - 4, y + 2) && !blockedAt(w, x + 4, y + 2)
-    ) return { x, y };
+  for (const [ox, oy] of order) {
+    if (walkable(w, ptx + ox, pty + oy)) {
+      return { x: tileCenter(ptx + ox), y: tileCenter(pty + oy) };
+    }
   }
   return randomWalkable(w);
 }
