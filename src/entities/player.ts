@@ -1,6 +1,7 @@
 /** The player: state, backpack, equipment and derived stats. */
 import { PLAYER_BASE_HP, PLAYER_BASE_SPEED, SPEED_PER_LEVEL, PLAYER_ATTACK_RATE, expNeeded, CAP_BASE, CAP_PER_LEVEL } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
+import { toTile, tileCenter } from "../world/grid.ts";
 import { activeBonus } from "../systems/derived.ts";
 import { emptyBag, emptyEquipment, gearStat, itemWeight, bagWeight, addItem } from "../items.ts";
 import type { Bag, Equipment, ItemKind } from "../items.ts";
@@ -27,6 +28,9 @@ export type GatherTask =
 export interface Player {
   x: number;
   y: number;
+  /** Logical tile the player stands on (claims) — grid movement core. */
+  tx: number;
+  ty: number;
   spr: HTMLCanvasElement;
   hp: number;
   maxhp: number;
@@ -65,8 +69,10 @@ export function createPlayer(spawn: Vec): Player {
   addItem(bag, "bow", 1);
   addItem(bag, "arrow", 30);
   return {
-    x: spawn.x,
-    y: spawn.y,
+    x: tileCenter(toTile(spawn.x)),
+    y: tileCenter(toTile(spawn.y)),
+    tx: toTile(spawn.x),
+    ty: toTile(spawn.y),
     spr: SPR.player,
     hp: PLAYER_BASE_HP,
     maxhp: PLAYER_BASE_HP,

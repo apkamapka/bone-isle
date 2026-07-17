@@ -1,8 +1,10 @@
 /** Monster definitions, danger-band spawning and the wander/chase/attack AI. */
 import { rnd, rndi, wrnd, dist } from "../util.ts";
-import { WILD_ENTRANCE_SAFE_PX, BODY_SEPARATION_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, SHOT_SPEED } from "../config.ts";
+import { WILD_ENTRANCE_SAFE_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, SHOT_SPEED, TILE } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
-import { moveEntity, randomWalkable, lineOfSight, stepAllowed } from "../world/collision.ts";
+import { randomWalkable, lineOfSight } from "../world/collision.ts";
+import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
+import type { Occupied } from "../world/grid.ts";
 import { Tile } from "../world/types.ts";
 import type { World, Monster, MonsterKind, Camp } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
@@ -233,12 +235,19 @@ function pushMonster(
   kind: MonsterKind,
   p: { x: number; y: number },
   home?: { camp: string; x: number; y: number; r: number },
-): void {
+): boolean {
   const d = MONSTER_DEFS[kind];
+  // grid rule: every creature claims exactly one tile — never spawn onto a
+  // square already claimed by another creature
+  const tx = toTile(p.x);
+  const ty = toTile(p.y);
+  if (w.monsters.some((o) => o.tx === tx && o.ty === ty)) return false;
   w.monsters.push({
     kind,
-    x: p.x,
-    y: p.y,
+    x: tileCenter(tx),
+    y: tileCenter(ty),
+    tx,
+    ty,
     spr: d.spr,
     hp: d.hp,
     maxhp: d.hp,
@@ -246,8 +255,6 @@ function pushMonster(
     atkRate: d.atkRate,
     atkCd: wrnd(0, 1),
     wanderT: wrnd(0, 2),
-    wx: 0,
-    wy: 0,
     bob: wrnd(0, 3),
     hurtT: 0,
     aggroT: 0,
@@ -257,6 +264,7 @@ function pushMonster(
     hy: home?.y,
     hr: home?.r,
   });
+  return true;
 }
 
 /**
@@ -283,8 +291,7 @@ export function spawnMonsterInCamp(
     // keep the descent hole clear so arrivals from the lair aren't body-blocked
     if (w.portals.some((pt) => dist(pt.x, pt.y, x, y) < 24)) continue;
     if (!w.monsters.every((m) => dist(m.x, m.y, x, y) >= SPAWN_SPACING_PX)) continue;
-    pushMonster(w, kind, { x, y }, { camp: camp.key, x: camp.x, y: camp.y, r: camp.r });
-    return true;
+    if (pushMonster(w, kind, { x, y }, { camp: camp.key, x: camp.x, y: camp.y, r: camp.r })) return true;
   }
   return false;
 }
@@ -303,8 +310,7 @@ export function spawnWilderness(w: World, kind: MonsterKind, avoid?: { x: number
     if (w.camps.some((c) => dist(c.x, c.y, cand.x, cand.y) < c.r + 48)) continue;
     if (avoid && dist(cand.x, cand.y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
     if (!w.monsters.every((m) => dist(m.x, m.y, cand.x, cand.y) >= SPAWN_SPACING_PX)) continue;
-    pushMonster(w, kind, cand);
-    return true;
+    if (pushMonster(w, kind, cand)) return true;
   }
   return false;
 }
@@ -328,6 +334,8 @@ export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y
     const dd = dist(cand.x, cand.y, ex, ey);
     if (dd < WILD_ENTRANCE_SAFE_PX) continue; // keep the arrival area clear
     if (avoid && dist(cand.x, cand.y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
+    // grid hard rule: the candidate SQUARE must be free — one creature per tile
+    if (w.monsters.some((m) => m.tx === toTile(cand.x) && m.ty === toTile(cand.y))) continue;
     fallback ??= cand;
     if (!w.monsters.every((m) => dist(m.x, m.y, cand.x, cand.y) >= SPAWN_SPACING_PX)) continue;
     spaced ??= cand;
@@ -335,10 +343,16 @@ export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y
   }
   // a fresh populate must never lose a creature — but a respawn near a camping
   // player simply reports failure and gets retried by the caller
-  const p = match ?? spaced ?? (avoid ? null : fallback ?? randomWalkable(w));
+  let p = match ?? spaced ?? (avoid ? null : fallback);
+  // a fresh populate must never lose a creature: last-ditch free-square hunt
+  if (!p && !avoid) {
+    for (let tries = 0; tries < 40 && !p; tries++) {
+      const cand = randomWalkable(w);
+      if (!w.monsters.some((m) => m.tx === toTile(cand.x) && m.ty === toTile(cand.y))) p = cand;
+    }
+  }
   if (!p) return false;
-  pushMonster(w, kind, p);
-  return true;
+  return pushMonster(w, kind, p);
 }
 
 /** Roll a monster's loot into concrete stacks + gold. Runtime randomness —
@@ -361,13 +375,24 @@ export function rollLoot(kind: MonsterKind): { items: { kind: ItemKind; n: numbe
 export interface AttackTarget {
   x: number;
   y: number;
+  /** Logical tile the target CLAIMS (may differ from x,y mid-glide). When
+   *  given, occupancy and ring checks use it — the claimed square stays
+   *  blocked for the whole step, exactly like every other creature's. */
+  tx?: number;
+  ty?: number;
   dead: boolean;
 }
 
 /**
- * Advance every monster in `w`. When a monster lands a hit it calls
- * `onHit(monster, ranged)` so the caller (combat system) applies damage to the
- * player — `ranged` picks between the melee and the ranged damage roll.
+ * Advance every monster in `w` on the tile grid. When a monster lands a hit it
+ * calls `onHit(monster, ranged)` so the caller (combat system) applies damage
+ * to the player — `ranged` picks between the melee and the ranged damage roll.
+ *
+ * Movement is fully Tibia-style: a creature logically stands on ONE tile,
+ * glides toward its centre, and only from the centre may claim an adjacent
+ * tile (8 directions). The player's tile and every other creature's tile are
+ * hard-blocked, so at most 8 bodies can ring the player and a free square is
+ * always a genuine escape route.
  */
 export function updateMonsters(
   w: World,
@@ -375,50 +400,86 @@ export function updateMonsters(
   target: AttackTarget,
   onHit: (m: Monster, ranged: boolean) => void,
 ): void {
-  // every creature body-blocks every other one, and the player blocks them all
-  const blockers: { x: number; y: number }[] = [target, ...w.monsters];
+  const ptx = target.tx ?? toTile(target.x);
+  const pty = target.ty ?? toTile(target.y);
+  const occOf = (self: Monster): Occupied => (tx, ty) =>
+    (tx === ptx && ty === pty) || w.monsters.some((o) => o !== self && o.tx === tx && o.ty === ty);
+
+  /**
+   * One chase step toward (gx,gy), Tibia-style. First choice: any free square
+   * that REDUCES the Chebyshev distance (fastest octile route as tiebreak).
+   * When every closer square is claimed, walk the ARC — a free square at the
+   * SAME Chebyshev distance, rotating in the creature's own preferred
+   * direction (`orbit`). Half the pack circles left, half right, so they flow
+   * around each other and surround the target instead of queueing single-file.
+   * In a walled corridor the arc is solid rock and they correctly queue.
+   */
+  const chaseStep = (m: Monster, occ: Occupied, gx: number, gy: number): boolean => {
+    const curC = chebTiles(m.tx, m.ty, gx, gy);
+    let best: readonly [number, number] | null = null;
+    let bestO = Infinity;
+    let arc: readonly [number, number] | null = null;
+    for (const [sx, sy] of STEPS8) {
+      const nx = m.tx + sx;
+      const ny = m.ty + sy;
+      if (!walkable(w, nx, ny) || occ(nx, ny)) continue;
+      const c = chebTiles(nx, ny, gx, gy);
+      const o = octile(nx, ny, gx, gy);
+      if (c < curC) {
+        if (o < bestO) { bestO = o; best = [sx, sy]; }
+      } else if (c === curC && !arc) {
+        // rotation side split by `orbit` keeps the arc walk consistent
+        const cross = sx * (gy - m.ty) - sy * (gx - m.tx);
+        if (Math.sign(cross) === m.orbit) arc = [sx, sy];
+      }
+    }
+    const pick = best ?? arc;
+    if (!pick) return false;
+    return tryStep(w, m, pick[0], pick[1], occ);
+  };
+
+  /** One retreat step: the free square that maximises walking distance from
+   *  the player. With the path of retreat blocked the shooter holds ground. */
+  const retreatStep = (m: Monster, occ: Occupied): boolean => {
+    const cur = octile(m.tx, m.ty, ptx, pty);
+    let best: readonly [number, number] | null = null;
+    let bestO = cur;
+    for (const [sx, sy] of STEPS8) {
+      const nx = m.tx + sx;
+      const ny = m.ty + sy;
+      if (!walkable(w, nx, ny) || occ(nx, ny)) continue;
+      const o = octile(nx, ny, ptx, pty);
+      if (o > bestO) { bestO = o; best = [sx, sy]; }
+    }
+    if (!best) return false;
+    return tryStep(w, m, best[0], best[1], occ);
+  };
+
   for (const m of w.monsters) {
     m.hurtT = Math.max(0, m.hurtT - dt);
     m.aggroT = Math.max(0, m.aggroT - dt);
     m.atkCd -= dt;
+    const occ = occOf(m);
     const d = dist(m.x, m.y, target.x, target.y);
-    // chase only what it can actually see — cave walls break line of sight,
-    // so creatures in the next chamber stay put instead of chasing through rock.
-    // Sight range covers every bow (+1 tile), and a creature that was HIT stays
-    // aggressive beyond it (aggroT) — plinking arrows never goes unanswered.
+    const cheb = chebTiles(m.tx, m.ty, ptx, pty);
     const provoked = d < MONSTER_AGGRO_RANGE || m.aggroT > 0;
     const rd = MONSTER_DEFS[m.kind].ranged;
-    // Distance fighters (Tibia-style): inside firing range with a clear line
-    // they STOP advancing, loose a projectile on their normal 2.0 s cadence,
-    // and back away when the player closes in — the mirror of the player's
-    // own kite-and-shoot. With the path of retreat blocked (walls, pack mates)
-    // they simply stand and keep firing; and once the player reaches melee
-    // reach (d <= 13) this branch is skipped, so the ordinary melee exchange
-    // below takes over with their (weaker) melee roll.
-    //
-    // A `brute` shooter (the dragon) is the exception: it does NOT kite. It
-    // skips the retreat entirely and falls through to the chase branch, so it
-    // keeps charging in — breathing fire on the way, then mauling with its paw
-    // once it's on top of you.
-    if (rd && !target.dead && provoked && d > 13 && d <= rd.range
-      && lineOfSight(w, m.x, m.y, target.x, target.y)) {
-      const keep = Math.min(rd.range * 0.5, 64);
-      if (!rd.brute && d < keep) {
-        // too close for comfort — probe retreat steps like the chase steering
-        const away = Math.atan2(m.y - target.y, m.x - target.x);
-        const step = m.speed * dt;
-        const s = m.orbit;
-        for (const a of [0, 0.6 * s, -0.6 * s, 1.1 * s, -1.1 * s]) {
-          const dx = Math.cos(away + a) * step;
-          const dy = Math.sin(away + a) * step;
-          if (stepAllowed(w, m, dx, dy, blockers)) {
-            m.x += dx;
-            m.y += dy;
-            m.bob += dt * 9;
-            break;
-          }
-        }
+
+    // ---- attacks (cadence-gated, independent of the glide phase) ----
+    if (!target.dead && provoked && cheb <= 1) {
+      // adjacent: the ordinary melee exchange — shooters stab with their
+      // (weaker) melee roll when cornered, exactly the old behaviour
+      if (m.atkCd <= 0) {
+        m.atkCd = m.atkRate;
+        onHit(m, false);
       }
+      // an adjacent creature holds its square (no movement) — but still
+      // finish any glide already in flight so it settles on its centre
+      glideWalker(m, m.speed * dt);
+      continue;
+    }
+    if (rd && !target.dead && provoked && cheb > 1 && d <= rd.range
+      && lineOfSight(w, m.x, m.y, target.x, target.y)) {
       if (m.atkCd <= 0) {
         m.atkCd = m.atkRate;
         // cosmetic projectile, instant hit — same contract as the player's bow
@@ -430,98 +491,60 @@ export function updateMonsters(
         });
         onHit(m, true);
       }
-      // Kiters hold their ground here; a brute keeps coming, so let it fall
-      // through to the chase branch and close the distance while it burns.
-      if (!rd.brute) continue;
-    }
-    if (!target.dead && provoked && d > 13 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
-      // Steered chase: try the direct step first; if a body (usually the pack
-      // mate in front) blocks it, probe steps at growing angles, preferring
-      // the monster's own detour side. The last pair sits just past 90° —
-      // a purely tangential orbit around the blocker (any smaller angle still
-      // closes the distance to it and is rightly refused by body blocking).
-      // Half the pack circles left, half right, so instead of queueing in a
-      // line they flow around each other and SURROUND the target, exactly the
-      // Tibia feel. In a walled corridor every angle is blocked and they
-      // correctly queue single-file.
-      const base = Math.atan2(target.y - m.y, target.x - m.x);
-      const step = m.speed * dt;
-      const s = m.orbit;
-      let stepped = false;
-      for (const a of [0, 0.5 * s, -0.5 * s, 0.95 * s, -0.95 * s, 1.35 * s, -1.35 * s, 1.7 * s, -1.7 * s]) {
-        const dx = Math.cos(base + a) * step;
-        const dy = Math.sin(base + a) * step;
-        if (stepAllowed(w, m, dx, dy, blockers)) {
-          m.x += dx;
-          m.y += dy;
-          stepped = true;
-          break;
+      if (!rd.brute) {
+        // distance fighter (Tibia-style): hold ground in range; back away
+        // tile by tile when the player closes in. With the retreat blocked
+        // (walls, pack mates) it simply stands and keeps firing.
+        const keepTiles = Math.max(2, Math.round(Math.min(rd.range * 0.5, 64) / TILE));
+        let budget = m.speed * dt;
+        for (;;) {
+          budget = glideWalker(m, budget);
+          if (budget <= 0) break;
+          if (chebTiles(m.tx, m.ty, ptx, pty) >= keepTiles) break;
+          if (!retreatStep(m, occ)) break;
+          m.bob += 0.4;
         }
+        continue;
       }
-      // axis-sliding fallback keeps the old wall-hugging behaviour near terrain
-      if (!stepped) moveEntity(w, m, Math.cos(base) * step, Math.sin(base) * step, blockers);
+      // a brute shooter (the dragon) does NOT kite — fall through to chase
+    }
+
+    if (!target.dead && provoked && cheb > 1 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
+      // ---- tile-grid chase ----
+      let budget = m.speed * dt;
+      for (;;) {
+        budget = glideWalker(m, budget);
+        if (budget <= 0) break;
+        if (chebTiles(m.tx, m.ty, ptx, pty) <= 1) break; // arrived at the ring
+        if (!chaseStep(m, occ, ptx, pty)) break;
+      }
       m.bob += dt * 9;
-    } else if (!target.dead && d <= 13) {
-      if (m.atkCd <= 0) {
-        m.atkCd = m.atkRate;
-        onHit(m, false);
+      continue;
+    }
+
+    // ---- idle: wander / home leash ----
+    let budget = m.speed * 0.5 * dt;
+    budget = glideWalker(m, budget);
+    if (budget > 0) {
+      const leashed = m.hr && m.hx !== undefined && m.hy !== undefined
+        && dist(m.x, m.y, m.hx, m.hy) > m.hr;
+      if (leashed && m.hx !== undefined && m.hy !== undefined) {
+        // drifted beyond its camp: turn back toward home, square by square
+        const hx = toTile(m.hx);
+        const hy = toTile(m.hy);
+        if (chaseStep(m, occ, hx, hy)) m.bob += dt * 6;
+      } else {
+        m.wanderT -= dt;
+        if (m.wanderT <= 0) {
+          m.wanderT = rnd(1, 3);
+          if (Math.random() >= 0.4) {
+            const [sx, sy] = STEPS8[rndi(0, 7)];
+            if (tryStep(w, m, sx, sy, occ)) m.bob += dt * 6;
+          }
+        }
       }
     } else {
-      m.wanderT -= dt;
-      if (m.wanderT <= 0) {
-        m.wanderT = rnd(1, 3);
-        if (Math.random() < 0.4) {
-          m.wx = 0;
-          m.wy = 0;
-        } else {
-          const a = rnd(0, 6.28);
-          m.wx = Math.cos(a);
-          m.wy = Math.sin(a);
-        }
-      }
-      // home leash: a villager that drifted (or chased) beyond its camp turns
-      // back toward home — settlements keep their populations without fences
-      if (m.hr && m.hx !== undefined && m.hy !== undefined) {
-        const dh = dist(m.x, m.y, m.hx, m.hy);
-        if (dh > m.hr) {
-          m.wx = (m.hx - m.x) / dh;
-          m.wy = (m.hy - m.y) / dh;
-          m.wanderT = Math.max(m.wanderT, 0.8);
-        }
-      }
-      if (m.wx || m.wy) {
-        moveEntity(w, m, m.wx * m.speed * 0.5 * dt, m.wy * m.speed * 0.5 * dt, blockers);
-        m.bob += dt * 6;
-      }
-    }
-  }
-
-  // positional correction: resolve any residual overlaps (spawns, portals,
-  // legacy saves) by pushing pairs apart. Between monsters the soft target is
-  // slightly WIDER than the hard body distance — this evens out the attack
-  // ring (opening gaps newcomers can join through) and frees a chaser wedged
-  // in the "V" between two ring members, where every step would otherwise be
-  // body-blocked.
-  const SOFT = BODY_SEPARATION_PX + 1.5;
-  for (let i = 0; i < w.monsters.length; i++) {
-    for (let j = i + 1; j < w.monsters.length; j++) {
-      const a = w.monsters[i];
-      const b = w.monsters[j];
-      const d = dist(a.x, a.y, b.x, b.y);
-      if (d < SOFT && d > 0.01) {
-        const push = (SOFT - d) * 2.5 * dt + 2 * dt;
-        const px = (a.x - b.x) / d;
-        const py = (a.y - b.y) / d;
-        moveEntity(w, a, px * push, py * push);
-        moveEntity(w, b, -px * push, -py * push);
-      }
-    }
-    // …and never let a creature rest on top of the player
-    const m = w.monsters[i];
-    const dp = dist(m.x, m.y, target.x, target.y);
-    if (dp < BODY_SEPARATION_PX && dp > 0.01) {
-      const push = (BODY_SEPARATION_PX - dp) * 3 * dt + 2 * dt;
-      moveEntity(w, m, ((m.x - target.x) / dp) * push, ((m.y - target.y) / dp) * push);
+      m.bob += dt * 6; // still gliding a wander step
     }
   }
 }
