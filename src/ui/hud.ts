@@ -65,6 +65,43 @@ export function hudText(
 }
 
 /** Small minimap of the current island in the top-right corner. */
+
+/**
+ * Cached minimap terrain, one tiny canvas per world. The old code re-sampled
+ * the whole tile grid with fillRect EVERY frame — on the 368x272 continent
+ * that was ~25,000 fillRect calls per frame and the main cause of big-map lag.
+ * Terrain is static per world, so it's now baked ONCE (via ImageData, so the
+ * bake itself is instant) at one pixel per tile and each frame just blits it
+ * scaled; only the dynamic dots (portals, monsters, player) draw on top.
+ */
+const miniCache = new Map<string, HTMLCanvasElement>();
+function minimapTerrain(w: Game["current"]): HTMLCanvasElement {
+  const hit = miniCache.get(w.key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = w.w;
+  c.height = w.h;
+  const cx = c.getContext("2d")!;
+  const img = cx.createImageData(w.w, w.h);
+  const d = img.data;
+  // identical palette to the old per-frame sampler:
+  // water #1c6060, sand #c8b47a, wall #6b7275, everything else grass #557a34
+  for (let ty = 0; ty < w.h; ty++) {
+    for (let tx = 0; tx < w.w; tx++) {
+      const t = w.tile[ty][tx];
+      const i = (ty * w.w + tx) * 4;
+      if (t === 0) { d[i] = 0x1c; d[i + 1] = 0x60; d[i + 2] = 0x60; }
+      else if (t === 2) { d[i] = 0xc8; d[i + 1] = 0xb4; d[i + 2] = 0x7a; }
+      else if (t === 3) { d[i] = 0x6b; d[i + 1] = 0x72; d[i + 2] = 0x75; }
+      else { d[i] = 0x55; d[i + 1] = 0x7a; d[i + 2] = 0x34; }
+      d[i + 3] = 255;
+    }
+  }
+  cx.putImageData(img, 0, 0);
+  miniCache.set(w.key, c);
+  return c;
+}
+
 function drawMinimap(h: HudCtx, game: Game, p: Player): void {
   const { ctx, scale: S, screenW } = h;
   const w = game.current;
@@ -78,15 +115,11 @@ function drawMinimap(h: HudCtx, game: Game, p: Player): void {
   ctx.strokeStyle = "#3d5a50";
   ctx.lineWidth = S;
   ctx.strokeRect(x - 2 * S + S / 2, y - 2 * S + S / 2, size + 4 * S - S, size + 4 * S - S);
-  // terrain: sample tiles coarsely
-  const step = 2;
-  for (let ty = 0; ty < w.h; ty += step) {
-    for (let tx = 0; tx < w.w; tx += step) {
-      const t = w.tile[ty][tx];
-      ctx.fillStyle = t === 0 ? "#1c6060" : t === 2 ? "#c8b47a" : t === 3 ? "#6b7275" : "#557a34";
-      ctx.fillRect(x + tx * TILE * sx, y + ty * TILE * sy, Math.max(1, step * TILE * sx), Math.max(1, step * TILE * sy));
-    }
-  }
+  // terrain: one blit of the per-world cache (pixelated, like the game art)
+  const wasSmooth = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(minimapTerrain(w), x, y, size, size);
+  ctx.imageSmoothingEnabled = wasSmooth;
   // portals
   for (const pt of w.portals) {
     ctx.fillStyle = "#7fd0ff";

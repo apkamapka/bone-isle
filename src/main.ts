@@ -1627,8 +1627,16 @@ function render(): void {
 
   vctx.fillStyle = "#1c6060";
   vctx.fillRect(0, 0, VW, VH);
-  // baked terrain
-  vctx.drawImage(world.mapCanvas, -Math.round(cam.x), -Math.round(cam.y));
+  // baked terrain — blit ONLY the visible source rect. Drawing the whole
+  // canvas with an offset made the browser shuffle the full baked bitmap
+  // every frame; on the 368x272-tile continent that's a ~5900x4350 px image
+  // and was the single biggest source of big-map lag. The source rect is
+  // clamped so small islands (map smaller than the view) stay correct.
+  const camX = Math.round(cam.x);
+  const camY = Math.round(cam.y);
+  const srcW = Math.min(VW, world.mapCanvas.width - camX);
+  const srcH = Math.min(VH, world.mapCanvas.height - camY);
+  vctx.drawImage(world.mapCanvas, camX, camY, srcW, srcH, 0, 0, srcW, srcH);
 
   // animated coastal foam
   vctx.fillStyle = "rgba(200,240,235,.5)";
@@ -1726,10 +1734,18 @@ function render(): void {
   // gather nodes: trees, rocks, herbs (sorted by y with actors below)
   type Drawable = { y: number; fn: () => void };
   const drawList: Drawable[] = [];
+  // Viewport culling: anything whose base sits outside the camera view (plus
+  // a margin for tall sprites and shadows) is skipped BEFORE a closure is
+  // allocated. On the continent (~1000 drawables) this cuts the per-frame
+  // build + sort of the draw list down to just the on-screen handful.
+  const CULL = 48;
+  const inView = (x: number, y: number): boolean =>
+    x >= cam.x - CULL && x <= cam.x + VW + CULL && y >= cam.y - CULL && y <= cam.y + VH + CULL;
 
   for (const tr of world.trees) {
     const bx = tr.tx * TILE + TILE / 2;
     const by = tr.ty * TILE + TILE;
+    if (!inView(bx, by)) continue;
     if (tr.stump) {
       drawList.push({ y: by, fn: () => { drawShadow(bx, by); drawSprite(SPR.stump, bx, by); } });
     } else {
@@ -1744,6 +1760,7 @@ function render(): void {
   for (const rk of world.rocks) {
     const bx = rk.tx * TILE + TILE / 2;
     const by = rk.ty * TILE + TILE;
+    if (!inView(bx, by)) continue;
     if (rk.depleted) {
       drawList.push({ y: by, fn: () => { drawShadow(bx, by); drawSprite(SPR.rubble, bx, by); } });
     } else {
@@ -1759,6 +1776,7 @@ function render(): void {
     if (hb.picked) continue;
     const bx = hb.tx * TILE + TILE / 2;
     const by = hb.ty * TILE + TILE;
+    if (!inView(bx, by)) continue;
     drawList.push({ y: by, fn: () => drawSprite(SPR.herb, bx, by) });
   }
   // structures
@@ -1767,6 +1785,7 @@ function render(): void {
     const c = structCenter(s);
     const bx = c.x;
     const by = c.baseY;
+    if (!inView(bx, by)) continue;
     drawList.push({ y: by, fn: () => {
       drawShadow(bx, by, spr.width / 2);
       const shake = s.hurtT ? Math.round(Math.sin(s.hurtT * 40) * 1.5) : 0;
@@ -1779,6 +1798,7 @@ function render(): void {
   }
   // corpses
   for (const c of world.corpses) {
+    if (!inView(c.x, c.y)) continue;
     const blink = c.t < 10 ? (Math.sin(waveT * 8) > 0 ? 1 : 0.4) : 1;
     drawList.push({ y: c.y, fn: () => {
       vctx.globalAlpha = blink;
@@ -1789,6 +1809,7 @@ function render(): void {
   }
   // dropped items on the ground
   for (const gi of world.ground) {
+    if (!inView(gi.x, gi.y)) continue;
     const blink = gi.t < 30 ? (Math.sin(waveT * 8) > 0 ? 1 : 0.45) : 1;
     const spr = itemSprite(gi.kind);
     drawList.push({ y: gi.y, fn: () => {
@@ -1811,6 +1832,7 @@ function render(): void {
   }
   // NPCs
   for (const n of world.npcs) {
+    if (!inView(n.x, n.y)) continue;
     const bob = Math.sin(waveT * 2 + n.bob) * 1.2;
     drawList.push({ y: n.y, fn: () => {
       drawShadow(n.x, n.y);
@@ -1826,6 +1848,7 @@ function render(): void {
   }
   // monsters
   for (const m of world.monsters) {
+    if (!inView(m.x, m.y)) continue;
     const bob = Math.sin(m.bob) * 1.5;
     drawList.push({ y: m.y, fn: () => {
       drawShadow(m.x, m.y);
