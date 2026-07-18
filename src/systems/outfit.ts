@@ -35,34 +35,67 @@ export function zoneLabels(): Readonly<Record<OutfitZone, string>> {
 }
 
 /**
- * The dye rack: a curated 19-color palette (one Tibia outfit-picker row's
- * worth). The first three entries are the classic default look — brown hair,
- * red tunic, forest legs — so index 0/1/2 reproduce the original sprite.
+ * The dye rack (Etap 14): Tibia's own 133-color outfit palette, generated
+ * rather than hand-listed. It is a 19 x 7 grid — 19 hue steps across, and 7
+ * rows pairing a saturation with a value. Where hue index 0 lands the
+ * saturation falls to zero, which is why the first column comes out as a
+ * grayscale ramp from white down to near-black.
+ *
+ * Reproduced from the formula in OTClient, the open-source client — CipSoft
+ * never published theirs, but the output matches the original pixel for pixel.
+ * The consequence worth knowing: with saturation locked to a handful of
+ * values, the palette has no muted or olive tones. Every hue is either pastel,
+ * fully saturated, or dark.
  */
-export const OUTFIT_COLORS: readonly string[] = [
-  "#6e4a2a", // 0 brown (default hair)
-  "#a8432f", // 1 rust red (default tunic)
-  "#46604a", // 2 forest (default legs)
-  "#2b2017", // 3 near-black
-  "#efe9d6", // 4 bone white
-  "#d8b75a", // 5 straw
-  "#e3b341", // 6 gold
-  "#c96a1e", // 7 orange
-  "#7d2f20", // 8 dried blood
-  "#e06a8a", // 9 rose
-  "#8a4a9e", // 10 plum
-  "#8a6cff", // 11 violet
-  "#3a4fae", // 12 deep blue
-  "#5aa1e8", // 13 sky
-  "#3d8a86", // 14 teal
-  "#6f9c3f", // 15 leaf
-  "#33483a", // 16 pine
-  "#8a989e", // 17 steel
-  "#cfd8da", // 18 silver
+export const HUE_STEPS = 19;
+export const SAT_ROWS = 7;
+
+/** [saturation, value] for each of the seven rows. */
+const SI_ROWS: ReadonlyArray<readonly [number, number]> = [
+  [0.25, 1.0], [0.25, 0.75], [0.5, 0.75], [0.667, 0.75],
+  [1.0, 1.0], [1.0, 0.75], [1.0, 0.5],
 ];
 
-/** Outfit maps by id. Only the starter for now; loot-box outfits append here
- *  and old saves keep working (unknown ids fall back to the starter). */
+function dyeAt(i: number): string {
+  const idx = i >= HUE_STEPS * SAT_ROWS ? 0 : i;
+  let hue = 0, sat = 0, val = 0;
+  if (idx % HUE_STEPS !== 0) {
+    hue = (idx % HUE_STEPS) / 18;
+    [sat, val] = SI_ROWS[Math.floor(idx / HUE_STEPS)];
+  } else {
+    val = 1 - idx / HUE_STEPS / SAT_ROWS; // the grayscale column
+  }
+  let r = 0, g = 0, b = 0;
+  if (val === 0) { r = g = b = 0; }
+  else if (sat === 0) { r = g = b = val; }
+  else {
+    const lo = val * (1 - sat);
+    const f = hue * 6;
+    if (f < 1) { r = val; b = lo; g = lo + (val - lo) * f; }
+    else if (f < 2) { g = val; b = lo; r = g - (val - lo) * (f - 1); }
+    else if (f < 3) { g = val; r = lo; b = r + (val - r) * (f - 2); }
+    else if (f < 4) { b = val; r = lo; g = b - (val - r) * (f - 3); }
+    else if (f < 5) { b = val; g = lo; r = g + (val - g) * (f - 4); }
+    else { r = val; g = lo; b = r - (r - g) * (f - 5); }
+  }
+  const c = (v: number) => Math.floor(v * 255);
+  return `#${((c(r) << 16) | (c(g) << 8) | c(b)).toString(16).padStart(6, "0")}`;
+}
+
+export const OUTFIT_COLORS: readonly string[] =
+  Array.from({ length: HUE_STEPS * SAT_ROWS }, (_, i) => dyeAt(i));
+
+/** Nearest match in the new palette for each entry of the old 19-dye rack,
+ *  so pre-Etap-14 saves keep (as close as the palette allows) their look.
+ *  The old forest green has no equivalent — the palette holds no muted
+ *  greens — so it lands on the nearest gray. */
+const LEGACY_REMAP: readonly number[] = [
+  116, 75, 95, 114, 19, 41, 60, 58, 115, 55, 71, 51, 69, 48, 65, 62, 95, 57, 19,
+];
+
+/** Default look: brown hood, red tunic, dark green legs. */
+const DEFAULT_DYES = { hair: 116, primary: 75, secondary: 120 } as const;
+
 /**
  * An outfit is three pixel maps — one per facing. Single-view outfits (the
  * original Classic map) just repeat the same map, so every outfit reads the
@@ -90,6 +123,9 @@ const DEFAULT_OUTFIT = "adventurer";
 
 /** Persisted shape (a plain snapshot of the module state below). */
 export interface OutfitSave {
+  /** Palette generation. Absent/older means the pre-Etap-14 19-dye rack, whose
+   *  indices are remapped on load. */
+  pal?: number;
   hair: number;
   primary: number;
   secondary: number;
@@ -97,10 +133,12 @@ export interface OutfitSave {
   owned: string[];
 }
 
+const PALETTE_GEN = 133;
+
 const state: OutfitSave = defaults();
 
 function defaults(): OutfitSave {
-  return { hair: 0, primary: 1, secondary: 2, current: DEFAULT_OUTFIT, owned: [DEFAULT_OUTFIT] };
+  return { ...DEFAULT_DYES, current: DEFAULT_OUTFIT, owned: [DEFAULT_OUTFIT] };
 }
 
 /** Read-only view for the Wardrobe panel. */
@@ -157,9 +195,9 @@ export function setOutfitColor(p: Player, zone: OutfitZone, idx: number): void {
 
 /** Back to the classic look (colors only — owned outfits are never lost). */
 export function resetOutfitColors(p: Player): void {
-  state.hair = 0;
-  state.primary = 1;
-  state.secondary = 2;
+  state.hair = DEFAULT_DYES.hair;
+  state.primary = DEFAULT_DYES.primary;
+  state.secondary = DEFAULT_DYES.secondary;
   applyOutfit(p);
 }
 
@@ -170,7 +208,7 @@ export function resetOutfit(): void {
 
 /** Snapshot for the save file. */
 export function outfitSave(): OutfitSave {
-  return { ...state, owned: [...state.owned] };
+  return { ...state, pal: PALETTE_GEN, owned: [...state.owned] };
 }
 
 /** Restore from a save — every field validated, absent/corrupt → defaults,
@@ -179,11 +217,17 @@ export function loadOutfitSave(data: unknown): void {
   Object.assign(state, defaults());
   if (!data || typeof data !== "object") return;
   const d = data as Partial<OutfitSave>;
-  const idx = (v: unknown, fb: number): number =>
-    typeof v === "number" && Number.isInteger(v) && v >= 0 && v < OUTFIT_COLORS.length ? v : fb;
-  state.hair = idx(d.hair, 0);
-  state.primary = idx(d.primary, 1);
-  state.secondary = idx(d.secondary, 2);
+  // Pre-Etap-14 saves indexed the old 19-dye rack; translate before validating.
+  const legacy = d.pal !== PALETTE_GEN;
+  const idx = (v: unknown, fb: number): number => {
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 0) return fb;
+    const n = legacy ? LEGACY_REMAP[v] : v;
+    return n !== undefined && n < OUTFIT_COLORS.length ? n : fb;
+  };
+  state.pal = PALETTE_GEN;
+  state.hair = idx(d.hair, DEFAULT_DYES.hair);
+  state.primary = idx(d.primary, DEFAULT_DYES.primary);
+  state.secondary = idx(d.secondary, DEFAULT_DYES.secondary);
   if (Array.isArray(d.owned)) {
     const owned = d.owned.filter((o): o is string => typeof o === "string" && o in OUTFITS);
     if (!owned.includes(DEFAULT_OUTFIT)) owned.unshift(DEFAULT_OUTFIT);

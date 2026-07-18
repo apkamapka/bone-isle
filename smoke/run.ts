@@ -764,27 +764,27 @@ async function main(): Promise<void> {
     const p = createPlayer({ x: 0, y: 0 });
     outfit.resetOutfit();
     const d0 = outfit.outfitState();
-    ok(d0.hair === 0 && d0.primary === 1 && d0.secondary === 2 && d0.current === "adventurer",
-      "fresh state is the classic look");
+    ok(d0.hair === 116 && d0.primary === 75 && d0.secondary === 120 && d0.current === "adventurer",
+      "fresh state is the default look in the 133-dye rack");
     outfit.setOutfitColor(p, "hair", 11);
     outfit.setOutfitColor(p, "primary", 4);
     ok(outfit.outfitState().hair === 11 && outfit.outfitState().primary === 4, "dye picks stick");
     outfit.setOutfitColor(p, "secondary", 999);
-    ok(outfit.outfitState().secondary === 2, "an out-of-range dye is refused");
+    ok(outfit.outfitState().secondary === 120, "an out-of-range dye is refused");
     // save round-trip
     const snap = outfit.outfitSave();
     outfit.resetOutfit();
-    ok(outfit.outfitState().hair === 0, "reset back to defaults");
+    ok(outfit.outfitState().hair === 116, "reset back to defaults");
     outfit.loadOutfitSave(snap);
     const d1 = outfit.outfitState();
-    ok(d1.hair === 11 && d1.primary === 4 && d1.secondary === 2, "save snapshot restores the dyes");
+    ok(d1.hair === 11 && d1.primary === 4 && d1.secondary === 120, "save snapshot restores the dyes");
     // hostile / legacy data → defaults, owned always keeps the starter
     outfit.loadOutfitSave({ hair: "purple", current: "dragonKing", owned: ["dragonKing", 7] });
     const d2 = outfit.outfitState();
-    ok(d2.hair === 0 && d2.current === "adventurer" && d2.owned.includes("adventurer"),
-      "corrupt save data falls back to the classic look");
+    ok(d2.hair === 116 && d2.current === "adventurer" && d2.owned.includes("adventurer"),
+      "corrupt save data falls back to the default look");
     outfit.loadOutfitSave(undefined);
-    ok(outfit.outfitState().primary === 1, "pre-wardrobe saves (no outfit field) load clean");
+    ok(outfit.outfitState().primary === 75, "pre-wardrobe saves (no outfit field) load clean");
     outfit.resetOutfit();
   }
 
@@ -1061,6 +1061,34 @@ async function main(): Promise<void> {
     ok(of.bakeOutfitSprites().down.width === before, "dyeing leaves geometry alone");
 
     // zone captions follow the worn outfit
+    // the 133-dye rack: Tibia's own 19 x 7 grid, generated not hand-listed
+    ok(of.OUTFIT_COLORS.length === 133, "the rack holds 133 dyes");
+    ok(of.HUE_STEPS === 19 && of.SAT_ROWS === 7, "laid out 19 across by 7 down");
+    ok(of.OUTFIT_COLORS.every((c) => /^#[0-9a-f]{6}$/.test(c)), "every dye is valid hex");
+    ok(new Set(of.OUTFIT_COLORS).size >= 120, "the grid is near enough collision-free");
+    ok(of.OUTFIT_COLORS[0] === "#ffffff", "index 0 is white, where the gray column starts");
+    for (let r = 0; r < 7; r++) {
+      const c = of.OUTFIT_COLORS[r * 19];
+      ok(c.slice(1, 3) === c.slice(3, 5) && c.slice(3, 5) === c.slice(5, 7),
+        `column 0 row ${r} is a gray`);
+    }
+    ok(of.OUTFIT_COLORS[77] === "#ff5500", "row 4 hue 1 is saturated orange");
+    ok(of.OUTFIT_COLORS[82] === "#00ff00", "pure green sits where Tibia puts it");
+
+    // pre-Etap-14 saves indexed the old 19-dye rack and must be translated
+    of.loadOutfitSave({ hair: 0, primary: 1, secondary: 2, current: "adventurer", owned: ["adventurer"] });
+    ok(of.outfitState().hair === 116 && of.outfitState().primary === 75,
+      "legacy dye indices remap into the 133-color rack");
+    ok(of.outfitSave().pal === 133, "saves now carry the palette generation");
+    of.loadOutfitSave({ pal: 133, hair: 130, primary: 4, secondary: 9, current: "adventurer", owned: ["adventurer"] });
+    ok(of.outfitState().hair === 130, "Etap-14 saves are taken at face value");
+    of.loadOutfitSave({ pal: 133, hair: 9999, primary: -3, secondary: 9, current: "adventurer", owned: ["adventurer"] });
+    ok(of.outfitState().hair === 116 && of.outfitState().primary === 75,
+      "out-of-range indices fall back to the default look");
+    // restore the dyes the round-trip check below expects
+    of.setOutfitColor(P, "primary", 12);
+    of.setOutfitColor(P, "secondary", 6);
+
     ok(of.zoneLabels().hair === "Hood" && of.zoneLabels().primary === "Tunic",
       "Adventurer's dye rows are captioned Hood/Tunic/Legs");
 

@@ -9,7 +9,7 @@ import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, bestArrow, it
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
-import { OUTFIT_COLORS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
+import { OUTFIT_COLORS, HUE_STEPS, SAT_ROWS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
 import { hudText, type HudCtx } from "./hud.ts";
 import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
@@ -1118,65 +1118,93 @@ function drawStash(p: PanelInput): void {
  * preview IS the player sprite, so it always matches what walks out the door.
  * Outfit SHAPES (loot-box unlocks) plug in here later; for now colors only.
  */
+/** Which dye zone the shared palette grid is currently painting. */
+let dyeZone: OutfitZone = "primary";
+
 function drawWardrobe(p: PanelInput): void {
   const { hud, player } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
   const st = outfitState();
   const zones: readonly OutfitZone[] = ["hair", "primary", "secondary"];
-  const sw = 12 * S;        // swatch size
-  const sg = 2 * S;         // swatch gap
-  const rowW = OUTFIT_COLORS.length * (sw + sg) - sg;
-  const w = rowW + 28 * S;
-  const previewH = 66 * S;
-  const zoneH = 26 * S;
-  const h = 20 * S + previewH + zones.length * zoneH + 30 * S;
+
+  // Tibia's layout: preview + zone selector on the left, one shared 19 x 7
+  // palette on the right. Three separate 133-swatch rows would never fit.
+  const sw = 7 * S;                 // swatch size
+  const sg = 1 * S;                 // swatch gap
+  const gridW = HUE_STEPS * (sw + sg) - sg;
+  const gridH = SAT_ROWS * (sw + sg) - sg;
+  const btnW = 46 * S;
+  const btnH = 12 * S;
+  const previewW = 52 * S;
+  const previewH = 58 * S;
+  const leftW = Math.max(previewW, btnW);
+  const pad = 10 * S;
+
+  const w = leftW + gridW + pad * 3;
+  const bodyH = Math.max(previewH + 4 * S + zones.length * (btnH + 3 * S), gridH);
+  const h = 20 * S + bodyH + 30 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   if (!goldPanel(p, x, y, w, h, "WARDROBE — Vesper")) return;
 
+  const top = y + 18 * S;
+  const lx = x + pad;
+
   // live preview: the actual player sprite, big
   const spr = player.spr;
-  const psc = 4 * S;
-  const px = x + (w - spr.width * psc) / 2;
-  const py = y + 18 * S + (previewH - spr.height * psc) / 2;
+  const psc = Math.max(1, Math.floor((previewH - 8 * S) / spr.height));
   ctx.fillStyle = "rgba(40,32,20,.9)";
-  ctx.fillRect(x + w / 2 - 34 * S, y + 18 * S, 68 * S, previewH - 6 * S);
+  ctx.fillRect(lx, top, previewW, previewH);
   ctx.strokeStyle = "#6e571f";
   ctx.lineWidth = S;
-  ctx.strokeRect(x + w / 2 - 34 * S + S / 2, y + 18 * S + S / 2, 68 * S - S, previewH - 6 * S - S);
-  icon(p, spr, px, py, psc);
+  ctx.strokeRect(lx + S / 2, top + S / 2, previewW - S, previewH - S);
+  icon(p, spr, lx + (previewW - spr.width * psc) / 2, top + (previewH - spr.height * psc) / 2, psc);
 
-  let ry = y + 18 * S + previewH;
+  // zone selector — the grid paints whichever one is armed
+  let by = top + previewH + 4 * S;
   for (const zone of zones) {
-    hudText(hud, zoneLabels()[zone], x + 14 * S, ry + 5 * S, 8 * S, "#cfe8d2", "left", true);
-    const sy = ry + 10 * S;
-    const sx0 = x + (w - rowW) / 2;
-    OUTFIT_COLORS.forEach((col, i) => {
-      const sx = sx0 + i * (sw + sg);
-      const sel = st[zone] === i;
-      ctx.fillStyle = col;
-      ctx.fillRect(sx, sy, sw, sw);
-      ctx.strokeStyle = sel ? "#ffe9a8" : "rgba(0,0,0,.55)";
-      ctx.lineWidth = sel ? Math.max(1, 1.5 * S) : S;
-      ctx.strokeRect(sx + S / 2, sy + S / 2, sw - S, sw - S);
-      const zi = zone;
-      const ii = i;
-      p.hotspots.push({ x: sx, y: sy, w: sw, h: sw, fn: () => p.act.setOutfitColor(zi, ii) });
-    });
-    ry += zoneH;
+    const on = dyeZone === zone;
+    ctx.fillStyle = on ? "rgba(110,87,31,.9)" : "rgba(40,32,20,.95)";
+    ctx.fillRect(lx, by, btnW, btnH);
+    ctx.strokeStyle = on ? "#ffe9a8" : "#6e571f";
+    ctx.lineWidth = on ? Math.max(1, 1.5 * S) : S;
+    ctx.strokeRect(lx + S / 2, by + S / 2, btnW - S, btnH - S);
+    hudText(hud, zoneLabels()[zone], lx + btnW / 2, by + btnH / 2, 6.5 * S,
+      on ? "#fff4d0" : "#cfe8d2", "center", true);
+    const z = zone;
+    p.hotspots.push({ x: lx, y: by, w: btnW, h: btnH, fn: () => { dyeZone = z; } });
+    by += btnH + 3 * S;
+  }
+
+  // the shared palette: 19 hues across, 7 saturation/value rows down
+  const gx0 = x + leftW + pad * 2;
+  const gy0 = top;
+  const cur = st[dyeZone];
+  for (let i = 0; i < OUTFIT_COLORS.length; i++) {
+    const gx = gx0 + (i % HUE_STEPS) * (sw + sg);
+    const gy = gy0 + Math.floor(i / HUE_STEPS) * (sw + sg);
+    ctx.fillStyle = OUTFIT_COLORS[i];
+    ctx.fillRect(gx, gy, sw, sw);
+    if (cur === i) {
+      ctx.strokeStyle = "#ffe9a8";
+      ctx.lineWidth = Math.max(1, 1.5 * S);
+      ctx.strokeRect(gx - S / 2, gy - S / 2, sw + S, sw + S);
+    }
+    const ii = i;
+    p.hotspots.push({ x: gx, y: gy, w: sw, h: sw, fn: () => p.act.setOutfitColor(dyeZone, ii) });
   }
 
   // reset to the classic look
   const bw = 90 * S;
   const bh = 13 * S;
   const bx = x + (w - bw) / 2;
-  const by = y + h - 22 * S;
+  const ry = y + h - 22 * S;
   ctx.fillStyle = "rgba(40,32,20,.95)";
-  ctx.fillRect(bx, by, bw, bh);
+  ctx.fillRect(bx, ry, bw, bh);
   ctx.strokeStyle = "#6e571f";
   ctx.lineWidth = S;
-  ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, bh - S);
-  hudText(hud, "Classic look", bx + bw / 2, by + bh / 2, 7 * S, "#e8dcc0", "center", true);
-  p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.resetOutfitColors() });
-  hudText(hud, "Tap a dye to wear it — free, any time", x + w / 2, y + h - 6 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
+  ctx.strokeRect(bx + S / 2, ry + S / 2, bw - S, bh - S);
+  hudText(hud, "Classic look", bx + bw / 2, ry + bh / 2, 7 * S, "#e8dcc0", "center", true);
+  p.hotspots.push({ x: bx, y: ry, w: bw, h: bh, fn: () => p.act.resetOutfitColors() });
+  hudText(hud, "Pick a zone, then a dye — free, any time", x + w / 2, y + h - 6 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
 }
