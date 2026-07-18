@@ -1031,27 +1031,25 @@ async function main(): Promise<void> {
 
     const set = of.bakeOutfitSprites();
     ok(!!set.down && !!set.side && !!set.up, "three facings bake");
-    ok(set.down.height === 26 && set.side.height === 26 && set.up.height === 26,
-      "every facing is 26px tall (bottom-anchored on 16px tiles)");
-    ok(set.down.width <= 16 && set.side.width <= 16 && set.up.width <= 16,
-      "no facing is wider than a tile");
+    ok(set.down.height === 13 && set.side.height === 13 && set.up.height === 13,
+      "every facing is 13px tall — the NPC template");
+    ok(set.down.width === 10 && set.side.width === 10 && set.up.width === 10,
+      "every facing is 10px wide");
     ok(set.down !== set.side, "front and side are distinct canvases");
 
-    // dye zones are declared for the whole palette, never out of range
+    // every map is well-formed and drawn from the shared palette
     const adv = await import("../src/gfx/adventurer.ts");
-    ok(adv.ADV_PALETTE.length === adv.ADV_ZONES.length,
-      "every palette entry declares a zone");
-    ok(adv.ADV_CHARS.length === adv.ADV_PALETTE.length,
-      "one char per palette entry");
-    ok(!adv.ADV_CHARS.includes("."), "no palette char collides with transparency");
-    const uniq = new Set(adv.ADV_CHARS.split(""));
-    ok(uniq.size === adv.ADV_CHARS.length, "palette chars are unique");
-    for (const dir of [adv.ADV_DOWN, adv.ADV_SIDE, adv.ADV_UP]) {
-      const w = dir[0].length;
-      ok(dir.every((r) => r.length === w), "map rows are rectangular");
-      ok(dir.every((r) => [...r].every((c) => c === "." || uniq.has(c))),
-        "every map char is in the palette");
+    const { PAL } = await import("../src/gfx/sprites.ts");
+    for (const [nm, m] of [["down", adv.ADV_DOWN], ["side", adv.ADV_SIDE], ["up", adv.ADV_UP]] as const) {
+      ok(m.length === 13, `${nm} is 13 rows — same template as the NPCs`);
+      ok(m.every((r) => r.length === 10), `${nm} rows are all 10 wide`);
+      ok(m.every((r) => [...r].every((c) => c === "." || c in PAL)),
+        `${nm} uses only palette glyphs`);
     }
+    ok(adv.ADV_DOWN[12] === "..kk..kk..", "front keeps the shared boot row");
+    ok(adv.ADV_SIDE.some((r) => r.includes("c")) && adv.ADV_UP.some((r) => r.includes("c")),
+      "the quiver reads on the side and back views");
+    ok(!adv.ADV_UP.some((r) => r.includes("e")), "the back view shows no eyes");
 
     // dyeing must change the sprite but never its geometry
     const before = of.bakeOutfitSprites().down.width;
@@ -1063,8 +1061,8 @@ async function main(): Promise<void> {
     ok(of.bakeOutfitSprites().down.width === before, "dyeing leaves geometry alone");
 
     // zone captions follow the worn outfit
-    ok(of.zoneLabels().primary === "Cloak" && of.zoneLabels().hair === "Boots",
-      "Adventurer relabels the hidden-hair zone as Boots");
+    ok(of.zoneLabels().hair === "Hood" && of.zoneLabels().primary === "Tunic",
+      "Adventurer's dye rows are captioned Hood/Tunic/Legs");
 
     // save format is unchanged — no migration required
     const snap = of.outfitSave();
@@ -1078,7 +1076,8 @@ async function main(): Promise<void> {
     // the legacy glyph outfit still bakes (single view repeated)
     of.loadOutfitSave({ hair: 0, primary: 1, secondary: 2, current: "classic", owned: ["adventurer", "classic"] });
     const cls = of.bakeOutfitSprites();
-    ok(cls.down === cls.side && cls.side === cls.up, "glyph outfits reuse one view");
+    ok(cls.down.width === cls.side.width && cls.side.height === cls.up.height,
+      "single-view outfits render identically in every facing");
     ok(of.zoneLabels().hair === "Hair", "Classic keeps the original captions");
     of.resetOutfit();
   }

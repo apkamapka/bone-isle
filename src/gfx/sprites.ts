@@ -7,7 +7,7 @@ import { rndi } from "../util.ts";
 /** Single-character color palette used by pixel maps. */
 export const PAL: Readonly<Record<string, string>> = {
   k: "#2b2017", e: "#1c1410",
-  s: "#eab984", h: "#6e4a2a",
+  s: "#eab984", h: "#6e4a2a", H: "#4a3320",
   r: "#a8432f", R: "#7d2f20",
   p: "#46604a", P: "#33483a",
   m: "#cfd8da", M: "#8a989e",
