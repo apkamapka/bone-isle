@@ -315,6 +315,42 @@ export function spawnWilderness(w: World, kind: MonsterKind, avoid?: { x: number
   return false;
 }
 
+/**
+ * Plant a creature right beside a fixed tile — used for the treasure-chest
+ * guards (Etap 13): every one-time chest is now watched by a dragon coiled on
+ * top of its hoard, so the prize has to be fought for rather than walked to.
+ * Rings outward from the chest until a free walkable tile turns up, so it
+ * always lands as close to the chest as the cavern allows.
+ */
+export function spawnGuard(
+  w: World, kind: MonsterKind, tx: number, ty: number, avoid?: { x: number; y: number },
+): boolean {
+  for (let r = 1; r <= 6; r++) {
+    const ring: Array<[number, number]> = [];
+    for (let oy = -r; oy <= r; oy++) {
+      for (let ox = -r; ox <= r; ox++) {
+        if (Math.max(Math.abs(ox), Math.abs(oy)) !== r) continue; // ring edge only
+        ring.push([tx + ox, ty + oy]);
+      }
+    }
+    for (const [nx, ny] of ring) {
+      if (nx < 1 || ny < 1 || nx >= w.w - 1 || ny >= w.h - 1) continue;
+      if (w.solid[ny]?.[nx] !== false || !(w.tile[ny]?.[nx] > 0)) continue;
+      if (w.monsters.some((m) => m.tx === nx && m.ty === ny)) continue;
+      const cx = tileCenter(nx);
+      const cy = tileCenter(ny);
+      // never materialise on top of the player
+      if (avoid && dist(cx, cy, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
+      if (pushMonster(w, kind, { x: cx, y: cy })) {
+        // tag it so a slain guard respawns back onto its hoard
+        w.monsters[w.monsters.length - 1].guard = { tx, ty };
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y: number }, uniform = false): boolean {
   const d = MONSTER_DEFS[kind];
   const entrance = w.portals[0];
