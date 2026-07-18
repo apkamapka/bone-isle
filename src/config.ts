@@ -65,7 +65,20 @@ export const MONSTER_RESPAWN_S = 12;
  * steady-state population too, not just the opening one. Bosses (the dragon)
  * are exempt so a lair still nests exactly one. Tune here after playtests.
  */
-export const CAVE_CROWD_MULT = 1.8;
+export const CAVE_CROWD_MULT = 2.2;
+
+/**
+ * Guaranteed underground density (Etap 13). The per-floor rosters above are
+ * hand-authored, but floor SIZES vary enormously (the Roost's heart is ~2400
+ * walkable tiles against a 6-creature roster), so several floors still read as
+ * half-empty however high the multiplier goes. After the roster is placed, a
+ * floor holding fewer than one creature per this many walkable tiles is topped
+ * up from its OWN roster — the thematic mix is preserved, only the count
+ * rises — until it clears the bar. This is what removes the dead zones; raise
+ * the number for sparser caves, lower it for a wall-to-wall meat grinder.
+ * Bosses (the dragon) are never used as filler.
+ */
+export const CAVE_TILES_PER_MONSTER = 34;
 
 /**
  * Master monster switch. When `false`, no creatures are placed on the map and

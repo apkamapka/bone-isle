@@ -6,7 +6,7 @@ import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupie
 import { SPR, itemSprite } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
-import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness } from "./entities/monsters.ts";
+import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost, structCenter, canPlaceAt } from "./systems/building.ts";
@@ -152,7 +152,7 @@ let hotspots: Hotspot[] = [];
 let itemSlots: ItemSlot[] = [];
 // mouse drag-and-drop of inventory items
 let suppressClick = false;
-let itemDrag: { src: "bag" | "stash" | "ground"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean; gi?: GroundItem; touch?: boolean } | null = null;
+let itemDrag: { src: "bag" | "stash" | "ground" | "eq"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean; gi?: GroundItem; eqSlot?: EqSlot; touch?: boolean } | null = null;
 /** Pending mobile throw (chosen in the quantity popup): next world tap aims it. */
 let throwPending: { kind: ItemKind; n: number } | null = null;
 
@@ -181,7 +181,7 @@ function probeSlotDrag(sx: number, sy: number, isTouch: boolean): boolean {
   for (let i = itemSlots.length - 1; i >= 0; i--) {
     const it = itemSlots[i];
     if (sx >= it.x && sx < it.x + it.w && sy >= it.y && sy < it.y + it.h) {
-      itemDrag = { src: it.src, index: it.index, kind: it.kind, n: it.n, sx, sy, active: false, touch: isTouch };
+      itemDrag = { src: it.src, index: it.index, kind: it.kind, n: it.n, sx, sy, active: false, touch: isTouch, eqSlot: it.eqSlot };
       return true;
     }
   }
@@ -606,6 +606,30 @@ const currentN = (src: "bag" | "stash" | "ground", index: number): number => {
   return s ? s.n : 0;
 };
 
+/** Take gear off a paperdoll slot and throw it on the ground (optionally aimed).
+ *  Worn gear never counted toward carry cap, so this needs no weight check —
+ *  it goes straight from the body to the floor, Tibia-style. */
+function dropFromEq(slot: EqSlot, tx?: number, ty?: number): void {
+  const kind = P.eq[slot];
+  if (!kind) return;
+  P.eq[slot] = null;
+  refreshDerived(P);
+  dropToGround(kind, 1, tx, ty);
+  beep(300, 0.08, "triangle", 0.05);
+}
+
+/** Move gear from a paperdoll slot straight into the open storage chest. */
+function storeFromEq(slot: EqSlot): void {
+  const kind = P.eq[slot];
+  if (!kind) return;
+  const stash = openStash();
+  if (!stash) return;
+  if (addItem(stash, kind, 1) > 0) { flash("chest full"); return; }
+  P.eq[slot] = null;
+  refreshDerived(P);
+  beep(300, 0.08, "triangle", 0.05);
+}
+
 /** Resolve where a dragged item was released: slot, chest window, or ground. */
 function resolveItemDrop(rx: number, ry: number): void {
   const d = itemDrag;
@@ -618,6 +642,16 @@ function resolveItemDrop(rx: number, ry: number): void {
         if (!d.gi) return;
         if (dist(P.x, P.y, d.gi.x, d.gi.y) > ITEM_MOVE_REACH_PX) { flash("too far away", "#d96a5a"); return; }
         pickupGround(d.gi);
+      }
+      // worn gear dropped onto a bag cell → unequip; onto a chest cell → store
+      else if (d.src === "eq") {
+        if (!d.eqSlot) return;
+        if (it.src === "stash") storeFromEq(d.eqSlot);
+        else act.unequip(d.eqSlot);
+      }
+      // something dropped onto an equipment cell → wear it
+      else if (it.src === "eq") {
+        if (d.src === "bag") act.equipItem(d.kind, d.index);
       }
       else if (it.src === d.src) {
         const arr = d.src === "bag" ? P.bag : openStash();
@@ -633,6 +667,13 @@ function resolveItemDrop(rx: number, ry: number): void {
     const overStash = ui.windows.some((w) => w.kind === "stash" && w.rect &&
       rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h);
     if (overStash && d.src === "bag") storePartial(d.index, currentN("bag", d.index));
+    else if (overStash && d.src === "eq" && d.eqSlot) storeFromEq(d.eqSlot);
+    else if (d.src === "eq" && d.eqSlot) {
+      // dropped anywhere on the bag panel → unequip into the backpack
+      const overBag = ui.windows.some((w) => w.kind === "bag" && w.rect &&
+        rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h);
+      if (overBag) act.unequip(d.eqSlot);
+    }
     else if (d.src === "ground" && d.gi) {
       const overBag = ui.windows.some((w) => w.kind === "bag" && w.rect &&
         rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h);
@@ -654,6 +695,9 @@ function resolveItemDrop(rx: number, ry: number): void {
     } else if (n === 1) {
       dropFromBag(d.index, 1, wx, wy);
     }
+  } else if (d.src === "eq" && d.eqSlot) {
+    // worn gear thrown onto the map — the reported bug: this had no path at all
+    dropFromEq(d.eqSlot, wx, wy);
   } else if (d.src === "ground" && d.gi) {
     // no telekinesis: pushing loot around requires standing near it
     if (dist(P.x, P.y, d.gi.x, d.gi.y) > ITEM_MOVE_REACH_PX) { flash("too far away", "#d96a5a"); return; }
@@ -1639,11 +1683,13 @@ function update(dt: number): void {
           // caves respawn uniformly across the floor (same as populate), so
           // kills don't slowly re-clump every creature back into one corner.
           const caveUniform = world.key !== "wild" && world.key !== "deepwild";
-          const done = camp
-            ? spawnMonsterInCamp(world, r.kind, camp, P)
-            : world.key === "deepwild"
-              ? spawnWilderness(world, r.kind, P)
-              : spawnMonster(world, r.kind, P, caveUniform);
+          const done = r.guard
+            ? spawnGuard(world, r.kind, r.guard.tx, r.guard.ty, P)
+            : camp
+              ? spawnMonsterInCamp(world, r.kind, camp, P)
+              : world.key === "deepwild"
+                ? spawnWilderness(world, r.kind, P)
+                : spawnMonster(world, r.kind, P, caveUniform);
           if (done) world.respawns.splice(i, 1);
           else r.t = RESPAWN_RETRY_S;
         }
@@ -2141,13 +2187,14 @@ function render(): void {
     sctx.globalAlpha = 0.85;
     sctx.drawImage(spr, Math.round(mouse.sx - gw / 2), Math.round(mouse.sy - gh / 2), gw, gh);
     sctx.globalAlpha = 1;
-    if (itemDrag.n > 1) {
+    if (itemDrag.n > 1 && itemDrag.src !== "eq") {
+      const dn = currentN(itemDrag.src, itemDrag.index);
       sctx.font = `bold ${7 * scale}px monospace`;
       sctx.textAlign = "right";
       sctx.fillStyle = "#000";
-      sctx.fillText(`${currentN(itemDrag.src, itemDrag.index)}`, Math.round(mouse.sx + gw / 2) + 1, Math.round(mouse.sy + gh / 2) + 1);
+      sctx.fillText(`${dn}`, Math.round(mouse.sx + gw / 2) + 1, Math.round(mouse.sy + gh / 2) + 1);
       sctx.fillStyle = "#ffe9a8";
-      sctx.fillText(`${currentN(itemDrag.src, itemDrag.index)}`, Math.round(mouse.sx + gw / 2), Math.round(mouse.sy + gh / 2));
+      sctx.fillText(`${dn}`, Math.round(mouse.sx + gw / 2), Math.round(mouse.sy + gh / 2));
     }
   }
   if (touchUI) drawTouchControls();

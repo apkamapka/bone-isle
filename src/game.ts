@@ -5,7 +5,7 @@ import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC } from "./world/h
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn } from "./world/collision.ts";
-import { spawnMonster, spawnMonsterInCamp, spawnWilderness } from "./entities/monsters.ts";
+import { spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
 import type { ItemKind } from "./items.ts";
 import { loadResearchState } from "./systems/tower.ts";
@@ -16,7 +16,7 @@ import { resetOutfit, applyOutfit } from "./systems/outfit.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
-import { WORLD_SEED, MONSTERS_ENABLED, CAVE_CROWD_MULT } from "./config.ts";
+import { WORLD_SEED, MONSTERS_ENABLED, CAVE_CROWD_MULT, CAVE_TILES_PER_MONSTER } from "./config.ts";
 import type { World, WorldKey } from "./world/types.ts";
 import type { Player } from "./entities/player.ts";
 import type { Bag } from "./items.ts";
@@ -256,11 +256,43 @@ export function populateWorld(w: World, seed = WORLD_SEED): void {
   // cavern is populated instead of clumping at the entrance/exit. The surface
   // Wildlands is a radial island and keeps its distance-from-beach danger band.
   const crowded = w.key !== "wild";
+  // A chest world posts a dragon ON the chest below; worlds whose roster
+  // already lists one (cave3, roost3) SPEND that dragon on guard duty rather
+  // than fielding a second, so the floor's boss count is unchanged.
+  const chest = w.structures.find((s) => s.key === "treasure");
   for (const kind of Object.keys(pop) as MonsterKind[]) {
     let n = pop[kind] ?? 0;
+    if (kind === "dragon" && chest) n = Math.max(0, n - 1);
     if (crowded && kind !== "dragon") n = Math.round(n * CAVE_CROWD_MULT);
     for (let i = 0; i < n; i++) spawnMonster(w, kind, undefined, crowded);
   }
+  // Density floor: top the cavern up from its own roster until it clears the
+  // one-creature-per-N-walkable-tiles bar, so no floor reads as half-empty
+  // regardless of how small its authored roster is (Etap 13). UNDERGROUNDS
+  // ONLY — the surface Wildlands keeps its deliberately trimmed roster.
+  let walkTiles = 0;
+  if (crowded) {
+    for (let y = 0; y < w.h; y++) {
+      for (let x = 0; x < w.w; x++) if (!w.solid[y][x] && w.tile[y][x] > 0) walkTiles++;
+    }
+  }
+  const target = Math.floor(walkTiles / CAVE_TILES_PER_MONSTER);
+  // filler pool = this floor's own creatures, bosses excluded, repeated in
+  // proportion to their roster weight so the mix stays true to the theme
+  const filler: MonsterKind[] = [];
+  for (const kind of Object.keys(pop) as MonsterKind[]) {
+    if (kind === "dragon") continue;
+    for (let i = 0; i < (pop[kind] ?? 0); i++) filler.push(kind);
+  }
+  if (filler.length) {
+    let guard = 0;
+    while (w.monsters.length < target && guard < 4000) {
+      const kind = filler[guard % filler.length];
+      spawnMonster(w, kind, undefined, crowded);
+      guard++;
+    }
+  }
+
   // the Marrow chest's elite guard detail, posted around the hoard
   const guards = HOARD_GUARDS[w.key];
   const hoard = w.camps.find((c) => c.key === "hoard");
@@ -269,6 +301,14 @@ export function populateWorld(w: World, seed = WORLD_SEED): void {
       for (let i = 0; i < (guards[kind] ?? 0); i++) spawnMonsterInCamp(w, kind, hoard);
     }
   }
+  // EVERY one-time treasure chest is now guarded by a dragon coiled on its
+  // hoard (Etap 13) — the prize has to be fought for, never just walked to.
+  // Posted directly beside the chest so it's unmistakably ITS guardian, and
+  // registered as a `guard` respawn so killing it only clears the way for a
+  // while. Worlds whose roster already lists a dragon (cave3, roost3) spend
+  // that dragon here instead of adding a second one.
+  const chestGuard = chest;
+  if (chestGuard) spawnGuard(w, "dragon", chestGuard.tx, chestGuard.ty);
 }
 
 /** Populate the Wildlands, the caverns, the continent, and every lair floor. */
