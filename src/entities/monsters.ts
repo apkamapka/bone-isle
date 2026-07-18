@@ -242,6 +242,10 @@ function pushMonster(
   const tx = toTile(p.x);
   const ty = toTile(p.y);
   if (w.monsters.some((o) => o.tx === tx && o.ty === ty)) return false;
+  // never materialise ON a portal either — a creature spawned on the ladder
+  // would block the floor's entrance from the very first frame. Covers every
+  // spawn path at once (roster, density top-up, chest guard, camp, respawn).
+  if (w.portals.some((pt) => toTile(pt.x) === tx && toTile(pt.y) === ty)) return false;
   w.monsters.push({
     kind,
     x: tileCenter(tx),
@@ -476,8 +480,18 @@ export function updateMonsters(
 ): void {
   const ptx = target.tx ?? toTile(target.x);
   const pty = target.ty ?? toTile(target.y);
+  // Portal tiles are off-limits to creatures (Etap 13). A monster parked on a
+  // ladder/cave mouth while it trades blows with you physically blocks the
+  // only way out of the floor, which reads as the game cheating. Treating the
+  // pad as permanently "occupied" means the whole existing steering stack —
+  // chase, arc-around, retreat, wander — routes around it for free, and the
+  // creature still happily stands on any adjacent tile to keep fighting.
+  const portalTiles = new Set(w.portals.map((pt) => toTile(pt.y) * w.w + toTile(pt.x)));
+  const onPortal = (tx: number, ty: number): boolean => portalTiles.has(ty * w.w + tx);
+
   const occOf = (self: Monster): Occupied => (tx, ty) =>
-    (tx === ptx && ty === pty) || w.monsters.some((o) => o !== self && o.tx === tx && o.ty === ty);
+    (tx === ptx && ty === pty) || onPortal(tx, ty) ||
+    w.monsters.some((o) => o !== self && o.tx === tx && o.ty === ty);
 
   /**
    * One chase step toward (gx,gy), Tibia-style. First choice: any free square
@@ -534,6 +548,16 @@ export function updateMonsters(
     m.aggroT = Math.max(0, m.aggroT - dt);
     m.atkCd -= dt;
     const occ = occOf(m);
+    // Evict anything already standing on a portal — from an older save, or
+    // shoved there before this rule existed. `occ` only stops a creature
+    // ENTERING a pad, so without this a squatter would never leave. Step it
+    // onto the nearest free neighbour; it keeps fighting from right beside
+    // the pad, the exit is simply usable again.
+    if (onPortal(m.tx, m.ty)) {
+      for (const [sx, sy] of STEPS8) {
+        if (tryStep(w, m, sx, sy, occ)) break;
+      }
+    }
     const d = dist(m.x, m.y, target.x, target.y);
     const cheb = chebTiles(m.tx, m.ty, ptx, pty);
     const provoked = d < MONSTER_AGGRO_RANGE || m.aggroT > 0;
