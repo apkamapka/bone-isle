@@ -156,7 +156,7 @@ export function killMonster(world: World, p: Player, m: Monster): void {
   if (idx >= 0) world.monsters.splice(idx, 1);
   // per-kind respawn override: the dragon's lair refills on a long clock.
   // Camp dwellers remember their settlement and respawn back home.
-  world.respawns.push({ kind: m.kind, t: d.respawnS ?? MONSTER_RESPAWN_S, camp: m.camp });
+  world.respawns.push({ kind: m.kind, t: d.respawnS ?? MONSTER_RESPAWN_S, camp: m.camp, guard: m.guard });
 }
 
 /**
