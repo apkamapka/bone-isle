@@ -193,6 +193,9 @@ export interface Monster {
   /** Camp this creature belongs to (Deep Wildlands settlements). A slain
    *  camp dweller respawns back home instead of anywhere on the continent. */
   camp?: string;
+  /** Treasure-chest guard: the chest tile it is posted on, so a slain guard
+   *  respawns back beside its hoard rather than anywhere on the floor. */
+  guard?: { tx: number; ty: number };
   /** Home point + leash radius in px: wandering beyond it turns the creature
    *  back toward home, so villagers idle around their village. Roamers
    *  (wilderness wolves) simply have no home set. */
@@ -250,6 +253,8 @@ export interface Respawn {
   t: number;
   /** Camp the slain creature came from — it respawns back there. */
   camp?: string;
+  /** Treasure-chest guard: respawns back beside the chest at this tile. */
+  guard?: { tx: number; ty: number };
 }
 
 /** Options for generating a world. */
