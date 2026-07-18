@@ -1362,7 +1362,7 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
     const m = t.m;
     // let go of a target that has died or left the current island
     if (m.hp <= 0 || !cw().monsters.includes(m)) { P.target = null; return; }
-    P.face = m.x < P.x ? -1 : 1;
+    faceDelta(m.x - P.x, m.y - P.y);
     // range AND a clear line of fire — arrows no longer thread cave walls
     // (which made the dragon a shooting-gallery target from total safety)
     if (dist(P.x, P.y, m.x, m.y) <= mode.reach && P.atkCd <= 0
@@ -1373,7 +1373,7 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
   } else if (t.kind === "dummy") {
     const tp = targetPoint();
     if (!tp) return;
-    P.face = tp.x < P.x ? -1 : 1;
+    faceDelta(tp.x - P.x, tp.y - P.y);
     if (dist(P.x, P.y, tp.x, tp.y) <= mode.reach && P.atkCd <= 0) {
       P.atkCd = P.atkRate;
       shootDummy(cw(), P, t.s, mode.arrow);
@@ -1395,7 +1395,7 @@ function tickMeleeFire(): void {
   if (m.hp <= 0 || !cw().monsters.includes(m)) { P.target = null; return; }
   if (dist(P.x, P.y, m.x, m.y) <= MELEE_REACH_PX && P.atkCd <= 0) {
     P.atkCd = P.atkRate;
-    P.face = m.x < P.x ? -1 : 1;
+    faceDelta(m.x - P.x, m.y - P.y);
     if (equippedBow(P.eq)) warnNoArrows(); // bow with an empty quiver pokes, but nags
     if (playerAttack(cw(), P, m)) P.target = null;
   }
@@ -1443,7 +1443,7 @@ function walkGrid(world: World, gx: number, gy: number, budget: number): boolean
     const ok = Math.abs(sx) <= 1 && Math.abs(sy) <= 1 && tryStep(world, P, sx, sy, occ);
     if (ok) {
       walkRoute.shift();
-      if (sx) P.face = sx < 0 ? -1 : 1;
+      faceDelta(sx, sy);
       moved = true;
       continue;
     }
@@ -1454,7 +1454,7 @@ function walkGrid(world: World, gx: number, gy: number, budget: number): boolean
     const s2y = n2 ? n2.y - P.ty : 0;
     if (n2 && tryStep(world, P, s2x, s2y, occ)) {
       walkRoute.shift();
-      if (s2x) P.face = s2x < 0 ? -1 : 1;
+      faceDelta(s2x, s2y);
       moved = true;
       continue;
     }
@@ -1614,7 +1614,7 @@ function update(dt: number): void {
         && !(sx && sy && (tryStep(world, P, sx, 0, occ) || tryStep(world, P, 0, sy, occ)))) break;
     }
     walkKey = ""; // manual steps invalidate any cached auto-route
-    if (ax.dx) P.face = ax.dx < 0 ? -1 : 1;
+    faceDelta(ax.dx, ax.dy);
   } else if (P.dest) {
     const gx = toTile(P.dest.x);
     const gy = toTile(P.dest.y);
@@ -1803,6 +1803,18 @@ function drawShadow(x: number, y: number, w = 8): void {
   vctx.beginPath();
   vctx.ellipse(x - cam.x, y - cam.y + 1, w, w * 0.4, 0, 0, 6.2832);
   vctx.fill();
+}
+
+
+/**
+ * Pick the render facing from a movement/aim delta. Vertical wins only when it
+ * clearly dominates, so diagonal movement keeps the more readable side view —
+ * the same bias Tibia's outfits use.
+ */
+function faceDelta(dx: number, dy: number): void {
+  const P = game.player;
+  if (Math.abs(dy) > Math.abs(dx) * 1.4) P.dir = dy < 0 ? "up" : "down";
+  else if (dx !== 0) { P.dir = "side"; P.face = dx < 0 ? -1 : 1; }
 }
 
 function drawSprite(spr: HTMLCanvasElement, x: number, y: number, face = 1, bobY = 0): void {
@@ -2093,7 +2105,7 @@ function render(): void {
   drawList.push({ y: P.y, fn: () => {
     drawShadow(P.x, P.y);
     vctx.globalAlpha = P.dead ? 0.4 : 1;
-    drawSprite(P.spr, P.x, P.y, P.face, pbob);
+    drawSprite(P.sprDir[P.dir], P.x, P.y, P.dir === "side" ? P.face : 1, pbob);
     vctx.globalAlpha = 1;
   } });
 

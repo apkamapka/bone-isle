@@ -9,15 +9,30 @@
  * Module state (like skills/tasks): serialize/load/reset from save.ts/game.ts.
  */
 import { PLAYER_MAP, bake } from "../gfx/sprites.ts";
+import { ADV_PALETTE, ADV_ZONES, ADV_CHARS, ADV_DOWN, ADV_SIDE, ADV_UP } from "../gfx/adventurer.ts";
 import type { Player } from "../entities/player.ts";
+
+/** The four render facings. `left` is `side` mirrored at draw time, so only
+ *  three maps are stored. */
+export type Facing = "down" | "up" | "side";
+export type DirSprites = Readonly<Record<Facing, HTMLCanvasElement>>;
 
 /** The three dye zones and the player-map glyphs each one re-tints. */
 export type OutfitZone = "hair" | "primary" | "secondary";
-export const ZONE_LABEL: Readonly<Record<OutfitZone, string>> = {
-  hair: "Hair",
-  primary: "Tunic",
-  secondary: "Legs",
+/** Zone captions are per-outfit: the classic map dyes hair/tunic/legs, while
+ *  the Adventurer's hood hides the hair entirely, so its third zone paints the
+ *  boots instead. The save format is untouched — only the captions differ. */
+const LEGACY_LABELS: Readonly<Record<OutfitZone, string>> = {
+  hair: "Hair", primary: "Tunic", secondary: "Legs",
 };
+const ADV_LABELS: Readonly<Record<OutfitZone, string>> = {
+  hair: "Boots", primary: "Cloak", secondary: "Tunic",
+};
+
+/** Captions for the Wardrobe swatch rows, for whichever outfit is worn. */
+export function zoneLabels(): Readonly<Record<OutfitZone, string>> {
+  return OUTFITS[state.current]?.labels ?? LEGACY_LABELS;
+}
 
 /**
  * The dye rack: a curated 19-color palette (one Tibia outfit-picker row's
@@ -48,8 +63,39 @@ export const OUTFIT_COLORS: readonly string[] = [
 
 /** Outfit maps by id. Only the starter for now; loot-box outfits append here
  *  and old saves keep working (unknown ids fall back to the starter). */
-export const OUTFITS: Readonly<Record<string, { name: string; map: readonly string[] }>> = {
-  adventurer: { name: "Adventurer", map: PLAYER_MAP },
+/**
+ * An outfit is either `glyph` (the original hand-written maps, whose glyphs
+ * carry their own meaning) or `indexed` (generated from artwork: one char per
+ * pixel into a palette, with a dye zone declared per palette entry).
+ */
+interface GlyphOutfit {
+  kind: "glyph";
+  name: string;
+  map: readonly string[];
+  labels: Readonly<Record<OutfitZone, string>>;
+}
+interface IndexedOutfit {
+  kind: "indexed";
+  name: string;
+  chars: string;
+  palette: readonly string[];
+  zones: ReadonlyArray<OutfitZone | null>;
+  frames: Readonly<Record<Facing, readonly string[]>>;
+  labels: Readonly<Record<OutfitZone, string>>;
+}
+type OutfitDef = GlyphOutfit | IndexedOutfit;
+
+export const OUTFITS: Readonly<Record<string, OutfitDef>> = {
+  adventurer: {
+    kind: "indexed",
+    name: "Adventurer",
+    chars: ADV_CHARS,
+    palette: ADV_PALETTE,
+    zones: ADV_ZONES,
+    frames: { down: ADV_DOWN, side: ADV_SIDE, up: ADV_UP },
+    labels: ADV_LABELS,
+  },
+  classic: { kind: "glyph", name: "Classic", map: PLAYER_MAP, labels: LEGACY_LABELS },
 };
 const DEFAULT_OUTFIT = "adventurer";
 
@@ -73,28 +119,108 @@ export function outfitState(): Readonly<OutfitSave> {
   return state;
 }
 
-/** Darken a #rrggbb color — the shaded glyphs (R, P) derive from the base dye
- *  so every color choice keeps the sprite's original shading. */
-function darken(hex: string, f = 0.68): string {
+/** #rrggbb -> [r,g,b] 0..1 */
+function rgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
-  const r = Math.round(((n >> 16) & 255) * f);
-  const g = Math.round(((n >> 8) & 255) * f);
-  const b = Math.round((n & 255) * f);
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
-/** Bake the current outfit + dyes into a fresh player sprite. */
-export function bakeOutfitSprite(): HTMLCanvasElement {
-  const map = OUTFITS[state.current]?.map ?? PLAYER_MAP;
-  const hair = OUTFIT_COLORS[state.hair] ?? OUTFIT_COLORS[0];
+function toHex(r: number, g: number, b: number): string {
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
+  return `#${((c(r) << 16) | (c(g) << 8) | c(b)).toString(16).padStart(6, "0")}`;
+}
+
+function toHsv(r: number, g: number, b: number): [number, number, number] {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d > 0) {
+    if (mx === r) h = ((g - b) / d) % 6;
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  return [(h / 6 + 1) % 1, mx === 0 ? 0 : d / mx, mx];
+}
+
+function fromHsv(h: number, s: number, v: number): [number, number, number] {
+  const i = Math.floor(h * 6), f = h * 6 - i;
+  const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  switch (i % 6) {
+    case 0: return [v, t, p];
+    case 1: return [q, v, p];
+    case 2: return [p, v, t];
+    case 3: return [p, q, v];
+    case 4: return [t, p, v];
+    default: return [v, p, q];
+  }
+}
+
+/**
+ * Re-tint one artwork color to a dye. Flat replacement would flatten the
+ * sprite, so the source pixel's own value/saturation is folded into the
+ * result: light shades stay light, shadows stay shadows, only the hue moves.
+ */
+function tint(base: string, dye: string): string {
+  const [, bs, bv] = toHsv(...rgb(base));
+  const [dh, ds, dv] = toHsv(...rgb(dye));
+  const v = Math.min(1, bv * (0.45 + dv * 0.75));
+  const sat = Math.min(1, ds * (0.55 + bs * 0.7));
+  return toHex(...fromHsv(dh, sat, v));
+}
+
+/** Darken a #rrggbb color — the glyph outfits' shaded glyphs (R, P) derive
+ *  from the base dye so every choice keeps the sprite's original shading. */
+function darkenHex(hex: string, f = 0.68): string {
+  const [r, g, b] = rgb(hex);
+  return toHex(r * f, g * f, b * f);
+}
+
+/** Build the char -> color override for an indexed outfit at the current dyes. */
+function indexedOverride(o: Extract<OutfitDef, { kind: "indexed" }>): Record<string, string> {
+  const dye: Record<OutfitZone, string> = {
+    hair: OUTFIT_COLORS[state.hair] ?? OUTFIT_COLORS[0],
+    primary: OUTFIT_COLORS[state.primary] ?? OUTFIT_COLORS[1],
+    secondary: OUTFIT_COLORS[state.secondary] ?? OUTFIT_COLORS[2],
+  };
+  const over: Record<string, string> = {};
+  for (let i = 0; i < o.palette.length; i++) {
+    const zone = o.zones[i];
+    const base = o.palette[i];
+    over[o.chars[i]] = zone ? tint(base, dye[zone]) : base;
+  }
+  return over;
+}
+
+/** Bake the current outfit + dyes into a fresh set of directional sprites. */
+export function bakeOutfitSprites(): DirSprites {
+  const o = OUTFITS[state.current] ?? OUTFITS[DEFAULT_OUTFIT];
+  if (o.kind === "indexed") {
+    const over = indexedOverride(o);
+    return {
+      down: bake(o.frames.down, over),
+      side: bake(o.frames.side, over),
+      up: bake(o.frames.up, over),
+    };
+  }
   const prim = OUTFIT_COLORS[state.primary] ?? OUTFIT_COLORS[1];
   const sec = OUTFIT_COLORS[state.secondary] ?? OUTFIT_COLORS[2];
-  return bake(map, { h: hair, r: prim, R: darken(prim), p: sec, P: darken(sec) });
+  const one = bake(o.map, {
+    h: OUTFIT_COLORS[state.hair] ?? OUTFIT_COLORS[0],
+    r: prim, R: darkenHex(prim), p: sec, P: darkenHex(sec),
+  });
+  // Glyph outfits are single-view: every facing draws the same map.
+  return { down: one, side: one, up: one };
+}
+
+/** Legacy single-sprite entry point — the front view. */
+export function bakeOutfitSprite(): HTMLCanvasElement {
+  return bakeOutfitSprites().down;
 }
 
 /** Re-bake and hand the player their current look. Call after any change. */
 export function applyOutfit(p: Player): void {
-  p.spr = bakeOutfitSprite();
+  const set = bakeOutfitSprites();
+  p.sprDir = set;
+  p.spr = set.down; // keep the generic walker field in sync (shadows, corpses)
 }
 
 /** Pick a dye for one zone (Wardrobe swatch click). */

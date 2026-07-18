@@ -9,7 +9,7 @@ import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, bestArrow, it
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
-import { OUTFIT_COLORS, ZONE_LABEL, outfitState, type OutfitZone } from "../systems/outfit.ts";
+import { OUTFIT_COLORS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
 import { hudText, type HudCtx } from "./hud.ts";
 import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
@@ -1148,7 +1148,7 @@ function drawWardrobe(p: PanelInput): void {
 
   let ry = y + 18 * S + previewH;
   for (const zone of zones) {
-    hudText(hud, ZONE_LABEL[zone], x + 14 * S, ry + 5 * S, 8 * S, "#cfe8d2", "left", true);
+    hudText(hud, zoneLabels()[zone], x + 14 * S, ry + 5 * S, 8 * S, "#cfe8d2", "left", true);
     const sy = ry + 10 * S;
     const sx0 = x + (w - rowW) / 2;
     OUTFIT_COLORS.forEach((col, i) => {

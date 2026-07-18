@@ -1,6 +1,7 @@
 /** The player: state, backpack, equipment and derived stats. */
 import { PLAYER_BASE_HP, PLAYER_BASE_SPEED, SPEED_PER_LEVEL, PLAYER_ATTACK_RATE, expNeeded, CAP_BASE, CAP_PER_LEVEL } from "../config.ts";
-import { SPR } from "../gfx/sprites.ts";
+import { bakeOutfitSprites } from "../systems/outfit.ts";
+import type { Facing, DirSprites } from "../systems/outfit.ts";
 import { toTile, tileCenter } from "../world/grid.ts";
 import { activeBonus } from "../systems/derived.ts";
 import { emptyBag, emptyEquipment, gearStat, itemWeight, bagWeight, addItem } from "../items.ts";
@@ -54,6 +55,10 @@ export interface Player {
   tpCd: number;
   bob: number;
   face: 1 | -1;
+  /** Which of the three baked views to draw. `side` is mirrored by `face`. */
+  dir: Facing;
+  /** The current outfit baked in all three facings. */
+  sprDir: DirSprites;
   bag: Bag;
   eq: Equipment;
 }
@@ -61,6 +66,7 @@ export interface Player {
 /** Create a fresh player positioned at `spawn`. */
 export function createPlayer(spawn: Vec): Player {
   const bag = emptyBag();
+  const startSet = bakeOutfitSprites();
   // Starter crystals so the action bar is usable before the Alchemy Tower exists.
   addItem(bag, "healCrystal", 25);
   addItem(bag, "fireCrystal", 15);
@@ -73,7 +79,7 @@ export function createPlayer(spawn: Vec): Player {
     y: tileCenter(toTile(spawn.y)),
     tx: toTile(spawn.x),
     ty: toTile(spawn.y),
-    spr: SPR.player,
+    spr: startSet.down,
     hp: PLAYER_BASE_HP,
     maxhp: PLAYER_BASE_HP,
     gold: 0,
@@ -93,6 +99,8 @@ export function createPlayer(spawn: Vec): Player {
     tpCd: 0,
     bob: 0,
     face: 1,
+    dir: "down",
+    sprDir: startSet,
     bag,
     eq: emptyEquipment(),
   };
