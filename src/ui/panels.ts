@@ -37,10 +37,12 @@ export interface ItemSlot {
   y: number;
   w: number;
   h: number;
-  src: "bag" | "stash";
+  src: "bag" | "stash" | "eq";
   index: number;
   kind: ItemKind;
   n: number;
+  /** Which paperdoll slot this cell is, when src === "eq". */
+  eqSlot?: EqSlot;
 }
 
 /** One open, draggable window. Multiple can be open at once (z-order = array order). */
@@ -589,6 +591,9 @@ function drawEquip(p: PanelInput): void {
       icon(p, spr, cx + (slot - spr.width * 2 * S) / 2, cy + (slot - spr.height * 2 * S) / 2 - 3 * S, 2 * S);
       if (hovering(p, cx, cy, slot, slot)) tooltipKind = equipped;
       const eqk = equipped;
+      // register as a draggable item cell so worn gear can be dragged straight
+      // to the ground / bag / storage chest, exactly like a backpack item
+      p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, src: "eq", index: 0, kind: eqk, n: 1, eqSlot: key });
       p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => (p.ui.lookMode ? p.act.look(eqk) : p.act.unequip(key)) });
     } else {
       const spr = SLOT_ICONS[key];
