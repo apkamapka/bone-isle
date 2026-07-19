@@ -1031,25 +1031,32 @@ async function main(): Promise<void> {
 
     const set = of.bakeOutfitSprites();
     ok(!!set.down && !!set.side && !!set.up, "three facings bake");
-    ok(set.down.height === 13 && set.side.height === 13 && set.up.height === 13,
-      "every facing is 13px tall — the NPC template");
-    ok(set.down.width === 10 && set.side.width === 10 && set.up.width === 10,
-      "every facing is 10px wide");
+    ok(set.down.height === 16 && set.side.height === 16 && set.up.height === 16,
+      "every facing is 16px tall — three rows above the townsfolk");
+    ok(set.down.width === 12 && set.side.width === 12 && set.up.width === 12,
+      "every facing is 12px wide, still within one tile");
     ok(set.down !== set.side, "front and side are distinct canvases");
 
     // every map is well-formed and drawn from the shared palette
     const adv = await import("../src/gfx/adventurer.ts");
     const { PAL } = await import("../src/gfx/sprites.ts");
     for (const [nm, m] of [["down", adv.ADV_DOWN], ["side", adv.ADV_SIDE], ["up", adv.ADV_UP]] as const) {
-      ok(m.length === 13, `${nm} is 13 rows — same template as the NPCs`);
-      ok(m.every((r) => r.length === 10), `${nm} rows are all 10 wide`);
+      ok(m.length === 16, `${nm} is 16 rows`);
+      ok(m.every((r) => r.length === 12), `${nm} rows are all 12 wide`);
       ok(m.every((r) => [...r].every((c) => c === "." || c in PAL)),
         `${nm} uses only palette glyphs`);
     }
-    ok(adv.ADV_DOWN[12] === "..kk..kk..", "front keeps the shared boot row");
+    ok(adv.ADV_DOWN.every((r) => r.startsWith(".") || r.startsWith("e")),
+      "no facing bleeds into the left edge without an outline");
+    for (const [nm, m] of [["down", adv.ADV_DOWN], ["side", adv.ADV_SIDE], ["up", adv.ADV_UP]] as const) {
+      ok(m.some((r) => r.includes("e")), `${nm} carries the dark outline`);
+    }
     ok(adv.ADV_SIDE.some((r) => r.includes("c")) && adv.ADV_UP.some((r) => r.includes("c")),
       "the quiver reads on the side and back views");
-    ok(!adv.ADV_UP.some((r) => r.includes("e")), "the back view shows no eyes");
+    ok(adv.ADV_UP.slice(0, 7).every((r) => !r.includes("s")),
+      "the back view shows no face — no skin in the head rows");
+    ok(adv.ADV_DOWN[4].includes("e") && adv.ADV_DOWN[4].includes("s"),
+      "the front view has eyes set in skin");
 
     // dyeing must change the sprite but never its geometry
     const before = of.bakeOutfitSprites().down.width;
@@ -1108,6 +1115,42 @@ async function main(): Promise<void> {
       "single-view outfits render identically in every facing");
     ok(of.zoneLabels().hair === "Hair", "Classic keeps the original captions");
     of.resetOutfit();
+  }
+
+
+  // ---------------------------------------------------------------- Etap 16
+  {
+    console.log("Etap 16 — desktop zoom (2x closer):");
+    const { worldZoom, visibleTiles, DESKTOP_ZOOM_DIV, MOBILE_ZOOM_DIV } =
+      await import("../src/config.ts");
+
+    // the desktop framing this stage exists to fix
+    const shot = visibleTiles(1916, 931, false);
+    ok(shot.w > 21 && shot.w < 26, "a 1916px window shows ~23 tiles across, not ~46");
+    ok(shot.h > 10 && shot.h < 13, "and ~11 down — Tibia's vertical framing");
+
+    // exactly double the old zoom, which divided by 360
+    ok(DESKTOP_ZOOM_DIV === 180, "the desktop divisor halved from 360");
+    ok(Math.abs(worldZoom(1916, 931, false) - (931 / 180)) < 1e-9,
+      "desktop zoom is min(w,h)/180 inside the clamp");
+
+    // clamps hold at both ends
+    ok(worldZoom(400, 400, false) === 4, "tiny desktop windows clamp at 4");
+    ok(worldZoom(6000, 4000, false) === 6.4, "huge desktop windows clamp at 6.4");
+    ok(worldZoom(2560, 1440, false) === 6.4, "a 1440p screen sits on the upper clamp");
+
+    // phones keep the framing they already had
+    ok(MOBILE_ZOOM_DIV === 220, "the mobile divisor is untouched");
+    ok(worldZoom(390, 844, true) === 2, "iPhone-sized portrait is unchanged");
+    ok(worldZoom(820, 1180, true) === 4, "tablet portrait is unchanged");
+    ok(Number.isInteger(worldZoom(1000, 1000, true)), "mobile zoom stays a whole number");
+
+    // zooming in must never widen the view
+    for (const [w, h] of [[1280, 720], [1600, 900], [1920, 1080], [3440, 1440]] as const) {
+      const now = visibleTiles(w, h, false).w;
+      const before = Math.ceil(w / Math.max(2, Math.min(3.2, Math.min(w, h) / 360))) / 16;
+      ok(now < before, `${w}x${h} shows fewer tiles than before`);
+    }
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
