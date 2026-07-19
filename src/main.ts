@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom,} from "./config.ts";
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
@@ -80,10 +80,7 @@ function resize(): void {
   // visible (a classic top-down feel) — HUD sizing is unaffected.
   const mobile = isTouchDevice() || Math.min(cw, ch) < 620;
 
-  // CSS px per internal world px. Larger => more zoomed in / chunkier pixels.
-  const f = mobile
-    ? clamp(Math.round(Math.min(cw, ch) / 220), 2, 6)   // phones: unchanged
-    : clamp(Math.min(cw, ch) / 360, 2, 3.2);            // desktop: wider, finer view
+  const f = worldZoom(cw, ch, mobile);
   VW = Math.max(160, Math.ceil(cw / f));
   VH = Math.max(120, Math.ceil(ch / f));
   view.width = VW;

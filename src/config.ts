@@ -12,6 +12,38 @@ export const TILE = 16;
 export const WORLD_SEED = 20260713;
 
 /** Internal viewport resolution (scaled up with pixelated rendering). */
+
+/**
+ * CSS pixels per internal world pixel — the zoom. Larger means closer in and
+ * chunkier, and directly sets how much of the island is on screen:
+ * visible tiles = viewport / (f * TILE).
+ *
+ * Phones keep their original tight framing. Desktop used to sit at
+ * min(w,h)/360, which on a 1080p-ish window put roughly 46 x 22 tiles on
+ * screen — far more world than Tibia's 15 x 11 and too wide to read faces.
+ * Halving the divisor doubles the zoom, landing near 23 x 11 tiles.
+ *
+ * Note this only magnifies: every tile still holds TILE px of detail. Genuinely
+ * finer artwork needs TILE itself to grow, which is a separate change.
+ */
+export const DESKTOP_ZOOM_DIV = 180;
+export const MOBILE_ZOOM_DIV = 220;
+
+export function worldZoom(cw: number, ch: number, mobile: boolean): number {
+  const lo = Math.min(cw, ch);
+  const cl = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+  return mobile
+    ? cl(Math.round(lo / MOBILE_ZOOM_DIV), 2, 6)
+    : cl(lo / DESKTOP_ZOOM_DIV, 4, 6.4);
+}
+
+/** How many tiles fit across a viewport at the given zoom — the number that
+ *  actually matters when judging framing. */
+export function visibleTiles(cw: number, ch: number, mobile: boolean): { w: number; h: number } {
+  const f = worldZoom(cw, ch, mobile);
+  return { w: Math.max(160, Math.ceil(cw / f)) / TILE, h: Math.max(120, Math.ceil(ch / f)) / TILE };
+}
+
 export const VIEW_W = 480;
 export const VIEW_H = 320;
 
