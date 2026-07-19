@@ -16,7 +16,7 @@ import { resetOutfit, applyOutfit } from "./systems/outfit.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
-import { WORLD_SEED, MONSTERS_ENABLED, CAVE_CROWD_MULT, CAVE_TILES_PER_MONSTER } from "./config.ts";
+import { WORLD_SEED, MONSTERS_ENABLED, CAVE_CROWD_MULT, CAVE_TILES_PER_MONSTER, TILE } from "./config.ts";
 import type { World, WorldKey } from "./world/types.ts";
 import type { Player } from "./entities/player.ts";
 import type { Bag } from "./items.ts";
@@ -216,7 +216,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
     if (chest) {
       lw.camps.push({
         key: "hoard", name: `${l.name} hoard`,
-        x: chest.tx * 16 + 8, y: chest.ty * 16 + 8, r: 96,
+        x: chest.tx * TILE + TILE / 2, y: chest.ty * TILE + TILE / 2, r: 192,
       });
     }
     worlds[l.key] = lw;

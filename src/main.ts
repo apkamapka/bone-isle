@@ -1,9 +1,9 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom,} from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom,} from "./config.ts";
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
-import { SPR, itemSprite } from "./gfx/sprites.ts";
+import { SPR, itemSprite, iconW, iconH } from "./gfx/sprites.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard } from "./entities/monsters.ts";
@@ -81,8 +81,8 @@ function resize(): void {
   const mobile = isTouchDevice() || Math.min(cw, ch) < 620;
 
   const f = worldZoom(cw, ch, mobile);
-  VW = Math.max(160, Math.ceil(cw / f));
-  VH = Math.max(120, Math.ceil(ch / f));
+  VW = Math.max(MIN_VIEW_W, Math.ceil(cw / f));
+  VH = Math.max(MIN_VIEW_H, Math.ceil(ch / f));
   view.width = VW;
   view.height = VH;
 
@@ -163,7 +163,7 @@ function probeGroundDrag(sx: number, sy: number, isTouch: boolean): boolean {
   const wy = sy / vScale + cam.y;
   const world = cw();
   for (const gi of world.ground) {
-    if (Math.abs(wx - gi.x) < 9 && wy > gi.y - 14 && wy < gi.y + 4) {
+    if (Math.abs(wx - gi.x) < 18 && wy > gi.y - 28 && wy < gi.y + 8) {
       itemDrag = { src: "ground", index: -1, kind: gi.kind, n: gi.n, sx, sy, active: false, gi, touch: isTouch };
       return true;
     }
@@ -196,7 +196,7 @@ function hudEditing(): boolean {
 }
 
 const cw = (): World => game.current;
-const flash = (t: string, c = "#ffe9a8"): void => addFloat(cw(), P.x, P.y - 30, t, c);
+const flash = (t: string, c = "#ffe9a8"): void => addFloat(cw(), P.x, P.y - 60, t, c);
 
 /** Recompute the player's max HP from current owned structures. */
 function recomputeBonuses(): void {
@@ -451,7 +451,7 @@ function resolveThrowTarget(tx: number, ty: number): { x: number; y: number } {
     const cy = Math.floor(py / TILE) * TILE + TILE / 2;
     if (!blockedAt(world, cx, cy) && lineOfSight(world, P.x, P.y, cx, cy)) return { x: cx, y: cy };
   }
-  return { x: P.x, y: P.y + 2 };
+  return { x: P.x, y: P.y + 4 };
 }
 
 /**
@@ -463,9 +463,9 @@ function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }): v
   const from = cw();
   const dest = game.worlds[pt.dest];
   const back = dest.portals.find((p2) => p2.dest === from.key) ?? dest.portals[0];
-  const gx = (back?.x ?? dest.w * TILE / 2) + (Math.random() - 0.5) * 8;
-  const gy = (back?.y ?? dest.h * TILE / 2) + 14;
-  const near = dest.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 7);
+  const gx = (back?.x ?? dest.w * TILE / 2) + (Math.random() - 0.5) * 16;
+  const gy = (back?.y ?? dest.h * TILE / 2) + 28;
+  const near = dest.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 14);
   if (near) near.n += n;
   else dest.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
   flash(`whoosh — ${n} ${ITEMS[kind].name} through the portal!`, "#8ab6ff");
@@ -475,7 +475,7 @@ function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }): v
 /** The portal (if any) whose swirl covers world point (x,y). */
 function portalAt(x: number, y: number): { dest: WorldKey } | null {
   for (const pt of cw().portals) {
-    if (dist(x, y, pt.x, pt.y) < 12) return pt;
+    if (dist(x, y, pt.x, pt.y) < 24) return pt;
   }
   return null;
 }
@@ -494,12 +494,12 @@ function dropToGround(kind: ItemKind, n: number, tx?: number, ty?: number): void
     if (pt) { sendThroughPortal(kind, n, pt); return; }
     gx = t.x; gy = t.y;
   } else {
-    const jitter = () => (Math.random() - 0.5) * 8;
+    const jitter = () => (Math.random() - 0.5) * 16;
     gx = P.x + jitter();
-    gy = P.y + 2 + jitter();
+    gy = P.y + 4 + jitter();
   }
   // merge into a very close stack of the same kind to avoid clutter
-  const near = world.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 7);
+  const near = world.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 14);
   if (near) near.n += n;
   else world.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
   flash(`dropped ${n} ${ITEMS[kind].name}`, "#cfa86a");
@@ -520,7 +520,7 @@ function throwGroundItem(gi: GroundItem, tx: number, ty: number): void {
     sendThroughPortal(gi.kind, gi.n, pt);
     return;
   }
-  const near = world.ground.find((g) => g !== gi && g.kind === gi.kind && Math.hypot(g.x - t.x, g.y - t.y) < 7);
+  const near = world.ground.find((g) => g !== gi && g.kind === gi.kind && Math.hypot(g.x - t.x, g.y - t.y) < 14);
   if (near) {
     near.n += gi.n;
     const idx = world.ground.indexOf(gi);
@@ -1186,7 +1186,7 @@ function worldClick(w: Vec): void {
   const world = cw();
   // monsters
   for (const m of world.monsters) {
-    if (Math.abs(w.x - m.x) < 9 && w.y > m.y - 16 && w.y < m.y + 5) {
+    if (Math.abs(w.x - m.x) < 18 && w.y > m.y - 32 && w.y < m.y + 10) {
       // clicking the monster you're already attacking STOPS the attack (Tibia-style toggle)
       if (P.target?.kind === "mob" && P.target.m === m) {
         P.target = null;
@@ -1200,7 +1200,7 @@ function worldClick(w: Vec): void {
   }
   // dropped ground items — walk over and pick up (Tibia-style, no telekinesis)
   for (const gi of world.ground) {
-    if (Math.abs(w.x - gi.x) < 9 && w.y > gi.y - 14 && w.y < gi.y + 4) {
+    if (Math.abs(w.x - gi.x) < 18 && w.y > gi.y - 28 && w.y < gi.y + 8) {
       P.target = { kind: "ground", gi };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
@@ -1211,7 +1211,7 @@ function worldClick(w: Vec): void {
   // over (pendingLoot pops it on arrival) — the marked monster stays marked
   // and tickMeleeFire / tickRangedFire keep the blows coming the whole time.
   for (const c of world.corpses) {
-    if (Math.abs(w.x - c.x) < 10 && Math.abs(w.y - c.y) < 8) {
+    if (Math.abs(w.x - c.x) < 20 && Math.abs(w.y - c.y) < 16) {
       if (P.target?.kind === "mob") {
         if (dist(P.x, P.y, c.x, c.y) < USE_RANGE_PX) {
           ui.loot = c; openWindow("loot");
@@ -1229,7 +1229,7 @@ function worldClick(w: Vec): void {
   }
   // NPCs
   for (const n of world.npcs) {
-    if (Math.abs(w.x - n.x) < 9 && w.y > n.y - 16 && w.y < n.y + 5) {
+    if (Math.abs(w.x - n.x) < 18 && w.y > n.y - 32 && w.y < n.y + 10) {
       P.target = { kind: "npc", n };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
@@ -1239,7 +1239,7 @@ function worldClick(w: Vec): void {
   // structure's real footprint centre (1×1 dummies vs 2×2 buildings).
   for (const s of world.structures) {
     const c = structCenter(s);
-    if (Math.abs(w.x - c.x) < 16 && w.y > c.baseY - 30 && w.y < c.baseY + 4) {
+    if (Math.abs(w.x - c.x) < 32 && w.y > c.baseY - 60 && w.y < c.baseY + 8) {
       if (s.key === "dummy" || s.key === "dummyII" || s.key === "range") {
         // re-clicking the dummy you're training on stops the attack (toggle)
         if (P.target?.kind === "dummy" && P.target.s === s) {
@@ -1266,7 +1266,7 @@ function worldClick(w: Vec): void {
   for (const tr of world.trees) {
     if (tr.stump) continue;
     const cx = tr.tx * TILE + TILE / 2;
-    if (Math.abs(w.x - cx) < 8 && w.y > tr.ty * TILE + TILE - 27 && w.y < tr.ty * TILE + TILE + 2) {
+    if (Math.abs(w.x - cx) < 16 && w.y > tr.ty * TILE + TILE - 54 && w.y < tr.ty * TILE + TILE + 4) {
       P.gather = { kind: "tree", obj: tr };
       P.target = null; P.dest = null; moveMarker = null; pendingLoot = null;
       return;
@@ -1277,7 +1277,7 @@ function worldClick(w: Vec): void {
     if (rk.depleted) continue;
     const cx = rk.tx * TILE + TILE / 2;
     const cy = rk.ty * TILE + TILE / 2;
-    if (Math.abs(w.x - cx) < 8 && Math.abs(w.y - cy) < 8) {
+    if (Math.abs(w.x - cx) < 16 && Math.abs(w.y - cy) < 16) {
       P.gather = { kind: "rock", obj: rk };
       P.target = null; P.dest = null; moveMarker = null; pendingLoot = null;
       return;
@@ -1288,7 +1288,7 @@ function worldClick(w: Vec): void {
     if (hb.picked) continue;
     const cx = hb.tx * TILE + TILE / 2;
     const cy = hb.ty * TILE + TILE / 2;
-    if (Math.abs(w.x - cx) < 8 && Math.abs(w.y - cy) < 8) {
+    if (Math.abs(w.x - cx) < 16 && Math.abs(w.y - cy) < 16) {
       P.gather = { kind: "herb", obj: hb };
       P.target = null; P.dest = null; moveMarker = null; pendingLoot = null;
       return;
@@ -1311,7 +1311,7 @@ function targetPoint(): Vec | null {
   if (t.kind === "npc") return { x: t.n.x, y: t.n.y };
   // structure: stand just below the sprite base (footprint-aware anchor)
   const c = structCenter(t.s);
-  return { x: c.x, y: c.baseY - 2 };
+  return { x: c.x, y: c.baseY - 4 };
 }
 
 function gatherPoint(): Vec | null {
@@ -1518,7 +1518,7 @@ function tickProximityPanels(dt: number): void {
 function checkPortals(): void {
   if (P.tpCd > 0) return;
   for (const pt of cw().portals) {
-    if (dist(P.x, P.y, pt.x, pt.y) < 11) {
+    if (dist(P.x, P.y, pt.x, pt.y) < 22) {
       if (pt.inactive) {
         // a dormant quest pad: hum, but do not travel (yet)
         flash("the portal is dormant… for now", "#b9a6d8");
@@ -1795,10 +1795,10 @@ function resolveTarget(): void {
 
 /* ---------------- render ---------------- */
 
-function drawShadow(x: number, y: number, w = 8): void {
+function drawShadow(x: number, y: number, w = 16): void {
   vctx.fillStyle = "rgba(0,0,0,.22)";
   vctx.beginPath();
-  vctx.ellipse(x - cam.x, y - cam.y + 1, w, w * 0.4, 0, 0, 6.2832);
+  vctx.ellipse(x - cam.x, y - cam.y + 2, w, w * 0.4, 0, 0, 6.2832);
   vctx.fill();
 }
 
@@ -1828,13 +1828,13 @@ function drawSprite(spr: HTMLCanvasElement, x: number, y: number, face = 1, bobY
   vctx.restore();
 }
 
-function hpBar(x: number, y: number, frac: number, w = 14): void {
+function hpBar(x: number, y: number, frac: number, w = 28): void {
   vctx.fillStyle = "#000";
-  vctx.fillRect(Math.round(x - cam.x - w / 2) - 1, Math.round(y - cam.y) - 1, w + 2, 4);
+  vctx.fillRect(Math.round(x - cam.x - w / 2) - 2, Math.round(y - cam.y) - 2, w + 4, 8);
   vctx.fillStyle = "#5d1a14";
-  vctx.fillRect(Math.round(x - cam.x - w / 2), Math.round(y - cam.y), w, 2);
+  vctx.fillRect(Math.round(x - cam.x - w / 2), Math.round(y - cam.y), w, 4);
   vctx.fillStyle = "#e1483b";
-  vctx.fillRect(Math.round(x - cam.x - w / 2), Math.round(y - cam.y), Math.round(w * clamp(frac, 0, 1)), 2);
+  vctx.fillRect(Math.round(x - cam.x - w / 2), Math.round(y - cam.y), Math.round(w * clamp(frac, 0, 1)), 4);
 }
 
 function render(): void {
@@ -1850,11 +1850,26 @@ function render(): void {
   // every frame; on the 368x272-tile continent that's a ~5900x4350 px image
   // and was the single biggest source of big-map lag. The source rect is
   // clamped so small islands (map smaller than the view) stay correct.
+  // Since Etap 17 that canvas is painted at MAP_TILE (legacy 16 px per tile)
+  // and blown up SPRITE_SCALE times right here — nearest-neighbour, so what
+  // lands on screen is the exact 16-px-era terrain, only chunkier. Baking it at
+  // TILE instead would quadruple a bitmap that is already ~25 Mpx on the
+  // continent, which phones refuse to allocate. The source rect is floored to
+  // whole source pixels and the remainder paid back on the destination, so the
+  // camera still pans one world pixel at a time with no wobble.
   const camX = Math.round(cam.x);
   const camY = Math.round(cam.y);
-  const srcW = Math.min(VW, world.mapCanvas.width - camX);
-  const srcH = Math.min(VH, world.mapCanvas.height - camY);
-  vctx.drawImage(world.mapCanvas, camX, camY, srcW, srcH, 0, 0, srcW, srcH);
+  const K = SPRITE_SCALE;
+  const sx0 = Math.floor(camX / K);
+  const sy0 = Math.floor(camY / K);
+  const offX = camX - sx0 * K;
+  const offY = camY - sy0 * K;
+  const srcW = Math.min(Math.ceil(VW / K) + 1, world.mapCanvas.width - sx0);
+  const srcH = Math.min(Math.ceil(VH / K) + 1, world.mapCanvas.height - sy0);
+  vctx.imageSmoothingEnabled = false;
+  if (srcW > 0 && srcH > 0) {
+    vctx.drawImage(world.mapCanvas, sx0, sy0, srcW, srcH, -offX, -offY, srcW * K, srcH * K);
+  }
 
   // animated coastal foam
   vctx.fillStyle = "rgba(200,240,235,.5)";
@@ -1863,7 +1878,7 @@ function render(): void {
     const sy = cwv.y - cam.y;
     if (sx < -TILE || sy < -TILE || sx > VW || sy > VH) continue;
     const a = 0.5 + 0.5 * Math.sin(waveT * 2 + cwv.ph);
-    if (a > 0.6) vctx.fillRect(Math.round(sx + 2), Math.round(sy + 6), 6, 1);
+    if (a > 0.6) vctx.fillRect(Math.round(sx + 4), Math.round(sy + 12), 12, 2);
   }
 
   // building ghost: while placing, preview the structure under the cursor
@@ -1894,7 +1909,8 @@ function render(): void {
     vctx.fillStyle = ok ? `rgba(120,230,140,${a})` : `rgba(230,90,70,${a})`;
     vctx.fillRect(gx, gy, TILE * n, TILE * n);
     vctx.strokeStyle = ok ? "rgba(180,255,190,.9)" : "rgba(255,140,120,.9)";
-    vctx.strokeRect(gx + 0.5, gy + 0.5, TILE * n - 1, TILE * n - 1);
+    vctx.lineWidth = 2;
+    vctx.strokeRect(gx + 1, gy + 1, TILE * n - 2, TILE * n - 2);
     const spr = structSprite(key);
     vctx.globalAlpha = 0.6;
     vctx.imageSmoothingEnabled = false;
@@ -1911,15 +1927,15 @@ function render(): void {
       const pulse = 0.5 + 0.5 * Math.sin(waveT * 3);
       vctx.fillStyle = "rgba(20,16,14,0.35)";
       vctx.beginPath();
-      vctx.ellipse(sx, sy + 6, 15, 6, 0, 0, 6.2832);
+      vctx.ellipse(sx, sy + 12, 30, 12, 0, 0, 6.2832);
       vctx.fill();
       vctx.strokeStyle = `rgba(230,178,90,${0.25 + 0.35 * pulse})`;
-      vctx.lineWidth = 1.5;
+      vctx.lineWidth = 3;
       vctx.beginPath();
-      vctx.ellipse(sx, sy + 2, 13 + pulse * 3, 9 + pulse * 2, 0, 0, 6.2832);
+      vctx.ellipse(sx, sy + 4, 26 + pulse * 6, 18 + pulse * 4, 0, 0, 6.2832);
       vctx.stroke();
       const cmp = SPR.caveMouth;
-      vctx.drawImage(cmp, Math.round(sx - cmp.width / 2), Math.round(sy - cmp.height + 6));
+      vctx.drawImage(cmp, Math.round(sx - cmp.width / 2), Math.round(sy - cmp.height + 12));
       continue;
     }
     if (pt.style) {
@@ -1928,18 +1944,18 @@ function render(): void {
       vctx.drawImage(SPR.ladder, Math.round(sx - lw / 2), Math.round(sy - lh / 2));
       const down = pt.style === "ladderDown";
       const dir = down ? 1 : -1;
-      const ay = down ? sy + lh / 2 + 3 : sy - lh / 2 - 3;
+      const ay = down ? sy + lh / 2 + 6 : sy - lh / 2 - 6;
       vctx.fillStyle = down ? "#e6b25a" : "#a6e6c4";
       vctx.beginPath();
-      vctx.moveTo(sx - 3, ay);
-      vctx.lineTo(sx + 3, ay);
-      vctx.lineTo(sx, ay + dir * 3);
+      vctx.moveTo(sx - 6, ay);
+      vctx.lineTo(sx + 6, ay);
+      vctx.lineTo(sx, ay + dir * 6);
       vctx.closePath();
       vctx.fill();
       continue;
     }
     const dormant = !!pt.inactive;
-    for (let r = 8; r > 0; r -= 2) {
+    for (let r = 16; r > 0; r -= 4) {
       // a dormant pad smoulders ash-grey and barely breathes; a live portal
       // pulses violet — the state reads at a glance from across the hall
       const a = dormant ? 0.10 + 0.04 * Math.sin(waveT * 1.5 + r) : 0.15 + 0.12 * Math.sin(waveT * 4 + r);
@@ -1949,7 +1965,7 @@ function render(): void {
       vctx.fill();
     }
     vctx.fillStyle = dormant ? "#8d939a" : "#c9a6ff";
-    vctx.fillRect(Math.round(sx) - 1, Math.round(sy - 4 + (dormant ? 0 : Math.sin(waveT * 5) * 2)), 2, 8);
+    vctx.fillRect(Math.round(sx) - 2, Math.round(sy - 8 + (dormant ? 0 : Math.sin(waveT * 5) * 4)), 4, 16);
   }
 
 
@@ -1959,12 +1975,12 @@ function render(): void {
     if (P.level >= gt.lv) continue;
     const gx = gt.tx * TILE + TILE / 2 - cam.x;
     const gy = gt.ty * TILE + TILE - cam.y;
-    vctx.drawImage(SPR.gate, Math.round(gx - SPR.gate.width / 2), Math.round(gy - SPR.gate.height - 2));
-    vctx.font = "bold 6px monospace";
+    vctx.drawImage(SPR.gate, Math.round(gx - SPR.gate.width / 2), Math.round(gy - SPR.gate.height - 4));
+    vctx.font = "bold 12px monospace";
     vctx.fillStyle = "#14171a";
-    vctx.fillText(`${gt.lv}`, Math.round(gx) - 3 + 1, Math.round(gy) - 5 + 1);
+    vctx.fillText(`${gt.lv}`, Math.round(gx) - 6 + 2, Math.round(gy) - 10 + 2);
     vctx.fillStyle = "#ffd98a";
-    vctx.fillText(`${gt.lv}`, Math.round(gx) - 3, Math.round(gy) - 5);
+    vctx.fillText(`${gt.lv}`, Math.round(gx) - 6, Math.round(gy) - 10);
   }
 
   // gather nodes: trees, rocks, herbs (sorted by y with actors below)
@@ -1974,7 +1990,7 @@ function render(): void {
   // a margin for tall sprites and shadows) is skipped BEFORE a closure is
   // allocated. On the continent (~1000 drawables) this cuts the per-frame
   // build + sort of the draw list down to just the on-screen handful.
-  const CULL = 48;
+  const CULL = 96;
   const inView = (x: number, y: number): boolean =>
     x >= cam.x - CULL && x <= cam.x + VW + CULL && y >= cam.y - CULL && y <= cam.y + VH + CULL;
 
@@ -1986,10 +2002,10 @@ function render(): void {
       drawList.push({ y: by, fn: () => { drawShadow(bx, by); drawSprite(SPR.stump, bx, by); } });
     } else {
       drawList.push({ y: by, fn: () => {
-        drawShadow(bx, by, 6);
-        const shake = tr.hurtT > 0 ? Math.round(Math.sin(tr.hurtT * 40) * 1.5) : 0;
+        drawShadow(bx, by, 12);
+        const shake = tr.hurtT > 0 ? Math.round(Math.sin(tr.hurtT * 40) * 3) : 0;
         drawSprite(tr.spr, bx + shake, by);
-        if (tr.hp < tr.maxhp) hpBar(bx, tr.ty * TILE - 4, tr.hp / tr.maxhp);
+        if (tr.hp < tr.maxhp) hpBar(bx, tr.ty * TILE - 8, tr.hp / tr.maxhp);
       } });
     }
   }
@@ -2005,9 +2021,9 @@ function render(): void {
     } else {
       drawList.push({ y: by, fn: () => {
         drawShadow(bx, by);
-        const shake = rk.hurtT > 0 ? Math.round(Math.sin(rk.hurtT * 40) * 1.5) : 0;
+        const shake = rk.hurtT > 0 ? Math.round(Math.sin(rk.hurtT * 40) * 3) : 0;
         drawSprite(SPR.rock, bx + shake, by);
-        if (rk.hp < rk.maxhp) hpBar(bx, rk.ty * TILE - 2, rk.hp / rk.maxhp);
+        if (rk.hp < rk.maxhp) hpBar(bx, rk.ty * TILE - 4, rk.hp / rk.maxhp);
       } });
     }
   }
@@ -2027,11 +2043,11 @@ function render(): void {
     if (!inView(bx, by)) continue;
     drawList.push({ y: by, fn: () => {
       drawShadow(bx, by, spr.width / 2);
-      const shake = s.hurtT ? Math.round(Math.sin(s.hurtT * 40) * 1.5) : 0;
+      const shake = s.hurtT ? Math.round(Math.sin(s.hurtT * 40) * 3) : 0;
       drawSprite(spr, bx + shake, by);
       if (s.key === "forge") {
         vctx.fillStyle = `rgba(255,${140 + Math.round(Math.sin(waveT * 8) * 40)},60,.8)`;
-        vctx.fillRect(Math.round(bx - cam.x - 2), Math.round(by - cam.y - 6 + Math.sin(waveT * 6)), 2, 2);
+        vctx.fillRect(Math.round(bx - cam.x - 4), Math.round(by - cam.y - 12 + Math.sin(waveT * 6) * 2), 4, 4);
       }
     } });
   }
@@ -2042,7 +2058,7 @@ function render(): void {
     drawList.push({ y: c.y, fn: () => {
       vctx.globalAlpha = blink;
       drawShadow(c.x, c.y);
-      drawSprite(SPR.corpse, c.x, c.y + 4);
+      drawSprite(SPR.corpse, c.x, c.y + 8);
       vctx.globalAlpha = 1;
     } });
   }
@@ -2053,16 +2069,16 @@ function render(): void {
     const spr = itemSprite(gi.kind);
     drawList.push({ y: gi.y, fn: () => {
       vctx.globalAlpha = blink;
-      drawShadow(gi.x, gi.y, 6);
+      drawShadow(gi.x, gi.y, 12);
       const px = Math.round(gi.x - cam.x - spr.width / 2);
       const py = Math.round(gi.y - cam.y - spr.height);
       vctx.imageSmoothingEnabled = false;
       vctx.drawImage(spr, px, py);
       if (gi.n > 1) {
-        vctx.font = "bold 6px monospace";
+        vctx.font = "bold 12px monospace";
         vctx.textAlign = "right";
         vctx.fillStyle = "#000";
-        vctx.fillText(`${gi.n}`, px + spr.width + 1, py + spr.height + 1);
+        vctx.fillText(`${gi.n}`, px + spr.width + 2, py + spr.height + 2);
         vctx.fillStyle = "#ffe9a8";
         vctx.fillText(`${gi.n}`, px + spr.width, py + spr.height);
       }
@@ -2072,33 +2088,33 @@ function render(): void {
   // NPCs
   for (const n of world.npcs) {
     if (!inView(n.x, n.y)) continue;
-    const bob = Math.sin(waveT * 2 + n.bob) * 1.2;
+    const bob = Math.sin(waveT * 2 + n.bob) * 2.4;
     drawList.push({ y: n.y, fn: () => {
       drawShadow(n.x, n.y);
       drawSprite(n.spr, n.x, n.y, 1, bob);
       // name tag
-      vctx.font = "bold 6px monospace";
+      vctx.font = "bold 12px monospace";
       vctx.textAlign = "center";
       vctx.fillStyle = "#000";
-      vctx.fillText("!", Math.round(n.x - cam.x) + 1, Math.round(n.y - cam.y - n.spr.height - 3) + 1);
+      vctx.fillText("!", Math.round(n.x - cam.x) + 2, Math.round(n.y - cam.y - n.spr.height - 6) + 2);
       vctx.fillStyle = "#ffe9a8";
-      vctx.fillText("!", Math.round(n.x - cam.x), Math.round(n.y - cam.y - n.spr.height - 3));
+      vctx.fillText("!", Math.round(n.x - cam.x), Math.round(n.y - cam.y - n.spr.height - 6));
     } });
   }
   // monsters
   for (const m of world.monsters) {
     if (!inView(m.x, m.y)) continue;
-    const bob = Math.sin(m.bob) * 1.5;
+    const bob = Math.sin(m.bob) * 3;
     drawList.push({ y: m.y, fn: () => {
       drawShadow(m.x, m.y);
       vctx.globalAlpha = m.hurtT > 0 && Math.sin(m.hurtT * 60) > 0 ? 0.5 : 1;
       drawSprite(m.spr, m.x, m.y, 1, bob);
       vctx.globalAlpha = 1;
-      hpBar(m.x, m.y - m.spr.height - 4, m.hp / m.maxhp);
+      hpBar(m.x, m.y - m.spr.height - 8, m.hp / m.maxhp);
     } });
   }
   // player
-  const pbob = (P.dest || P.target || P.gather || moveAxisNonZero() || !atCenter(P)) ? Math.sin(P.bob * 10) * 1.2 : 0;
+  const pbob = (P.dest || P.target || P.gather || moveAxisNonZero() || !atCenter(P)) ? Math.sin(P.bob * 10) * 2.4 : 0;
   drawList.push({ y: P.y, fn: () => {
     drawShadow(P.x, P.y);
     vctx.globalAlpha = P.dead ? 0.4 : 1;
@@ -2113,14 +2129,14 @@ function render(): void {
   for (const sh of world.shots) {
     const t = sh.p < 1 ? sh.p : 1;
     const cx = sh.fromX + (sh.toX - sh.fromX) * t;
-    const cy = sh.fromY + (sh.toY - sh.fromY) * t - Math.sin(t * Math.PI) * 6;
+    const cy = sh.fromY + (sh.toY - sh.fromY) * t - Math.sin(t * Math.PI) * 12;
     const ang = Math.atan2(sh.toY - sh.fromY, sh.toX - sh.fromX);
-    const dx = Math.cos(ang) * 3;
-    const dy = Math.sin(ang) * 3;
+    const dx = Math.cos(ang) * 6;
+    const dy = Math.sin(ang) * 6;
     const px = Math.round(cx - cam.x);
     const py = Math.round(cy - cam.y);
     vctx.strokeStyle = sh.color ?? (sh.bone ? "#efe9d6" : "#cfd8da");
-    vctx.lineWidth = sh.wide ? 2 : 1;
+    vctx.lineWidth = sh.wide ? 4 : 2;
     vctx.beginPath();
     vctx.moveTo(px - dx, py - dy);
     vctx.lineTo(px + dx, py + dy);
@@ -2134,9 +2150,9 @@ function render(): void {
       const sx = Math.round(tp.x - cam.x);
       const sy = Math.round(tp.y - cam.y);
       vctx.strokeStyle = "#ff5a4a";
-      vctx.lineWidth = 1;
-      const s = 9;
-      for (const [ox, oy, dx, dy] of [[-s, -s, 3, 0], [-s, -s, 0, 3], [s, -s, -3, 0], [s, -s, 0, 3], [-s, s, 3, 0], [-s, s, 0, -3], [s, s, -3, 0], [s, s, 0, -3]] as const) {
+      vctx.lineWidth = 2;
+      const s = 18;
+      for (const [ox, oy, dx, dy] of [[-s, -s, 6, 0], [-s, -s, 0, 6], [s, -s, -6, 0], [s, -s, 0, 6], [-s, s, 6, 0], [-s, s, 0, -6], [s, s, -6, 0], [s, s, 0, -6]] as const) {
         vctx.beginPath();
         vctx.moveTo(sx + ox, sy + oy);
         vctx.lineTo(sx + ox + dx, sy + oy + dy);
@@ -2149,14 +2165,16 @@ function render(): void {
     const gp = gatherPoint();
     if (gp) {
       vctx.strokeStyle = "#8ce06a";
-      vctx.strokeRect(Math.round(gp.x - cam.x) - 8, Math.round(gp.y - cam.y) - 8, 16, 16);
+      vctx.lineWidth = 2;
+      vctx.strokeRect(Math.round(gp.x - cam.x) - 16, Math.round(gp.y - cam.y) - 16, 32, 32);
     }
   }
   // move marker
   if (moveMarker) {
     const a = moveMarker.t / 0.5;
     vctx.strokeStyle = `rgba(255,255,255,${a})`;
-    const r = (1 - a) * 6 + 2;
+    vctx.lineWidth = 2;
+    const r = (1 - a) * 12 + 4;
     vctx.beginPath();
     vctx.arc(moveMarker.x - cam.x, moveMarker.y - cam.y, r, 0, 6.2832);
     vctx.stroke();
@@ -2190,8 +2208,8 @@ function render(): void {
   // ghost of the item being dragged, following the cursor
   if (itemDrag && itemDrag.active) {
     const spr = itemSprite(itemDrag.kind);
-    const gw = spr.width * 2 * scale;
-    const gh = spr.height * 2 * scale;
+    const gw = iconW(spr, 2 * scale);
+    const gh = iconH(spr, 2 * scale);
     sctx.imageSmoothingEnabled = false;
     sctx.globalAlpha = 0.85;
     sctx.drawImage(spr, Math.round(mouse.sx - gw / 2), Math.round(mouse.sy - gh / 2), gw, gh);

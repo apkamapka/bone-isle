@@ -1,7 +1,30 @@
 /** Game-wide constants. One place to tune the whole prototype. */
 
-/** Tile size in internal (low-res) pixels. */
-export const TILE = 16;
+/** Tile size in internal (low-res) pixels. Doubled from 16 in Etap 17: a tile
+ *  now carries four times the pixel budget, which is what lets a hero sprite
+ *  be 32x48 instead of 12x16. */
+export const TILE = 32;
+
+/**
+ * The tile size every existing pixel map, terrain painter and structure baker
+ * was authored against. Nothing was redrawn for TILE=32 — legacy art is baked
+ * once at this resolution and blown up SPRITE_SCALE times with nearest-
+ * neighbour, so the game looks pixel-for-pixel identical to the 16-px era.
+ * Native 32-px maps arrive sprite by sprite in later stages.
+ */
+export const LEGACY_TILE = 16;
+
+/** Nearest-neighbour magnification applied to legacy art. */
+export const SPRITE_SCALE = TILE / LEGACY_TILE;
+
+/**
+ * Resolution (px per tile) of the static terrain canvas. It deliberately stays
+ * at legacy scale and is blitted SPRITE_SCALE times bigger every frame: the
+ * 368x272-tile continent already bakes to a ~5900x4350 bitmap, and painting it
+ * at TILE would need four times that (~100 Mpx) — an allocation phones refuse.
+ * Keeping it small also means the per-frame blit reads a quarter of the pixels.
+ */
+export const MAP_TILE = TILE / SPRITE_SCALE;
 
 /**
  * The one canonical world seed. Terrain generation is fully deterministic, so a
@@ -11,51 +34,64 @@ export const TILE = 16;
  */
 export const WORLD_SEED = 20260713;
 
-/** Internal viewport resolution (scaled up with pixelated rendering). */
-
 /**
  * CSS pixels per internal world pixel — the zoom. Larger means closer in and
  * chunkier, and directly sets how much of the island is on screen:
  * visible tiles = viewport / (f * TILE).
  *
- * Phones keep their original tight framing. Desktop used to sit at
- * min(w,h)/360, which on a 1080p-ish window put roughly 46 x 22 tiles on
- * screen — far more world than Tibia's 15 x 11 and too wide to read faces.
- * Halving the divisor doubles the zoom, landing near 23 x 11 tiles.
+ * Both divisors doubled with TILE (Etap 17). A world pixel is half a tile-width
+ * of what it used to be, so the zoom factor must halve for the framing to stay
+ * put — and the clamps halve with it (desktop 4..6.4 became 2..3.2, mobile
+ * 2..6 became 1..3). Desktop stays near 23 x 11 tiles, phones keep exactly the
+ * framing they had.
  *
- * Note this only magnifies: every tile still holds TILE px of detail. Genuinely
- * finer artwork needs TILE itself to grow, which is a separate change.
+ * Mobile rounds in HALF steps, not whole ones. A plain round() at the doubled
+ * divisor is not the old value halved: a 768-px tablet used to land on f=3
+ * (768/220 -> 3) and would now land on round(768/440) = 2, quietly showing a
+ * third more world. round(lo / MOBILE_ZOOM_DIV * 2) / 2 is exactly the old
+ * factor divided by two for every viewport. Half steps stay perfectly crisp
+ * because legacy art is baked SPRITE_SCALE times chunkier: one art pixel is
+ * two world pixels, so f=2.5 is still a whole number of screen pixels per
+ * pixel of artwork.
  */
-export const DESKTOP_ZOOM_DIV = 180;
-export const MOBILE_ZOOM_DIV = 220;
+export const DESKTOP_ZOOM_DIV = 360;
+export const MOBILE_ZOOM_DIV = 440;
 
 export function worldZoom(cw: number, ch: number, mobile: boolean): number {
   const lo = Math.min(cw, ch);
   const cl = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
   return mobile
-    ? cl(Math.round(lo / MOBILE_ZOOM_DIV), 2, 6)
-    : cl(lo / DESKTOP_ZOOM_DIV, 4, 6.4);
+    ? cl(Math.round((lo / MOBILE_ZOOM_DIV) * 2) / 2, 1, 3)
+    : cl(lo / DESKTOP_ZOOM_DIV, 2, 3.2);
 }
+
+/** Floor on the internal render buffer (world px). Ten by seven-and-a-half
+ *  tiles — the same slice of world the old 160x120 floor guaranteed. */
+export const MIN_VIEW_W = 10 * TILE;
+export const MIN_VIEW_H = 7.5 * TILE;
 
 /** How many tiles fit across a viewport at the given zoom — the number that
  *  actually matters when judging framing. */
 export function visibleTiles(cw: number, ch: number, mobile: boolean): { w: number; h: number } {
   const f = worldZoom(cw, ch, mobile);
-  return { w: Math.max(160, Math.ceil(cw / f)) / TILE, h: Math.max(120, Math.ceil(ch / f)) / TILE };
+  return {
+    w: Math.max(MIN_VIEW_W, Math.ceil(cw / f)) / TILE,
+    h: Math.max(MIN_VIEW_H, Math.ceil(ch / f)) / TILE,
+  };
 }
 
-export const VIEW_W = 480;
-export const VIEW_H = 320;
+export const VIEW_W = 30 * TILE;
+export const VIEW_H = 20 * TILE;
 
 /** Player balance. */
-export const PLAYER_BASE_SPEED = 58;
+export const PLAYER_BASE_SPEED = 116;
 /**
  * Movement speed gained per character level above 1 (px/s). Tibia 8.6 has no
  * Speed skill — haste comes from the character level itself (+2 speed/level on
- * a 220 base, ~0.9%). Scaled to our 58 px/s base that's ~0.5 px/s per level,
+ * a 220 base, ~0.9%). Scaled to our 116 px/s base that's ~1 px/s per level,
  * so a level-50 character moves ~42% faster, matching the 8.6 curve.
  */
-export const SPEED_PER_LEVEL = 0.5;
+export const SPEED_PER_LEVEL = 1;
 
 /**
  * Food & regeneration, Tibia 8.6 style: eating banks "fed" seconds and HP only
@@ -128,8 +164,8 @@ export const MONSTERS_ENABLED = true;
  * real chokepoints, and getting cornered is genuinely dangerous.
  */
 /** Melee/interaction reach in px: covers the 8 adjacent tile centres
- *  (diagonal ≈ 22.6px) but never a tile two squares away (32px). */
-export const MELEE_REACH_PX = 24;
+ *  (diagonal ≈ 45.3px) but never a tile two squares away (64px). */
+export const MELEE_REACH_PX = 48;
 
 /**
  * Shielding cap, straight from Tibia: your shield blocks at most this many
@@ -147,8 +183,8 @@ export const SHIELD_BLOCK_WINDOW_S = 2;
  * is Tibia's "creatures don't spawn on screen": a respawn never pops within
  * this radius of the player — if the area is camped, it retries a bit later.
  */
-export const SPAWN_SPACING_PX = 28;
-export const SPAWN_AVOID_PLAYER_PX = 120;
+export const SPAWN_SPACING_PX = 56;
+export const SPAWN_AVOID_PLAYER_PX = 240;
 export const RESPAWN_RETRY_S = 3;
 
 /**
@@ -158,7 +194,7 @@ export const RESPAWN_RETRY_S = 3;
  * corners — Rookgaard-style discovery. No monster spawns within this radius of
  * the entrance, so arriving is never an instant ambush.
  */
-export const WILD_ENTRANCE_SAFE_PX = 96;
+export const WILD_ENTRANCE_SAFE_PX = 192;
 
 /** How long a lootable corpse stays on the ground (seconds). */
 export const CORPSE_DECAY_S = 75;
@@ -170,7 +206,7 @@ export const CORPSE_DECAY_S = 75;
  * an open chest window would allow remote deposits from anywhere, which would
  * defeat the whole carry-capacity / multi-trip design.
  */
-export const USE_RANGE_PX = 56;
+export const USE_RANGE_PX = 112;
 
 /** Resource node regrowth (seconds). Slow enough that you rotate between
  *  nodes and islands rather than farming one spot — paired with denser nodes. */
@@ -179,7 +215,7 @@ export const ROCK_REGROW_S = 120;
 export const HERB_REGROW_S = 75;
 
 /** Garden aura: heal radius (px) and HP per second while standing near. */
-export const GARDEN_RADIUS = 40;
+export const GARDEN_RADIUS = 80;
 export const GARDEN_HEAL_PER_S = 3;
 
 /** Passive max-HP bonus granted while you own a Garden on Home Isle. */
@@ -188,9 +224,9 @@ export const GARDEN_HP_BONUS = 15;
 /** Crystals (charge-based, replace spells). Values are per single charge. */
 export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level*3
 export const FIRE_CRYSTAL_DMG = 18;     // damage = this + level
-export const FIRE_CRYSTAL_RANGE = 120;  // px the fire crystal can reach
+export const FIRE_CRYSTAL_RANGE = 240;  // px the fire crystal can reach
 export const SPEAR_CRYSTAL_DMG = 40;    // Spear Crystal (tower-researched) = this + level*2
-export const SPEAR_CRYSTAL_RANGE = 160; // longer reach than a Fire Crystal
+export const SPEAR_CRYSTAL_RANGE = 320; // longer reach than a Fire Crystal
 /** Shared cooldown for OFFENSIVE crystals (Fire, Spear) — they were spammable
  *  into a machine-gun burst; one bolt per this many seconds now. */
 export const CRYSTAL_COOLDOWN_S = 1.5;
@@ -212,7 +248,7 @@ export const DIST_FACTOR_BASE = 0.45;   // multiplier at skill 10 (start)
 export const DIST_FACTOR_PER = 0.055;   // + this per Distance level above 10
 export const DIST_LEVEL_BONUS = 0.30;   // small flat + level * this
 export const ARROW_MISS_WARN_S = 1.2;   // throttle for the "no arrows" nag
-export const SHOT_SPEED = 520;          // px/s the drawn arrow travels
+export const SHOT_SPEED = 1040;          // px/s the drawn arrow travels
 
 /**
  * Melee mirrors ranged: the weapon's attack value (bare fists + gear Attack) is
@@ -234,7 +270,7 @@ export const GROUND_DESPAWN_S = 3600;
  * Throws also require line of sight and a walkable landing tile; an illegal
  * target slides back along the throw line toward the player until legal.
  */
-export const THROW_RANGE_PX = 120;
+export const THROW_RANGE_PX = 240;
 
 /**
  * How close (px) the player must STAND to a loose ground item to grab it —
@@ -242,16 +278,16 @@ export const THROW_RANGE_PX = 120;
  * (√2·16 ≈ 23), the Tibia adjacency rule: you can throw far, but you can't
  * manipulate loot from across the room ("You are too far away").
  */
-export const ITEM_MOVE_REACH_PX = 24;
+export const ITEM_MOVE_REACH_PX = 48;
 
 /**
  * Monster sight range (px). Deliberately one tile MORE than the longest bow
- * in the game (Hunter's Bow, 150 px), so no bow can shoot from outside every
+ * in the game (Hunter's Bow, 300 px), so no bow can shoot from outside every
  * creature's awareness — archers can still kite, but never plink at a target
  * that won't react. If a longer weapon is ever added, bump this with it (the
  * aggro-on-hit timer below is the safety net if it's forgotten).
  */
-export const MONSTER_AGGRO_RANGE = 166;
+export const MONSTER_AGGRO_RANGE = 332;
 /**
  * After taking a hit a monster stays aggressive for this many seconds even
  * beyond its sight range (line of sight still required) — shooting something

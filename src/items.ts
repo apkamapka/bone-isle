@@ -58,7 +58,8 @@ export interface ItemDef {
   heal?: number;
   /** True for charge-based crystals; each use consumes one from the stack. */
   crystal?: true;
-  /** Bows: two-handed ranged weapon. `range` px reach, `power` adds to shot dmg. */
+  /** Bows: two-handed ranged weapon. `range` is WORLD px (doubled with TILE in
+   *  Etap 17 — 220 px is the same 7 tiles it always was). `power` adds to dmg. */
   bow?: { range: number; power: number };
   /** Arrows: consumable ammo. `dmg` adds to each shot's damage. */
   ammo?: { dmg: number };
@@ -94,8 +95,8 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   recallCrystal: { name: "Recall Crystal", stack: 999, value: 6, weight: 2, crystal: true },
   spearCrystal:  { name: "Spear Crystal",  stack: 999, value: 14, weight: 2, crystal: true },
   fireRuby:      { name: "Fire Ruby",      stack: 999, value: 40, weight: 3 },
-  bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 110, power: 4 } },
-  longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 150, power: 9 } },
+  bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 220, power: 4 } },
+  longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 300, power: 9 } },
   arrow:     { name: "Arrow",        stack: 999, value: 1, weight: 1, ammo: { dmg: 8 } },
   // Blunt practice shafts: dirt-cheap (1g at the smith, or bulk-crafted from
   // wood), zero attack — pure Distance training fodder for the Archery Range.
@@ -125,9 +126,9 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   marrowArmor: { name: "Marrow Plate",   stack: 1, value: 620, weight: 110, slot: "body",  gear: { def: 9 } },
   marrowHelmet:{ name: "Marrow Helm",    stack: 1, value: 420, weight: 52, slot: "head",   gear: { def: 5 } },
   marrowLegs:  { name: "Marrow Greaves", stack: 1, value: 460, weight: 84, slot: "legs",   gear: { def: 6 } },
-  marrowBoots: { name: "Marrow Boots",   stack: 1, value: 380, weight: 26, slot: "boots",  gear: { def: 3, speed: 8 } },
+  marrowBoots: { name: "Marrow Boots",   stack: 1, value: 380, weight: 26, slot: "boots",  gear: { def: 3, speed: 16 } },
   legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 2 } },
-  boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 6 } },
+  boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 12 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },

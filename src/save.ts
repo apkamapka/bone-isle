@@ -1,6 +1,6 @@
 /** localStorage persistence: full game snapshot keyed by a single slot. */
 import { buildWorlds, populateAll, type Game } from "./game.ts";
-import { WORLD_SEED, GROUND_DESPAWN_S, PACK_BONUS_SLOTS, PACK_MAX } from "./config.ts";
+import { WORLD_SEED, GROUND_DESPAWN_S, PACK_BONUS_SLOTS, PACK_MAX, SPRITE_SCALE } from "./config.ts";
 import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn, feetBlocked } from "./world/collision.ts";
@@ -20,8 +20,17 @@ import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
 
 const KEY = "bone-isle-save-v2";
 
+/**
+ * Save format version. Bumped to 3 when TILE went 16 → 32 (Etap 17): every
+ * stored WORLD-PIXEL coordinate (the player, loose ground stacks, corpses) is
+ * twice what it used to be. Tile coordinates — structures — are unaffected, and
+ * so is the storage key, so a v2 save loads straight into the new world with
+ * its positions scaled on the way in.
+ */
+const SAVE_V = 3;
+
 interface SaveData {
-  v: 2;
+  v: 2 | 3;
   seed: number;
   current: WorldKey;
   player: {
@@ -73,7 +82,7 @@ export function saveGame(g: Game): void {
     if (g.worlds[k].corpses.length) corpseDump[k] = g.worlds[k].corpses;
   });
   const data: SaveData = {
-    v: 2,
+    v: SAVE_V,
     seed: g.seed,
     current: g.current.key,
     player: {
@@ -114,10 +123,13 @@ export function loadGame(): Game | null {
   let data: SaveData;
   try {
     data = JSON.parse(raw) as SaveData;
-    if (data.v !== 2) return null;
+    if (data.v !== 2 && data.v !== SAVE_V) return null;
   } catch {
     return null;
   }
+
+  /** v2 stored world pixels on a 16-px tile; TILE is 32 now, so they double. */
+  const pos = data.v === 2 ? SPRITE_SCALE : 1;
 
   // rebuild the deterministic world. We force the canonical WORLD_SEED (rather
   // than the seed stored in the save) so every device shows the same islands —
@@ -143,7 +155,7 @@ export function loadGame(): Game | null {
     if (Array.isArray(gr)) {
       worlds[k].ground = gr
         .filter((gi) => validItem(gi) && typeof gi.x === "number" && typeof gi.y === "number")
-        .map((gi) => ({ kind: gi.kind, n: gi.n, x: gi.x, y: gi.y, t: typeof gi.t === "number" ? gi.t : GROUND_DESPAWN_S }));
+        .map((gi) => ({ kind: gi.kind, n: gi.n, x: gi.x * pos, y: gi.y * pos, t: typeof gi.t === "number" ? gi.t : GROUND_DESPAWN_S }));
     }
     const cs = data.corpses?.[k];
     if (Array.isArray(cs)) {
@@ -151,7 +163,7 @@ export function loadGame(): Game | null {
         .filter((c) => c && typeof c.x === "number" && typeof c.y === "number" && Array.isArray(c.items))
         .map((c) => ({
           name: typeof c.name === "string" ? c.name : "corpse",
-          x: c.x, y: c.y,
+          x: c.x * pos, y: c.y * pos,
           items: c.items.map(validItem).filter((it): it is NonNullable<ReturnType<typeof validItem>> => it !== null),
           gold: typeof c.gold === "number" ? Math.max(0, c.gold) : 0,
           t: typeof c.t === "number" ? c.t : 60,
@@ -198,7 +210,7 @@ export function loadGame(): Game | null {
 
   const player = createPlayer(portalSpawn(worlds.home));
   const sp = data.player;
-  placeWalker(player, sp.x, sp.y); // grid migration: snap old free positions to a tile centre
+  placeWalker(player, sp.x * pos, sp.y * pos); // scale a v2 position, then snap to its tile centre
   player.gold = sp.gold; player.taskPoints = sp.taskPoints ?? 0; player.level = sp.level;
   player.fedS = sp.fedS ?? 0; // older saves start hungry
   // Recompute expNext from level so older saves adopt the current XP curve.
@@ -246,7 +258,7 @@ export function loadGame(): Game | null {
     if (firstChest) left = addItem((firstChest.inv ??= emptyStash()), st.kind, st.n);
     if (left > 0) {
       const at = portalSpawn(worlds.home);
-      worlds.home.ground.push({ kind: st.kind, n: left, x: at.x + (Math.random() - 0.5) * 12, y: at.y + 8, t: GROUND_DESPAWN_S });
+      worlds.home.ground.push({ kind: st.kind, n: left, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16, t: GROUND_DESPAWN_S });
     }
   }
 
