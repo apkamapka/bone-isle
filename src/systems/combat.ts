@@ -1,5 +1,6 @@
 /** Combat: player hits monsters, monsters hit the player, corpses & leveling. */
 import {
+  TILE,
   expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED, MONSTER_AGGRO_HIT_S,
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
   SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S,
@@ -23,17 +24,17 @@ import type { World, Monster, Structure } from "../world/types.ts";
 /** Player strikes a monster. Returns true if the monster died. */
 export function playerAttack(world: World, p: Player, m: Monster): boolean {
   const dmg = rollMeleeDamage(attackPower(p.level, p.eq));
-  addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+  addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   if (dmg <= 0) {
     // the classic Tibia whiff — the swing lands for nothing
-    addFloat(world, m.x, m.y - 16, "poof", "#9aa0a8");
+    addFloat(world, m.x, m.y - 32, "poof", "#9aa0a8");
     beep(140, 0.05, "sine", 0.03);
     return false;
   }
   m.hp -= dmg;
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
-  addFloat(world, m.x, m.y - 16, String(dmg), "#ffe27a");
+  addFloat(world, m.x, m.y - 32, String(dmg), "#ffe27a");
   beep(160, 0.07, "square", 0.05);
   if (m.hp <= 0) {
     killMonster(world, p, m);
@@ -52,8 +53,8 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   if (!removeItem(p.bag, arrowKind, 1)) return false;
   const flight = Math.hypot(m.x - p.x, m.y - p.y) / SHOT_SPEED;
   world.shots.push({
-    fromX: p.x, fromY: p.y - 8,
-    toX: m.x, toY: m.y - 6,
+    fromX: p.x, fromY: p.y - 16,
+    toX: m.x, toY: m.y - 12,
     p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow",
   });
   if (m.x < p.x) p.face = -1; else p.face = 1;
@@ -62,16 +63,16 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   // Distance once, a hit trains it DOUBLE (as in the real skill system)
   if (Math.random() > distanceHitChance()) {
     m.aggroT = MONSTER_AGGRO_HIT_S; // even a whizzing miss provokes the target
-    addFloat(world, m.x, m.y - 16, "miss", "#9aa0a8");
-    addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+    addFloat(world, m.x, m.y - 32, "miss", "#9aa0a8");
+    addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
     return false;
   }
   const dmg = rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg), p.level);
   m.hp -= dmg;
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
-  addFloat(world, m.x, m.y - 16, String(dmg), "#bfe08a");
-  addSkillXp("dist", 2, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+  addFloat(world, m.x, m.y - 32, String(dmg), "#bfe08a");
+  addSkillXp("dist", 2, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   if (m.hp <= 0) {
     killMonster(world, p, m);
     return true;
@@ -89,19 +90,19 @@ export function shootDummy(world: World, p: Player, s: Structure, arrowKind: Ite
   const dp = distancePower(p.level, p.eq, arrowAtk);
   const c = structCenter(s);
   const tx = c.x;
-  const ty = c.baseY - 8;
+  const ty = c.baseY - 32;
   s.hurtT = 0.2;
   s.anim = 0;
   const flight = Math.hypot(tx - p.x, ty - p.y) / SHOT_SPEED;
-  world.shots.push({ fromX: p.x, fromY: p.y - 8, toX: tx, toY: ty - 6, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow" });
+  world.shots.push({ fromX: p.x, fromY: p.y - 16, toX: tx, toY: ty - 12, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow" });
   if (Math.random() > distanceHitChance()) {
-    addFloat(world, c.x, s.ty * 16 - 4, "miss", "#9aa0a8");
-    addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+    addFloat(world, c.x, s.ty * TILE - 8, "miss", "#9aa0a8");
+    addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
     return true;
   }
   const dmg = rollDistanceDamage(dp, p.level);
-  addFloat(world, c.x, s.ty * 16 - 4, String(dmg), "#bfe08a");
-  addSkillXp("dist", 2, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+  addFloat(world, c.x, s.ty * TILE - 8, String(dmg), "#bfe08a");
+  addSkillXp("dist", 2, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   beep(430, 0.06, "triangle", 0.045, -120);
   return true;
 }
@@ -111,24 +112,24 @@ export function hitDummy(world: World, p: Player, s: Structure): void {
   const dmg = rollMeleeDamage(attackPower(p.level, p.eq));
   s.hurtT = 0.2;
   s.anim = 0;
-  addFloat(world, structCenter(s).x, s.ty * 16 - 4, dmg > 0 ? String(dmg) : "poof", dmg > 0 ? "#d8d2c0" : "#9aa0a8");
-  addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+  addFloat(world, structCenter(s).x, s.ty * TILE - 8, dmg > 0 ? String(dmg) : "poof", dmg > 0 ? "#d8d2c0" : "#9aa0a8");
+  addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   // The War Dummy hits back for training value: also trains Shielding.
-  if (s.key === "dummyII") addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 38, t, "#7dff9e"));
+  if (s.key === "dummyII") addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 76, t, "#7dff9e"));
   beep(220, 0.05, "triangle", 0.05);
 }
 
 /** Grant xp and process any level-ups. */
 export function grantExp(world: World, p: Player, exp: number): void {
   p.exp += exp;
-  addFloat(world, p.x, p.y - 18, `+${exp} xp`, "#caa6ff");
+  addFloat(world, p.x, p.y - 36, `+${exp} xp`, "#caa6ff");
   while (p.exp >= p.expNext) {
     p.exp -= p.expNext;
     p.level++;
     p.expNext = expNeeded(p.level);
     refreshDerived(p);
     p.hp = p.maxhp;
-    addFloat(world, p.x, p.y - 24, "LEVEL UP!", "#7dff9e");
+    addFloat(world, p.x, p.y - 48, "LEVEL UP!", "#7dff9e");
     beep(440, 0.1, "square", 0.06);
   }
 }
@@ -149,7 +150,7 @@ export function killMonster(world: World, p: Player, m: Monster): void {
     t: CORPSE_DECAY_S,
   });
 
-  onMonsterKilled(m.kind, (t) => addFloat(world, p.x, p.y - 32, t, "#ffe9a8"));
+  onMonsterKilled(m.kind, (t) => addFloat(world, p.x, p.y - 64, t, "#ffe9a8"));
   onTaskKill(m.kind);
 
   const idx = world.monsters.indexOf(m);
@@ -179,7 +180,7 @@ export function applyDeathPenalty(world: World, p: Player): void {
   const aol = p.eq.amulet && ITEMS[p.eq.amulet].deathProtect ? p.eq.amulet : null;
   if (aol) {
     p.eq.amulet = null; // consumed
-    addFloat(world, p.x, p.y - 30, "Amulet of Loss shattered!", "#c9a6ff");
+    addFloat(world, p.x, p.y - 60, "Amulet of Loss shattered!", "#c9a6ff");
   } else {
     const dropped: { kind: ItemKind; n: number }[] = [];
     for (const s of p.bag) if (s) dropped.push({ kind: s.kind, n: s.n });
@@ -193,7 +194,7 @@ export function applyDeathPenalty(world: World, p: Player): void {
     }
     if (dropped.length) {
       world.corpses.push({ name: "your body", x: p.x, y: p.y, items: dropped, gold: 0, t: PLAYER_CORPSE_DECAY_S });
-      addFloat(world, p.x, p.y - 30, "you dropped your backpack!", "#ff9e6a");
+      addFloat(world, p.x, p.y - 60, "you dropped your backpack!", "#ff9e6a");
     }
   }
 
@@ -237,9 +238,9 @@ export function hurtPlayer(world: World, p: Player, raw: number): boolean {
   p.hp -= dmg;
   // Shielding trains only on hits the shield actually engaged — more than
   // SHIELD_BLOCK_MAX attackers won't train it faster, exactly like Tibia.
-  if (blocked) addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 26, t, "#7dff9e"));
+  if (blocked) addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   // pierced hits (past the shield cap) glow hotter so a swarm reads as danger
-  addFloat(world, p.x, p.y - 18, `-${dmg}`, blocked ? "#ff6a5e" : "#ff9e3a");
+  addFloat(world, p.x, p.y - 36, `-${dmg}`, blocked ? "#ff6a5e" : "#ff9e3a");
   beep(90, 0.1, "sawtooth", 0.05);
   if (p.hp <= 0) {
     p.hp = 0;

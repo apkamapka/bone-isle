@@ -103,7 +103,7 @@ export function canPlaceAt(home: World, key: StructKey, tx: number, ty: number, 
   const cx = (tx + n / 2) * TILE;
   const cy = (ty + n / 2) * TILE;
   for (const pt of home.portals) {
-    if (dist(pt.x, pt.y, cx, cy) < 22 + n * 8) return false;
+    if (dist(pt.x, pt.y, cx, cy) < 44 + n * 16) return false;
   }
   for (const s of home.structures) {
     if (s === ignore) continue;
@@ -139,7 +139,7 @@ export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy:
   home.structures.push({ key, tx, ty, anim: Math.random() * 6, hurtT: 0, ...(key === "chest" ? { inv: emptyStash() } : {}) });
   markSolid(home, key, tx, ty);
   unstick(home, p); // if you built on the tile you were standing on, step out of it
-  onStructureBuilt(key, (t) => addFloat(home, tx * TILE + TILE, ty * TILE - 8, t, "#ffe9a8"));
+  onStructureBuilt(key, (t) => addFloat(home, tx * TILE + TILE, ty * TILE - 16, t, "#ffe9a8"));
   addFloat(home, tx * TILE + TILE, ty * TILE, `${def.name} built!`, "#ffe27a");
   beep(330, 0.1, "triangle", 0.06);
   return true;

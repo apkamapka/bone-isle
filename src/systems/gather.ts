@@ -29,12 +29,12 @@ export function gatherTick(world: World, p: Player, g: GatherTask, fx?: GatherFx
     tr.hurtT = 0.15;
     addItem(p.bag, "wood", 1);
     onItemCollected("wood", 1);
-    addFloat(world, tr.tx * TILE + TILE / 2, tr.ty * TILE - 8, "+1 wood", "#b9e07f");
+    addFloat(world, tr.tx * TILE + TILE / 2, tr.ty * TILE - 16, "+1 wood", "#b9e07f");
     beep(300, 0.06, "triangle", 0.06);
     if (tr.hp <= 0) {
       addItem(p.bag, "wood", 2);
       onItemCollected("wood", 2);
-      addFloat(world, tr.tx * TILE + TILE / 2, tr.ty * TILE - 2, "+2 wood", "#b9e07f");
+      addFloat(world, tr.tx * TILE + TILE / 2, tr.ty * TILE - 4, "+2 wood", "#b9e07f");
       tr.stump = true;
       tr.respawnT = TREE_REGROW_S;
       world.solid[tr.ty][tr.tx] = false;
@@ -47,12 +47,12 @@ export function gatherTick(world: World, p: Player, g: GatherTask, fx?: GatherFx
     rk.hurtT = 0.15;
     addItem(p.bag, "stone", 1);
     onItemCollected("stone", 1);
-    addFloat(world, rk.tx * TILE + TILE / 2, rk.ty * TILE - 2, "+1 stone", "#c8d3d8");
+    addFloat(world, rk.tx * TILE + TILE / 2, rk.ty * TILE - 4, "+1 stone", "#c8d3d8");
     beep(180, 0.06, "square", 0.05);
     if (rk.hp <= 0) {
       addItem(p.bag, "stone", 2);
       onItemCollected("stone", 2);
-      addFloat(world, rk.tx * TILE + TILE / 2, rk.ty * TILE + 4, "+2 stone", "#c8d3d8");
+      addFloat(world, rk.tx * TILE + TILE / 2, rk.ty * TILE + 8, "+2 stone", "#c8d3d8");
       rk.depleted = true;
       rk.respawnT = ROCK_REGROW_S;
       world.solid[rk.ty][rk.tx] = false;
@@ -63,7 +63,7 @@ export function gatherTick(world: World, p: Player, g: GatherTask, fx?: GatherFx
     const hb = g.obj;
     addItem(p.bag, "herb", 1);
     onItemCollected("herb", 1);
-    addFloat(world, hb.tx * TILE + TILE / 2, hb.ty * TILE - 4, "+1 herb", "#9fe08a");
+    addFloat(world, hb.tx * TILE + TILE / 2, hb.ty * TILE - 8, "+1 herb", "#9fe08a");
     beep(360, 0.06, "sine", 0.05);
     hb.picked = true;
     hb.respawnT = HERB_REGROW_S;
@@ -80,7 +80,7 @@ export function tickRegrowth(world: World, dt: number, px: number, py: number, p
   for (const tr of world.trees) {
     if (!tr.stump) continue;
     tr.respawnT -= dt;
-    if (tr.respawnT <= 0 && !(playerHere && dist(px, py, tr.tx * TILE + 8, tr.ty * TILE + 8) < 18)) {
+    if (tr.respawnT <= 0 && !(playerHere && dist(px, py, tr.tx * TILE + TILE / 2, tr.ty * TILE + TILE / 2) < 36)) {
       tr.stump = false;
       tr.hp = tr.maxhp;
       world.solid[tr.ty][tr.tx] = true;
@@ -89,7 +89,7 @@ export function tickRegrowth(world: World, dt: number, px: number, py: number, p
   for (const rk of world.rocks) {
     if (!rk.depleted) continue;
     rk.respawnT -= dt;
-    if (rk.respawnT <= 0 && !(playerHere && dist(px, py, rk.tx * TILE + 8, rk.ty * TILE + 8) < 18)) {
+    if (rk.respawnT <= 0 && !(playerHere && dist(px, py, rk.tx * TILE + TILE / 2, rk.ty * TILE + TILE / 2) < 36)) {
       rk.depleted = false;
       rk.hp = rk.maxhp;
       world.solid[rk.ty][rk.tx] = true;

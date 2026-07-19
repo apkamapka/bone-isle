@@ -45,19 +45,19 @@ function offensiveStats(kind: ItemKind, level: number): { dmg: number; range: nu
 export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
   if (p.dead) return false;
   if (bagCount(p.bag, kind) <= 0) {
-    addFloat(world, p.x, p.y - 22, "no crystal", "#8ab6ff");
+    addFloat(world, p.x, p.y - 44, "no crystal", "#8ab6ff");
     return false;
   }
 
   if (kind === "healCrystal") {
     if (p.hp >= p.maxhp) {
-      addFloat(world, p.x, p.y - 22, "full hp", "#7dff9e");
+      addFloat(world, p.x, p.y - 44, "full hp", "#7dff9e");
       return false;
     }
     removeItem(p.bag, kind, 1);
     const amount = HEAL_CRYSTAL_BASE + p.level * 3;
     p.hp = Math.min(p.maxhp, p.hp + amount);
-    addFloat(world, p.x, p.y - 20, `+${amount}`, "#7dff9e");
+    addFloat(world, p.x, p.y - 40, `+${amount}`, "#7dff9e");
     beep(660, 0.2, "sine", 0.06, 220);
     return true;
   }
@@ -65,7 +65,7 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
   const off = offensiveStats(kind, p.level);
   if (off) {
     if (offensiveCd > 0) {
-      addFloat(world, p.x, p.y - 22, "not ready", "#8ab6ff");
+      addFloat(world, p.x, p.y - 44, "not ready", "#8ab6ff");
       return false;
     }
     // The MARKED attack target comes first — the old code always zapped the
@@ -76,11 +76,11 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
     const t = p.target;
     if (t && t.kind === "mob" && t.m.hp > 0 && world.monsters.includes(t.m)) {
       if (dist(p.x, p.y, t.m.x, t.m.y) > off.range) {
-        addFloat(world, p.x, p.y - 22, "too far", "#ff9e6a");
+        addFloat(world, p.x, p.y - 44, "too far", "#ff9e6a");
         return false;
       }
       if (!lineOfSight(world, p.x, p.y, t.m.x, t.m.y)) {
-        addFloat(world, p.x, p.y - 22, "no line of sight", "#ff9e6a");
+        addFloat(world, p.x, p.y - 44, "no line of sight", "#ff9e6a");
         return false;
       }
       best = t.m;
@@ -93,7 +93,7 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
         if (d < bd && lineOfSight(world, p.x, p.y, m.x, m.y)) { bd = d; best = m; }
       }
       if (!best) {
-        addFloat(world, p.x, p.y - 22, "no target", "#ff9e6a");
+        addFloat(world, p.x, p.y - 44, "no target", "#ff9e6a");
         return false;
       }
     }
@@ -103,7 +103,7 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
     best.hurtT = 0.2;
     best.aggroT = MONSTER_AGGRO_HIT_S;
     const col = kind === "spearCrystal" ? "#ffce4a" : "#ff8a3a";
-    addFloat(world, best.x, best.y - 16, String(off.dmg), col);
+    addFloat(world, best.x, best.y - 32, String(off.dmg), col);
     beep(kind === "spearCrystal" ? 240 : 300, 0.2, "sawtooth", 0.06, -140);
     if (best.hp <= 0) killMonster(world, p, best);
     return true;
