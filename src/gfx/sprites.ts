@@ -3,6 +3,7 @@
  * All graphics are tiny string maps rendered once onto offscreen canvases.
  */
 import { rndi } from "../util.ts";
+import { SPRITE_SCALE } from "../config.ts";
 
 /** Single-character color palette used by pixel maps. */
 export const PAL: Readonly<Record<string, string>> = {
@@ -19,10 +20,65 @@ export const PAL: Readonly<Record<string, string>> = {
   u: "#8a6cff", U: "#5a3fd0", x: "#4a4a52",
 };
 
-/** Bake a string pixel-map into an offscreen canvas ('.' = transparent).
- *  `over` remaps selected palette glyphs to custom colors — the outfit system
- *  uses it to re-tint the player sprite without a second pixel map. */
-export function bake(map: readonly string[], over?: Readonly<Record<string, string>>): HTMLCanvasElement {
+/**
+ * The 1x source every upscaled sprite came from. The static terrain canvas is
+ * painted at MAP_TILE (legacy) resolution, so the decor it bakes in needs the
+ * ORIGINAL artwork — looking it up here beats downsampling the chunky copy,
+ * which would lean on the browser's nearest-neighbour downscale being exact.
+ */
+const nativeSrc = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+
+/** The unscaled art a sprite was baked from (itself, if it was never scaled). */
+export function spriteSource(spr: HTMLCanvasElement): HTMLCanvasElement {
+  return nativeSrc.get(spr) ?? spr;
+}
+
+/** Nearest-neighbour blow-up of a freshly painted canvas. Registered against
+ *  its source so spriteSource() can find the original later. */
+function upscale(src: HTMLCanvasElement, s: number): HTMLCanvasElement {
+  if (s === 1) return src;
+  const c = document.createElement("canvas");
+  c.width = src.width * s;
+  c.height = src.height * s;
+  const x = c.getContext("2d")!;
+  x.imageSmoothingEnabled = false;
+  x.drawImage(src, 0, 0, c.width, c.height);
+  nativeSrc.set(c, src);
+  return c;
+}
+
+/**
+ * Paint `w` x `h` pixels of LEGACY (16-px-era) artwork and hand back a
+ * SPRITE_SCALE nearest-neighbour blow-up. Every existing baker draws through
+ * this with its coordinates untouched: one old pixel becomes one solid block,
+ * so the result is the old sprite exactly, four times the pixels.
+ */
+export function legacyBake(
+  w: number,
+  h: number,
+  draw: (x: CanvasRenderingContext2D) => void,
+): HTMLCanvasElement {
+  const src = document.createElement("canvas");
+  src.width = w;
+  src.height = h;
+  draw(src.getContext("2d")!);
+  return upscale(src, SPRITE_SCALE);
+}
+
+/**
+ * Bake a string pixel-map into an offscreen canvas ('.' = transparent).
+ * `over` remaps selected palette glyphs to custom colors — the outfit system
+ * uses it to re-tint the player sprite without a second pixel map.
+ *
+ * `scale` defaults to SPRITE_SCALE, i.e. every map in this file is treated as
+ * LEGACY 16-px-era art and doubled. Maps drawn natively for a 32-px tile pass
+ * 1 (or call bakeNative) and are used at their own resolution.
+ */
+export function bake(
+  map: readonly string[],
+  over?: Readonly<Record<string, string>>,
+  scale: number = SPRITE_SCALE,
+): HTMLCanvasElement {
   const h = map.length;
   const w = map[0].length;
   const c = document.createElement("canvas");
@@ -37,7 +93,27 @@ export function bake(map: readonly string[], over?: Readonly<Record<string, stri
       x.fillRect(i, j, 1, 1);
     }
   }
-  return c;
+  return upscale(c, scale);
+}
+
+/** Bake a pixel map drawn natively for a 32-px tile — no upscaling. */
+export function bakeNative(
+  map: readonly string[],
+  over?: Readonly<Record<string, string>>,
+): HTMLCanvasElement {
+  return bake(map, over, 1);
+}
+
+/**
+ * On-screen size of a baked sprite drawn at `zoom` px per LEGACY art pixel.
+ * The HUD authored all its icon sizes against 16-px-era art, so it divides the
+ * bake scale straight back out and every icon keeps the footprint it had.
+ */
+export function iconW(spr: HTMLCanvasElement, zoom: number): number {
+  return (spr.width * zoom) / SPRITE_SCALE;
+}
+export function iconH(spr: HTMLCanvasElement, zoom: number): number {
+  return (spr.height * zoom) / SPRITE_SCALE;
 }
 
 /**
@@ -907,201 +983,177 @@ export type SpriteName = keyof typeof SPR;
 
 /** Tall sketchy conifer — every call produces a slightly different tree. */
 export function bakeTree(): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = 16;
-  c.height = 28;
-  const x = c.getContext("2d")!;
-  const greens = ["#2f5226", "#3f6d33", "#5d8f3f"] as const;
-  x.fillStyle = PAL.t;
-  x.fillRect(7, 22, 2, 6);
-  x.fillStyle = "#4a2c16";
-  x.fillRect(7, 27, 2, 1);
-  x.fillRect(6, 26, 1, 2);
-  const layers: ReadonlyArray<readonly [number, number]> = [[22, 7], [16, 6], [10, 4]];
-  let tip = 4;
-  for (const [bottom, halfw] of layers) {
-    const top = bottom - 8;
-    for (let row = top; row < bottom; row++) {
-      const t = (row - top) / (bottom - top);
-      const half = Math.max(1, Math.round(halfw * t) + rndi(-1, 0));
-      x.fillStyle = greens[1];
-      x.fillRect(8 - half, row, half * 2, 1);
-      x.fillStyle = greens[2];
-      x.fillRect(8 - half, row, 1 + (row % 2), 1);
-      x.fillStyle = greens[0];
-      x.fillRect(8 + half - 1 - (row % 2), row, 1 + (row % 2), 1);
-      if (Math.random() < 0.7) {
-        x.fillStyle = "#1e3a19";
-        x.fillRect(8 - half, row, 1, 1);
-        x.fillRect(8 + half - 1, row, 1, 1);
+  return legacyBake(16, 28, (x) => {
+    const greens = ["#2f5226", "#3f6d33", "#5d8f3f"] as const;
+    x.fillStyle = PAL.t;
+    x.fillRect(7, 22, 2, 6);
+    x.fillStyle = "#4a2c16";
+    x.fillRect(7, 27, 2, 1);
+    x.fillRect(6, 26, 1, 2);
+    const layers: ReadonlyArray<readonly [number, number]> = [[22, 7], [16, 6], [10, 4]];
+    let tip = 4;
+    for (const [bottom, halfw] of layers) {
+      const top = bottom - 8;
+      for (let row = top; row < bottom; row++) {
+        const t = (row - top) / (bottom - top);
+        const half = Math.max(1, Math.round(halfw * t) + rndi(-1, 0));
+        x.fillStyle = greens[1];
+        x.fillRect(8 - half, row, half * 2, 1);
+        x.fillStyle = greens[2];
+        x.fillRect(8 - half, row, 1 + (row % 2), 1);
+        x.fillStyle = greens[0];
+        x.fillRect(8 + half - 1 - (row % 2), row, 1 + (row % 2), 1);
+        if (Math.random() < 0.7) {
+          x.fillStyle = "#1e3a19";
+          x.fillRect(8 - half, row, 1, 1);
+          x.fillRect(8 + half - 1, row, 1, 1);
+        }
       }
+      tip = top;
     }
-    tip = top;
-  }
-  x.fillStyle = "#1e3a19";
-  x.fillRect(7, tip, 2, 2);
-  x.fillStyle = "#5d8f3f";
-  x.fillRect(7, tip + 1, 1, 1);
-  return c;
+    x.fillStyle = "#1e3a19";
+    x.fillRect(7, tip, 2, 2);
+    x.fillStyle = "#5d8f3f";
+    x.fillRect(7, tip + 1, 1, 1);
+  });
 }
 
 export function bakeForge(): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = 28;
-  c.height = 26;
-  const x = c.getContext("2d")!;
-  x.fillStyle = "#4f5557"; x.fillRect(18, 2, 7, 10);
-  x.fillStyle = "#7d8487"; x.fillRect(19, 3, 5, 8);
-  x.fillStyle = "#2f3436"; x.fillRect(18, 2, 7, 1);
-  x.fillStyle = "#5f6669"; x.fillRect(2, 10, 24, 15);
-  x.fillStyle = "#7d8487"; x.fillRect(3, 11, 22, 13);
-  x.fillStyle = "#999fa2";
-  for (let j = 0; j < 3; j++)
-    for (let i = 0; i < 4; i++)
-      x.fillRect(4 + i * 5 + (j % 2) * 2, 12 + j * 4, 4, 3);
-  x.fillStyle = "#1c1410"; x.fillRect(9, 15, 9, 9);
-  x.fillStyle = "#e8772e"; x.fillRect(11, 21, 5, 2);
-  x.fillStyle = "#ffc23e"; x.fillRect(12, 20, 3, 2);
-  x.fillStyle = "#2f3436"; x.fillRect(21, 21, 4, 2); x.fillRect(22, 23, 2, 1);
-  x.fillRect(2, 24, 24, 1);
-  return c;
+  return legacyBake(28, 26, (x) => {
+    x.fillStyle = "#4f5557"; x.fillRect(18, 2, 7, 10);
+    x.fillStyle = "#7d8487"; x.fillRect(19, 3, 5, 8);
+    x.fillStyle = "#2f3436"; x.fillRect(18, 2, 7, 1);
+    x.fillStyle = "#5f6669"; x.fillRect(2, 10, 24, 15);
+    x.fillStyle = "#7d8487"; x.fillRect(3, 11, 22, 13);
+    x.fillStyle = "#999fa2";
+    for (let j = 0; j < 3; j++)
+      for (let i = 0; i < 4; i++)
+        x.fillRect(4 + i * 5 + (j % 2) * 2, 12 + j * 4, 4, 3);
+    x.fillStyle = "#1c1410"; x.fillRect(9, 15, 9, 9);
+    x.fillStyle = "#e8772e"; x.fillRect(11, 21, 5, 2);
+    x.fillStyle = "#ffc23e"; x.fillRect(12, 20, 3, 2);
+    x.fillStyle = "#2f3436"; x.fillRect(21, 21, 4, 2); x.fillRect(22, 23, 2, 1);
+    x.fillRect(2, 24, 24, 1);
+  });
 }
 
 export function bakeLibrary(): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = 28;
-  c.height = 27;
-  const x = c.getContext("2d")!;
-  x.fillStyle = "#5b3b22"; x.fillRect(3, 12, 22, 13);
-  x.fillStyle = "#7a5a32"; x.fillRect(4, 13, 20, 11);
-  x.fillStyle = "#4a2c16";
-  for (let j = 0; j < 3; j++) x.fillRect(4, 15 + j * 3, 20, 1);
-  // roof (wide at the walls, narrowing to the ridge)
-  x.fillStyle = "#2e6e6a";
-  for (let r = 0; r < 8; r++) x.fillRect(2 + r, 12 - r, 24 - r * 2, 1);
-  x.fillStyle = "#3f8d87";
-  for (let r = 1; r < 8; r += 2) x.fillRect(2 + r, 12 - r, 24 - r * 2, 1);
-  x.fillStyle = "#1d4b48"; x.fillRect(9, 4, 10, 1);
-  x.fillStyle = "#2b2017"; x.fillRect(12, 18, 5, 7);
-  x.fillStyle = "#e3b341"; x.fillRect(6, 16, 3, 3);
-  x.fillStyle = "#efe9d6"; x.fillRect(19, 15, 5, 4);
-  x.fillStyle = "#a8432f"; x.fillRect(21, 15, 1, 4);
-  x.fillStyle = "#2f3436"; x.fillRect(3, 24, 22, 1);
-  return c;
+  return legacyBake(28, 27, (x) => {
+    x.fillStyle = "#5b3b22"; x.fillRect(3, 12, 22, 13);
+    x.fillStyle = "#7a5a32"; x.fillRect(4, 13, 20, 11);
+    x.fillStyle = "#4a2c16";
+    for (let j = 0; j < 3; j++) x.fillRect(4, 15 + j * 3, 20, 1);
+    // roof (wide at the walls, narrowing to the ridge)
+    x.fillStyle = "#2e6e6a";
+    for (let r = 0; r < 8; r++) x.fillRect(2 + r, 12 - r, 24 - r * 2, 1);
+    x.fillStyle = "#3f8d87";
+    for (let r = 1; r < 8; r += 2) x.fillRect(2 + r, 12 - r, 24 - r * 2, 1);
+    x.fillStyle = "#1d4b48"; x.fillRect(9, 4, 10, 1);
+    x.fillStyle = "#2b2017"; x.fillRect(12, 18, 5, 7);
+    x.fillStyle = "#e3b341"; x.fillRect(6, 16, 3, 3);
+    x.fillStyle = "#efe9d6"; x.fillRect(19, 15, 5, 4);
+    x.fillStyle = "#a8432f"; x.fillRect(21, 15, 1, 4);
+    x.fillStyle = "#2f3436"; x.fillRect(3, 24, 22, 1);
+  });
 }
 
 export function bakeGarden(): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = 32;
-  c.height = 18;
-  const x = c.getContext("2d")!;
-  x.fillStyle = "#4a3320"; x.fillRect(1, 3, 30, 14);
-  x.fillStyle = "#5d4128";
-  for (let j = 0; j < 4; j++) x.fillRect(2, 4 + j * 3.5, 28, 2);
-  x.fillStyle = "#9a7a4a";
-  for (let i = 0; i < 32; i += 3) { x.fillRect(i, 2, 2, 2); x.fillRect(i, 16, 2, 2); }
-  x.fillRect(0, 3, 1, 14); x.fillRect(31, 3, 1, 14);
-  for (let i = 0; i < 10; i++) {
-    const px = 3 + rndi(0, 26);
-    const py = 5 + rndi(0, 9);
-    x.fillStyle = "#5d8f3f"; x.fillRect(px, py, 1, 2);
-    x.fillStyle = "#7fb24f"; x.fillRect(px, py - 1, 1, 1);
-  }
-  x.fillStyle = "#d8536a"; x.fillRect(6, 6, 2, 2);
-  x.fillStyle = "#e3b341"; x.fillRect(24, 11, 2, 2);
-  return c;
+  return legacyBake(32, 18, (x) => {
+    x.fillStyle = "#4a3320"; x.fillRect(1, 3, 30, 14);
+    x.fillStyle = "#5d4128";
+    for (let j = 0; j < 4; j++) x.fillRect(2, 4 + j * 3.5, 28, 2);
+    x.fillStyle = "#9a7a4a";
+    for (let i = 0; i < 32; i += 3) { x.fillRect(i, 2, 2, 2); x.fillRect(i, 16, 2, 2); }
+    x.fillRect(0, 3, 1, 14); x.fillRect(31, 3, 1, 14);
+    for (let i = 0; i < 10; i++) {
+      const px = 3 + rndi(0, 26);
+      const py = 5 + rndi(0, 9);
+      x.fillStyle = "#5d8f3f"; x.fillRect(px, py, 1, 2);
+      x.fillStyle = "#7fb24f"; x.fillRect(px, py - 1, 1, 1);
+    }
+    x.fillStyle = "#d8536a"; x.fillRect(6, 6, 2, 2);
+    x.fillStyle = "#e3b341"; x.fillRect(24, 11, 2, 2);
+  });
 }
 
 /** Archery Range: a round straw butt with painted rings on a wooden post.
  *  Same 1-tile footprint family as the training dummies. */
 export function bakeRange(): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = 15;
-  c.height = 21;
-  const x = c.getContext("2d")!;
-  // post + foot
-  x.fillStyle = PAL.t; x.fillRect(7, 12, 2, 8);
-  x.fillStyle = "#4a2c16"; x.fillRect(4, 19, 8, 1);
-  // straw butt (round-ish disc)
-  x.fillStyle = PAL.y;
-  x.fillRect(4, 2, 8, 12); x.fillRect(3, 4, 10, 8); x.fillRect(2, 6, 12, 4);
-  // straw shading (bottom-left)
-  x.fillStyle = "#b8964a";
-  x.fillRect(3, 10, 4, 2); x.fillRect(4, 12, 4, 1);
-  // painted rings: white ring, red bull
-  x.fillStyle = PAL.w;
-  x.fillRect(6, 4, 4, 1); x.fillRect(5, 5, 1, 6); x.fillRect(10, 5, 1, 6); x.fillRect(6, 11, 4, 1);
-  x.fillStyle = PAL.r;
-  x.fillRect(7, 7, 2, 2);
-  return c;
+  return legacyBake(15, 21, (x) => {
+    // post + foot
+    x.fillStyle = PAL.t; x.fillRect(7, 12, 2, 8);
+    x.fillStyle = "#4a2c16"; x.fillRect(4, 19, 8, 1);
+    // straw butt (round-ish disc)
+    x.fillStyle = PAL.y;
+    x.fillRect(4, 2, 8, 12); x.fillRect(3, 4, 10, 8); x.fillRect(2, 6, 12, 4);
+    // straw shading (bottom-left)
+    x.fillStyle = "#b8964a";
+    x.fillRect(3, 10, 4, 2); x.fillRect(4, 12, 4, 1);
+    // painted rings: white ring, red bull
+    x.fillStyle = PAL.w;
+    x.fillRect(6, 4, 4, 1); x.fillRect(5, 5, 1, 6); x.fillRect(10, 5, 1, 6); x.fillRect(6, 11, 4, 1);
+    x.fillStyle = PAL.r;
+    x.fillRect(7, 7, 2, 2);
+  });
 }
 
 export function bakeDummy(): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = 14;
-  c.height = 21;
-  const x = c.getContext("2d")!;
-  x.fillStyle = PAL.t; x.fillRect(6, 6, 2, 14);
-  x.fillStyle = "#4a2c16"; x.fillRect(2, 9, 10, 1);
-  x.fillStyle = PAL.y; x.fillRect(4, 7, 6, 8);
-  x.fillStyle = "#b8964a"; x.fillRect(4, 11, 6, 1); x.fillRect(4, 7, 1, 8);
-  x.fillStyle = PAL.y; x.fillRect(5, 2, 4, 4);
-  x.fillStyle = "#b8964a"; x.fillRect(5, 4, 4, 1);
-  x.fillStyle = PAL.b; x.fillRect(4, 14, 6, 1);
-  x.fillStyle = "#2b2017"; x.fillRect(6, 3, 1, 1); x.fillRect(8, 3, 1, 1);
-  return c;
+  return legacyBake(14, 21, (x) => {
+    x.fillStyle = PAL.t; x.fillRect(6, 6, 2, 14);
+    x.fillStyle = "#4a2c16"; x.fillRect(2, 9, 10, 1);
+    x.fillStyle = PAL.y; x.fillRect(4, 7, 6, 8);
+    x.fillStyle = "#b8964a"; x.fillRect(4, 11, 6, 1); x.fillRect(4, 7, 1, 8);
+    x.fillStyle = PAL.y; x.fillRect(5, 2, 4, 4);
+    x.fillStyle = "#b8964a"; x.fillRect(5, 4, 4, 1);
+    x.fillStyle = PAL.b; x.fillRect(4, 14, 6, 1);
+    x.fillStyle = "#2b2017"; x.fillRect(6, 3, 1, 1); x.fillRect(8, 3, 1, 1);
+  });
 }
 
 export function bakeChest(): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = 18;
-  c.height = 14;
-  const x = c.getContext("2d")!;
-  // body
-  x.fillStyle = "#5b3b22"; x.fillRect(1, 5, 16, 8);
-  x.fillStyle = "#7a4a28"; x.fillRect(2, 6, 14, 6);
-  // lid
-  x.fillStyle = "#6e4a2a"; x.fillRect(1, 2, 16, 4);
-  x.fillStyle = "#8a5a32"; x.fillRect(2, 2, 14, 2);
-  // iron bands
-  x.fillStyle = "#3a2a1a";
-  x.fillRect(1, 5, 16, 1);
-  x.fillRect(4, 2, 1, 11); x.fillRect(13, 2, 1, 11);
-  // corners
-  x.fillStyle = "#c9c2a8";
-  x.fillRect(1, 12, 1, 1); x.fillRect(16, 12, 1, 1);
-  x.fillRect(1, 2, 1, 1); x.fillRect(16, 2, 1, 1);
-  // lock
-  x.fillStyle = "#e3b341"; x.fillRect(8, 6, 2, 3);
-  x.fillStyle = "#9a7424"; x.fillRect(8, 7, 2, 1);
-  return c;
+  return legacyBake(18, 14, (x) => {
+    // body
+    x.fillStyle = "#5b3b22"; x.fillRect(1, 5, 16, 8);
+    x.fillStyle = "#7a4a28"; x.fillRect(2, 6, 14, 6);
+    // lid
+    x.fillStyle = "#6e4a2a"; x.fillRect(1, 2, 16, 4);
+    x.fillStyle = "#8a5a32"; x.fillRect(2, 2, 14, 2);
+    // iron bands
+    x.fillStyle = "#3a2a1a";
+    x.fillRect(1, 5, 16, 1);
+    x.fillRect(4, 2, 1, 11); x.fillRect(13, 2, 1, 11);
+    // corners
+    x.fillStyle = "#c9c2a8";
+    x.fillRect(1, 12, 1, 1); x.fillRect(16, 12, 1, 1);
+    x.fillRect(1, 2, 1, 1); x.fillRect(16, 2, 1, 1);
+    // lock
+    x.fillStyle = "#e3b341"; x.fillRect(8, 6, 2, 3);
+    x.fillStyle = "#9a7424"; x.fillRect(8, 7, 2, 1);
+  });
 }
 
 /** The cave-treasure chest: the storage chest's silhouette with a golden lid,
  *  so it reads instantly as "loot", not "stash". */
 export function bakeTreasureChest(): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = 18;
-  c.height = 14;
-  const x = c.getContext("2d")!;
-  // body
-  x.fillStyle = "#5b3b22"; x.fillRect(1, 5, 16, 8);
-  x.fillStyle = "#7a4a28"; x.fillRect(2, 6, 14, 6);
-  // golden lid
-  x.fillStyle = "#c9a23a"; x.fillRect(1, 2, 16, 4);
-  x.fillStyle = "#e3b341"; x.fillRect(2, 2, 14, 2);
-  // iron bands
-  x.fillStyle = "#3a2a1a";
-  x.fillRect(1, 5, 16, 1);
-  x.fillRect(4, 2, 1, 11); x.fillRect(13, 2, 1, 11);
-  // corners
-  x.fillStyle = "#c9c2a8";
-  x.fillRect(1, 12, 1, 1); x.fillRect(16, 12, 1, 1);
-  x.fillRect(1, 2, 1, 1); x.fillRect(16, 2, 1, 1);
-  // lock
-  x.fillStyle = "#efe9d6"; x.fillRect(8, 6, 2, 3);
-  x.fillStyle = "#9a7424"; x.fillRect(8, 7, 2, 1);
-  return c;
+  return legacyBake(18, 14, (x) => {
+    // body
+    x.fillStyle = "#5b3b22"; x.fillRect(1, 5, 16, 8);
+    x.fillStyle = "#7a4a28"; x.fillRect(2, 6, 14, 6);
+    // golden lid
+    x.fillStyle = "#c9a23a"; x.fillRect(1, 2, 16, 4);
+    x.fillStyle = "#e3b341"; x.fillRect(2, 2, 14, 2);
+    // iron bands
+    x.fillStyle = "#3a2a1a";
+    x.fillRect(1, 5, 16, 1);
+    x.fillRect(4, 2, 1, 11); x.fillRect(13, 2, 1, 11);
+    // corners
+    x.fillStyle = "#c9c2a8";
+    x.fillRect(1, 12, 1, 1); x.fillRect(16, 12, 1, 1);
+    x.fillRect(1, 2, 1, 1); x.fillRect(16, 2, 1, 1);
+    // lock
+    x.fillStyle = "#efe9d6"; x.fillRect(8, 6, 2, 3);
+    x.fillStyle = "#9a7424"; x.fillRect(8, 7, 2, 1);
+  });
 }
 
 /** Icon lookup for item kinds (bag, corpse loot, shops). */
