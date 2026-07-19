@@ -3,9 +3,9 @@
  * Deterministic per seed (uses the world RNG from util.ts) so saved games
  * regenerate the exact same islands. Visual pixel jitter stays random.
  */
-import { TILE } from "../config.ts";
+import { TILE, MAP_TILE, SPRITE_SCALE } from "../config.ts";
 import { wrnd, wrndi, rnd, rndi, dist } from "../util.ts";
-import { SPR, bakeTree } from "../gfx/sprites.ts";
+import { SPR, bakeTree, spriteSource } from "../gfx/sprites.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldOpts, Vec, NpcKey } from "./types.ts";
 
@@ -287,14 +287,25 @@ function landDistance(w: World): number[][] {
   return depth;
 }
 
-/** Render the static terrain + decorations into world.mapCanvas once. */
+/**
+ * Render the static terrain + decorations into world.mapCanvas once.
+ *
+ * Deliberately painted at MAP_TILE (16 px per tile), NOT at TILE. Every
+ * literal below — the speckle offsets, the plank widths, the wall courses —
+ * was hand-tuned against a 16-px square, and the renderer blits this canvas
+ * SPRITE_SCALE times bigger, so the terrain comes out pixel-identical to the
+ * 16-px era without a single number here changing. It also keeps the
+ * continent's bitmap at a quarter of the memory a TILE-resolution bake needs.
+ */
 export function bakeWorldCanvas(w: World, grassShift = 0): void {
   const W = w.w;
   const H = w.h;
+  const TILE = MAP_TILE; // everything below paints in legacy map pixels
   const mc = w.mapCanvas;
   mc.width = W * TILE;
   mc.height = H * TILE;
   const m = mc.getContext("2d")!;
+  m.imageSmoothingEnabled = false;
   const gj = grassShift;
   const depth = landDistance(w);
 
@@ -316,7 +327,8 @@ export function bakeWorldCanvas(w: World, grassShift = 0): void {
         let coastal = false;
         for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const)
           if ((w.tile[y + oy]?.[x + ox] ?? 0) > 0) coastal = true;
-        if (coastal) w.coastWater.push({ x: px, y: py, ph: rnd(0, 6.28) });
+        // the renderer reads these in WORLD pixels, not map pixels
+        if (coastal) w.coastWater.push({ x: x * SPRITE_SCALE * TILE, y: y * SPRITE_SCALE * TILE, ph: rnd(0, 6.28) });
       } else if (t0 === Tile.Grass) {
         const j = rndi(-7, 7);
         m.fillStyle = `rgb(${111 + j + gj},${154 + j},${68 + j})`;
@@ -408,25 +420,34 @@ export function bakeWorldCanvas(w: World, grassShift = 0): void {
       }
     }
   }
-  // baked decor
+  // baked decor — the 1x source, since this canvas is at legacy resolution
   for (const d of w.decos) {
-    m.drawImage(d.spr, d.tx * TILE + ((TILE - d.spr.width) >> 1), d.ty * TILE + TILE - d.spr.height - 2);
+    const spr = spriteSource(d.spr);
+    m.drawImage(spr, d.tx * TILE + ((TILE - spr.width) >> 1), d.ty * TILE + TILE - spr.height - 2);
     m.fillStyle = "rgba(0,0,0,.18)";
     m.fillRect(d.tx * TILE + 3, d.ty * TILE + TILE - 3, TILE - 6, 2);
   }
-  // portal stone ring bases
+  // portal stone ring bases (portal coords are world px → map px)
   for (const pt of w.portals) {
+    const cx = pt.x / SPRITE_SCALE;
+    const cy = pt.y / SPRITE_SCALE;
     m.fillStyle = "#6a7174";
     for (let a = 0; a < 12; a++) {
       const th = (a / 12) * 6.283;
-      m.fillRect(Math.round(pt.x + Math.cos(th) * 12 - 1.5), Math.round(pt.y + Math.sin(th) * 7 - 1), 3, 2);
+      m.fillRect(Math.round(cx + Math.cos(th) * 12 - 1.5), Math.round(cy + Math.sin(th) * 7 - 1), 3, 2);
     }
     m.fillStyle = "#3a4144";
     for (let a = 0; a < 12; a += 2) {
       const th = (a / 12) * 6.283 + 0.26;
-      m.fillRect(Math.round(pt.x + Math.cos(th) * 12 - 1), Math.round(pt.y + Math.sin(th) * 7), 2, 1);
+      m.fillRect(Math.round(cx + Math.cos(th) * 12 - 1), Math.round(cy + Math.sin(th) * 7), 2, 1);
     }
   }
+}
+
+/** World pixels → static-map-canvas pixels. The terrain bake lives at legacy
+ *  resolution, so anything painted over it afterwards converts through here. */
+export function toMapPx(v: number): number {
+  return v / SPRITE_SCALE;
 }
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);

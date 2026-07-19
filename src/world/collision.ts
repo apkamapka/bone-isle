@@ -29,12 +29,13 @@ function sightBlockedAt(w: World, px: number, py: number): boolean {
 }
 
 /**
- * Straight-line visibility between two points, sampled every ~6px. Used to
+ * Straight-line visibility between two points, sampled every ~12px (half a
+ * tile — was 6 when a tile was 16). Used to
  * gate monster aggro so creatures behind cave walls don't chase you through
  * solid rock — you fight the caverns room by room instead of pulling a floor.
  */
 export function lineOfSight(w: World, x1: number, y1: number, x2: number, y2: number): boolean {
-  const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 6));
+  const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 12));
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
     if (sightBlockedAt(w, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)) return false;

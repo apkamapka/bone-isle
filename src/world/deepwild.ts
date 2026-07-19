@@ -24,7 +24,7 @@
 import { TILE } from "../config.ts";
 import { wrnd, wrand, dist } from "../util.ts";
 import { SPR, bakeTree } from "../gfx/sprites.ts";
-import { makeWorld, bakeWorldCanvas } from "./generate.ts";
+import { makeWorld, bakeWorldCanvas, toMapPx } from "./generate.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldKey } from "./types.ts";
 
@@ -230,10 +230,13 @@ export function makeDeepWildWorld(): World {
   for (const pt of w.portals) {
     if (pt.style !== "caveMouth") continue;
     const m = w.mapCanvas.getContext("2d")!;
+    // map-canvas coordinates: the terrain bake is at legacy (MAP_TILE) scale
+    const mx = toMapPx(pt.x);
+    const my = toMapPx(pt.y);
     m.fillStyle = "#54504a";
-    m.beginPath(); m.ellipse(pt.x, pt.y + 1, 12, 9, 0, 0, 6.2832); m.fill();
+    m.beginPath(); m.ellipse(mx, my + 1, 12, 9, 0, 0, 6.2832); m.fill();
     m.fillStyle = "#26241f";
-    m.beginPath(); m.ellipse(pt.x, pt.y + 2, 8, 6, 0, 0, 6.2832); m.fill();
+    m.beginPath(); m.ellipse(mx, my + 2, 8, 6, 0, 0, 6.2832); m.fill();
   }
   return w;
 }

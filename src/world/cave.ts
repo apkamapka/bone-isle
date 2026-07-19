@@ -11,10 +11,10 @@
  * Each floor is generated from its own seed, so it is fully deterministic and
  * independent of the surface RNG and of the other floors.
  */
-import { TILE } from "../config.ts";
+import { TILE, MAP_TILE } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { seedWorldRng, wrand, wrndi, dist } from "../util.ts";
-import { bakeWorldCanvas } from "./generate.ts";
+import { bakeWorldCanvas, toMapPx } from "./generate.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldKey } from "./types.ts";
 
@@ -338,28 +338,32 @@ export function addCaveEntrance(w: World, dest: WorldKey, seed: number): void {
   w.herbs = w.herbs.filter((h) => !inClearing(h.tx, h.ty));
   w.decos = w.decos.filter((d) => !inClearing(d.tx, d.ty));
 
-  // paint the clearing onto the already-baked map canvas so it shows up
+  // paint the clearing onto the already-baked map canvas so it shows up. That
+  // canvas lives at MAP_TILE (legacy) resolution — see bakeWorldCanvas — so
+  // every coordinate here is a map pixel, not a world one.
   const m = w.mapCanvas.getContext("2d")!;
+  const mx = toMapPx(cx);
+  const my = toMapPx(cy);
   for (let oy = -R; oy <= R; oy++) {
     for (let ox = -R; ox <= R; ox++) {
       if (Math.hypot(ox, oy) > R + 0.3) continue;
       const tx = spot.tx + ox;
       const ty = spot.ty + oy;
       if (tx < 0 || ty < 0 || tx >= w.w || ty >= w.h || w.tile[ty][tx] === Tile.Water) continue;
-      const px = tx * TILE;
-      const py = ty * TILE;
+      const px = tx * MAP_TILE;
+      const py = ty * MAP_TILE;
       const j = ((tx * 7 + ty * 13) % 9) - 4;
       m.fillStyle = `rgb(${92 + j},${88 + j},${84 + j})`;
-      m.fillRect(px, py, TILE, TILE);
+      m.fillRect(px, py, MAP_TILE, MAP_TILE);
       m.fillStyle = "rgba(58,54,50,.6)";
       m.fillRect(px + ((tx * 5) % 12), py + ((ty * 3) % 12), 2, 1);
     }
   }
   // dark descent hole + rocky rim under the ladder
   m.fillStyle = "#54504a";
-  m.beginPath(); m.ellipse(cx, cy + 1, 12, 9, 0, 0, 6.2832); m.fill();
+  m.beginPath(); m.ellipse(mx, my + 1, 12, 9, 0, 0, 6.2832); m.fill();
   m.fillStyle = "#26241f";
-  m.beginPath(); m.ellipse(cx, cy + 2, 8, 6, 0, 0, 6.2832); m.fill();
+  m.beginPath(); m.ellipse(mx, my + 2, 8, 6, 0, 0, 6.2832); m.fill();
 
   w.portals.push({ x: cx, y: cy, dest, label: "descend into the caverns", style: "caveMouth" });
 }
