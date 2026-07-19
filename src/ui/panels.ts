@@ -1,5 +1,5 @@
 /** All toggleable UI panels. Each draws itself and pushes clickable hotspots. */
-import { SPR, itemSprite } from "../gfx/sprites.ts";
+import { SPR, itemSprite, iconW, iconH } from "../gfx/sprites.ts";
 import { skills, skillNeed } from "../systems/skills.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText } from "../systems/building.ts";
 import { RESEARCH, isResearched } from "../systems/tower.ts";
@@ -203,9 +203,15 @@ function hovering(p: PanelInput, x: number, y: number, w: number, h: number): bo
   return p.mouse.sx >= x && p.mouse.sx < x + w && p.mouse.sy >= y && p.mouse.sy < y + h;
 }
 
+/**
+ * Draw a sprite as a UI icon. `sc` is screen px per LEGACY (16-px-era) art
+ * pixel — iconW/iconH divide the bake scale back out, so every call site keeps
+ * the number it was authored with and every icon keeps its exact footprint,
+ * however chunky the underlying sprite got.
+ */
 function icon(p: PanelInput, spr: HTMLCanvasElement, x: number, y: number, sc: number): void {
   p.hud.ctx.imageSmoothingEnabled = false;
-  p.hud.ctx.drawImage(spr, x, y, spr.width * sc, spr.height * sc);
+  p.hud.ctx.drawImage(spr, x, y, iconW(spr, sc), iconH(spr, sc));
 }
 
 /** Set each frame by whichever slot the mouse is over; drawn as a hover tooltip. */
@@ -286,7 +292,7 @@ function drawInspect(base: Omit<PanelInput, "win">): void {
   ctx.strokeRect(x + S / 2, y + S / 2, w - S, h - S);
   const spr = itemSprite(kind);
   icon(base as PanelInput, spr, x + pad, y + pad, 2 * S);
-  hudText(base.hud, title, x + pad + spr.width * 2 * S + 8 * S, y + pad + 8 * S, fs, "#ffe9a8", "left", true);
+  hudText(base.hud, title, x + pad + iconW(spr, 2 * S) + 8 * S, y + pad + 8 * S, fs, "#ffe9a8", "left", true);
   let ly = y + pad + 26 * S;
   for (const l of lines) {
     hudText(base.hud, l, x + pad, ly, fs, "#d7d2c0", "left");
@@ -314,7 +320,7 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   ctx.strokeRect(x + S / 2, y + S / 2, w - S, h - S);
   const spr = itemSprite(sp.kind);
   icon(base as PanelInput, spr, x + 10 * S, y + 8 * S, 2 * S);
-  hudText(base.hud, ITEMS[sp.kind].name, x + 10 * S + spr.width * 2 * S + 8 * S, y + 14 * S, 9 * S, "#ffe9a8", "left", true);
+  hudText(base.hud, ITEMS[sp.kind].name, x + 10 * S + iconW(spr, 2 * S) + 8 * S, y + 14 * S, 9 * S, "#ffe9a8", "left", true);
   hudText(base.hud, `How many?  (max ${sp.max})`, x + w / 2, y + 34 * S, 7 * S, "rgba(220,214,190,.7)", "center");
   hudText(base.hud, `${sp.n}`, x + w / 2, y + 52 * S, 14 * S, "#ffe9a8", "center", true);
 
@@ -431,8 +437,8 @@ function drawBuild(p: PanelInput): void {
       hud.ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
     }
     const spr = def.spr;
-    const isc = Math.max(1, Math.floor((rowH - 10 * S) / spr.height));
-    icon(p, spr, x + 10 * S, ry + (rowH - spr.height * isc) / 2, isc);
+    const isc = Math.max(1, Math.floor((rowH - 10 * S) / iconH(spr, 1)));
+    icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, isc)) / 2, isc);
     hudText(hud, def.name, x + 48 * S, ry + 9 * S, 10 * S, afford ? "#f3eedd" : "#8a8070", "left", true);
     hudText(hud, costText(def.cost), x + 48 * S, ry + 20 * S, 8 * S, afford ? "#b9e07f" : "#d96a5a");
     hudText(hud, def.desc, x + 48 * S, ry + 29 * S, 7 * S, "rgba(220,214,190,.6)");
@@ -552,7 +558,7 @@ function drawEquip(p: PanelInput): void {
       ctx.lineWidth = S;
       ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
       const spr = SPR.pack;
-      icon(p, spr, cx + (slot - spr.width * 2 * S) / 2, cy + (slot - spr.height * 2 * S) / 2 - 3 * S, 2 * S);
+      icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
       hudText(hud, "Bag", cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.85)", "center");
       p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => p.act.openBag() });
       return;
@@ -566,7 +572,7 @@ function drawEquip(p: PanelInput): void {
       ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
       const spr = ammoKind ? itemSprite(ammoKind) : SPR.arrow;
       ctx.globalAlpha = ammoKind ? 1 : 0.4;
-      icon(p, spr, cx + (slot - spr.width * 2 * S) / 2, cy + (slot - spr.height * 2 * S) / 2 - 3 * S, 2 * S);
+      icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
       ctx.globalAlpha = 1;
       if (ammoKind) {
         const n = bagCount(player.bag, ammoKind);
@@ -588,7 +594,7 @@ function drawEquip(p: PanelInput): void {
     ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
     if (equipped) {
       const spr = itemSprite(equipped);
-      icon(p, spr, cx + (slot - spr.width * 2 * S) / 2, cy + (slot - spr.height * 2 * S) / 2 - 3 * S, 2 * S);
+      icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
       if (hovering(p, cx, cy, slot, slot)) tooltipKind = equipped;
       const eqk = equipped;
       // register as a draggable item cell so worn gear can be dragged straight
@@ -598,7 +604,7 @@ function drawEquip(p: PanelInput): void {
     } else {
       const spr = SLOT_ICONS[key];
       ctx.globalAlpha = 0.4;
-      icon(p, spr, cx + (slot - spr.width * 2 * S) / 2, cy + (slot - spr.height * 2 * S) / 2 - 3 * S, 2 * S);
+      icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
       ctx.globalAlpha = 1;
     }
     hudText(hud, SLOT_LABEL[key], cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.7)", "center");
@@ -642,7 +648,7 @@ function drawBag(p: PanelInput): void {
   const gx = x + (w - gridW) / 2;
   const coin = SPR.coin;
   icon(p, coin, gx, y + 18 * S, 2 * S);
-  hudText(hud, `${player.gold} gold`, gx + coin.width * 2 * S + 6 * S, y + 18 * S + coin.height * S, 8 * S, "#ffe9a8", "left", true);
+  hudText(hud, `${player.gold} gold`, gx + iconW(coin, 2 * S) + 6 * S, y + 18 * S + iconH(coin, S), 8 * S, "#ffe9a8", "left", true);
   const gy = y + 20 * S + goldRow;
   player.bag.forEach((stackSlot, i) => {
     const cx = gx + (i % cols) * (cell + gap);
@@ -655,8 +661,8 @@ function drawBag(p: PanelInput): void {
     ctx.strokeRect(cx + S / 2, cy + S / 2, cell - S, cell - S);
     if (stackSlot) {
       const spr = itemSprite(stackSlot.kind);
-      const dw = spr.width * 2 * S;
-      const dh = spr.height * 2 * S;
+      const dw = iconW(spr, 2 * S);
+      const dh = iconH(spr, 2 * S);
       icon(p, spr, cx + (cell - dw) / 2, cy + (cell - dh) / 2 - 2 * S, 2 * S);
       if (stackSlot.n > 1) hudText(hud, `${stackSlot.n}`, cx + cell - 3 * S, cy + cell - 4 * S, 7 * S, "#ffe9a8", "right");
       if (hov) tooltipKind = stackSlot.kind;
@@ -699,7 +705,7 @@ function drawForge(p: PanelInput): void {
       ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
     }
     const spr = itemSprite(r.out);
-    icon(p, spr, x + 10 * S, ry + (rowH - spr.height * 2 * S) / 2, 2 * S);
+    icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
     hudText(hud, ITEMS[r.out].name, x + 34 * S, ry + 8 * S, 9 * S, ok ? "#f3eedd" : "#8a8070", "left", true);
     hudText(hud, recipeCostText(r), x + 34 * S, ry + 18 * S, 7 * S, ok ? "#b9e07f" : "#d96a5a");
     if (ok) {
@@ -734,7 +740,7 @@ function drawTower(p: PanelInput): void {
       ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
     }
     const spr = itemSprite(r.crystal);
-    icon(p, spr, x + 10 * S, ry + (rowH - spr.height * 2 * S) / 2, 2 * S);
+    icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
     const owned = bagCount(player.bag, r.crystal);
     hudText(hud, r.name, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true);
     if (researched) {
@@ -854,7 +860,7 @@ function drawShop(p: PanelInput): void {
       ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
     }
     const spr = itemSprite(e.kind);
-    icon(p, spr, x + 10 * S, ry + (rowH - spr.height * 2 * S) / 2, 2 * S);
+    icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
     hudText(hud, ITEMS[e.kind].name, x + 34 * S, ry + 8 * S, 8 * S, canDo ? "#f3eedd" : "#8a8070", "left", true);
     if (ui.shopTab === "sell") hudText(hud, `you have ${have}`, x + 34 * S, ry + 18 * S, 7 * S, "rgba(220,214,190,.55)");
     hudText(hud, `${price}g`, x + w - 14 * S, ry + rowH / 2, 9 * S, canDo ? "#ffe9a8" : "#d96a5a", "right");
@@ -1022,7 +1028,7 @@ function drawTasks(p: PanelInput): void {
       ctx.fillRect(x + 6 * S, ry, w - 12 * S, exRowH - 2 * S);
     }
     const spr = itemSprite(e.item);
-    icon(p, spr, x + 10 * S, ry + (exRowH - spr.height * 2 * S) / 2, 2 * S);
+    icon(p, spr, x + 10 * S, ry + (exRowH - iconH(spr, 2 * S)) / 2, 2 * S);
     hudText(hud, `${e.itemN}x ${ITEMS[e.item].name}`, x + 34 * S, ry + 8 * S, 8 * S, can ? "#f3eedd" : "#8a8070", "left", true);
     hudText(hud, e.desc, x + 34 * S, ry + 17 * S, 6 * S, "rgba(220,214,190,.5)");
     hudText(hud, `${e.cost} TP`, x + w - 12 * S, ry + exRowH / 2, 8 * S, can ? "#9ad0ff" : "#d96a5a", "right");
@@ -1062,8 +1068,8 @@ function drawGrid(
     ctx.strokeRect(cx + S / 2, cy + S / 2, cell - S, cell - S);
     if (slot) {
       const spr = itemSprite(slot.kind);
-      const dw = spr.width * 2 * S;
-      const dh = spr.height * 2 * S;
+      const dw = iconW(spr, 2 * S);
+      const dh = iconH(spr, 2 * S);
       icon(p, spr, cx + (cell - dw) / 2, cy + (cell - dh) / 2 - 2 * S, 2 * S);
       if (slot.n > 1) hudText(hud, `${slot.n}`, cx + cell - 3 * S, cy + cell - 4 * S, 7 * S, "#ffe9a8", "right");
       if (hov) tooltipKind = slot.kind;
@@ -1152,13 +1158,13 @@ function drawWardrobe(p: PanelInput): void {
 
   // live preview: the actual player sprite, big
   const spr = player.spr;
-  const psc = Math.max(1, Math.floor((previewH - 8 * S) / spr.height));
+  const psc = Math.max(1, Math.floor((previewH - 8 * S) / iconH(spr, 1)));
   ctx.fillStyle = "rgba(40,32,20,.9)";
   ctx.fillRect(lx, top, previewW, previewH);
   ctx.strokeStyle = "#6e571f";
   ctx.lineWidth = S;
   ctx.strokeRect(lx + S / 2, top + S / 2, previewW - S, previewH - S);
-  icon(p, spr, lx + (previewW - spr.width * psc) / 2, top + (previewH - spr.height * psc) / 2, psc);
+  icon(p, spr, lx + (previewW - iconW(spr, psc)) / 2, top + (previewH - iconH(spr, psc)) / 2, psc);
 
   // zone selector — the grid paints whichever one is armed
   let by = top + previewH + 4 * S;
