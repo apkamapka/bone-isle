@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const tasks = await import("../src/systems/tasks.ts");
   const { skills, resetSkills, addSkillXp } = await import("../src/systems/skills.ts");
   const { buildWorlds } = await import("../src/game.ts");
-  const { WORLD_SEED } = await import("../src/config.ts");
+  const { WORLD_SEED, TILE } = await import("../src/config.ts");
   const { lineOfSight } = await import("../src/world/collision.ts");
   const { Tile } = await import("../src/world/types.ts");
   const { STRUCTS, canPlaceAt } = await import("../src/systems/building.ts");
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
     outer: for (let y = 2; y < c.h - 2 && !checked; y++) {
       for (let x = 2; x < c.w - 2; x++) {
         if (c.tile[y][x] === Tile.Wall && c.tile[y][x - 1] === Tile.Cave && c.tile[y][x + 1] === Tile.Cave) {
-          const lx = (x - 1) * 16 + 8, rx = (x + 1) * 16 + 8, cy = y * 16 + 8;
+          const lx = (x - 1) * TILE + TILE / 2, rx = (x + 1) * TILE + TILE / 2, cy = y * TILE + TILE / 2;
           ok(!lineOfSight(c, lx, cy, rx, cy), "wall between two floor tiles blocks sight");
           ok(lineOfSight(c, lx, cy, lx, cy + 0.1), "point-blank sight is clear");
           checked = true;
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
     }
     ok(minGap >= SPAWN_SPACING_PX, `no day-one blobs (closest pair ${minGap.toFixed(0)}px ≥ ${SPAWN_SPACING_PX})`);
     // respawn avoids the player: everything spawned with `avoid` keeps its distance
-    const px = (wild.w / 2) * 16, py = (wild.h / 2) * 16;
+    const px = (wild.w / 2) * TILE, py = (wild.h / 2) * TILE;
     let okDist = true, spawned = 0;
     for (let i = 0; i < 8; i++) {
       const n0 = wild.monsters.length;
@@ -304,7 +304,7 @@ async function main(): Promise<void> {
         for (let j = 0; j < 8 && clear; j++) for (let i = 0; i < 8; i++) {
           if (arena.solid[y + j][x + i] || arena.tile[y + j][x + i] === 0) { clear = false; break; }
         }
-        if (clear) { cx = (x + 4) * 16; cy = (y + 4) * 16; break outer4; }
+        if (clear) { cx = (x + 4) * TILE; cy = (y + 4) * TILE; break outer4; }
       }
     }
     ok(cx > 0, "found a clear 8x8 arena");
@@ -389,13 +389,14 @@ async function main(): Promise<void> {
     p.level = 50;
     ok(playerSpeed(p) === PLAYER_BASE_SPEED + 49 * SPEED_PER_LEVEL, "level 50 gains the per-level bonus");
     const boots = createPlayer({ x: 0, y: 0 });
-    boots.eq.boots = "boots"; // Swift Boots: gear speed +6
-    ok(playerSpeed(boots) === PLAYER_BASE_SPEED + 6, "gear speed bonus still applies on top");
+    boots.eq.boots = "boots"; // Swift Boots — a world-pixel bonus, so it doubled with TILE
+    const bootSpeed = items.ITEMS.boots.gear!.speed!;
+    ok(playerSpeed(boots) === PLAYER_BASE_SPEED + bootSpeed, "gear speed bonus still applies on top");
   }
 
   console.log("monster aggro (sight covers every bow + hit provokes):");
   {
-    const { MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HIT_S, TILE } = await import("../src/config.ts");
+    const { MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HIT_S } = await import("../src/config.ts");
     const { playerShoot } = await import("../src/systems/combat.ts");
     const { spawnMonster } = await import("../src/entities/monsters.ts");
     // no bow may outrange monster awareness — the whole point of the change
@@ -458,8 +459,8 @@ async function main(): Promise<void> {
     if (chest) {
       ok(c3.solid[chest.ty][chest.tx] === true, "the chest tile is solid (can't stand on it)");
       const up = c3.portals.find((pt) => pt.style === "ladderUp")!;
-      const dChest = Math.hypot(chest.tx * 16 + 8 - up.x, chest.ty * 16 + 8 - up.y);
-      ok(dChest > 16 * 20, `chest is deep in the cavern (${Math.round(dChest / 16)} tiles from the ladder)`);
+      const dChest = Math.hypot(chest.tx * TILE + TILE / 2 - up.x, chest.ty * TILE + TILE / 2 - up.y);
+      ok(dChest > TILE * 20, `chest is deep in the cavern (${Math.round(dChest / TILE)} tiles from the ladder)`);
       const again = buildWorlds(WORLD_SEED).cave3.structures.find((st) => st.key === "treasure")!;
       ok(again.tx === chest.tx && again.ty === chest.ty, "chest position is deterministic from the seed");
     }
@@ -573,11 +574,11 @@ async function main(): Promise<void> {
     // eight themed camps, far apart, all anchored on walkable ground
     ok(dw.camps.length === 8, `eight camps are recorded, got ${dw.camps.length}`);
     ok(new Set(dw.camps.map((c) => c.key)).size === 8, "camp keys are unique");
-    ok(dw.camps.every((c) => !dw.solid[Math.floor(c.y / 16)][Math.floor(c.x / 16)]), "every camp centre is walkable");
+    ok(dw.camps.every((c) => !dw.solid[Math.floor(c.y / TILE)][Math.floor(c.x / TILE)]), "every camp centre is walkable");
     let minGap = Infinity;
     for (let i = 0; i < dw.camps.length; i++)
       for (let j = i + 1; j < dw.camps.length; j++)
-        minGap = Math.min(minGap, dist(dw.camps[i].x, dw.camps[i].y, dw.camps[j].x, dw.camps[j].y) / 16);
+        minGap = Math.min(minGap, dist(dw.camps[i].x, dw.camps[i].y, dw.camps[j].x, dw.camps[j].y) / TILE);
     ok(minGap >= 48, `settlements keep their distance (nearest pair ${Math.round(minGap)} tiles apart)`);
     // carved terrain actually exists: dirt floors/trails, solid palisades
     let dirt = 0, pal = 0, palSolid = true;
@@ -589,13 +590,13 @@ async function main(): Promise<void> {
     ok(dirt > 600, `camp floors + trails carved in dirt (${dirt} tiles)`);
     ok(pal > 40 && palSolid, `palisade rings raised and solid (${pal} posts)`);
     ok(dw.camps.every((c) => dw.trees.every((t) =>
-      dist(t.tx * 16 + 8, t.ty * 16 + 8, c.x, c.y) > c.r - 16)), "camp interiors are clear of trees");
+      dist(t.tx * TILE + TILE / 2, t.ty * TILE + TILE / 2, c.x, c.y) > c.r - TILE)), "camp interiors are clear of trees");
     // every camp reaches the dock on foot — one connected mainland, no islets
     {
       const dock = dw.portals.find((p) => p.dest === "town")!;
       const W = dw.w;
       const seen = new Uint8Array(W * dw.h);
-      const q: number[] = [Math.floor(dock.y / 16) * W + Math.floor(dock.x / 16)];
+      const q: number[] = [Math.floor(dock.y / TILE) * W + Math.floor(dock.x / TILE)];
       seen[q[0]] = 1;
       for (let h = 0; h < q.length; h++) {
         const x = q[h] % W;
@@ -610,7 +611,7 @@ async function main(): Promise<void> {
           q.push(id);
         }
       }
-      ok(dw.camps.every((c) => seen[Math.floor(c.y / 16) * W + Math.floor(c.x / 16)] === 1),
+      ok(dw.camps.every((c) => seen[Math.floor(c.y / TILE) * W + Math.floor(c.x / TILE)] === 1),
         "every settlement is reachable on foot from the dock");
     }
     // Etap 9b: the region is ALIVE — every settlement fields its themed
@@ -711,7 +712,7 @@ async function main(): Promise<void> {
       const ch = lw.structures.find((st) => st.key === "treasure");
       if (!ch) { chestsOk = false; continue; }
       const hoard = lw.camps.find((c) => c.key === "hoard");
-      if (!hoard || dist(hoard.x, hoard.y, ch.tx * 16 + 8, ch.ty * 16 + 8) > 1) hoardOk = false;
+      if (!hoard || dist(hoard.x, hoard.y, ch.tx * TILE + TILE / 2, ch.ty * TILE + TILE / 2) > 1) hoardOk = false;
       const detail = lw.monsters.filter((m) => m.camp === "hoard");
       if (detail.length < 2) guardsOk = false;
       if (!detail.every((m) => hoard && dist(m.x, m.y, hoard.x, hoard.y) <= hoard.r && m.hr)) postedOk = false;
@@ -858,7 +859,7 @@ async function main(): Promise<void> {
     for (let ty = 1; ty < home.h - 1 && built < 2; ty++)
       for (let tx = 1; tx < home.w - 1 && built < 2; tx++)
         if (canPlaceAt(home, "chest", tx, ty))
-          if (tryPlace(home, g.player, "chest", tx * 16 + 16, ty * 16 + 16, homeChests(g))) built++;
+          if (tryPlace(home, g.player, "chest", tx * TILE + TILE, ty * TILE + TILE, homeChests(g))) built++;
     ok(built === 2, "two chests raised on Home Isle");
     const invs = homeChests(g);
     ok(invs.length === 2 && invs[0] !== invs[1], "each chest owns a separate inventory");
@@ -888,7 +889,7 @@ async function main(): Promise<void> {
     outer: for (let ty = 1; ty < home.h - 1; ty++)
       for (let tx = 1; tx < home.w - 1; tx++)
         if (canPlaceAt(home, "chest", tx, ty)) {
-          tryPlace(home, g.player, "chest", tx * 16 + 16, ty * 16 + 16, homeChests(g));
+          tryPlace(home, g.player, "chest", tx * TILE + TILE, ty * TILE + TILE, homeChests(g));
           break outer;
         }
     items.addItem(homeChests(g)[0], "silk", 44);
@@ -1027,14 +1028,18 @@ async function main(): Promise<void> {
   {
     console.log("Etap 13 — Adventurer outfit (directional sprites + dye zones):");
     const of = await import("../src/systems/outfit.ts");
+    const gfxSrc = await import("../src/gfx/sprites.ts");
     of.resetOutfit();
 
     const set = of.bakeOutfitSprites();
     ok(!!set.down && !!set.side && !!set.up, "three facings bake");
-    ok(set.down.height === 16 && set.side.height === 16 && set.up.height === 16,
-      "every facing is 16px tall — three rows above the townsfolk");
-    ok(set.down.width === 12 && set.side.width === 12 && set.up.width === 12,
-      "every facing is 12px wide, still within one tile");
+    // the maps are still 12x16; the bake is SPRITE_SCALE bigger since Etap 17
+    const advSrc = (c: HTMLCanvasElement): HTMLCanvasElement => gfxSrc.spriteSource(c);
+    ok(advSrc(set.down).height === 16 && advSrc(set.side).height === 16 && advSrc(set.up).height === 16,
+      "every facing is 16 art px tall — three rows above the townsfolk");
+    ok(advSrc(set.down).width === 12 && advSrc(set.side).width === 12 && advSrc(set.up).width === 12,
+      "every facing is 12 art px wide, still within one tile");
+    ok(set.down.height === 32 && set.down.width === 24, "…and it bakes out at 24x32 for a 32-px tile");
     ok(set.down !== set.side, "front and side are distinct canvases");
 
     // every map is well-formed and drawn from the shared palette
@@ -1118,39 +1123,138 @@ async function main(): Promise<void> {
   }
 
 
-  // ---------------------------------------------------------------- Etap 16
+  // ---------------------------------------------------------------- Etap 17
   {
-    console.log("Etap 16 — desktop zoom (2x closer):");
-    const { worldZoom, visibleTiles, DESKTOP_ZOOM_DIV, MOBILE_ZOOM_DIV } =
-      await import("../src/config.ts");
+    console.log("Etap 17 — TILE 16 → 32 (four times the pixels, same picture):");
+    const cfg = await import("../src/config.ts");
+    const gfx = await import("../src/gfx/sprites.ts");
 
-    // the desktop framing this stage exists to fix
-    const shot = visibleTiles(1916, 931, false);
-    ok(shot.w > 21 && shot.w < 26, "a 1916px window shows ~23 tiles across, not ~46");
-    ok(shot.h > 10 && shot.h < 13, "and ~11 down — Tibia's vertical framing");
+    ok(cfg.TILE === 32, "a tile is 32 px");
+    ok(cfg.LEGACY_TILE === 16 && cfg.SPRITE_SCALE === 2, "legacy art is blown up 2x");
+    ok(cfg.MAP_TILE === 16, "the static terrain canvas stays at legacy resolution");
 
-    // exactly double the old zoom, which divided by 360
-    ok(DESKTOP_ZOOM_DIV === 180, "the desktop divisor halved from 360");
-    ok(Math.abs(worldZoom(1916, 931, false) - (931 / 180)) < 1e-9,
-      "desktop zoom is min(w,h)/180 inside the clamp");
+    // bake(): legacy maps double, native 32-px maps are left alone
+    const map = ["ab", "ba"];
+    const legacy = gfx.bake(map);
+    ok(legacy.width === 4 && legacy.height === 4, "bake() turns a 2x2 legacy map into 4x4");
+    const native = gfx.bakeNative(map);
+    ok(native.width === 2 && native.height === 2, "bakeNative() leaves a 32-px map at its own size");
+    ok(gfx.spriteSource(legacy).width === 2, "the 1x source stays reachable (the map canvas needs it)");
+    ok(gfx.spriteSource(native) === native, "a native sprite is its own source");
 
-    // clamps hold at both ends
-    ok(worldZoom(400, 400, false) === 4, "tiny desktop windows clamp at 4");
-    ok(worldZoom(6000, 4000, false) === 6.4, "huge desktop windows clamp at 6.4");
-    ok(worldZoom(2560, 1440, false) === 6.4, "a 1440p screen sits on the upper clamp");
+    // the whole atlas came through the legacy path
+    ok(gfx.SPR.player.width === 20 && gfx.SPR.player.height === 26,
+      `the player sprite is a 2x bake of the 10x13 map (${gfx.SPR.player.width}x${gfx.SPR.player.height})`);
+    ok(gfx.bakeForge().width === 56 && gfx.bakeForge().height === 52, "procedural bakers scale too (forge 28x26 → 56x52)");
 
-    // phones keep the framing they already had
-    ok(MOBILE_ZOOM_DIV === 220, "the mobile divisor is untouched");
-    ok(worldZoom(390, 844, true) === 2, "iPhone-sized portrait is unchanged");
-    ok(worldZoom(820, 1180, true) === 4, "tablet portrait is unchanged");
-    ok(Number.isInteger(worldZoom(1000, 1000, true)), "mobile zoom stays a whole number");
+    // UI icons keep the footprint they had when a tile was 16 px
+    ok(gfx.iconW(gfx.SPR.coin, 2) === 14 && gfx.iconH(gfx.SPR.coin, 2) === 10,
+      "a coin icon still draws 14x10 at 2x zoom");
 
-    // zooming in must never widen the view
-    for (const [w, h] of [[1280, 720], [1600, 900], [1920, 1080], [3440, 1440]] as const) {
-      const now = visibleTiles(w, h, false).w;
-      const before = Math.ceil(w / Math.max(2, Math.min(3.2, Math.min(w, h) / 360))) / 16;
-      ok(now < before, `${w}x${h} shows fewer tiles than before`);
+    // ---- framing: the same tile count as the 16-px era, on every viewport ----
+    const oldZoom = (w: number, h: number, mobile: boolean): number => {
+      const lo = Math.min(w, h);
+      const cl = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+      return mobile ? cl(Math.round(lo / 220), 2, 6) : cl(lo / 180, 4, 6.4);
+    };
+    const oldTiles = (w: number, h: number, mobile: boolean): { w: number; h: number } => {
+      const f = oldZoom(w, h, mobile);
+      return { w: Math.max(160, Math.ceil(w / f)) / 16, h: Math.max(120, Math.ceil(h / f)) / 16 };
+    };
+    const screens: ReadonlyArray<readonly [number, number, boolean]> = [
+      [1916, 931, false], [1280, 720, false], [1600, 900, false], [1920, 1080, false],
+      [2560, 1440, false], [3440, 1440, false], [400, 400, false], [6000, 4000, false],
+      [360, 800, true], [390, 844, true], [430, 932, true], [540, 1200, true],
+      [768, 1024, true], [820, 1180, true], [1000, 1000, true], [1024, 1366, true],
+    ];
+    let same = 0;
+    for (const [w, h, m] of screens) {
+      const now = cfg.visibleTiles(w, h, m);
+      const was = oldTiles(w, h, m);
+      // ceil() snaps the buffer to a whole world pixel, and a world pixel is
+      // half what it used to be — so the count may differ by at most ONE
+      // legacy pixel (1/16 of a tile). Anything beyond that is a real regression.
+      const tol = 1 / cfg.LEGACY_TILE + 1e-9;
+      if (Math.abs(now.w - was.w) <= tol && Math.abs(now.h - was.h) <= tol) same++;
+      else console.log(`      ${w}x${h}${m ? " mobile" : ""}: was ${was.w.toFixed(2)}x${was.h.toFixed(2)}, now ${now.w.toFixed(2)}x${now.h.toFixed(2)}`);
     }
+    ok(same === screens.length, `framing holds within a legacy pixel on all ${screens.length} reference viewports (${same} match)`);
+
+    ok(cfg.DESKTOP_ZOOM_DIV === 360 && cfg.MOBILE_ZOOM_DIV === 440, "both divisors doubled with TILE");
+    ok(cfg.worldZoom(400, 400, false) === 2 && cfg.worldZoom(6000, 4000, false) === 3.2,
+      "desktop clamps halved to 2..3.2");
+    ok(cfg.worldZoom(390, 844, true) === 1,
+      "a phone reaches f=1 — the old floor of 2 would have shown half the world");
+    ok(cfg.worldZoom(768, 1024, true) === 1.5,
+      "a 768-px tablet lands on a HALF step: plain rounding at /440 would have zoomed it in");
+    const shot = cfg.visibleTiles(1916, 931, false);
+    ok(shot.w > 21 && shot.w < 26 && shot.h > 10 && shot.h < 13,
+      `desktop still frames ~23x11 tiles (${shot.w.toFixed(1)}x${shot.h.toFixed(1)})`);
+
+    // ---- world geometry moved with the tile, so ranges are the same distance ----
+    ok(cfg.MELEE_REACH_PX === 48 && cfg.USE_RANGE_PX === 112 && cfg.THROW_RANGE_PX === 240,
+      "reach constants doubled");
+    ok(cfg.MELEE_REACH_PX > Math.SQRT2 * cfg.TILE && cfg.MELEE_REACH_PX < 2 * cfg.TILE,
+      "melee still covers a diagonal neighbour and never a square two out");
+    ok(cfg.GARDEN_RADIUS / cfg.TILE === 2.5, "the garden aura still spans 2.5 tiles");
+    ok(items.ITEMS.longbow.bow!.range / cfg.TILE === 9.375, "Hunter's Bow still reaches the same 9.4 tiles");
+    ok(cfg.MONSTER_AGGRO_RANGE >= items.ITEMS.longbow.bow!.range + cfg.TILE,
+      "monster sight still outreaches the longest bow by a tile");
+
+    // ---- the terrain canvas is NOT baked at TILE (phones would refuse it) ----
+    const zw = buildWorlds(WORLD_SEED);
+    ok(zw.home.mapCanvas.width === zw.home.w * cfg.MAP_TILE,
+      "the map canvas is painted at MAP_TILE, not TILE");
+    ok(zw.deepwild.mapCanvas.width * zw.deepwild.mapCanvas.height < 30_000_000,
+      `the continent's bitmap stays under 30 Mpx (${(zw.deepwild.mapCanvas.width * zw.deepwild.mapCanvas.height / 1e6).toFixed(1)} Mpx)`);
+  }
+
+  // ------------------------------------------------- Etap 17: save migration
+  {
+    console.log("Etap 17 — a v2 save scales into the 32-px world:");
+    const { loadGame, saveGame, deleteSave } = await import("../src/save.ts");
+    const { toTile } = await import("../src/world/grid.ts");
+    const KEY = "bone-isle-save-v2";
+
+    const probe = buildWorlds(WORLD_SEED).home;
+    let ttx = -1;
+    let tty = -1;
+    outerSave: for (let y = 3; y < probe.h - 3; y++) {
+      for (let x = 3; x < probe.w - 3; x++) {
+        if (!probe.solid[y][x] && probe.tile[y][x] > 0) { ttx = x; tty = y; break outerSave; }
+      }
+    }
+    ok(ttx >= 0, "found a walkable home tile to anchor the migration test");
+
+    // exactly what a pre-Etap-17 client wrote for that tile centre
+    const v2 = {
+      v: 2, seed: WORLD_SEED, current: "home",
+      player: {
+        x: ttx * 16 + 8, y: tty * 16 + 8,
+        hp: 60, maxhp: 100, gold: 42, level: 3, exp: 0, expNext: 100,
+        bag: [], eq: {},
+      },
+      skills: {}, quests: [], structures: {},
+      ground: { home: [{ kind: "wood", n: 3, x: ttx * 16 + 8, y: tty * 16 + 8 }] },
+      corpses: { home: [{ name: "corpse", x: ttx * 16 + 8, y: tty * 16 + 8, items: [], gold: 5, t: 60 }] },
+    };
+    localStorage.setItem(KEY, JSON.stringify(v2));
+    const g2 = loadGame()!;
+    ok(!!g2, "a v2 save still loads");
+    ok(g2.player.tx === ttx && g2.player.ty === tty,
+      `the player lands on the SAME tile, not half way (${g2.player.tx},${g2.player.ty} vs ${ttx},${tty})`);
+    ok(g2.player.gold === 42, "the rest of the save is untouched");
+    ok(g2.worlds.home.ground[0]?.x === ttx * 32 + 16, "loose ground stacks scale too");
+    ok(g2.worlds.home.corpses[0]?.x === ttx * 32 + 16, "and so do corpses");
+
+    // v3 round-trips without scaling a second time
+    saveGame(g2);
+    const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
+    ok(stored.v === 3, "saving writes the new v3 format");
+    const g3 = loadGame()!;
+    ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
+    ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
+    deleteSave();
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
