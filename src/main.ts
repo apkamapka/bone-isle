@@ -4,6 +4,7 @@ import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
 import { SPR, itemSprite, iconW, iconH } from "./gfx/sprites.ts";
+import { loadHeroSheet, heroSprite } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard } from "./entities/monsters.ts";
@@ -104,6 +105,7 @@ function resize(): void {
 }
 addEventListener("resize", resize);
 addEventListener("orientationchange", () => setTimeout(resize, 100));
+loadHeroSheet();
 resize();
 
 loadHudLayout(); // restore any customized mobile HUD positions + lock state
@@ -2113,12 +2115,17 @@ function render(): void {
       hpBar(m.x, m.y - m.spr.height - 8, m.hp / m.maxhp);
     } });
   }
-  // player
-  const pbob = (P.dest || P.target || P.gather || moveAxisNonZero() || !atCenter(P)) ? Math.sin(P.bob * 10) * 2.4 : 0;
+  // player — hand-drawn LPC art when the sheet is up, the baked outfit until then
+  const pmoving = !!(P.dest || P.target || P.gather || moveAxisNonZero() || !atCenter(P));
+  const pbob = pmoving ? Math.sin(P.bob * 10) * 2.4 : 0;
   drawList.push({ y: P.y, fn: () => {
     drawShadow(P.x, P.y);
-    vctx.globalAlpha = P.dead ? 0.4 : 1;
-    drawSprite(P.sprDir[P.dir], P.x, P.y, P.dir === "side" ? P.face : 1, pbob);
+    const lpc = heroSprite(P.dir, P.face, pmoving, P.bob, P.dead);
+    // the LPC body is a real lying-down frame, so it is not faded like the
+    // stand-in would be; the baked outfit still gets the ghosting treatment
+    vctx.globalAlpha = P.dead && !lpc ? 0.4 : 1;
+    if (lpc) drawSprite(lpc, P.x, P.y, 1, 0);
+    else drawSprite(P.sprDir[P.dir], P.x, P.y, P.dir === "side" ? P.face : 1, pbob);
     vctx.globalAlpha = 1;
   } });
 

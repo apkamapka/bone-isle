@@ -1257,6 +1257,31 @@ async function main(): Promise<void> {
     deleteSave();
   }
 
+  // ------------------------------------------------- LPC hero sheet
+  {
+    console.log("Hero sprite sheet (LPC walk cycle + body):");
+    const hs = await import("../src/gfx/heroSheet.ts");
+
+    // headless: no Image, so the sheet never loads and the caller must fall
+    // back to the baked Adventurer outfit rather than crashing
+    hs.loadHeroSheet();
+    ok(hs.heroReady() === false, "loading is a safe no-op without a DOM");
+    ok(hs.heroSprite("down", 1, true, 0, false) === null,
+      "heroSprite() returns null so the baked outfit stands in");
+    ok(hs.heroSprite("side", -1, false, 0, true) === null, "…including for the death frame");
+
+    // walk cycle maths — pure, so it is testable without a canvas
+    ok(hs.walkFrameIndex(false, 0) === 0 && hs.walkFrameIndex(false, 99) === 0,
+      "standing still parks on frame 0, not a frozen stride");
+    const seen = new Set<number>();
+    for (let i = 0; i < 200; i++) seen.add(hs.walkFrameIndex(true, i / 8));
+    ok(seen.size === 8, `walking cycles through all 8 stride frames (${seen.size})`);
+    ok(![...seen].includes(0), "the cycle never falls back onto the standing frame");
+    ok(Math.min(...seen) === 1 && Math.max(...seen) === 8, "frames stay inside 1..8");
+    ok(hs.walkFrameIndex(true, 0) === hs.walkFrameIndex(true, 1),
+      "the cycle repeats once a second at 8 fps");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
