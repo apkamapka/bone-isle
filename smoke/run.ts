@@ -765,27 +765,27 @@ async function main(): Promise<void> {
     const p = createPlayer({ x: 0, y: 0 });
     outfit.resetOutfit();
     const d0 = outfit.outfitState();
-    ok(d0.hair === 116 && d0.primary === 75 && d0.secondary === 120 && d0.current === "adventurer",
-      "fresh state is the default look in the 133-dye rack");
+    ok(d0.hair === 57 && d0.primary === 95 && d0.secondary === 95 && d0.shoes === 114 && d0.current === "adventurer",
+      "fresh state is the silver/gray look in the 133-dye rack");
     outfit.setOutfitColor(p, "hair", 11);
     outfit.setOutfitColor(p, "primary", 4);
     ok(outfit.outfitState().hair === 11 && outfit.outfitState().primary === 4, "dye picks stick");
     outfit.setOutfitColor(p, "secondary", 999);
-    ok(outfit.outfitState().secondary === 120, "an out-of-range dye is refused");
+    ok(outfit.outfitState().secondary === 95, "an out-of-range dye is refused");
     // save round-trip
     const snap = outfit.outfitSave();
     outfit.resetOutfit();
-    ok(outfit.outfitState().hair === 116, "reset back to defaults");
+    ok(outfit.outfitState().hair === 57, "reset back to defaults");
     outfit.loadOutfitSave(snap);
     const d1 = outfit.outfitState();
-    ok(d1.hair === 11 && d1.primary === 4 && d1.secondary === 120, "save snapshot restores the dyes");
+    ok(d1.hair === 11 && d1.primary === 4 && d1.secondary === 95, "save snapshot restores the dyes");
     // hostile / legacy data → defaults, owned always keeps the starter
     outfit.loadOutfitSave({ hair: "purple", current: "dragonKing", owned: ["dragonKing", 7] });
     const d2 = outfit.outfitState();
-    ok(d2.hair === 116 && d2.current === "adventurer" && d2.owned.includes("adventurer"),
+    ok(d2.hair === 57 && d2.current === "adventurer" && d2.owned.includes("adventurer"),
       "corrupt save data falls back to the default look");
     outfit.loadOutfitSave(undefined);
-    ok(outfit.outfitState().primary === 75, "pre-wardrobe saves (no outfit field) load clean");
+    ok(outfit.outfitState().primary === 95, "pre-wardrobe saves (no outfit field) load clean");
     outfit.resetOutfit();
   }
 
@@ -1095,14 +1095,15 @@ async function main(): Promise<void> {
     of.loadOutfitSave({ pal: 133, hair: 130, primary: 4, secondary: 9, current: "adventurer", owned: ["adventurer"] });
     ok(of.outfitState().hair === 130, "Etap-14 saves are taken at face value");
     of.loadOutfitSave({ pal: 133, hair: 9999, primary: -3, secondary: 9, current: "adventurer", owned: ["adventurer"] });
-    ok(of.outfitState().hair === 116 && of.outfitState().primary === 75,
+    ok(of.outfitState().hair === 57 && of.outfitState().primary === 95,
       "out-of-range indices fall back to the default look");
     // restore the dyes the round-trip check below expects
     of.setOutfitColor(P, "primary", 12);
     of.setOutfitColor(P, "secondary", 6);
 
-    ok(of.zoneLabels().hair === "Hood" && of.zoneLabels().primary === "Tunic",
-      "Adventurer's dye rows are captioned Hood/Tunic/Legs");
+    ok(of.zoneLabels().hair === "Hair" && of.zoneLabels().primary === "Shirt"
+      && of.zoneLabels().secondary === "Pants" && of.zoneLabels().shoes === "Shoes",
+      "Wardrobe dye rows are captioned Hair/Shirt/Pants/Shoes");
 
     // save format is unchanged — no migration required
     const snap = of.outfitSave();

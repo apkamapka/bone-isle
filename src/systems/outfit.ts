@@ -10,6 +10,7 @@
  */
 import { PLAYER_MAP, bake } from "../gfx/sprites.ts";
 import { ADV_DOWN, ADV_SIDE, ADV_UP } from "../gfx/adventurer.ts";
+import { setHeroDyes, type HeroZone } from "../gfx/heroSheet.ts";
 import type { Player } from "../entities/player.ts";
 
 /** The four render facings. `left` is `side` mirrored at draw time, so only
@@ -17,21 +18,25 @@ import type { Player } from "../entities/player.ts";
 export type Facing = "down" | "up" | "side";
 export type DirSprites = Readonly<Record<Facing, HTMLCanvasElement>>;
 
-/** The three dye zones and the player-map glyphs each one re-tints. */
-export type OutfitZone = "hair" | "primary" | "secondary";
-/** Zone captions are per-outfit: the classic map dyes hair/tunic/legs, while
- *  the Adventurer's hood hides the hair entirely, so its third zone paints the
- *  boots instead. The save format is untouched — only the captions differ. */
+/** The four dye zones. The internal keys stay hair/primary/secondary (+shoes)
+ *  so older saves load untouched; they now paint the LPC hero's hair, shirt,
+ *  pants and shoes. The `primary`/`secondary` names are historical. */
+export type OutfitZone = "hair" | "primary" | "secondary" | "shoes";
 const LEGACY_LABELS: Readonly<Record<OutfitZone, string>> = {
-  hair: "Hair", primary: "Tunic", secondary: "Legs",
+  hair: "Hair", primary: "Tunic", secondary: "Legs", shoes: "Shoes",
 };
 const ADV_LABELS: Readonly<Record<OutfitZone, string>> = {
-  hair: "Hood", primary: "Tunic", secondary: "Legs",
+  hair: "Hood", primary: "Tunic", secondary: "Legs", shoes: "Boots",
+};
+/** The Wardrobe dyes the LPC hero, so its rows read Hair / Shirt / Pants /
+ *  Shoes regardless of the fallback outfit worn headless. */
+const HERO_LABELS: Readonly<Record<OutfitZone, string>> = {
+  hair: "Hair", primary: "Shirt", secondary: "Pants", shoes: "Shoes",
 };
 
-/** Captions for the Wardrobe swatch rows, for whichever outfit is worn. */
+/** Captions for the Wardrobe swatch rows. */
 export function zoneLabels(): Readonly<Record<OutfitZone, string>> {
-  return OUTFITS[state.current]?.labels ?? LEGACY_LABELS;
+  return HERO_LABELS;
 }
 
 /**
@@ -93,8 +98,10 @@ const LEGACY_REMAP: readonly number[] = [
   116, 75, 95, 114, 19, 41, 60, 58, 115, 55, 71, 51, 69, 48, 65, 62, 95, 57, 19,
 ];
 
-/** Default look: brown hood, red tunic, dark green legs. */
-const DEFAULT_DYES = { hair: 116, primary: 75, secondary: 120 } as const;
+/** Default look — the silver/gray teen as first shipped. Grayscale-column
+ *  palette indices: hair mid gray (#929292), shirt & pants charcoal (#494949),
+ *  shoes near-black (#242424). "Classic look" returns here. */
+const DEFAULT_DYES = { hair: 57, primary: 95, secondary: 95, shoes: 114 } as const;
 
 /**
  * An outfit is three pixel maps — one per facing. Single-view outfits (the
@@ -129,6 +136,8 @@ export interface OutfitSave {
   hair: number;
   primary: number;
   secondary: number;
+  /** Shoe dye (Etap: layered LPC hero). Absent in older saves → default. */
+  shoes: number;
   current: string;
   owned: string[];
 }
@@ -179,11 +188,25 @@ export function bakeOutfitSprite(): HTMLCanvasElement {
   return bakeOutfitSprites().down;
 }
 
-/** Re-bake and hand the player their current look. Call after any change. */
+/** The four Wardrobe dyes as hex, mapped to the LPC hero's layer zones. */
+function heroDyeColors(): Record<HeroZone, string> {
+  const at = (i: number, fb: string) => OUTFIT_COLORS[i] ?? fb;
+  return {
+    hair: at(state.hair, "#929292"),
+    shirt: at(state.primary, "#494949"),
+    pants: at(state.secondary, "#494949"),
+    shoes: at(state.shoes, "#242424"),
+  };
+}
+
+/** Re-bake and hand the player their current look. Call after any change.
+ *  Drives both the LPC hero (the tinted layers) and the baked Adventurer
+ *  fallback, so a dye change shows up whichever one is on screen. */
 export function applyOutfit(p: Player): void {
   const set = bakeOutfitSprites();
   p.sprDir = set;
   p.spr = set.down; // keep the generic walker field in sync (shadows, corpses)
+  setHeroDyes(heroDyeColors());
 }
 
 /** Pick a dye for one zone (Wardrobe swatch click). */
@@ -198,6 +221,7 @@ export function resetOutfitColors(p: Player): void {
   state.hair = DEFAULT_DYES.hair;
   state.primary = DEFAULT_DYES.primary;
   state.secondary = DEFAULT_DYES.secondary;
+  state.shoes = DEFAULT_DYES.shoes;
   applyOutfit(p);
 }
 
@@ -228,6 +252,7 @@ export function loadOutfitSave(data: unknown): void {
   state.hair = idx(d.hair, DEFAULT_DYES.hair);
   state.primary = idx(d.primary, DEFAULT_DYES.primary);
   state.secondary = idx(d.secondary, DEFAULT_DYES.secondary);
+  state.shoes = idx(d.shoes, DEFAULT_DYES.shoes);
   if (Array.isArray(d.owned)) {
     const owned = d.owned.filter((o): o is string => typeof o === "string" && o in OUTFITS);
     if (!owned.includes(DEFAULT_OUTFIT)) owned.unshift(DEFAULT_OUTFIT);

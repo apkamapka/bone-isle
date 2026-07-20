@@ -15,6 +15,13 @@ The generator's full export was repacked into a 9x5 grid of 64px cells
 idle for four facings, and the last frame of the death animation used as the
 on-ground corpse.
 
+To let the in-game Wardrobe recolor the hero, the character is kept as separate
+layers: `hero-base.png` (body + head + eyes, never dyed) plus grayscale
+`hero-hair.png`, `hero-shirt.png`, `hero-pants.png` and `hero-shoes.png`, which
+are tinted and composited at runtime. (The earlier single `public/hero.png` is
+no longer used and may be deleted.) The attribution below is unchanged — it is
+the same LPC artwork, only split by garment.
+
 ### Licence: OGA-BY 3.0
 
 Every layer in this character is multi-licensed. Six of the seven layers offer

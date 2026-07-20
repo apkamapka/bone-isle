@@ -10,6 +10,7 @@ import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
 import { OUTFIT_COLORS, HUE_STEPS, SAT_ROWS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
+import { heroPreviewFrame } from "../gfx/heroSheet.ts";
 import { hudText, type HudCtx } from "./hud.ts";
 import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
@@ -1131,7 +1132,7 @@ function drawWardrobe(p: PanelInput): void {
   const { hud, player } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
   const st = outfitState();
-  const zones: readonly OutfitZone[] = ["hair", "primary", "secondary"];
+  const zones: readonly OutfitZone[] = ["hair", "primary", "secondary", "shoes"];
 
   // Tibia's layout: preview + zone selector on the left, one shared 19 x 7
   // palette on the right. Three separate 133-swatch rows would never fit.
@@ -1156,15 +1157,25 @@ function drawWardrobe(p: PanelInput): void {
   const top = y + 18 * S;
   const lx = x + pad;
 
-  // live preview: the actual player sprite, big
-  const spr = player.spr;
-  const psc = Math.max(1, Math.floor((previewH - 8 * S) / iconH(spr, 1)));
+  // live preview: the LPC hero that actually walks around, so the dyes you pick
+  // are exactly what you'll wear. Falls back to the baked outfit headless / if
+  // the layer sheets fail to load.
   ctx.fillStyle = "rgba(40,32,20,.9)";
   ctx.fillRect(lx, top, previewW, previewH);
   ctx.strokeStyle = "#6e571f";
   ctx.lineWidth = S;
   ctx.strokeRect(lx + S / 2, top + S / 2, previewW - S, previewH - S);
-  icon(p, spr, lx + (previewW - iconW(spr, psc)) / 2, top + (previewH - iconH(spr, psc)) / 2, psc);
+  const lpc = heroPreviewFrame();
+  if (lpc) {
+    const psc = Math.max(1, Math.floor((previewH - 6 * S) / 64));
+    const dw = 64 * psc, dh = 64 * psc;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(lpc, lx + (previewW - dw) / 2, top + (previewH - dh) / 2, dw, dh);
+  } else {
+    const spr = player.spr;
+    const psc = Math.max(1, Math.floor((previewH - 8 * S) / iconH(spr, 1)));
+    icon(p, spr, lx + (previewW - iconW(spr, psc)) / 2, top + (previewH - iconH(spr, psc)) / 2, psc);
+  }
 
   // zone selector — the grid paints whichever one is armed
   let by = top + previewH + 4 * S;

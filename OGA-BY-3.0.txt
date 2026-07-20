@@ -1,8 +1,10 @@
 OpenGameArt.org Attribution 3.0 (OGA-BY 3.0)
 ============================================
 
-The player sprite sheet in this repository (public/hero.png) is distributed
-under the OpenGameArt.org Attribution 3.0 Unported licence (OGA-BY 3.0).
+The player sprite sheets in this repository (public/hero-base.png and the
+grayscale hero-hair / hero-shirt / hero-pants / hero-shoes layers) are
+distributed under the OpenGameArt.org Attribution 3.0 Unported licence
+(OGA-BY 3.0).
 
 OGA-BY 3.0 is the Creative Commons Attribution 3.0 licence (CC-BY 3.0) with the
 "anti-DRM" clause removed. In plain terms:
