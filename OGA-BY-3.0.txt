@@ -1,0 +1,34 @@
+OpenGameArt.org Attribution 3.0 (OGA-BY 3.0)
+============================================
+
+The player sprite sheet in this repository (public/hero.png) is distributed
+under the OpenGameArt.org Attribution 3.0 Unported licence (OGA-BY 3.0).
+
+OGA-BY 3.0 is the Creative Commons Attribution 3.0 licence (CC-BY 3.0) with the
+"anti-DRM" clause removed. In plain terms:
+
+  - Commercial use, modification and redistribution are all permitted.
+  - Attribution is REQUIRED: you must state that you used the work and credit
+    the original artists. See CREDITS.md for the full per-layer artist list.
+  - There is NO share-alike requirement (derivatives need not use this licence).
+  - There is NO restriction on technical protection measures (DRM), so the art
+    is safe to ship on DRM-gated stores (iOS App Store, consoles).
+
+Full, authoritative licence text:
+  https://static.opengameart.org/OGA-BY-3.0.txt
+
+Licence FAQ and summary:
+  https://opengameart.org/content/oga-by-30-faq
+
+OGA-BY 3.0 also grants, at your option, distribution under the terms of the
+Creative Commons Attribution 3.0 licence (CC-BY 3.0):
+  https://creativecommons.org/licenses/by/3.0/legalcode
+
+Attribution for this sheet (recommended OpenGameArt form):
+  Player character assembled from Universal LPC Spritesheet Character Generator
+  layers by bluecarrot16, Evert, TheraHedwig, Benjamin K. Smith (BenCreating),
+  MuffinElZangano, Durrani, Pierre Vigier (pvigier), Eliza Wyatt (ElizaWy),
+  Matthew Krohn (makrohn), Johannes Sjolund (wulax), Stephen Challener
+  (Redshrike), JaidynReiman, Manuel Riecke (MrBeast), Joe White and Nyom.
+  Licensed OGA-BY 3.0, hosted by OpenGameArt.org. Modified (layers composited
+  and trimmed to walk / idle / death frames).
