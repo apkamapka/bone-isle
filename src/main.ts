@@ -134,6 +134,17 @@ let moveMarker: { x: number; y: number; t: number } | null = null;
  *  target, and the loot window pops the moment it's in use range. */
 let pendingLoot: Corpse | null = null;
 let waveT = 0;
+/**
+ * Walk-cycle clock for the hero sheet. Advanced only on frames where the
+ * player's position actually CHANGED — intent flags are not motion. Having a
+ * combat target, a queued destination or a held key all mean "about to move",
+ * and driving the stride off those made the sprite march on the spot whenever
+ * the player stood still attacking or bumped into a wall.
+ */
+let walkT = 0;
+let walking = false;
+let lastPX = Number.NaN;
+let lastPY = Number.NaN;
 let saveTimer = 0;
 let last = performance.now();
 
@@ -1188,7 +1199,7 @@ function worldClick(w: Vec): void {
   const world = cw();
   // monsters
   for (const m of world.monsters) {
-    if (Math.abs(w.x - m.x) < 18 && w.y > m.y - 32 && w.y < m.y + 10) {
+    if (Math.abs(w.x - m.x) < m.spr.width / 2 && w.y > m.y - m.spr.height && w.y < m.y + 10) {
       // clicking the monster you're already attacking STOPS the attack (Tibia-style toggle)
       if (P.target?.kind === "mob" && P.target.m === m) {
         P.target = null;
@@ -1231,7 +1242,7 @@ function worldClick(w: Vec): void {
   }
   // NPCs
   for (const n of world.npcs) {
-    if (Math.abs(w.x - n.x) < 18 && w.y > n.y - 32 && w.y < n.y + 10) {
+    if (Math.abs(w.x - n.x) < n.spr.width / 2 && w.y > n.y - n.spr.height && w.y < n.y + 10) {
       P.target = { kind: "npc", n };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
@@ -1241,7 +1252,7 @@ function worldClick(w: Vec): void {
   // structure's real footprint centre (1×1 dummies vs 2×2 buildings).
   for (const s of world.structures) {
     const c = structCenter(s);
-    if (Math.abs(w.x - c.x) < 32 && w.y > c.baseY - 60 && w.y < c.baseY + 8) {
+    if (Math.abs(w.x - c.x) < SPR.corpse.width / 2 && w.y > c.baseY - SPR.corpse.height * 2 && w.y < c.baseY + 8) {
       if (s.key === "dummy" || s.key === "dummyII" || s.key === "range") {
         // re-clicking the dummy you're training on stops the attack (toggle)
         if (P.target?.kind === "dummy" && P.target.s === s) {
@@ -1573,6 +1584,11 @@ function update(dt: number): void {
     }
   }
   P.bob += dt;
+  // actual displacement this tick, not what the player meant to do
+  walking = P.x !== lastPX || P.y !== lastPY;
+  if (walking) walkT += dt;
+  lastPX = P.x;
+  lastPY = P.y;
 
   // death → respawn countdown
   if (P.dead) {
@@ -2116,11 +2132,10 @@ function render(): void {
     } });
   }
   // player — hand-drawn LPC art when the sheet is up, the baked outfit until then
-  const pmoving = !!(P.dest || P.target || P.gather || moveAxisNonZero() || !atCenter(P));
-  const pbob = pmoving ? Math.sin(P.bob * 10) * 2.4 : 0;
+  const pbob = (P.dest || P.target || P.gather || moveAxisNonZero() || !atCenter(P)) ? Math.sin(P.bob * 10) * 2.4 : 0;
   drawList.push({ y: P.y, fn: () => {
     drawShadow(P.x, P.y);
-    const lpc = heroSprite(P.dir, P.face, pmoving, P.bob, P.dead);
+    const lpc = heroSprite(P.dir, P.face, walking, walkT, waveT, P.dead);
     // the LPC body is a real lying-down frame, so it is not faded like the
     // stand-in would be; the baked outfit still gets the ghosting treatment
     vctx.globalAlpha = P.dead && !lpc ? 0.4 : 1;

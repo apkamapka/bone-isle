@@ -27,6 +27,18 @@ export const SPRITE_SCALE = TILE / LEGACY_TILE;
 export const MAP_TILE = TILE / SPRITE_SCALE;
 
 /**
+ * Bake magnification for ACTORS — monsters, townsfolk, corpses — as opposed to
+ * props and icons, which stay at SPRITE_SCALE. The hand-drawn hero is 64-px
+ * LPC art standing about 1.6 tiles tall; creatures baked at 2x barely fill a
+ * tile and read as dolls beside him. Bumping them one step closes most of the
+ * gap without making them as blocky as a 4x bake would.
+ *
+ * Temporary scaffolding: as each creature gets its own native 32-px artwork it
+ * moves to bakeNative() and drops off the ACTORS list in sprites.ts.
+ */
+export const ACTOR_SCALE = 3;
+
+/**
  * The one canonical world seed. Terrain generation is fully deterministic, so a
  * fixed seed means every device — and every future online player — sees the
  * exact same islands. When multiplayer arrives, a server can hand out its own

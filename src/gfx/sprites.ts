@@ -3,7 +3,7 @@
  * All graphics are tiny string maps rendered once onto offscreen canvases.
  */
 import { rndi } from "../util.ts";
-import { SPRITE_SCALE } from "../config.ts";
+import { SPRITE_SCALE, ACTOR_SCALE } from "../config.ts";
 
 /** Single-character color palette used by pixel maps. */
 export const PAL: Readonly<Record<string, string>> = {
@@ -33,6 +33,16 @@ export function spriteSource(spr: HTMLCanvasElement): HTMLCanvasElement {
   return nativeSrc.get(spr) ?? spr;
 }
 
+/** What each baked sprite was magnified by. Props sit at SPRITE_SCALE, actors
+ *  at ACTOR_SCALE, future native art at 1 — so anything reasoning about "art
+ *  pixels" has to ask rather than assume. */
+const bakedAt = new WeakMap<HTMLCanvasElement, number>();
+
+/** The magnification a sprite was baked at (1 for native artwork). */
+export function spriteZoom(spr: HTMLCanvasElement): number {
+  return bakedAt.get(spr) ?? 1;
+}
+
 /** Nearest-neighbour blow-up of a freshly painted canvas. Registered against
  *  its source so spriteSource() can find the original later. */
 function upscale(src: HTMLCanvasElement, s: number): HTMLCanvasElement {
@@ -44,6 +54,7 @@ function upscale(src: HTMLCanvasElement, s: number): HTMLCanvasElement {
   x.imageSmoothingEnabled = false;
   x.drawImage(src, 0, 0, c.width, c.height);
   nativeSrc.set(c, src);
+  bakedAt.set(c, s);
   return c;
 }
 
@@ -110,10 +121,10 @@ export function bakeNative(
  * bake scale straight back out and every icon keeps the footprint it had.
  */
 export function iconW(spr: HTMLCanvasElement, zoom: number): number {
-  return (spr.width * zoom) / SPRITE_SCALE;
+  return (spr.width * zoom) / spriteZoom(spr);
 }
 export function iconH(spr: HTMLCanvasElement, zoom: number): number {
-  return (spr.height * zoom) / SPRITE_SCALE;
+  return (spr.height * zoom) / spriteZoom(spr);
 }
 
 /**
@@ -1177,6 +1188,28 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   trainingArrow: SPR.trainingArrow,
   backpack: SPR.pack, booster: SPR.boosterPotion,
 };
+
+/**
+ * Living things are baked chunkier than props — see ACTOR_SCALE. Re-upscaling
+ * from the 1x source rather than the already-doubled copy keeps every pixel
+ * exact instead of resampling a resample. Decor is untouched: it is painted
+ * into the terrain canvas from spriteSource() anyway.
+ */
+const ACTORS = [
+  "skeleton", "goblin", "spider", "orc", "ghost",
+  "troll", "rat", "bat", "wolf", "bear",
+  "minotaur", "cyclops", "snake", "crab", "wasp",
+  "poisonSpider", "rotworm", "amazon", "warWolf", "ghoul",
+  "orcSpearman", "orcWarrior", "hunter", "minotaurArcher", "orcShaman",
+  "mummy", "orcBerserker", "minotaurGuard", "minotaurMage", "dragon",
+  "boneLord", "corpse", "npcSmith", "npcHerbalist", "npcElder",
+  "npcTailor", "npcTaskmaster",
+] as const;
+
+{
+  const spr = SPR as unknown as Record<string, HTMLCanvasElement>;
+  for (const k of ACTORS) spr[k] = upscale(spriteSource(spr[k]), ACTOR_SCALE);
+}
 export function itemSprite(kind: ItemKind): HTMLCanvasElement {
   return ITEM_SPR[kind];
 }

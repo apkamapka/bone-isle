@@ -1259,27 +1259,56 @@ async function main(): Promise<void> {
 
   // ------------------------------------------------- LPC hero sheet
   {
-    console.log("Hero sprite sheet (LPC walk cycle + body):");
+    console.log("Hero sprite sheet (LPC walk + idle + body):");
     const hs = await import("../src/gfx/heroSheet.ts");
 
     // headless: no Image, so the sheet never loads and the caller must fall
     // back to the baked Adventurer outfit rather than crashing
     hs.loadHeroSheet();
     ok(hs.heroReady() === false, "loading is a safe no-op without a DOM");
-    ok(hs.heroSprite("down", 1, true, 0, false) === null,
+    ok(hs.heroSprite("down", 1, true, 0, 0, false) === null,
       "heroSprite() returns null so the baked outfit stands in");
-    ok(hs.heroSprite("side", -1, false, 0, true) === null, "…including for the death frame");
+    ok(hs.heroSprite("side", -1, false, 0, 0, true) === null, "…including for the death frame");
 
-    // walk cycle maths — pure, so it is testable without a canvas
-    ok(hs.walkFrameIndex(false, 0) === 0 && hs.walkFrameIndex(false, 99) === 0,
-      "standing still parks on frame 0, not a frozen stride");
+    // walk cycle — pure maths, testable without a canvas
     const seen = new Set<number>();
-    for (let i = 0; i < 200; i++) seen.add(hs.walkFrameIndex(true, i / 8));
-    ok(seen.size === 8, `walking cycles through all 8 stride frames (${seen.size})`);
-    ok(![...seen].includes(0), "the cycle never falls back onto the standing frame");
-    ok(Math.min(...seen) === 1 && Math.max(...seen) === 8, "frames stay inside 1..8");
-    ok(hs.walkFrameIndex(true, 0) === hs.walkFrameIndex(true, 1),
-      "the cycle repeats once a second at 8 fps");
+    for (let i = 0; i < 200; i++) seen.add(hs.walkFrameIndex(i / 8));
+    ok(seen.size === 8, `the walk cycles through all 8 stride frames (${seen.size})`);
+    ok(Math.min(...seen) === 1 && Math.max(...seen) === 8, "stride frames stay inside 1..8");
+    ok(hs.walkFrameIndex(0) === hs.walkFrameIndex(1), "the stride repeats once a second at 8 fps");
+
+    // idle loop — the fix for marching on the spot
+    ok(hs.idleFrameIndex(0) === 0 && hs.idleFrameIndex(0.5) === 1,
+      "idle alternates two frames at 2 fps");
+    ok(hs.idleFrameIndex(1) === 0, "and loops");
+    const idles = new Set<number>();
+    for (let i = 0; i < 40; i++) idles.add(hs.idleFrameIndex(i / 4));
+    ok(idles.size === 2 && !idles.has(2), "idle never wanders outside its two frames");
+  }
+
+  // ------------------------------------------------- actor scale
+  {
+    console.log("Actor scale (creatures bigger than props):");
+    const cfg = await import("../src/config.ts");
+    const gfx = await import("../src/gfx/sprites.ts");
+
+    ok(cfg.ACTOR_SCALE > cfg.SPRITE_SCALE, "actors bake chunkier than props");
+    ok(gfx.spriteZoom(gfx.SPR.skeleton) === cfg.ACTOR_SCALE, "a monster carries the actor zoom");
+    ok(gfx.spriteZoom(gfx.SPR.npcSmith) === cfg.ACTOR_SCALE, "so does a townsperson");
+    ok(gfx.spriteZoom(gfx.SPR.corpse) === cfg.ACTOR_SCALE, "and a corpse, so it matches what died");
+    ok(gfx.spriteZoom(gfx.SPR.coin) === cfg.SPRITE_SCALE, "an item icon stays at the prop scale");
+    ok(gfx.spriteZoom(gfx.SPR.mushroom) === cfg.SPRITE_SCALE,
+      "so does decor — it is painted into the legacy-scale terrain canvas");
+
+    // the 1x art is untouched, so the terrain bake still gets exact pixels
+    ok(gfx.spriteSource(gfx.SPR.skeleton).height === gfx.SPR.skeleton.height / cfg.ACTOR_SCALE,
+      "the original 1x artwork survives the re-bake");
+    ok(gfx.SPR.skeleton.height > gfx.SPR.coin.height, "a skeleton now out-sizes a coin");
+
+    // icons must not grow just because the sprite did
+    ok(gfx.iconW(gfx.SPR.skeleton, 2) === gfx.spriteSource(gfx.SPR.skeleton).width * 2,
+      "iconW divides out the actual bake zoom, not a hardcoded 2");
+    ok(gfx.iconH(gfx.SPR.coin, 2) === 10, "a coin icon still draws at its old size");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
