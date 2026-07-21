@@ -512,7 +512,7 @@ async function main(): Promise<void> {
   console.log("Etap 8 — extended bestiary:");
   {
     const { MONSTER_DEFS, MONSTER_KINDS, spawnMonster, updateMonsters } = await import("../src/entities/monsters.ts");
-    const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S } = await import("../src/config.ts");
+    const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S, TILE } = await import("../src/config.ts");
     const { killMonster } = await import("../src/systems/combat.ts");
     ok(MONSTER_KINDS.length === 31, `bestiary holds 31 kinds (30 + the dragon), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
@@ -524,11 +524,30 @@ async function main(): Promise<void> {
     }
     ok(lootOk, "every loot entry maps to a real item");
     ok(sprOk, "every monster kind has a baked sprite");
-    // shooters never outrange their own awareness
+    // Aggro is now a tight 6 tiles (tighter engagement for the zoomed-in view).
+    // A shooter's weapon range may EXCEED aggro — that only bites once you
+    // provoke one and then retreat. What must hold: an UNPROVOKED monster never
+    // attacks from beyond aggro, whatever its own range.
     const shooters = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].ranged);
     ok(shooters.length === 8, `eight distance fighters in the bestiary, got ${shooters.length}`);
-    ok(shooters.every((k) => MONSTER_DEFS[k].ranged!.range < MONSTER_AGGRO_RANGE),
-      "every shooter's range stays under the aggro range");
+    ok(MONSTER_AGGRO_RANGE === 6 * TILE, "aggro range is a tight 6 tiles");
+    {
+      // hunter's weapon range is 280 px (8.75 tiles) — well past aggro (192).
+      const arena = buildWorlds(WORLD_SEED).wild;
+      arena.monsters.length = 0;
+      spawnMonster(arena, "hunter");
+      const h = arena.monsters[0];
+      // fresh target sat BEYOND aggro but INSIDE weapon range: must stay asleep
+      const far = { x: h.x + 240, y: h.y, dead: false }; // 240 > 192 aggro, < 280 range
+      let farShots = 0;
+      for (let t = 0; t < 40; t++) updateMonsters(arena, 1 / 60, far, (_m, r) => { if (r) farShots++; }); // <1s ⇒ no wander drift
+      ok(farShots === 0, "an unprovoked shooter beyond aggro never fires, even in weapon range");
+      // bring the target inside aggro: it wakes and shoots
+      const near = { x: h.x + 150, y: h.y, dead: false }; // 150 < 192 aggro
+      let nearShots = 0;
+      for (let t = 0; t < 240; t++) updateMonsters(arena, 1 / 60, near, (_m, r) => { if (r) nearShots++; });
+      ok(nearShots >= 1, "…but wakes and fires once the target is within aggro");
+    }
     // the orc spearman drops bone arrows (spears were cut per design review)
     const spearman = MONSTER_DEFS.orcSpearman;
     ok(spearman.loot.some((e) => e.kind === "boneArrow"), "orc spearman drops bone arrows");
@@ -1241,7 +1260,8 @@ async function main(): Promise<void> {
     ok(cfg.MELEE_REACH_PX > Math.SQRT2 * cfg.TILE && cfg.MELEE_REACH_PX < 2 * cfg.TILE,
       "melee still covers a diagonal neighbour and never a square two out");
     ok(cfg.GARDEN_RADIUS / cfg.TILE === 2.5, "the garden aura still spans 2.5 tiles");
-    ok(items.ITEMS.longbow.bow!.range / cfg.TILE === 9.375, "Hunter's Bow still reaches the same 9.4 tiles");
+    ok(items.ITEMS.longbow.bow!.range / cfg.TILE === 5, "Hunter's Bow reaches 5 tiles");
+    ok(items.ITEMS.bow.bow!.range / cfg.TILE === 5, "Short Bow reaches 5 tiles too");
     ok(cfg.MONSTER_AGGRO_RANGE >= items.ITEMS.longbow.bow!.range + cfg.TILE,
       "monster sight still outreaches the longest bow by a tile");
 
