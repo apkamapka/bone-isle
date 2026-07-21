@@ -1614,19 +1614,27 @@ function update(dt: number): void {
   // its centre, and only from the centre claims an adjacent square. Monsters
   // hard-block their tiles — a free square is always a real escape route.
   const ax = moveAxis();
+  // Tibia-style grid walking: whatever state we're in, ALWAYS finish the
+  // in-flight glide toward the current tile centre FIRST. A step, once begun,
+  // always completes — so the player can never come to rest between tiles
+  // (releasing the key mid-step no longer freezes it half-way; approaching a
+  // monster / node settles it cleanly too). The unspent budget then funds any
+  // NEW steps below. While the glide is still running this frame `budget`
+  // comes back 0 and every branch simply waits a frame.
+  let budget = playerSpeed(P) * dt;
+  budget = glideWalker(P, budget);
   if (ax.dx || ax.dy) {
     P.dest = null; P.gather = null; pendingLoot = null;
     if (!kiting && !holdMelee) P.target = null; // non-combat targets still drop
     const occ = playerOcc(world);
-    let budget = playerSpeed(P) * dt;
     for (;;) {
-      budget = glideWalker(P, budget);
       if (budget <= 0) break;
       const { sx, sy } = stepDir(ax.dx, ax.dy);
       if (!sx && !sy) break;
       // diagonal blocked → slide along whichever axis is free (wall hugging)
       if (!tryStep(world, P, sx, sy, occ)
         && !(sx && sy && (tryStep(world, P, sx, 0, occ) || tryStep(world, P, 0, sy, occ)))) break;
+      budget = glideWalker(P, budget); // glide onto the freshly-claimed tile
     }
     walkKey = ""; // manual steps invalidate any cached auto-route
     faceDelta(ax.dx, ax.dy);
@@ -1636,7 +1644,7 @@ function update(dt: number): void {
     const there = P.tx === gx && P.ty === gy && atCenter(P);
     if (there) P.dest = null;
     else {
-      const moved = walkGrid(world, gx, gy, playerSpeed(P) * dt);
+      const moved = walkGrid(world, gx, gy, budget);
       if (P.tx === gx && P.ty === gy && atCenter(P)) P.dest = null;
       // unreachable click (water, rock): the best-effort route ended — stop
       else if (!moved && atCenter(P)) P.dest = null;
@@ -1648,7 +1656,7 @@ function update(dt: number): void {
       const d = dist(P.x, P.y, tp.x, tp.y);
       let reach = MELEE_REACH_PX;
       if (P.target.kind === "dummy" || P.target.kind === "mob") reach = mode.reach;
-      if (d > reach) walkGrid(world, toTile(tp.x), toTile(tp.y), playerSpeed(P) * dt);
+      if (d > reach) walkGrid(world, toTile(tp.x), toTile(tp.y), budget);
       else resolveTarget();
     }
   } else if (kiting) {
@@ -1658,13 +1666,13 @@ function update(dt: number): void {
     if (tp) {
       const d = dist(P.x, P.y, tp.x, tp.y);
       const blocked = P.target?.kind === "mob" && !lineOfSight(world, P.x, P.y, tp.x, tp.y);
-      if (d > mode.reach || blocked) walkGrid(world, toTile(tp.x), toTile(tp.y), playerSpeed(P) * dt);
+      if (d > mode.reach || blocked) walkGrid(world, toTile(tp.x), toTile(tp.y), budget);
     }
   } else if (P.gather) {
     const gp = gatherPoint();
     if (gp) {
       const d = dist(P.x, P.y, gp.x, gp.y);
-      if (d > MELEE_REACH_PX) walkGrid(world, toTile(gp.x), toTile(gp.y), playerSpeed(P) * dt);
+      if (d > MELEE_REACH_PX) walkGrid(world, toTile(gp.x), toTile(gp.y), budget);
       else if (P.atkCd <= 0 && P.gather) {
         gatherTick(world, P, P.gather, (t) => flash(t, "#ffe9a8"));
       }
