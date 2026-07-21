@@ -1,6 +1,6 @@
 # Credits
 
-## Player character — `public/hero.png`
+## Player character — `public/hero-*.png` (layered)
 
 The player sprite is composed from the **Universal LPC Spritesheet Character
 Generator** and trimmed to just the frames the game uses.
@@ -8,7 +8,7 @@ Generator** and trimmed to just the frames the game uses.
 Reproducible character configuration (open in the generator to get the exact
 same character):
 
-<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=teen&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Plain_white&clothes=Shortsleeve_gray&legs=Long_Pants_gray&shoes=Basic_Shoes_black>
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Plain_white&clothes=Shortsleeve_gray&legs=Long_Pants_gray&shoes=Basic_Shoes_black>
 
 The generator's full export was repacked into a 9x5 grid of 64px cells
 (see `src/gfx/heroSheet.ts`): the walk cycle for four facings, a two-frame
@@ -19,8 +19,8 @@ To let the in-game Wardrobe recolor the hero, the character is kept as separate
 layers: `hero-base.png` (body + head + eyes, never dyed) plus grayscale
 `hero-hair.png`, `hero-shirt.png`, `hero-pants.png` and `hero-shoes.png`, which
 are tinted and composited at runtime. (The earlier single `public/hero.png` is
-no longer used and may be deleted.) The attribution below is unchanged — it is
-the same LPC artwork, only split by garment.
+no longer used and may be deleted.) The attribution below covers exactly these
+layers.
 
 ### Licence: OGA-BY 3.0
 
@@ -48,10 +48,10 @@ Attribution follows OpenGameArt's recommended form:
 
 ### Artists, per layer
 
-**Base body — "Body Color" (teen)**
-bluecarrot16, Evert, TheraHedwig, Benjamin K. Smith (BenCreating),
-MuffinElZangano, Durrani, Pierre Vigier (pvigier), Eliza Wyatt (ElizaWy),
-Matthew Krohn (makrohn), Johannes Sjolund (wulax), Stephen Challener (Redshrike)
+**Base body — "Body Color" (male)**
+bluecarrot16, JaidynReiman, Benjamin K. Smith (BenCreating), Evert,
+Eliza Wyatt (ElizaWy), TheraHedwig, MuffinElZangano, Durrani,
+Johannes Sjolund (wulax), Stephen Challener (Redshrike)
 — OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0
 
 **Head — "Human Male"**
@@ -66,8 +66,8 @@ JaidynReiman, Eliza Wyatt (ElizaWy), Stephen Challener (Redshrike)
 JaidynReiman, Manuel Riecke (MrBeast), Joe White
 — OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0
 
-**Shirt — "Shortsleeve" (teen)**
-Nyom, bluecarrot16, Eliza Wyatt (ElizaWy), JaidynReiman,
+**Shirt — "Shortsleeve" (male)**
+bluecarrot16, Eliza Wyatt (ElizaWy), JaidynReiman,
 Stephen Challener (Redshrike)
 — OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0
 
@@ -93,7 +93,6 @@ are hosted on OpenGameArt.org. Primary collections these layers draw from:
 - Ponytail and Plain Hairstyles — <https://opengameart.org/content/ponytail-and-plain-hairstyles>
 - LPC Expanded Hair — <https://opengameart.org/content/lpc-expanded-hair>
 - LPC Expanded Simple Shirts — <https://opengameart.org/content/lpc-expanded-simple-shirts>
-- Teen Androgynous Short Sleeve Shirt — <https://opengameart.org/content/lpc-teen-androgynous-short-sleeve-shirt>
 - LPC Expanded Pants — <https://opengameart.org/content/lpc-expanded-pants>
 - LPC Expanded Socks & Shoes — <https://opengameart.org/content/lpc-expanded-socks-shoes>
 
