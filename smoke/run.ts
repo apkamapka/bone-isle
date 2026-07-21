@@ -215,6 +215,49 @@ async function main(): Promise<void> {
     }), "route is a chain of single-tile steps");
   }
 
+  console.log("grid walking: a started step always finishes on the centre (Tibia release-mid-step):");
+  {
+    const { tryStep, glideWalker, tileCenter, stepDir, atCenter } = await import("../src/world/grid.ts");
+    const home = buildWorlds(WORLD_SEED).home;
+    // find an open 3x3 patch, then take its CENTRE so E and the NE diagonal fit
+    let ox = 0, oy = 0;
+    outerStep: for (let y = 4; y < home.h - 4; y++) {
+      for (let x = 4; x < home.w - 4; x++) {
+        let clear = true;
+        for (let j = 0; j < 3 && clear; j++) for (let i = 0; i < 3; i++) {
+          if (home.solid[y + j][x + i] || home.tile[y + j][x + i] === 0) { clear = false; break; }
+        }
+        if (clear) { ox = x + 1; oy = y + 1; break outerStep; }
+      }
+    }
+    ok(ox > 0, "found an open 3x3 patch to walk in");
+
+    // The exact bug: hold one frame → claim the E tile → glide only PART of the
+    // way → RELEASE. With the pre-glide fix the leftover travel must still land
+    // dead-centre on the DESTINATION, never freeze between the two centres.
+    const w1 = { x: tileCenter(ox), y: tileCenter(oy), tx: ox, ty: oy };
+    const s = stepDir(1, 0);
+    ok(s.sx === 1 && s.sy === 0, "east input quantises to a pure +x step");
+    tryStep(home, w1, s.sx, s.sy);      // claims (ox+1, oy) at once
+    glideWalker(w1, 3);                  // travels only 3px of a whole tile
+    ok(!atCenter(w1), "mid-step: render is stranded between the two centres");
+    ok(w1.tx === ox + 1 && w1.ty === oy, "…yet the destination tile is already claimed");
+    // KEY RELEASED — no further step, only the per-frame settle glide.
+    let guard = 0;
+    while (!atCenter(w1) && guard++ < 64) glideWalker(w1, 4);
+    ok(atCenter(w1), "released mid-step: the step still finishes exactly on the centre");
+    ok(w1.x === tileCenter(ox + 1) && w1.y === tileCenter(oy), "…and it is the DESTINATION centre, not the origin");
+
+    // One tap = exactly one tile, diagonals included (8-dir, Tibia 8.6).
+    const w2 = { x: tileCenter(ox), y: tileCenter(oy), tx: ox, ty: oy };
+    const dg = stepDir(0.7, -0.7);
+    ok(Math.abs(dg.sx) === 1 && Math.abs(dg.sy) === 1, "a 45° input quantises to a diagonal step");
+    tryStep(home, w2, dg.sx, dg.sy);
+    let g2 = 0;
+    while (!atCenter(w2) && g2++ < 64) glideWalker(w2, 4);
+    ok(w2.tx === ox + dg.sx && w2.ty === oy + dg.sy && atCenter(w2), "a single diagonal tap lands exactly one tile away, centred");
+  }
+
   console.log("shield block cap (max 2 attackers per round):");
   {
     const { hurtPlayer, resetShieldWindow } = await import("../src/systems/combat.ts");
