@@ -2,7 +2,7 @@
  * Items: the full catalog, backpack stacking, equipment stats and
  * Forge crafting recipes. Pure data + logic — no world imports.
  */
-import { BAG_SIZE, STASH_SIZE } from "./config.ts";
+import { BAG_SIZE, STASH_SIZE, TILE } from "./config.ts";
 
 export type ItemKind =
   // resources
@@ -95,8 +95,8 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   recallCrystal: { name: "Recall Crystal", stack: 999, value: 6, weight: 2, crystal: true },
   spearCrystal:  { name: "Spear Crystal",  stack: 999, value: 14, weight: 2, crystal: true },
   fireRuby:      { name: "Fire Ruby",      stack: 999, value: 40, weight: 3 },
-  bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 220, power: 4 } },
-  longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 300, power: 9 } },
+  bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 5 * TILE, power: 4 } },
+  longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 5 * TILE, power: 9 } },
   arrow:     { name: "Arrow",        stack: 999, value: 1, weight: 1, ammo: { dmg: 8 } },
   // Blunt practice shafts: dirt-cheap (1g at the smith, or bulk-crafted from
   // wood), zero attack — pure Distance training fodder for the Archery Range.

@@ -293,13 +293,13 @@ export const THROW_RANGE_PX = 240;
 export const ITEM_MOVE_REACH_PX = 48;
 
 /**
- * Monster sight range (px). Deliberately one tile MORE than the longest bow
- * in the game (Hunter's Bow, 300 px), so no bow can shoot from outside every
- * creature's awareness — archers can still kite, but never plink at a target
- * that won't react. If a longer weapon is ever added, bump this with it (the
- * aggro-on-hit timer below is the safety net if it's forgotten).
+ * Monster sight range. Deliberately one tile MORE than the longest bow in the
+ * game (every bow now reaches 5 tiles / 160 px), so no bow can shoot from
+ * outside every creature's awareness — archers can still kite, but never plink
+ * at a target that won't react. If a longer weapon is ever added, bump this
+ * with it (the aggro-on-hit timer below is the safety net if it's forgotten).
  */
-export const MONSTER_AGGRO_RANGE = 332;
+export const MONSTER_AGGRO_RANGE = 6 * TILE;
 /**
  * After taking a hit a monster stays aggressive for this many seconds even
  * beyond its sight range (line of sight still required) — shooting something
