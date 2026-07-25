@@ -3,7 +3,7 @@ import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, GARDEN_RADI
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
-import { SPR, itemSprite, iconW, iconH } from "./gfx/sprites.ts";
+import { SPR, itemSprite, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
 import { loadHeroSheet, heroSprite } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
@@ -2027,15 +2027,18 @@ function render(): void {
   const inView = (x: number, y: number): boolean =>
     x >= cam.x - CULL && x <= cam.x + VW + CULL && y >= cam.y - CULL && y <= cam.y + VH + CULL;
 
+  // Drawn artwork carries its own painted shadow, so the engine must not add
+  // a second one underneath it.
+  const artShadow = hasPropArt() ? () => {} : drawShadow;
   for (const tr of world.trees) {
     const bx = tr.tx * TILE + TILE / 2;
     const by = tr.ty * TILE + TILE;
     if (!inView(bx, by)) continue;
     if (tr.stump) {
-      drawList.push({ y: by, fn: () => { drawShadow(bx, by); drawSprite(SPR.stump, bx, by); } });
+      drawList.push({ y: by, fn: () => { artShadow(bx, by); drawSprite(propSprite("stump"), bx, by); } });
     } else {
       drawList.push({ y: by, fn: () => {
-        drawShadow(bx, by, 12);
+        artShadow(bx, by, 12);
         const shake = tr.hurtT > 0 ? Math.round(Math.sin(tr.hurtT * 40) * 3) : 0;
         drawSprite(tr.spr, bx + shake, by);
         if (tr.hp < tr.maxhp) hpBar(bx, tr.ty * TILE - 8, tr.hp / tr.maxhp);
@@ -2047,15 +2050,15 @@ function render(): void {
     // anchor the sprite so it sits CENTRED in its square (a rock is a squat
     // 10x6 sprite — bottom-of-tile anchoring made it hug the tile edge and
     // look like it belonged to the boundary, not the square it blocks)
-    const by = rk.ty * TILE + ((TILE + (rk.depleted ? SPR.rubble : SPR.rock).height) >> 1);
+    const by = rk.ty * TILE + ((TILE + (rk.depleted ? propSprite("rubble") : propSprite("rock")).height) >> 1);
     if (!inView(bx, by)) continue;
     if (rk.depleted) {
-      drawList.push({ y: by, fn: () => { drawShadow(bx, by); drawSprite(SPR.rubble, bx, by); } });
+      drawList.push({ y: by, fn: () => { artShadow(bx, by); drawSprite(propSprite("rubble"), bx, by); } });
     } else {
       drawList.push({ y: by, fn: () => {
-        drawShadow(bx, by);
+        artShadow(bx, by);
         const shake = rk.hurtT > 0 ? Math.round(Math.sin(rk.hurtT * 40) * 3) : 0;
-        drawSprite(SPR.rock, bx + shake, by);
+        drawSprite(propSprite("rock"), bx + shake, by);
         if (rk.hp < rk.maxhp) hpBar(bx, rk.ty * TILE - 4, rk.hp / rk.maxhp);
       } });
     }

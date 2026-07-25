@@ -43,6 +43,34 @@ export function spriteZoom(spr: HTMLCanvasElement): number {
   return bakedAt.get(spr) ?? 1;
 }
 
+/**
+ * Adopt artwork that came from a PNG rather than from `bake()`.
+ *
+ * Everything reasoning about "art pixels" — icon sizing above all — asks
+ * `spriteZoom()`, which answers 1 for anything it has never seen. External
+ * sheets are authored at world scale (2x the legacy 16-px art), so they must
+ * be registered or every icon drawn from them comes out half size.
+ */
+export function adoptSprite(c: HTMLCanvasElement, zoom = SPRITE_SCALE): HTMLCanvasElement {
+  bakedAt.set(c, zoom);
+  nativeSrc.set(c, c);
+  return c;
+}
+
+/** Artwork replacing the procedural tree, once a PNG has been loaded. */
+let treeArt: HTMLCanvasElement | null = null;
+
+/** Swap in (or clear, with null) the tree artwork used by every new tree. */
+export function setTreeArt(c: HTMLCanvasElement | null): void {
+  treeArt = c;
+}
+
+/** True once external prop artwork is in use — the renderer then skips its own
+ *  drop shadows, because the artwork already has them painted in. */
+export function hasPropArt(): boolean {
+  return treeArt !== null;
+}
+
 /** Nearest-neighbour blow-up of a freshly painted canvas. Registered against
  *  its source so spriteSource() can find the original later. */
 function upscale(src: HTMLCanvasElement, s: number): HTMLCanvasElement {
@@ -992,8 +1020,27 @@ export const SPR = {
 
 export type SpriteName = keyof typeof SPR;
 
+/** Props whose baked art a PNG may replace at runtime. */
+export type PropName = "rock" | "stump" | "rubble";
+
+/** SPR is frozen (`as const`) and `SpriteName` is derived from it, so loaded
+ *  artwork lives in this side table instead of being written back into it. */
+const propOverride: Partial<Record<PropName, HTMLCanvasElement>> = {};
+
+/** Install artwork for a prop; pass nothing to fall back to the baked sprite. */
+export function setPropArt(k: PropName, c: HTMLCanvasElement | null): void {
+  if (c) propOverride[k] = c;
+  else delete propOverride[k];
+}
+
+/** The sprite to draw for a prop: loaded artwork if there is any, else baked. */
+export function propSprite(k: PropName): HTMLCanvasElement {
+  return propOverride[k] ?? SPR[k];
+}
+
 /** Tall sketchy conifer — every call produces a slightly different tree. */
 export function bakeTree(): HTMLCanvasElement {
+  if (treeArt) return treeArt;
   return legacyBake(16, 28, (x) => {
     const greens = ["#2f5226", "#3f6d33", "#5d8f3f"] as const;
     x.fillStyle = PAL.t;

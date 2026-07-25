@@ -3,6 +3,7 @@ import { makeWorld } from "./world/generate.ts";
 import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC } from "./world/handmade.ts";
 import { loadTerrainImages } from "./world/terrainImage.ts";
+import { loadPropArt } from "./world/propArt.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn, worldSpawn } from "./world/collision.ts";
@@ -205,6 +206,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   // LAIRS covers exactly the remaining WorldKey members.
   const worlds = { home, town, sanctum, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
+  loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
   for (const l of LAIRS) {
     const lw = makeCaveWorld({
       key: l.key, name: l.name, w: l.w, h: l.h, seed: seed ^ keySalt(l.key),

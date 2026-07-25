@@ -19,6 +19,7 @@ async function main(): Promise<void> {
   const { lineOfSight } = await import("../src/world/collision.ts");
   const { Tile } = await import("../src/world/types.ts");
   const { STRUCTS, canPlaceAt } = await import("../src/systems/building.ts");
+  const { SPRITE_SCALE: SPRITE_SCALE2 } = await import("../src/config.ts");
 
   console.log("bagRoomFor:");
   {
@@ -1444,6 +1445,25 @@ async function main(): Promise<void> {
     const { TILE: T2 } = await import("../src/config.ts");
     ok(home.w * T2 === 1120 && home.h * T2 === 1120,
       "the collision grid matches the 1120x1120 terrain export");
+
+    // prop artwork: headless there are no images, so every prop must still be
+    // the baked sprite and the engine must keep drawing its own shadows.
+    const gfx2 = await import("../src/gfx/sprites.ts");
+    ok(!gfx2.hasPropArt(), "headless: no PNG props, the baked art stands in");
+    ok(gfx2.propSprite("rock") === gfx2.SPR.rock, "propSprite falls through to the baked rock");
+    ok(gfx2.propSprite("stump") === gfx2.SPR.stump, "…and the baked stump");
+    ok(gfx2.propSprite("rubble") === gfx2.SPR.rubble, "…and the baked rubble");
+
+    // installing artwork must swap it everywhere and be undoable
+    const fake = document.createElement("canvas");
+    fake.width = 36; fake.height = 32;
+    gfx2.adoptSprite(fake);
+    ok(gfx2.spriteZoom(fake) === SPRITE_SCALE2,
+      "adopted artwork registers its scale, so icons size correctly");
+    gfx2.setPropArt("rock", fake);
+    ok(gfx2.propSprite("rock") === fake, "installed artwork wins over the baked sprite");
+    gfx2.setPropArt("rock", null);
+    ok(gfx2.propSprite("rock") === gfx2.SPR.rock, "clearing it restores the baked sprite");
 
     // a procedural island has no authored spawn, so it must fall back cleanly
     const wild = buildWorlds(WORLD_SEED).wild;
