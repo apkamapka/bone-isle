@@ -1885,21 +1885,28 @@ function render(): void {
   // camera still pans one world pixel at a time with no wobble.
   const camX = Math.round(cam.x);
   const camY = Math.round(cam.y);
-  const K = SPRITE_SCALE;
+  // A Tiled export is already at native tile resolution, so it blits 1:1;
+  // the procedural bake is half-scale and gets blown up by SPRITE_SCALE.
+  const art = world.mapImage;
+  const srcImg: CanvasImageSource = art ?? world.mapCanvas;
+  const artW = art ? art.naturalWidth : world.mapCanvas.width;
+  const artH = art ? art.naturalHeight : world.mapCanvas.height;
+  const K = art ? 1 : SPRITE_SCALE;
   const sx0 = Math.floor(camX / K);
   const sy0 = Math.floor(camY / K);
   const offX = camX - sx0 * K;
   const offY = camY - sy0 * K;
-  const srcW = Math.min(Math.ceil(VW / K) + 1, world.mapCanvas.width - sx0);
-  const srcH = Math.min(Math.ceil(VH / K) + 1, world.mapCanvas.height - sy0);
+  const srcW = Math.min(Math.ceil(VW / K) + 1, artW - sx0);
+  const srcH = Math.min(Math.ceil(VH / K) + 1, artH - sy0);
   vctx.imageSmoothingEnabled = false;
   if (srcW > 0 && srcH > 0) {
-    vctx.drawImage(world.mapCanvas, sx0, sy0, srcW, srcH, -offX, -offY, srcW * K, srcH * K);
+    vctx.drawImage(srcImg, sx0, sy0, srcW, srcH, -offX, -offY, srcW * K, srcH * K);
   }
 
-  // animated coastal foam
+  // animated coastal foam — the exported art paints its own waves, so the
+  // overlay only runs on procedurally baked terrain
   vctx.fillStyle = "rgba(200,240,235,.5)";
-  for (const cwv of world.coastWater) {
+  for (const cwv of art ? [] : world.coastWater) {
     const sx = cwv.x - cam.x;
     const sy = cwv.y - cam.y;
     if (sx < -TILE || sy < -TILE || sx > VW || sy > VH) continue;

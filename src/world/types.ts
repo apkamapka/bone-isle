@@ -315,6 +315,11 @@ export interface World {
    *  maps mark it with a glyph; when absent the player lands beside a portal
    *  exactly as before, so procedural islands are unaffected. */
   spawn?: Vec;
+  /** Pre-rendered terrain (a Tiled "export as image" PNG) drawn 1:1 in place
+   *  of the procedural bake. Native tile resolution, so it is sharper than
+   *  `mapCanvas`, which is painted at half scale and blown up. Attached
+   *  asynchronously — until the image arrives the baked canvas shows. */
+  mapImage?: HTMLImageElement;
   landR: (theta: number) => number;
   mapCanvas: HTMLCanvasElement;
 }

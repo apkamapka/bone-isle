@@ -1382,6 +1382,7 @@ async function main(): Promise<void> {
     const home = buildWorlds(WORLD_SEED).home;
 
     ok(home.w === 35 && home.h === 35, "the island is the 35x35 grid exported from Tiled");
+    ok(home.mapImage === undefined, "headless: no terrain image, the baked canvas carries on");
     ok(home.trees.length === 12, "all 12 authored trees made it across");
     ok(home.rocks.length === 10, "…and all 10 rocks (the duplicate marker is gone)");
     ok(home.herbs.length === 0 && home.decos.length === 0, "no scattered decoration was added");
@@ -1418,7 +1419,7 @@ async function main(): Promise<void> {
     const bridge: Array<[number, number]> = [];
     for (let y = 0; y < home.h; y++) for (let x = 0; x < home.w; x++)
       if (home.tile[y][x] === Tile.Dirt) bridge.push([x, y]);
-    ok(bridge.length === 12, "the bridge is exactly the 12 authored deck tiles");
+    ok(bridge.length === 6, "the bridge deck is 6 tiles — the railings are solid, like the art");
     ok(bridge.every(([x, y]) => walkable(home, x, y)), "every deck tile is walkable");
     // …and the two shores it joins really are separate landmasses: remove the
     // deck and the flood fill must no longer cover everything.
@@ -1437,6 +1438,12 @@ async function main(): Promise<void> {
     }
     ok(seen2.size < open - 100, "block the deck and the far shore is cut off — the bridge is load-bearing");
     for (const [x, y] of bridge) home.solid[y][x] = false;
+
+    // terrain art and collision must not drift apart: the exported picture is
+    // 32 px per tile, so a mismatched export has to be rejected, not drawn.
+    const { TILE: T2 } = await import("../src/config.ts");
+    ok(home.w * T2 === 1120 && home.h * T2 === 1120,
+      "the collision grid matches the 1120x1120 terrain export");
 
     // a procedural island has no authored spawn, so it must fall back cleanly
     const wild = buildWorlds(WORLD_SEED).wild;
