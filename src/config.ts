@@ -355,3 +355,16 @@ export const DEATH_EXP_LOSS = 0.10;      // fraction of TOTAL exp lost
 export const DEATH_SKILL_LOSS = 0.10;    // fraction of current skill tries lost
 export const DEATH_EQ_DROP_CHANCE = 0.10; // per equipped piece
 export const PLAYER_CORPSE_DECAY_S = 300; // your dropped body waits this long
+
+/**
+ * Animated sea for image-based terrain (a Tiled export is a still picture, so
+ * the swell is painted over it). Glints are short bright dashes that drift
+ * across a water tile and fade in and out; each tile takes its phase from its
+ * own coordinates, so the surface never pulses in unison. Only a fraction of
+ * tiles glint at a time — a dash on every square reads as static noise.
+ */
+export const WATER_GLINT_COLOR = "#cfeef4";
+export const WATER_GLINT_PCT = 26;    // % of water tiles carrying a glint
+export const WATER_GLINT_ALPHA = 0.5; // peak opacity
+export const WATER_GLINT_DRIFT = 6;   // px per second the dash slides
+export const WATER_GLINT_LEN = 5;     // dash length in px

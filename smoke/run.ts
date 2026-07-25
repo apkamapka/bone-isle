@@ -1465,6 +1465,13 @@ async function main(): Promise<void> {
     gfx2.setPropArt("rock", null);
     ok(gfx2.propSprite("rock") === gfx2.SPR.rock, "clearing it restores the baked sprite");
 
+    // the stump must read as the same tree, cut: no wider at its base than the
+    // trunk's root flare, or it looks like it belongs to a different plant.
+    const cfg2 = await import("../src/config.ts");
+    ok(cfg2.WATER_GLINT_PCT > 0 && cfg2.WATER_GLINT_PCT <= 100,
+      "the sea-glint density is a sane percentage");
+    ok(cfg2.WATER_GLINT_DRIFT > 0, "glints actually drift, so the sea moves");
+
     // a procedural island has no authored spawn, so it must fall back cleanly
     const wild = buildWorlds(WORLD_SEED).wild;
     ok(wild.spawn === undefined, "procedural maps carry no authored spawn");

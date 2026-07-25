@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom,} from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN } from "./config.ts";
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
@@ -35,6 +35,7 @@ import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZ
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
 import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
+import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
 import type { StructKey } from "./systems/building.ts";
@@ -1903,8 +1904,34 @@ function render(): void {
     vctx.drawImage(srcImg, sx0, sy0, srcW, srcH, -offX, -offY, srcW * K, srcH * K);
   }
 
-  // animated coastal foam — the exported art paints its own waves, so the
-  // overlay only runs on procedurally baked terrain
+  // Animated sea over a still export: drifting glints on the water tiles the
+  // collision grid already knows about. Only the visible window is walked.
+  if (art) {
+    vctx.fillStyle = WATER_GLINT_COLOR;
+    const tx0 = Math.max(0, Math.floor(cam.x / TILE));
+    const ty0 = Math.max(0, Math.floor(cam.y / TILE));
+    const tx1 = Math.min(world.w - 1, Math.ceil((cam.x + VW) / TILE));
+    const ty1 = Math.min(world.h - 1, Math.ceil((cam.y + VH) / TILE));
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        if (world.tile[ty][tx] !== Tile.Water) continue;
+        // a cheap spatial hash: stable per tile, no per-tile state to store
+        const h = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
+        if (h % 100 >= WATER_GLINT_PCT) continue;
+        const ph = (h % 628) / 100;
+        const a = 0.5 + 0.5 * Math.sin(waveT * 1.5 + ph);
+        if (a < 0.5) continue; // dark half of the cycle: the dash is absent
+        const drift = (waveT * WATER_GLINT_DRIFT + ph * 9) % TILE;
+        const sx = tx * TILE + drift - cam.x;
+        const sy = ty * TILE + (h % (TILE - 2)) + 1 - cam.y;
+        vctx.globalAlpha = (a - 0.5) * 2 * WATER_GLINT_ALPHA;
+        vctx.fillRect(Math.round(sx), Math.round(sy), WATER_GLINT_LEN, 1);
+      }
+    }
+    vctx.globalAlpha = 1;
+  }
+
+  // animated coastal foam — only on procedurally baked terrain
   vctx.fillStyle = "rgba(200,240,235,.5)";
   for (const cwv of art ? [] : world.coastWater) {
     const sx = cwv.x - cam.x;
