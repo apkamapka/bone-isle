@@ -4,7 +4,7 @@ import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC } from "./world/handmade.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
-import { portalSpawn } from "./world/collision.ts";
+import { portalSpawn, worldSpawn } from "./world/collision.ts";
 import { spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
 import type { ItemKind } from "./items.ts";
@@ -320,7 +320,7 @@ export function populateAll(worlds: Record<WorldKey, World>, seed = WORLD_SEED):
 export function createGame(seed = WORLD_SEED): Game {
   const worlds = buildWorlds(seed);
   populateAll(worlds, seed);
-  const player = createPlayer(portalSpawn(worlds.home));
+  const player = createPlayer(worldSpawn(worlds.home));
   loadResearchState([]); // a fresh game has no research completed
   resetTasks(); // no board tasks taken yet
   resetSkills(); // module state — wipe any training from a previous session
@@ -390,7 +390,7 @@ export function travelTo(g: Game, dest: WorldKey): void {
 /** Send the player home alive (used on respawn after death). */
 export function respawnAtHome(g: Game): void {
   g.current = g.worlds.home;
-  const p = portalSpawn(g.worlds.home);
+  const p = worldSpawn(g.worlds.home);
   placeWalker(g.player, p.x, p.y);
   g.player.hp = g.player.maxhp;
   g.player.dead = false;

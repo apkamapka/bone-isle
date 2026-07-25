@@ -311,6 +311,10 @@ export interface World {
   /** Themed settlements (Deep Wildlands); empty elsewhere. */
   camps: Camp[];
   coastWater: CoastWater[];
+  /** Authored spawn point (world px) — the map's own start tile. Hand-drawn
+   *  maps mark it with a glyph; when absent the player lands beside a portal
+   *  exactly as before, so procedural islands are unaffected. */
+  spawn?: Vec;
   landR: (theta: number) => number;
   mapCanvas: HTMLCanvasElement;
 }

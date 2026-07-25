@@ -3,7 +3,7 @@ import { buildWorlds, populateAll, type Game } from "./game.ts";
 import { WORLD_SEED, GROUND_DESPAWN_S, PACK_BONUS_SLOTS, PACK_MAX, SPRITE_SCALE } from "./config.ts";
 import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
-import { portalSpawn, feetBlocked } from "./world/collision.ts";
+import { portalSpawn, feetBlocked, worldSpawn } from "./world/collision.ts";
 import { placeWalker } from "./world/grid.ts";
 import { applyStructureSolidity, structureBonuses, canPlaceAt, STRUCTS } from "./systems/building.ts";
 import type { StructKey } from "./systems/building.ts";
@@ -208,7 +208,7 @@ export function loadGame(): Game | null {
 
   applyStructureSolidity(worlds.home);
 
-  const player = createPlayer(portalSpawn(worlds.home));
+  const player = createPlayer(worldSpawn(worlds.home));
   const sp = data.player;
   placeWalker(player, sp.x * pos, sp.y * pos); // scale a v2 position, then snap to its tile centre
   player.gold = sp.gold; player.taskPoints = sp.taskPoints ?? 0; player.level = sp.level;
@@ -243,7 +243,7 @@ export function loadGame(): Game | null {
   // the saved position was on the old per-device island; if it now lands on
   // water/solid on the canonical map, drop the player at a safe portal spawn
   if (feetBlocked(current, player.x, player.y)) {
-    const safe = portalSpawn(current);
+    const safe = worldSpawn(current);
     placeWalker(player, safe.x, safe.y);
   }
   // LEGACY stash migration (pre-Etap 11 shared chest): pour the old shared

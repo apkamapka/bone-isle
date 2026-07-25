@@ -89,6 +89,12 @@ export function randomWalkable(w: World): Vec {
   return { x: (w.w / 2) * TILE, y: (w.h / 2) * TILE };
 }
 
+/** Where an arriving player lands: the map's authored spawn tile when it has
+ *  one, otherwise the classic "step off the portal" ring search. */
+export function worldSpawn(w: World): Vec {
+  return w.spawn ?? portalSpawn(w);
+}
+
 /** A guaranteed-walkable tile centre just beside a portal (ring search). */
 export function portalSpawn(w: World, portal?: Portal): Vec {
   const pt = portal ?? w.portals[0];

@@ -1375,6 +1375,77 @@ async function main(): Promise<void> {
     ok(gfx.iconH(gfx.SPR.coin, 2) === 10, "a coin icon still draws at its old size");
   }
 
+  console.log("Home Isle authored in Tiled (map swap):");
+  {
+    const { walkable } = await import("../src/world/grid.ts");
+    const { worldSpawn } = await import("../src/world/collision.ts");
+    const home = buildWorlds(WORLD_SEED).home;
+
+    ok(home.w === 35 && home.h === 35, "the island is the 35x35 grid exported from Tiled");
+    ok(home.trees.length === 12, "all 12 authored trees made it across");
+    ok(home.rocks.length === 10, "…and all 10 rocks (the duplicate marker is gone)");
+    ok(home.herbs.length === 0 && home.decos.length === 0, "no scattered decoration was added");
+    ok(home.portals.length === 1 && home.portals[0].dest === "town", "one portal, to Bonetown");
+
+    // the authored spawn tile is honoured and is somewhere you can stand
+    ok(home.spawn !== undefined, "the 'S' glyph produced a spawn point");
+    const sp = worldSpawn(home);
+    ok(!home.solid[Math.floor(sp.y / TILE)][Math.floor(sp.x / TILE)], "the spawn tile is walkable");
+
+    // EVERY walkable tile must be reachable from spawn — the bridge is the only
+    // link between the two landmasses, so a mis-converted bridge strands half
+    // the island. Flood fill 4-way from the spawn tile and compare counts.
+    const sx = Math.floor(sp.x / TILE);
+    const sy = Math.floor(sp.y / TILE);
+    const seen = new Set<number>([sy * home.w + sx]);
+    const stack = [[sx, sy]];
+    while (stack.length) {
+      const [x, y] = stack.pop()!;
+      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + ox, ny = y + oy;
+        const id = ny * home.w + nx;
+        if (seen.has(id) || !walkable(home, nx, ny)) continue;
+        seen.add(id);
+        stack.push([nx, ny]);
+      }
+    }
+    let open = 0;
+    for (let y = 0; y < home.h; y++) for (let x = 0; x < home.w; x++) if (walkable(home, x, y)) open++;
+    ok(open > 400, "the island has a substantial walkable area");
+    ok(seen.size === open, "every walkable tile is reachable from spawn — the bridge connects");
+
+    // the bridge itself: dirt over what used to be open sea, and crossable
+    const bridge: Array<[number, number]> = [];
+    for (let y = 0; y < home.h; y++) for (let x = 0; x < home.w; x++)
+      if (home.tile[y][x] === Tile.Dirt) bridge.push([x, y]);
+    ok(bridge.length === 12, "the bridge is exactly the 12 authored deck tiles");
+    ok(bridge.every(([x, y]) => walkable(home, x, y)), "every deck tile is walkable");
+    // …and the two shores it joins really are separate landmasses: remove the
+    // deck and the flood fill must no longer cover everything.
+    for (const [x, y] of bridge) home.solid[y][x] = true;
+    const seen2 = new Set<number>([sy * home.w + sx]);
+    const st2 = [[sx, sy]];
+    while (st2.length) {
+      const [x, y] = st2.pop()!;
+      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + ox, ny = y + oy;
+        const id = ny * home.w + nx;
+        if (seen2.has(id) || !walkable(home, nx, ny)) continue;
+        seen2.add(id);
+        st2.push([nx, ny]);
+      }
+    }
+    ok(seen2.size < open - 100, "block the deck and the far shore is cut off — the bridge is load-bearing");
+    for (const [x, y] of bridge) home.solid[y][x] = false;
+
+    // a procedural island has no authored spawn, so it must fall back cleanly
+    const wild = buildWorlds(WORLD_SEED).wild;
+    ok(wild.spawn === undefined, "procedural maps carry no authored spawn");
+    const wsp = worldSpawn(wild);
+    ok(!wild.solid[Math.floor(wsp.y / TILE)][Math.floor(wsp.x / TILE)],
+      "…and still land beside their portal, exactly as before");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
