@@ -136,8 +136,10 @@ export function updateNpcs(w: World, dt: number, px: number, py: number): void {
     n.rest -= dt;
     if (n.rest > 0) continue;
     n.rest = npcRest();
-    // a quarter of the time he just stands there a while longer
-    if (rndi(0, 4) === 0) continue;
+    // a quarter of the time he just stands there a while longer. rndi is
+    // inclusive at BOTH ends, so the top of every range here is the last
+    // valid value, never one past it.
+    if (rndi(0, 3) === 0) continue;
 
     // 3. pick a free square inside the beat, in random order
     const occupied = (tx: number, ty: number): boolean =>
@@ -148,7 +150,7 @@ export function updateNpcs(w: World, dt: number, px: number, py: number): void {
 
     const order = [0, 1, 2, 3];
     for (let i = order.length - 1; i > 0; i--) {
-      const j = rndi(0, i + 1);
+      const j = rndi(0, i);
       [order[i], order[j]] = [order[j], order[i]];
     }
     for (const i of order) {
