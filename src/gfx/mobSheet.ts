@@ -19,7 +19,7 @@
  * run or a slow connection.
  */
 import { adoptSprite } from "./sprites.ts";
-import type { MonsterKind } from "../world/types.ts";
+import type { MonsterKind, NpcKey } from "../world/types.ts";
 
 /** Facing, in the row order the LPC sheet uses. */
 export type MobDir = "up" | "left" | "down" | "right";
@@ -28,13 +28,18 @@ const DIR_ROW: Record<MobDir, number> = { up: 0, left: 1, down: 2, right: 3 };
 const COLS = 9;
 const WALK_FPS = 8;
 
-/** Sheets to load, keyed by creature. */
-const SHEET_SRC: Partial<Record<MonsterKind, string>> = {
+/**
+ * Sheets to load, keyed by creature. Townsfolk live in the same registry under
+ * an `npc:` prefix — a walking smith is the same problem as a walking bandit,
+ * and one loader means one place where the LPC layout is spelled out.
+ */
+const SHEET_SRC: Record<string, string> = {
   bandit: "./mob-bandit-walk.png",
+  "npc:smith": "./npc-smith.png",
 };
 
 type Cut = HTMLCanvasElement[][]; // [row][col]
-const sheets: Partial<Record<MonsterKind, Cut>> = {};
+const sheets: Record<string, Cut | undefined> = {};
 
 /** Slice a loaded sheet into its 4 x 9 grid of frames. */
 function slice(img: HTMLImageElement): Cut {
@@ -60,14 +65,14 @@ function slice(img: HTMLImageElement): Cut {
 /** Start loading every directional sheet. No-op headless, safe to repeat. */
 export function loadMobSheets(): void {
   if (typeof Image === "undefined" || typeof document === "undefined") return;
-  for (const kind of Object.keys(SHEET_SRC) as MonsterKind[]) {
-    if (sheets[kind]) continue;
+  for (const id of Object.keys(SHEET_SRC)) {
+    if (sheets[id]) continue;
     const img = new Image();
-    img.onload = () => { sheets[kind] = slice(img); };
+    img.onload = () => { sheets[id] = slice(img); };
     img.onerror = () => {
-      console.warn(`walk sheet for '${kind}' failed to load, it will slide instead`);
+      console.warn(`walk sheet for '${id}' failed to load, it will slide instead`);
     };
-    img.src = SHEET_SRC[kind]!;
+    img.src = SHEET_SRC[id];
   }
 }
 
@@ -84,7 +89,23 @@ export function hasWalkSheet(kind: MonsterKind): boolean {
 export function mobFrame(
   kind: MonsterKind, dir: MobDir, moving: boolean, phase: number,
 ): HTMLCanvasElement | null {
-  const cut = sheets[kind];
+  return frameOf(kind, dir, moving, phase);
+}
+
+/**
+ * The same thing for a townsperson. Returns null for anyone without a sheet —
+ * four of the five still use their baked stand-in and never move.
+ */
+export function npcFrame(
+  key: NpcKey, dir: MobDir, moving: boolean, phase: number,
+): HTMLCanvasElement | null {
+  return frameOf("npc:" + key, dir, moving, phase);
+}
+
+function frameOf(
+  id: string, dir: MobDir, moving: boolean, phase: number,
+): HTMLCanvasElement | null {
+  const cut = sheets[id];
   if (!cut) return null;
   const row = cut[DIR_ROW[dir]];
   if (!moving) return row[0];
