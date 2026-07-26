@@ -13,15 +13,17 @@ import type { World, WorldOpts, Vec, NpcKey } from "./types.ts";
 /**
  * The townsfolk roster: key, display name, baked stand-in sprite, and how far
  * from the tile the map put them on they are allowed to wander (in tiles,
- * Chebyshev — 1 means the 3x3 square around home). 0 keeps them rooted, which
- * is still everyone but the smith until each gets their own walk sheet.
+ * Chebyshev — 1 means the 3x3 square around home). 0 would root them in place.
+ *
+ * The map must keep their home tiles at least 3 apart, or two beats overlap and
+ * the pair spend their day blocking each other; a smoke test enforces it.
  */
 export const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement, number]> = [
   ["smith", "Borin the Smith", SPR.npcSmith, 1],
-  ["herbalist", "Mira the Herbalist", SPR.npcHerbalist, 0],
-  ["elder", "Elder Oswin", SPR.npcElder, 0],
-  ["taskmaster", "Grizelda the Huntress", SPR.npcTaskmaster, 0],
-  ["tailor", "Vesper the Tailor", SPR.npcTailor, 0],
+  ["herbalist", "Mira the Herbalist", SPR.npcHerbalist, 1],
+  ["elder", "Elder Oswin", SPR.npcElder, 1],
+  ["taskmaster", "Grizelda the Huntress", SPR.npcTaskmaster, 1],
+  ["tailor", "Vesper the Tailor", SPR.npcTailor, 1],
 ];
 
 export function makeWorld(opts: WorldOpts): World {
@@ -218,7 +220,10 @@ export function makeWorld(opts: WorldOpts): World {
           tx: spot.x, ty: spot.y, hx: spot.x, hy: spot.y, roam,
           dir: "down", rest: npcRest(), phase: 0, moving: false, talk: 0,
         });
-        reserve(spot.x, spot.y, 2.4);
+        // 3 tiles, not 2.4: two 3x3 beats sharing a square would leave the
+        // pair shuffling into each other all day. The handmade town spaces
+        // them by hand; this is the same rule for the generated path.
+        reserve(spot.x, spot.y, 3);
       }
     }
   }
