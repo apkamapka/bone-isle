@@ -21,6 +21,7 @@ import type { World, WorldKey } from "./types.ts";
 /** Which maps have an exported terrain picture, and where it lives. */
 const TERRAIN_SRC: Partial<Record<WorldKey, string>> = {
   home: "./home-terrain.png",
+  town: "./town-terrain.png",
 };
 
 /**
