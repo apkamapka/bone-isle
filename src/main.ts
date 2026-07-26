@@ -1,9 +1,10 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN } from "./config.ts";
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
-import { mobFrame } from "./gfx/mobSheet.ts";
+import { mobFrame, npcFrame } from "./gfx/mobSheet.ts";
+import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, itemSprite, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
 import { loadHeroSheet, heroSprite } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
@@ -1244,8 +1245,13 @@ function worldClick(w: Vec): void {
   }
   // NPCs
   for (const n of world.npcs) {
-    if (Math.abs(w.x - n.x) < n.spr.width / 2 && w.y > n.y - n.spr.height && w.y < n.y + 10) {
+    const spr = npcSpr(n);
+    if (Math.abs(w.x - n.x) < spr.width / 2 && w.y > n.y - spr.height && w.y < n.y + 10) {
       P.target = { kind: "npc", n };
+      // clicked: he stops where he is and turns to face you, Tibia-style. The
+      // hold is refreshed by tickNpcTalk for as long as the conversation lasts.
+      n.talk = NPC_TALK_HOLD_S;
+      faceToward(n, P.x, P.y);
       P.dest = null; P.gather = null; moveMarker = null;
       return;
     }
@@ -1419,9 +1425,14 @@ function tickMeleeFire(): void {
 let walkRoute: { x: number; y: number }[] = [];
 let walkKey = "";
 
-/** Tiles claimed by creatures — the player can never step onto one. */
+/**
+ * Tiles claimed by creatures — the player can never step onto one. Townsfolk
+ * count: now that the smith walks, sharing his square would let him slide
+ * through you, and A* routes around him for free anyway.
+ */
 function playerOcc(world: World): Occupied {
-  return (tx, ty) => world.monsters.some((m) => m.tx === tx && m.ty === ty);
+  return (tx, ty) => world.monsters.some((m) => m.tx === tx && m.ty === ty)
+    || world.npcs.some((n) => n.tx === tx && n.ty === ty);
 }
 
 /**
@@ -1493,6 +1504,23 @@ function nearStructure(...keys: string[]): boolean {
 /** Is the player near an NPC accepted by `match` on the current island? */
 function nearNpc(match: (n: Npc) => boolean): boolean {
   return cw().npcs.some((n) => match(n) && dist(P.x, P.y, n.x, n.y) < USE_RANGE_PX);
+}
+
+/**
+ * Refresh the "someone is talking to me" hold. A townsperson is in conversation
+ * while you hold them as a target OR while the window they opened is up — the
+ * shop for its own NPC, the board for the taskmaster, the wardrobe for the
+ * tailor. The hold decays on its own once all of that stops being true, so
+ * nobody needs to remember to release it.
+ */
+function tickNpcTalk(world: World): void {
+  const hold = (n: Npc | null | undefined): void => {
+    if (n && world.npcs.includes(n)) n.talk = NPC_TALK_HOLD_S;
+  };
+  if (P.target?.kind === "npc") hold(P.target.n);
+  if (hasWindow("shop")) hold(ui.npc);
+  if (hasWindow("tasks")) hold(world.npcs.find((n) => n.key === "taskmaster"));
+  if (hasWindow("wardrobe")) hold(world.npcs.find((n) => n.key === "tailor"));
 }
 
 let proximityT = 0;
@@ -1765,6 +1793,8 @@ function update(dt: number): void {
   }
 
   tickRegrowth(world, dt, P.x, P.y, true);
+  tickNpcTalk(world);
+  updateNpcs(world, dt, P.x, P.y);
   tickProximityPanels(dt);
   checkPortals();
   updateFloats(dt);
@@ -1840,6 +1870,15 @@ function faceDelta(dx: number, dy: number): void {
   const P = game.player;
   if (Math.abs(dy) > Math.abs(dx) * 1.4) P.dir = dy < 0 ? "up" : "down";
   else if (dx !== 0) { P.dir = "side"; P.face = dx < 0 ? -1 : 1; }
+}
+
+/**
+ * The sprite a townsperson is showing right now: their walk-sheet frame if one
+ * is loaded, otherwise the baked stand-in. Hit-testing, drawing and the quest
+ * marker all go through here so the click box always matches the pixels.
+ */
+function npcSpr(n: Npc): HTMLCanvasElement {
+  return npcFrame(n.key, n.dir, n.moving, n.phase) ?? n.spr;
 }
 
 function drawSprite(spr: HTMLCanvasElement, x: number, y: number, face = 1, bobY = 0): void {
@@ -2152,17 +2191,20 @@ function render(): void {
   // NPCs
   for (const n of world.npcs) {
     if (!inView(n.x, n.y)) continue;
-    const bob = Math.sin(waveT * 2 + n.bob) * 2.4;
+    // the walk cycle carries its own weight shift, so a walking NPC must not
+    // also bob — that reads as a limp. Only the rooted, baked ones bob.
+    const spr = npcSpr(n);
+    const bob = n.moving ? 0 : Math.sin(waveT * 2 + n.bob) * 2.4;
     drawList.push({ y: n.y, fn: () => {
       drawShadow(n.x, n.y);
-      drawSprite(n.spr, n.x, n.y, 1, bob);
+      drawSprite(spr, n.x, n.y, 1, bob);
       // name tag
       vctx.font = "bold 12px monospace";
       vctx.textAlign = "center";
       vctx.fillStyle = "#000";
-      vctx.fillText("!", Math.round(n.x - cam.x) + 2, Math.round(n.y - cam.y - n.spr.height - 6) + 2);
+      vctx.fillText("!", Math.round(n.x - cam.x) + 2, Math.round(n.y - cam.y - spr.height - 6) + 2);
       vctx.fillStyle = "#ffe9a8";
-      vctx.fillText("!", Math.round(n.x - cam.x), Math.round(n.y - cam.y - n.spr.height - 6));
+      vctx.fillText("!", Math.round(n.x - cam.x), Math.round(n.y - cam.y - spr.height - 6));
     } });
   }
   // monsters

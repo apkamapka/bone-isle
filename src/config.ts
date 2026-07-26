@@ -220,6 +220,25 @@ export const CORPSE_DECAY_S = 75;
  */
 export const USE_RANGE_PX = 112;
 
+/**
+ * Townsfolk pacing, Tibia-style. NPCs in the original shuffle: one square,
+ * a long pause, another square. They are not going anywhere and must never
+ * look like they are fleeing you, so the speed is roughly a third of a level-1
+ * player (116 px/s) — about one tile per second — and the pause between steps
+ * is long and randomised so no two of them fall into a rhythm.
+ */
+export const NPC_WALK_SPEED = 34;
+export const NPC_REST_MIN_S = 1.4;
+export const NPC_REST_MAX_S = 4.2;
+
+/**
+ * How long a townsperson keeps standing still after being spoken to. Refreshed
+ * every frame while the conversation is live (target held or the shop / task /
+ * wardrobe window open), so this only governs the grace period AFTER it ends:
+ * long enough that the NPC does not bolt the instant you close the window.
+ */
+export const NPC_TALK_HOLD_S = 2.5;
+
 /** Resource node regrowth (seconds). Slow enough that you rotate between
  *  nodes and islands rather than farming one spot — paired with denser nodes. */
 export const TREE_REGROW_S = 90;
