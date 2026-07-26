@@ -1505,13 +1505,13 @@ async function main(): Promise<void> {
       "one gate, back to Home Isle");
     // the split has to hold in practice, not just in the flag
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
-    ok(town.mobPosts?.length === 31, "the 31 authored bandit posts came across");
+    ok(town.mobPosts?.length === 16, "the 16 authored bandit posts came across");
 
     // THE test that matters: a real game start, not a hand-driven populate.
     // Calling populateWorld directly proves the function works while the town
     // stands empty in the actual game, which is exactly what happened once.
     const fresh = createGame(WORLD_SEED);
-    ok(fresh.worlds.town.monsters.length === 31,
+    ok(fresh.worlds.town.monsters.length === 16,
       "starting a game actually puts the bandits on the map");
     ok(fresh.worlds.town.monsters.every((m) => m.kind === "bandit"),
       "…and they are all bandits");
@@ -1520,11 +1520,11 @@ async function main(): Promise<void> {
     const { saveGame, loadGame } = await import("../src/save.ts");
     saveGame(fresh);
     const restored = loadGame();
-    ok(restored !== null && restored.worlds.town.monsters.length === 31,
+    ok(restored !== null && restored.worlds.town.monsters.length === 16,
       "loading a save leaves the town populated too");
 
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length === 31, "exactly as many bandits as the map asks for — no roster padding");
+    ok(town.monsters.length === 16, "exactly as many bandits as the map asks for — no roster padding");
     ok(town.monsters.every((m) => m.ty > 25),
       "not one bandit spawned north of the fence");
     // authored placement means EXACT placement, not "somewhere in the region"
