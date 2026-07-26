@@ -118,6 +118,33 @@ cropped to one rectangle shared by every frame (see `src/gfx/mobSheet.ts`).
 are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
+## Borin the Smith — `public/npc-smith.png`
+
+The town smith is composed from the same **Universal LPC Spritesheet Character
+Generator** as the player and the bandit, under the same licences as the layers
+listed above.
+
+Reproducible character configuration:
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&beard=Medium_Beard_black&mustache=Mustache_black&hair=Bangs_black&shoulders=Epaulets_red&gloves=Gloves_brass&armour=Leather_red&legs=Armour_brass&shoes=Armour_brass&weapon=Mace_mace>
+
+Beyond the collections listed under the player, this character also draws on the
+beard, moustache, epaulet, brass-armour and mace layers of the ULPC project; the
+generator's own credits export is authoritative for the per-layer author list.
+
+Packed exactly like the bandit: only the walk block was kept — rows 8-11
+(up, left, down, right), nine frames each — repacked into a 9x4 grid and cropped
+to one rectangle shared by every frame, here 52x51 px. Column 0 of each row is
+the standing pose the NPC shows while talking to you.
+
+> **TODO before release:** download "Credits (CSV)" from the generator for this
+> configuration and paste the per-layer author list here. The URL above
+> reproduces the character, but a URL is not an attribution.
+
+**ShareAlike:** this file is a derivative work of CC-BY-SA 3.0 artwork and is
+itself published under **CC-BY-SA 3.0**. It must stay publicly available on
+those terms even if this repository is later made private.
+
 ## Terrain and props
 
 `public/home-terrain.png` and `public/town-terrain.png` are exported from Tiled
