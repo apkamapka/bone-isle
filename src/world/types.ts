@@ -1,4 +1,5 @@
 /** Shared data shapes for the world: terrain, nodes, monsters, NPCs. */
+import type { MobDir } from "../gfx/mobSheet.ts";
 import type { ItemStack } from "../items.ts";
 
 /** Terrain tile codes. (Plain const object so the syntax is fully erasable.) */
@@ -181,6 +182,8 @@ export interface Monster {
   atkCd: number;
   wanderT: number;
   bob: number;
+  /** Facing, for creatures drawn from a directional walk sheet. */
+  dir: MobDir;
   hurtT: number;
   /** Seconds of forced aggression left after taking a hit — the creature
    *  chases even beyond its normal sight range (LoS still required), so
@@ -315,6 +318,11 @@ export interface World {
    *  maps mark it with a glyph; when absent the player lands beside a portal
    *  exactly as before, so procedural islands are unaffected. */
   spawn?: Vec;
+  /** Rows 0..safeMaxY are a haven inside an otherwise dangerous map: no
+   *  creature may spawn there and none may step into it. Bonetown uses it —
+   *  north of the fence is town, south of it is hunting ground. Absent on
+   *  maps that are wholly safe or wholly hostile. */
+  safeMaxY?: number;
   /** Pre-rendered terrain (a Tiled "export as image" PNG) drawn 1:1 in place
    *  of the procedural bake. Native tile resolution, so it is sharper than
    *  `mapCanvas`, which is painted at half scale and blown up. Attached

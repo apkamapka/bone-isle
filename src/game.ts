@@ -4,6 +4,7 @@ import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC } from "./world/handmade.ts";
 import { loadTerrainImages } from "./world/terrainImage.ts";
 import { loadPropArt } from "./world/propArt.ts";
+import { loadMobSheets } from "./gfx/mobSheet.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn, worldSpawn } from "./world/collision.ts";
@@ -55,7 +56,7 @@ export interface Game {
  * carries only the low tiers, and each Bone Caverns floor down adds heavier
  * ones — so pushing deeper, not running laps, is how you meet tougher foes.
  */
-type DangerKey = "wild" | "cave1" | "cave2" | "cave3"
+type DangerKey = "town" | "wild" | "cave1" | "cave2" | "cave3"
   | "warren1" | "cove1" | "hollow1" | "hollow2" | "goblin1" | "goblin2"
   | "orcfort1" | "orcfort2" | "bastion1" | "bastion2" | "grave1" | "grave2"
   | "roost1" | "roost2" | "roost3";
@@ -67,6 +68,9 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   // (poison spider spit, amazon knives) before the cavern archers below.
   // Trimmed ~25% after playtests — the open round island concentrated packs
   // into one big crowd; the undergrounds are where the density lives now.
+  // Bonetown south of the fence: the starter hunting ground. Spawns can only
+  // land below row 25, so the count is spread over the southern half alone.
+  town: { bandit: 31 },
   wild: {
     bandit: 4, snake: 3, crab: 3, bat: 3, spider: 3, wasp: 2,
     skeleton: 2, rotworm: 2, poisonSpider: 2, wolf: 2, goblin: 2, amazon: 2,
@@ -207,6 +211,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   const worlds = { home, town, sanctum, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
+  loadMobSheets();           // directional walk cycles for humanoid creatures
   for (const l of LAIRS) {
     const lw = makeCaveWorld({
       key: l.key, name: l.name, w: l.w, h: l.h, seed: seed ^ keySalt(l.key),

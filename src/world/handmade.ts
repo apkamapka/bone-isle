@@ -54,6 +54,8 @@ export interface HandmadeSpec {
    *  per-spec rather than hard-coded, because the same letter already means a
    *  portal on Bonetown. */
   spawn?: string;
+  /** Rows 0..safeMaxY stay a haven even though the map itself is hostile. */
+  safeMaxY?: number;
 }
 
 /** NPC display name + sprite, keyed for O(1) lookup while parsing. */
@@ -97,6 +99,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     key: spec.key,
     name: spec.name,
     safe: spec.safe,
+    safeMaxY: spec.safeMaxY,
     w: W,
     h: H,
     tile,
@@ -313,7 +316,11 @@ const TOWN_ROWS: readonly string[] = [
 export const TOWN_SPEC: HandmadeSpec = {
   key: "town",
   name: "Bonetown",
-  safe: true,
+  // No longer a blanket haven: the fence on row 25 splits the map. North of it
+  // is town and nothing hostile may set foot there; south of it is the first
+  // hunting ground a new character can reach.
+  safe: false,
+  safeMaxY: 25,
   grassShift: 4,
   rows: TOWN_ROWS,
   // Only the Home Isle gate is authored on the redrawn map; the Wildlands,

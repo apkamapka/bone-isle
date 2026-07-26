@@ -96,7 +96,46 @@ are hosted on OpenGameArt.org. Primary collections these layers draw from:
 - LPC Expanded Pants — <https://opengameart.org/content/lpc-expanded-pants>
 - LPC Expanded Socks & Shoes — <https://opengameart.org/content/lpc-expanded-socks-shoes>
 
+## Bandit — `public/mob-bandit.png`, `public/mob-bandit-walk.png`
+
+The bandit is composed from the same **Universal LPC Spritesheet Character
+Generator** as the player, under the same licences as the layers listed above.
+
+Reproducible character configuration:
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&nose=Big_nose_light&hair=Spiked_dark_brown&hat=Tricorne_Lieutenant_brown&hat_trim=Tricorne_Stitching_blue&gloves=Gloves_ceramic&sleeves=Longsleeves_2_Overlay_gray&jacket=Frock_coat_black&legs=Formal_Pants_gray&shoes=Basic_Shoes_gray>
+
+Beyond the collections listed under the player, this character also draws on
+the hat, coat, gloves and formal-trouser layers of the ULPC project; the
+generator's own credits export is authoritative for the per-layer author list.
+
+From the generator's full export only the walk block was kept — rows 8-11
+(up, left, down, right), nine frames each — repacked into a 9x4 grid and
+cropped to one rectangle shared by every frame (see `src/gfx/mobSheet.ts`).
+`mob-bandit.png` is the standing pose from that same grid.
+
+**ShareAlike:** these two files are derivative works of CC-BY-SA 3.0 artwork and
+are themselves published under **CC-BY-SA 3.0**. They must stay publicly
+available on those terms even if this repository is later made private.
+
+## Terrain and props
+
+`public/home-terrain.png` and `public/town-terrain.png` are exported from Tiled
+maps painted with commercially licensed tile packs. The pack licence permits
+commercial use and modification, forbids redistributing the assets themselves
+(original or modified) and forbids their use in a logo or trademark.
+
+> **TODO before release:** record each pack's name, version, source URL and
+> purchase date here. The licence text is identical for both the free and the
+> paid pack, but the packs must still be named.
+
+`public/prop-tree.png`, `prop-rock.png`, `prop-stump.png` and `prop-rubble.png`
+were drawn from scratch for this game in the palette of those packs. They
+contain no third-party pixels and carry no external obligations.
+
 ## Everything else
 
-All other artwork in this game is procedural — baked at runtime from character
-maps in `src/gfx/sprites.ts` and `src/gfx/adventurer.ts`. No external files.
+All remaining artwork is procedural — baked at runtime from character maps in
+`src/gfx/sprites.ts` and `src/gfx/adventurer.ts`, with no external files. The
+baked sprites also remain the fallback for every PNG above: if an image fails
+to load, the game draws its procedural stand-in instead.

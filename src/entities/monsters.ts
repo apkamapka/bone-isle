@@ -4,6 +4,8 @@ import { WILD_ENTRANCE_SAFE_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER
 import { SPR } from "../gfx/sprites.ts";
 import { randomWalkable, lineOfSight } from "../world/collision.ts";
 import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
+import { inHavenBand } from "../world/collision.ts";
+import { dirOfStep } from "../gfx/mobSheet.ts";
 import type { Occupied } from "../world/grid.ts";
 import { Tile } from "../world/types.ts";
 import type { World, Monster, MonsterKind, Camp } from "../world/types.ts";
@@ -270,6 +272,9 @@ function pushMonster(
   // would block the floor's entrance from the very first frame. Covers every
   // spawn path at once (roster, density top-up, chest guard, camp, respawn).
   if (w.portals.some((pt) => toTile(pt.x) === tx && toTile(pt.y) === ty)) return false;
+  // A haven inside a hostile map is off limits to every spawn path at once —
+  // roster, density top-up, respawn, camp and chest guard all land here.
+  if (inHavenBand(w, ty)) return false;
   w.monsters.push({
     kind,
     x: tileCenter(tx),
@@ -283,6 +288,7 @@ function pushMonster(
     atkRate: d.atkRate,
     atkCd: wrnd(0, 1),
     wanderT: wrnd(0, 2),
+    dir: "down",
     bob: wrnd(0, 3),
     hurtT: 0,
     aggroT: 0,
@@ -513,8 +519,16 @@ export function updateMonsters(
   const portalTiles = new Set(w.portals.map((pt) => toTile(pt.y) * w.w + toTile(pt.x)));
   const onPortal = (tx: number, ty: number): boolean => portalTiles.has(ty * w.w + tx);
 
+  /** A step that also records which way the creature ended up facing. */
+  const step = (m: Monster, sx: number, sy: number, occ: Occupied): boolean => {
+    if (!tryStep(w, m, sx, sy, occ)) return false;
+    const d = dirOfStep(sx, sy);
+    if (d) m.dir = d;
+    return true;
+  };
+
   const occOf = (self: Monster): Occupied => (tx, ty) =>
-    (tx === ptx && ty === pty) || onPortal(tx, ty) ||
+    (tx === ptx && ty === pty) || onPortal(tx, ty) || inHavenBand(w, ty) ||
     w.monsters.some((o) => o !== self && o.tx === tx && o.ty === ty);
 
   /**
@@ -547,7 +561,7 @@ export function updateMonsters(
     }
     const pick = best ?? arc;
     if (!pick) return false;
-    return tryStep(w, m, pick[0], pick[1], occ);
+    return step(m, pick[0], pick[1], occ);
   };
 
   /** One retreat step: the free square that maximises walking distance from
@@ -564,7 +578,7 @@ export function updateMonsters(
       if (o > bestO) { bestO = o; best = [sx, sy]; }
     }
     if (!best) return false;
-    return tryStep(w, m, best[0], best[1], occ);
+    return step(m, best[0], best[1], occ);
   };
 
   for (const m of w.monsters) {
@@ -579,7 +593,7 @@ export function updateMonsters(
     // the pad, the exit is simply usable again.
     if (onPortal(m.tx, m.ty)) {
       for (const [sx, sy] of STEPS8) {
-        if (tryStep(w, m, sx, sy, occ)) break;
+        if (step(m, sx, sy, occ)) break;
       }
     }
     const d = dist(m.x, m.y, target.x, target.y);
@@ -661,7 +675,7 @@ export function updateMonsters(
           m.wanderT = rnd(1, 3);
           if (Math.random() >= 0.4) {
             const [sx, sy] = STEPS8[rndi(0, 7)];
-            if (tryStep(w, m, sx, sy, occ)) m.bob += dt * 6;
+            if (step(m, sx, sy, occ)) m.bob += dt * 6;
           }
         }
       }

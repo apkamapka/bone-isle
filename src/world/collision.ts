@@ -89,6 +89,25 @@ export function randomWalkable(w: World): Vec {
   return { x: (w.w / 2) * TILE, y: (w.h / 2) * TILE };
 }
 
+/**
+ * The haven band inside an otherwise hostile map: rows 0..safeMaxY.
+ *
+ * Creatures consult THIS — not `isSafeTile` — before spawning and before every
+ * step, and the distinction matters. A wholly safe world already keeps its
+ * monsters out by never running their update at all; folding that case in here
+ * as well would also forbid deliberately placing creatures on a safe map,
+ * which the test arenas rely on. So this answers false when there is no band.
+ */
+export function inHavenBand(w: World, ty: number): boolean {
+  return w.safeMaxY !== undefined && ty <= w.safeMaxY;
+}
+
+/** Is the player standing somewhere nothing can reach them? Used for the
+ *  zone label, where a wholly safe map counts as safe everywhere. */
+export function isSafeTile(w: World, _tx: number, ty: number): boolean {
+  return w.safe || inHavenBand(w, ty);
+}
+
 /** Where an arriving player lands: the map's authored spawn tile when it has
  *  one, otherwise the classic "step off the portal" ring search. */
 export function worldSpawn(w: World): Vec {

@@ -3,6 +3,7 @@ import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, GARDEN_RADI
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
+import { mobFrame } from "./gfx/mobSheet.ts";
 import { SPR, itemSprite, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
 import { loadHeroSheet, heroSprite } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
@@ -2167,13 +2168,17 @@ function render(): void {
   // monsters
   for (const m of world.monsters) {
     if (!inView(m.x, m.y)) continue;
-    const bob = Math.sin(m.bob) * 3;
+    // Creatures with a walk sheet stride and face where they are going; the
+    // rest keep the old idle bob, which on an animated body reads as a limp.
+    const walk = mobFrame(m.kind, m.dir, !atCenter(m), waveT + m.bob);
+    const bob = walk ? 0 : Math.sin(m.bob) * 3;
+    const spr = walk ?? m.spr;
     drawList.push({ y: m.y, fn: () => {
       drawShadow(m.x, m.y);
       vctx.globalAlpha = m.hurtT > 0 && Math.sin(m.hurtT * 60) > 0 ? 0.5 : 1;
-      drawSprite(m.spr, m.x, m.y, 1, bob);
+      drawSprite(spr, m.x, m.y, 1, bob);
       vctx.globalAlpha = 1;
-      hpBar(m.x, m.y - m.spr.height - 8, m.hp / m.maxhp);
+      hpBar(m.x, m.y - spr.height - 8, m.hp / m.maxhp);
     } });
   }
   // player — hand-drawn LPC art when the sheet is up, the baked outfit until then

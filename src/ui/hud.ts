@@ -1,4 +1,5 @@
 /** Screen-space HUD: HP/EXP bars, cap, gold, minimap, action bar, overlays. */
+import { isSafeTile } from "../world/collision.ts";
 import { TILE } from "../config.ts";
 import { SPR, iconW, iconH } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
@@ -224,7 +225,7 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
 
   // top-left: title + zone
   hudText(h, "BONE ISLE", pad + 2, pad + 7 * S, 11 * S, "#cfe8d2", "left", true);
-  hudText(h, game.current.name + (game.current.safe ? " · safe" : " · danger"), pad + 2, pad + 18 * S, 8 * S, "rgba(207,232,210,.7)");
+  hudText(h, game.current.name + (isSafeTile(game.current, game.player.tx, game.player.ty) ? " · safe" : " · danger"), pad + 2, pad + 18 * S, 8 * S, "rgba(207,232,210,.7)");
 
   // active board-task tracker
   const task = activeTask();

@@ -1495,14 +1495,22 @@ async function main(): Promise<void> {
     const { walkable } = await import("../src/world/grid.ts");
     const town = buildWorlds(WORLD_SEED).town;
     ok(town.w === 60 && town.h === 60, "the town is the 60x60 grid exported from Tiled");
-    ok(town.safe, "it is still a haven");
+    ok(!town.safe && town.safeMaxY === 25,
+      "the town is split: a haven down to the fence on row 25, hunting ground below");
     ok(town.trees.length === 114 && town.rocks.length === 48,
       "every authored tree and rock came across, duplicates dropped");
     ok(town.npcs.length === 5, "all five townsfolk are present");
     ok(new Set(town.npcs.map((n) => n.name)).size === 5, "…and none is a duplicate");
     ok(town.portals.length === 1 && town.portals[0].dest === "home",
       "one gate, back to Home Isle");
-    ok(town.monsters.length === 0, "no creatures — the fence line is a later stage");
+    // the split has to hold in practice, not just in the flag
+    const { populateWorld: popTown } = await import("../src/game.ts");
+    popTown(town, WORLD_SEED);
+    ok(town.monsters.length > 0, "bandits populate the southern half");
+    ok(town.monsters.every((m) => m.ty > 25),
+      "not one bandit spawned north of the fence");
+    ok(town.npcs.every((n) => Math.floor(n.y / TILE) <= 25),
+      "every townsperson stands inside the haven");
 
     // Reachability: trees and rocks are clearable, so the honest invariant is
     // that nothing is walled off by TERRAIN. Flood fill treating props as
@@ -1568,7 +1576,33 @@ async function main(): Promise<void> {
     const ws = buildWorlds(WORLD_SEED);
     pop(ws.wild, WORLD_SEED);
     ok(ws.wild.monsters.some((m) => m.kind === "bandit"), "bandits populate the Wildlands roster");
-    ok(ws.town.monsters.length === 0, "…and never the safe town — it stays a haven");
+    ok(ws.town.monsters.length === 0, "…and buildWorlds alone leaves the town empty");
+  }
+
+  console.log("Bandit walk cycle + the credits that come with it:");
+  {
+    const { dirOfStep, mobFrame, hasWalkSheet } = await import("../src/gfx/mobSheet.ts");
+    ok(dirOfStep(0, -1) === "up" && dirOfStep(0, 1) === "down", "vertical steps face up/down");
+    ok(dirOfStep(-1, 0) === "left" && dirOfStep(1, 0) === "right", "horizontal steps face sideways");
+    ok(dirOfStep(1, 1) === "down", "diagonals resolve to the vertical, matching the player");
+    ok(dirOfStep(0, 0) === null, "standing still changes nothing");
+    ok(!hasWalkSheet("bandit"), "headless there is no sheet…");
+    ok(mobFrame("bandit", "down", true, 0) === null, "…so the caller falls back to the flat sprite");
+
+    // fresh creatures must start with a valid facing, or the first draw throws
+    const ws = buildWorlds(WORLD_SEED);
+    const { populateWorld: pw } = await import("../src/game.ts");
+    pw(ws.town, WORLD_SEED);
+    ok(ws.town.monsters.every((m) => m.dir === "down"), "every creature spawns facing camera");
+
+    // the licence obligation is a build artefact, so assert it like one
+    const fs = await import("node:fs");
+    const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    ok(credits.includes("mob-bandit-walk.png"), "the bandit sheet is credited by filename");
+    ok(credits.includes("Tricorne_Lieutenant_brown"),
+      "…with the generator recipe that reproduces it");
+    ok(/ShareAlike/i.test(credits), "…and the ShareAlike obligation is spelled out");
+    ok(credits.includes("prop-tree.png"), "the drawn props are accounted for too");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
