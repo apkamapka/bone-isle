@@ -6,15 +6,22 @@
 import { TILE, MAP_TILE, SPRITE_SCALE } from "../config.ts";
 import { wrnd, wrndi, rnd, rndi, dist } from "../util.ts";
 import { SPR, bakeTree, spriteSource } from "../gfx/sprites.ts";
+import { npcRest } from "../entities/npcs.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldOpts, Vec, NpcKey } from "./types.ts";
 
-export const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement]> = [
-  ["smith", "Borin the Smith", SPR.npcSmith],
-  ["herbalist", "Mira the Herbalist", SPR.npcHerbalist],
-  ["elder", "Elder Oswin", SPR.npcElder],
-  ["taskmaster", "Grizelda the Huntress", SPR.npcTaskmaster],
-  ["tailor", "Vesper the Tailor", SPR.npcTailor],
+/**
+ * The townsfolk roster: key, display name, baked stand-in sprite, and how far
+ * from the tile the map put them on they are allowed to wander (in tiles,
+ * Chebyshev — 1 means the 3x3 square around home). 0 keeps them rooted, which
+ * is still everyone but the smith until each gets their own walk sheet.
+ */
+export const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement, number]> = [
+  ["smith", "Borin the Smith", SPR.npcSmith, 1],
+  ["herbalist", "Mira the Herbalist", SPR.npcHerbalist, 0],
+  ["elder", "Elder Oswin", SPR.npcElder, 0],
+  ["taskmaster", "Grizelda the Huntress", SPR.npcTaskmaster, 0],
+  ["tailor", "Vesper the Tailor", SPR.npcTailor, 0],
 ];
 
 export function makeWorld(opts: WorldOpts): World {
@@ -196,7 +203,7 @@ export function makeWorld(opts: WorldOpts): World {
 
   // NPCs (town only): placed near the center on clear grass
   if (opts.npcs) {
-    for (const [key, name, spr] of NPC_DATA) {
+    for (const [key, name, spr, roam] of NPC_DATA) {
       let spot: Vec | null = null;
       for (let tries = 0; tries < 500 && !spot; tries++) {
         const x = Math.floor(CX) + wrndi(-7, 7);
@@ -205,7 +212,12 @@ export function makeWorld(opts: WorldOpts): World {
       }
       spot ??= place();
       if (spot) {
-        w.npcs.push({ key, name, x: spot.x * TILE + TILE / 2, y: spot.y * TILE + TILE / 2, spr, bob: wrnd(0, 3) });
+        w.npcs.push({
+          key, name, spr, bob: wrnd(0, 3),
+          x: spot.x * TILE + TILE / 2, y: spot.y * TILE + TILE / 2,
+          tx: spot.x, ty: spot.y, hx: spot.x, hy: spot.y, roam,
+          dir: "down", rest: npcRest(), phase: 0, moving: false, talk: 0,
+        });
         reserve(spot.x, spot.y, 2.4);
       }
     }

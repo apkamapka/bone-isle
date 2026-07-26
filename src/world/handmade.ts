@@ -24,6 +24,7 @@
 import { TILE } from "../config.ts";
 import { SPR, bakeTree } from "../gfx/sprites.ts";
 import { NPC_DATA, bakeWorldCanvas } from "./generate.ts";
+import { npcRest } from "../entities/npcs.ts";
 import type { MonsterKind } from "./types.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldKey, NpcKey } from "./types.ts";
@@ -62,8 +63,8 @@ export interface HandmadeSpec {
 }
 
 /** NPC display name + sprite, keyed for O(1) lookup while parsing. */
-const NPC_BY_KEY = new Map<NpcKey, { name: string; spr: HTMLCanvasElement }>(
-  NPC_DATA.map(([key, name, spr]) => [key, { name, spr }]),
+const NPC_BY_KEY = new Map<NpcKey, { name: string; spr: HTMLCanvasElement; roam: number }>(
+  NPC_DATA.map(([key, name, spr, roam]) => [key, { name, spr, roam }]),
 );
 
 const baseTileOf = (ch: string): Tile => {
@@ -189,7 +190,14 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           const nkey = spec.npcs?.[ch];
           if (nkey) {
             const meta = NPC_BY_KEY.get(nkey);
-            if (meta) w.npcs.push({ key: nkey, name: meta.name, x: cx, y: cy, spr: meta.spr, bob: (x + y) % 3 });
+            if (meta) {
+              w.npcs.push({
+                key: nkey, name: meta.name, spr: meta.spr, bob: (x + y) % 3,
+                x: cx, y: cy, tx: x, ty: y,
+                hx: x, hy: y, roam: meta.roam,
+                dir: "down", rest: npcRest(), phase: 0, moving: false, talk: 0,
+              });
+            }
           }
           break;
         }

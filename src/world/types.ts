@@ -220,14 +220,38 @@ export interface Corpse {
 /** Town NPC kinds. */
 export type NpcKey = "smith" | "herbalist" | "elder" | "taskmaster" | "tailor";
 
-/** A town NPC. */
+/** Facing of a townsperson — the LPC sheet's row order. */
+export type NpcDir = "up" | "left" | "down" | "right";
+
+/**
+ * A town NPC. Townsfolk are grid walkers like everyone else: they stand on one
+ * tile (tx,ty) and glide toward its centre. Most are rooted (`roam` 0) and
+ * simply never take a step; the smith paces a small square around the spot the
+ * map placed him on.
+ */
 export interface Npc {
   key: NpcKey;
   name: string;
   x: number;
   y: number;
+  tx: number;
+  ty: number;
   spr: HTMLCanvasElement;
   bob: number;
+  /** The tile he was authored on — the centre of his beat. */
+  hx: number;
+  hy: number;
+  /** How far he may stray from home, in tiles (Chebyshev). 0 = rooted. */
+  roam: number;
+  dir: NpcDir;
+  /** Seconds of standing about before the next step is considered. */
+  rest: number;
+  /** Free-running walk clock, so two NPCs never march in lockstep. */
+  phase: number;
+  /** Set by the mover each tick — drives stride vs. stance. */
+  moving: boolean;
+  /** Seconds left of "someone is talking to me": stand still, face them. */
+  talk: number;
 }
 
 /**
