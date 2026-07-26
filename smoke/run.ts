@@ -1634,6 +1634,88 @@ async function main(): Promise<void> {
     ok(credits.includes("prop-tree.png"), "the drawn props are accounted for too");
   }
 
+  console.log("Townsfolk: the smith walks his beat, everyone else is rooted:");
+  {
+    const { updateNpcs, faceToward } = await import("../src/entities/npcs.ts");
+    const { NPC_WALK_SPEED, NPC_TALK_HOLD_S, PLAYER_BASE_SPEED } = await import("../src/config.ts");
+    const { chebTiles } = await import("../src/world/grid.ts");
+    const { npcFrame } = await import("../src/gfx/mobSheet.ts");
+
+    ok(NPC_WALK_SPEED * 3 < PLAYER_BASE_SPEED,
+      "a townsperson can never outpace a level 1 player");
+    ok(npcFrame("smith", "down", true, 0) === null,
+      "headless there is no sheet, so the baked stand-in is used");
+
+    const town = buildWorlds(WORLD_SEED).town;
+    const smith = town.npcs.find((n) => n.key === "smith")!;
+    const rooted = town.npcs.filter((n) => n.key !== "smith");
+    ok(smith !== undefined, "the smith is on the town map");
+    ok(smith.roam === 1, "…with a 3x3 beat");
+    ok(rooted.length === 4 && rooted.every((n) => n.roam === 0),
+      "…and the other four stay put");
+    ok(town.npcs.every((n) => n.dir === "down"),
+      "everyone spawns facing camera, so the first draw has a valid row");
+    ok(smith.hx === smith.tx && smith.hy === smith.ty,
+      "home is the tile the map authored him on");
+
+    // Half a minute of pacing, far from the player. He must stay inside the
+    // beat every single tick — not merely end up back inside it.
+    const home = { x: smith.hx, y: smith.hy };
+    const rootedHome = rooted.map((n) => ({ n, tx: n.tx, ty: n.ty }));
+    let strayed = false;
+    let stepped = false;
+    let offCentre = false;
+    for (let i = 0; i < 1800; i++) {
+      updateNpcs(town, 1 / 60, -9999, -9999);
+      if (chebTiles(smith.tx, smith.ty, home.x, home.y) > 1) strayed = true;
+      if (smith.tx !== home.x || smith.ty !== home.y) stepped = true;
+      if (Math.abs(smith.x - (smith.tx * TILE + TILE / 2)) > TILE) offCentre = true;
+    }
+    ok(!strayed, "thirty seconds of pacing never leaves the 3x3");
+    ok(stepped, "…but he does actually move");
+    ok(!offCentre, "…and the render position never runs away from his tile");
+    ok(rootedHome.every((r) => r.n.tx === r.tx && r.n.ty === r.ty),
+      "the rooted four have not budged");
+    ok(!town.npcs.some((a) => town.npcs.some((b) => b !== a && b.tx === a.tx && b.ty === a.ty)),
+      "no two townsfolk ever share a square");
+    ok(town.solid[smith.ty][smith.tx] === false, "he only ever stands on walkable ground");
+
+    // Being spoken to freezes him where he stands and turns him around.
+    smith.talk = NPC_TALK_HOLD_S;
+    const held = { tx: smith.tx, ty: smith.ty };
+    for (let i = 0; i < 120; i++) updateNpcs(town, 1 / 60, -9999, -9999);
+    ok(smith.tx === held.tx && smith.ty === held.ty, "in conversation he does not step");
+    ok(smith.moving === false, "…and shows his standing pose, not a stride");
+    ok(smith.talk > 0, "…for as long as the hold lasts");
+
+    // …and the hold expires on its own once the conversation stops.
+    for (let i = 0; i < 60 * (NPC_TALK_HOLD_S + 1); i++) updateNpcs(town, 1 / 60, -9999, -9999);
+    ok(smith.talk === 0, "the hold decays with nobody refreshing it");
+
+    faceToward(smith, smith.x, smith.y - 500);
+    ok(smith.dir === "up", "he turns to look north at a player above him");
+    faceToward(smith, smith.x + 500, smith.y);
+    ok(smith.dir === "right", "…and east at one to his right");
+    faceToward(smith, smith.x - 500, smith.y + 20);
+    ok(smith.dir === "left", "a shallow angle still reads as sideways");
+
+    // He must not walk onto the player, so a free tile stays a real one.
+    smith.talk = 0;
+    const blockX = smith.hx * TILE + TILE / 2;
+    const blockY = smith.hy * TILE + TILE / 2;
+    let landedOnPlayer = false;
+    for (let i = 0; i < 1800; i++) {
+      updateNpcs(town, 1 / 60, blockX, blockY);
+      if (smith.tx === smith.hx && smith.ty === smith.hy) landedOnPlayer = true;
+    }
+    ok(!landedOnPlayer, "he never claims the square the player is standing on");
+
+    const fs2 = await import("node:fs");
+    const cr = fs2.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    ok(cr.includes("npc-smith.png"), "the smith sheet is credited by filename");
+    ok(cr.includes("Mace_mace"), "…with the generator recipe that reproduces it");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
