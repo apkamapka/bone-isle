@@ -317,7 +317,7 @@ async function main(): Promise<void> {
     let okDist = true, spawned = 0;
     for (let i = 0; i < 8; i++) {
       const n0 = wild.monsters.length;
-      if (spawnMonster(wild, "rat", { x: px, y: py })) {
+      if (spawnMonster(wild, "bandit", { x: px, y: py })) {
         spawned++;
         const m = wild.monsters[wild.monsters.length - 1];
         if (Math.hypot(m.x - px, m.y - py) < SPAWN_AVOID_PLAYER_PX) okDist = false;
@@ -356,7 +356,7 @@ async function main(): Promise<void> {
     const ptx = toTile(cx);
     const pty = toTile(cy);
     arena.monsters.length = 0;
-    for (let i = 0; i < 4; i++) spawnMonster(arena, "rat");
+    for (let i = 0; i < 4; i++) spawnMonster(arena, "bandit");
     // line them up single-file due west of the target — the worst case
     arena.monsters.forEach((m, i) => {
       m.tx = ptx - 2 - i;
@@ -1478,6 +1478,43 @@ async function main(): Promise<void> {
     const wsp = worldSpawn(wild);
     ok(!wild.solid[Math.floor(wsp.y / TILE)][Math.floor(wsp.x / TILE)],
       "…and still land beside their portal, exactly as before");
+  }
+
+  console.log("Bandit — the tier-1 creature replacing the rat:");
+  {
+    const { MONSTER_DEFS, mobSprite, setMobArt } = await import("../src/entities/monsters.ts");
+    const b = MONSTER_DEFS.bandit;
+    ok(b !== undefined, "the bandit is a defined creature");
+    ok(!("rat" in MONSTER_DEFS), "the rat is gone, not merely hidden");
+
+    // "weak, from level 1": it must sit at the bottom of the ladder. Compare
+    // against every other creature rather than hard-coding numbers, so the
+    // claim survives future rebalancing.
+    const others = (Object.keys(MONSTER_DEFS) as Array<keyof typeof MONSTER_DEFS>)
+      .filter((k) => k !== "bandit")
+      .map((k) => MONSTER_DEFS[k]);
+    ok(others.every((o) => b.hp <= o.hp), "no creature has less health");
+    ok(others.every((o) => b.exp <= o.exp), "none is worth less experience");
+    ok(b.danger <= Math.min(...others.map((o) => o.danger)),
+      "it spawns closest to the entrance of any creature");
+    ok(b.ranged === undefined, "it fights in melee, so a level 1 can close on it");
+    ok(b.gold[1] > 0, "being a person, it carries coin");
+
+    // artwork: baked fallback headless, and installing a PNG must take over
+    ok(mobSprite("bandit") === b.spr, "headless it draws with the baked fallback");
+    const art = document.createElement("canvas");
+    art.width = 30; art.height = 53;
+    setMobArt("bandit", art);
+    ok(mobSprite("bandit") === art, "loaded artwork wins");
+    setMobArt("bandit", null);
+    ok(mobSprite("bandit") === b.spr, "clearing it restores the fallback");
+
+    // it must actually be in the world the newcomer reaches first
+    const { populateWorld: pop } = await import("../src/game.ts");
+    const ws = buildWorlds(WORLD_SEED);
+    pop(ws.wild, WORLD_SEED);
+    ok(ws.wild.monsters.some((m) => m.kind === "bandit"), "bandits populate the Wildlands roster");
+    ok(ws.town.monsters.length === 0, "…and never the safe town — it stays a haven");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

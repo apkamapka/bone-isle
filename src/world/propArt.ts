@@ -19,6 +19,8 @@
  * shadow already painted in.
  */
 import { adoptSprite, setTreeArt, setPropArt } from "../gfx/sprites.ts";
+import { setMobArt, mobSprite } from "../entities/monsters.ts";
+import type { MonsterKind } from "./types.ts";
 import type { World, WorldKey } from "./types.ts";
 
 type PropKey = "tree" | "rock" | "stump" | "rubble";
@@ -32,6 +34,11 @@ const PROP_SRC: Record<PropKey, string> = {
 
 const PROP_KEYS = Object.keys(PROP_SRC) as PropKey[];
 
+/** Creature artwork. Cut from an LPC sheet, so already at actor scale. */
+const MOB_SRC: Partial<Record<MonsterKind, string>> = {
+  bandit: "./mob-bandit.png",
+};
+
 let loaded = false;
 let treeCanvas: HTMLCanvasElement | null = null;
 
@@ -44,6 +51,28 @@ function toCanvas(img: HTMLImageElement): HTMLCanvasElement {
   x.imageSmoothingEnabled = false;
   x.drawImage(img, 0, 0);
   return adoptSprite(c);
+}
+
+/** Repoint creatures already alive at the artwork their kind now uses. */
+function sweepMobs(worlds: Record<WorldKey, World>): void {
+  for (const key of Object.keys(worlds) as WorldKey[]) {
+    for (const m of worlds[key].monsters) m.spr = mobSprite(m.kind);
+  }
+}
+
+/** Load creature artwork; each kind lands independently of the others. */
+function loadMobArt(worlds: Record<WorldKey, World>): void {
+  for (const kind of Object.keys(MOB_SRC) as MonsterKind[]) {
+    const img = new Image();
+    img.onload = () => {
+      setMobArt(kind, adoptSprite(toCanvas(img)));
+      sweepMobs(worlds);
+    };
+    img.onerror = () => {
+      console.warn(`creature '${kind}' failed to load, keeping the baked sprite`);
+    };
+    img.src = MOB_SRC[kind]!;
+  }
 }
 
 /** Point every existing tree at the loaded artwork (worlds built earlier). */
@@ -60,6 +89,7 @@ function sweep(worlds: Record<WorldKey, World>, art: HTMLCanvasElement): void {
  */
 export function loadPropArt(worlds: Record<WorldKey, World>): void {
   if (typeof Image === "undefined" || typeof document === "undefined") return;
+  loadMobArt(worlds);
   if (loaded && treeCanvas) {
     sweep(worlds, treeCanvas);
     return;

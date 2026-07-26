@@ -155,7 +155,7 @@ export interface GroundItem {
 
 /** Monster kinds present on the Wildlands and down the Bone Caverns. */
 export type MonsterKind =
-  | "rat" | "spider" | "bat" | "skeleton" | "goblin" | "wolf"
+  | "bandit" | "spider" | "bat" | "skeleton" | "goblin" | "wolf"
   | "ghost" | "orc" | "bear" | "minotaur" | "troll" | "cyclops" | "boneLord"
   // Etap 8 — the extended bestiary (Tibia 8.6-inspired tiers to ~level 20)
   | "snake" | "crab" | "wasp" | "poisonSpider" | "rotworm" | "amazon"

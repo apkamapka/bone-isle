@@ -68,7 +68,7 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   // Trimmed ~25% after playtests — the open round island concentrated packs
   // into one big crowd; the undergrounds are where the density lives now.
   wild: {
-    rat: 4, snake: 3, crab: 3, bat: 3, spider: 3, wasp: 2,
+    bandit: 4, snake: 3, crab: 3, bat: 3, spider: 3, wasp: 2,
     skeleton: 2, rotworm: 2, poisonSpider: 2, wolf: 2, goblin: 2, amazon: 2,
   },
   // -1: tiers 2-3 (~level 8-13). The first spear-throwing orcs appear.
@@ -92,7 +92,7 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   // ---- Deep Wildlands camp lairs: each settlement's dungeon, difficulty ----
   // ---- rising floor by floor (Etap 9b). Floor -1s tested as "ok"; the    ----
   // ---- deeper floors are bigger and read as empty, so -2/-3 run ~double. ----
-  warren1:  { rat: 5, bat: 4, snake: 3 },
+  warren1:  { bandit: 5, bat: 4, snake: 3 },
   cove1:    { crab: 7, wasp: 3 },
   hollow1:  { spider: 5, poisonSpider: 4 },
   hollow2:  { poisonSpider: 9, wasp: 7 },
@@ -118,7 +118,7 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
  * spawned anywhere on the mainland outside settlements and the dock area.
  */
 const CAMP_POPULATIONS: Readonly<Record<string, Partial<Record<MonsterKind, number>>>> = {
-  warren:  { rat: 5, snake: 3 },
+  warren:  { bandit: 5, snake: 3 },
   cove:    { crab: 6 },
   hollow:  { spider: 4, poisonSpider: 3, wasp: 2 },
   goblin:  { goblin: 5, warWolf: 2 },

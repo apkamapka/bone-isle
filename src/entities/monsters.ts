@@ -67,10 +67,34 @@ export interface MonsterDef {
  * rarer, heavier hits, exactly the old-Tibia feel. A monster's actual hit is
  * rolled uniformly inside `dmg` and then reduced by the player's defense.
  */
+/**
+ * Creature artwork loaded from PNGs, keyed by kind.
+ *
+ * `MONSTER_DEFS` is readonly and its baked sprite is the guaranteed fallback,
+ * so drawn artwork lives beside it: `mobSprite()` prefers the loaded canvas
+ * and drops back to the bake when there is none. Instances copy the sprite at
+ * spawn, so anything alive when a PNG lands is swept by the loader.
+ */
+const mobArt: Partial<Record<MonsterKind, HTMLCanvasElement>> = {};
+
+/** Install artwork for a creature; pass null to fall back to the baked sprite. */
+export function setMobArt(k: MonsterKind, c: HTMLCanvasElement | null): void {
+  if (c) mobArt[k] = c;
+  else delete mobArt[k];
+}
+
+/** The sprite a creature of this kind should draw with. */
+export function mobSprite(k: MonsterKind): HTMLCanvasElement {
+  return mobArt[k] ?? MONSTER_DEFS[k].spr;
+}
+
 export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
-  rat: {
-    spr: SPR.rat, hp: 10, dmg: [1, 5], speed: 60, atkRate: 2.0, exp: 5, gold: [0, 1], danger: 0.06,
-    loot: [{ kind: "meat", chance: 0.15, n: [1, 1] }],
+  // Tier 1, the creature a fresh character meets first. A person rather than
+  // vermin, so it carries coin and the odd bit of kit — but the stats stay at
+  // the very bottom of the ladder: a level 1 player must be able to win.
+  bandit: {
+    spr: SPR.rat, hp: 14, dmg: [1, 6], speed: 62, atkRate: 2.0, exp: 8, gold: [1, 4], danger: 0.06,
+    loot: [{ kind: "hpPotion", chance: 0.08, n: [1, 1] }, { kind: "leatherArmor", chance: 0.03, n: [1, 1] }],
   },
   snake: {
     spr: SPR.snake, hp: 14, dmg: [2, 7], speed: 68, atkRate: 2.0, exp: 8, gold: [0, 1], danger: 0.1,
@@ -252,7 +276,7 @@ function pushMonster(
     y: tileCenter(ty),
     tx,
     ty,
-    spr: d.spr,
+    spr: mobSprite(kind),
     hp: d.hp,
     maxhp: d.hp,
     speed: d.speed,
