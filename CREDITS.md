@@ -145,6 +145,41 @@ the standing pose the NPC shows while talking to you.
 itself published under **CC-BY-SA 3.0**. It must stay publicly available on
 those terms even if this repository is later made private.
 
+## The other four townsfolk
+
+`public/npc-herbalist.png`, `npc-elder.png`, `npc-taskmaster.png` and
+`npc-tailor.png` come from the same **Universal LPC Spritesheet Character
+Generator** under the same licences, and are packed identically to the smith:
+walk rows 8-11 only, repacked into a 9x4 grid, cropped to one rectangle shared
+by every frame of that sheet. Column 0 of each row is the standing pose.
+
+Frame sizes differ because the outfits do — 34x51 for Mira, 34x50 for Oswin,
+34x55 for Grizelda (cape and topknot), 32x51 for Vesper.
+
+Reproducible character configurations:
+
+- Mira the Herbalist —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=female&body=Body_Color_olive&head=Human_Male_olive&expression=Neutral_olive&neck=Scarf_brown&gloves=Gloves_cloth.gray&clothes=Tunic_slate&shoes=Sandals_gray&legs=Belle_skirt_green&ring=Stud_Ring_green&hair=Long_messy_light_brown>
+- Elder Oswin —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Pixie_platinum&ring=Stud_Ring_sky&legs=Long_Pants_sky&shoes=Basic_Shoes_sky&jacket=Tabard_sky&headcover=Thick_Headband_sky&necklace=Necklace_gold>
+- Grizelda the Huntress —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&bandana_overlay=Skull_Bandana_Overlay_green&hair=Long_Topknot_red&ring=Stud_Ring_red&gloves=Gloves_cloth.green&cape=Solid_forest&armour=Legion_all.lpcr.peach&legs=Armour_all.lpcr.peach&shoes=Armour_all.lpcr.ivory>
+- Vesper the Tailor —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Messy1_gray&jacket=Frock_coat_blue&legs=Leggings_navy&shoes=Sara_Shoes_navy>
+
+Between them these four add the scarf, tunic, belle-skirt, sandal, tabard,
+headband, necklace, bandana-overlay, topknot, cape, Legion-armour, frock-coat,
+leggings and stud-ring layers of the ULPC project to the collections already
+listed above.
+
+> **TODO before release:** download "Credits (CSV)" from the generator for each
+> of these five configurations and paste the per-layer author lists here. The
+> URLs reproduce the characters, but a URL is not an attribution.
+
+**ShareAlike:** all four files are derivative works of CC-BY-SA 3.0 artwork and
+are themselves published under **CC-BY-SA 3.0**. They must stay publicly
+available on those terms even if this repository is later made private.
+
 ## Terrain and props
 
 `public/home-terrain.png` and `public/town-terrain.png` are exported from Tiled
