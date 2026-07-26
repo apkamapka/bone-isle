@@ -8,7 +8,7 @@ import { loadMobSheets } from "./gfx/mobSheet.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn, worldSpawn } from "./world/collision.ts";
-import { spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard } from "./entities/monsters.ts";
+import { spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard, spawnAtPost } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
 import type { ItemKind } from "./items.ts";
 import { loadResearchState } from "./systems/tower.ts";
@@ -56,7 +56,7 @@ export interface Game {
  * carries only the low tiers, and each Bone Caverns floor down adds heavier
  * ones — so pushing deeper, not running laps, is how you meet tougher foes.
  */
-type DangerKey = "town" | "wild" | "cave1" | "cave2" | "cave3"
+type DangerKey = "wild" | "cave1" | "cave2" | "cave3"
   | "warren1" | "cove1" | "hollow1" | "hollow2" | "goblin1" | "goblin2"
   | "orcfort1" | "orcfort2" | "bastion1" | "bastion2" | "grave1" | "grave2"
   | "roost1" | "roost2" | "roost3";
@@ -68,9 +68,6 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   // (poison spider spit, amazon knives) before the cavern archers below.
   // Trimmed ~25% after playtests — the open round island concentrated packs
   // into one big crowd; the undergrounds are where the density lives now.
-  // Bonetown south of the fence: the starter hunting ground. Spawns can only
-  // land below row 25, so the count is spread over the southern half alone.
-  town: { bandit: 31 },
   wild: {
     bandit: 4, snake: 3, crab: 3, bat: 3, spider: 3, wasp: 2,
     skeleton: 2, rotworm: 2, poisonSpider: 2, wolf: 2, goblin: 2, amazon: 2,
@@ -251,6 +248,15 @@ export function populateWorld(w: World, seed = WORLD_SEED): void {
     for (const kind of Object.keys(WILDERNESS_ROAMERS) as MonsterKind[]) {
       for (let i = 0; i < (WILDERNESS_ROAMERS[kind] ?? 0); i++) spawnWilderness(w, kind);
     }
+    return;
+  }
+  // A hand-drawn map places its own creatures: use them verbatim rather than
+  // scattering a roster, so the author's spacing is what the player meets.
+  if (w.mobPosts?.length) {
+    w.monsters.length = 0;
+    w.respawns.length = 0;
+    if (!MONSTERS_ENABLED) return;
+    for (const post of w.mobPosts) spawnAtPost(w, post.kind, post.tx, post.ty);
     return;
   }
   const pop = POPULATIONS[w.key as DangerKey];

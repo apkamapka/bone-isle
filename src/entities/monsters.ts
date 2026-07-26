@@ -356,6 +356,30 @@ export function spawnWilderness(w: World, kind: MonsterKind, avoid?: { x: number
  * Rings outward from the chest until a free walkable tile turns up, so it
  * always lands as close to the chest as the cavern allows.
  */
+/**
+ * Put a creature on the exact tile a map author marked, falling back to the
+ * nearest free ring if that square is taken (a corpse-blocked respawn, say).
+ * The post is recorded so the creature returns here when it is killed.
+ */
+export function spawnAtPost(
+  w: World, kind: MonsterKind, tx: number, ty: number, avoid?: { x: number; y: number },
+): boolean {
+  const free =
+    w.solid[ty]?.[tx] === false && (w.tile[ty]?.[tx] ?? 0) > 0 &&
+    !w.monsters.some((m) => m.tx === tx && m.ty === ty);
+  if (free) {
+    const cx = tileCenter(tx);
+    const cy = tileCenter(ty);
+    const clear = !avoid || dist(cx, cy, avoid.x, avoid.y) >= SPAWN_AVOID_PLAYER_PX;
+    if (clear && pushMonster(w, kind, { x: cx, y: cy })) {
+      const m = w.monsters[w.monsters.length - 1];
+      m.guard = { tx, ty };
+      return true;
+    }
+  }
+  return spawnGuard(w, kind, tx, ty, avoid);
+}
+
 export function spawnGuard(
   w: World, kind: MonsterKind, tx: number, ty: number, avoid?: { x: number; y: number },
 ): boolean {

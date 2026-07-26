@@ -1505,10 +1505,22 @@ async function main(): Promise<void> {
       "one gate, back to Home Isle");
     // the split has to hold in practice, not just in the flag
     const { populateWorld: popTown } = await import("../src/game.ts");
+    ok(town.mobPosts?.length === 31, "the 31 authored bandit posts came across");
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length > 0, "bandits populate the southern half");
+    ok(town.monsters.length === 31, "exactly as many bandits as the map asks for — no roster padding");
     ok(town.monsters.every((m) => m.ty > 25),
       "not one bandit spawned north of the fence");
+    // authored placement means EXACT placement, not "somewhere in the region"
+    const posts = new Set(town.mobPosts!.map((p) => p.ty * town.w + p.tx));
+    ok(town.monsters.every((m) => posts.has(m.ty * town.w + m.tx)),
+      "every bandit stands on the tile the map marked, not a scattered one");
+    ok(town.monsters.every((m) => m.guard !== undefined),
+      "each one remembers its post, so a kill respawns it back there");
+    // and the placement is stable: repopulating must not shuffle them
+    const before = town.monsters.map((m) => m.ty * town.w + m.tx).sort((a, b) => a - b);
+    popTown(town, WORLD_SEED);
+    const after = town.monsters.map((m) => m.ty * town.w + m.tx).sort((a, b) => a - b);
+    ok(before.join() === after.join(), "repopulating puts them back on the same squares");
     ok(town.npcs.every((n) => Math.floor(n.y / TILE) <= 25),
       "every townsperson stands inside the haven");
 

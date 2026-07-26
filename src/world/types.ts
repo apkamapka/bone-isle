@@ -256,7 +256,9 @@ export interface Respawn {
   t: number;
   /** Camp the slain creature came from — it respawns back there. */
   camp?: string;
-  /** Treasure-chest guard: respawns back beside the chest at this tile. */
+  /** The tile this creature is posted to: a treasure hoard, or an authored
+   *  spawn point on a hand-drawn map. Either way it respawns back here rather
+   *  than anywhere on the floor. */
   guard?: { tx: number; ty: number };
 }
 
@@ -323,6 +325,10 @@ export interface World {
    *  north of the fence is town, south of it is hunting ground. Absent on
    *  maps that are wholly safe or wholly hostile. */
   safeMaxY?: number;
+  /** Authored creature posts: exactly where the map says a creature stands.
+   *  Maps carrying these populate from them instead of scattering a roster,
+   *  and each creature respawns back onto its own post. */
+  mobPosts?: { kind: MonsterKind; tx: number; ty: number }[];
   /** Pre-rendered terrain (a Tiled "export as image" PNG) drawn 1:1 in place
    *  of the procedural bake. Native tile resolution, so it is sharper than
    *  `mapCanvas`, which is painted at half scale and blown up. Attached

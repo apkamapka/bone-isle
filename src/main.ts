@@ -8,7 +8,7 @@ import { SPR, itemSprite, iconW, iconH, hasPropArt, propSprite } from "./gfx/spr
 import { loadHeroSheet, heroSprite } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
-import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard } from "./entities/monsters.ts";
+import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnAtPost } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, structSprite, structureBonuses, STRUCTS, canAfford, payCost, structCenter, canPlaceAt } from "./systems/building.ts";
@@ -1709,7 +1709,7 @@ function update(dt: number): void {
           // kills don't slowly re-clump every creature back into one corner.
           const caveUniform = world.key !== "wild" && world.key !== "deepwild";
           const done = r.guard
-            ? spawnGuard(world, r.kind, r.guard.tx, r.guard.ty, P)
+            ? spawnAtPost(world, r.kind, r.guard.tx, r.guard.ty, P)
             : camp
               ? spawnMonsterInCamp(world, r.kind, camp, P)
               : world.key === "deepwild"
