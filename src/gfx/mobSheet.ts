@@ -36,6 +36,10 @@ const WALK_FPS = 8;
 const SHEET_SRC: Record<string, string> = {
   bandit: "./mob-bandit-walk.png",
   "npc:smith": "./npc-smith.png",
+  "npc:herbalist": "./npc-herbalist.png",
+  "npc:elder": "./npc-elder.png",
+  "npc:taskmaster": "./npc-taskmaster.png",
+  "npc:tailor": "./npc-tailor.png",
 };
 
 type Cut = HTMLCanvasElement[][]; // [row][col]
