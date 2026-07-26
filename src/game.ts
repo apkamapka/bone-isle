@@ -326,10 +326,22 @@ export function populateWorld(w: World, seed = WORLD_SEED): void {
   if (chestGuard) spawnGuard(w, "dragon", chestGuard.tx, chestGuard.ty);
 }
 
-/** Populate the Wildlands, the caverns, the continent, and every lair floor. */
+/**
+ * Populate the Wildlands, the caverns, the continent, and every lair floor —
+ * plus any hand-drawn map that places its own creatures.
+ *
+ * That last clause is easy to forget and expensive to miss: a map with
+ * authored posts carries no roster, so it is absent from DANGER_KEYS and would
+ * otherwise be skipped entirely and stand empty. Driving it off `mobPosts`
+ * rather than a second hard-coded list means a new authored map populates the
+ * day it is added, with nothing here to update.
+ */
 export function populateAll(worlds: Record<WorldKey, World>, seed = WORLD_SEED): void {
   for (const k of DANGER_KEYS) populateWorld(worlds[k], seed);
   populateWorld(worlds.deepwild, seed);
+  for (const k of Object.keys(worlds) as WorldKey[]) {
+    if (worlds[k].mobPosts?.length) populateWorld(worlds[k], seed);
+  }
 }
 
 export function createGame(seed = WORLD_SEED): Game {
