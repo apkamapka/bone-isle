@@ -1634,7 +1634,7 @@ async function main(): Promise<void> {
     ok(credits.includes("prop-tree.png"), "the drawn props are accounted for too");
   }
 
-  console.log("Townsfolk: the smith walks his beat, everyone else is rooted:");
+  console.log("Townsfolk: all five walk a 3x3 beat and stop when spoken to:");
   {
     const { updateNpcs, faceToward } = await import("../src/entities/npcs.ts");
     const { NPC_WALK_SPEED, NPC_TALK_HOLD_S, PLAYER_BASE_SPEED } = await import("../src/config.ts");
@@ -1646,39 +1646,69 @@ async function main(): Promise<void> {
     ok(npcFrame("smith", "down", true, 0) === null,
       "headless there is no sheet, so the baked stand-in is used");
 
+    // rndi is inclusive at both ends. The step-order shuffle got this wrong
+    // once and fed an out-of-range index into the direction table, which only
+    // showed up once five NPCs were rolling instead of one.
+    const { rndi: ri } = await import("../src/util.ts");
+    let outOfRange = false;
+    for (let i = 0; i < 20000; i++) if (ri(0, 3) > 3 || ri(0, 3) < 0) outOfRange = true;
+    ok(!outOfRange, "rndi(0, 3) stays inside a four-element table");
+
     const town = buildWorlds(WORLD_SEED).town;
     const smith = town.npcs.find((n) => n.key === "smith")!;
-    const rooted = town.npcs.filter((n) => n.key !== "smith");
     ok(smith !== undefined, "the smith is on the town map");
-    ok(smith.roam === 1, "…with a 3x3 beat");
-    ok(rooted.length === 4 && rooted.every((n) => n.roam === 0),
-      "…and the other four stay put");
+    ok(town.npcs.length === 5 && town.npcs.every((n) => n.roam === 1),
+      "all five townsfolk walk a 3x3 beat");
     ok(town.npcs.every((n) => n.dir === "down"),
       "everyone spawns facing camera, so the first draw has a valid row");
-    ok(smith.hx === smith.tx && smith.hy === smith.ty,
-      "home is the tile the map authored him on");
+    ok(town.npcs.every((n) => n.hx === n.tx && n.hy === n.ty),
+      "home is the tile the map authored them on");
 
-    // Half a minute of pacing, far from the player. He must stay inside the
-    // beat every single tick — not merely end up back inside it.
-    const home = { x: smith.hx, y: smith.hy };
-    const rootedHome = rooted.map((n) => ({ n, tx: n.tx, ty: n.ty }));
-    let strayed = false;
-    let stepped = false;
+    // Two beats sharing a square would leave that pair shuffling into each
+    // other forever. Home tiles must be at least 3 apart, Chebyshev.
+    let tooClose = "";
+    for (const a of town.npcs) {
+      for (const b of town.npcs) {
+        if (a === b) continue;
+        if (chebTiles(a.hx, a.hy, b.hx, b.hy) < 3) tooClose = `${a.key}/${b.key}`;
+      }
+    }
+    ok(tooClose === "", `no two beats overlap${tooClose && " — " + tooClose}`);
+
+    // Every square any of them can reach must be standable, or they get wedged
+    // against a wall on one side of the beat.
+    let unwalkable = "";
+    for (const n of town.npcs) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (town.solid[n.hy + dy][n.hx + dx]) unwalkable = n.key;
+        }
+      }
+    }
+    ok(unwalkable === "", `every beat is 9 walkable tiles${unwalkable && " — " + unwalkable}`);
+
+    // Half a minute of pacing. Nobody may leave their beat on any single tick —
+    // not merely end up back inside it — and nobody may share a square.
+    const homes = town.npcs.map((n) => ({ n, x: n.hx, y: n.hy }));
+    let strayed = "";
+    let collided = false;
     let offCentre = false;
+    const stepped = new Set<string>();
     for (let i = 0; i < 1800; i++) {
       updateNpcs(town, 1 / 60, -9999, -9999);
-      if (chebTiles(smith.tx, smith.ty, home.x, home.y) > 1) strayed = true;
-      if (smith.tx !== home.x || smith.ty !== home.y) stepped = true;
-      if (Math.abs(smith.x - (smith.tx * TILE + TILE / 2)) > TILE) offCentre = true;
+      for (const h of homes) {
+        if (chebTiles(h.n.tx, h.n.ty, h.x, h.y) > 1) strayed = h.n.key;
+        if (h.n.tx !== h.x || h.n.ty !== h.y) stepped.add(h.n.key);
+        if (Math.abs(h.n.x - (h.n.tx * TILE + TILE / 2)) > TILE) offCentre = true;
+      }
+      if (town.npcs.some((a) => town.npcs.some((b) => b !== a && b.tx === a.tx && b.ty === a.ty))) {
+        collided = true;
+      }
     }
-    ok(!strayed, "thirty seconds of pacing never leaves the 3x3");
-    ok(stepped, "…but he does actually move");
-    ok(!offCentre, "…and the render position never runs away from his tile");
-    ok(rootedHome.every((r) => r.n.tx === r.tx && r.n.ty === r.ty),
-      "the rooted four have not budged");
-    ok(!town.npcs.some((a) => town.npcs.some((b) => b !== a && b.tx === a.tx && b.ty === a.ty)),
-      "no two townsfolk ever share a square");
-    ok(town.solid[smith.ty][smith.tx] === false, "he only ever stands on walkable ground");
+    ok(strayed === "", `thirty seconds of pacing never leaves the beat${strayed && " — " + strayed}`);
+    ok(stepped.size === 5, "…and all five actually move");
+    ok(!offCentre, "…and no render position runs away from its tile");
+    ok(!collided, "…and no two townsfolk ever share a square");
 
     // Being spoken to freezes him where he stands and turns him around.
     smith.talk = NPC_TALK_HOLD_S;
@@ -1712,8 +1742,23 @@ async function main(): Promise<void> {
 
     const fs2 = await import("node:fs");
     const cr = fs2.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
-    ok(cr.includes("npc-smith.png"), "the smith sheet is credited by filename");
-    ok(cr.includes("Mace_mace"), "…with the generator recipe that reproduces it");
+    const KEYS = ["smith", "herbalist", "elder", "taskmaster", "tailor"] as const;
+    for (const k of KEYS) {
+      ok(cr.includes(`npc-${k}.png`), `the ${k} sheet is credited by filename`);
+    }
+    ok(cr.includes("Mace_mace") && cr.includes("Belle_skirt_green")
+      && cr.includes("Necklace_gold") && cr.includes("Long_Topknot_red")
+      && cr.includes("Frock_coat_blue"),
+      "…each with the generator recipe that reproduces it");
+
+    // The art must actually be wired up: every roster entry needs a sheet, or
+    // that NPC silently falls back to a baked stand-in that cannot turn.
+    const sheetSrc = fs2.readFileSync(
+      new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    for (const k of KEYS) {
+      ok(sheetSrc.includes(`"npc:${k}": "./npc-${k}.png"`),
+        `${k} has a walk sheet registered`);
+    }
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
