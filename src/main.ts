@@ -2172,17 +2172,26 @@ function render(): void {
     } });
   }
   // corpses — real bodies where the art exists, the bone pile everywhere else.
-  // The two anchor differently: a drawn body's last row IS the ground line, so
-  // it sits flush at c.y, while the bone pile was authored to be nudged down.
+  // A body lies flat, so it hangs off the BOTTOM edge of its tile rather than
+  // the centre line every standing sprite uses. Feet-at-tile-centre is right
+  // for something upright — the mass is above the anchor — but a body pinned
+  // there floats in the tile's upper half with the ground showing beneath it.
+  // The shadow follows the body down; the bone pile keeps the nudge it was
+  // drawn for, so every other creature in the bestiary is untouched.
   for (const c of world.corpses) {
     if (!inView(c.x, c.y)) continue;
     const blink = c.t < 10 ? (Math.sin(waveT * 8) > 0 ? 1 : 0.4) : 1;
     const body = c.name === "your body" ? heroCorpse() : corpseSprite(c.name);
+    const baseY = c.y + TILE / 2;
     drawList.push({ y: c.y, fn: () => {
       vctx.globalAlpha = blink;
-      drawShadow(c.x, c.y);
-      if (body) drawSprite(body, c.x, c.y);
-      else drawSprite(SPR.corpse, c.x, c.y + 8);
+      if (body) {
+        drawShadow(c.x, baseY);
+        drawSprite(body, c.x, baseY);
+      } else {
+        drawShadow(c.x, c.y);
+        drawSprite(SPR.corpse, c.x, c.y + 8);
+      }
       vctx.globalAlpha = 1;
     } });
   }
