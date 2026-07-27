@@ -220,7 +220,9 @@ export function makeWorld(opts: WorldOpts): World {
         w.npcs.push({
           key, name, spr, bob: wrnd(0, 3),
           x: spot.x * TILE + TILE / 2, y: spot.y * TILE + TILE / 2,
-          tx: spot.x, ty: spot.y, hx: spot.x, hy: spot.y, roam,
+          tx: spot.x, ty: spot.y, hx: spot.x, hy: spot.y,
+          bx0: spot.x - roam, bx1: spot.x + roam,
+          by0: spot.y - roam, by1: spot.y + roam,
           dir: "down", rest: npcRest(), phase: 0, moving: false, talk: 0,
         });
         // 3 tiles, not 2.4: two 3x3 beats sharing a square would leave the

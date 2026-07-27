@@ -46,8 +46,10 @@ interface PortalDef {
 /** A townsperson placed on a specific map, with that map's beat. */
 export interface NpcPlacement {
   key: NpcKey;
-  roam?: number;
-  roamY?: number;
+  /** How many tiles he may stray in each direction from where the glyph put
+   *  him. Anything omitted falls back to the roster's own radius, so
+   *  `{ west: 4, east: 4 }` on a rooted NPC gives a line and nothing else. */
+  beat?: { west?: number; east?: number; north?: number; south?: number };
   floor?: Tile;
 }
 
@@ -221,11 +223,13 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
                 tile[y][x] = place.floor;
                 solid[y][x] = false;
               }
+              const b = place.beat ?? {};
               w.npcs.push({
                 key: place.key, name: meta.name, spr: meta.spr, bob: (x + y) % 3,
                 x: cx, y: cy, tx: x, ty: y,
-                hx: x, hy: y, roam: place.roam ?? meta.roam,
-                ...(place.roamY !== undefined ? { roamY: place.roamY } : {}),
+                hx: x, hy: y,
+                bx0: x - (b.west ?? meta.roam), bx1: x + (b.east ?? meta.roam),
+                by0: y - (b.north ?? meta.roam), by1: y + (b.south ?? meta.roam),
                 dir: "down", rest: npcRest(), phase: 0, moving: false, talk: 0,
               });
             }
@@ -374,14 +378,15 @@ export const TOWN_SPEC: HandmadeSpec = {
   // Deep Wildlands and Sanctum doors come back as those maps are redrawn.
   portals: {
     P: { dest: "home", label: "to Home Isle" },
-    // the trapdoor on the northern dirt tongue, down to the Time Sage
-    C: { dest: "cellar", label: "down to the Time Sage", style: "ladderDown", floor: Tile.Dirt },
+    // a proper teleport pad, 2x2 like the ones downstairs — the glyph marks
+    // its top-left tile, so it covers (16,8)…(17,9) on the northern tongue
+    C: { dest: "cellar", label: "to the Time Sage's cellar", span: 2, floor: Tile.Dirt },
   },
   npcs: {
     s: "smith", h: "herbalist", e: "elder", g: "taskmaster", t: "tailor",
     // Chronos paces the western plaza: four tiles east, four west, one row —
     // never north or south, so he stays on the line the map put him on.
-    z: { key: "timesage", roam: 4, roamY: 0, floor: Tile.Dirt },
+    z: { key: "timesage", beat: { west: 4, east: 4 }, floor: Tile.Dirt },
   },
   monsters: { b: "bandit" },
 };
@@ -440,58 +445,73 @@ export const SANCTUM_SPEC: HandmadeSpec = {
 /* ------------------------------------------------------------------ */
 /*  THE TIME SAGE'S CELLAR — under the northern dirt tongue in town.   */
 /*  Painted in Tiled (public/cellar-terrain.png); this grid carries    */
-/*  only collision, and the author's rule is simple: the outer wall is */
-/*  the only solid thing. The pools are ankle-deep and the black spurs */
-/*  are floor decoration, so the whole hall is walkable — which it has */
-/*  to be, since the way up sits on the islet between the four pools.  */
+/*  only collision, and the author's rule is simple: the hall's outer  */
+/*  wall is the only solid thing inside it. The pools are ankle-deep   */
+/*  and the black spurs are floor decoration, so the whole hall is     */
+/*  walkable — which it has to be, since the way up sits on the islet  */
+/*  between the four pools.                                            */
+/*                                                                     */
+/*  Around that hall runs a five-tile black margin, solid and unlit.   */
+/*  It exists so the camera can centre on you in the corners instead   */
+/*  of clamping to the map edge and shoving you off to one side; the   */
+/*  terrain PNG carries the same margin as flat black.                 */
 /*                                                                     */
 /*  Fourteen pads carry an X in the artwork; each is a 2x2 block and   */
 /*  the portal glyph sits on its top-left tile. All fourteen are       */
 /*  dormant for now — the hunting grounds behind them come later.      */
 /* ------------------------------------------------------------------ */
 const CELLAR_ROWS: readonly string[] = [
-  "####################",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==1===2===3===4===#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==5===========6===#",
-  "#=========Z========#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==7===========8===#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==9===========0===#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==a===========b===#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#=========U========#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==c===========d===#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "#==================#",
-  "####################",
+  "##############################",
+  "##############################",
+  "##############################",
+  "##############################",
+  "##############################",
+  "##############################",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==1===2===3===4===######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==5===========6===######",
+  "######=========Z========######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==7===========8===######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==9===========0===######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==a===========b===######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######=========U========######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==c===========d===######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "######==================######",
+  "##############################",
+  "##############################",
+  "##############################",
+  "##############################",
+  "##############################",
+  "##############################",
 ];
-
 /** A cellar pad that hums but takes nobody anywhere yet. The artwork paints
  *  each one 2x2, so the portal spans the block and all four squares carry you
  *  the day its hunting ground exists. The glyph marks the top-left square. */
@@ -504,7 +524,7 @@ export const CELLAR_SPEC: HandmadeSpec = {
   safe: true,
   rows: CELLAR_ROWS,
   portals: {
-    U: { dest: "town", label: "up to Bonetown", style: "ladderUp", floor: Tile.Cave },
+    U: { dest: "town", label: "back up to Bonetown", span: 2, floor: Tile.Cave },
     // the four that will open first, once their hunting grounds exist
     a: sealed("Minotaur Halls — sealed"),
     b: sealed("Undead Crypt — sealed"),
@@ -522,5 +542,7 @@ export const CELLAR_SPEC: HandmadeSpec = {
     "9": sealed("Sealed Rift IX"),
     "0": sealed("Sealed Rift X"),
   },
-  npcs: { Z: { key: "timesage", roam: 0, floor: Tile.Cave } },
+  // He shuffles a 2x2 square that hangs off his corner — one tile west and
+  // one south of where the pin put him — rather than standing dead still.
+  npcs: { Z: { key: "timesage", beat: { west: 1, south: 1 }, floor: Tile.Cave } },
 };

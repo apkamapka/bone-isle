@@ -149,12 +149,17 @@ export function portalSpawn(w: World, portal?: Portal): Vec {
   const pt = portal ?? w.portals[0];
   const ptx = toTile(pt.x);
   const pty = toTile(pt.y);
+  // Never land ON the pad you arrived by: with a spanned pad the tile beside
+  // its centre can still be part of the block, and standing on it would fire
+  // the portal again and bounce you straight back where you came from.
+  const own = new Set(portalTiles(pt).map((t) => `${t.tx},${t.ty}`));
   // south first (classic "step off the stairs"), then the rest of ring 1, then ring 2
   const order: ReadonlyArray<readonly [number, number]> = [
     [0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1],
     [0, 2], [2, 0], [-2, 0], [0, -2], [1, 2], [-1, 2], [2, 1], [-2, 1],
   ];
   for (const [ox, oy] of order) {
+    if (own.has(`${ptx + ox},${pty + oy}`)) continue;
     if (walkable(w, ptx + ox, pty + oy)) {
       return { x: tileCenter(ptx + ox), y: tileCenter(pty + oy) };
     }

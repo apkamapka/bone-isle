@@ -249,11 +249,15 @@ export interface Npc {
   /** The tile he was authored on — the centre of his beat. */
   hx: number;
   hy: number;
-  /** How far he may stray from home along X, in tiles. 0 = rooted. */
-  roam: number;
-  /** Same along Y. Absent means "as wide as `roam`" — i.e. the classic square
-   *  beat. Set to 0 for someone who only paces left and right on one row. */
-  roamY?: number;
+  /** The rectangle he may walk, in absolute tile coordinates (inclusive).
+   *  A shopkeeper gets a 3x3 box around his home; the town sage a nine-tile
+   *  line; the cellar sage a 2x2 square hanging off his corner. Equal bounds
+   *  on both axes mean rooted. Kept as bounds rather than a radius because
+   *  a beat is not always centred on where the map put him. */
+  bx0: number;
+  by0: number;
+  bx1: number;
+  by1: number;
   dir: NpcDir;
   /** Seconds of standing about before the next step is considered. */
   rest: number;
