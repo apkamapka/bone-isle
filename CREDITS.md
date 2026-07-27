@@ -118,6 +118,39 @@ cropped to one rectangle shared by every frame (see `src/gfx/mobSheet.ts`).
 are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
+## Minotaurs — `public/mob-minotaur-walk.png`, `public/mob-minotaur-archer-walk.png`, `public/mob-minotaur-guard-walk.png`, `public/mob-minotaur-mage-walk.png`
+
+All four minotaur ranks are composed from the same **Universal LPC Spritesheet
+Character Generator** as the player and the bandit, under the same licences as
+the layers listed above. They share one body (`muscular`, fur tan) and one head
+(`Minotaur_fur_tan`); only the gear differs.
+
+Reproducible character configurations:
+
+- Minotaur —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_fur_tan&head=Minotaur_fur_tan&expression=Neutral_fur_tan&gloves=Gloves_iron&legs=Wide_pants_black>
+- Minotaur Archer —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_fur_tan&head=Minotaur_fur_tan&expression=Neutral_fur_tan&weapon=Crossbow_crossbow&gloves=Gloves_iron&legs=Wide_pants_black>
+- Minotaur Guard —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_fur_tan&head=Minotaur_fur_tan&expression=Neutral_fur_tan&gloves=Gloves_iron&legs=Wide_pants_black&weapon=Saber_saber&shield=Scutum_shield_scutum>
+- Minotaur Mage —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_fur_tan&head=Minotaur_fur_tan&expression=Neutral_fur_tan&gloves=Gloves_iron&legs=Wide_pants_black&weapon=S_staff_iron&cape=Tattered_teal>
+
+Beyond the collections listed under the player, these characters draw on the
+minotaur head, the muscular body base, and the iron-glove, wide-trouser, saber,
+crossbow, iron-staff, scutum-shield and tattered-cape layers of the ULPC
+project; the generator's own credits export is authoritative for the per-layer
+author list.
+
+From each generator export only the walk block was kept — rows 8-11
+(up, left, down, right), nine frames each — repacked into a 9x4 grid and
+cropped to one rectangle shared by every frame, symmetric about the source
+cell's centre line (see `src/gfx/mobSheet.ts`). No pixel was repainted.
+
+**ShareAlike:** these four files are derivative works of CC-BY-SA 3.0 artwork
+and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
+available on those terms even if this repository is later made private.
+
 ## Borin the Smith — `public/npc-smith.png`
 
 The town smith is composed from the same **Universal LPC Spritesheet Character
