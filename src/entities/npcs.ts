@@ -6,6 +6,7 @@ import { ITEMS } from "../items.ts";
 import { NPC_WALK_SPEED, NPC_REST_MIN_S, NPC_REST_MAX_S } from "../config.ts";
 import { rnd, rndi } from "../util.ts";
 import { toTile, glideWalker, tryStep, atCenter, walkable } from "../world/grid.ts";
+import { portalTiles } from "../world/collision.ts";
 import type { ItemKind } from "../items.ts";
 import type { NpcKey, Npc, NpcDir, World } from "../world/types.ts";
 
@@ -111,7 +112,10 @@ export function updateNpcs(w: World, dt: number, px: number, py: number): void {
   if (!w.npcs.length) return;
   const ptx = toTile(px);
   const pty = toTile(py);
-  const portal = new Set(w.portals.map((p) => toTile(p.y) * w.w + toTile(p.x)));
+  const portal = new Set<number>();
+  for (const p of w.portals) {
+    for (const t of portalTiles(p)) portal.add(t.ty * w.w + t.tx);
+  }
 
   for (const n of w.npcs) {
     if (n.talk > 0) n.talk = Math.max(0, n.talk - dt);
