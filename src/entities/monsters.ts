@@ -161,9 +161,9 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.orc, hp: 90, dmg: [8, 23], speed: 56, atkRate: 2.0, exp: 55, gold: [6, 14], danger: 0.62,
     loot: [{ kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "ironSword", chance: 0.06, n: [1, 1] }, { kind: "fireRuby", chance: 0.05, n: [1, 1] }],
   },
-  orcSpearman: {
-    spr: SPR.orcSpearman, hp: 80, dmg: [5, 13], speed: 64, atkRate: 2.0, exp: 58, gold: [5, 12], danger: 0.55,
-    ranged: { range: 220, dmg: [6, 17], color: "#b98a4e" }, // hurled spears
+  orcArcher: {
+    spr: SPR.orcArcher, hp: 80, dmg: [5, 13], speed: 64, atkRate: 2.0, exp: 58, gold: [5, 12], danger: 0.55,
+    ranged: { range: 220, dmg: [6, 17], color: "#b98a4e" }, // crossbow bolts
     loot: [{ kind: "boneArrow", chance: 0.4, n: [2, 6] }, { kind: "meat", chance: 0.3, n: [1, 1] }],
   },
   bear: {

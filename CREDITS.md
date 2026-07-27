@@ -158,6 +158,67 @@ lying beside the corpse, which reads as loot the game will not let you take.
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
+## Skeleton, goblin, ghoul and the five orc ranks
+
+`public/mob-skeleton-walk.png`, `mob-goblin-walk.png`, `mob-ghoul-walk.png`,
+`mob-orc-walk.png`, `mob-orc-warrior-walk.png`, `mob-orc-berserker-walk.png`,
+`mob-orc-archer-walk.png`, `mob-orc-shaman-walk.png`, plus the bodies
+`mob-skeleton-dead.png`, `mob-goblin-dead.png`, `mob-ghoul-dead.png` and
+`mob-orc-dead.png`.
+
+All eight are composed from the same **Universal LPC Spritesheet Character
+Generator** as the player, the bandit and the minotaurs, under the same licences
+as the layers listed above. The five orc ranks share one body base
+(`Body_Color_dark_green`) and one head (`Orc_male_dark_green`); only the gear
+differs.
+
+Reproducible character configurations:
+
+- Skeleton —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Skeleton_skeleton&head=Skeleton_skeleton&expression=Neutral_light>
+- Goblin —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_pale_green&head=Goblin_pale_green&expression=Neutral_pale_green&legs=Shorts_black>
+- Ghoul —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_zombie&head=Zombie_zombie&expression=Neutral_zombie&legs=Shorts_slate>
+- Orc —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&shoulders=Legion_iron&legs=Shorts_black>
+- Orc Warrior —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&shoulders=Legion_iron&legs=Armour_iron&arms=Armour_iron&gloves=Gloves_iron&shoes=Armour_iron&weapon=Dagger_dagger>
+- Orc Berserker —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&legs=Shorts_orange&arms=Armour_iron&gloves=Gloves_copper&shoes=Armour_copper&weapon=Mace_mace&armour=Plate_copper&shoulders=Epaulets_orange>
+- Orc Archer —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&legs=Shorts_forest&gloves=Gloves_steel&shoes=Armour_steel&shoulders=Epaulets_forest&weapon=Crossbow_crossbow>
+- Orc Shaman —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&weapon=Gnarled_staff_bronze&shoes=Sandals_tan&legs=Legion_skirt_tan&cape=Tattered_orange&earrings=Moon_earrings_copper>
+
+Beyond the collections listed under the player, these characters draw on the
+skeleton, goblin, zombie and orc bases and heads, and on the shorts, legion
+shoulder, iron/copper/steel armour, dagger, mace, crossbow, gnarled-staff,
+legion-skirt, sandal, tattered-cape and moon-earring layers of the ULPC project;
+the generator's own credits export is authoritative for the per-layer author
+list.
+
+From each export only the walk block was kept — rows 8-11 (up, left, down,
+right), nine frames each — repacked into a 9x4 grid and cropped to one rectangle
+shared by every frame, symmetric about the source cell's centre line (see
+`src/gfx/mobSheet.ts`). No pixel was repainted. Frame sizes: 32x47 skeleton,
+32x49 goblin, 32x48 ghoul, 32x46 orc, 40x47 warrior, 52x47 berserker (the mace
+held out sideways is the widest sprite in the game), 44x47 archer, 38x46 shaman.
+
+The bodies are the last frame of the hurt row (row 20, column 6) of each export,
+cropped to the body. All five orc ranks share `mob-orc-dead.png`, taken from the
+bare orc: the geared ranks' own death frames leave the dagger, mace, crossbow
+and staff lying beside the corpse, which reads as loot the game will not let you
+take, and stretches the archer's body to 60px against the bare corpse's 40px.
+
+> **TODO before release:** download "Credits (CSV)" from the generator for each
+> of these eight configurations and paste the per-layer author lists here. The
+> URLs reproduce the characters, but a URL is not an attribution.
+
+**ShareAlike:** these twelve files are derivative works of CC-BY-SA 3.0 artwork
+and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
+available on those terms even if this repository is later made private.
+
 ## Borin the Smith — `public/npc-smith.png`
 
 The town smith is composed from the same **Universal LPC Spritesheet Character

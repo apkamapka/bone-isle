@@ -75,12 +75,12 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   // -1: tiers 2-3 (~level 8-13). The first spear-throwing orcs appear.
   cave1: {
     skeleton: 3, rotworm: 3, goblin: 3, wolf: 3, warWolf: 3,
-    ghoul: 3, ghost: 3, orc: 3, orcSpearman: 3, bear: 2,
+    ghoul: 3, ghost: 3, orc: 3, orcArcher: 3, bear: 2,
   },
   // -2: tiers 3-4 (~level 12-17). The orc war camp and the minotaur outposts.
   // Bumped after playtests: the floor is bigger than -1 but read as sparse.
   cave2: {
-    orc: 4, orcSpearman: 3, bear: 3, orcWarrior: 5, hunter: 3, ghost: 3,
+    orc: 4, orcArcher: 3, bear: 3, orcWarrior: 5, hunter: 3, ghost: 3,
     minotaur: 5, minotaurArcher: 3, troll: 3, orcShaman: 3, mummy: 3,
   },
   // -3: tier 5 (~level 17-20+) and the dragon's lair — ONE dragon nests in
@@ -99,7 +99,7 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   hollow2:  { poisonSpider: 9, wasp: 7 },
   goblin1:  { goblin: 6, rotworm: 3 },
   goblin2:  { goblin: 10, warWolf: 6 },
-  orcfort1: { orc: 4, orcSpearman: 3, orcWarrior: 3 },
+  orcfort1: { orc: 4, orcArcher: 3, orcWarrior: 3 },
   orcfort2: { orcWarrior: 7, orcShaman: 5, orcBerserker: 4 },
   bastion1: { minotaur: 4, minotaurArcher: 3 },
   bastion2: { minotaurGuard: 5, minotaurMage: 4, minotaur: 6 },
@@ -123,7 +123,7 @@ const CAMP_POPULATIONS: Readonly<Record<string, Partial<Record<MonsterKind, numb
   cove:    { crab: 6 },
   hollow:  { spider: 4, poisonSpider: 3, wasp: 2 },
   goblin:  { goblin: 5, warWolf: 2 },
-  orcfort: { orc: 4, orcSpearman: 3, orcWarrior: 2 },
+  orcfort: { orc: 4, orcArcher: 3, orcWarrior: 2 },
   bastion: { minotaur: 4, minotaurArcher: 2, minotaurGuard: 1 },
   grave:   { skeleton: 4, ghoul: 3, ghost: 2 },
   roost:   { warWolf: 3 },

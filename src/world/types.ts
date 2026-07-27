@@ -168,7 +168,7 @@ export type MonsterKind =
   | "ghost" | "orc" | "bear" | "minotaur" | "troll" | "cyclops" | "boneLord"
   // Etap 8 — the extended bestiary (Tibia 8.6-inspired tiers to ~level 20)
   | "snake" | "crab" | "wasp" | "poisonSpider" | "rotworm" | "amazon"
-  | "warWolf" | "ghoul" | "orcSpearman" | "orcWarrior" | "hunter"
+  | "warWolf" | "ghoul" | "orcArcher" | "orcWarrior" | "hunter"
   | "minotaurArcher" | "orcShaman" | "mummy" | "orcBerserker"
   | "minotaurGuard" | "minotaurMage"
   // the boss: one lair at the bottom of the Bone Caverns, long respawn

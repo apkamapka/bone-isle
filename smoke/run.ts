@@ -549,9 +549,9 @@ async function main(): Promise<void> {
       for (let t = 0; t < 240; t++) updateMonsters(arena, 1 / 60, near, (_m, r) => { if (r) nearShots++; });
       ok(nearShots >= 1, "…but wakes and fires once the target is within aggro");
     }
-    // the orc spearman drops bone arrows (spears were cut per design review)
-    const spearman = MONSTER_DEFS.orcSpearman;
-    ok(spearman.loot.some((e) => e.kind === "boneArrow"), "orc spearman drops bone arrows");
+    // the orc archer drops bone arrows (he carries a crossbow, not a spear)
+    const archer = MONSTER_DEFS.orcArcher;
+    ok(archer.loot.some((e) => e.kind === "boneArrow"), "orc archer drops bone arrows");
     ok(!MONSTER_KINDS.some((k) => MONSTER_DEFS[k].loot.some((e) => (e.kind as string) === "spear")),
       "no monster drops a 'spear' item (it does not exist)");
     // the dragon: boss stats, long respawn, exclusive gear drops
@@ -694,7 +694,7 @@ async function main(): Promise<void> {
       ok(dw.monsters.filter((m) => m.camp).every((m) => m.hr !== undefined && m.hx !== undefined),
         "camp dwellers carry a home leash");
       ok(inCamp("goblin").some((m) => m.kind === "goblin")
-        && inCamp("orcfort").some((m) => m.kind === "orcSpearman")
+        && inCamp("orcfort").some((m) => m.kind === "orcArcher")
         && inCamp("grave").some((m) => m.kind === "ghoul")
         && inCamp("bastion").some((m) => m.kind === "minotaur"), "garrisons match their settlement themes");
       // the forest between camps belongs to the wolves — free roamers
@@ -1685,6 +1685,80 @@ async function main(): Promise<void> {
       "…and the shield-bearer is wider, not taller-and-thinner");
   }
 
+  console.log("The skeleton, the goblin, the ghoul and the five orc ranks walk too:");
+  {
+    const fs = await import("node:fs");
+    const { mobFrame } = await import("../src/gfx/mobSheet.ts");
+    const sheetSrc = fs.readFileSync(
+      new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+
+    const png = (file: string): [number, number] => {
+      const b = fs.readFileSync(new URL(`../public/${file}`, import.meta.url));
+      return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    };
+
+    const WALKERS: [string, string][] = [
+      ["skeleton", "mob-skeleton-walk.png"],
+      ["goblin", "mob-goblin-walk.png"],
+      ["ghoul", "mob-ghoul-walk.png"],
+      ["orc", "mob-orc-walk.png"],
+      ["orcWarrior", "mob-orc-warrior-walk.png"],
+      ["orcBerserker", "mob-orc-berserker-walk.png"],
+      ["orcArcher", "mob-orc-archer-walk.png"],
+      ["orcShaman", "mob-orc-shaman-walk.png"],
+    ];
+
+    for (const [kind, file] of WALKERS) {
+      ok(sheetSrc.includes(`${kind}: "./${file}"`), `${kind} has a walk sheet registered`);
+      ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
+        `…and ${file} is actually shipped`);
+      const [w, h] = png(file);
+      ok(w % 9 === 0 && h % 4 === 0,
+        `…laid out as the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(credits.includes(file), `…and ${file} is credited by filename`);
+      ok(mobFrame(kind as never, "down", true, 0) === null,
+        "…while headless it still falls back to the baked sprite");
+    }
+
+    // Every rank shares one base and one head; only the gear differs, and the
+    // gear is what the crop width is measuring. Bare orc sets the floor.
+    const bare = png("mob-orc-walk.png")[0] / 9;
+    ok(bare === 32, "the bare orc is a one-tile build like the bandit");
+    for (const f of ["mob-orc-warrior-walk.png", "mob-orc-berserker-walk.png",
+      "mob-orc-archer-walk.png", "mob-orc-shaman-walk.png"]) {
+      ok(png(f)[0] / 9 > bare, `${f} is wider than the bare orc — its gear sticks out`);
+    }
+    ok(png("mob-orc-berserker-walk.png")[0] / 9 === 52,
+      "the berserker's mace makes him the widest sprite in the game");
+
+    ok(credits.includes("Orc_male_dark_green"),
+      "the shared orc head names the generator recipe");
+    ok(credits.includes("Skeleton_skeleton") && credits.includes("Goblin_pale_green")
+      && credits.includes("Zombie_zombie"),
+      "…and so do the three loners");
+  }
+
+  console.log("The orc spearman is an archer now:");
+  {
+    const fs = await import("node:fs");
+    const { MONSTER_DEFS, MONSTER_KINDS } = await import("../src/entities/monsters.ts");
+
+    ok(MONSTER_KINDS.includes("orcArcher" as never), "orcArcher is a live monster kind");
+    ok(!(MONSTER_KINDS as readonly string[]).includes("orcSpearman"),
+      "…and the old spearman name is gone from the bestiary");
+
+    // He was always shooting and always dropping arrows; only the label lied.
+    ok(MONSTER_DEFS.orcArcher.ranged !== undefined, "he is still a ranged attacker");
+
+    // The rename has to reach the camp rosters too, or the orc fort spawns
+    // nothing where the spearmen used to stand.
+    for (const f of ["../src/game.ts", "../src/gfx/sprites.ts", "../src/world/types.ts"]) {
+      const src = fs.readFileSync(new URL(f, import.meta.url), "utf8");
+      ok(!src.includes("orcSpearman"), `${f} carries no leftover spearman`);
+    }
+  }
+
   console.log("Bodies on the ground:");
   {
     const fs = await import("node:fs");
@@ -1730,6 +1804,28 @@ async function main(): Promise<void> {
     ok(sheetSrc.includes('bandit: "./mob-bandit-dead.png"'),
       "…and registered, so the outlaws stop leaving bones");
     ok(credits.includes("mob-bandit-dead.png"), "…and credited by filename");
+
+    // Three loners keep their own bodies; the five orc ranks share the bare
+    // orc's, for the same reason the minotaurs share theirs.
+    for (const [kind, file] of [
+      ["skeleton", "mob-skeleton-dead.png"],
+      ["goblin", "mob-goblin-dead.png"],
+      ["ghoul", "mob-ghoul-dead.png"],
+      ["orc", "mob-orc-dead.png"],
+    ] as [string, string][]) {
+      ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
+        `the ${kind} body is shipped`);
+      ok(sheetSrc.includes(`${kind}: "./${file}"`), `…and registered for the ${kind}`);
+      ok(credits.includes(file), `…and credited by filename`);
+    }
+    for (const k of ["orc", "orcWarrior", "orcBerserker", "orcArcher", "orcShaman"]) {
+      ok(sheetSrc.includes(`${k}: "./mob-orc-dead.png"`),
+        `${k} leaves a bare orc body, not his gear`);
+    }
+    for (const f of ["warrior", "berserker", "archer", "shaman"]) {
+      ok(!fs.existsSync(new URL(`../public/mob-orc-${f}-dead.png`, import.meta.url)),
+        `no separate ${f} body — the ranks share one corpse`);
+    }
 
     ok(corpseSprite("spider") === null, "a creature with no body art gets none");
     ok(corpseSprite("minotaur") === null, "headless even a minotaur falls back…");

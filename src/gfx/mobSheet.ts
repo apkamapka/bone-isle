@@ -41,6 +41,14 @@ const WALK_FPS = 8;
  */
 const SHEET_SRC: Record<string, string> = {
   bandit: "./mob-bandit-walk.png",
+  skeleton: "./mob-skeleton-walk.png",
+  goblin: "./mob-goblin-walk.png",
+  ghoul: "./mob-ghoul-walk.png",
+  orc: "./mob-orc-walk.png",
+  orcWarrior: "./mob-orc-warrior-walk.png",
+  orcBerserker: "./mob-orc-berserker-walk.png",
+  orcArcher: "./mob-orc-archer-walk.png",
+  orcShaman: "./mob-orc-shaman-walk.png",
   minotaur: "./mob-minotaur-walk.png",
   minotaurArcher: "./mob-minotaur-archer-walk.png",
   minotaurGuard: "./mob-minotaur-guard-walk.png",
@@ -65,9 +73,21 @@ const sheets: Record<string, Cut | undefined> = {};
  * death frames leave the crossbow, shield and staff lying beside the corpse,
  * which reads as loot you cannot pick up — a promise the loot table does not
  * keep. Stripped of gear the ranks are the same animal anyway.
+ *
+ * The five orc ranks share the plain orc's body for the same reason, and the
+ * saving is larger there: the archer's dropped crossbow alone stretches his
+ * death frame to 60px, half again the width of the bare corpse.
  */
 const CORPSE_SRC: Record<string, string> = {
   bandit: "./mob-bandit-dead.png",
+  skeleton: "./mob-skeleton-dead.png",
+  goblin: "./mob-goblin-dead.png",
+  ghoul: "./mob-ghoul-dead.png",
+  orc: "./mob-orc-dead.png",
+  orcWarrior: "./mob-orc-dead.png",
+  orcBerserker: "./mob-orc-dead.png",
+  orcArcher: "./mob-orc-dead.png",
+  orcShaman: "./mob-orc-dead.png",
   minotaur: "./mob-minotaur-dead.png",
   minotaurArcher: "./mob-minotaur-dead.png",
   minotaurGuard: "./mob-minotaur-dead.png",
