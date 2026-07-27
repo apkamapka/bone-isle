@@ -3,10 +3,10 @@ import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HO
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight, portalCovers } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
-import { mobFrame, npcFrame } from "./gfx/mobSheet.ts";
+import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, itemSprite, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
-import { loadHeroSheet, heroSprite } from "./gfx/heroSheet.ts";
+import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnAtPost } from "./entities/monsters.ts";
@@ -2171,14 +2171,18 @@ function render(): void {
       }
     } });
   }
-  // corpses
+  // corpses — real bodies where the art exists, the bone pile everywhere else.
+  // The two anchor differently: a drawn body's last row IS the ground line, so
+  // it sits flush at c.y, while the bone pile was authored to be nudged down.
   for (const c of world.corpses) {
     if (!inView(c.x, c.y)) continue;
     const blink = c.t < 10 ? (Math.sin(waveT * 8) > 0 ? 1 : 0.4) : 1;
+    const body = c.name === "your body" ? heroCorpse() : corpseSprite(c.name);
     drawList.push({ y: c.y, fn: () => {
       vctx.globalAlpha = blink;
       drawShadow(c.x, c.y);
-      drawSprite(SPR.corpse, c.x, c.y + 8);
+      if (body) drawSprite(body, c.x, c.y);
+      else drawSprite(SPR.corpse, c.x, c.y + 8);
       vctx.globalAlpha = 1;
     } });
   }
