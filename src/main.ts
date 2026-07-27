@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
@@ -488,9 +488,13 @@ function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }): v
   beep(600, 0.12, "sine", 0.05, -220);
 }
 
-/** The portal (if any) whose swirl covers world point (x,y). */
+/** The portal (if any) whose swirl covers world point (x,y). A dormant pad is
+ *  not a portal for this purpose: it refuses to carry the player, so it must
+ *  not swallow a thrown stack either — the goods would land on the far side of
+ *  a door that doesn't open. Items simply drop on top of it instead. */
 function portalAt(x: number, y: number): { dest: WorldKey } | null {
   for (const pt of cw().portals) {
+    if (pt.inactive) continue;
     if (dist(x, y, pt.x, pt.y) < 24) return pt;
   }
   return null;
@@ -1840,6 +1844,9 @@ function resolveTarget(): void {
   } else if (t.kind === "npc") {
     if (t.n.key === "taskmaster") { openWindow("tasks"); }
     else if (t.n.key === "tailor") { openWindow("wardrobe"); }
+    // Someone with neither a shop nor a panel of their own has nothing to open
+    // yet — say so rather than putting an empty window on screen.
+    else if (!SHOPS[t.n.key]) { flash(`${t.n.name} has nothing to say… yet`, "#b9a6d8"); }
     else { ui.npc = t.n; ui.shopTab = "buy"; openWindow("shop"); }
     P.target = null;
   } else if (t.kind === "structure") {
@@ -2058,13 +2065,13 @@ function render(): void {
     for (let r = 16; r > 0; r -= 4) {
       // a dormant pad smoulders ash-grey and barely breathes; a live portal
       // pulses violet — the state reads at a glance from across the hall
-      const a = dormant ? 0.10 + 0.04 * Math.sin(waveT * 1.5 + r) : 0.15 + 0.12 * Math.sin(waveT * 4 + r);
-      vctx.fillStyle = dormant ? `rgba(140,140,148,${a})` : `rgba(150,110,230,${a})`;
+      const a = dormant ? 0.12 + 0.06 * Math.sin(waveT * 1.5 + r) : 0.15 + 0.12 * Math.sin(waveT * 4 + r);
+      vctx.fillStyle = `rgba(${dormant ? PORTAL_DORMANT_HALO : PORTAL_LIVE_HALO},${a})`;
       vctx.beginPath();
       vctx.ellipse(sx, sy, r, r * 0.6, 0, 0, 6.2832);
       vctx.fill();
     }
-    vctx.fillStyle = dormant ? "#8d939a" : "#c9a6ff";
+    vctx.fillStyle = dormant ? PORTAL_DORMANT_CORE : PORTAL_LIVE_CORE;
     vctx.fillRect(Math.round(sx) - 2, Math.round(sy - 8 + (dormant ? 0 : Math.sin(waveT * 5) * 4)), 4, 16);
   }
 

@@ -862,7 +862,7 @@ async function main(): Promise<void> {
     const town = makeHandmadeWorld(TOWN_SPEC);
     const tailor = town.npcs.find((n) => n.key === "tailor");
     ok(!!tailor, "Vesper is placed on the town map");
-    ok(town.npcs.length === 5, "all five town NPCs parse from the grid");
+    ok(town.npcs.length === 6, "all six town NPCs parse from the grid");
     const { SHOPS } = await import("../src/entities/npcs.ts");
     ok(!SHOPS.tailor, "the tailor runs the wardrobe, not a shop");
     ok(!!SHOPS.smith?.entries.find((e) => e.kind === "trainingArrow" && e.buy === 1 && e.sell === 0),
@@ -879,14 +879,15 @@ async function main(): Promise<void> {
     // untouched and is still checked in full below; what the town must prove
     // meanwhile is that its one gate is walkable-to from every townsperson.
     const town = makeHandmadeWorld(TOWN_SPEC);
-    ok(town.portals.every((p) => p.dest === "home"),
-      "the redrawn town carries only the Home Isle gate for now");
+    ok(town.portals.length === 2 && town.portals.some((p) => p.dest === "home")
+      && town.portals.some((p) => p.dest === "cellar"),
+      "the redrawn town carries the Home Isle gate and the cellar trapdoor");
     const plaza = town.portals.find((p) => p.dest === "home")!;
     for (const n of town.npcs) {
       const road = findPath(town, toTile(n.x), toTile(n.y), toTile(plaza.x), toTile(plaza.y));
       ok(road.length > 0, `${n.name} can walk to the gate (${road.length} steps)`);
     }
-    ok(town.npcs.length === 5, "the redraw shifted no NPC off the map");
+    ok(town.npcs.length === 6, "the redraw shifted no NPC off the map");
 
     const s = makeHandmadeWorld(SANCTUM_SPEC);
     ok(s.gates.length === 10, "five doorways, two gate tiles each");
@@ -1499,10 +1500,11 @@ async function main(): Promise<void> {
       "the town is split: a haven down to the fence on row 25, hunting ground below");
     ok(town.trees.length === 114 && town.rocks.length === 48,
       "every authored tree and rock came across, duplicates dropped");
-    ok(town.npcs.length === 5, "all five townsfolk are present");
-    ok(new Set(town.npcs.map((n) => n.name)).size === 5, "…and none is a duplicate");
-    ok(town.portals.length === 1 && town.portals[0].dest === "home",
-      "one gate, back to Home Isle");
+    ok(town.npcs.length === 6, "all six townsfolk are present");
+    ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
+    ok(town.portals.length === 2 && town.portals.some((p) => p.dest === "home")
+      && town.portals.some((p) => p.dest === "cellar"),
+      "two gates: Home Isle and the Time Sage's cellar");
     // the split has to hold in practice, not just in the flag
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
     ok(town.mobPosts?.length === 16, "the 16 authored bandit posts came across");
@@ -1657,8 +1659,9 @@ async function main(): Promise<void> {
     const town = buildWorlds(WORLD_SEED).town;
     const smith = town.npcs.find((n) => n.key === "smith")!;
     ok(smith !== undefined, "the smith is on the town map");
-    ok(town.npcs.length === 5 && town.npcs.every((n) => n.roam === 1),
-      "all five townsfolk walk a 3x3 beat");
+    const shopkeepers = town.npcs.filter((n) => n.key !== "timesage");
+    ok(shopkeepers.length === 5 && shopkeepers.every((n) => n.roam === 1),
+      "the five shopkeepers walk a 3x3 beat");
     ok(town.npcs.every((n) => n.dir === "down"),
       "everyone spawns facing camera, so the first draw has a valid row");
     ok(town.npcs.every((n) => n.hx === n.tx && n.hy === n.ty),
@@ -1678,14 +1681,19 @@ async function main(): Promise<void> {
     // Every square any of them can reach must be standable, or they get wedged
     // against a wall on one side of the beat.
     let unwalkable = "";
+    let beatTiles = 0;
     for (const n of town.npcs) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
+      const ry = n.roamY ?? n.roam;
+      for (let dy = -ry; dy <= ry; dy++) {
+        for (let dx = -n.roam; dx <= n.roam; dx++) {
+          beatTiles++;
           if (town.solid[n.hy + dy][n.hx + dx]) unwalkable = n.key;
         }
       }
     }
-    ok(unwalkable === "", `every beat is 9 walkable tiles${unwalkable && " — " + unwalkable}`);
+    ok(unwalkable === "", `every beat is walkable end to end${unwalkable && " — " + unwalkable}`);
+    // 5 shopkeepers x 9 tiles + the sage's 9-tile line
+    ok(beatTiles === 54, `every beat covers the tiles it should (${beatTiles})`);
 
     // Half a minute of pacing. Nobody may leave their beat on any single tick —
     // not merely end up back inside it — and nobody may share a square.
@@ -1697,7 +1705,8 @@ async function main(): Promise<void> {
     for (let i = 0; i < 1800; i++) {
       updateNpcs(town, 1 / 60, -9999, -9999);
       for (const h of homes) {
-        if (chebTiles(h.n.tx, h.n.ty, h.x, h.y) > 1) strayed = h.n.key;
+        if (Math.abs(h.n.tx - h.x) > h.n.roam
+          || Math.abs(h.n.ty - h.y) > (h.n.roamY ?? h.n.roam)) strayed = h.n.key;
         if (h.n.tx !== h.x || h.n.ty !== h.y) stepped.add(h.n.key);
         if (Math.abs(h.n.x - (h.n.tx * TILE + TILE / 2)) > TILE) offCentre = true;
       }
@@ -1706,7 +1715,7 @@ async function main(): Promise<void> {
       }
     }
     ok(strayed === "", `thirty seconds of pacing never leaves the beat${strayed && " — " + strayed}`);
-    ok(stepped.size === 5, "…and all five actually move");
+    ok(stepped.size === 6, "…and all six actually move");
     ok(!offCentre, "…and no render position runs away from its tile");
     ok(!collided, "…and no two townsfolk ever share a square");
 
@@ -1730,13 +1739,33 @@ async function main(): Promise<void> {
     ok(smith.dir === "left", "a shallow angle still reads as sideways");
 
     // He must not walk onto the player, so a free tile stays a real one.
+    // The blocked square has to be one the smith is NOT already standing on:
+    // tryStep claims the destination the instant it is chosen, so `smith.tx/ty`
+    // is either where he stands or where he is already committed to. Parking
+    // the player on his home tile (the old test) passed or failed purely on
+    // where the previous loop happened to leave him.
     smith.talk = 0;
-    const blockX = smith.hx * TILE + TILE / 2;
-    const blockY = smith.hy * TILE + TILE / 2;
+    let blockTx = smith.hx;
+    let blockTy = smith.hy;
+    search: for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const tx = smith.hx + dx;
+        const ty = smith.hy + dy;
+        if (tx === smith.tx && ty === smith.ty) continue;
+        if (town.solid[ty][tx]) continue;
+        blockTx = tx;
+        blockTy = ty;
+        break search;
+      }
+    }
+    ok(!(blockTx === smith.tx && blockTy === smith.ty),
+      "the blocked square is one he has not already claimed");
+    const blockX = blockTx * TILE + TILE / 2;
+    const blockY = blockTy * TILE + TILE / 2;
     let landedOnPlayer = false;
     for (let i = 0; i < 1800; i++) {
       updateNpcs(town, 1 / 60, blockX, blockY);
-      if (smith.tx === smith.hx && smith.ty === smith.hy) landedOnPlayer = true;
+      if (smith.tx === blockTx && smith.ty === blockTy) landedOnPlayer = true;
     }
     ok(!landedOnPlayer, "he never claims the square the player is standing on");
 
@@ -1759,6 +1788,129 @@ async function main(): Promise<void> {
       ok(sheetSrc.includes(`"npc:${k}": "./npc-${k}.png"`),
         `${k} has a walk sheet registered`);
     }
+  }
+
+  console.log("Chronos the Time Sage & his cellar:");
+  {
+    const { makeHandmadeWorld, TOWN_SPEC, CELLAR_SPEC } = await import("../src/world/handmade.ts");
+    const { updateNpcs } = await import("../src/entities/npcs.ts");
+    const { buildWorlds } = await import("../src/game.ts");
+    const { WORLD_SEED, TILE: T } = await import("../src/config.ts");
+
+    /* --- the sage in town: the tile the printscreen showed, pacing one row --- */
+    const town = makeHandmadeWorld(TOWN_SPEC);
+    const sage = town.npcs.find((n) => n.key === "timesage")!;
+    ok(!!sage, "Chronos stands in Bonetown");
+    ok(sage.name === "Chronos the Time Sage", `named in English (${sage.name})`);
+    ok(sage.tx === 16 && sage.ty === 15,
+      `on the tile the printscreen showed (${sage.tx},${sage.ty})`);
+    ok(sage.roam === 4 && sage.roamY === 0, "four tiles east and west, none north or south");
+    for (let dx = -4; dx <= 4; dx++) {
+      ok(!town.solid[sage.hy][sage.hx + dx], `his beat is clear at +${dx}`);
+    }
+
+    // …and he actually walks it: half a minute of pacing must reach both ends
+    // of the line and never step off the row.
+    let minTx = sage.tx;
+    let maxTx = sage.tx;
+    let leftRow = false;
+    for (let i = 0; i < 4000; i++) {
+      updateNpcs(town, 1 / 60, -9999, -9999);
+      if (sage.ty !== sage.hy) leftRow = true;
+      minTx = Math.min(minTx, sage.tx);
+      maxTx = Math.max(maxTx, sage.tx);
+    }
+    ok(!leftRow, "he never leaves his row");
+    ok(minTx >= sage.hx - 4 && maxTx <= sage.hx + 4,
+      `and never overshoots the four tiles (${minTx}..${maxTx})`);
+    ok(maxTx > minTx, "he does pace — this is not a rooted NPC by accident");
+
+    /* --- the trapdoor where the stack was dropped --- */
+    const down = town.portals.find((p) => p.dest === "cellar")!;
+    ok(!!down, "the town has a way down to the cellar");
+    ok(Math.floor(down.x / T) === 16 && Math.floor(down.y / T) === 8,
+      "…on tile (16,8), where the stack was left on the ground");
+    ok(down.style === "ladderDown", "…drawn as stairs down, not a swirl");
+
+    /* --- the cellar itself --- */
+    const cellar = makeHandmadeWorld(CELLAR_SPEC);
+    ok(cellar.w === 20 && cellar.h === 40, "the cellar is the 20x40 grid from Tiled");
+    ok(cellar.safe, "nothing hostile lives down there yet");
+
+    // the author's rule: the outer wall is the only solid thing
+    let strayWall = "";
+    for (let y = 0; y < cellar.h; y++) {
+      for (let x = 0; x < cellar.w; x++) {
+        const edge = x === 0 || y === 0 || x === cellar.w - 1 || y === cellar.h - 1;
+        if (cellar.solid[y][x] !== edge) strayWall = `${x},${y}`;
+      }
+    }
+    ok(strayWall === "", `only the outer wall blocks${strayWall && " — " + strayWall}`);
+
+    const up = cellar.portals.find((p) => p.dest === "town")!;
+    ok(!!up && up.style === "ladderUp", "the stairs back to Bonetown are down there");
+    ok(Math.floor(up.x / T) === 10 && Math.floor(up.y / T) === 27,
+      "…on the islet between the four pools, as pinned");
+
+    const pads = cellar.portals.filter((p) => p.inactive);
+    ok(pads.length === 14, `fourteen pads, all dormant for now (${pads.length})`);
+    ok(cellar.portals.length === 15, "…and nothing else that teleports");
+    const named = ["Orc Warrens", "Troll Caves", "Minotaur Halls", "Undead Crypt"];
+    for (const n of named) {
+      ok(pads.some((p) => p.label.startsWith(n)), `${n} has its own pad`);
+    }
+    ok(pads.filter((p) => p.label.startsWith("Sealed Rift")).length === 10,
+      "…plus the ten the sage has not named yet");
+
+    // every pad has to be standable, or the pad you can see is a pad you
+    // can never use once its hunting ground exists
+    let padBlocked = "";
+    for (const p of pads) {
+      const tx = Math.floor(p.x / T);
+      const ty = Math.floor(p.y / T);
+      if (cellar.solid[ty][tx]) padBlocked = p.label;
+    }
+    ok(padBlocked === "", `every pad is walkable${padBlocked && " — " + padBlocked}`);
+
+    const deep = cellar.npcs.find((n) => n.key === "timesage")!;
+    ok(!!deep, "the sage is in his cellar too");
+    ok(deep.tx === 10 && deep.ty === 9, `at the heart of the great pool (${deep.tx},${deep.ty})`);
+    ok(deep.roam === 0, "…and this one never moves");
+    const before = { tx: deep.tx, ty: deep.ty };
+    for (let i = 0; i < 1800; i++) updateNpcs(cellar, 1 / 60, -9999, -9999);
+    ok(deep.tx === before.tx && deep.ty === before.ty, "half a minute later he is still there");
+
+    /* --- and it is wired into the real game, not just the spec --- */
+    const worlds = buildWorlds(WORLD_SEED);
+    ok(!!worlds.cellar && worlds.cellar.name === "Time Sage's Cellar",
+      "buildWorlds actually creates the cellar");
+    const back = worlds.cellar.portals.find((p) => p.dest === "town");
+    const there = worlds.town.portals.find((p) => p.dest === "cellar");
+    ok(!!back && !!there, "the round trip is complete in both directions");
+
+    const fs3 = await import("node:fs");
+    const terrain = fs3.readFileSync(
+      new URL("../src/world/terrainImage.ts", import.meta.url), "utf8");
+    ok(terrain.includes('cellar: "./cellar-terrain.png"'), "the painted floor is registered");
+    ok(fs3.existsSync(new URL("../public/cellar-terrain.png", import.meta.url)),
+      "…and the file is actually shipped");
+    ok(fs3.existsSync(new URL("../public/npc-timesage.png", import.meta.url)),
+      "the sage's walk sheet is shipped too");
+    const sheetSrc2 = fs3.readFileSync(
+      new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    ok(sheetSrc2.includes('"npc:timesage": "./npc-timesage.png"'),
+      "…and registered, so he turns instead of sliding");
+    const cr2 = fs3.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    ok(cr2.includes("npc-timesage.png"), "his sheet is credited by filename");
+    ok(cr2.includes("Celestial_Wizard_Moon_Hat_slate"),
+      "…with the generator recipe that reproduces him");
+
+    /* --- dormant pads read red now, live ones violet --- */
+    const cfg = fs3.readFileSync(new URL("../src/config.ts", import.meta.url), "utf8");
+    ok(/PORTAL_DORMANT_CORE = "#e0574c"/.test(cfg), "a dormant pad burns red");
+    ok(/PORTAL_LIVE_CORE = "#c9a6ff"/.test(cfg), "…and a live one still breathes violet");
+    const mainSrc = fs3.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(!/rgba\(140,140,148/.test(mainSrc), "the old ash-grey pad is gone from the renderer");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

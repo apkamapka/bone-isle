@@ -39,6 +39,14 @@ interface PortalDef {
   floor?: Tile;
 }
 
+/** A townsperson placed on a specific map, with that map's beat. */
+export interface NpcPlacement {
+  key: NpcKey;
+  roam?: number;
+  roamY?: number;
+  floor?: Tile;
+}
+
 export interface HandmadeSpec {
   key: WorldKey;
   name: string;
@@ -47,8 +55,10 @@ export interface HandmadeSpec {
   rows: readonly string[];
   /** Glyph → portal destination. */
   portals: Readonly<Record<string, PortalDef>>;
-  /** Glyph → town NPC key. */
-  npcs?: Readonly<Record<string, NpcKey>>;
+  /** Glyph → town NPC key, or the same key with this map's own beat: `roam`
+   *  tiles east/west, `roamY` north/south (both default to the roster's), and
+   *  `floor` for the terrain painted underneath (default grass, as before). */
+  npcs?: Readonly<Record<string, NpcKey | NpcPlacement>>;
   /** Glyph → required level for a sealed doorway (rendered as a portcullis,
    *  solid until the player reaches the level; floor beneath is cave). */
   gates?: Readonly<Record<string, number>>;
@@ -187,14 +197,20 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
               ...(pdef.inactive ? { inactive: true } : {}) });
             break;
           }
-          const nkey = spec.npcs?.[ch];
-          if (nkey) {
-            const meta = NPC_BY_KEY.get(nkey);
+          const nspec = spec.npcs?.[ch];
+          if (nspec) {
+            const place: NpcPlacement = typeof nspec === "string" ? { key: nspec } : nspec;
+            const meta = NPC_BY_KEY.get(place.key);
             if (meta) {
+              if (place.floor !== undefined) {
+                tile[y][x] = place.floor;
+                solid[y][x] = false;
+              }
               w.npcs.push({
-                key: nkey, name: meta.name, spr: meta.spr, bob: (x + y) % 3,
+                key: place.key, name: meta.name, spr: meta.spr, bob: (x + y) % 3,
                 x: cx, y: cy, tx: x, ty: y,
-                hx: x, hy: y, roam: meta.roam,
+                hx: x, hy: y, roam: place.roam ?? meta.roam,
+                ...(place.roamY !== undefined ? { roamY: place.roamY } : {}),
                 dir: "down", rest: npcRest(), phase: 0, moving: false, talk: 0,
               });
             }
@@ -275,14 +291,14 @@ const TOWN_ROWS: readonly string[] = [
   "~~~~~~~~~~~~~........~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
   "~~~~~~~~~~.....::::.T....~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
   "~~~~~~~~......::::::......~~~~~~~~~~~~.............~~~~~~~~~",
-  "~~~~~~~....T..::::::.......~~~~~~~.......R...T..R....~~~~~~~",
+  "~~~~~~~....T..::C:::.......~~~~~~~.......R...T..R....~~~~~~~",
   "~~~~~~~.......::::::...T.....~~~......T.:::::::::..T..~~~~~~",
   "~~~~~~~....R...::::....................:::::::::::....~~~~~~",
   "~~~~~~.........::::R....R.......T.....:::::::::::::.R.~~~~~~",
   "~~~~~~~.T.::::::::::::::.............:::s:::::::h:::...~~~~~",
   "~~~~~~~...::::::::::::::...T..R....T.:::::::::::::::.T~~~~~~",
   "~~~~~~....::::::::::::::::::::::::::::::::::::::::::..~~~~~~",
-  "~~~~~~~..R::::::::::::::::::::::::::::::::::P:::::::...~~~~~",
+  "~~~~~~~..R::::::z:::::::::::::::::::::::::::P:::::::...~~~~~",
   "~~~~~~~~..::::::::::::::::::::::::::::::::::::::::::..~~~~~~",
   "~~~~~~~~..::::::::::::::::::::::::::::::::::::::::::T..~~~~~",
   "~~~~~~~..T::::::::::::::T............:::::::::::e:::..~~~~~~",
@@ -343,8 +359,15 @@ export const TOWN_SPEC: HandmadeSpec = {
   // Deep Wildlands and Sanctum doors come back as those maps are redrawn.
   portals: {
     P: { dest: "home", label: "to Home Isle" },
+    // the trapdoor on the northern dirt tongue, down to the Time Sage
+    C: { dest: "cellar", label: "down to the Time Sage", style: "ladderDown", floor: Tile.Dirt },
   },
-  npcs: { s: "smith", h: "herbalist", e: "elder", g: "taskmaster", t: "tailor" },
+  npcs: {
+    s: "smith", h: "herbalist", e: "elder", g: "taskmaster", t: "tailor",
+    // Chronos paces the western plaza: four tiles east, four west, one row —
+    // never north or south, so he stays on the line the map put him on.
+    z: { key: "timesage", roam: 4, roamY: 0, floor: Tile.Dirt },
+  },
   monsters: { b: "bandit" },
 };
 
@@ -397,4 +420,90 @@ export const SANCTUM_SPEC: HandmadeSpec = {
     e: dormant("Dormant Portal V"),
   },
   gates: { "1": 10, "2": 15, "3": 20, "4": 25, "5": 30 },
+};
+
+/* ------------------------------------------------------------------ */
+/*  THE TIME SAGE'S CELLAR — under the northern dirt tongue in town.   */
+/*  Painted in Tiled (public/cellar-terrain.png); this grid carries    */
+/*  only collision, and the author's rule is simple: the outer wall is */
+/*  the only solid thing. The pools are ankle-deep and the black spurs */
+/*  are floor decoration, so the whole hall is walkable — which it has */
+/*  to be, since the way up sits on the islet between the four pools.  */
+/*                                                                     */
+/*  Fourteen pads carry an X in the artwork; each is a 2x2 block and   */
+/*  the portal glyph sits on its top-left tile. All fourteen are       */
+/*  dormant for now — the hunting grounds behind them come later.      */
+/* ------------------------------------------------------------------ */
+const CELLAR_ROWS: readonly string[] = [
+  "####################",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==1===2===3===4===#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==5===========6===#",
+  "#=========Z========#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==7===========8===#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==9===========0===#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==a===========b===#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#=========U========#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==c===========d===#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "#==================#",
+  "####################",
+];
+
+/** A cellar pad that hums but takes nobody anywhere yet. */
+const sealed = (label: string) =>
+  ({ dest: "cellar", label, inactive: true, floor: Tile.Cave } as const);
+
+export const CELLAR_SPEC: HandmadeSpec = {
+  key: "cellar",
+  name: "Time Sage's Cellar",
+  safe: true,
+  rows: CELLAR_ROWS,
+  portals: {
+    U: { dest: "town", label: "up to Bonetown", style: "ladderUp", floor: Tile.Cave },
+    // the four that will open first, once their hunting grounds exist
+    a: sealed("Minotaur Halls — sealed"),
+    b: sealed("Undead Crypt — sealed"),
+    c: sealed("Orc Warrens — sealed"),
+    d: sealed("Troll Caves — sealed"),
+    // and ten more the sage has not named yet
+    "1": sealed("Sealed Rift I"),
+    "2": sealed("Sealed Rift II"),
+    "3": sealed("Sealed Rift III"),
+    "4": sealed("Sealed Rift IV"),
+    "5": sealed("Sealed Rift V"),
+    "6": sealed("Sealed Rift VI"),
+    "7": sealed("Sealed Rift VII"),
+    "8": sealed("Sealed Rift VIII"),
+    "9": sealed("Sealed Rift IX"),
+    "0": sealed("Sealed Rift X"),
+  },
+  npcs: { Z: { key: "timesage", roam: 0, floor: Tile.Cave } },
 };

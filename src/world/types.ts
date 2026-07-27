@@ -21,6 +21,9 @@ export type WorldKey = "home" | "town" | "wild" | "deepwild" | "cave1" | "cave2"
   // The Bone Sanctum — the crypt beneath the western temple; its level-gated
   // teleport chambers will link to quest realms in a future stage.
   | "sanctum"
+  // The Time Sage's cellar under Bonetown: fourteen dormant pads that will
+  // become the hunting grounds (orcs, trolls, minotaurs, undead) later on.
+  | "cellar"
   // Deep Wildlands camp lairs — each settlement descends into its own dungeon
   // (one to three floors; deeper floors are larger and will carry harder tiers)
   | "warren1"
@@ -218,7 +221,7 @@ export interface Corpse {
 }
 
 /** Town NPC kinds. */
-export type NpcKey = "smith" | "herbalist" | "elder" | "taskmaster" | "tailor";
+export type NpcKey = "smith" | "herbalist" | "elder" | "taskmaster" | "tailor" | "timesage";
 
 /** Facing of a townsperson — the LPC sheet's row order. */
 export type NpcDir = "up" | "left" | "down" | "right";
@@ -241,8 +244,11 @@ export interface Npc {
   /** The tile he was authored on — the centre of his beat. */
   hx: number;
   hy: number;
-  /** How far he may stray from home, in tiles (Chebyshev). 0 = rooted. */
+  /** How far he may stray from home along X, in tiles. 0 = rooted. */
   roam: number;
+  /** Same along Y. Absent means "as wide as `roam`" — i.e. the classic square
+   *  beat. Set to 0 for someone who only paces left and right on one row. */
+  roamY?: number;
   dir: NpcDir;
   /** Seconds of standing about before the next step is considered. */
   rest: number;

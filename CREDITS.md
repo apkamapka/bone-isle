@@ -180,9 +180,36 @@ listed above.
 are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
+## Chronos the Time Sage
+
+`public/npc-timesage.png` comes from the same **Universal LPC Spritesheet
+Character Generator** under the same licences, packed the same way: walk rows
+8-11 only, repacked into a 9x4 grid, cropped to one 38x58 rectangle shared by
+every frame. Column 0 of each row is the standing pose. He appears twice in the
+game — pacing the western plaza in Bonetown and rooted in his cellar — from
+this single sheet.
+
+Reproducible character configuration:
+
+- Chronos the Time Sage —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_Elderly_light&expression=Neutral_light&beard=Winter_Beard_white&mustache=French_Mustache_white&hair=Long_messy2_white&hat=Celestial_Wizard_Moon_Hat_slate&earrings=Moon_earrings_steel&cape=Tattered_all.lpcr.ice&belt=Robe_Belt_white&clothes=Cardigan_all.lpcr.ice&legs=Long_Pants_all.lpcr.ice&shoes=Sandals_all.lpcr.ice&weapon=Diamond_staff_silver&eyes=Eye_Color_purple>
+
+He adds the elderly-male head, winter beard, French moustache, celestial wizard
+hat, moon earrings, tattered cape, robe belt, cardigan and diamond staff layers
+of the ULPC project to the collections already listed above.
+
+> **TODO before release:** download "Credits (CSV)" from the generator for this
+> configuration and paste the per-layer author list here. The URL reproduces the
+> character, but a URL is not an attribution.
+
+**ShareAlike:** this file is a derivative work of CC-BY-SA 3.0 artwork and is
+itself published under **CC-BY-SA 3.0**. It must stay publicly available on
+those terms even if this repository is later made private.
+
 ## Terrain and props
 
-`public/home-terrain.png` and `public/town-terrain.png` are exported from Tiled
+`public/home-terrain.png`, `public/town-terrain.png` and
+`public/cellar-terrain.png` are exported from Tiled
 maps painted with commercially licensed tile packs. The pack licence permits
 commercial use and modification, forbids redistributing the assets themselves
 (original or modified) and forbids their use in a logo or trademark.

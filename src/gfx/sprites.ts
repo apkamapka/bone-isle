@@ -741,6 +741,25 @@ export const SPR = {
     "uuyuu",
     ".uuu.",
   ]),
+  // Chronos the Time Sage — the wizard under Bonetown. Slate star-hat, white
+  // beard down the chest, ice-pale robe. Only a stand-in: the LPC walk sheet
+  // (public/npc-timesage.png) replaces him the moment it loads.
+  npcTimesage: bake([
+    "...kkkk...",
+    "..kkyykk..",
+    ".kkkkkkkk.",
+    ".kssssssk.",
+    ".ksessesk.",
+    "..wwwwww..",
+    ".WWwwwwWW.",
+    "sWWWWWWWWs",
+    ".WWyyyyWW.",
+    ".WWWWWWWW.",
+    "..WWWWWW..",
+    ".WWWWWWWW.",
+    "..WW..WW..",
+    "..kk..kk..",
+  ]),
   npcTaskmaster: bake([
     "..tttttt..",
     ".tttttttt.",
@@ -1250,7 +1269,7 @@ const ACTORS = [
   "orcSpearman", "orcWarrior", "hunter", "minotaurArcher", "orcShaman",
   "mummy", "orcBerserker", "minotaurGuard", "minotaurMage", "dragon",
   "boneLord", "corpse", "npcSmith", "npcHerbalist", "npcElder",
-  "npcTailor", "npcTaskmaster",
+  "npcTailor", "npcTaskmaster", "npcTimesage",
 ] as const;
 
 {

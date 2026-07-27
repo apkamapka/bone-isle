@@ -24,6 +24,9 @@ export const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement
   ["elder", "Elder Oswin", SPR.npcElder, 1],
   ["taskmaster", "Grizelda the Huntress", SPR.npcTaskmaster, 1],
   ["tailor", "Vesper the Tailor", SPR.npcTailor, 1],
+  // Rooted by default — the cellar copy never moves. The town copy overrides
+  // the beat in its own spec (four tiles east and west, one row).
+  ["timesage", "Chronos the Time Sage", SPR.npcTimesage, 0],
 ];
 
 export function makeWorld(opts: WorldOpts): World {

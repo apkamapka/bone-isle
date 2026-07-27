@@ -5,7 +5,7 @@
 import { ITEMS } from "../items.ts";
 import { NPC_WALK_SPEED, NPC_REST_MIN_S, NPC_REST_MAX_S } from "../config.ts";
 import { rnd, rndi } from "../util.ts";
-import { toTile, glideWalker, tryStep, atCenter, walkable, chebTiles } from "../world/grid.ts";
+import { toTile, glideWalker, tryStep, atCenter, walkable } from "../world/grid.ts";
 import type { ItemKind } from "../items.ts";
 import type { NpcKey, Npc, NpcDir, World } from "../world/types.ts";
 
@@ -132,7 +132,12 @@ export function updateNpcs(w: World, dt: number, px: number, py: number): void {
       continue;
     }
 
-    if (n.roam <= 0) continue;
+    // The beat is a rectangle, not a square: `roam` bounds the walk east-west
+    // and `roamY` (defaulting to the same) north-south, so a sage who paces
+    // four tiles along one row is `roam: 4, roamY: 0` rather than a special case.
+    const rx = n.roam;
+    const ry = n.roamY ?? n.roam;
+    if (rx <= 0 && ry <= 0) continue;
     n.rest -= dt;
     if (n.rest > 0) continue;
     n.rest = npcRest();
@@ -157,7 +162,7 @@ export function updateNpcs(w: World, dt: number, px: number, py: number): void {
       const [sx, sy] = STEPS4[i];
       const nx = n.tx + sx;
       const ny = n.ty + sy;
-      if (chebTiles(nx, ny, n.hx, n.hy) > n.roam) continue;
+      if (Math.abs(nx - n.hx) > rx || Math.abs(ny - n.hy) > ry) continue;
       if (!walkable(w, nx, ny)) continue;
       if (!tryStep(w, n, sx, sy, occupied)) continue;
       const d = dirOf(sx, sy);

@@ -239,6 +239,17 @@ export const NPC_REST_MAX_S = 4.2;
  */
 export const NPC_TALK_HOLD_S = 2.5;
 
+/**
+ * Teleport pad colours. A live pad breathes violet; a dormant one — a pad whose
+ * destination has not been built yet — burns red, so "you cannot go there yet"
+ * reads from across the hall without walking onto it. The halo is an "r,g,b"
+ * triplet because the swirl fades it through several alphas.
+ */
+export const PORTAL_LIVE_HALO = "150,110,230";
+export const PORTAL_LIVE_CORE = "#c9a6ff";
+export const PORTAL_DORMANT_HALO = "214,66,58";
+export const PORTAL_DORMANT_CORE = "#e0574c";
+
 /** Resource node regrowth (seconds). Slow enough that you rotate between
  *  nodes and islands rather than farming one spot — paired with denser nodes. */
 export const TREE_REGROW_S = 90;
