@@ -1636,6 +1636,55 @@ async function main(): Promise<void> {
     ok(credits.includes("prop-tree.png"), "the drawn props are accounted for too");
   }
 
+  console.log("The four minotaur ranks walk instead of sliding:");
+  {
+    const fs = await import("node:fs");
+    const { mobFrame } = await import("../src/gfx/mobSheet.ts");
+    const sheetSrc = fs.readFileSync(
+      new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+
+    /** Width and height straight out of the PNG's IHDR — no decoder needed. */
+    const png = (file: string): [number, number] => {
+      const b = fs.readFileSync(new URL(`../public/${file}`, import.meta.url));
+      return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    };
+
+    const RANKS: [string, string][] = [
+      ["minotaur", "mob-minotaur-walk.png"],
+      ["minotaurArcher", "mob-minotaur-archer-walk.png"],
+      ["minotaurGuard", "mob-minotaur-guard-walk.png"],
+      ["minotaurMage", "mob-minotaur-mage-walk.png"],
+    ];
+
+    for (const [kind, file] of RANKS) {
+      ok(sheetSrc.includes(`${kind}: "./${file}"`), `${kind} has a walk sheet registered`);
+      ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
+        `…and ${file} is actually shipped`);
+      const [w, h] = png(file);
+      ok(w % 9 === 0 && h % 4 === 0,
+        `…laid out as the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(h / 4 > w / 9,
+        "…and the frame is taller than it is wide, so the crop kept the body upright");
+      ok(credits.includes(file), `…and ${file} is credited by filename`);
+      ok(mobFrame(kind as never, "down", true, 0) === null,
+        "…while headless it still falls back to the baked sprite");
+    }
+
+    ok(credits.includes("Minotaur_fur_tan"),
+      "the shared head layer names the generator recipe");
+    ok(credits.includes("Scutum_shield_scutum") && credits.includes("Tattered_teal"),
+      "…and the gear that tells the guard and the mage apart");
+
+    // The guard's shield and the mage's staff widen the crop; the plain
+    // minotaur must stay the bandit's build, or the tiers stop reading as one
+    // family standing on one-tile footprints.
+    const [pw, ph] = png("mob-minotaur-walk.png");
+    ok(pw / 9 === 32 && ph / 4 === 55, "the plain minotaur matches the bandit frame exactly");
+    ok(png("mob-minotaur-guard-walk.png")[0] / 9 > pw / 9,
+      "…and the shield-bearer is wider, not taller-and-thinner");
+  }
+
   console.log("Townsfolk: all five walk a 3x3 beat and stop when spoken to:");
   {
     const { updateNpcs, faceToward } = await import("../src/entities/npcs.ts");
