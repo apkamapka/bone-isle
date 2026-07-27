@@ -35,6 +35,10 @@ interface PortalDef {
   style?: "ladderDown" | "ladderUp" | "caveMouth";
   /** Dormant pad — rendered ashen, refuses travel (quest realms come later). */
   inactive?: boolean;
+  /** Pads painted larger than one tile: the glyph marks the block's TOP-LEFT
+   *  square and `span` says how many tiles across it runs. The portal is
+   *  centred on the block, so every square of it teleports. */
+  span?: number;
   /** Terrain painted under the portal glyph (default grass). */
   floor?: Tile;
 }
@@ -188,13 +192,24 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           }
           const pdef = spec.portals[ch];
           if (pdef) {
+            const span = pdef.span ?? 1;
             if (pdef.floor !== undefined) {
-              tile[y][x] = pdef.floor;
-              solid[y][x] = false;
+              // paint the WHOLE block, not just the glyph's own square
+              for (let dy = 0; dy < span; dy++) {
+                for (let dx = 0; dx < span; dx++) {
+                  const bx = x + dx;
+                  const by = y + dy;
+                  if (bx >= W || by >= H) continue;
+                  tile[by][bx] = pdef.floor;
+                  solid[by][bx] = false;
+                }
+              }
             }
-            w.portals.push({ x: cx, y: cy, dest: pdef.dest, label: pdef.label,
+            w.portals.push({ x: cx + ((span - 1) * TILE) / 2, y: cy + ((span - 1) * TILE) / 2,
+              dest: pdef.dest, label: pdef.label,
               ...(pdef.style ? { style: pdef.style } : {}),
-              ...(pdef.inactive ? { inactive: true } : {}) });
+              ...(pdef.inactive ? { inactive: true } : {}),
+              ...(span > 1 ? { span } : {}) });
             break;
           }
           const nspec = spec.npcs?.[ch];
@@ -477,9 +492,11 @@ const CELLAR_ROWS: readonly string[] = [
   "####################",
 ];
 
-/** A cellar pad that hums but takes nobody anywhere yet. */
+/** A cellar pad that hums but takes nobody anywhere yet. The artwork paints
+ *  each one 2x2, so the portal spans the block and all four squares carry you
+ *  the day its hunting ground exists. The glyph marks the top-left square. */
 const sealed = (label: string) =>
-  ({ dest: "cellar", label, inactive: true, floor: Tile.Cave } as const);
+  ({ dest: "cellar", label, inactive: true, floor: Tile.Cave, span: 2 } as const);
 
 export const CELLAR_SPEC: HandmadeSpec = {
   key: "cellar",

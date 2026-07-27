@@ -114,6 +114,36 @@ export function worldSpawn(w: World): Vec {
   return w.spawn ?? portalSpawn(w);
 }
 
+/**
+ * Does the world point (px,py) stand on `pt`?
+ *
+ * A plain pad is one tile and keeps the classic radius test — you have to be
+ * on the swirl, not merely in the same square. A pad with a `span` covers a
+ * whole block of tiles and is tested as a rectangle instead, so every square
+ * of a 2x2 pad carries you rather than just the one the glyph was authored on.
+ *
+ * `reach` widens the single-tile radius; it is ignored for spanned pads, whose
+ * footprint is already exactly the painted block.
+ */
+export function portalCovers(pt: Portal, px: number, py: number, reach = 22): boolean {
+  const span = pt.span ?? 1;
+  if (span <= 1) return Math.hypot(px - pt.x, py - pt.y) < reach;
+  const half = (span * TILE) / 2;
+  return Math.abs(px - pt.x) <= half && Math.abs(py - pt.y) <= half;
+}
+
+/** Every tile a portal sits on — one square, or the whole spanned block. */
+export function portalTiles(pt: Portal): Array<{ tx: number; ty: number }> {
+  const span = pt.span ?? 1;
+  const x0 = toTile(pt.x - (span * TILE) / 2 + TILE / 2);
+  const y0 = toTile(pt.y - (span * TILE) / 2 + TILE / 2);
+  const out: Array<{ tx: number; ty: number }> = [];
+  for (let dy = 0; dy < span; dy++) {
+    for (let dx = 0; dx < span; dx++) out.push({ tx: x0 + dx, ty: y0 + dy });
+  }
+  return out;
+}
+
 /** A guaranteed-walkable tile centre just beside a portal (ring search). */
 export function portalSpawn(w: World, portal?: Portal): Vec {
   const pt = portal ?? w.portals[0];

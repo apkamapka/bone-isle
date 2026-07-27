@@ -52,6 +52,11 @@ export interface Portal {
   /** A dormant pad: rendered ashen, refuses travel with a flash message.
    *  Placeholder for quest-realm teleports that don't exist yet. */
   inactive?: boolean;
+  /** Side of the tile block this pad covers, in tiles (default 1). A pad
+   *  painted 2x2 in Tiled is ONE portal with `span: 2`, centred on the block —
+   *  so all four squares carry you, and one swirl is drawn across the lot
+   *  instead of four crowded into the corners. */
+  span?: number;
 }
 
 /** A level-sealed doorway: solid until the player's level reaches `lv`. */
