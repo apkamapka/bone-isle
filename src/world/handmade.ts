@@ -463,8 +463,9 @@ export const SANCTUM_SPEC: HandmadeSpec = {
 /*  PNG carries the same margin as flat black.                             */
 /*                                                                     */
 /*  Fourteen pads carry an X in the artwork; each is a 2x2 block and   */
-/*  the portal glyph sits on its top-left tile. All fourteen are       */
-/*  dormant for now — the hunting grounds behind them come later.      */
+/*  the portal glyph sits on its top-left tile. The bottom pair is     */
+/*  live and leads to the Wildlands and the Deep Wildlands; the other  */
+/*  twelve are dormant until their hunting grounds are built.          */
 /* ------------------------------------------------------------------ */
 const CELLAR_ROWS: readonly string[] = [
   "##############################",
@@ -533,8 +534,12 @@ export const CELLAR_SPEC: HandmadeSpec = {
     // the four that will open first, once their hunting grounds exist
     a: sealed("Minotaur Halls — sealed"),
     b: sealed("Undead Crypt — sealed"),
-    c: sealed("Orc Warrens — sealed"),
-    d: sealed("Troll Caves — sealed"),
+    // …except the bottom pair, which is live already: until those grounds are
+    // built it carries you to the two islands that DO have monsters on them.
+    // Neither island has a way back to the cellar, so you arrive beside its own
+    // gate to Bonetown and return that way — see the note in `travelTo`.
+    c: { dest: "wild", label: "to the Wildlands", span: 2, floor: Tile.Cave },
+    d: { dest: "deepwild", label: "to the Deep Wildlands", span: 2, floor: Tile.Cave },
     // and ten more the sage has not named yet
     "1": sealed("Sealed Rift I"),
     "2": sealed("Sealed Rift II"),
