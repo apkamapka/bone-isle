@@ -445,16 +445,22 @@ export const SANCTUM_SPEC: HandmadeSpec = {
 /* ------------------------------------------------------------------ */
 /*  THE TIME SAGE'S CELLAR — under the northern dirt tongue in town.   */
 /*  Painted in Tiled (public/cellar-terrain.png); this grid carries    */
-/*  only collision, and the author's rule is simple: the hall's outer  */
-/*  wall is the only solid thing inside it. The pools are ankle-deep   */
-/*  and the black spurs are floor decoration, so the whole hall is     */
-/*  walkable — which it has to be, since the way up sits on the islet  */
-/*  between the four pools.                                            */
+/*  only collision, and the author's rule is simple: the floor of the hall  */
+/*  walks and its rocky rim does not. The pools are ankle-deep and the      */
+/*  black spurs are floor decoration, so everything inside the rim is       */
+/*  walkable — which it has to be, since the way up sits on the islet       */
+/*  between the four pools.                                                */
 /*                                                                     */
-/*  Around that hall runs a five-tile black margin, solid and unlit.   */
-/*  It exists so the camera can centre on you in the corners instead   */
-/*  of clamping to the map edge and shoving you off to one side; the   */
-/*  terrain PNG carries the same margin as flat black.                 */
+/*  The walkable box is x 7..22, y 8..42. That is not the rim the old      */
+/*  Tiled grid drew: the mushroom rock reads three tiles deep along the    */
+/*  top and one to two elsewhere, and standing on any of it looked like    */
+/*  walking up the wall. The box is pulled in to the last tile that is     */
+/*  clean floor in the artwork.                                            */
+/*                                                                     */
+/*  Around the hall runs a five-tile black margin, solid and unlit. It     */
+/*  exists so the camera can centre on you in the corners instead of       */
+/*  clamping to the map edge and shoving you off to one side; the terrain  */
+/*  PNG carries the same margin as flat black.                             */
 /*                                                                     */
 /*  Fourteen pads carry an X in the artwork; each is a 2x2 block and   */
 /*  the portal glyph sits on its top-left tile. All fourteen are       */
@@ -467,52 +473,51 @@ const CELLAR_ROWS: readonly string[] = [
   "##############################",
   "##############################",
   "##############################",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==1===2===3===4===######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==5===========6===######",
-  "######=========Z========######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==7===========8===######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==9===========0===######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==a===========b===######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######========U=========######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==c===========d===######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
-  "######==================######",
+  "##############################",
+  "##############################",
+  "#######================#######",
+  "#######=1===2===3===4==#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######=5===========6==#######",
+  "#######========Z=======#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######=7===========8==#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######=9===========0==#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######=a===========b==#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######=======U========#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
+  "#######=c===========d==#######",
+  "#######================#######",
+  "#######================#######",
+  "#######================#######",
   "##############################",
   "##############################",
   "##############################",
   "##############################",
   "##############################",
   "##############################",
-];
-/** A cellar pad that hums but takes nobody anywhere yet. The artwork paints
+  "##############################",
+];/** A cellar pad that hums but takes nobody anywhere yet. The artwork paints
  *  each one 2x2, so the portal spans the block and all four squares carry you
  *  the day its hunting ground exists. The glyph marks the top-left square. */
 const sealed = (label: string) =>
