@@ -205,6 +205,18 @@ export function idleFrameIndex(t: number): number {
 }
 
 /**
+ * The player's body lying on the ground, or null before the sheets load.
+ *
+ * `heroSprite(..., dead)` already returns this for the dying player; this
+ * accessor exists for the OTHER place the same body shows up — the lootable
+ * "your body" corpse, which outlives the death animation and is drawn by the
+ * corpse pass, not the player pass.
+ */
+export function heroCorpse(): HTMLCanvasElement | null {
+  return corpse;
+}
+
+/**
  * The sprite to draw for the player this frame, or null if the sheets have not
  * loaded and the caller should fall back to the baked outfit.
  */
