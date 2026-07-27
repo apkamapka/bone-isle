@@ -1835,6 +1835,7 @@ async function main(): Promise<void> {
 
     /* --- the cellar itself --- */
     const cellar = makeHandmadeWorld(CELLAR_SPEC);
+    const { portalTiles, portalCovers } = await import("../src/world/collision.ts");
     ok(cellar.w === 30 && cellar.h === 50,
       "the 20x40 hall plus a five-tile margin on every side");
     ok(cellar.safe, "nothing hostile lives down there yet");
@@ -1862,8 +1863,14 @@ async function main(): Promise<void> {
     ok(!!up, "the way back to Bonetown is down there");
     ok(up.style === undefined && up.span === 2,
       "…and it too is a 2x2 pad rather than a ladder");
-    ok(Math.floor(up.x / T) === 16 && Math.floor(up.y / T) === 33,
-      "…still on the islet between the four pools, shifted by the margin");
+    ok(Math.floor(up.x / T) === 15 && Math.floor(up.y / T) === 33,
+      "…centred on the dry core of the islet between the four pools");
+    // the whole pad must sit on dry floor: half of it hanging over a pool was
+    // what made it look shoved off to one side
+    for (const t of portalTiles(up)) {
+      ok(t.tx >= 14 && t.tx <= 15 && t.ty >= 32 && t.ty <= 33,
+        `pad tile (${t.tx},${t.ty}) is on the islet`);
+    }
 
     const pads = cellar.portals.filter((p) => p.inactive);
     ok(pads.length === 14, `fourteen pads, all dormant for now (${pads.length})`);
@@ -1878,7 +1885,6 @@ async function main(): Promise<void> {
     // every pad has to be standable, or the pad you can see is a pad you
     // can never use once its hunting ground exists. And it is 2x2: all four
     // squares carry you, not just the one the glyph was authored on.
-    const { portalTiles, portalCovers } = await import("../src/world/collision.ts");
     let padBlocked = "";
     let padSpan = "";
     let padTiles = "";
