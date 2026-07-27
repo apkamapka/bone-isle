@@ -1660,7 +1660,8 @@ async function main(): Promise<void> {
     const smith = town.npcs.find((n) => n.key === "smith")!;
     ok(smith !== undefined, "the smith is on the town map");
     const shopkeepers = town.npcs.filter((n) => n.key !== "timesage");
-    ok(shopkeepers.length === 5 && shopkeepers.every((n) => n.roam === 1),
+    ok(shopkeepers.length === 5 && shopkeepers.every((n) =>
+      n.bx0 === n.hx - 1 && n.bx1 === n.hx + 1 && n.by0 === n.hy - 1 && n.by1 === n.hy + 1),
       "the five shopkeepers walk a 3x3 beat");
     ok(town.npcs.every((n) => n.dir === "down"),
       "everyone spawns facing camera, so the first draw has a valid row");
@@ -1683,11 +1684,10 @@ async function main(): Promise<void> {
     let unwalkable = "";
     let beatTiles = 0;
     for (const n of town.npcs) {
-      const ry = n.roamY ?? n.roam;
-      for (let dy = -ry; dy <= ry; dy++) {
-        for (let dx = -n.roam; dx <= n.roam; dx++) {
+      for (let ty = n.by0; ty <= n.by1; ty++) {
+        for (let tx = n.bx0; tx <= n.bx1; tx++) {
           beatTiles++;
-          if (town.solid[n.hy + dy][n.hx + dx]) unwalkable = n.key;
+          if (town.solid[ty][tx]) unwalkable = n.key;
         }
       }
     }
@@ -1705,8 +1705,8 @@ async function main(): Promise<void> {
     for (let i = 0; i < 1800; i++) {
       updateNpcs(town, 1 / 60, -9999, -9999);
       for (const h of homes) {
-        if (Math.abs(h.n.tx - h.x) > h.n.roam
-          || Math.abs(h.n.ty - h.y) > (h.n.roamY ?? h.n.roam)) strayed = h.n.key;
+        if (h.n.tx < h.n.bx0 || h.n.tx > h.n.bx1
+          || h.n.ty < h.n.by0 || h.n.ty > h.n.by1) strayed = h.n.key;
         if (h.n.tx !== h.x || h.n.ty !== h.y) stepped.add(h.n.key);
         if (Math.abs(h.n.x - (h.n.tx * TILE + TILE / 2)) > TILE) offCentre = true;
       }
@@ -1804,7 +1804,9 @@ async function main(): Promise<void> {
     ok(sage.name === "Chronos the Time Sage", `named in English (${sage.name})`);
     ok(sage.tx === 16 && sage.ty === 15,
       `on the tile the printscreen showed (${sage.tx},${sage.ty})`);
-    ok(sage.roam === 4 && sage.roamY === 0, "four tiles east and west, none north or south");
+    ok(sage.bx0 === sage.hx - 4 && sage.bx1 === sage.hx + 4,
+      "four tiles east and west");
+    ok(sage.by0 === sage.hy && sage.by1 === sage.hy, "…and never north or south");
     for (let dx = -4; dx <= 4; dx++) {
       ok(!town.solid[sage.hy][sage.hx + dx], `his beat is clear at +${dx}`);
     }
@@ -1828,29 +1830,40 @@ async function main(): Promise<void> {
     /* --- the trapdoor where the stack was dropped --- */
     const down = town.portals.find((p) => p.dest === "cellar")!;
     ok(!!down, "the town has a way down to the cellar");
-    ok(Math.floor(down.x / T) === 16 && Math.floor(down.y / T) === 8,
-      "…on tile (16,8), where the stack was left on the ground");
-    ok(down.style === "ladderDown", "…drawn as stairs down, not a swirl");
+    ok(down.style === undefined, "…and it is a teleport pad, not a ladder");
+    ok(down.span === 2, "…a 2x2 one, like the pads downstairs");
 
     /* --- the cellar itself --- */
     const cellar = makeHandmadeWorld(CELLAR_SPEC);
-    ok(cellar.w === 20 && cellar.h === 40, "the cellar is the 20x40 grid from Tiled");
+    ok(cellar.w === 30 && cellar.h === 50,
+      "the 20x40 hall plus a five-tile margin on every side");
     ok(cellar.safe, "nothing hostile lives down there yet");
 
-    // the author's rule: the outer wall is the only solid thing
+    // The hall proper is tiles 6..23 x 6..43. Everything inside it walks;
+    // everything outside — the old wall ring and the new black margin — blocks,
+    // so the camera can centre on you in a corner without letting you wander
+    // into the void the margin is painted with.
     let strayWall = "";
+    let marginHole = "";
     for (let y = 0; y < cellar.h; y++) {
       for (let x = 0; x < cellar.w; x++) {
-        const edge = x === 0 || y === 0 || x === cellar.w - 1 || y === cellar.h - 1;
-        if (cellar.solid[y][x] !== edge) strayWall = `${x},${y}`;
+        const inside = x >= 6 && x <= 23 && y >= 6 && y <= 43;
+        if (cellar.solid[y][x] !== !inside) strayWall = `${x},${y}`;
+        const margin = x < 5 || y < 5 || x > 24 || y > 44;
+        if (margin && !cellar.solid[y][x]) marginHole = `${x},${y}`;
       }
     }
-    ok(strayWall === "", `only the outer wall blocks${strayWall && " — " + strayWall}`);
+    ok(strayWall === "", `only the wall and the margin block${strayWall && " — " + strayWall}`);
+    ok(marginHole === "", `the margin has no gaps${marginHole && " — " + marginHole}`);
+    ok(cellar.solid[5].every((v) => v) && cellar.solid[44].every((v) => v),
+      "the old stone ring is still solid inside the margin");
 
     const up = cellar.portals.find((p) => p.dest === "town")!;
-    ok(!!up && up.style === "ladderUp", "the stairs back to Bonetown are down there");
-    ok(Math.floor(up.x / T) === 10 && Math.floor(up.y / T) === 27,
-      "…on the islet between the four pools, as pinned");
+    ok(!!up, "the way back to Bonetown is down there");
+    ok(up.style === undefined && up.span === 2,
+      "…and it too is a 2x2 pad rather than a ladder");
+    ok(Math.floor(up.x / T) === 16 && Math.floor(up.y / T) === 33,
+      "…still on the islet between the four pools, shifted by the margin");
 
     const pads = cellar.portals.filter((p) => p.inactive);
     ok(pads.length === 14, `fourteen pads, all dormant for now (${pads.length})`);
@@ -1895,22 +1908,36 @@ async function main(): Promise<void> {
     // x=3 and x=15, plus the extra pair along the top row
     const corners = pads.map((p) => portalTiles(p)[0]).map((t) => `${t.tx},${t.ty}`).sort();
     ok(corners.join(" ") === [
-      "11,4", "15,13", "15,17", "15,21", "15,34", "15,4", "15,8",
-      "3,13", "3,17", "3,21", "3,34", "3,4", "3,8", "7,4",
+      "16,9", "20,18", "20,22", "20,26", "20,39", "20,9", "20,13",
+      "8,18", "8,22", "8,26", "8,39", "8,9", "8,13", "12,9",
     ].sort().join(" "), `pads sit on the painted blocks (${corners.join(" ")})`);
 
-    // the ladders stay single-tile: a spanned staircase would be nonsense
-    ok(up.span === undefined, "the way up is a plain one-tile staircase");
-    ok(portalCovers(up, up.x, up.y) && !portalCovers(up, up.x + T, up.y),
-      "…and is still tested as a radius, not a block");
+    // arriving must not drop you back onto the pad you came through, or the
+    // portal fires again and bounces you home
+    const { portalSpawn } = await import("../src/world/collision.ts");
+    const landing = portalSpawn(cellar, up);
+    ok(!portalCovers(up, landing.x, landing.y),
+      "you land beside the pad, not on it");
+    const landingBack = portalSpawn(town, down);
+    ok(!portalCovers(down, landingBack.x, landingBack.y),
+      "…and the same coming back up");
 
     const deep = cellar.npcs.find((n) => n.key === "timesage")!;
     ok(!!deep, "the sage is in his cellar too");
-    ok(deep.tx === 10 && deep.ty === 9, `at the heart of the great pool (${deep.tx},${deep.ty})`);
-    ok(deep.roam === 0, "…and this one never moves");
-    const before = { tx: deep.tx, ty: deep.ty };
-    for (let i = 0; i < 1800; i++) updateNpcs(cellar, 1 / 60, -9999, -9999);
-    ok(deep.tx === before.tx && deep.ty === before.ty, "half a minute later he is still there");
+    ok(deep.tx === 15 && deep.ty === 14,
+      `at the heart of the great pool (${deep.tx},${deep.ty})`);
+    // a 2x2 square hanging west and south of his corner
+    ok(deep.bx0 === 14 && deep.bx1 === 15 && deep.by0 === 14 && deep.by1 === 15,
+      "his beat is the square one tile west and one south");
+    const seen = new Set<string>();
+    let escaped = "";
+    for (let i = 0; i < 6000; i++) {
+      updateNpcs(cellar, 1 / 60, -9999, -9999);
+      seen.add(`${deep.tx},${deep.ty}`);
+      if (deep.tx < 14 || deep.tx > 15 || deep.ty < 14 || deep.ty > 15) escaped = `${deep.tx},${deep.ty}`;
+    }
+    ok(escaped === "", `he never leaves the square${escaped && " — " + escaped}`);
+    ok(seen.size === 4, `and walks all four of its tiles (${seen.size})`);
 
     /* --- and it is wired into the real game, not just the spec --- */
     const worlds = buildWorlds(WORLD_SEED);
