@@ -118,7 +118,7 @@ cropped to one rectangle shared by every frame (see `src/gfx/mobSheet.ts`).
 are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
-## Minotaurs — `public/mob-minotaur-walk.png`, `public/mob-minotaur-archer-walk.png`, `public/mob-minotaur-guard-walk.png`, `public/mob-minotaur-mage-walk.png`
+## Minotaurs — `public/mob-minotaur-walk.png`, `public/mob-minotaur-archer-walk.png`, `public/mob-minotaur-guard-walk.png`, `public/mob-minotaur-mage-walk.png`, `public/mob-minotaur-dead.png`
 
 All four minotaur ranks are composed from the same **Universal LPC Spritesheet
 Character Generator** as the player and the bandit, under the same licences as
@@ -147,7 +147,12 @@ From each generator export only the walk block was kept — rows 8-11
 cropped to one rectangle shared by every frame, symmetric about the source
 cell's centre line (see `src/gfx/mobSheet.ts`). No pixel was repainted.
 
-**ShareAlike:** these four files are derivative works of CC-BY-SA 3.0 artwork
+`public/mob-minotaur-dead.png` is the last frame of the hurt row (row 20,
+column 6) of the plain minotaur export, cropped to the body. All four ranks
+share it: the archer's, guard's and mage's own death frames leave their gear
+lying beside the corpse, which reads as loot the game will not let you take.
+
+**ShareAlike:** these five files are derivative works of CC-BY-SA 3.0 artwork
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
