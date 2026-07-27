@@ -1,7 +1,7 @@
 import "./style.css";
 import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, GARDEN_RADIUS, GARDEN_HEAL_PER_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
-import { unstick, blockedAt, lineOfSight } from "./world/collision.ts";
+import { unstick, blockedAt, lineOfSight, portalCovers } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
 import { mobFrame, npcFrame } from "./gfx/mobSheet.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
@@ -495,7 +495,7 @@ function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }): v
 function portalAt(x: number, y: number): { dest: WorldKey } | null {
   for (const pt of cw().portals) {
     if (pt.inactive) continue;
-    if (dist(x, y, pt.x, pt.y) < 24) return pt;
+    if (portalCovers(pt, x, y, 24)) return pt;
   }
   return null;
 }
@@ -1565,7 +1565,7 @@ function tickProximityPanels(dt: number): void {
 function checkPortals(): void {
   if (P.tpCd > 0) return;
   for (const pt of cw().portals) {
-    if (dist(P.x, P.y, pt.x, pt.y) < 22) {
+    if (portalCovers(pt, P.x, P.y)) {
       if (pt.inactive) {
         // a dormant quest pad: hum, but do not travel (yet)
         flash("the portal is dormant… for now", "#b9a6d8");
@@ -2062,8 +2062,12 @@ function render(): void {
       continue;
     }
     const dormant = !!pt.inactive;
-    for (let r = 16; r > 0; r -= 4) {
-      // a dormant pad smoulders ash-grey and barely breathes; a live portal
+    // A spanned pad draws ONE swirl across the whole block rather than a
+    // cluster of little ones in the corners — the pad reads as a single door.
+    const span = pt.span ?? 1;
+    const step = 4 * span;
+    for (let r = 16 * span; r > 0; r -= step) {
+      // a dormant pad smoulders red and barely breathes; a live portal
       // pulses violet — the state reads at a glance from across the hall
       const a = dormant ? 0.12 + 0.06 * Math.sin(waveT * 1.5 + r) : 0.15 + 0.12 * Math.sin(waveT * 4 + r);
       vctx.fillStyle = `rgba(${dormant ? PORTAL_DORMANT_HALO : PORTAL_LIVE_HALO},${a})`;
@@ -2072,7 +2076,13 @@ function render(): void {
       vctx.fill();
     }
     vctx.fillStyle = dormant ? PORTAL_DORMANT_CORE : PORTAL_LIVE_CORE;
-    vctx.fillRect(Math.round(sx) - 2, Math.round(sy - 8 + (dormant ? 0 : Math.sin(waveT * 5) * 4)), 4, 16);
+    const bw = 4 * span;
+    const bh = 16 * span;
+    vctx.fillRect(
+      Math.round(sx) - bw / 2,
+      Math.round(sy - bh / 2 + (dormant ? 0 : Math.sin(waveT * 5) * 4)),
+      bw, bh,
+    );
   }
 
 
