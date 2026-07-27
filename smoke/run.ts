@@ -1840,24 +1840,29 @@ async function main(): Promise<void> {
       "the 20x40 hall plus a five-tile margin on every side");
     ok(cellar.safe, "nothing hostile lives down there yet");
 
-    // The hall proper is tiles 6..23 x 6..43. Everything inside it walks;
-    // everything outside — the old wall ring and the new black margin — blocks,
-    // so the camera can centre on you in a corner without letting you wander
-    // into the void the margin is painted with.
+    // The walkable floor is tiles 7..22 x 8..42 — pulled inside the rocky rim
+    // so you cannot stand on the mushroom rock and look like you are walking
+    // up the wall. Everything outside it, rim and black margin alike, blocks.
     let strayWall = "";
     let marginHole = "";
     for (let y = 0; y < cellar.h; y++) {
       for (let x = 0; x < cellar.w; x++) {
-        const inside = x >= 6 && x <= 23 && y >= 6 && y <= 43;
+        const inside = x >= 7 && x <= 22 && y >= 8 && y <= 42;
         if (cellar.solid[y][x] !== !inside) strayWall = `${x},${y}`;
         const margin = x < 5 || y < 5 || x > 24 || y > 44;
         if (margin && !cellar.solid[y][x]) marginHole = `${x},${y}`;
       }
     }
-    ok(strayWall === "", `only the wall and the margin block${strayWall && " — " + strayWall}`);
+    ok(strayWall === "", `only the rim and the margin block${strayWall && " — " + strayWall}`);
     ok(marginHole === "", `the margin has no gaps${marginHole && " — " + marginHole}`);
-    ok(cellar.solid[5].every((v) => v) && cellar.solid[44].every((v) => v),
-      "the old stone ring is still solid inside the margin");
+    // the rim itself: the rows and columns the artwork draws rock on
+    ok(cellar.solid[6].every((v) => v) && cellar.solid[7].every((v) => v),
+      "the two rock rows along the top are closed off");
+    ok(cellar.solid[43].every((v) => v), "…and the mushroom row along the bottom");
+    ok(cellar.solid.every((row) => row[6] && row[23]),
+      "…and the rock column down each side");
+    ok(!cellar.solid[8][7] && !cellar.solid[42][22],
+      "the corners of the floor itself are still walkable");
 
     const up = cellar.portals.find((p) => p.dest === "town")!;
     ok(!!up, "the way back to Bonetown is down there");
