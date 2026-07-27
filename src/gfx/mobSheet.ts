@@ -67,6 +67,7 @@ const sheets: Record<string, Cut | undefined> = {};
  * keep. Stripped of gear the ranks are the same animal anyway.
  */
 const CORPSE_SRC: Record<string, string> = {
+  bandit: "./mob-bandit-dead.png",
   minotaur: "./mob-minotaur-dead.png",
   minotaurArcher: "./mob-minotaur-dead.png",
   minotaurGuard: "./mob-minotaur-dead.png",

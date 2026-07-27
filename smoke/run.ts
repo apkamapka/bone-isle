@@ -1725,8 +1725,15 @@ async function main(): Promise<void> {
     ok(ws.wild.corpses[ws.wild.corpses.length - 1].name === kind,
       "…named after the kind, which is what the art lookup keys on");
 
+    ok(fs.existsSync(new URL("../public/mob-bandit-dead.png", import.meta.url)),
+      "the bandit body is shipped too");
+    ok(sheetSrc.includes('bandit: "./mob-bandit-dead.png"'),
+      "…and registered, so the outlaws stop leaving bones");
+    ok(credits.includes("mob-bandit-dead.png"), "…and credited by filename");
+
     ok(corpseSprite("spider") === null, "a creature with no body art gets none");
     ok(corpseSprite("minotaur") === null, "headless even a minotaur falls back…");
+    ok(corpseSprite("bandit") === null, "…and so does a bandit…");
     ok(heroCorpse() === null, "…and so does the player's own body");
     ok(mainSrc.includes('c.name === "your body" ? heroCorpse() : corpseSprite(c.name)'),
       "the lootable body reuses the hero's death frame instead of the bone pile");

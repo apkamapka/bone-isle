@@ -96,7 +96,7 @@ are hosted on OpenGameArt.org. Primary collections these layers draw from:
 - LPC Expanded Pants — <https://opengameart.org/content/lpc-expanded-pants>
 - LPC Expanded Socks & Shoes — <https://opengameart.org/content/lpc-expanded-socks-shoes>
 
-## Bandit — `public/mob-bandit.png`, `public/mob-bandit-walk.png`
+## Bandit — `public/mob-bandit.png`, `public/mob-bandit-walk.png`, `public/mob-bandit-dead.png`
 
 The bandit is composed from the same **Universal LPC Spritesheet Character
 Generator** as the player, under the same licences as the layers listed above.
@@ -112,10 +112,12 @@ generator's own credits export is authoritative for the per-layer author list.
 From the generator's full export only the walk block was kept — rows 8-11
 (up, left, down, right), nine frames each — repacked into a 9x4 grid and
 cropped to one rectangle shared by every frame (see `src/gfx/mobSheet.ts`).
-`mob-bandit.png` is the standing pose from that same grid.
+`mob-bandit.png` is the standing pose from that same grid, and
+`mob-bandit-dead.png` is the last frame of the hurt row (row 20, column 6),
+cropped to the body.
 
-**ShareAlike:** these two files are derivative works of CC-BY-SA 3.0 artwork and
-are themselves published under **CC-BY-SA 3.0**. They must stay publicly
+**ShareAlike:** these three files are derivative works of CC-BY-SA 3.0 artwork
+and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
 ## Minotaurs — `public/mob-minotaur-walk.png`, `public/mob-minotaur-archer-walk.png`, `public/mob-minotaur-guard-walk.png`, `public/mob-minotaur-mage-walk.png`, `public/mob-minotaur-dead.png`
