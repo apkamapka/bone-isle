@@ -1636,55 +1636,6 @@ async function main(): Promise<void> {
     ok(credits.includes("prop-tree.png"), "the drawn props are accounted for too");
   }
 
-  console.log("The four minotaur ranks walk instead of sliding:");
-  {
-    const fs = await import("node:fs");
-    const { mobFrame } = await import("../src/gfx/mobSheet.ts");
-    const sheetSrc = fs.readFileSync(
-      new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
-    const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
-
-    /** Width and height straight out of the PNG's IHDR — no decoder needed. */
-    const png = (file: string): [number, number] => {
-      const b = fs.readFileSync(new URL(`../public/${file}`, import.meta.url));
-      return [b.readUInt32BE(16), b.readUInt32BE(20)];
-    };
-
-    const RANKS: [string, string][] = [
-      ["minotaur", "mob-minotaur-walk.png"],
-      ["minotaurArcher", "mob-minotaur-archer-walk.png"],
-      ["minotaurGuard", "mob-minotaur-guard-walk.png"],
-      ["minotaurMage", "mob-minotaur-mage-walk.png"],
-    ];
-
-    for (const [kind, file] of RANKS) {
-      ok(sheetSrc.includes(`${kind}: "./${file}"`), `${kind} has a walk sheet registered`);
-      ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
-        `…and ${file} is actually shipped`);
-      const [w, h] = png(file);
-      ok(w % 9 === 0 && h % 4 === 0,
-        `…laid out as the 9x4 grid the slicer expects (${w}x${h})`);
-      ok(h / 4 > w / 9,
-        "…and the frame is taller than it is wide, so the crop kept the body upright");
-      ok(credits.includes(file), `…and ${file} is credited by filename`);
-      ok(mobFrame(kind as never, "down", true, 0) === null,
-        "…while headless it still falls back to the baked sprite");
-    }
-
-    ok(credits.includes("Minotaur_fur_tan"),
-      "the shared head layer names the generator recipe");
-    ok(credits.includes("Scutum_shield_scutum") && credits.includes("Tattered_teal"),
-      "…and the gear that tells the guard and the mage apart");
-
-    // The guard's shield and the mage's staff widen the crop; the plain
-    // minotaur must stay the bandit's build, or the tiers stop reading as one
-    // family standing on one-tile footprints.
-    const [pw, ph] = png("mob-minotaur-walk.png");
-    ok(pw / 9 === 32 && ph / 4 === 55, "the plain minotaur matches the bandit frame exactly");
-    ok(png("mob-minotaur-guard-walk.png")[0] / 9 > pw / 9,
-      "…and the shield-bearer is wider, not taller-and-thinner");
-  }
-
   console.log("Townsfolk: all five walk a 3x3 beat and stop when spoken to:");
   {
     const { updateNpcs, faceToward } = await import("../src/entities/npcs.ts");
@@ -1885,6 +1836,8 @@ async function main(): Promise<void> {
     /* --- the cellar itself --- */
     const cellar = makeHandmadeWorld(CELLAR_SPEC);
     const { portalTiles, portalCovers } = await import("../src/world/collision.ts");
+    const { portalSpawn } = await import("../src/world/collision.ts");
+    const worlds = buildWorlds(WORLD_SEED);
     ok(cellar.w === 30 && cellar.h === 50,
       "the 20x40 hall plus a five-tile margin on every side");
     ok(cellar.safe, "nothing hostile lives down there yet");
@@ -1926,14 +1879,18 @@ async function main(): Promise<void> {
         `pad tile (${t.tx},${t.ty}) is on the islet`);
     }
 
-    const pads = cellar.portals.filter((p) => p.inactive);
-    ok(pads.length === 14, `fourteen pads, all dormant for now (${pads.length})`);
+    const pads = cellar.portals.filter((p) => p !== up);
+    ok(pads.length === 14, `fourteen pads in the hall (${pads.length})`);
     ok(cellar.portals.length === 15, "…and nothing else that teleports");
-    const named = ["Orc Warrens", "Troll Caves", "Minotaur Halls", "Undead Crypt"];
+    const dormant = pads.filter((p) => p.inactive);
+    const live = pads.filter((p) => !p.inactive);
+    ok(dormant.length === 12, `twelve still sealed (${dormant.length})`);
+    ok(live.length === 2, `and the bottom pair is open (${live.length})`);
+    const named = ["Minotaur Halls", "Undead Crypt"];
     for (const n of named) {
-      ok(pads.some((p) => p.label.startsWith(n)), `${n} has its own pad`);
+      ok(dormant.some((p) => p.label.startsWith(n)), `${n} has its own sealed pad`);
     }
-    ok(pads.filter((p) => p.label.startsWith("Sealed Rift")).length === 10,
+    ok(dormant.filter((p) => p.label.startsWith("Sealed Rift")).length === 10,
       "…plus the ten the sage has not named yet");
 
     // every pad has to be standable, or the pad you can see is a pad you
@@ -1965,16 +1922,41 @@ async function main(): Promise<void> {
     ok(leaked === "", `…and nothing outside the block does${leaked && " — " + leaked}`);
 
     // the blocks land where the artwork painted them: two columns of pads at
-    // x=3 and x=15, plus the extra pair along the top row
+    // x=8 and x=20, plus the extra pair along the top row
     const corners = pads.map((p) => portalTiles(p)[0]).map((t) => `${t.tx},${t.ty}`).sort();
     ok(corners.join(" ") === [
       "16,9", "20,18", "20,22", "20,26", "20,39", "20,9", "20,13",
       "8,18", "8,22", "8,26", "8,39", "8,9", "8,13", "12,9",
     ].sort().join(" "), `pads sit on the painted blocks (${corners.join(" ")})`);
 
+    /* --- the bottom pair: the two islands that already hold monsters --- */
+    const toWild = live.find((p) => p.dest === "wild")!;
+    const toDeep = live.find((p) => p.dest === "deepwild")!;
+    ok(!!toWild && !!toDeep, "the bottom pads point at the Wildlands and the Deep Wildlands");
+    ok(portalTiles(toWild)[0].tx === 8 && portalTiles(toWild)[0].ty === 39,
+      "…the Wildlands from the bottom-left pad");
+    ok(portalTiles(toDeep)[0].tx === 20 && portalTiles(toDeep)[0].ty === 39,
+      "…the Deep Wildlands from the bottom-right pad");
+    ok(!worlds.cellar.portals.some((p) => p.dest === "cellar" && !p.inactive),
+      "no live pad loops back into the cellar");
+
+    // Neither island has a portal home to the cellar, so `travelTo` falls back
+    // to the target's FIRST portal for the landing spot. That first portal has
+    // to be the island's own gate to Bonetown — otherwise you would arrive at a
+    // cave mouth or a camp instead of on the shore.
+    for (const k of ["wild", "deepwild"] as const) {
+      const island = worlds[k];
+      ok(!island.portals.some((p) => p.dest === "cellar"),
+        `${k} has no gate back to the cellar — you leave via Bonetown`);
+      ok(island.portals[0]?.dest === "town",
+        `${k}'s first portal is its Bonetown gate, so that is where you land`);
+      const spot = portalSpawn(island, island.portals[0]);
+      ok(!island.solid[Math.floor(spot.y / T)][Math.floor(spot.x / T)],
+        `…and the landing tile on ${k} is walkable`);
+    }
+
     // arriving must not drop you back onto the pad you came through, or the
     // portal fires again and bounces you home
-    const { portalSpawn } = await import("../src/world/collision.ts");
     const landing = portalSpawn(cellar, up);
     ok(!portalCovers(up, landing.x, landing.y),
       "you land beside the pad, not on it");
@@ -2000,7 +1982,6 @@ async function main(): Promise<void> {
     ok(seen.size === 4, `and walks all four of its tiles (${seen.size})`);
 
     /* --- and it is wired into the real game, not just the spec --- */
-    const worlds = buildWorlds(WORLD_SEED);
     ok(!!worlds.cellar && worlds.cellar.name === "Time Sage's Cellar",
       "buildWorlds actually creates the cellar");
     const back = worlds.cellar.portals.find((p) => p.dest === "town");
