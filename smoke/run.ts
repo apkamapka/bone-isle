@@ -1730,6 +1730,10 @@ async function main(): Promise<void> {
     ok(heroCorpse() === null, "…and so does the player's own body");
     ok(mainSrc.includes('c.name === "your body" ? heroCorpse() : corpseSprite(c.name)'),
       "the lootable body reuses the hero's death frame instead of the bone pile");
+    ok(mainSrc.includes("const baseY = c.y + TILE / 2;"),
+      "a body lies on the bottom edge of its tile, not the centre line");
+    ok(mainSrc.includes("drawShadow(c.x, baseY)"),
+      "…and its shadow goes down with it");
     ok(mainSrc.includes("drawSprite(SPR.corpse, c.x, c.y + 8)"),
       "…while the bone pile keeps the nudge it was drawn for");
   }
