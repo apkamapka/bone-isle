@@ -136,12 +136,10 @@ export function updateNpcs(w: World, dt: number, px: number, py: number): void {
       continue;
     }
 
-    // The beat is a rectangle, not a square: `roam` bounds the walk east-west
-    // and `roamY` (defaulting to the same) north-south, so a sage who paces
-    // four tiles along one row is `roam: 4, roamY: 0` rather than a special case.
-    const rx = n.roam;
-    const ry = n.roamY ?? n.roam;
-    if (rx <= 0 && ry <= 0) continue;
+    // The beat is a rectangle in absolute tiles, so it need not be centred on
+    // where the map put him: the cellar sage's square hangs west and south of
+    // his corner, the town sage's is a line, a shopkeeper's is a 3x3 box.
+    if (n.bx0 === n.bx1 && n.by0 === n.by1) continue;
     n.rest -= dt;
     if (n.rest > 0) continue;
     n.rest = npcRest();
@@ -166,7 +164,7 @@ export function updateNpcs(w: World, dt: number, px: number, py: number): void {
       const [sx, sy] = STEPS4[i];
       const nx = n.tx + sx;
       const ny = n.ty + sy;
-      if (Math.abs(nx - n.hx) > rx || Math.abs(ny - n.hy) > ry) continue;
+      if (nx < n.bx0 || nx > n.bx1 || ny < n.by0 || ny > n.by1) continue;
       if (!walkable(w, nx, ny)) continue;
       if (!tryStep(w, n, sx, sy, occupied)) continue;
       const d = dirOf(sx, sy);
