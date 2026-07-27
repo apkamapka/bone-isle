@@ -1863,14 +1863,46 @@ async function main(): Promise<void> {
       "…plus the ten the sage has not named yet");
 
     // every pad has to be standable, or the pad you can see is a pad you
-    // can never use once its hunting ground exists
+    // can never use once its hunting ground exists. And it is 2x2: all four
+    // squares carry you, not just the one the glyph was authored on.
+    const { portalTiles, portalCovers } = await import("../src/world/collision.ts");
     let padBlocked = "";
+    let padSpan = "";
+    let padTiles = "";
+    let missedSquare = "";
+    let leaked = "";
     for (const p of pads) {
-      const tx = Math.floor(p.x / T);
-      const ty = Math.floor(p.y / T);
-      if (cellar.solid[ty][tx]) padBlocked = p.label;
+      if (p.span !== 2) padSpan = p.label;
+      const ts = portalTiles(p);
+      if (ts.length !== 4) padTiles = p.label;
+      for (const t of ts) {
+        if (cellar.solid[t.ty][t.tx]) padBlocked = p.label;
+        // standing anywhere on the block must count as standing on the pad
+        if (!portalCovers(p, t.tx * T + T / 2, t.ty * T + T / 2)) missedSquare = p.label;
+      }
+      // …and one square outside the block must not
+      const out = ts[0];
+      if (portalCovers(p, (out.tx - 1) * T + T / 2, out.ty * T + T / 2)) leaked = p.label;
+      if (portalCovers(p, out.tx * T + T / 2, (out.ty - 1) * T + T / 2)) leaked = p.label;
     }
-    ok(padBlocked === "", `every pad is walkable${padBlocked && " — " + padBlocked}`);
+    ok(padSpan === "", `every pad is a 2x2 block${padSpan && " — " + padSpan}`);
+    ok(padTiles === "", `…covering exactly four squares${padTiles && " — " + padTiles}`);
+    ok(padBlocked === "", `…all of them walkable${padBlocked && " — " + padBlocked}`);
+    ok(missedSquare === "", `…all of them teleporting${missedSquare && " — " + missedSquare}`);
+    ok(leaked === "", `…and nothing outside the block does${leaked && " — " + leaked}`);
+
+    // the blocks land where the artwork painted them: two columns of pads at
+    // x=3 and x=15, plus the extra pair along the top row
+    const corners = pads.map((p) => portalTiles(p)[0]).map((t) => `${t.tx},${t.ty}`).sort();
+    ok(corners.join(" ") === [
+      "11,4", "15,13", "15,17", "15,21", "15,34", "15,4", "15,8",
+      "3,13", "3,17", "3,21", "3,34", "3,4", "3,8", "7,4",
+    ].sort().join(" "), `pads sit on the painted blocks (${corners.join(" ")})`);
+
+    // the ladders stay single-tile: a spanned staircase would be nonsense
+    ok(up.span === undefined, "the way up is a plain one-tile staircase");
+    ok(portalCovers(up, up.x, up.y) && !portalCovers(up, up.x + T, up.y),
+      "…and is still tested as a radius, not a block");
 
     const deep = cellar.npcs.find((n) => n.key === "timesage")!;
     ok(!!deep, "the sage is in his cellar too");
