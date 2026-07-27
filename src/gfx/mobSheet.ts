@@ -11,6 +11,12 @@
  * frame to its own bounds and the arms' swing changes the width, so the body
  * jitters sideways as the cycle plays.
  *
+ * The rectangle itself differs per creature and is read off the file, not
+ * hard-coded: a bandit is 32x55 but the minotaur guard's shield and the mage's
+ * staff push those two out to 50x56 and 60x64. The crop is kept symmetric about
+ * the source cell's centre line so a wide prop on one side does not shove the
+ * body off the tile it stands on.
+ *
  * Column 0 of a row is the standing pose; columns 1-8 are the stride. A
  * creature standing still shows column 0 and never ticks a clock.
  *
@@ -35,6 +41,10 @@ const WALK_FPS = 8;
  */
 const SHEET_SRC: Record<string, string> = {
   bandit: "./mob-bandit-walk.png",
+  minotaur: "./mob-minotaur-walk.png",
+  minotaurArcher: "./mob-minotaur-archer-walk.png",
+  minotaurGuard: "./mob-minotaur-guard-walk.png",
+  minotaurMage: "./mob-minotaur-mage-walk.png",
   "npc:smith": "./npc-smith.png",
   "npc:herbalist": "./npc-herbalist.png",
   "npc:elder": "./npc-elder.png",
