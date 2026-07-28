@@ -219,6 +219,54 @@ take, and stretches the archer's body to 60px against the bare corpse's 40px.
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
+## Snake — `public/mob-snake-walk.png`, `public/mob-snake-dead.png`
+
+The snake is **not** an LPC asset. It comes from the "Snake Sprites" pack by
+**carysaurus**: <https://carysaurus.itch.io/snake-sprites>
+
+### Licence: pack terms, attribution required
+
+Verbatim from the pack: *"This asset pack can be used in both free and
+commercial projects; you cannot redistribute or resell these assets. Credit must
+be given."*
+
+Three consequences worth spelling out, because they run the opposite way to the
+LPC art above:
+
+- **Attribution is mandatory** — carysaurus must be credited in this file and on
+  the in-game Credits screen.
+- **No redistribution.** Shipping the sprite inside a running game is ordinary
+  licensed use; publishing the sheet as a standalone file where anyone can take
+  it is not. That makes a *public* source repository the exposure, not the
+  deployed game. This repo is to go private before commercial release.
+- **No share-alike.** Unlike the LPC art, nothing here has to stay openly
+  available, and nothing may.
+
+### What was changed
+
+Only the green snake of the six in the pack is used, and only its walk strip
+(`SnakeGreen-Walk.png`, 224x32 — seven 32px frames in a single row).
+
+The pack's four-colour palette was swapped for a cooler, deeper green so the
+creature reads as its own animal rather than as the pack's stock sprite:
+outline `#101c14`, body `#4f9e5a`, underside `#2f6b3c`, back `#1d3d26`. No
+shape was altered — this is a palette substitution, pixel for pixel.
+
+The strip was repacked into a 7x4 grid cropped to one 32x21 rectangle shared by
+every frame. The pack contains a side view and nothing else, so row 3 (right) is
+the source, row 1 (left) is its mirror, and rows 0 and 2 (up, down) carry the
+side view too — a monster spawns facing "down" before it has taken a step. In
+play a snake turns only on horizontal movement and holds its facing through a
+vertical one, so a pose that was never drawn is never shown (`SIDE_ONLY` in
+`src/gfx/mobSheet.ts`).
+
+`mob-snake-dead.png` (30x7) is **original artwork drawn for this game**, not
+part of the pack: the pack ships no death frame. It is a slack, uncoiled body in
+the same four-colour palette, with a dark back, a lit flank, a pale underside, a
+dead eye marked in outline and a lolling tongue. It contains no pixels from the
+pack and carries no external obligation, but it is a recognisable derivative of
+the pack's creature and should be treated as covered by the same terms.
+
 ## Borin the Smith — `public/npc-smith.png`
 
 The town smith is composed from the same **Universal LPC Spritesheet Character

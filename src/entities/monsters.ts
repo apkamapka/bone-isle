@@ -5,7 +5,7 @@ import { SPR } from "../gfx/sprites.ts";
 import { randomWalkable, lineOfSight } from "../world/collision.ts";
 import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
 import { inHavenBand } from "../world/collision.ts";
-import { dirOfStep } from "../gfx/mobSheet.ts";
+import { stepFacing } from "../gfx/mobSheet.ts";
 import type { Occupied } from "../world/grid.ts";
 import { Tile } from "../world/types.ts";
 import type { World, Monster, MonsterKind, Camp } from "../world/types.ts";
@@ -546,8 +546,7 @@ export function updateMonsters(
   /** A step that also records which way the creature ended up facing. */
   const step = (m: Monster, sx: number, sy: number, occ: Occupied): boolean => {
     if (!tryStep(w, m, sx, sy, occ)) return false;
-    const d = dirOfStep(sx, sy);
-    if (d) m.dir = d;
+    m.dir = stepFacing(m.kind, sx, sy, m.dir);
     return true;
   };
 

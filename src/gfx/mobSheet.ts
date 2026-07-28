@@ -35,12 +35,36 @@ const COLS = 9;
 const WALK_FPS = 8;
 
 /**
+ * Sheets that are not nine frames across. The LPC exports all are; artwork from
+ * elsewhere is whatever its author drew, and the snake pack ships seven.
+ */
+const SHEET_COLS: Record<string, number> = {
+  snake: 7,
+};
+
+const colsOf = (id: string): number => SHEET_COLS[id] ?? COLS;
+
+/**
+ * Creatures whose artwork has only a side view.
+ *
+ * The snake was drawn facing one way and nothing else — no front, no back. The
+ * honest answer is to never show a pose that was never drawn: a step with any
+ * horizontal component turns the creature, and a straight up-or-down step
+ * leaves it facing where it already was. It slithers across the screen rather
+ * than pretending to look at the camera. Both vertical rows of its sheet still
+ * carry the side view, because a monster spawns facing "down" before it has
+ * taken a single step.
+ */
+const SIDE_ONLY = new Set<string>(["snake"]);
+
+/**
  * Sheets to load, keyed by creature. Townsfolk live in the same registry under
  * an `npc:` prefix — a walking smith is the same problem as a walking bandit,
  * and one loader means one place where the LPC layout is spelled out.
  */
 const SHEET_SRC: Record<string, string> = {
   bandit: "./mob-bandit-walk.png",
+  snake: "./mob-snake-walk.png",
   skeleton: "./mob-skeleton-walk.png",
   goblin: "./mob-goblin-walk.png",
   ghoul: "./mob-ghoul-walk.png",
@@ -80,6 +104,7 @@ const sheets: Record<string, Cut | undefined> = {};
  */
 const CORPSE_SRC: Record<string, string> = {
   bandit: "./mob-bandit-dead.png",
+  snake: "./mob-snake-dead.png",
   skeleton: "./mob-skeleton-dead.png",
   goblin: "./mob-goblin-dead.png",
   ghoul: "./mob-ghoul-dead.png",
@@ -98,13 +123,13 @@ const CORPSE_SRC: Record<string, string> = {
 const bodies: Record<string, HTMLCanvasElement | undefined> = {};
 
 /** Slice a loaded sheet into its 4 x 9 grid of frames. */
-function slice(img: HTMLImageElement): Cut {
-  const fw = Math.floor(img.naturalWidth / COLS);
+function slice(img: HTMLImageElement, cols: number): Cut {
+  const fw = Math.floor(img.naturalWidth / cols);
   const fh = Math.floor(img.naturalHeight / 4);
   const rows: Cut = [];
   for (let r = 0; r < 4; r++) {
     const row: HTMLCanvasElement[] = [];
-    for (let c = 0; c < COLS; c++) {
+    for (let c = 0; c < cols; c++) {
       const cv = document.createElement("canvas");
       cv.width = fw;
       cv.height = fh;
@@ -124,7 +149,7 @@ export function loadMobSheets(): void {
   for (const id of Object.keys(SHEET_SRC)) {
     if (sheets[id]) continue;
     const img = new Image();
-    img.onload = () => { sheets[id] = slice(img); };
+    img.onload = () => { sheets[id] = slice(img, colsOf(id)); };
     img.onerror = () => {
       console.warn(`walk sheet for '${id}' failed to load, it will slide instead`);
     };
@@ -194,7 +219,7 @@ function frameOf(
   if (!cut) return null;
   const row = cut[DIR_ROW[dir]];
   if (!moving) return row[0];
-  const step = 1 + (Math.floor(phase * WALK_FPS) % (COLS - 1));
+  const step = 1 + (Math.floor(phase * WALK_FPS) % (row.length - 1));
   return row[step];
 }
 
@@ -203,5 +228,20 @@ function frameOf(
 export function dirOfStep(sx: number, sy: number): MobDir | null {
   if (sx === 0 && sy === 0) return null;
   if (Math.abs(sy) >= Math.abs(sx)) return sy < 0 ? "up" : "down";
+  return sx < 0 ? "left" : "right";
+}
+
+/**
+ * The facing a creature ends a step in, given where it was already looking.
+ *
+ * Everything with a full four-view sheet just turns. A side-only creature
+ * (see SIDE_ONLY) turns on the horizontal and keeps its facing through a purely
+ * vertical step, so it never has to show a view nobody drew.
+ */
+export function stepFacing(
+  kind: MonsterKind, sx: number, sy: number, current: MobDir,
+): MobDir {
+  if (!SIDE_ONLY.has(kind)) return dirOfStep(sx, sy) ?? current;
+  if (sx === 0) return current;
   return sx < 0 ? "left" : "right";
 }

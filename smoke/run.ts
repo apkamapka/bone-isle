@@ -1759,6 +1759,72 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("The snake slithers, and only sideways:");
+  {
+    const fs = await import("node:fs");
+    const { stepFacing, mobFrame } = await import("../src/gfx/mobSheet.ts");
+    const sheetSrc = fs.readFileSync(
+      new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+
+    const png = (file: string): [number, number] => {
+      const b = fs.readFileSync(new URL(`../public/${file}`, import.meta.url));
+      return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    };
+
+    ok(sheetSrc.includes('snake: "./mob-snake-walk.png"'), "the snake has a walk sheet");
+    ok(fs.existsSync(new URL("../public/mob-snake-walk.png", import.meta.url)),
+      "…and it is actually shipped");
+
+    // Seven frames, not the LPC nine — the slicer has to read the count off the
+    // sheet rather than assume, or every frame lands a third of a body out.
+    const [w, h] = png("mob-snake-walk.png");
+    ok(sheetSrc.includes("snake: 7"), "…registered as a seven-frame strip");
+    ok(w % 7 === 0 && h % 4 === 0, `…laid out as a 7x4 grid (${w}x${h})`);
+    ok(w / 7 === 32 && h / 4 === 21, "…with a 32x21 frame: one tile long, a third of a tile tall");
+
+    // it must read as vermin next to the humanoids, not as another orc
+    ok(h / 4 < png("mob-orc-walk.png")[1] / 4 / 2,
+      "the snake is under half the orc's height");
+
+    // side-only facing: horizontal turns it, vertical leaves it alone
+    ok(stepFacing("snake", 1, 0, "left") === "right", "a step east turns the snake east");
+    ok(stepFacing("snake", -1, 0, "right") === "left", "…and a step west turns it west");
+    ok(stepFacing("snake", 1, -1, "left") === "right", "…a diagonal turns it on the horizontal");
+    ok(stepFacing("snake", 0, -1, "right") === "right", "a step north leaves it facing east");
+    ok(stepFacing("snake", 0, 1, "left") === "left", "…and a step south leaves it facing west");
+    ok(stepFacing("snake", 0, 0, "left") === "left", "standing still changes nothing");
+
+    // everything else still turns all four ways, ties to the vertical
+    ok(stepFacing("orc", 0, -1, "left") === "up", "an orc still faces north when it walks north");
+    ok(stepFacing("orc", 1, -1, "left") === "up", "…and its diagonals still break to the vertical");
+    ok(stepFacing("orc", 1, 0, "up") === "right", "…while a step east turns it east");
+    ok(stepFacing("orc", 0, 0, "up") === "up", "…and standing still changes nothing");
+
+    ok(mobFrame("snake", "right", true, 0) === null,
+      "headless it still falls back to the baked sprite");
+
+    // the body is hand-drawn, since the pack ships no death frame
+    ok(fs.existsSync(new URL("../public/mob-snake-dead.png", import.meta.url)),
+      "the snake leaves a body");
+    ok(sheetSrc.includes('snake: "./mob-snake-dead.png"'), "…and it is registered");
+    const [dw, dh] = png("mob-snake-dead.png");
+    ok(dw <= 32 && dh < 21, `…lying flatter than the living coil (${dw}x${dh})`);
+
+    // this pack is not LPC and its terms run the other way — the credit is
+    // mandatory and the redistribution ban is the thing to remember
+    ok(credits.includes("carysaurus"), "the pack's author is credited by name");
+    ok(credits.includes("carysaurus.itch.io/snake-sprites"), "…with a link to the source");
+    ok(credits.includes("cannot redistribute"), "…and the licence term is quoted, not paraphrased");
+    ok(!credits.includes("mob-snake-walk.png` is a derivative work of CC-BY-SA"),
+      "…and it is not mislabelled as CC-BY-SA like the LPC art");
+
+    // it stays at the bottom of the ladder: new art, same creature
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    ok(MONSTER_DEFS.snake.exp <= 10 && MONSTER_DEFS.snake.hp <= 20,
+      "the snake is still a level 1 creature");
+  }
+
   console.log("Bodies on the ground:");
   {
     const fs = await import("node:fs");
