@@ -515,7 +515,8 @@ async function main(): Promise<void> {
     const { MONSTER_DEFS, MONSTER_KINDS, spawnMonster, updateMonsters } = await import("../src/entities/monsters.ts");
     const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S, TILE } = await import("../src/config.ts");
     const { killMonster } = await import("../src/systems/combat.ts");
-    ok(MONSTER_KINDS.length === 31, `bestiary holds 31 kinds (30 + the dragon), got ${MONSTER_KINDS.length}`);
+    // 30 + the dragon, then the two undead heavies of Etap 18
+    ok(MONSTER_KINDS.length === 33, `bestiary holds 33 kinds (32 + the dragon), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -2252,6 +2253,106 @@ async function main(): Promise<void> {
     ok(/PORTAL_LIVE_CORE = "#c9a6ff"/.test(cfg), "…and a live one still breathes violet");
     const mainSrc = fs3.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
     ok(!/rgba\(140,140,148/.test(mainSrc), "the old ash-grey pad is gone from the renderer");
+  }
+
+  console.log("The skeleton warrior and the demon skeleton join the bestiary:");
+  {
+    const fs = await import("node:fs");
+    const { mobFrame, corpseSprite } = await import("../src/gfx/mobSheet.ts");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const sheetSrc = fs.readFileSync(
+      new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+
+    const png = (file: string): [number, number] => {
+      const b = fs.readFileSync(new URL(`../public/${file}`, import.meta.url));
+      return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    };
+
+    const UNDEAD: [string, string][] = [
+      ["skeletonWarrior", "mob-skeleton-warrior-walk.png"],
+      ["demonSkeleton", "mob-demon-skeleton-walk.png"],
+    ];
+
+    for (const [kind, file] of UNDEAD) {
+      ok(sheetSrc.includes(`${kind}: "./${file}"`), `${kind} has a walk sheet registered`);
+      ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
+        `…and ${file} is actually shipped`);
+      const [w, h] = png(file);
+      ok(w % 9 === 0 && h % 4 === 0,
+        `…laid out as the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(h / 4 === 49, "…with all four facings cut to one height, so it never bobs on turning");
+      ok(credits.includes(file), `…and ${file} is credited by filename`);
+      ok(mobFrame(kind as never, "down", true, 0) === null,
+        "…while headless it still falls back to the baked sprite");
+      ok(corpseSprite(kind) === null,
+        "…and headless its body falls back too, rather than throwing");
+    }
+
+    // Three skeletons, one heap of bones. A new *-dead.png for either of these
+    // means someone re-drew a corpse that was deliberately shared.
+    for (const k of ["skeleton", "skeletonWarrior", "demonSkeleton"]) {
+      ok(sheetSrc.includes(`${k}: "./mob-skeleton-dead.png"`),
+        `${k} leaves the shared skeleton body`);
+    }
+    for (const f of ["mob-skeleton-warrior-dead.png", "mob-demon-skeleton-dead.png"]) {
+      ok(!fs.existsSync(new URL(`../public/${f}`, import.meta.url)),
+        `no separate ${f} — the three skeletons share one corpse`);
+    }
+
+    // The wings are the whole point of the demon's silhouette: they fill the
+    // 64px source cell edge to edge, which makes it the widest thing alive.
+    const demonW = png("mob-demon-skeleton-walk.png")[0] / 9;
+    ok(demonW === 64, "the demon's wings span the full source cell");
+    for (const f of ["mob-orc-berserker-walk.png", "mob-minotaur-guard-walk.png",
+      "mob-minotaur-mage-walk.png"]) {
+      ok(png(f)[0] / 9 < demonW, `…wider than ${f}, which used to hold the record`);
+    }
+    ok(png("mob-skeleton-warrior-walk.png")[0] / 9 > png("mob-skeleton-walk.png")[0] / 9,
+      "the warrior is wider than the bare skeleton — the helmet and dagger stick out");
+
+    /* --- stats: the warrior shadows the minotaur guard, the demon the dragon --- */
+    const guard = MONSTER_DEFS.minotaurGuard;
+    const warrior = MONSTER_DEFS.skeletonWarrior;
+    const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= b * tol;
+    ok(near(warrior.hp, guard.hp, 0.1), "the skeleton warrior matches the guard's HP");
+    ok(near(warrior.exp, guard.exp, 0.1), "…and its experience");
+    ok(near(warrior.dmg[0], guard.dmg[0], 0.15) && near(warrior.dmg[1], guard.dmg[1], 0.15),
+      "…and both ends of its damage roll");
+
+    const dragon = MONSTER_DEFS.dragon;
+    const demon = MONSTER_DEFS.demonSkeleton;
+    ok(demon.hp < dragon.hp && demon.hp > dragon.hp * 0.6,
+      "the demon skeleton is below the dragon but in its weight class");
+    ok(demon.exp < dragon.exp && demon.dmg[1] < dragon.dmg[1],
+      "…worth less and hitting softer than the boss");
+    ok(demon.hp > MONSTER_DEFS.boneLord.hp,
+      "…yet clear of the Bone Lord, the next thing down");
+
+    // Both are melee. A ranged block on either would let it out-range the bow
+    // it is meant to be fought with, and the demon has no breath to justify it.
+    ok(warrior.ranged === undefined, "the skeleton warrior fights in melee only");
+    ok(demon.ranged === undefined, "…and so does the demon skeleton");
+
+    // Loot is being done wholesale later; an empty table must stay empty and
+    // must not crash the roller.
+    const { rollLoot } = await import("../src/entities/monsters.ts");
+    for (const k of ["skeletonWarrior", "demonSkeleton"] as const) {
+      ok(MONSTER_DEFS[k].loot.length === 0, `${k} carries no loot table yet`);
+      ok(rollLoot(k).items.length === 0, "…and rolling it yields nothing rather than throwing");
+    }
+
+    /* --- they actually spawn somewhere, and it is flagged as temporary --- */
+    const gameSrc = fs.readFileSync(new URL("../src/game.ts", import.meta.url), "utf8");
+    ok(/TEMP-ETAP18/.test(gameSrc),
+      "the stand-in spawn entries are tagged for removal");
+    const worlds = buildWorlds(WORLD_SEED);
+    const { populateWorld: pw3 } = await import("../src/game.ts");
+    pw3(worlds.cave3, WORLD_SEED);
+    ok(worlds.cave3.monsters.some((m) => m.kind === "skeletonWarrior"),
+      "a skeleton warrior stands on Bone Caverns -3");
+    ok(worlds.cave3.monsters.some((m) => m.kind === "demonSkeleton"),
+      "…and so does a demon skeleton");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

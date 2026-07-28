@@ -203,7 +203,8 @@ right), nine frames each — repacked into a 9x4 grid and cropped to one rectang
 shared by every frame, symmetric about the source cell's centre line (see
 `src/gfx/mobSheet.ts`). No pixel was repainted. Frame sizes: 32x47 skeleton,
 32x49 goblin, 32x48 ghoul, 32x46 orc, 40x47 warrior, 52x47 berserker (the mace
-held out sideways is the widest sprite in the game), 44x47 archer, 38x46 shaman.
+held out sideways, the widest sprite in the game until the demon skeleton's
+wings arrived), 44x47 archer, 38x46 shaman.
 
 The bodies are the last frame of the hurt row (row 20, column 6) of each export,
 cropped to the body. All five orc ranks share `mob-orc-dead.png`, taken from the
@@ -218,6 +219,46 @@ take, and stretches the archer's body to 60px against the bare corpse's 40px.
 **ShareAlike:** these twelve files are derivative works of CC-BY-SA 3.0 artwork
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
+
+## Skeleton Warrior and Demon Skeleton
+
+`public/mob-skeleton-warrior-walk.png`, `public/mob-demon-skeleton-walk.png`.
+Neither has a body file of its own — both reuse `public/mob-skeleton-dead.png`,
+credited in the section above.
+
+Both are composed from the same **Universal LPC Spritesheet Character
+Generator** as everything above, under the same licences as the layers listed
+under the player. They share the plain skeleton's body and head
+(`Skeleton_skeleton`) with the skeleton already in the game, so the three read
+as one family; only the gear and the wings differ.
+
+Reproducible character configurations:
+
+- Skeleton Warrior —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Skeleton_skeleton&head=Skeleton_skeleton&expression=Neutral_light&hat=Barbarian_steel&gloves=Gloves_steel&legs=Armour_steel&weapon=Dagger_dagger>
+- Demon Skeleton —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&head=Skeleton_skeleton&expression=Neutral_all.lpcr.red&gloves=Gloves_steel&legs=Armour_steel&body=Skeleton_skeleton&wings=Bat_Wings_fur_white&shoulders=Epaulets_gray>
+
+Beyond the collections listed under the player, these two draw on the skeleton
+base and head and on the barbarian-helm, steel-glove, steel-legplate, dagger,
+grey-epaulet and bat-wing layers of the ULPC project; the generator's own
+credits export is authoritative for the per-layer author list.
+
+From each export only the walk block was kept — rows 8-11 (up, left, down,
+right), nine frames each — repacked into a 9x4 grid and cropped to one rectangle
+shared by every frame, symmetric about the source cell's centre line (see
+`src/gfx/mobSheet.ts`). No pixel was repainted. Frame sizes: 40x49 warrior,
+64x49 demon. The demon is the widest creature in the game and by some margin:
+its spread wings fill the source cell edge to edge, so the crop could not be
+narrowed without clipping them.
+
+> **TODO before release:** download "Credits (CSV)" from the generator for both
+> configurations and paste the per-layer author lists here. The URLs reproduce
+> the characters, but a URL is not an attribution.
+
+**ShareAlike:** both files are derivative works of CC-BY-SA 3.0 artwork and are
+themselves published under **CC-BY-SA 3.0**. They must stay publicly available
+on those terms even if this repository is later made private.
 
 ## Snake — `public/mob-snake-walk.png`, `public/mob-snake-dead.png`
 

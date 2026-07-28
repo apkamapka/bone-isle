@@ -89,6 +89,7 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   cave3: {
     troll: 3, mummy: 3, orcBerserker: 4, cyclops: 4,
     minotaurGuard: 3, minotaurMage: 3, boneLord: 3, dragon: 1,
+    skeletonWarrior: 3, demonSkeleton: 1, // TEMP-ETAP18: until they get their own grounds
   },
   // ---- Deep Wildlands camp lairs: each settlement's dungeon, difficulty ----
   // ---- rising floor by floor (Etap 9b). Floor -1s tested as "ok"; the    ----
@@ -104,7 +105,8 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   bastion1: { minotaur: 4, minotaurArcher: 3 },
   bastion2: { minotaurGuard: 5, minotaurMage: 4, minotaur: 6 },
   grave1:   { skeleton: 4, ghoul: 4, ghost: 3 },
-  grave2:   { mummy: 8, ghost: 6, boneLord: 2 },
+  grave2:   { mummy: 8, ghost: 6, boneLord: 2,
+              skeletonWarrior: 3, demonSkeleton: 1 }, // TEMP-ETAP18: see cave3
   roost1:   { bear: 3, warWolf: 3 },
   roost2:   { cyclops: 5, orcBerserker: 4 },
   // the Roost's heart: the SECOND dragon (the cavern one guards the chest;

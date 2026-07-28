@@ -171,6 +171,9 @@ export type MonsterKind =
   | "warWolf" | "ghoul" | "orcArcher" | "orcWarrior" | "hunter"
   | "minotaurArcher" | "orcShaman" | "mummy" | "orcBerserker"
   | "minotaurGuard" | "minotaurMage"
+  // Etap 18 — the undead heavies. Both are skeletons and both leave the
+  // skeleton's body; the demon is the last thing short of the dragon.
+  | "skeletonWarrior" | "demonSkeleton"
   // the boss: one lair at the bottom of the Bone Caverns, long respawn
   | "dragon";
 

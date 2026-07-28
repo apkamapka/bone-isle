@@ -77,6 +77,8 @@ const SHEET_SRC: Record<string, string> = {
   minotaurArcher: "./mob-minotaur-archer-walk.png",
   minotaurGuard: "./mob-minotaur-guard-walk.png",
   minotaurMage: "./mob-minotaur-mage-walk.png",
+  skeletonWarrior: "./mob-skeleton-warrior-walk.png",
+  demonSkeleton: "./mob-demon-skeleton-walk.png",
   "npc:smith": "./npc-smith.png",
   "npc:herbalist": "./npc-herbalist.png",
   "npc:elder": "./npc-elder.png",
@@ -101,11 +103,19 @@ const sheets: Record<string, Cut | undefined> = {};
  * The five orc ranks share the plain orc's body for the same reason, and the
  * saving is larger there: the archer's dropped crossbow alone stretches his
  * death frame to 60px, half again the width of the bare corpse.
+ *
+ * The three skeletons go further and share the ORIGINAL skeleton's body. That
+ * one is not a saving, it is the fiction: strip a skeleton warrior of its
+ * helmet and dagger, or a demon skeleton of its wings, and what is left on the
+ * ground is the same heap of bones the plain skeleton leaves. Drawing three
+ * near-identical piles would have been three downloads to say one thing.
  */
 const CORPSE_SRC: Record<string, string> = {
   bandit: "./mob-bandit-dead.png",
   snake: "./mob-snake-dead.png",
   skeleton: "./mob-skeleton-dead.png",
+  skeletonWarrior: "./mob-skeleton-dead.png",
+  demonSkeleton: "./mob-skeleton-dead.png",
   goblin: "./mob-goblin-dead.png",
   ghoul: "./mob-ghoul-dead.png",
   orc: "./mob-orc-dead.png",

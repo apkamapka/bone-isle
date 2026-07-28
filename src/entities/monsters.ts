@@ -213,6 +213,14 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.minotaurGuard, hp: 280, dmg: [16, 42], speed: 56, atkRate: 2.0, exp: 210, gold: [16, 34], danger: 0.85,
     loot: [{ kind: "steelShield", chance: 0.05, n: [1, 1] }, { kind: "chainArmor", chance: 0.06, n: [1, 1] }, { kind: "bones", chance: 0.6, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] }],
   },
+  // A minotaur guard's equal, built out of the skeleton instead of the bull:
+  // same wall of HP, same heavy two-second swing, marginally quicker on its
+  // feet because it carries no shield. Pure melee — the dagger is a stabbing
+  // weapon, not a thrown one, so it must close the distance like the guard.
+  skeletonWarrior: {
+    spr: SPR.skeleton, hp: 275, dmg: [15, 41], speed: 58, atkRate: 2.0, exp: 205, gold: [14, 30], danger: 0.85,
+    loot: [],
+  },
   minotaurMage: {
     spr: SPR.minotaurMage, hp: 220, dmg: [8, 20], speed: 52, atkRate: 2.0, exp: 240, gold: [18, 38], danger: 0.9,
     ranged: { range: 280, dmg: [12, 32], color: "#ff8a3a", wide: true }, // fire bolt
@@ -221,6 +229,16 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   boneLord: {
     spr: SPR.boneLord, hp: 340, dmg: [18, 49], speed: 44, atkRate: 2.0, exp: 300, gold: [25, 50], danger: 0.99,
     loot: [{ kind: "fireRuby", chance: 0.3, n: [1, 2] }, { kind: "boneSword", chance: 0.12, n: [1, 1] }, { kind: "amulet", chance: 0.08, n: [1, 1] }, { kind: "ring", chance: 0.06, n: [1, 1] }],
+  },
+  // Second-hardest thing in the game, and deliberately shaped as the dragon's
+  // shadow: roughly three quarters of its damage, four fifths of its HP, three
+  // quarters of its experience. The difference that matters is reach — the
+  // dragon breathes, this one has only claws, so it can be fought at a bow's
+  // length in a way the dragon never allows. It is slightly faster to make the
+  // closing distance cost you something.
+  demonSkeleton: {
+    spr: SPR.boneLord, hp: 780, dmg: [36, 95], speed: 62, atkRate: 2.0, exp: 700, gold: [45, 105], danger: 0.97,
+    loot: [],
   },
   // The boss. One dragon nests in the deepest reaches of Bone Caverns -3
   // (Tibia's Dragon Lair feel): a wall for anyone under ~level 15, a real but
