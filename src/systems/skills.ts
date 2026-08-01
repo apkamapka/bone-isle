@@ -2,10 +2,13 @@
 import { beep } from "../audio.ts";
 import { gearStat, gearStatOf, equippedBow } from "../items.ts";
 import {
-  DIST_FACTOR_BASE, DIST_FACTOR_PER, DIST_LEVEL_BONUS,
-  MELEE_FIST_ATK, MELEE_FACTOR_BASE, MELEE_FACTOR_PER, MELEE_LEVEL_BONUS,
+  MELEE_FIST_ATK, MIN_HIT_RATIO,
+  SKILL_TERM_PER, SKILL_TERM_PER_DIST, SKILL_TERM_FLAT,
+  LEVEL_DIVISOR, MASTERY_DIVISOR,
+  ARMOR_MIN_RATIO, SHIELD_SKILL_FACTOR, SHIELD_FLAT_FACTOR,
   DIST_HITCHANCE_BASE, DIST_HITCHANCE_PER, DIST_HITCHANCE_MAX,
 } from "../config.ts";
+import { stanceAtk, stanceDef } from "./stance.ts";
 import type { Equipment } from "../items.ts";
 
 export type SkillKey = "sword" | "shield" | "dist";
@@ -87,67 +90,149 @@ export function addSkillXp(key: SkillKey, n: number, onLevel?: SkillUpFx): void 
   }
 }
 
-/** Derived combat stats from skills + level + equipped gear. */
+/* ================================================================== *
+ *  ATTACK
+ *
+ *  maxHit = attackValue · skillTerm · levelFactor · mastery · stance
+ *
+ *  Four multiplied terms, each bought with a different currency: gear with
+ *  gold, skillTerm with training hours, levelFactor with experience, mastery
+ *  with the decision not to spread yourself thin. Nothing here is additive,
+ *  which is why gear can never substitute for training.
+ * ================================================================== */
+
+/** The linear skill ramp. `per` differs between melee and distance. */
+function skillTerm(skillLv: number, per: number): number {
+  return per * skillLv + SKILL_TERM_FLAT;
+}
+
+/** Character level as a straight multiplier: 1 level ≈ +1% damage. */
+export function levelFactor(level: number): number {
+  return 1 + level / LEVEL_DIVISOR;
+}
+
 /**
- * Melee attack value scaled by Sword Fighting. Unarmed you swing bare fists
- * (MELEE_FIST_ATK); a weapon adds its gear Attack on top, and the whole thing is
- * multiplied by a skill-driven factor — so a +7 sword pulls much further ahead
- * of fists as your Sword skill climbs, rather than being a flat +7.
+ * Specialisation bonus. `used` is the skill you are swinging with; the penalty
+ * is measured against your best OTHER *weapon* skill, so a 60/10 specialist is
+ * rewarded and a 50/50 hybrid is not. Shielding never enters this calculation:
+ * sword and bow are mutually exclusive in the moment, a shield is not, and
+ * taxing it would make training defense strictly wrong.
+ */
+export function mastery(used: SkillKey): number {
+  const other = used === "sword" ? skills.dist.lv : skills.sword.lv;
+  return 1 + Math.max(0, skills[used].lv - other) / MASTERY_DIVISOR;
+}
+
+/**
+ * Maximum melee hit. Unarmed you swing bare fists (MELEE_FIST_ATK); a weapon's
+ * gear Attack adds to that attack value before every multiplier, so a better
+ * blade pulls further ahead the more Sword Fighting you have.
  */
 export function attackPower(level: number, eq: Equipment): number {
   const attackValue = MELEE_FIST_ATK + gearStat(eq, "atk");
-  const factor = MELEE_FACTOR_BASE + (skills.sword.lv - 10) * MELEE_FACTOR_PER;
-  return Math.max(1, Math.round(attackValue * factor) + Math.floor(level * MELEE_LEVEL_BONUS));
+  const raw = attackValue
+    * skillTerm(skills.sword.lv, SKILL_TERM_PER)
+    * levelFactor(level)
+    * mastery("sword")
+    * stanceAtk();
+  return Math.max(1, Math.round(raw));
 }
+
 /**
- * Damage of a single arrow shot. The raw attack value (bow power + arrow) is
- * scaled by a factor driven almost entirely by Distance Fighting: at skill 10
- * you only land ~30% of it, but the multiplier climbs every level, so a maxed
- * archer hits several times harder with the very same bow and arrows. This is
- * the "damage is proportional to skill" behaviour — a fresh bow is deliberately
- * weak until you train it up.
+ * Maximum damage of a single arrow. Same pipeline as melee, driven by Distance
+ * Fighting and a marginally hotter per-point term — the bow pays for that with
+ * its accuracy roll, its ammunition and the shield it cannot hold.
  */
 export function distancePower(level: number, eq: Equipment, arrowAtk: number): number {
   const attackValue = (equippedBow(eq)?.power ?? 0) + arrowAtk;
-  const factor = DIST_FACTOR_BASE + (skills.dist.lv - 10) * DIST_FACTOR_PER;
-  return Math.max(1, Math.round(attackValue * factor) + Math.floor(level * DIST_LEVEL_BONUS));
+  const raw = attackValue
+    * skillTerm(skills.dist.lv, SKILL_TERM_PER_DIST)
+    * levelFactor(level)
+    * mastery("dist")
+    * stanceAtk();
+  return Math.max(1, Math.round(raw));
 }
+
 /**
- * Tibia 8.6 damage rolls. attackPower/distancePower above compute the MAX hit;
- * an actual melee blow is uniform 0..max (a 0 is the classic whiffed "poof"),
- * and an arrow that passes its accuracy roll lands for uniform lvl/5..max.
- * Average damage is therefore about HALF the max — the single biggest reason
- * leveling now paces like the real game instead of every hit being a crit.
+ * The damage roll. Both channels land uniformly between MIN_HIT_RATIO · max
+ * and max, so the average blow is 0.70 · max. The old floor of zero meant a
+ * flat 1-in-max chance to whiff entirely on every single swing — dramatic the
+ * first time, maddening by the hundredth, and it made high defense feel like
+ * nothing because half your damage was noise anyway.
  */
-export function rollMeleeDamage(max: number): number {
-  return Math.floor(Math.random() * (max + 1));
-}
-export function rollDistanceDamage(max: number, level: number): number {
-  const min = Math.min(max, Math.floor(level / 5));
+function rollHit(max: number): number {
+  const min = Math.floor(max * MIN_HIT_RATIO);
   return min + Math.floor(Math.random() * (max - min + 1));
 }
+export function rollMeleeDamage(max: number): number {
+  return rollHit(max);
+}
+export function rollDistanceDamage(max: number, _level?: number): number {
+  return rollHit(max);
+}
+
 /** Accuracy of one bow shot at the current Distance Fighting skill. */
 export function distanceHitChance(): number {
   return Math.min(DIST_HITCHANCE_MAX, DIST_HITCHANCE_BASE + (skills.dist.lv - 10) * DIST_HITCHANCE_PER);
 }
 
+/* ================================================================== *
+ *  DEFENSE
+ *
+ *  raw damage → armor → shield → HP
+ *
+ *  Two stages that behave completely differently. Armor is a flat subtraction
+ *  and therefore shreds a hail of small hits while barely denting one heavy
+ *  one. The shield is a proportional roll and does the opposite. Which of the
+ *  two saved you is worth showing on screen — armor sparks, a shield puffs.
+ * ================================================================== */
+
 /**
- * Shield-side defense: the Shielding skill plus the def of what's in your
- * hands (shield, or a weapon's def bonus). This part only applies to hits
- * your shield actually engages — at most SHIELD_BLOCK_MAX attackers per round.
+ * Shield-side rating: what is in your hands (a shield, or a weapon's own def).
+ * Note that unlike the old model the Shielding SKILL is not folded in here —
+ * it multiplies this rating inside shieldBlockMax instead, which is what lets
+ * a trained character get real value out of a good shield rather than a flat
+ * bonus that a wooden buckler would have given just as well.
  */
 export function defenseShield(eq: Equipment): number {
-  return Math.floor((skills.shield.lv - 10) / 2) + gearStatOf(eq, "def", ["shield", "weapon"]);
+  return gearStatOf(eq, "def", ["shield", "weapon"]);
 }
 
-/** Armor-side defense: worn pieces (helmet, armor, legs, boots, jewellery).
+/** Armor-side rating: worn pieces (helmet, armor, legs, boots, jewellery).
  *  Always applies, to every hit, no matter how many creatures are on you. */
 export function defenseArmor(eq: Equipment): number {
   return gearStatOf(eq, "def", ["head", "body", "legs", "boots", "ring", "amulet"]);
 }
 
-/** Full defense (shield + armor) — what a blocked hit is reduced by. */
+/** Both ratings together — used by the UI, never by the damage pipeline. */
 export function defensePower(eq: Equipment): number {
   return defenseShield(eq) + defenseArmor(eq);
+}
+
+/**
+ * Flat armor reduction, rolled from half the rating to all of it. An odd total
+ * therefore protects exactly as well as the next even number down — a quirk
+ * inherited from Tibia and kept deliberately, because it makes armor values
+ * read as chunky steps rather than a smooth dial.
+ */
+export function rollArmorReduction(armor: number): number {
+  const half = Math.floor(armor * ARMOR_MIN_RATIO);
+  return half + Math.floor(Math.random() * (armor - half + 1));
+}
+
+/** Ceiling of a shield block at the current Shielding skill and stance. */
+export function shieldBlockMax(eq: Equipment): number {
+  const src = defenseShield(eq);
+  return (SHIELD_SKILL_FACTOR * skills.shield.lv * src + SHIELD_FLAT_FACTOR * src) * stanceDef();
+}
+
+/**
+ * One shield block, rolled triangular over 0..ceiling. The triangular shape
+ * ((a+b)/2 of two uniforms) averages half the ceiling with far less spread
+ * than a flat roll, so defense reads as dependable instead of a coin flip.
+ */
+export function rollShieldBlock(eq: Equipment): number {
+  const max = shieldBlockMax(eq);
+  return ((Math.random() + Math.random()) / 2) * max;
 }
 

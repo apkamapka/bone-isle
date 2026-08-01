@@ -7,6 +7,7 @@ import { ITEMS } from "../items.ts";
 import { activeTask, progressOf } from "../systems/tasks.ts";
 import { placeHud, hudUserScale } from "../systems/hudLayout.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
+import { stance, stanceAtk, stanceDef, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import type { Player } from "../entities/player.ts";
 import type { Game } from "../game.ts";
 
@@ -137,9 +138,9 @@ export function drawMinimapAt(h: HudCtx, game: Game, p: Player, x: number, y: nu
 
 /** Reference vitals-panel size (design px) — multiply by a scale to place it. */
 export const VITALS_W = 190;
-export const VITALS_H = 54;
+export const VITALS_H = 68;
 
-/** The HP / EXP / Cap panel at an arbitrary top-left with its own scale. */
+/** The HP / EXP / Cap / stance panel at an arbitrary top-left and scale. */
 export function drawVitals(h: HudCtx, p: Player, px: number, py: number, S: number): void {
   panel({ ...h, scale: S }, px, py, VITALS_W * S, VITALS_H * S);
   bar({ ...h, scale: S }, px + 10 * S, py + 8 * S, 130 * S, 8 * S, p.hp / p.maxhp, "#e1483b", "#5d1a14");
@@ -152,6 +153,20 @@ export function drawVitals(h: HudCtx, p: Player, px: number, py: number, S: numb
   hudText(h, "Cap", px + 10 * S, py + 40 * S, 8 * S, "rgba(220,214,190,.7)");
   bar({ ...h, scale: S }, px + 34 * S, py + 37 * S, 106 * S, 6 * S, used / cap, capFull ? "#e06a4a" : "#caa15a", "#3a3222");
   hudText(h, `${used}/${cap}`, px + 145 * S, py + 40 * S, 8 * S, capFull ? "#ffb59a" : "#e8dcc0");
+  // stance: the one combat setting you change mid-fight, so it lives where
+  // your eye already is — next to the HP bar, not buried in a panel
+  const st = stance();
+  const stColor = STANCE_COLOR[st];
+  const chipW = 66 * S;
+  const chipX = px + 10 * S;
+  const chipY = py + 50 * S;
+  h.ctx.fillStyle = "rgba(0,0,0,.35)";
+  h.ctx.fillRect(chipX, chipY, chipW, 12 * S);
+  h.ctx.fillStyle = stColor;
+  h.ctx.fillRect(chipX, chipY, 3 * S, 12 * S);
+  hudText(h, STANCE_LABEL[st], chipX + 8 * S, chipY + 6 * S, 7 * S, stColor, "left", true);
+  hudText(h, `atk ×${stanceAtk().toFixed(2)}  def ×${stanceDef().toFixed(1)}`, px + 145 * S, chipY + 6 * S, 7 * S, "rgba(220,214,190,.65)", "right");
+  hudText(h, "[X]", chipX + chipW + 4 * S, chipY + 6 * S, 6 * S, "rgba(220,214,190,.4)");
 }
 
 /** Compact gold + TP row (used by the desktop sidebar). */

@@ -129,7 +129,18 @@ export const PLAYER_ATTACK_RATE = 2.0;
 export const DIST_HITCHANCE_BASE = 0.60;
 export const DIST_HITCHANCE_PER = 0.005;
 export const DIST_HITCHANCE_MAX = 0.90;
-export const PLAYER_BASE_HP = 100;
+/**
+ * Health, on Tibia's knight curve plus a small starting cushion:
+ *   maxHP = HP_BASE + HP_PER_LEVEL · level      (level 1 = 95, level 25 = 455)
+ * The knight curve is the right model because there is one character class and
+ * it has to stand in melee — a paladin's 10/level would leave the archer
+ * playable and the swordsman not. HP_PER_LEVEL is the single dial for how long
+ * fights run: raise it and defense stops mattering, because you survive either
+ * way and only healing throughput counts.
+ */
+export const HP_BASE = 80;
+export const HP_PER_LEVEL = 15;
+export const PLAYER_BASE_HP = HP_BASE + HP_PER_LEVEL; // level 1
 
 /** Backpack capacity (slots). */
 export const BAG_SIZE = 16;
@@ -280,15 +291,10 @@ export const CRYSTAL_COOLDOWN_S = 1.5;
  * Distance Fighting, so early bows are weak and the skill grind is what makes
  * them hit hard (Tibia-style). See distancePower() in skills.ts.
  */
-// Distance was lagging badly behind melee at high skill: at Distance 70 the old
-// multiplier reached only ~1.8x, so a longbow + bone arrow topped out near 45
-// while a same-skill sword pushed past 100. The base, per-level and flat-level
-// terms are all raised so a trained archer's shots climb into the same league
-// as a blade (still a touch below, since ranged fights from safety and burns
-// ammo). Roughly: at Distance 70 a bone-arrow shot now maxes ~90 instead of ~45.
-export const DIST_FACTOR_BASE = 0.45;   // multiplier at skill 10 (start)
-export const DIST_FACTOR_PER = 0.055;   // + this per Distance level above 10
-export const DIST_LEVEL_BONUS = 0.30;   // small flat + level * this
+// Distance shares the melee pipeline (skillTerm · levelFactor · mastery ·
+// stance) with a slightly hotter per-point term, SKILL_TERM_PER_DIST — see the
+// COMBAT MODEL block below. The bow's own balancing act is its accuracy roll
+// plus the fact that it is two-handed, so an archer carries no shield.
 export const ARROW_MISS_WARN_S = 1.2;   // throttle for the "no arrows" nag
 export const SHOT_SPEED = 1040;          // px/s the drawn arrow travels
 
@@ -299,9 +305,72 @@ export const SHOT_SPEED = 1040;          // px/s the drawn arrow travels
  * (Tibia-style) instead of just adding a flat few points.
  */
 export const MELEE_FIST_ATK = 7;        // unarmed attack value (fists)
-export const MELEE_FACTOR_BASE = 0.9;   // multiplier at Sword level 10
-export const MELEE_FACTOR_PER = 0.09;   // + this per Sword level above 10
-export const MELEE_LEVEL_BONUS = 0.5;   // + level * this (rounded down)
+
+/* ------------------------------------------------------------------ *
+ *  COMBAT MODEL — every knob of the damage/defense pipeline
+ *
+ *  maxHit = attackValue · skillTerm · levelFactor · mastery · stanceAtk
+ *  minHit = MIN_HIT_RATIO · maxHit
+ *
+ *  skillTerm   = SKILL_TERM_PER · skill + SKILL_TERM_FLAT
+ *  levelFactor = 1 + level / LEVEL_DIVISOR      (level is a MULTIPLIER, not a
+ *                bonus — this is what guarantees a level-30 character out-hits
+ *                a level-8 one even when the low level trained harder)
+ *  mastery     = 1 + (thisSkill − highest OTHER weapon skill) / MASTERY_DIVISOR
+ *
+ *  Tuning order, most to least safe: MASTERY_DIVISOR → SHIELD_SKILL_FACTOR →
+ *  HP_PER_LEVEL → attack rate. Touch the skill curve (skills.ts `factor`) last:
+ *  it rebuilds the whole progression and breaks build parity.
+ * ------------------------------------------------------------------ */
+
+/** Damage roll floor as a fraction of max. 0 = the old "poof" whiff on every
+ *  swing; 0.40 is Tibia's melee band and makes the average hit 0.70 · max. */
+export const MIN_HIT_RATIO = 0.40;
+
+/** skillTerm: a linear ramp on the weapon skill. At skill 10 it is ~1.2, at
+ *  100 it is ~8.8 — so training is worth ~7× while gear is worth ~3×. */
+export const SKILL_TERM_PER = 0.085;    // melee, per point of Sword Fighting
+export const SKILL_TERM_PER_DIST = 0.09; // distance runs slightly hotter
+export const SKILL_TERM_FLAT = 1 / 3;
+
+/** Character level as a damage multiplier: 1 level ≈ +1% damage, so 10 points
+ *  of skill trade against roughly 15 levels. Deliberate departure from Tibia
+ *  (which only adds level/5) — it is the hard guarantee that a low-level
+ *  character with a bought-up skill cannot out-damage a high-level one. */
+export const LEVEL_DIVISOR = 100;
+
+/** Specialisation bonus, standing in for Tibia's vocations: the gap between
+ *  the skill you are using and your best OTHER weapon skill. A pure swordsman
+ *  at 60/10 gains +8%; a 50/50 hybrid gains nothing. Shielding is deliberately
+ *  NOT counted — sword and bow exclude each other in the moment, a shield does
+ *  not, so taxing Shielding would turn defense into a trap. Raise the divisor
+ *  to be kinder to hybrids (900 ≈ half the penalty). */
+export const MASTERY_DIVISOR = 600;
+
+/** Attack stance multipliers. Offensive/balanced/defensive, straight from
+ *  Tibia's fight modes: what you give up in damage you get back in blocking. */
+export const STANCE_ATK = { offensive: 1.0, balanced: 5 / 6, defensive: 0.5 } as const;
+export const STANCE_DEF = { offensive: 1.0, balanced: 1.2, defensive: 2.0 } as const;
+
+/** Armor: flat but random reduction, from half the rating to all of it (avg
+ *  0.75×). Flat reduction shreds many small hits and barely dents one big one
+ *  — that asymmetry is the quiet backbone of the whole balance. */
+export const ARMOR_MIN_RATIO = 0.5;
+
+/** Shield block ceiling: (SHIELD_SKILL_FACTOR · Shielding + SHIELD_FLAT_FACTOR)
+ *  · the defense of what is in your hands · stance. The actual block is rolled
+ *  triangular over 0..ceiling, so defense is steady rather than a lottery.
+ *  SHIELD_SKILL_FACTOR is the main attack↔defense dial of the game. */
+export const SHIELD_SKILL_FACTOR = 0.020;
+export const SHIELD_FLAT_FACTOR = 0.1;
+
+/** Hard ceiling on how much of one hit armor + shield may erase. Without it a
+ *  well-geared character becomes literally untouchable by weaker attackers;
+ *  as a PERCENTAGE it also guarantees that big hits always land for something. */
+export const DEFENSE_CAP_FRAC = 0.5;
+
+/** Damage that always gets through, no matter the defense. */
+export const MIN_DAMAGE = 1;
 
 /** Dropped items linger on the ground this long (seconds) before vanishing. */
 export const GROUND_DESPAWN_S = 3600;

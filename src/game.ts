@@ -14,6 +14,7 @@ import type { ItemKind } from "./items.ts";
 import { loadResearchState } from "./systems/tower.ts";
 import { resetTasks } from "./systems/tasks.ts";
 import { resetSkills } from "./systems/skills.ts";
+import { resetStance } from "./systems/stance.ts";
 import { resetQuests } from "./systems/quests.ts";
 import { resetOutfit, applyOutfit } from "./systems/outfit.ts";
 import { emptyStash } from "./items.ts";
@@ -354,6 +355,7 @@ export function createGame(seed = WORLD_SEED): Game {
   loadResearchState([]); // a fresh game has no research completed
   resetTasks(); // no board tasks taken yet
   resetSkills(); // module state — wipe any training from a previous session
+  resetStance(); // …and start every character in the balanced stance
   resetQuests(); // likewise, quest progress lives in module state
   resetOutfit(); // and the wardrobe — a fresh hero wears the classic look
   applyOutfit(player);

@@ -1,6 +1,8 @@
 /** All toggleable UI panels. Each draws itself and pushes clickable hotspots. */
 import { SPR, itemSprite, iconW, iconH } from "../gfx/sprites.ts";
-import { skills, skillNeed } from "../systems/skills.ts";
+import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax } from "../systems/skills.ts";
+import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
+import { MIN_HIT_RATIO } from "../config.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText } from "../systems/building.ts";
 import { RESEARCH, isResearched } from "../systems/tower.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
@@ -469,7 +471,7 @@ function drawSkills(p: PanelInput): void {
   const { scale: S, screenW, screenH } = hud;
   const w = 216 * S;
   const rows = Object.keys(skills) as (keyof typeof skills)[];
-  const h = 20 * S + rows.length * 26 * S + 22 * S;
+  const h = 20 * S + rows.length * 26 * S + 62 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   if (!goldPanel(p, x, y, w, h, "SKILLS")) return;
@@ -485,14 +487,40 @@ function drawSkills(p: PanelInput): void {
     if (!s.active) hudText(hud, "(coming soon)", x + 12 * S, ry + 14 * S, 6 * S, "rgba(220,214,190,.45)");
     ry += 26 * S;
   }
+
+  // ---- stance: three buttons, because a fight mode is a choice, not a toggle
+  hudText(hud, "Stance", x + 10 * S, ry + 5 * S, 7 * S, "rgba(220,214,190,.7)");
+  const cur = stance();
+  const bw = (w - 20 * S) / STANCES.length;
+  const by = ry + 11 * S;
+  STANCES.forEach((st, i) => {
+    const bx = x + 10 * S + i * bw;
+    const on = st === cur;
+    hud.ctx.fillStyle = on ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.2)";
+    hud.ctx.fillRect(bx + 1 * S, by, bw - 2 * S, 14 * S);
+    hud.ctx.strokeStyle = on ? STANCE_COLOR[st] : "rgba(220,214,190,.18)";
+    hud.ctx.lineWidth = S;
+    hud.ctx.strokeRect(bx + 1.5 * S, by + 0.5 * S, bw - 3 * S, 13 * S);
+    hudText(hud, STANCE_LABEL[st], bx + bw / 2, by + 7 * S, 7 * S, on ? STANCE_COLOR[st] : "rgba(220,214,190,.55)", "center", on);
+    p.hotspots.push({ x: bx + 1 * S, y: by, w: bw - 2 * S, h: 14 * S, fn: () => setStance(st) });
+  });
+
+  // ---- what those numbers actually come out as, so the maths is inspectable
+  const pl = p.player;
+  const maxMelee = attackPower(pl.level, pl.eq);
+  const spec = Math.round((mastery("sword") - 1) * 100);
+  hudText(hud, `Max hit ${Math.round(maxMelee * MIN_HIT_RATIO)}–${maxMelee}`, x + 10 * S, ry + 33 * S, 7 * S, "#e8dcc0");
+  hudText(hud, spec > 0 ? `Specialist +${spec}%` : "Hybrid — no specialist bonus", x + w - 12 * S, ry + 33 * S, 7 * S, spec > 0 ? "#9fe8a8" : "rgba(220,214,190,.5)", "right");
+  hudText(hud, `Armor ${defenseArmor(pl.eq)} · shield block ≤${shieldBlockMax(pl.eq).toFixed(1)}`, x + 10 * S, ry + 43 * S, 7 * S, "rgba(154,208,255,.8)");
+
   // fed status (Tibia-style regeneration): time left, or a nudge to eat
-  const fed = p.player.fedS;
+  const fed = pl.fedS;
   if (fed > 0) {
     const mm = Math.floor(fed / 60);
     const ss = Math.floor(fed % 60).toString().padStart(2, "0");
-    hudText(hud, `Fed ${mm}:${ss} — regenerating`, x + 10 * S, ry + 4 * S, 7 * S, "#9ad08a");
+    hudText(hud, `Fed ${mm}:${ss} — regenerating`, x + 10 * S, ry + 53 * S, 7 * S, "#9ad08a");
   } else {
-    hudText(hud, "Hungry — eat food to regenerate", x + 10 * S, ry + 4 * S, 7 * S, "rgba(224,160,106,.9)");
+    hudText(hud, "Hungry — eat food to regenerate", x + 10 * S, ry + 53 * S, 7 * S, "rgba(224,160,106,.9)");
   }
 }
 

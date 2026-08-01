@@ -1,5 +1,5 @@
 /** The player: state, backpack, equipment and derived stats. */
-import { PLAYER_BASE_HP, PLAYER_BASE_SPEED, SPEED_PER_LEVEL, PLAYER_ATTACK_RATE, expNeeded, CAP_BASE, CAP_PER_LEVEL } from "../config.ts";
+import { HP_BASE, HP_PER_LEVEL, PLAYER_BASE_HP, PLAYER_BASE_SPEED, SPEED_PER_LEVEL, PLAYER_ATTACK_RATE, expNeeded, CAP_BASE, CAP_PER_LEVEL } from "../config.ts";
 import { bakeOutfitSprites } from "../systems/outfit.ts";
 import type { Facing, DirSprites } from "../systems/outfit.ts";
 import { toTile, tileCenter } from "../world/grid.ts";
@@ -111,10 +111,16 @@ export interface DerivedBonus {
   maxhp?: number;
 }
 
-/** Recompute max HP from base + level + gear + structure bonuses. */
+/**
+ * Recompute max HP: HP_BASE + HP_PER_LEVEL · level, plus gear and structures.
+ * The knight curve — one character class that has to stand in melee — so a
+ * level 25 character sits at 455 rather than the old 580. That 22% cut is
+ * deliberate: an overstuffed HP pool makes fights drag, which quietly makes
+ * armor and shielding irrelevant and leaves healing throughput as the only
+ * statistic that decides anything.
+ */
 export function refreshDerived(p: Player, bonus: DerivedBonus = activeBonus): void {
-  const lvBonus = (p.level - 1) * 20;
-  p.maxhp = PLAYER_BASE_HP + lvBonus + gearStat(p.eq, "maxhp") + (bonus.maxhp ?? 0);
+  p.maxhp = HP_BASE + HP_PER_LEVEL * p.level + gearStat(p.eq, "maxhp") + (bonus.maxhp ?? 0);
   if (p.hp > p.maxhp) p.hp = p.maxhp;
 }
 

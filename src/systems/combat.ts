@@ -3,7 +3,7 @@ import {
   TILE,
   expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED, MONSTER_AGGRO_HIT_S,
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
-  SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S,
+  SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S, DEFENSE_CAP_FRAC, MIN_DAMAGE,
 } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
@@ -12,8 +12,9 @@ import { ITEMS, removeItem, emptyBag } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
 import { structCenter } from "./building.ts";
 import {
-  addSkillXp, applySkillDeathLoss, attackPower, defenseShield, defenseArmor, distancePower,
+  addSkillXp, applySkillDeathLoss, attackPower, defenseArmor, distancePower,
   rollMeleeDamage, rollDistanceDamage, distanceHitChance,
+  rollArmorReduction, rollShieldBlock,
 } from "./skills.ts";
 import type { ItemKind } from "../items.ts";
 import { onMonsterKilled } from "./quests.ts";
@@ -21,9 +22,21 @@ import { onTaskKill } from "./tasks.ts";
 import type { Player } from "../entities/player.ts";
 import type { World, Monster, Structure } from "../world/types.ts";
 
+/**
+ * Physical damage a creature actually takes: its armor is a flat roll off the
+ * top, floored at MIN_DAMAGE so nothing is ever completely immune to steel.
+ * Elemental damage is meant to skip this function entirely — that bypass is
+ * the whole argument for spending resources on crystals.
+ */
+export function applyMonsterArmor(m: Monster, raw: number): number {
+  const armor = MONSTER_DEFS[m.kind].armor ?? 0;
+  if (armor <= 0) return raw;
+  return Math.max(MIN_DAMAGE, raw - rollArmorReduction(armor));
+}
+
 /** Player strikes a monster. Returns true if the monster died. */
 export function playerAttack(world: World, p: Player, m: Monster): boolean {
-  const dmg = rollMeleeDamage(attackPower(p.level, p.eq));
+  const dmg = applyMonsterArmor(m, rollMeleeDamage(attackPower(p.level, p.eq)));
   addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   if (dmg <= 0) {
     // the classic Tibia whiff — the swing lands for nothing
@@ -67,7 +80,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
     addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
     return false;
   }
-  const dmg = rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg), p.level);
+  const dmg = applyMonsterArmor(m, rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg)));
   m.hp -= dmg;
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
@@ -100,7 +113,7 @@ export function shootDummy(world: World, p: Player, s: Structure, arrowKind: Ite
     addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
     return true;
   }
-  const dmg = rollDistanceDamage(dp, p.level);
+  const dmg = rollDistanceDamage(dp);
   addFloat(world, c.x, s.ty * TILE - 8, String(dmg), "#bfe08a");
   addSkillXp("dist", 2, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   beep(430, 0.06, "triangle", 0.045, -120);
@@ -226,21 +239,41 @@ export function resetShieldWindow(): void {
   shieldBlockTimes = [];
 }
 
-/** Apply raw damage to the player. Returns true if this killed them. */
+/**
+ * Apply raw damage to the player: armor, then shield, then HP.
+ *
+ * Armor is a flat random subtraction that every hit meets. The shield is a
+ * proportional roll that only the first SHIELD_BLOCK_MAX attackers of the
+ * round run into. Their combined reduction is then capped at DEFENSE_CAP_FRAC
+ * of the incoming hit, which is the one rule standing between a well-geared
+ * character and outright invulnerability — and, because it is a percentage,
+ * it also guarantees that a heavy blow always lands for something.
+ *
+ * Returns true if this killed them.
+ */
 export function hurtPlayer(world: World, p: Player, raw: number): boolean {
   if (p.dead) return false;
   const now = performance.now() / 1000;
   shieldBlockTimes = shieldBlockTimes.filter((t) => now - t < SHIELD_BLOCK_WINDOW_S);
   const blocked = shieldBlockTimes.length < SHIELD_BLOCK_MAX;
   if (blocked) shieldBlockTimes.push(now);
-  const def = blocked ? defenseShield(p.eq) + defenseArmor(p.eq) : defenseArmor(p.eq);
-  const dmg = Math.max(1, raw - def);
+
+  const fromArmor = rollArmorReduction(defenseArmor(p.eq));
+  const fromShield = blocked ? rollShieldBlock(p.eq) : 0;
+  const reduced = Math.min(fromArmor + fromShield, raw * DEFENSE_CAP_FRAC);
+  const dmg = Math.max(MIN_DAMAGE, Math.round(raw - reduced));
   p.hp -= dmg;
+
   // Shielding trains only on hits the shield actually engaged — more than
   // SHIELD_BLOCK_MAX attackers won't train it faster, exactly like Tibia.
   if (blocked) addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   // pierced hits (past the shield cap) glow hotter so a swarm reads as danger
   addFloat(world, p.x, p.y - 36, `-${dmg}`, blocked ? "#ff6a5e" : "#ff9e3a");
+  // whichever layer did the most work announces itself: armor sparks, shield puffs
+  if (reduced >= 1) {
+    const shieldWon = fromShield > fromArmor;
+    addFloat(world, p.x + 16, p.y - 20, shieldWon ? "puff" : "spark", shieldWon ? "#9ec8ff" : "#d8d2c0");
+  }
   beep(90, 0.1, "sawtooth", 0.05);
   if (p.hp <= 0) {
     p.hp = 0;

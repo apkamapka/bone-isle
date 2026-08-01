@@ -25,6 +25,7 @@ import {
 import { researchById, isResearched, markResearched } from "./systems/tower.ts";
 import { loadPanelPrefs } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
+import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
@@ -1005,6 +1006,10 @@ initInput(screen, {
     ui.lookMode = !ui.lookMode;
     if (!ui.lookMode) ui.inspect = null;
     flash(ui.lookMode ? "look mode on" : "look mode off", "#8ab6ff");
+  },
+  onStance: () => {
+    const s = cycleStance();
+    flash(STANCE_LABEL[s], STANCE_COLOR[s]);
   },
   onEscape: () => {
     if (throwPending) { throwPending = null; flash("throw cancelled", "#8ab6ff"); return; }

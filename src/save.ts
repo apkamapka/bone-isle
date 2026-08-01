@@ -13,6 +13,7 @@ import { serializeSlots, loadSlots, type SlotAction } from "./systems/actions.ts
 import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./systems/outfit.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
+import { stance, setStance, STANCES, type Stance } from "./systems/stance.ts";
 import { quests } from "./systems/quests.ts";
 import { emptyBag, emptyStash, emptyEquipment, addItem, ITEMS } from "./items.ts";
 import type { Bag, Equipment, ItemKind } from "./items.ts";
@@ -41,6 +42,8 @@ interface SaveData {
     bag: Bag; eq: Equipment;
   };
   skills: Record<SkillKey, { lv: number; pts: number }>;
+  /** Attack stance. Absent in pre-Etap 19 saves — those load as balanced. */
+  stance?: Stance;
   quests: { id: string; progress: number; done: boolean; claimed: boolean }[];
   structures: Record<WorldKey, Structure[]>;
   /** Items lying on the ground, per world (incl. a death-dropped backpack). */
@@ -93,6 +96,7 @@ export function saveGame(g: Game): void {
       bag: p.bag, eq: p.eq,
     },
     skills: skillDump,
+    stance: stance(),
     quests: quests.map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
     structures: structDump,
     ground: groundDump,
@@ -223,6 +227,8 @@ export function loadGame(): Game | null {
     const s = data.skills?.[k];
     if (s) { skills[k].lv = s.lv; skills[k].pts = s.pts; }
   });
+  // an unknown or missing stance falls back to the default rather than throwing
+  if (data.stance && STANCES.includes(data.stance)) setStance(data.stance);
 
   for (const qs of data.quests ?? []) {
     const q = quests.find((x) => x.id === qs.id);

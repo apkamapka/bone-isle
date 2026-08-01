@@ -48,6 +48,17 @@ export interface MonsterDef {
   loot: readonly LootEntry[];
   /** Danger band: how far from the world's entrance it spawns (0..1). */
   danger: number;
+  /**
+   * Flat armor rating, mirroring the player's: every incoming hit is reduced
+   * by a roll from half this value to all of it. Absent means bare flesh.
+   *
+   * Because the reduction is flat it costs a hail of weak blows far more than
+   * one heavy one, which is what makes a hulking armored creature a genuine
+   * wall to a low-skill character and merely an inconvenience to a trained
+   * one. It is also the reason elemental damage will matter: crystals are
+   * meant to bypass this entirely, so armor is what they are the answer to.
+   */
+  armor?: number;
   /** Present on distance fighters: they hold ground and shoot (Tibia-style),
    *  back away when the player closes in, and fall back to `dmg` in melee. */
   ranged?: RangedDef;
@@ -95,7 +106,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // vermin, so it carries coin and the odd bit of kit — but the stats stay at
   // the very bottom of the ladder: a level 1 player must be able to win.
   bandit: {
-    spr: SPR.rat, hp: 14, dmg: [1, 6], speed: 62, atkRate: 2.0, exp: 8, gold: [1, 4], danger: 0.06,
+    spr: SPR.rat, hp: 14, dmg: [1, 6], speed: 62, atkRate: 2.0, exp: 8, gold: [1, 4], danger: 0.06, armor: 1,
     loot: [{ kind: "hpPotion", chance: 0.08, n: [1, 1] }, { kind: "leatherArmor", chance: 0.03, n: [1, 1] }],
   },
   snake: {
@@ -103,7 +114,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [{ kind: "venomGland", chance: 0.25, n: [1, 1] }],
   },
   crab: {
-    spr: SPR.crab, hp: 26, dmg: [2, 8], speed: 44, atkRate: 2.0, exp: 11, gold: [0, 2], danger: 0.12,
+    spr: SPR.crab, hp: 26, dmg: [2, 8], speed: 44, atkRate: 2.0, exp: 11, gold: [0, 2], danger: 0.12, armor: 3,
     loot: [{ kind: "meat", chance: 0.4, n: [1, 1] }, { kind: "shell", chance: 0.3, n: [1, 1] }],
   },
   wasp: {
@@ -125,11 +136,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [{ kind: "meat", chance: 0.2, n: [1, 1] }],
   },
   skeleton: {
-    spr: SPR.skeleton, hp: 34, dmg: [4, 11], speed: 40, atkRate: 2.0, exp: 18, gold: [1, 4], danger: 0.3,
+    spr: SPR.skeleton, hp: 34, dmg: [4, 11], speed: 40, atkRate: 2.0, exp: 18, gold: [1, 4], danger: 0.3, armor: 2,
     loot: [{ kind: "bones", chance: 0.9, n: [1, 3] }],
   },
   goblin: {
-    spr: SPR.goblin, hp: 52, dmg: [6, 18], speed: 68, atkRate: 2.0, exp: 30, gold: [3, 8], danger: 0.4,
+    spr: SPR.goblin, hp: 52, dmg: [6, 18], speed: 68, atkRate: 2.0, exp: 30, gold: [3, 8], danger: 0.4, armor: 2,
     loot: [{ kind: "meat", chance: 0.4, n: [1, 1] }, { kind: "hpPotion", chance: 0.12, n: [1, 1] }],
   },
   wolf: {
@@ -137,11 +148,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [{ kind: "meat", chance: 0.6, n: [1, 2] }],
   },
   rotworm: {
-    spr: SPR.rotworm, hp: 55, dmg: [4, 13], speed: 32, atkRate: 2.0, exp: 24, gold: [1, 5], danger: 0.33,
+    spr: SPR.rotworm, hp: 55, dmg: [4, 13], speed: 32, atkRate: 2.0, exp: 24, gold: [1, 5], danger: 0.33, armor: 1,
     loot: [{ kind: "meat", chance: 0.6, n: [1, 2] }, { kind: "hpPotion", chance: 0.08, n: [1, 1] }],
   },
   amazon: {
-    spr: SPR.amazon, hp: 60, dmg: [4, 10], speed: 72, atkRate: 2.0, exp: 35, gold: [4, 10], danger: 0.5,
+    spr: SPR.amazon, hp: 60, dmg: [4, 10], speed: 72, atkRate: 2.0, exp: 35, gold: [4, 10], danger: 0.5, armor: 3,
     ranged: { range: 190, dmg: [5, 14] }, // thrown knives
     loot: [{ kind: "leatherArmor", chance: 0.05, n: [1, 1] }, { kind: "hpPotion", chance: 0.1, n: [1, 1] }],
   },
@@ -150,7 +161,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [{ kind: "meat", chance: 0.7, n: [1, 2] }, { kind: "wolfFur", chance: 0.4, n: [1, 1] }],
   },
   ghoul: {
-    spr: SPR.ghoul, hp: 85, dmg: [7, 19], speed: 60, atkRate: 2.0, exp: 45, gold: [2, 8], danger: 0.5,
+    spr: SPR.ghoul, hp: 85, dmg: [7, 19], speed: 60, atkRate: 2.0, exp: 45, gold: [2, 8], danger: 0.5, armor: 3,
     loot: [{ kind: "bones", chance: 0.8, n: [1, 3] }, { kind: "ghoulClaw", chance: 0.2, n: [1, 1] }],
   },
   ghost: {
@@ -158,59 +169,59 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [{ kind: "fireCrystal", chance: 0.35, n: [2, 4] }, { kind: "ring", chance: 0.04, n: [1, 1] }, { kind: "fireRuby", chance: 0.07, n: [1, 1] }],
   },
   orc: {
-    spr: SPR.orc, hp: 90, dmg: [8, 23], speed: 56, atkRate: 2.0, exp: 55, gold: [6, 14], danger: 0.62,
+    spr: SPR.orc, hp: 90, dmg: [8, 23], speed: 56, atkRate: 2.0, exp: 55, gold: [6, 14], danger: 0.62, armor: 4,
     loot: [{ kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "ironSword", chance: 0.06, n: [1, 1] }, { kind: "fireRuby", chance: 0.05, n: [1, 1] }],
   },
   orcArcher: {
-    spr: SPR.orcArcher, hp: 80, dmg: [5, 13], speed: 64, atkRate: 2.0, exp: 58, gold: [5, 12], danger: 0.55,
+    spr: SPR.orcArcher, hp: 80, dmg: [5, 13], speed: 64, atkRate: 2.0, exp: 58, gold: [5, 12], danger: 0.55, armor: 3,
     ranged: { range: 220, dmg: [6, 17], color: "#b98a4e" }, // crossbow bolts
     loot: [{ kind: "boneArrow", chance: 0.4, n: [2, 6] }, { kind: "meat", chance: 0.3, n: [1, 1] }],
   },
   bear: {
-    spr: SPR.bear, hp: 120, dmg: [9, 25], speed: 60, atkRate: 2.0, exp: 70, gold: [4, 10], danger: 0.7,
+    spr: SPR.bear, hp: 120, dmg: [9, 25], speed: 60, atkRate: 2.0, exp: 70, gold: [4, 10], danger: 0.7, armor: 3,
     loot: [{ kind: "meat", chance: 0.7, n: [1, 3] }],
   },
   orcWarrior: {
-    spr: SPR.orcWarrior, hp: 125, dmg: [10, 28], speed: 60, atkRate: 2.0, exp: 78, gold: [8, 18], danger: 0.6,
+    spr: SPR.orcWarrior, hp: 125, dmg: [10, 28], speed: 60, atkRate: 2.0, exp: 78, gold: [8, 18], danger: 0.6, armor: 8,
     loot: [{ kind: "chainArmor", chance: 0.04, n: [1, 1] }, { kind: "ironSword", chance: 0.08, n: [1, 1] }, { kind: "meat", chance: 0.4, n: [1, 1] }],
   },
   hunter: {
-    spr: SPR.hunter, hp: 100, dmg: [5, 14], speed: 68, atkRate: 2.0, exp: 85, gold: [6, 15], danger: 0.62,
+    spr: SPR.hunter, hp: 100, dmg: [5, 14], speed: 68, atkRate: 2.0, exp: 85, gold: [6, 15], danger: 0.62, armor: 3,
     ranged: { range: 280, dmg: [8, 22] },
     loot: [{ kind: "arrow", chance: 0.7, n: [5, 15] }, { kind: "bow", chance: 0.04, n: [1, 1] }, { kind: "meat", chance: 0.3, n: [1, 1] }],
   },
   minotaur: {
-    spr: SPR.minotaur, hp: 140, dmg: [12, 33], speed: 60, atkRate: 2.0, exp: 95, gold: [8, 18], danger: 0.8,
+    spr: SPR.minotaur, hp: 140, dmg: [12, 33], speed: 60, atkRate: 2.0, exp: 95, gold: [8, 18], danger: 0.8, armor: 6,
     loot: [{ kind: "bones", chance: 0.6, n: [1, 3] }, { kind: "meat", chance: 0.4, n: [1, 2] }, { kind: "ironSword", chance: 0.05, n: [1, 1] }],
   },
   minotaurArcher: {
-    spr: SPR.minotaurArcher, hp: 130, dmg: [6, 16], speed: 60, atkRate: 2.0, exp: 100, gold: [8, 16], danger: 0.68,
+    spr: SPR.minotaurArcher, hp: 130, dmg: [6, 16], speed: 60, atkRate: 2.0, exp: 100, gold: [8, 16], danger: 0.68, armor: 4,
     ranged: { range: 300, dmg: [9, 26], color: "#efe9d6" }, // bone-tipped bolts
     loot: [{ kind: "boneArrow", chance: 0.6, n: [3, 10] }, { kind: "longbow", chance: 0.03, n: [1, 1] }],
   },
   orcShaman: {
-    spr: SPR.orcShaman, hp: 110, dmg: [5, 13], speed: 52, atkRate: 2.0, exp: 115, gold: [10, 22], danger: 0.72,
+    spr: SPR.orcShaman, hp: 110, dmg: [5, 13], speed: 52, atkRate: 2.0, exp: 115, gold: [10, 22], danger: 0.72, armor: 2,
     ranged: { range: 260, dmg: [8, 20], color: "#8a6cff" }, // crackling magic bolt
     loot: [{ kind: "fireCrystal", chance: 0.4, n: [1, 3] }, { kind: "healCrystal", chance: 0.2, n: [1, 2] }, { kind: "fireRuby", chance: 0.1, n: [1, 1] }],
   },
   troll: {
-    spr: SPR.troll, hp: 160, dmg: [10, 27], speed: 48, atkRate: 2.0, exp: 110, gold: [12, 28], danger: 0.9,
+    spr: SPR.troll, hp: 160, dmg: [10, 27], speed: 48, atkRate: 2.0, exp: 110, gold: [12, 28], danger: 0.9, armor: 3,
     loot: [{ kind: "bones", chance: 0.8, n: [2, 4] }, { kind: "boneSword", chance: 0.05, n: [1, 1] }, { kind: "amulet", chance: 0.03, n: [1, 1] }, { kind: "fireRuby", chance: 0.12, n: [1, 1] }],
   },
   mummy: {
-    spr: SPR.mummy, hp: 180, dmg: [12, 30], speed: 44, atkRate: 2.0, exp: 130, gold: [10, 24], danger: 0.75,
+    spr: SPR.mummy, hp: 180, dmg: [12, 30], speed: 44, atkRate: 2.0, exp: 130, gold: [10, 24], danger: 0.75, armor: 4,
     loot: [{ kind: "bones", chance: 0.7, n: [1, 3] }, { kind: "amulet", chance: 0.05, n: [1, 1] }, { kind: "ring", chance: 0.05, n: [1, 1] }, { kind: "fireRuby", chance: 0.1, n: [1, 1] }],
   },
   orcBerserker: {
-    spr: SPR.orcBerserker, hp: 210, dmg: [15, 38], speed: 88, atkRate: 2.0, exp: 155, gold: [12, 26], danger: 0.8,
+    spr: SPR.orcBerserker, hp: 210, dmg: [15, 38], speed: 88, atkRate: 2.0, exp: 155, gold: [12, 26], danger: 0.8, armor: 7,
     loot: [{ kind: "battleAxe", chance: 0.06, n: [1, 1] }, { kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "fireRuby", chance: 0.12, n: [1, 1] }],
   },
   cyclops: {
-    spr: SPR.cyclops, hp: 240, dmg: [14, 40], speed: 52, atkRate: 2.0, exp: 180, gold: [14, 30], danger: 0.95,
+    spr: SPR.cyclops, hp: 240, dmg: [14, 40], speed: 52, atkRate: 2.0, exp: 180, gold: [14, 30], danger: 0.95, armor: 8,
     loot: [{ kind: "bones", chance: 0.7, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] }, { kind: "boneSword", chance: 0.06, n: [1, 1] }, { kind: "amulet", chance: 0.05, n: [1, 1] }],
   },
   minotaurGuard: {
-    spr: SPR.minotaurGuard, hp: 280, dmg: [16, 42], speed: 56, atkRate: 2.0, exp: 210, gold: [16, 34], danger: 0.85,
+    spr: SPR.minotaurGuard, hp: 280, dmg: [16, 42], speed: 56, atkRate: 2.0, exp: 210, gold: [16, 34], danger: 0.85, armor: 12,
     loot: [{ kind: "steelShield", chance: 0.05, n: [1, 1] }, { kind: "chainArmor", chance: 0.06, n: [1, 1] }, { kind: "bones", chance: 0.6, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] }],
   },
   // A minotaur guard's equal, built out of the skeleton instead of the bull:
@@ -218,16 +229,16 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // feet because it carries no shield. Pure melee — the dagger is a stabbing
   // weapon, not a thrown one, so it must close the distance like the guard.
   skeletonWarrior: {
-    spr: SPR.skeleton, hp: 275, dmg: [15, 41], speed: 58, atkRate: 2.0, exp: 205, gold: [14, 30], danger: 0.85,
+    spr: SPR.skeleton, hp: 275, dmg: [15, 41], speed: 58, atkRate: 2.0, exp: 205, gold: [14, 30], danger: 0.85, armor: 10,
     loot: [],
   },
   minotaurMage: {
-    spr: SPR.minotaurMage, hp: 220, dmg: [8, 20], speed: 52, atkRate: 2.0, exp: 240, gold: [18, 38], danger: 0.9,
+    spr: SPR.minotaurMage, hp: 220, dmg: [8, 20], speed: 52, atkRate: 2.0, exp: 240, gold: [18, 38], danger: 0.9, armor: 4,
     ranged: { range: 280, dmg: [12, 32], color: "#ff8a3a", wide: true }, // fire bolt
     loot: [{ kind: "fireCrystal", chance: 0.6, n: [2, 5] }, { kind: "fireRuby", chance: 0.2, n: [1, 1] }, { kind: "ring", chance: 0.06, n: [1, 1] }],
   },
   boneLord: {
-    spr: SPR.boneLord, hp: 340, dmg: [18, 49], speed: 44, atkRate: 2.0, exp: 300, gold: [25, 50], danger: 0.99,
+    spr: SPR.boneLord, hp: 340, dmg: [18, 49], speed: 44, atkRate: 2.0, exp: 300, gold: [25, 50], danger: 0.99, armor: 10,
     loot: [{ kind: "fireRuby", chance: 0.3, n: [1, 2] }, { kind: "boneSword", chance: 0.12, n: [1, 1] }, { kind: "amulet", chance: 0.08, n: [1, 1] }, { kind: "ring", chance: 0.06, n: [1, 1] }],
   },
   // Second-hardest thing in the game, and deliberately shaped as the dragon's
@@ -237,7 +248,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // length in a way the dragon never allows. It is slightly faster to make the
   // closing distance cost you something.
   demonSkeleton: {
-    spr: SPR.boneLord, hp: 780, dmg: [36, 95], speed: 62, atkRate: 2.0, exp: 700, gold: [45, 105], danger: 0.97,
+    spr: SPR.boneLord, hp: 780, dmg: [36, 95], speed: 62, atkRate: 2.0, exp: 700, gold: [45, 105], danger: 0.97, armor: 16,
     loot: [],
   },
   // The boss. One dragon nests in the deepest reaches of Bone Caverns -3
@@ -249,7 +260,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     // charges in, mauls with its paw (melee) for heavy hits, and breathes fire
     // at range — no more backing away and plinking. Both rolls reach past 100
     // on the high end, so a careless approach genuinely hurts.
-    spr: SPR.dragon, hp: 1000, dmg: [45, 120], speed: 60, atkRate: 2.0, exp: 900, gold: [60, 140], danger: 0.99,
+    spr: SPR.dragon, hp: 1000, dmg: [45, 120], speed: 60, atkRate: 2.0, exp: 900, gold: [60, 140], danger: 0.99, armor: 20,
     ranged: { range: 320, dmg: [38, 100], color: "#ff5a2a", wide: true, brute: true }, // dragon fire
     respawnS: 600,
     loot: [

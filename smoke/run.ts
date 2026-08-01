@@ -262,25 +262,51 @@ async function main(): Promise<void> {
   console.log("shield block cap (max 2 attackers per round):");
   {
     const { hurtPlayer, resetShieldWindow } = await import("../src/systems/combat.ts");
-    const { defenseShield, defenseArmor } = await import("../src/systems/skills.ts");
+    const { defenseShield, defenseArmor, shieldBlockMax } = await import("../src/systems/skills.ts");
+    const { resetStance } = await import("../src/systems/stance.ts");
     const worlds = buildWorlds(WORLD_SEED);
     resetSkills();
     resetShieldWindow();
+    resetStance();
     const p = createPlayer({ x: 200, y: 200 });
     p.level = 1; // no death-drop side effects
-    p.maxhp = 1000; p.hp = 1000;
+    p.maxhp = 10_000_000; p.hp = p.maxhp;
     p.eq.shield = "shieldItem"; // def 3 (shield side)
     p.eq.body = "armor";        // def 4 (armor side)
     ok(defenseShield(p.eq) === 3 && defenseArmor(p.eq) === 4, "defense split: shield 3 / armor 4");
-    // three hits in one round, raw 20: first two blocked (20-7=13), third pierces (20-4=16)
-    hurtPlayer(worlds.home, p, 20);
-    hurtPlayer(worlds.home, p, 20);
-    hurtPlayer(worlds.home, p, 20);
-    ok(p.hp === 1000 - 13 - 13 - 16, `3rd attacker bypasses the shield (hp ${p.hp})`);
-    ok(skills.shield.pts === 2, "shielding trained only by the 2 blocked hits");
+    ok(shieldBlockMax(p.eq) > 0, "a held shield gives a non-zero block ceiling");
+    // Gear the character up so the two defense layers are worth more than the
+    // rounding noise, then compare AVERAGES — every reduction is now a roll,
+    // so a single hit proves nothing.
+    p.eq.shield = "marrowShield"; p.eq.head = "marrowHelmet";
+    p.eq.body = "marrowArmor"; p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots";
+    skills.shield.lv = 60;
+    const RAW = 200;
+    const sample = (n: number, engaged: boolean): number => {
+      let total = 0;
+      for (let i = 0; i < n; i++) {
+        resetShieldWindow();
+        if (!engaged) { hurtPlayer(worlds.home, p, RAW); hurtPlayer(worlds.home, p, RAW); } // use up the cap
+        const before = p.hp;
+        hurtPlayer(worlds.home, p, RAW);
+        total += before - p.hp;
+      }
+      return total / n;
+    };
+    const withShield = sample(400, true);
+    const pierced = sample(400, false);
+    ok(pierced > withShield, `3rd attacker bypasses the shield (${withShield.toFixed(1)} vs ${pierced.toFixed(1)} per hit)`);
+    ok(withShield >= RAW * 0.5, "armor + shield never erase more than the 50% cap");
+    skills.shield.lv = 10;
     resetShieldWindow();
-    hurtPlayer(worlds.home, p, 20);
-    ok(p.hp === 1000 - 13 - 13 - 16 - 13, "new round: shield engages again");
+    resetSkills();
+    const p2 = createPlayer({ x: 200, y: 200 });
+    p2.level = 1; p2.maxhp = 100000; p2.hp = 100000;
+    p2.eq.shield = "shieldItem";
+    hurtPlayer(worlds.home, p2, 200);
+    hurtPlayer(worlds.home, p2, 200);
+    hurtPlayer(worlds.home, p2, 200);
+    ok(skills.shield.pts === 2, "shielding trained only by the 2 blocked hits");
     resetShieldWindow();
     resetSkills();
   }
@@ -384,25 +410,27 @@ async function main(): Promise<void> {
   console.log("Tibia-style combat balance:");
   {
     const { rollMeleeDamage, rollDistanceDamage, distanceHitChance, attackPower } = await import("../src/systems/skills.ts");
-    const { PLAYER_ATTACK_RATE, DIST_HITCHANCE_MAX } = await import("../src/config.ts");
+    const { PLAYER_ATTACK_RATE, DIST_HITCHANCE_MAX, MIN_HIT_RATIO } = await import("../src/config.ts");
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
     ok(PLAYER_ATTACK_RATE === 2.0, "player swings every 2.0s (Tibia weapon speed)");
     ok(Object.values(MONSTER_DEFS).every((d) => d.atkRate === 2.0), "every monster attacks every 2.0s — blow for blow");
-    // damage rolls span the whole Tibia range
+    // damage rolls sit inside the Tibia band: [MIN_HIT_RATIO·max, max]
     resetSkills();
-    let sawZero = false, sawMax = false, sum = 0;
+    let sawMin = false, sawMax = false, outOfBand = false, sum = 0;
     const N = 20000;
+    const floor40 = Math.floor(40 * MIN_HIT_RATIO);
     for (let i = 0; i < N; i++) {
       const r = rollMeleeDamage(40);
-      if (r === 0) sawZero = true;
+      if (r === floor40) sawMin = true;
       if (r === 40) sawMax = true;
+      if (r < floor40 || r > 40) { outOfBand = true; break; }
       sum += r;
-      if (r < 0 || r > 40) { sawZero = false; break; }
     }
-    ok(sawZero && sawMax, "melee rolls cover 0 ('poof') through max");
-    ok(Math.abs(sum / N - 20) < 1, `average melee hit ≈ half of max (${(sum / N).toFixed(1)}/40)`);
-    const dr = rollDistanceDamage(50, 10);
-    ok(dr >= 2 && dr <= 50, "distance roll floors at level/5");
+    ok(!outOfBand, "no melee roll ever leaves the [40%·max, max] band");
+    ok(sawMin && sawMax, "melee rolls reach both the floor and the ceiling");
+    ok(Math.abs(sum / N - 28) < 1, `average melee hit ≈ 70% of max (${(sum / N).toFixed(1)}/40)`);
+    const dr = rollDistanceDamage(50);
+    ok(dr >= Math.floor(50 * MIN_HIT_RATIO) && dr <= 50, "distance rolls share the same band");
     // accuracy: 60% at skill 10, capped at 90%
     ok(Math.abs(distanceHitChance() - 0.60) < 1e-9, "bow accuracy 60% at Distance 10");
     skills.dist.lv = 90;
@@ -415,12 +443,167 @@ async function main(): Promise<void> {
     p.level = 10;
     p.eq.weapon = "ironSword";
     const maxHit = attackPower(p.level, p.eq);
-    const avg = maxHit / 2;
+    const avg = maxHit * (1 + MIN_HIT_RATIO) / 2;
     const goblin = MONSTER_DEFS.goblin;
     const swings = Math.ceil(goblin.hp / avg);
     const ttk = swings * 2.0;
-    ok(ttk >= 8 && ttk <= 30, `lvl-10 goblin kill ≈ ${ttk.toFixed(0)}s (${swings} swings, max hit ${maxHit}) — was ~2-3s before`);
+    ok(ttk >= 6 && ttk <= 30, `lvl-10 goblin kill ≈ ${ttk.toFixed(0)}s (${swings} swings, max hit ${maxHit})`);
     resetSkills();
+  }
+
+  console.log("combat model (multiplicative damage, stance, mastery):");
+  {
+    const sk = await import("../src/systems/skills.ts");
+    const st = await import("../src/systems/stance.ts");
+    const cfg = await import("../src/config.ts");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const mk = (lv: number, weapon?: keyof typeof items.ITEMS) => {
+      const p = createPlayer({ x: 0, y: 0 });
+      p.level = lv;
+      if (weapon) p.eq.weapon = weapon as never;
+      return p;
+    };
+
+    resetSkills(); st.resetStance();
+
+    // ---- level is a MULTIPLIER, so it can never be out-trained ----
+    ok(Math.abs(sk.levelFactor(0) - 1) < 1e-9, "level 0 is the neutral multiplier");
+    ok(Math.abs(sk.levelFactor(100) - 2) < 1e-9, "level 100 doubles damage (1% per level)");
+    {
+      // the report's own control: 8/70 must NOT out-hit 30/60
+      skills.sword.lv = 70;
+      const low = sk.attackPower(8, mk(8, "ironSword").eq);
+      skills.sword.lv = 60;
+      const high = sk.attackPower(30, mk(30, "ironSword").eq);
+      ok(high > low, `level 30 / skill 60 out-hits level 8 / skill 70 (${high} vs ${low})`);
+      resetSkills();
+    }
+
+    // ---- skillTerm: training outruns gear ----
+    {
+      const p = mk(25, "ironSword");
+      skills.sword.lv = 10;
+      const green = sk.attackPower(25, p.eq);
+      skills.sword.lv = 100;
+      const trained = sk.attackPower(25, p.eq);
+      ok(trained / green > 6, `skill 10 → 100 multiplies damage ${(trained / green).toFixed(1)}× (training beats gear)`);
+      resetSkills();
+      const fists = sk.attackPower(25, createPlayer({ x: 0, y: 0 }).eq);
+      ok(fists >= 1, "bare fists still hit for something (MELEE_FIST_ATK)");
+    }
+
+    // ---- mastery: rewards specialists, ignores Shielding ----
+    {
+      skills.sword.lv = 60; skills.dist.lv = 10; skills.shield.lv = 10;
+      const specialist = sk.mastery("sword");
+      ok(Math.abs(specialist - (1 + 50 / cfg.MASTERY_DIVISOR)) < 1e-9, "60/10 specialist gains the full mastery bonus");
+      skills.dist.lv = 60;
+      ok(sk.mastery("sword") === 1, "50/50-style hybrid gains nothing");
+      skills.dist.lv = 10; skills.shield.lv = 100;
+      ok(Math.abs(sk.mastery("sword") - specialist) < 1e-9, "Shielding is NOT taxed by mastery — defense must never be a trap");
+      resetSkills();
+    }
+
+    // ---- stance: damage traded for blocking, both directions ----
+    {
+      // trained + well-armed on purpose: at single-digit hits the rounding in
+      // attackPower would swamp the ratio being asserted
+      skills.sword.lv = 60;
+      const p = mk(60, "marrowBlade");
+      st.setStance("offensive");
+      const off = sk.attackPower(60, p.eq);
+      const offBlock = sk.shieldBlockMax({ ...p.eq, shield: "steelShield" } as never);
+      st.setStance("defensive");
+      const def = sk.attackPower(60, p.eq);
+      const defBlock = sk.shieldBlockMax({ ...p.eq, shield: "steelShield" } as never);
+      ok(off > def, `offensive out-damages defensive (${off} vs ${def})`);
+      ok(defBlock > offBlock, `defensive out-blocks offensive (${defBlock.toFixed(1)} vs ${offBlock.toFixed(1)})`);
+      ok(Math.abs(def / off - cfg.STANCE_ATK.defensive / cfg.STANCE_ATK.offensive) < 0.02, "the stance ratio matches STANCE_ATK");
+      st.setStance("balanced");
+      const bal = sk.attackPower(60, p.eq);
+      ok(bal > def && bal < off, "balanced sits between the two");
+      ok(st.cycleStance() === "defensive" && st.cycleStance() === "offensive", "the hotkey cycles through every stance");
+      st.resetStance();
+      ok(st.stance() === "balanced", "a fresh character starts balanced");
+      resetSkills();
+    }
+
+    // ---- armor: flat, random, and never total ----
+    {
+      let min = Infinity, max = -Infinity, sum = 0;
+      for (let i = 0; i < 20000; i++) {
+        const r = sk.rollArmorReduction(20);
+        min = Math.min(min, r); max = Math.max(max, r); sum += r;
+      }
+      ok(min === 10 && max === 20, "armor 20 reduces by 10–20 (half to full)");
+      ok(Math.abs(sum / 20000 - 15) < 0.3, `average armor reduction ≈ 0.75× rating (${(sum / 20000).toFixed(1)}/20)`);
+      ok(sk.rollArmorReduction(0) === 0, "no armor, no reduction");
+    }
+
+    // ---- shield block: triangular, so defense is steady not a lottery ----
+    {
+      resetSkills(); st.resetStance();
+      const eq = { ...createPlayer({ x: 0, y: 0 }).eq, shield: "marrowShield" } as never;
+      skills.shield.lv = 60;
+      const ceil = sk.shieldBlockMax(eq);
+      let sum = 0, over = false;
+      const N = 20000;
+      for (let i = 0; i < N; i++) {
+        const b = sk.rollShieldBlock(eq);
+        if (b > ceil + 1e-9 || b < 0) over = true;
+        sum += b;
+      }
+      ok(!over, "a block never exceeds its ceiling");
+      ok(Math.abs(sum / N - ceil / 2) < ceil * 0.03, `triangular roll averages half the ceiling (${(sum / N).toFixed(1)}/${ceil.toFixed(1)})`);
+      const bare = sk.shieldBlockMax(createPlayer({ x: 0, y: 0 }).eq);
+      ok(bare === 0, "empty hands block nothing");
+      resetSkills();
+    }
+
+    // ---- the invulnerability bug this whole pass exists to kill ----
+    {
+      const { hurtPlayer, resetShieldWindow } = await import("../src/systems/combat.ts");
+      const worlds = buildWorlds(WORLD_SEED);
+      resetSkills(); resetShieldWindow(); st.resetStance();
+      const p = createPlayer({ x: 200, y: 200 });
+      p.level = 1; p.maxhp = 10_000_000; p.hp = p.maxhp;
+      p.eq.shield = "marrowShield"; p.eq.head = "marrowHelmet";
+      p.eq.body = "marrowArmor"; p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots";
+      skills.shield.lv = 60;
+      const raw = 29; // an average Minotaur Guard swing
+      let total = 0;
+      for (let i = 0; i < 400; i++) { resetShieldWindow(); const b = p.hp; hurtPlayer(worlds.home, p, raw); total += b - p.hp; }
+      const avg = total / 400;
+      ok(avg >= raw * cfg.DEFENSE_CAP_FRAC - 0.5, `a fully-geared character still takes ~${avg.toFixed(1)} of a ${raw} hit (was 1)`);
+      resetShieldWindow(); resetSkills();
+    }
+
+    // ---- HP: the knight curve ----
+    {
+      const { refreshDerived } = await import("../src/entities/player.ts");
+      const p = createPlayer({ x: 0, y: 0 });
+      for (const [lv, want] of [[1, 95], [8, 200], [25, 455], [50, 830], [100, 1580]] as const) {
+        p.level = lv; refreshDerived(p, { maxhp: 0 });
+        ok(p.maxhp === want, `level ${lv} → ${want} HP (knight curve)`);
+      }
+    }
+
+    // ---- monster armor: real, bounded, and never total immunity ----
+    {
+      const { applyMonsterArmor } = await import("../src/systems/combat.ts");
+      const armored = Object.values(MONSTER_DEFS).filter((d) => (d.armor ?? 0) > 0);
+      ok(armored.length >= 20, `${armored.length} creatures carry an armor rating`);
+      ok(Object.values(MONSTER_DEFS).every((d) => (d.armor ?? 0) <= 20), "no creature's armor exceeds the dragon's");
+      ok((MONSTER_DEFS.dragon.armor ?? 0) > (MONSTER_DEFS.goblin.armor ?? 0), "armor tracks the difficulty ladder");
+      ok((MONSTER_DEFS.ghost.armor ?? 0) === 0, "an incorporeal creature wears none");
+      const m = { kind: "dragon" } as never;
+      let floored = true;
+      for (let i = 0; i < 500; i++) if (applyMonsterArmor(m, 5) < cfg.MIN_DAMAGE) floored = false;
+      ok(floored, "armor can never reduce a hit below MIN_DAMAGE");
+      ok(applyMonsterArmor({ kind: "ghost" } as never, 50) === 50, "an unarmored creature takes the hit whole");
+    }
+
+    resetSkills(); st.resetStance();
   }
 
   console.log("speed from level (no Speed skill — Tibia 8.6):");
