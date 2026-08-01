@@ -3,6 +3,7 @@
  * Forge crafting recipes. Pure data + logic — no world imports.
  */
 import { BAG_SIZE, STASH_SIZE, TILE } from "./config.ts";
+import type { Element } from "./systems/elements.ts";
 
 export type ItemKind =
   // resources
@@ -13,6 +14,8 @@ export type ItemKind =
   | "mushroom" | "meat" | "hpPotion" | "dragonHam"
   // crystals (charge-based spell replacements — one "use" per charge)
   | "healCrystal" | "fireCrystal" | "recallCrystal" | "spearCrystal"
+  // elemental crystals: 5 elements x 3 tiers x 2 roles, plus tier-I arrows
+  | "fireEmberShard" | "fireEmberBurst" | "fireFlameShard" | "fireFlameBurst" | "firePyreShard" | "firePyreBurst" | "iceFrostShard" | "iceFrostBurst" | "iceRimeShard" | "iceRimeBurst" | "iceGlacierShard" | "iceGlacierBurst" | "earthLoamShard" | "earthLoamBurst" | "earthStoneShard" | "earthStoneBurst" | "earthBedrockShard" | "earthBedrockBurst" | "stormSparkShard" | "stormSparkBurst" | "stormBoltShard" | "stormBoltBurst" | "stormTempestShard" | "stormTempestBurst" | "shadowGloomShard" | "shadowGloomBurst" | "shadowUmbraShard" | "shadowUmbraBurst" | "shadowEclipseShard" | "shadowEclipseBurst" | "fireArrow" | "iceArrow" | "earthArrow" | "stormArrow" | "shadowArrow"
   // rare research materials (gate the Alchemy Tower's tech tree)
   | "fireRuby"
   // ranged: bows (two-handed weapons) + arrows (consumable ammo)
@@ -59,6 +62,9 @@ export interface ItemDef {
   heal?: number;
   /** True for charge-based crystals; each use consumes one from the stack. */
   crystal?: true;
+  /** Element carried by an elemental crystal or arrow. Absent = physical, and
+   *  physical damage is the kind that armor gets to stop. */
+  element?: Element;
   /** Bows: two-handed ranged weapon. `range` is WORLD px (doubled with TILE in
    *  Etap 17 — 220 px is the same 7 tiles it always was). `power` adds to dmg. */
   bow?: { range: number; power: number };
@@ -95,6 +101,45 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   fireCrystal:   { name: "Fire Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
   recallCrystal: { name: "Recall Crystal", stack: 999, value: 6, weight: 2, crystal: true },
   spearCrystal:  { name: "Spear Crystal",  stack: 999, value: 14, weight: 2, crystal: true },
+  // ---- the elemental line. Naming runs Ember/Flame/Pyre by tier, and
+  // ---- Shard/Burst by role: a Shard flies at one target, a Burst goes off
+  // ---- where it lands. Tier is legible from the name alone, which matters
+  // ---- when thirty of them share a backpack.
+fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal: true },
+  fireEmberBurst: { name: "Ember Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  fireFlameShard: { name: "Flame Shard", stack: 999, value: 23, weight: 2, crystal: true },
+  fireFlameBurst: { name: "Flame Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  firePyreShard: { name: "Pyre Shard", stack: 999, value: 58, weight: 2, crystal: true },
+  firePyreBurst: { name: "Pyre Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  iceFrostShard: { name: "Frost Shard", stack: 999, value: 9, weight: 2, crystal: true },
+  iceFrostBurst: { name: "Frost Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  iceRimeShard: { name: "Rime Shard", stack: 999, value: 23, weight: 2, crystal: true },
+  iceRimeBurst: { name: "Rime Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  iceGlacierShard: { name: "Glacier Shard", stack: 999, value: 58, weight: 2, crystal: true },
+  iceGlacierBurst: { name: "Glacier Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  earthLoamShard: { name: "Loam Shard", stack: 999, value: 9, weight: 2, crystal: true },
+  earthLoamBurst: { name: "Loam Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  earthStoneShard: { name: "Stone Shard", stack: 999, value: 23, weight: 2, crystal: true },
+  earthStoneBurst: { name: "Stone Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  earthBedrockShard: { name: "Bedrock Shard", stack: 999, value: 58, weight: 2, crystal: true },
+  earthBedrockBurst: { name: "Bedrock Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  stormSparkShard: { name: "Spark Shard", stack: 999, value: 9, weight: 2, crystal: true },
+  stormSparkBurst: { name: "Spark Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  stormBoltShard: { name: "Bolt Shard", stack: 999, value: 23, weight: 2, crystal: true },
+  stormBoltBurst: { name: "Bolt Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  stormTempestShard: { name: "Tempest Shard", stack: 999, value: 58, weight: 2, crystal: true },
+  stormTempestBurst: { name: "Tempest Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  shadowGloomShard: { name: "Gloom Shard", stack: 999, value: 9, weight: 2, crystal: true },
+  shadowGloomBurst: { name: "Gloom Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  shadowUmbraShard: { name: "Umbra Shard", stack: 999, value: 23, weight: 2, crystal: true },
+  shadowUmbraBurst: { name: "Umbra Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  shadowEclipseShard: { name: "Eclipse Shard", stack: 999, value: 58, weight: 2, crystal: true },
+  shadowEclipseBurst: { name: "Eclipse Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  fireArrow: { name: "Ember Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "fire" },
+  iceArrow: { name: "Frost Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "ice" },
+  earthArrow: { name: "Loam Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "earth" },
+  stormArrow: { name: "Spark Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "storm" },
+  shadowArrow: { name: "Gloom Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "shadow" },
   fireRuby:      { name: "Fire Ruby",      stack: 999, value: 40, weight: 3 },
   bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 5 * TILE, power: 4 } },
   longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 5 * TILE, power: 9 } },

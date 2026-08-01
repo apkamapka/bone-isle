@@ -4,15 +4,17 @@ import {
   expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED, MONSTER_AGGRO_HIT_S,
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
   SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S, DEFENSE_CAP_FRAC, MIN_DAMAGE,
+  DUMMY_RATE, DUMMY_SHIELD_RATE,
 } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
+import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
 import { ITEMS, removeItem, emptyBag } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
 import { structCenter } from "./building.ts";
 import {
-  addSkillXp, applySkillDeathLoss, attackPower, defenseArmor, distancePower,
+  addSkillXp, addShieldXp, markBloodHit, applySkillDeathLoss, attackPower, defenseArmor, distancePower,
   rollMeleeDamage, rollDistanceDamage, distanceHitChance,
   rollArmorReduction, rollShieldBlock,
 } from "./skills.ts";
@@ -45,6 +47,7 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
     return false;
   }
   m.hp -= dmg;
+  markBloodHit(); // you drew blood — Shielding may train for the next minute
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
   addFloat(world, m.x, m.y - 32, String(dmg), "#ffe27a");
@@ -80,11 +83,19 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
     addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
     return false;
   }
-  const dmg = applyMonsterArmor(m, rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg)));
+  // An elemental arrow carries the crystal channel on its head: it skips the
+  // target's armor and meets its resistance instead. Costlier than a bone
+  // arrow, and the answer to a creature you cannot dent with a plain one.
+  const el = ITEMS[arrowKind].element;
+  const raw = rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg));
+  const dmg = el
+    ? Math.max(MIN_DAMAGE, Math.round(raw * resistanceOf(MONSTER_DEFS[m.kind].resist, el)))
+    : applyMonsterArmor(m, raw);
   m.hp -= dmg;
+  markBloodHit(); // you drew blood — Shielding may train for the next minute
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
-  addFloat(world, m.x, m.y - 32, String(dmg), "#bfe08a");
+  addFloat(world, m.x, m.y - 32, String(dmg), el ? ELEMENT_COLOR[el] : "#bfe08a");
   addSkillXp("dist", 2, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   if (m.hp <= 0) {
     killMonster(world, p, m);
@@ -110,12 +121,13 @@ export function shootDummy(world: World, p: Player, s: Structure, arrowKind: Ite
   world.shots.push({ fromX: p.x, fromY: p.y - 16, toX: tx, toY: ty - 12, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow" });
   if (Math.random() > distanceHitChance()) {
     addFloat(world, c.x, s.ty * TILE - 8, "miss", "#9aa0a8");
-    addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+    addSkillXp("dist", 1 * DUMMY_RATE, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
     return true;
   }
   const dmg = rollDistanceDamage(dp);
   addFloat(world, c.x, s.ty * TILE - 8, String(dmg), "#bfe08a");
-  addSkillXp("dist", 2, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+  markBloodHit(); // a dummy still counts as swinging at something
+  addSkillXp("dist", 2 * DUMMY_RATE, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   beep(430, 0.06, "triangle", 0.045, -120);
   return true;
 }
@@ -126,9 +138,12 @@ export function hitDummy(world: World, p: Player, s: Structure): void {
   s.hurtT = 0.2;
   s.anim = 0;
   addFloat(world, structCenter(s).x, s.ty * TILE - 8, dmg > 0 ? String(dmg) : "poof", dmg > 0 ? "#d8d2c0" : "#9aa0a8");
-  addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
-  // The War Dummy hits back for training value: also trains Shielding.
-  if (s.key === "dummyII") addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 76, t, "#7dff9e"));
+  markBloodHit();
+  addSkillXp("sword", 1 * DUMMY_RATE, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+  // The War Dummy hits back for training value: also trains Shielding, at the
+  // slowest rate in the game — one post is not the two attackers that justify
+  // Shielding's doubled cost in the first place.
+  if (s.key === "dummyII") addShieldXp(DUMMY_SHIELD_RATE, (t) => addFloat(world, p.x, p.y - 76, t, "#7dff9e"));
   beep(220, 0.05, "triangle", 0.05);
 }
 
@@ -266,7 +281,7 @@ export function hurtPlayer(world: World, p: Player, raw: number): boolean {
 
   // Shielding trains only on hits the shield actually engaged — more than
   // SHIELD_BLOCK_MAX attackers won't train it faster, exactly like Tibia.
-  if (blocked) addSkillXp("shield", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+  if (blocked) addShieldXp(1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   // pierced hits (past the shield cap) glow hotter so a swarm reads as danger
   addFloat(world, p.x, p.y - 36, `-${dmg}`, blocked ? "#ff6a5e" : "#ff9e3a");
   // whichever layer did the most work announces itself: armor sparks, shield puffs

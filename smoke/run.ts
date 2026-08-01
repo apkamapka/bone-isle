@@ -264,6 +264,7 @@ async function main(): Promise<void> {
     const { hurtPlayer, resetShieldWindow } = await import("../src/systems/combat.ts");
     const { defenseShield, defenseArmor, shieldBlockMax } = await import("../src/systems/skills.ts");
     const { resetStance } = await import("../src/systems/stance.ts");
+    const { markBloodHit, resetBloodHit } = await import("../src/systems/skills.ts");
     const worlds = buildWorlds(WORLD_SEED);
     resetSkills();
     resetShieldWindow();
@@ -285,6 +286,7 @@ async function main(): Promise<void> {
     const sample = (n: number, engaged: boolean): number => {
       let total = 0;
       for (let i = 0; i < n; i++) {
+        markBloodHit();
         resetShieldWindow();
         if (!engaged) { hurtPlayer(worlds.home, p, RAW); hurtPlayer(worlds.home, p, RAW); } // use up the cap
         const before = p.hp;
@@ -303,12 +305,26 @@ async function main(): Promise<void> {
     const p2 = createPlayer({ x: 200, y: 200 });
     p2.level = 1; p2.maxhp = 100000; p2.hp = 100000;
     p2.eq.shield = "shieldItem";
+    markBloodHit();
     hurtPlayer(worlds.home, p2, 200);
     hurtPlayer(worlds.home, p2, 200);
     hurtPlayer(worlds.home, p2, 200);
     ok(skills.shield.pts === 2, "shielding trained only by the 2 blocked hits");
+
+    // ---- blood hit: standing still must never train anything ----
+    resetShieldWindow(); resetSkills(); resetBloodHit();
+    const idle = createPlayer({ x: 200, y: 200 });
+    idle.level = 1; idle.maxhp = 100000; idle.hp = 100000;
+    idle.eq.shield = "shieldItem";
+    for (let i = 0; i < 50; i++) { resetShieldWindow(); hurtPlayer(worlds.home, idle, 20); }
+    ok(skills.shield.pts === 0, "50 hits taken without fighting back train NOTHING");
+    markBloodHit();
+    resetShieldWindow();
+    hurtPlayer(worlds.home, idle, 20);
+    ok(skills.shield.pts === 1, "…and one blow of your own re-opens the window");
     resetShieldWindow();
     resetSkills();
+    resetBloodHit();
   }
 
   console.log("Amulet of Loss recipe (gold cost):");
@@ -731,6 +747,164 @@ async function main(): Promise<void> {
     }
     ok(rising, "every skill level costs strictly more than the one before it");
     resetSkills();
+  }
+
+  console.log("monster budget (a net for creatures added later):");
+  {
+    const M = await import("../src/entities/monsters.ts");
+    const defs = Object.entries(M.MONSTER_DEFS) as [string, typeof M.MONSTER_DEFS[keyof typeof M.MONSTER_DEFS]][];
+    const dpsOf = (d: typeof defs[0][1]): number => (d.dmg[0] + d.dmg[1]) / 2 / d.atkRate;
+
+    // the budget must be monotone, or "the level it is for" means nothing
+    let mono = true;
+    for (let l = 2; l <= 100; l++) {
+      if (M.monsterHpBudget(l) <= M.monsterHpBudget(l - 1)) mono = false;
+      if (M.monsterDpsBudget(l) <= M.monsterDpsBudget(l - 1)) mono = false;
+      if (M.monsterExpBudget(l) <= M.monsterExpBudget(l - 1)) mono = false;
+    }
+    ok(mono, "every budget curve rises with the level it is written for");
+    ok(M.monsterTierOf(M.monsterHpBudget(30)) === 30, "monsterTierOf inverts monsterHpBudget");
+
+    // exp must grow SLOWER than threat, or levelling accelerates away
+    const t20 = M.monsterHpBudget(20) * M.monsterDpsBudget(20);
+    const t60 = M.monsterHpBudget(60) * M.monsterDpsBudget(60);
+    const expRatio = M.monsterExpBudget(60) / M.monsterExpBudget(20);
+    ok(expRatio < t60 / t20, `exp grows ${expRatio.toFixed(0)}× where threat grows ${(t60 / t20).toFixed(0)}× — levelling decelerates`);
+
+    // the shipped bestiary, held to a wide band: variety is the point, but
+    // nothing should be off by more than a factor of ~2 without a reason
+    const bad: string[] = [];
+    for (const [k, d] of defs) {
+      const tier = M.monsterTierOf(d.hp);
+      const eR = d.exp / M.monsterExpBudget(tier);
+      const dR = dpsOf(d) / M.monsterDpsBudget(tier);
+      if (eR < 0.5 || eR > 1.6) bad.push(`${k} exp ${eR.toFixed(2)}×`);
+      // casters read low here because their ranged damage is not in `dmg`
+      if (dR < 0.35 || dR > 2.0) bad.push(`${k} dps ${dR.toFixed(2)}×`);
+      if ((d.armor ?? 0) > M.monsterArmorBudget(tier) + 6) bad.push(`${k} armor ${d.armor}`);
+    }
+    if (bad.length) console.log(`    out of band: ${bad.join(", ")}`);
+    ok(bad.length === 0, `all ${defs.length} creatures sit inside the budget band`);
+
+    // …and a creature placed BY the budget must come out inside it
+    for (const lv of [5, 20, 45, 70]) {
+      const hp = M.monsterHpBudget(lv);
+      ok(M.monsterTierOf(hp) === lv, `a creature built to the level-${lv} budget reads back as level ${lv}`);
+    }
+  }
+
+  console.log("elemental channel (crystals, resistances, arrows):");
+  {
+    const E = await import("../src/systems/elements.ts");
+    const C = await import("../src/systems/crystals.ts");
+    const T = await import("../src/systems/tower.ts");
+    const M = await import("../src/entities/monsters.ts");
+
+    ok(E.ELEMENTS.length === 5, "five elements");
+    ok(Object.keys(C.CRYSTAL_SPECS).length === 30, "5 elements × 3 tiers × 2 roles = 30 crystals");
+    for (const k of Object.keys(C.CRYSTAL_SPECS)) {
+      ok(!!items.ITEMS[k as keyof typeof items.ITEMS]?.crystal, `${k} exists as a crystal item`);
+    }
+    // every crystal and arrow must be reachable through the tower
+    const unlockable = new Set(T.RESEARCH.map((r) => r.crystal));
+    ok(Object.keys(C.CRYSTAL_SPECS).every((k) => unlockable.has(k as never)),
+      "every crystal has a research project — none are unobtainable");
+    ok(E.ELEMENTS.every((el) => unlockable.has(`${el}Arrow` as never)), "every element has an arrowhead project");
+
+    // tiers must climb, and each must require the one below it in its own lane
+    ok(E.TIER_MULT[1] > E.TIER_MULT[0] * 2 && E.TIER_MULT[2] > E.TIER_MULT[1] * 2,
+      "each tier more than doubles — an upgrade, not a percentage");
+    let chained = true, deepest = 0;
+    for (const r of T.RESEARCH) {
+      if (r.tier === undefined || r.tier === 0) continue;
+      const req = T.RESEARCH.find((x) => x.id === r.requires);
+      if (!req || req.element !== r.element || req.tier !== r.tier - 1) chained = false;
+      deepest = Math.max(deepest, T.researchChain(r.id).length);
+    }
+    ok(chained, "every tier requires the tier below it, in the same element and role");
+    ok(deepest === 2, `the deepest lane is ${deepest} projects — commitment, not a wall`);
+    ok(!T.researchAvailable("fire3shard", ["fire1shard"]), "tier III is locked behind tier II");
+    ok(T.researchAvailable("fire3shard", ["fire1shard", "fire2shard"]), "…and opens once the lane is walked");
+
+    // resistances: sparse, meaningful, and never total immunity
+    const withRes = Object.values(M.MONSTER_DEFS).filter((d) => d.resist);
+    ok(withRes.length >= 15 && withRes.length < Object.keys(M.MONSTER_DEFS).length,
+      `${withRes.length} creatures carry resistances — the exception, not the rule`);
+    let sane = true, anyWeak = false, anyStrong = false;
+    for (const d of Object.values(M.MONSTER_DEFS)) {
+      for (const el of E.ELEMENTS) {
+        const r = E.resistanceOf(d.resist, el);
+        if (r <= 0 || r > 2) sane = false;
+        if (r < 1) anyStrong = true;
+        if (r > 1) anyWeak = true;
+      }
+    }
+    ok(sane, "no resistance is zero (immune) or beyond 2× (a free kill)");
+    ok(anyStrong && anyWeak, "both resistances and weaknesses exist — the element choice is real");
+    ok(E.resistanceOf(undefined, "fire") === 1, "ordinary flesh resists nothing");
+    ok((M.MONSTER_DEFS.dragon.resist?.fire ?? 1) < 1 && (M.MONSTER_DEFS.dragon.resist?.ice ?? 1) > 1,
+      "a dragon shrugs off fire and hates the cold");
+    ok((M.MONSTER_DEFS.ghost.resist?.earth ?? 1) < 1, "earth barely touches something incorporeal");
+
+    // damage: scales with tier and level, respects resistance, never zero
+    const roll = (tier: 0 | 1 | 2, lv: number, res?: Record<string, number>): number => {
+      let t = 0;
+      for (let i = 0; i < 4000; i++) t += E.crystalDamage([14, 22], tier, lv, res as never, "fire");
+      return t / 4000;
+    };
+    const t1 = roll(0, 20), t3 = roll(2, 20);
+    ok(t3 / t1 > 4 && t3 / t1 < 5.5, `tier III hits ${(t3 / t1).toFixed(1)}× a tier I`);
+    ok(roll(0, 100) / roll(0, 1) > 1.5, "crystal damage climbs with character level");
+    ok(roll(0, 20, { fire: 0.25 }) < t1 * 0.4, "a resistant creature takes far less");
+    ok(roll(0, 20, { fire: 1.6 }) > t1 * 1.4, "a vulnerable one takes far more");
+    ok(E.crystalDamage([0.1, 0.1], 0, 1, { fire: 0.01 }, "fire") >= 1, "a crystal always lands for something");
+
+    // the point of the whole channel: it goes around armor
+    for (const el of E.ELEMENTS) {
+      ok(items.ITEMS[`${el}Arrow` as keyof typeof items.ITEMS]?.element === el, `${el} arrow carries its element`);
+    }
+    ok(!items.ITEMS.boneArrow.element, "a plain bone arrow carries none — it meets armor like steel does");
+  }
+
+  console.log("combat power parity (builds worth the same must play the same):");
+  {
+    const sk = await import("../src/systems/skills.ts");
+    const st = await import("../src/systems/stance.ts");
+    // Spend an identical training budget three ways and compare output. This
+    // is the report's verification method turned into a regression test: it is
+    // what catches a "small" constant change quietly making one build dominant.
+    const cost = (lv: number, base: number): number => base * (Math.pow(1.1, lv - 10) - 1) / 0.1;
+    const skillFor = (budget: number, base: number): number => {
+      let lv = 10;
+      while (cost(lv + 1, base) <= budget && lv < 100) lv++;
+      return lv;
+    };
+    const BUDGET = cost(60, 50); // whatever a pure swordsman at 60 has paid
+    resetSkills(); st.resetStance();
+
+    const p = createPlayer({ x: 0, y: 0 });
+    p.level = 30;
+    p.eq.weapon = "marrowBlade";
+
+    // build A: everything into the blade
+    skills.sword.lv = skillFor(BUDGET, 50); skills.dist.lv = 10; skills.shield.lv = 10;
+    const specialist = sk.attackPower(30, p.eq) * sk.mastery("sword");
+
+    // build B: split evenly between blade and bow
+    const half = skillFor(BUDGET / 2, 50);
+    skills.sword.lv = half; skills.dist.lv = half; skills.shield.lv = 10;
+    const hybrid = sk.attackPower(30, p.eq) * sk.mastery("sword");
+
+    ok(skills.sword.lv < skillFor(BUDGET, 50), "splitting the budget really does cost skill levels");
+    const edge = specialist / hybrid;
+    ok(edge > 1.05 && edge < 1.6,
+      `the specialist out-hits the hybrid by ${((edge - 1) * 100).toFixed(0)}% — enough to be a choice, not a trap`);
+
+    // build C: half into Shielding instead. Must NOT be punished twice — once
+    // by the points spent, and again by losing the mastery bonus.
+    skills.sword.lv = half; skills.dist.lv = 10; skills.shield.lv = half;
+    ok(sk.mastery("sword") > 1, "training Shielding never costs the mastery bonus");
+    resetSkills(); st.resetStance();
   }
 
   console.log("speed from level (no Speed skill — Tibia 8.6):");

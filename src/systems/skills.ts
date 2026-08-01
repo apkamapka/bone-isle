@@ -7,6 +7,7 @@ import {
   LEVEL_DIVISOR, MASTERY_DIVISOR,
   ARMOR_MIN_RATIO, SHIELD_SKILL_FACTOR, SHIELD_FLAT_FACTOR,
   DIST_HITCHANCE_BASE, DIST_HITCHANCE_PER, DIST_HITCHANCE_MAX,
+  BLOOD_HIT_WINDOW_S,
 } from "../config.ts";
 import { stanceAtk, stanceDef } from "./stance.ts";
 import type { Equipment } from "../items.ts";
@@ -104,9 +105,41 @@ export function applySkillDeathLoss(frac: number): void {
 export type SkillUpFx = (text: string) => void;
 
 /** Award xp to a skill; may trigger one or more level-ups. */
+/**
+ * Blood hit: Tibia's rule that a skill only advances while you are genuinely
+ * fighting. Every blow YOU land stamps this clock; Shielding checks it before
+ * accepting a point.
+ *
+ * Without the gate, standing still next to a weak creature trains Shielding
+ * forever — it hits for the MIN_DAMAGE floor every attack rate while food
+ * regeneration outruns that, so the character never dies and never needs a
+ * keypress. The gate costs nothing to anyone actually playing and closes the
+ * one place where doing nothing was the optimal strategy.
+ */
+let lastBloodHitAt = -Infinity;
+
+/** Record that the player just dealt damage. Called from every attack path. */
+export function markBloodHit(): void {
+  lastBloodHitAt = performance.now() / 1000;
+}
+
+/** True while the blood-hit clock is still warm. */
+export function inCombat(): boolean {
+  return performance.now() / 1000 - lastBloodHitAt < BLOOD_HIT_WINDOW_S;
+}
+
+/** Clear the clock (new game / test isolation). */
+export function resetBloodHit(): void {
+  lastBloodHitAt = -Infinity;
+}
+
+/**
+ * Award training points. `n` may be fractional — the dummy pays half rate, and
+ * points below one accumulate in `s.pts` rather than rounding away to nothing.
+ */
 export function addSkillXp(key: SkillKey, n: number, onLevel?: SkillUpFx): void {
   const s = skills[key];
-  if (!s.active) return;
+  if (!s.active || n <= 0) return;
   s.pts += n;
   while (s.pts >= skillNeed(s)) {
     s.pts -= skillNeed(s);
@@ -114,6 +147,15 @@ export function addSkillXp(key: SkillKey, n: number, onLevel?: SkillUpFx): void 
     onLevel?.(`${s.name} → ${s.lv}`);
     beep(520, 0.08, "square", 0.05);
   }
+}
+
+/**
+ * Shielding is the only skill you can earn without acting, so it is the only
+ * one that has to ask whether you are actually in a fight.
+ */
+export function addShieldXp(n: number, onLevel?: SkillUpFx): void {
+  if (!inCombat()) return;
+  addSkillXp("shield", n, onLevel);
 }
 
 /* ================================================================== *

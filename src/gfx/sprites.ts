@@ -1241,6 +1241,42 @@ export function bakeTreasureChest(): HTMLCanvasElement {
 
 /** Icon lookup for item kinds (bag, corpse loot, shops). */
 import type { ItemKind } from "../items.ts";
+/* ------------------------------------------------------------------ *
+ *  ELEMENTAL CRYSTALS — 30 icons from three shapes and five tints
+ *
+ *  Hand-drawing thirty near-identical gems would produce thirty things the
+ *  player cannot tell apart in a full backpack. Instead the SHAPE carries the
+ *  role (a Shard is a pointed sliver, a Burst is a round bomb), the SIZE
+ *  carries the tier, and only the colour carries the element. That way the
+ *  two facts you need mid-fight — what does it do, how strong is it — read at
+ *  a glance, and the element reads from the tint you already associate with it.
+ * ------------------------------------------------------------------ */
+const SHARD_BY_TIER: readonly string[][] = [
+  ["..a...", ".aba..", ".abb..", "..bc..", "...c.."],
+  [".aa...", "abba..", "abbb..", ".bbc..", "..cc.."],
+  [".aaa..", "abbba.", "abbbb.", "abbbc.", ".bccc."],
+];
+const BURST_BY_TIER: readonly string[][] = [
+  ["..aa..", ".abba.", ".abbc.", "..cc.."],
+  [".aaaa.", "abbbba", "abbbbc", ".accc."],
+  ["a.aa.a", ".abba.", "abbbbc", "abbbbc", ".accc.", "c....c"],
+];
+
+/** Light / body / shadow for each element, on the game's existing ramp. */
+const ELEMENT_RAMP: Readonly<Record<string, readonly [string, string, string]>> = {
+  fire: ["#ffd48a", "#ff8a3a", "#a3401a"],
+  ice: ["#d8f4ff", "#7cd4ff", "#2f6f96"],
+  earth: ["#cfe0a8", "#8ab661", "#42602c"],
+  storm: ["#fff0b0", "#ffce4a", "#8a6410"],
+  shadow: ["#ded0ff", "#b58aff", "#4c2f7a"],
+};
+
+function elementalIcon(element: string, tier: number, role: "Shard" | "Burst"): HTMLCanvasElement {
+  const [a, b, c] = ELEMENT_RAMP[element];
+  const map = role === "Shard" ? SHARD_BY_TIER[tier] : BURST_BY_TIER[tier];
+  return bake(map, { a, b, c });
+}
+
 const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   wood: SPR.wood, stone: SPR.stoneIcon, bones: SPR.bones, herb: SPR.herb, silk: SPR.silkIcon,
   venomGland: SPR.venomGland, shell: SPR.shellIcon, wolfFur: SPR.wolfFur,
@@ -1258,6 +1294,41 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   legs: SPR.eqLegs, boots: SPR.eqBoots, ring: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
   healCrystal: SPR.crystalHeal, fireCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
   spearCrystal: SPR.crystalSpear, fireRuby: SPR.fireRuby,
+  fireEmberShard: elementalIcon("fire", 0, "Shard"),
+  fireEmberBurst: elementalIcon("fire", 0, "Burst"),
+  fireFlameShard: elementalIcon("fire", 1, "Shard"),
+  fireFlameBurst: elementalIcon("fire", 1, "Burst"),
+  firePyreShard: elementalIcon("fire", 2, "Shard"),
+  firePyreBurst: elementalIcon("fire", 2, "Burst"),
+  fireArrow: elementalArrow("fire"),
+  iceFrostShard: elementalIcon("ice", 0, "Shard"),
+  iceFrostBurst: elementalIcon("ice", 0, "Burst"),
+  iceRimeShard: elementalIcon("ice", 1, "Shard"),
+  iceRimeBurst: elementalIcon("ice", 1, "Burst"),
+  iceGlacierShard: elementalIcon("ice", 2, "Shard"),
+  iceGlacierBurst: elementalIcon("ice", 2, "Burst"),
+  iceArrow: elementalArrow("ice"),
+  earthLoamShard: elementalIcon("earth", 0, "Shard"),
+  earthLoamBurst: elementalIcon("earth", 0, "Burst"),
+  earthStoneShard: elementalIcon("earth", 1, "Shard"),
+  earthStoneBurst: elementalIcon("earth", 1, "Burst"),
+  earthBedrockShard: elementalIcon("earth", 2, "Shard"),
+  earthBedrockBurst: elementalIcon("earth", 2, "Burst"),
+  earthArrow: elementalArrow("earth"),
+  stormSparkShard: elementalIcon("storm", 0, "Shard"),
+  stormSparkBurst: elementalIcon("storm", 0, "Burst"),
+  stormBoltShard: elementalIcon("storm", 1, "Shard"),
+  stormBoltBurst: elementalIcon("storm", 1, "Burst"),
+  stormTempestShard: elementalIcon("storm", 2, "Shard"),
+  stormTempestBurst: elementalIcon("storm", 2, "Burst"),
+  stormArrow: elementalArrow("storm"),
+  shadowGloomShard: elementalIcon("shadow", 0, "Shard"),
+  shadowGloomBurst: elementalIcon("shadow", 0, "Burst"),
+  shadowUmbraShard: elementalIcon("shadow", 1, "Shard"),
+  shadowUmbraBurst: elementalIcon("shadow", 1, "Burst"),
+  shadowEclipseShard: elementalIcon("shadow", 2, "Shard"),
+  shadowEclipseBurst: elementalIcon("shadow", 2, "Burst"),
+  shadowArrow: elementalArrow("shadow"),
   bow: SPR.bow, longbow: SPR.longbow, arrow: SPR.arrow, boneArrow: SPR.boneArrow,
   trainingArrow: SPR.trainingArrow,
   backpack: SPR.pack, booster: SPR.boosterPotion,
@@ -1284,6 +1355,12 @@ const ACTORS = [
   const spr = SPR as unknown as Record<string, HTMLCanvasElement>;
   for (const k of ACTORS) spr[k] = upscale(spriteSource(spr[k]), ACTOR_SCALE);
 }
+/** Elemental arrows: a plain shaft with the element burning on the head. */
+function elementalArrow(element: string): HTMLCanvasElement {
+  const [a, b] = ELEMENT_RAMP[element];
+  return bake(["....ab", "...abW", "..aWW.", ".WW...", "WW...."], { a, b, W: "#bdb59c" });
+}
+
 export function itemSprite(kind: ItemKind): HTMLCanvasElement {
   return ITEM_SPR[kind];
 }

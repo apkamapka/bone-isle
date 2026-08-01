@@ -380,6 +380,21 @@ export const DEFENSE_CAP_FRAC = 0.5;
 /** Damage that always gets through, no matter the defense. */
 export const MIN_DAMAGE = 1;
 
+/** How long a blow you landed keeps you "in combat" for skill purposes.
+ *  Long enough to cover repositioning and a healing pause, short enough that
+ *  walking away stops the clock. */
+export const BLOOD_HIT_WINDOW_S = 60;
+
+/** Training-dummy rate, as a fraction of real combat. A dummy costs no travel,
+ *  no food, no arrows and cannot kill you — at parity it would be strictly
+ *  better than hunting, which inverts the point of both. Half rate leaves it
+ *  as what it should be: the safe, slower option for a rainy evening. */
+export const DUMMY_RATE = 0.5;
+/** Shielding on the War Dummy is slower still: the doubled Shielding cost
+ *  (A=100) is paid back by blocking two creatures at once, and a post in the
+ *  ground is exactly one creature. */
+export const DUMMY_SHIELD_RATE = 0.25;
+
 /* ------------------------------------------------------------------ *
  *  GEAR LADDER — the design curve the item table has to track
  *
