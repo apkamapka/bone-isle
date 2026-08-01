@@ -408,9 +408,22 @@ commercial use and modification, forbids redistributing the assets themselves
 > purchase date here. The licence text is identical for both the free and the
 > paid pack, but the packs must still be named.
 
-`public/prop-tree.png`, `prop-rock.png`, `prop-stump.png` and `prop-rubble.png`
-were drawn from scratch for this game in the palette of those packs. They
-contain no third-party pixels and carry no external obligations.
+`public/prop-tree.png`, `prop-rock.png`, `prop-stump.png`, `prop-rubble.png`,
+`prop-tree-dead.png` and `prop-tree-felled.png` were drawn from scratch for
+this game in the palette of those packs. They contain no third-party pixels
+and carry no external obligations.
+
+The two dead trees are deliberately built to the same rules as the live tree
+and the stump, both of which turned out to be clean 2x upscales of
+half-resolution art: they are authored on a 26 x 40 logical grid and doubled,
+they reuse the live tree's four-step bark ramp and its ground shadow (black at
+alpha 77) without adding a single new colour, and they follow its lighting
+convention of mid brown on the left edge, highlight inside, dark brown on the
+right. `prop-tree-felled.png` is the same trunk and root flare as
+`prop-tree-dead.png` taken off above the lower branch stub, capped with the
+ringed end grain that `prop-stump.png` uses, so the pair reads as one tree
+before and after the axe. Both are padded so the base of the trunk sits under
+the centre of the image, which is where `drawSprite()` anchors.
 
 ## Chests — `public/prop-chest-red.png`, `prop-chest-purple.png`, `prop-chest-wood.png`
 
