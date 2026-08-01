@@ -47,7 +47,8 @@ export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
     entries: shop(
       ["sword", "ironSword", "leatherArmor", "chainArmor", "helmet", "armor", "shieldItem", "legs", "trainingArrow", "backpack"],
       ["wood", "stone", "bones", "ironSword", "boneSword", "sword", "leatherArmor", "chainArmor",
-        "battleAxe", "steelShield", "fireSword", "dragonShield", "dragonScaleArmor", "shell"],
+        "battleAxe", "steelShield", "fireSword", "dragonShield", "dragonScaleArmor", "shell",
+        "boneShield", "boneHelmet", "boneLegs", "boneBoots"],
     ),
   },
   herbalist: {

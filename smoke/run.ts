@@ -273,7 +273,7 @@ async function main(): Promise<void> {
     p.maxhp = 10_000_000; p.hp = p.maxhp;
     p.eq.shield = "shieldItem"; // def 3 (shield side)
     p.eq.body = "armor";        // def 4 (armor side)
-    ok(defenseShield(p.eq) === 3 && defenseArmor(p.eq) === 4, "defense split: shield 3 / armor 4");
+    ok(defenseShield(p.eq) === 8 && defenseArmor(p.eq) === 9, "defense split: shield 8 / armor 9");
     ok(shieldBlockMax(p.eq) > 0, "a held shield gives a non-zero block ceiling");
     // Gear the character up so the two defense layers are worth more than the
     // rounding noise, then compare AVERAGES — every reduction is now a roll,
@@ -604,6 +604,86 @@ async function main(): Promise<void> {
     }
 
     resetSkills(); st.resetStance();
+  }
+
+  console.log("gear ladder (item table vs the design curve):");
+  {
+    const cfg = await import("../src/config.ts");
+    const I = items.ITEMS;
+    const defOf = (k: keyof typeof I): number => I[k].gear?.def ?? 0;
+    const atkValue = (k: keyof typeof I): number => cfg.MELEE_FIST_ATK + (I[k].gear?.atk ?? 0);
+
+    // Each rung names the level it is meant to carry a character through.
+    const weapons = [["sword", 1], ["ironSword", 8], ["battleAxe", 15],
+      ["boneSword", 22], ["fireSword", 32], ["marrowBlade", 42]] as const;
+    const shields = [["shieldItem", 1], ["steelShield", 12], ["boneShield", 22],
+      ["dragonShield", 32], ["marrowShield", 42]] as const;
+    // full worn sets: head + body + legs + boots
+    const sets = [
+      [["helmet", "leatherArmor", "legs", "boots"], 10],
+      [["helmet", "chainArmor", "legs", "boots"], 15],
+      [["helmet", "armor", "legs", "boots"], 20],
+      [["boneHelmet", "armor", "boneLegs", "boneBoots"], 26],
+      [["boneHelmet", "dragonScaleArmor", "boneLegs", "boneBoots"], 36],
+    ] as const;
+    // The Marrow set is deliberately OFF the curve: a single one-time chest
+    // prize, the best gear in the game, and the only reward for the bottom of
+    // the Bone Caverns. It is checked separately — ahead of the curve, but not
+    // so far ahead that everything below it stops mattering.
+    const MARROW = ["marrowHelmet", "marrowArmor", "marrowLegs", "marrowBoots"] as const;
+
+    let weaponsOk = true, shieldsOk = true, setsOk = true;
+    for (const [k, lv] of weapons) {
+      const want = cfg.bestWeaponAtk(lv);
+      if (Math.abs(atkValue(k) - want) > want * 0.2) { weaponsOk = false; console.log(`    ${k}: ${atkValue(k)} vs target ${want.toFixed(1)} @ lv${lv}`); }
+    }
+    for (const [k, lv] of shields) {
+      const want = cfg.bestShieldDef(lv);
+      if (Math.abs(defOf(k) - want) > want * 0.2) { shieldsOk = false; console.log(`    ${k}: ${defOf(k)} vs target ${want.toFixed(1)} @ lv${lv}`); }
+    }
+    for (const [pieces, lv] of sets) {
+      const total = pieces.reduce((n, k) => n + defOf(k as keyof typeof I), 0);
+      const want = cfg.bestArmorSet(lv);
+      if (Math.abs(total - want) > want * 0.2) { setsOk = false; console.log(`    set@${lv}: ${total} vs target ${want.toFixed(1)}`); }
+    }
+    ok(weaponsOk, "every weapon rung sits within 20% of bestWeaponAtk");
+    ok(shieldsOk, "every shield rung sits within 20% of bestShieldDef");
+    ok(setsOk, "every full armor set sits within 20% of bestArmorSet");
+
+    // monotone: an upgrade must always BE an upgrade
+    const mono = (xs: readonly (readonly [string, number])[], f: (k: never) => number): boolean =>
+      xs.every((x, i) => i === 0 || f(x[0] as never) > f(xs[i - 1][0] as never));
+    ok(mono(weapons, atkValue as never), "weapons never step backwards");
+    ok(mono(shields, defOf as never), "shields never step backwards");
+    ok(sets.every((x, i) => i === 0 || x[0].reduce((n, k) => n + defOf(k as keyof typeof I), 0)
+      > sets[i - 1][0].reduce((n, k) => n + defOf(k as keyof typeof I), 0)), "armor sets never step backwards");
+
+    // the Marrow prize: above the curve, and above every craftable set
+    {
+      const marrow = MARROW.reduce((n, k) => n + defOf(k), 0);
+      const best = sets[sets.length - 1][0].reduce((n, k) => n + defOf(k as keyof typeof I), 0);
+      const curveAtCeiling = cfg.bestArmorSet(45); // the deepest content we ship
+      ok(marrow > best, `the Marrow set (${marrow}) beats every craftable set (${best})`);
+      ok(marrow < curveAtCeiling * 1.5, `…but only ${(marrow / curveAtCeiling).toFixed(2)}× the curve — a prize, not a different game`);
+      ok(defOf("marrowShield") > defOf("dragonShield"), "the Marrow shield tops the shield ladder too");
+    }
+
+    // the plateau is as important as the slope: gear stops, training does not
+    ok(cfg.bestWeaponAtk(200) === cfg.bestWeaponAtk(100), "weapon curve plateaus and stays there");
+    ok(cfg.bestShieldDef(200) === 45 && cfg.bestArmorSet(200) === 45, "defense curves plateau at 45");
+    // …and across the covered range gear must grow slower than training does
+    const gearGrowth = cfg.bestWeaponAtk(60) / cfg.bestWeaponAtk(1);
+    ok(gearGrowth < 4, `best weapon grows only ${gearGrowth.toFixed(1)}× from level 1 to 60 (skillTerm grows ~4.5×)`);
+
+    // the Bone set exists, is craftable, and fills the gap it was added for
+    for (const k of ["boneShield", "boneHelmet", "boneLegs", "boneBoots"] as const) {
+      ok(!!items.RECIPES.find((r) => r.out === k), `${k} has a recipe`);
+      ok(!!items.ITEMS[k].slot, `${k} is equippable`);
+    }
+    const boneSet = defOf("boneHelmet") + defOf("armor") + defOf("boneLegs") + defOf("boneBoots");
+    const plateSet = defOf("helmet") + defOf("armor") + defOf("legs") + defOf("boots");
+    const marrowSet = defOf("marrowHelmet") + defOf("marrowArmor") + defOf("marrowLegs") + defOf("marrowBoots");
+    ok(boneSet > plateSet && boneSet < marrowSet, `Bone set (${boneSet}) sits between plate (${plateSet}) and Marrow (${marrowSet})`);
   }
 
   console.log("speed from level (no Speed skill — Tibia 8.6):");

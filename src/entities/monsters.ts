@@ -222,7 +222,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   minotaurGuard: {
     spr: SPR.minotaurGuard, hp: 280, dmg: [16, 42], speed: 56, atkRate: 2.0, exp: 210, gold: [16, 34], danger: 0.85, armor: 12,
-    loot: [{ kind: "steelShield", chance: 0.05, n: [1, 1] }, { kind: "chainArmor", chance: 0.06, n: [1, 1] }, { kind: "bones", chance: 0.6, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] }],
+    loot: [{ kind: "steelShield", chance: 0.05, n: [1, 1] }, { kind: "boneHelmet", chance: 0.04, n: [1, 1] }, { kind: "chainArmor", chance: 0.06, n: [1, 1] }, { kind: "bones", chance: 0.6, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] }],
   },
   // A minotaur guard's equal, built out of the skeleton instead of the bull:
   // same wall of HP, same heavy two-second swing, marginally quicker on its

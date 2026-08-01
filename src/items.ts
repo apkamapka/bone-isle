@@ -25,6 +25,7 @@ export type ItemKind =
   | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet"
   | "leatherArmor" | "chainArmor" | "dragonScaleArmor"
   | "steelShield" | "dragonShield"
+  | "boneShield" | "boneHelmet" | "boneLegs" | "boneBoots"
   // the Marrow set (Etap 9c): five one-time chest prizes matching the Marrow
   // Blade — each piece hoarded on a different camp's deepest lair floor
   | "marrowShield" | "marrowArmor" | "marrowHelmet" | "marrowLegs" | "marrowBoots"
@@ -112,23 +113,31 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   // Unique treasure: found only in the chest at the bottom of the Bone
   // Caverns (-3). Deliberately absent from every shop and every loot table.
   marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 20 } },
-  helmet:    { name: "Iron Helmet",  stack: 1, value: 30, weight: 55, slot: "head",   gear: { def: 2 } },
-  leatherArmor:{ name: "Leather Armor", stack: 1, value: 25, weight: 70, slot: "body", gear: { def: 2 } },
-  chainArmor:{ name: "Chain Armor",  stack: 1, value: 45, weight: 95, slot: "body",  gear: { def: 3 } },
-  armor:     { name: "Plate Armor",  stack: 1, value: 70, weight: 120, slot: "body",  gear: { def: 4 } },
-  dragonScaleArmor:{ name: "Dragon Scale Armor", stack: 1, value: 400, weight: 100, slot: "body", gear: { def: 7 } },
-  shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, weight: 60, slot: "shield", gear: { def: 3 } },
-  steelShield:{ name: "Steel Shield", stack: 1, value: 70, weight: 65, slot: "shield", gear: { def: 5 } },
-  dragonShield:{ name: "Dragon Shield", stack: 1, value: 300, weight: 70, slot: "shield", gear: { def: 8 } },
+  helmet:    { name: "Iron Helmet",  stack: 1, value: 30, weight: 55, slot: "head",   gear: { def: 3 } },
+  leatherArmor:{ name: "Leather Armor", stack: 1, value: 25, weight: 70, slot: "body", gear: { def: 3 } },
+  chainArmor:{ name: "Chain Armor",  stack: 1, value: 45, weight: 95, slot: "body",  gear: { def: 6 } },
+  armor:     { name: "Plate Armor",  stack: 1, value: 70, weight: 120, slot: "body",  gear: { def: 9 } },
+  dragonScaleArmor:{ name: "Dragon Scale Armor", stack: 1, value: 400, weight: 100, slot: "body", gear: { def: 13 } },
+  shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, weight: 60, slot: "shield", gear: { def: 8 } },
+  steelShield:{ name: "Steel Shield", stack: 1, value: 70, weight: 65, slot: "shield", gear: { def: 13 } },
+  dragonShield:{ name: "Dragon Shield", stack: 1, value: 300, weight: 70, slot: "shield", gear: { def: 21 } },
   // ---- the Marrow set: pale bone plate with a silver sheen and gold trim,
   // ---- the armour counterpart of the Marrow Blade. One-time chest prizes.
-  marrowShield:{ name: "Marrow Shield",  stack: 1, value: 520, weight: 68, slot: "shield", gear: { def: 10 } },
-  marrowArmor: { name: "Marrow Plate",   stack: 1, value: 620, weight: 110, slot: "body",  gear: { def: 9 } },
-  marrowHelmet:{ name: "Marrow Helm",    stack: 1, value: 420, weight: 52, slot: "head",   gear: { def: 5 } },
-  marrowLegs:  { name: "Marrow Greaves", stack: 1, value: 460, weight: 84, slot: "legs",   gear: { def: 6 } },
-  marrowBoots: { name: "Marrow Boots",   stack: 1, value: 380, weight: 26, slot: "boots",  gear: { def: 3, speed: 16 } },
-  legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 2 } },
-  boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 12 } },
+  marrowShield:{ name: "Marrow Shield",  stack: 1, value: 520, weight: 68, slot: "shield", gear: { def: 26 } },
+  marrowArmor: { name: "Marrow Plate",   stack: 1, value: 620, weight: 110, slot: "body",  gear: { def: 15 } },
+  marrowHelmet:{ name: "Marrow Helm",    stack: 1, value: 420, weight: 52, slot: "head",   gear: { def: 8 } },
+  marrowLegs:  { name: "Marrow Greaves", stack: 1, value: 460, weight: 84, slot: "legs",   gear: { def: 10 } },
+  marrowBoots: { name: "Marrow Boots",   stack: 1, value: 380, weight: 26, slot: "boots",  gear: { def: 5, speed: 16 } },
+  // ---- the Bone set: dull bone lashed over leather, the working armour of
+  // ---- Bonetown. Sits between plate and the Marrow prizes and is CRAFTED,
+  // ---- so the level 20-30 stretch has an upgrade you can work towards
+  // ---- rather than one you have to be lucky enough to loot.
+  boneShield:{ name: "Bone Shield",  stack: 1, value: 180, weight: 62, slot: "shield", gear: { def: 17 } },
+  boneHelmet:{ name: "Bone Helm",    stack: 1, value: 150, weight: 50, slot: "head",   gear: { def: 6 } },
+  boneLegs:  { name: "Bone Greaves", stack: 1, value: 170, weight: 82, slot: "legs",   gear: { def: 7 } },
+  boneBoots: { name: "Bone Treads",  stack: 1, value: 130, weight: 25, slot: "boots",  gear: { def: 3, speed: 8 } },
+  legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 4 } },
+  boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 2, speed: 12 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
@@ -329,6 +338,12 @@ export const RECIPES: readonly Recipe[] = [
   { out: "sword",      cost: { wood: 3, stone: 4 } },
   { out: "ironSword",  cost: { wood: 4, stone: 10 } },
   { out: "boneSword",  cost: { bones: 16, stone: 6 } },
+  // the Bone set — bones are plentiful but the counts are steep on purpose:
+  // this is the armour you grind Bonetown's undead for
+  { out: "boneShield", cost: { bones: 20, wood: 6 } },
+  { out: "boneHelmet", cost: { bones: 14, silk: 4 } },
+  { out: "boneLegs",   cost: { bones: 18, silk: 5 } },
+  { out: "boneBoots",  cost: { bones: 10, silk: 6 } },
   { out: "helmet",     cost: { stone: 8 } },
   { out: "armor",      cost: { stone: 14, wood: 4 } },
   { out: "shieldItem", cost: { wood: 8, stone: 3 } },

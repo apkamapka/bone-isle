@@ -372,6 +372,44 @@ export const DEFENSE_CAP_FRAC = 0.5;
 /** Damage that always gets through, no matter the defense. */
 export const MIN_DAMAGE = 1;
 
+/* ------------------------------------------------------------------ *
+ *  GEAR LADDER — the design curve the item table has to track
+ *
+ *  Gear is a multiplier on training, never a substitute for it. Between
+ *  level 1 and 60 the best weapon roughly triples while skillTerm grows
+ *  four and a half times and levelFactor adds another 60% on top, so
+ *  equipment accounts for well under a third of a character's growth. The
+ *  moment that stops being true, players stop training and start shopping,
+ *  and the whole skill curve becomes decoration.
+ *
+ *  The plateau matters as much as the slope: past the cap there is simply
+ *  nothing better to buy, and every further point of power has to be
+ *  trained. These functions are the design targets, checked against the
+ *  real item table in the smoke tests rather than read by the game.
+ * ------------------------------------------------------------------ */
+
+/** Best attack VALUE available at a level — fists included, so compare it
+ *  against MELEE_FIST_ATK + the weapon's gear Attack, not the weapon alone. */
+export function bestWeaponAtk(level: number): number {
+  return Math.min(50, 12 + 0.45 * level);
+}
+
+/** Best shield Defense available at a level. Unlike the weapon curve this one
+ *  bends: defense climbs briskly to level 25, then flattens out, so the early
+ *  game is where a shield upgrade is genuinely felt. */
+export function bestShieldDef(level: number): number {
+  const raw = level <= 25 ? 8 + 0.583 * (level - 1) : 22 + 0.307 * (level - 25);
+  return Math.min(45, raw);
+}
+
+/** Best TOTAL armor rating of a full worn set (head + body + legs + boots).
+ *  Same two-part shape as the shield, five points lower at the start — a
+ *  beginner finds a shield before a matched set of plate. */
+export function bestArmorSet(level: number): number {
+  const raw = level <= 25 ? 5 + 0.71 * (level - 1) : 22 + 0.31 * (level - 25);
+  return Math.min(45, raw);
+}
+
 /** Dropped items linger on the ground this long (seconds) before vanishing. */
 export const GROUND_DESPAWN_S = 3600;
 
