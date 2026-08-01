@@ -103,16 +103,16 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   // wood), zero attack — pure Distance training fodder for the Archery Range.
   trainingArrow: { name: "Training Arrow", stack: 9999, value: 0, weight: 1, ammo: { dmg: 0 }, practice: true },
   boneArrow: { name: "Bone Arrow",   stack: 999, value: 2, weight: 1, ammo: { dmg: 14 } },
-  sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 3 } },
-  ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 7 } },
-  battleAxe: { name: "Battle Axe",   stack: 1, value: 80, weight: 45, slot: "weapon", gear: { atk: 9 } },
-  boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 12 } },
+  sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 5 } },
+  ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 9 } },
+  battleAxe: { name: "Battle Axe",   stack: 1, value: 80, weight: 45, slot: "weapon", gear: { atk: 11 } },
+  boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 14 } },
   // Fire Sword — the dragon's rare blade: below the Marrow Blade (20) but
   // obtainable without the cave-bottom chest run.
-  fireSword: { name: "Fire Sword",   stack: 1, value: 350, weight: 46, slot: "weapon", gear: { atk: 16 } },
+  fireSword: { name: "Fire Sword",   stack: 1, value: 350, weight: 46, slot: "weapon", gear: { atk: 19 } },
   // Unique treasure: found only in the chest at the bottom of the Bone
   // Caverns (-3). Deliberately absent from every shop and every loot table.
-  marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 20 } },
+  marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 24 } },
   helmet:    { name: "Iron Helmet",  stack: 1, value: 30, weight: 55, slot: "head",   gear: { def: 3 } },
   leatherArmor:{ name: "Leather Armor", stack: 1, value: 25, weight: 70, slot: "body", gear: { def: 3 } },
   chainArmor:{ name: "Chain Armor",  stack: 1, value: 45, weight: 95, slot: "body",  gear: { def: 6 } },
@@ -123,7 +123,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   dragonShield:{ name: "Dragon Shield", stack: 1, value: 300, weight: 70, slot: "shield", gear: { def: 21 } },
   // ---- the Marrow set: pale bone plate with a silver sheen and gold trim,
   // ---- the armour counterpart of the Marrow Blade. One-time chest prizes.
-  marrowShield:{ name: "Marrow Shield",  stack: 1, value: 520, weight: 68, slot: "shield", gear: { def: 26 } },
+  marrowShield:{ name: "Marrow Shield",  stack: 1, value: 520, weight: 68, slot: "shield", gear: { def: 28 } },
   marrowArmor: { name: "Marrow Plate",   stack: 1, value: 620, weight: 110, slot: "body",  gear: { def: 15 } },
   marrowHelmet:{ name: "Marrow Helm",    stack: 1, value: 420, weight: 52, slot: "head",   gear: { def: 8 } },
   marrowLegs:  { name: "Marrow Greaves", stack: 1, value: 460, weight: 84, slot: "legs",   gear: { def: 10 } },

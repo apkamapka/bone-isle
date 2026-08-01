@@ -319,8 +319,16 @@ export const MELEE_FIST_ATK = 7;        // unarmed attack value (fists)
  *  mastery     = 1 + (thisSkill − highest OTHER weapon skill) / MASTERY_DIVISOR
  *
  *  Tuning order, most to least safe: MASTERY_DIVISOR → SHIELD_SKILL_FACTOR →
- *  HP_PER_LEVEL → attack rate. Touch the skill curve (skills.ts `factor`) last:
- *  it rebuilds the whole progression and breaks build parity.
+ *  HP_PER_LEVEL → attack rate.
+ *
+ *  The skill curve itself (skills.ts `factor` = 1.1) is NOT on that list and
+ *  is not up for tuning. It is Tibia 8.6's own constant, and 8.6's pacing is
+ *  the thing being reproduced — the long grind is the feature, not a cost to
+ *  be optimised away. Lowering it to 1.07/1.08 would buy hybrid-build parity
+ *  at the price of that pacing, and `mastery` above already buys the same
+ *  parity without touching the curve. The game is built to keep growing past
+ *  level 50 with new creatures and islands, so the high end of the curve is
+ *  content that has not shipped yet, not dead weight.
  * ------------------------------------------------------------------ */
 
 /** Damage roll floor as a fraction of max. 0 = the old "poof" whiff on every

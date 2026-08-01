@@ -27,9 +27,35 @@ export interface Skill {
   base: number;
 }
 
+/**
+ * The three trainable skills, on Tibia 8.6's own constants.
+ *
+ *   tries(s) = base · factor^(s − offset)
+ *
+ * `factor` is 1.1 across the board — the knight's melee/shielding multiplier
+ * and the paladin's distance one. It is NOT a dial: 8.6's pacing is the target,
+ * and the curve is what produces it. Every +10 skill roughly triples the total
+ * investment, which is exactly why a high skill reads as an achievement rather
+ * than a milestone you pass through.
+ *
+ * `base` is where the vocations differ in the real game, and where Bone Isle
+ * has to reason for itself, because it has one character rather than four:
+ *
+ *   sword      A=50   — matched exactly.
+ *   distance   A=25 in Tibia, 50 here. Not a deviation: our shots award TWO
+ *              points on a hit and one on a miss, so at 60-90% accuracy a shot
+ *              is worth ~1.75 points. Effective cost lands at 28.6 against
+ *              Tibia's 25 — within 14%, and the closest a single constant gets.
+ *   shielding  A=100. Double the weapons, because a shield engages up to
+ *              SHIELD_BLOCK_MAX creatures per round: fight two things and the
+ *              points arrive twice as fast, so the wall-clock cost matches a
+ *              weapon's. It is compensation, not a penalty — and it only holds
+ *              because hurtPlayer() actually implements the multi-block cap.
+ *              Halve this the day that cap goes away.
+ */
 export const skills: Record<SkillKey, Skill> = {
   sword: { name: "Sword Fighting", lv: 10, pts: 0, color: "#e1483b", active: true, offset: 10, factor: 1.1, base: 50 },
-  shield: { name: "Shielding", lv: 10, pts: 0, color: "#5aa1e8", active: true, offset: 10, factor: 1.1, base: 50 },
+  shield: { name: "Shielding", lv: 10, pts: 0, color: "#5aa1e8", active: true, offset: 10, factor: 1.1, base: 100 },
   dist: { name: "Distance Fighting", lv: 10, pts: 0, color: "#6fc06a", active: true, offset: 10, factor: 1.1, base: 50 },
 };
 // NOTE: there is deliberately no "speed" skill — Tibia 8.6 has none. Movement

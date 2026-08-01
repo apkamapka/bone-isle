@@ -662,7 +662,7 @@ async function main(): Promise<void> {
     {
       const marrow = MARROW.reduce((n, k) => n + defOf(k), 0);
       const best = sets[sets.length - 1][0].reduce((n, k) => n + defOf(k as keyof typeof I), 0);
-      const curveAtCeiling = cfg.bestArmorSet(45); // the deepest content we ship
+      const curveAtCeiling = cfg.bestArmorSet(50); // today's planned ceiling
       ok(marrow > best, `the Marrow set (${marrow}) beats every craftable set (${best})`);
       ok(marrow < curveAtCeiling * 1.5, `…but only ${(marrow / curveAtCeiling).toFixed(2)}× the curve — a prize, not a different game`);
       ok(defOf("marrowShield") > defOf("dragonShield"), "the Marrow shield tops the shield ladder too");
@@ -675,6 +675,23 @@ async function main(): Promise<void> {
     const gearGrowth = cfg.bestWeaponAtk(60) / cfg.bestWeaponAtk(1);
     ok(gearGrowth < 4, `best weapon grows only ${gearGrowth.toFixed(1)}× from level 1 to 60 (skillTerm grows ~4.5×)`);
 
+    // Coverage: the curve runs to level 100 because the world will keep
+    // growing. Report what the item table does NOT yet reach, so the gap is a
+    // visible content task instead of a silent hole.
+    {
+      const topAtk = Math.max(...(Object.keys(I) as (keyof typeof I)[]).map(atkValue));
+      const topShield = Math.max(...(Object.keys(I) as (keyof typeof I)[]).map(defOf));
+      const covered = (f: (l: number) => number, have: number): number => {
+        for (let l = 100; l >= 1; l--) if (f(l) <= have) return l;
+        return 0;
+      };
+      const wLv = covered(cfg.bestWeaponAtk, topAtk);
+      const sLv = covered(cfg.bestShieldDef, defOf("marrowShield"));
+      console.log(`    ladder reaches: weapons →lv${wLv}, shields →lv${sLv} (target ceiling: 50)`);
+      ok(wLv >= 40, `the weapon ladder carries a character to level ${wLv}`);
+      ok(sLv >= 40, `the shield ladder carries a character to level ${sLv}`);
+    }
+
     // the Bone set exists, is craftable, and fills the gap it was added for
     for (const k of ["boneShield", "boneHelmet", "boneLegs", "boneBoots"] as const) {
       ok(!!items.RECIPES.find((r) => r.out === k), `${k} has a recipe`);
@@ -684,6 +701,36 @@ async function main(): Promise<void> {
     const plateSet = defOf("helmet") + defOf("armor") + defOf("legs") + defOf("boots");
     const marrowSet = defOf("marrowHelmet") + defOf("marrowArmor") + defOf("marrowLegs") + defOf("marrowBoots");
     ok(boneSet > plateSet && boneSet < marrowSet, `Bone set (${boneSet}) sits between plate (${plateSet}) and Marrow (${marrowSet})`);
+  }
+
+  console.log("training curve (Tibia 8.6 constants):");
+  {
+    const { skillNeed } = await import("../src/systems/skills.ts");
+    const tries = (base: number, factor: number, s: number, offset = 10): number =>
+      base * (Math.pow(factor, s - offset) - 1) / (factor - 1);
+    resetSkills();
+    ok(Object.values(skills).every((s) => s.factor === 1.1),
+      "every skill grows on 8.6's 1.1 curve — the pacing IS the design");
+    ok(skills.sword.base === 50 && skills.dist.base === 50, "weapon skills start at A=50, like Tibia melee");
+    ok(skills.shield.base === 2 * skills.sword.base,
+      "Shielding costs double — paid back by blocking two creatures a round");
+    // the multi-block cap is the ONLY thing that justifies A=100; if it ever
+    // goes away this assertion is the tripwire that says to halve the cost
+    const { SHIELD_BLOCK_MAX } = await import("../src/config.ts");
+    ok(SHIELD_BLOCK_MAX === 2, "…and that payback exists because the shield engages 2 attackers");
+    // +10 skill roughly triples the total investment (1.1^10 ≈ 2.6)
+    const t60 = tries(50, 1.1, 60), t70 = tries(50, 1.1, 70);
+    ok(t70 / t60 > 2.3 && t70 / t60 < 3.0, `+10 skill costs ${(t70 / t60).toFixed(1)}× the total so far`);
+    // and the per-level need must never shrink as the skill climbs
+    let rising = true;
+    for (let lv = 11; lv <= 99; lv++) {
+      skills.sword.lv = lv;
+      const a = skillNeed(skills.sword);
+      skills.sword.lv = lv + 1;
+      if (skillNeed(skills.sword) <= a) rising = false;
+    }
+    ok(rising, "every skill level costs strictly more than the one before it");
+    resetSkills();
   }
 
   console.log("speed from level (no Speed skill — Tibia 8.6):");
@@ -744,7 +791,8 @@ async function main(): Promise<void> {
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
     const { SHOPS } = await import("../src/entities/npcs.ts");
     const blade = items.ITEMS.marrowBlade;
-    ok(blade.gear?.atk === 20 && blade.slot === "weapon", "Marrow Blade is a 20-attack weapon");
+    ok((blade.gear?.atk ?? 0) > (items.ITEMS.fireSword.gear?.atk ?? 0) && blade.slot === "weapon",
+      `Marrow Blade tops the weapon ladder (${blade.gear?.atk} attack)`);
     // unobtainable anywhere but the chest: no loot table and no shop sells it
     let inLoot = false;
     for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
@@ -870,8 +918,9 @@ async function main(): Promise<void> {
       ok(worlds.cave2.monsters.some((mm) => mm.kind === "minotaurArcher"), "cavern -2 fields minotaur archers");
     }
     // new gear sanity: the progression slots between existing pieces
-    ok(items.ITEMS.battleAxe.gear?.atk === 9 && items.ITEMS.fireSword.gear?.atk === 16,
-      "battle axe (9) and fire sword (16) slot into the weapon ladder");
+    ok((items.ITEMS.battleAxe.gear?.atk ?? 0) > (items.ITEMS.ironSword.gear?.atk ?? 0)
+      && (items.ITEMS.fireSword.gear?.atk ?? 0) > (items.ITEMS.boneSword.gear?.atk ?? 0),
+      "battle axe and fire sword slot into the weapon ladder in order");
     ok((items.ITEMS.dragonShield.gear?.def ?? 0) > (items.ITEMS.steelShield.gear?.def ?? 0),
       "dragon shield out-defends steel shield");
     ok((items.ITEMS.dragonHam.food ?? 0) > (items.ITEMS.meat.food ?? 0), "dragon ham out-feeds raw meat");
