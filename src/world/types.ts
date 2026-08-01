@@ -174,6 +174,8 @@ export type MonsterKind =
   // Etap 18 — the undead heavies. Both are skeletons and both leave the
   // skeleton's body; the demon is the last thing short of the dragon.
   | "skeletonWarrior" | "demonSkeleton"
+  // a goblin issued legion plate and a dagger — the rank the warrens promote to
+  | "goblinLegionary"
   // the boss: one lair at the bottom of the Bone Caverns, long respawn
   | "dragon";
 

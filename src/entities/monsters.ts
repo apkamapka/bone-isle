@@ -243,6 +243,14 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.bear, hp: 120, dmg: [9, 25], speed: 60, atkRate: 2.0, exp: 70, gold: [4, 10], danger: 0.7, armor: 3, resist: { ice: 0.6, fire: 1.4 },
     loot: [{ kind: "meat", chance: 0.7, n: [1, 3] }],
   },
+  // Same fight as an orc warrior, wearing the same iron and swinging on the same
+  // two-second beat — the armour is what the rank is, not the goblin under it.
+  // Marginally quicker and marginally softer than the orc, which is the goblin
+  // showing through: a smaller frame carries plate better but takes a hit worse.
+  goblinLegionary: {
+    spr: SPR.goblin, hp: 122, dmg: [10, 27], speed: 62, atkRate: 2.0, exp: 76, gold: [8, 18], danger: 0.6, armor: 8,
+    loot: [],
+  },
   orcWarrior: {
     spr: SPR.orcWarrior, hp: 125, dmg: [10, 28], speed: 60, atkRate: 2.0, exp: 78, gold: [8, 18], danger: 0.6, armor: 8,
     loot: [{ kind: "chainArmor", chance: 0.04, n: [1, 1] }, { kind: "ironSword", chance: 0.08, n: [1, 1] }, { kind: "meat", chance: 0.4, n: [1, 1] }],

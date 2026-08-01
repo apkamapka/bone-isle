@@ -100,7 +100,7 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   hollow1:  { spider: 5, poisonSpider: 4 },
   hollow2:  { poisonSpider: 9, wasp: 7 },
   goblin1:  { goblin: 6, rotworm: 3 },
-  goblin2:  { goblin: 10, warWolf: 6 },
+  goblin2:  { goblin: 10, warWolf: 6, goblinLegionary: 4 }, // TEMP-ETAP19: until it gets its own grounds
   orcfort1: { orc: 4, orcArcher: 3, orcWarrior: 3 },
   orcfort2: { orcWarrior: 7, orcShaman: 5, orcBerserker: 4 },
   bastion1: { minotaur: 4, minotaurArcher: 3 },

@@ -1001,7 +1001,7 @@ async function main(): Promise<void> {
     const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S, TILE } = await import("../src/config.ts");
     const { killMonster } = await import("../src/systems/combat.ts");
     // 30 + the dragon, then the two undead heavies of Etap 18
-    ok(MONSTER_KINDS.length === 33, `bestiary holds 33 kinds (32 + the dragon), got ${MONSTER_KINDS.length}`);
+    ok(MONSTER_KINDS.length === 34, `bestiary holds 34 kinds (33 + the dragon), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -2839,6 +2839,66 @@ async function main(): Promise<void> {
       "a skeleton warrior stands on Bone Caverns -3");
     ok(worlds.cave3.monsters.some((m) => m.kind === "demonSkeleton"),
       "…and so does a demon skeleton");
+  }
+
+  console.log("The goblin legionary takes the warrens' iron:");
+  {
+    const fs = await import("node:fs");
+    const { mobFrame, corpseSprite } = await import("../src/gfx/mobSheet.ts");
+    const { MONSTER_DEFS, rollLoot } = await import("../src/entities/monsters.ts");
+    const sheetSrc = fs.readFileSync(new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    const png = (file: string): [number, number] => {
+      const b = fs.readFileSync(new URL(`../public/${file}`, import.meta.url));
+      return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    };
+    const FILE = "mob-goblin-legionary-walk.png";
+
+    ok(sheetSrc.includes(`goblinLegionary: "./${FILE}"`), "the legionary has a walk sheet registered");
+    ok(fs.existsSync(new URL(`../public/${FILE}`, import.meta.url)), "…and it is actually shipped");
+    const [w, h] = png(FILE);
+    ok(w % 9 === 0 && h % 4 === 0, `…laid out as the 9x4 grid the slicer expects (${w}x${h})`);
+    ok(h / 4 === 50, "…with all four facings cut to one height, so it never bobs on turning");
+    ok(credits.includes(FILE), "…and credited by filename");
+    ok(mobFrame("goblinLegionary" as never, "down", true, 0) === null,
+      "…while headless it falls back to the baked sprite");
+    ok(corpseSprite("goblinLegionary") === null, "…and headless its body falls back too");
+
+    // Both goblins leave the same small green heap. Armour is not a corpse.
+    for (const k of ["goblin", "goblinLegionary"]) {
+      ok(sheetSrc.includes(`${k}: "./mob-goblin-dead.png"`), `${k} leaves the shared goblin body`);
+    }
+    ok(!fs.existsSync(new URL("../public/mob-goblin-legionary-dead.png", import.meta.url)),
+      "no separate legionary corpse — the two goblins share one");
+
+    // The helmet and pauldrons are what widen him past the bare goblin.
+    ok(png(FILE)[0] / 9 > png("mob-goblin-walk.png")[0] / 9,
+      "the legionary is wider than the bare goblin — the legion helm sticks out");
+
+    /* --- stats: he is an orc warrior in goblin skin --- */
+    const orc = MONSTER_DEFS.orcWarrior;
+    const leg = MONSTER_DEFS.goblinLegionary;
+    const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= b * tol;
+    ok(near(leg.hp, orc.hp, 0.1), "the legionary matches the orc warrior's HP");
+    ok(near(leg.exp, orc.exp, 0.1), "…and its experience");
+    ok(near(leg.dmg[0], orc.dmg[0], 0.15) && near(leg.dmg[1], orc.dmg[1], 0.15),
+      "…and both ends of its damage roll");
+    ok(leg.armor === orc.armor, "…and wears the same weight of iron");
+    ok(leg.hp > MONSTER_DEFS.goblin.hp * 2, "…while leaving the plain goblin far behind");
+    ok(leg.ranged === undefined, "the dagger is for stabbing — melee only");
+
+    // Loot is being done wholesale later.
+    ok(leg.loot.length === 0, "the legionary carries no loot table yet");
+    ok(rollLoot("goblinLegionary").items.length === 0, "…and rolling it yields nothing rather than throwing");
+
+    /* --- he spawns, and the stand-in is flagged --- */
+    const gameSrc = fs.readFileSync(new URL("../src/game.ts", import.meta.url), "utf8");
+    ok(/TEMP-ETAP19/.test(gameSrc), "the stand-in spawn entry is tagged for removal");
+    const worlds = buildWorlds(WORLD_SEED);
+    const { populateWorld: pwG } = await import("../src/game.ts");
+    pwG(worlds.goblin2, WORLD_SEED);
+    ok(worlds.goblin2.monsters.some((m) => m.kind === "goblinLegionary"),
+      "a goblin legionary stands in the deeper warren");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

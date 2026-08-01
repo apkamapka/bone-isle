@@ -220,6 +220,39 @@ take, and stretches the archer's body to 60px against the bare corpse's 40px.
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
+## Goblin Legionary — `public/mob-goblin-legionary-walk.png`
+
+No body file of its own: it reuses `public/mob-goblin-dead.png`, credited with
+the plain goblin above. A goblin stripped of its plate is just a goblin.
+
+Composed from the **Universal LPC Spritesheet Character Generator** under the
+same licences as the layers listed under the player. It shares the pale-green
+goblin head and body with the goblin already in the game, so the two read as one
+species at two ranks; only the iron differs.
+
+Reproducible character configuration:
+
+- <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_pale_green&head=Goblin_pale_green&expression=Neutral_pale_green&hat=Legion_iron&arms=Armour_iron&legs=Armour_iron&shoes=Armour_iron&weapon=Dagger_dagger>
+
+Beyond the collections listed under the player, this draws on the pale-green
+goblin head and body and on the iron legion-helm, iron arm, leg and boot armour
+and dagger layers of the ULPC project; the generator's own credits export is
+authoritative for the per-layer author list.
+
+Only the walk block was kept — rows 8-11 (up, left, down, right), nine frames
+each — repacked into a 9x4 grid and cropped to one rectangle shared by every
+frame, symmetric about the source cell's centre line (see `src/gfx/mobSheet.ts`).
+No pixel was repainted. Frame size 40x50, a little taller and wider than the bare
+goblin's, which is the helmet crest and the pauldrons.
+
+> **TODO before release:** download "Credits (CSV)" from the generator for this
+> configuration and paste the per-layer author list here. The URL reproduces the
+> character, but a URL is not an attribution.
+
+**ShareAlike:** this file is a derivative work of CC-BY-SA 3.0 artwork and is
+itself published under **CC-BY-SA 3.0**. It must stay publicly available on those
+terms even if this repository is later made private.
+
 ## Skeleton Warrior and Demon Skeleton
 
 `public/mob-skeleton-warrior-walk.png`, `public/mob-demon-skeleton-walk.png`.
