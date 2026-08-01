@@ -155,6 +155,8 @@ export function makeCaveWorld(opts: CaveOpts): World {
     rocks: [],
     herbs: [],
     decos: [],
+    fires: [],
+    scenery: [],
     monsters: [],
     corpses: [],
     ground: [],

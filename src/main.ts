@@ -4,6 +4,8 @@ import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight, portalCovers } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
+import { campfireFrame } from "./gfx/fireSheet.ts";
+import { scenerySprite } from "./gfx/sceneryArt.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, itemSprite, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
@@ -2151,6 +2153,32 @@ function render(): void {
         if (rk.hp < rk.maxhp) hpBar(bx, rk.ty * TILE - 4, rk.hp / rk.maxhp);
       } });
     }
+  }
+  // Standing scenery — totems, dead trees. Anchored at the bottom of their own
+  // tile, so the part that overhangs the tile above is drawn after anything
+  // standing up there: walk north of a totem and it hides you, like a tree.
+  for (const sc of world.scenery) {
+    const bx = sc.tx * TILE + TILE / 2;
+    const by = sc.ty * TILE + TILE;
+    if (!inView(bx, by)) continue;
+    drawList.push({ y: by, fn: () => {
+      artShadow(bx, by, 10);
+      drawSprite(scenerySprite(sc.kind), bx, by);
+    } });
+  }
+  // Campfires. Unlike every other piece of scenery these are NOT baked into
+  // the map canvas: the flame has to be recut each frame, so they ride the
+  // depth-sorted list and the player can walk behind one. `waveT` is the same
+  // clock the water glint uses, and each fire's own phase keeps two fires in
+  // one camp from pulsing together. Without the artwork the baked sprite
+  // stands in, still but present.
+  for (const fr of world.fires) {
+    const bx = fr.tx * TILE + TILE / 2;
+    const by = fr.ty * TILE + TILE;
+    if (!inView(bx, by)) continue;
+    drawList.push({ y: by, fn: () => {
+      drawSprite(campfireFrame(waveT, fr.phase) ?? SPR.campfire, bx, by);
+    } });
   }
   for (const hb of world.herbs) {
     if (hb.picked) continue;

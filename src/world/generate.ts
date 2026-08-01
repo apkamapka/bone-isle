@@ -129,6 +129,8 @@ export function makeWorld(opts: WorldOpts): World {
     rocks: [],
     herbs: [],
     decos: [],
+    fires: [],
+    scenery: [],
     monsters: [],
     corpses: [],
     ground: [],

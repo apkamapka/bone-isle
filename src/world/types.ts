@@ -104,6 +104,38 @@ export interface Deco {
   ty: number;
 }
 
+/**
+ * A campfire.
+ *
+ * Not a Deco: decorations are baked into the map canvas when the world is
+ * built, and a fire has to be redrawn every frame to flicker. It is drawn from
+ * the depth-sorted list instead, like a tree.
+ */
+export interface Fire {
+  tx: number;
+  ty: number;
+  /** Seconds of offset into the flicker cycle, so neighbouring fires in one
+   *  camp do not pulse in unison. */
+  phase: number;
+}
+
+/** Scenery a map may plant. Artwork and fallbacks live in gfx/sceneryArt.ts. */
+export type SceneryKind = "skullPole" | "deadTree" | "felledTree";
+
+/**
+ * A standing object taller than its tile — a skull totem, a dead tree.
+ *
+ * Not a Deco either, and for the opposite reason to a Fire: decorations are
+ * baked under everything, and these have to be drawn from the depth-sorted
+ * list so the player can pass behind them. The tile they name is theirs; the
+ * sprite overhangs upward from it.
+ */
+export interface Scenery {
+  tx: number;
+  ty: number;
+  kind: SceneryKind;
+}
+
 /** A 2x2 grass pad on Home Isle where a structure may be placed. */
 export interface BuildSpot {
   tx: number;
@@ -174,8 +206,6 @@ export type MonsterKind =
   // Etap 18 — the undead heavies. Both are skeletons and both leave the
   // skeleton's body; the demon is the last thing short of the dragon.
   | "skeletonWarrior" | "demonSkeleton"
-  // a goblin issued legion plate and a dagger — the rank the warrens promote to
-  | "goblinLegionary"
   // the boss: one lair at the bottom of the Bone Caverns, long respawn
   | "dragon";
 
@@ -346,6 +376,8 @@ export interface World {
   rocks: RockNode[];
   herbs: HerbNode[];
   decos: Deco[];
+  fires: Fire[];
+  scenery: Scenery[];
   monsters: Monster[];
   corpses: Corpse[];
   ground: GroundItem[];

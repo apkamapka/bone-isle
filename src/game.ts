@@ -5,6 +5,8 @@ import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC, CELLAR_SPEC } fr
 import { loadTerrainImages } from "./world/terrainImage.ts";
 import { loadPropArt } from "./world/propArt.ts";
 import { loadMobSheets } from "./gfx/mobSheet.ts";
+import { loadFireSheet } from "./gfx/fireSheet.ts";
+import { loadSceneryArt } from "./gfx/sceneryArt.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn, worldSpawn } from "./world/collision.ts";
@@ -100,7 +102,7 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
   hollow1:  { spider: 5, poisonSpider: 4 },
   hollow2:  { poisonSpider: 9, wasp: 7 },
   goblin1:  { goblin: 6, rotworm: 3 },
-  goblin2:  { goblin: 10, warWolf: 6, goblinLegionary: 4 }, // TEMP-ETAP19: until it gets its own grounds
+  goblin2:  { goblin: 10, warWolf: 6 },
   orcfort1: { orc: 4, orcArcher: 3, orcWarrior: 3 },
   orcfort2: { orcWarrior: 7, orcShaman: 5, orcBerserker: 4 },
   bastion1: { minotaur: 4, minotaurArcher: 3 },
@@ -213,6 +215,8 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
   loadMobSheets();           // directional walk cycles for humanoid creatures
+  loadFireSheet();           // the campfire flicker
+  loadSceneryArt();          // totems and dead trees the player walks behind
   for (const l of LAIRS) {
     const lw = makeCaveWorld({
       key: l.key, name: l.name, w: l.w, h: l.h, seed: seed ^ keySalt(l.key),

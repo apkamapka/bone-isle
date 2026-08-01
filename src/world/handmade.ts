@@ -25,7 +25,7 @@ import { TILE } from "../config.ts";
 import { SPR, bakeTree } from "../gfx/sprites.ts";
 import { NPC_DATA, bakeWorldCanvas } from "./generate.ts";
 import { npcRest } from "../entities/npcs.ts";
-import type { MonsterKind } from "./types.ts";
+import type { MonsterKind, SceneryKind } from "./types.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldKey, NpcKey } from "./types.ts";
 
@@ -76,6 +76,11 @@ export interface HandmadeSpec {
   safeMaxY?: number;
   /** Glyph → creature posted on that tile (plain grass or road underneath). */
   monsters?: Readonly<Record<string, MonsterKind>>;
+  /** Glyph → standing scenery on that tile. The tile is made solid, exactly
+   *  like a tree's: these objects are taller than one square and the player
+   *  walks BEHIND them, never through them. Glyphs are per-spec so a letter
+   *  free on one island can still mean a portal on another. */
+  scenery?: Readonly<Record<string, SceneryKind>>;
 }
 
 /** NPC display name + sprite, keyed for O(1) lookup while parsing. */
@@ -129,6 +134,8 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     rocks: [],
     herbs: [],
     decos: [],
+    fires: [],
+    scenery: [],
     monsters: [],
     corpses: [],
     ground: [],
@@ -168,6 +175,13 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
         case "M":
           w.decos.push({ spr: SPR.mushroom, tx: x, ty: y });
           break;
+        case "F":
+          // Solidity is the map's call, not the fire's: a hand-placed campfire
+          // is something to walk around, while the ones dressing a wilderness
+          // camp stay walkable so they cannot wall a monster into a corner.
+          w.fires.push({ tx: x, ty: y, phase: (x * 7 + y * 13) % 10 / 10 });
+          solid[y][x] = true;
+          break;
         case "o":
           w.decos.push({ spr: SPR.bones, tx: x, ty: y });
           break;
@@ -175,6 +189,12 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           w.buildSpots.push({ tx: x, ty: y, built: null });
           break;
         default: {
+          const scn = spec.scenery?.[ch];
+          if (scn) {
+            w.scenery.push({ tx: x, ty: y, kind: scn });
+            solid[y][x] = true;
+            break;
+          }
           const mob = spec.monsters?.[ch];
           if (mob) {
             (w.mobPosts ??= []).push({ kind: mob, tx: x, ty: y });

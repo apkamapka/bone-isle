@@ -504,6 +504,23 @@ The twelve frames are drawn as a loop: the jump from the last frame back to
 the first is no larger than any step inside the cycle, so they play straight
 through with no seam to hide.
 
+## Skull totem — `public/prop-skullpole.png`
+
+The drawn version of `SPR.skullPole`, the baked pole the wilderness camps
+already plant. Supplied by the project owner as a 32 x 64 file (`totem-czaszka
+.png`, the same name as a tileset in the island's Tiled project) and trimmed
+here to its opaque bounds, 22 x 49, with the base centred under the image so
+`drawSprite()` plants it on the tile it owns. Native resolution, 30 colours,
+no pixel changed.
+
+At 49 px it is a tile and a half tall, which is the point: it owns one solid
+tile and overhangs the one above, so the depth-sorted draw list puts it in
+front of anyone standing north of it.
+
+> **TODO before release:** record the author, pack and licence. Like the first
+> campfire, this arrived without provenance, so it is the one asset in the repo
+> whose terms are unknown.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in

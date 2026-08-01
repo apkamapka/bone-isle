@@ -2908,6 +2908,65 @@ async function main(): Promise<void> {
       "…and that one is solid, so the player walks around it");
   }
 
+  console.log("Standing scenery is walked behind, not over:");
+  {
+    const fs = await import("node:fs");
+    const scn = await import("../src/gfx/sceneryArt.ts");
+    const gfx = await import("../src/gfx/sprites.ts");
+    const { makeHandmadeWorld } = await import("../src/world/handmade.ts");
+    const { TILE: T } = await import("../src/config.ts");
+    const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+
+    const png = (file: string): [number, number] => {
+      const b = fs.readFileSync(new URL(`../public/${file}`, import.meta.url));
+      return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    };
+
+    const FILES: Record<string, string> = {
+      skullPole: "prop-skullpole.png",
+      deadTree: "prop-tree-dead.png",
+      felledTree: "prop-tree-felled.png",
+    };
+
+    ok(scn.SCENERY_KINDS.length === 3, "three kinds of scenery are registered");
+    for (const kind of scn.SCENERY_KINDS) {
+      const file = FILES[kind];
+      ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
+        `${kind} ships ${file}`);
+      const [w, h] = png(file);
+      ok(h > T, `…and it stands taller than one tile (${w}x${h}), so it overhangs`);
+      ok(credits.includes(file), `…and ${file} is credited by filename`);
+      ok(!scn.hasSceneryArt(kind), "…while headless the PNG never loads");
+      ok(scn.scenerySprite(kind) !== undefined,
+        "…and a baked sprite stands in for it instead");
+    }
+
+    /* --- the totem is the drawn version of the pole the camps already plant --- */
+    ok(scn.scenerySprite("skullPole") === gfx.SPR.skullPole,
+      "headless, the totem falls back to the baked skull pole it replaces");
+
+    /* --- a glyph plants one and seals the tile under it --- */
+    const w = makeHandmadeWorld({
+      key: "home",
+      name: "scenery probe",
+      safe: true,
+      rows: [".....", ".....", "..Y..", ".....", "....."],
+      portals: {},
+      scenery: { Y: "skullPole" },
+    });
+    ok(w.scenery.length === 1, "the glyph plants exactly one totem");
+    ok(w.scenery[0].tx === 2 && w.scenery[0].ty === 2, "…on the tile it was written");
+    ok(w.solid[2][2], "…and that tile is solid, like a tree's");
+    ok(!w.solid[1][2],
+      "…while the tile above stays walkable — the sprite overhangs it, nothing more");
+    ok(w.decos.length === 0,
+      "…and nothing was baked into the map canvas, which would draw it under the player");
+
+    const worlds = buildWorlds(WORLD_SEED);
+    ok(Object.values(worlds).every((x) => Array.isArray(x.scenery)),
+      "every world carries a scenery list");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
