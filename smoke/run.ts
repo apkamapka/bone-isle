@@ -1001,7 +1001,7 @@ async function main(): Promise<void> {
     const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S, TILE } = await import("../src/config.ts");
     const { killMonster } = await import("../src/systems/combat.ts");
     // 30 + the dragon, then the two undead heavies of Etap 18
-    ok(MONSTER_KINDS.length === 34, `bestiary holds 34 kinds (33 + the dragon), got ${MONSTER_KINDS.length}`);
+    ok(MONSTER_KINDS.length === 33, `bestiary holds 33 kinds (32 + the dragon), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -2841,64 +2841,71 @@ async function main(): Promise<void> {
       "…and so does a demon skeleton");
   }
 
-  console.log("The goblin legionary takes the warrens' iron:");
+  console.log("Campfires flicker instead of being baked into the map:");
   {
     const fs = await import("node:fs");
-    const { mobFrame, corpseSprite } = await import("../src/gfx/mobSheet.ts");
-    const { MONSTER_DEFS, rollLoot } = await import("../src/entities/monsters.ts");
-    const sheetSrc = fs.readFileSync(new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const fire = await import("../src/gfx/fireSheet.ts");
+    const gfx = await import("../src/gfx/sprites.ts");
     const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
-    const png = (file: string): [number, number] => {
-      const b = fs.readFileSync(new URL(`../public/${file}`, import.meta.url));
-      return [b.readUInt32BE(16), b.readUInt32BE(20)];
-    };
-    const FILE = "mob-goblin-legionary-walk.png";
+    const handmadeSrc = fs.readFileSync(
+      new URL("../src/world/handmade.ts", import.meta.url), "utf8");
+    const deepwildSrc = fs.readFileSync(
+      new URL("../src/world/deepwild.ts", import.meta.url), "utf8");
 
-    ok(sheetSrc.includes(`goblinLegionary: "./${FILE}"`), "the legionary has a walk sheet registered");
-    ok(fs.existsSync(new URL(`../public/${FILE}`, import.meta.url)), "…and it is actually shipped");
-    const [w, h] = png(FILE);
-    ok(w % 9 === 0 && h % 4 === 0, `…laid out as the 9x4 grid the slicer expects (${w}x${h})`);
-    ok(h / 4 === 50, "…with all four facings cut to one height, so it never bobs on turning");
-    ok(credits.includes(FILE), "…and credited by filename");
-    ok(mobFrame("goblinLegionary" as never, "down", true, 0) === null,
-      "…while headless it falls back to the baked sprite");
-    ok(corpseSprite("goblinLegionary") === null, "…and headless its body falls back too");
+    /* --- the strip is laid out the way the slicer reads it --- */
+    const b = fs.readFileSync(new URL("../public/prop-campfire.png", import.meta.url));
+    const [sw, sh] = [b.readUInt32BE(16), b.readUInt32BE(20)];
+    ok(sw === 32 * fire.FIRE_FRAMES && sh === 32,
+      `the strip is ${fire.FIRE_FRAMES} square 32px frames (${sw}x${sh})`);
+    ok(sw % fire.FIRE_FRAMES === 0, "…so the slicer's integer frame width is exact");
+    ok(credits.includes("prop-campfire.png"), "…and it is credited by filename");
+    ok(/NYKNCK/.test(credits), "…with the artist the pack was bought from named");
 
-    // Both goblins leave the same small green heap. Armour is not a corpse.
-    for (const k of ["goblin", "goblinLegionary"]) {
-      ok(sheetSrc.includes(`${k}: "./mob-goblin-dead.png"`), `${k} leaves the shared goblin body`);
-    }
-    ok(!fs.existsSync(new URL("../public/mob-goblin-legionary-dead.png", import.meta.url)),
-      "no separate legionary corpse — the two goblins share one");
+    /* --- the cycle walks the strip and wraps --- */
+    const seq = Array.from({ length: fire.FIRE_FRAMES + 2 },
+      (_, i) => fire.fireFrameIndex(i / fire.FIRE_FPS, 0));
+    ok(seq.every((f) => f >= 0 && f < fire.FIRE_FRAMES),
+      "every frame index lands inside the strip");
+    ok(seq.slice(0, fire.FIRE_FRAMES).join() === [...Array(fire.FIRE_FRAMES).keys()].join(),
+      "one second walks the whole strip in order");
+    ok(seq[fire.FIRE_FRAMES] === 0, "…then wraps back to the first frame");
+    ok(fire.fireFrameIndex(0, 0) === fire.fireFrameIndex(1000, 0),
+      "the cycle stays stable far from t=0");
+    ok(fire.fireFrameIndex(0, -0.5) >= 0,
+      "a negative phase still indexes inside the strip");
 
-    // The helmet and pauldrons are what widen him past the bare goblin.
-    ok(png(FILE)[0] / 9 > png("mob-goblin-walk.png")[0] / 9,
-      "the legionary is wider than the bare goblin — the legion helm sticks out");
+    /* --- phases keep two fires in one camp out of lockstep --- */
+    const t = 0.5 / fire.FIRE_FPS;
+    ok(new Set(Array.from({ length: 4 }, (_, i) =>
+      fire.fireFrameIndex(t, i / fire.FIRE_FPS))).size === 4,
+      "four different phases show four different frames at the same instant");
 
-    /* --- stats: he is an orc warrior in goblin skin --- */
-    const orc = MONSTER_DEFS.orcWarrior;
-    const leg = MONSTER_DEFS.goblinLegionary;
-    const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= b * tol;
-    ok(near(leg.hp, orc.hp, 0.1), "the legionary matches the orc warrior's HP");
-    ok(near(leg.exp, orc.exp, 0.1), "…and its experience");
-    ok(near(leg.dmg[0], orc.dmg[0], 0.15) && near(leg.dmg[1], orc.dmg[1], 0.15),
-      "…and both ends of its damage roll");
-    ok(leg.armor === orc.armor, "…and wears the same weight of iron");
-    ok(leg.hp > MONSTER_DEFS.goblin.hp * 2, "…while leaving the plain goblin far behind");
-    ok(leg.ranged === undefined, "the dagger is for stabbing — melee only");
+    /* --- headless there is no artwork, and the baked sprite carries it --- */
+    ok(!fire.hasFireArt(), "headless: the strip never loads");
+    ok(fire.campfireFrame(0, 0) === null, "…so the frame lookup returns null");
+    ok(gfx.SPR.campfire !== undefined, "…and the baked campfire is there to stand in");
 
-    // Loot is being done wholesale later.
-    ok(leg.loot.length === 0, "the legionary carries no loot table yet");
-    ok(rollLoot("goblinLegionary").items.length === 0, "…and rolling it yields nothing rather than throwing");
-
-    /* --- he spawns, and the stand-in is flagged --- */
-    const gameSrc = fs.readFileSync(new URL("../src/game.ts", import.meta.url), "utf8");
-    ok(/TEMP-ETAP19/.test(gameSrc), "the stand-in spawn entry is tagged for removal");
+    /* --- a fire is an entity, not a deco: decos are baked once --- */
     const worlds = buildWorlds(WORLD_SEED);
-    const { populateWorld: pwG } = await import("../src/game.ts");
-    pwG(worlds.goblin2, WORLD_SEED);
-    ok(worlds.goblin2.monsters.some((m) => m.kind === "goblinLegionary"),
-      "a goblin legionary stands in the deeper warren");
+    const all = Object.values(worlds);
+    ok(all.every((w) => Array.isArray(w.fires)), "every world carries a fire list");
+    ok(all.every((w) => w.decos.every((d) => d.spr !== gfx.SPR.campfire)),
+      "no campfire is left in the baked decoration list");
+    ok(worlds.deepwild.fires.length > 0, "the wilderness camps light real fires");
+    ok(worlds.deepwild.fires.every((f) => f.phase >= 0 && f.phase < 1),
+      "…each with its own phase inside one cycle");
+    ok(new Set(worlds.deepwild.fires.map((f) => `${f.tx},${f.ty}`)).size
+      === worlds.deepwild.fires.length,
+      "…and no two of them stacked on one tile");
+    ok(worlds.deepwild.fires.every((f) => !worlds.deepwild.solid[f.ty][f.tx]),
+      "camp fires stay walkable, so nothing can be sealed into a corner");
+    ok(!deepwildSrc.includes("dress(SPR.campfire"),
+      "the camps no longer dress themselves with a still campfire");
+
+    /* --- hand-authored maps can place one, and there it does block --- */
+    ok(/case "F":/.test(handmadeSrc), "hand-authored maps place a fire with 'F'");
+    ok(/case "F":[\s\S]{0,400}?w\.fires\.push[\s\S]{0,200}?solid\[y\]\[x\] = true/.test(handmadeSrc),
+      "…and that one is solid, so the player walks around it");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

@@ -220,39 +220,6 @@ take, and stretches the archer's body to 60px against the bare corpse's 40px.
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
-## Goblin Legionary — `public/mob-goblin-legionary-walk.png`
-
-No body file of its own: it reuses `public/mob-goblin-dead.png`, credited with
-the plain goblin above. A goblin stripped of its plate is just a goblin.
-
-Composed from the **Universal LPC Spritesheet Character Generator** under the
-same licences as the layers listed under the player. It shares the pale-green
-goblin head and body with the goblin already in the game, so the two read as one
-species at two ranks; only the iron differs.
-
-Reproducible character configuration:
-
-- <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_pale_green&head=Goblin_pale_green&expression=Neutral_pale_green&hat=Legion_iron&arms=Armour_iron&legs=Armour_iron&shoes=Armour_iron&weapon=Dagger_dagger>
-
-Beyond the collections listed under the player, this draws on the pale-green
-goblin head and body and on the iron legion-helm, iron arm, leg and boot armour
-and dagger layers of the ULPC project; the generator's own credits export is
-authoritative for the per-layer author list.
-
-Only the walk block was kept — rows 8-11 (up, left, down, right), nine frames
-each — repacked into a 9x4 grid and cropped to one rectangle shared by every
-frame, symmetric about the source cell's centre line (see `src/gfx/mobSheet.ts`).
-No pixel was repainted. Frame size 40x50, a little taller and wider than the bare
-goblin's, which is the helmet crest and the pauldrons.
-
-> **TODO before release:** download "Credits (CSV)" from the generator for this
-> configuration and paste the per-layer author list here. The URL reproduces the
-> character, but a URL is not an attribution.
-
-**ShareAlike:** this file is a derivative work of CC-BY-SA 3.0 artwork and is
-itself published under **CC-BY-SA 3.0**. It must stay publicly available on those
-terms even if this repository is later made private.
-
 ## Skeleton Warrior and Demon Skeleton
 
 `public/mob-skeleton-warrior-walk.png`, `public/mob-demon-skeleton-walk.png`.
@@ -499,6 +466,43 @@ stays horizontally centred for `drawSprite()`, which anchors bottom-centre.
 No pixel was recoloured, rescaled or redrawn. The remaining three frames of
 each opening animation are still available in the source pack if the chests
 are ever animated.
+
+## Campfire — `public/prop-campfire.png`
+
+Twelve 32 x 32 frames in one 384 x 32 strip, packed here from the twelve
+separate PNGs of **Fire Animation** by **NYKNCK**, bought by the project owner
+from itch.io:
+
+<https://nyknck.itch.io/fire-animation>
+
+### Licence: purchased asset, no published terms
+
+The store page carries no licence text — it states what the pack contains and
+what it costs, and nothing about attribution, commercial use or
+redistribution. So no credit is contractually owed here; this entry exists as
+the project's own record of where the art came from and on what footing.
+
+> **Open question before release:** because the pack ships no terms, there is
+> also no written permission to redistribute the frames. This repository is
+> public and serves the PNG unencrypted, which is redistribution in every
+> sense that matters. Two things settle it: whether
+> `fire_animation_nyknck.zip` contains a readme or licence file, and failing
+> that, one line in writing from the artist. The purchase receipt is the only
+> proof of licence that exists — keep it.
+
+### What was changed
+
+The source files are 512 x 512 but are a clean 16x nearest-neighbour upscale
+of 32 x 32 art, verified block by block, so they were taken back down to their
+native 32 x 32 rather than being resampled. Beyond that the pack was shifted
+one pixel right — as a whole, so the frames stay registered to each other —
+because the logs sat a pixel left of the cell centre and `drawSprite()`
+anchors bottom-centre. No pixel was recoloured or redrawn; the pack's six
+colours are intact and its frame order is untouched.
+
+The twelve frames are drawn as a loop: the jump from the last frame back to
+the first is no larger than any step inside the cycle, so they play straight
+through with no seam to hide.
 
 ## Everything else
 
