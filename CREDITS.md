@@ -412,6 +412,48 @@ commercial use and modification, forbids redistributing the assets themselves
 were drawn from scratch for this game in the palette of those packs. They
 contain no third-party pixels and carry no external obligations.
 
+## Chests — `public/prop-chest-red.png`, `prop-chest-purple.png`, `prop-chest-wood.png`
+
+Cut from **Fantasy RPG Chests 32 x 32 px for RPG Maker** ("Fantasy RPG (Toony)
+32x32.png") by **Francisco Téllez (franjatesa)**, a name-your-own-price asset
+pack of eight animated chests:
+
+<https://franjatesa.itch.io/free-rpgmaker-chests>
+
+### Licence: author's own terms — attribution to `franjatesa`
+
+The pack ships no separate licence file; the terms are stated on the download
+page and permit use in any project, including commercial ones, on the single
+condition that the author is credited as **franjatesa**. There is no
+ShareAlike obligation and no anti-DRM clause, so unlike the LPC artwork above
+these three files stay usable on storefronts that wrap the build in mandatory
+DRM (iOS, consoles), and they place no licence requirement on this repository
+or on the game's source.
+
+The terms do not grant permission to redistribute the pack itself, so the
+original sheet is deliberately **not** committed here — only the three single
+frames the game draws.
+
+### What was taken and how it was changed
+
+The sheet uses the RPG Maker character layout: 12 x 8 cells of 32 px, read as
+four chests per half, each chest occupying four consecutive rows. The three
+identical columns in every group are the walk cycle, which a chest has no use
+for; the four rows are the opening animation, frame 1 being the closed chest.
+
+| File | Source cell (row, column) | Frame | Size after trim |
+| --- | --- | --- | --- |
+| `prop-chest-red.png` | row 1, column 2 | closed | 28 x 25 |
+| `prop-chest-purple.png` | row 5, column 2 | closed | 28 x 21 |
+| `prop-chest-wood.png` | row 5, column 5 | closed | 28 x 24 |
+
+Each file is one 32 px cell trimmed to its opaque bounding box. The trim is
+symmetric — two transparent columns fell away on each side — so the artwork
+stays horizontally centred for `drawSprite()`, which anchors bottom-centre.
+No pixel was recoloured, rescaled or redrawn. The remaining three frames of
+each opening animation are still available in the source pack if the chests
+are ever animated.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in
