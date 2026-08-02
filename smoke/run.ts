@@ -3099,56 +3099,98 @@ async function main(): Promise<void> {
     };
     ok(meanDist("snake") < meanDist("orcBerserker"),
       "snakes sit nearer the way home than orc berserkers");
-    ok(meanDist("skeleton") < meanDist("demonSkeleton"),
-      "…and plain skeletons nearer than the demon skeleton");
-    /* --- creatures keep to the ten camps the map marks, and nowhere else --- */
+    // the demon skeleton is ranked by depth inland now, not by distance from
+    // the pad, so the ladder that still holds across regions is the outer one
+    /* --- five regions, one family each, spread not knotted --- */
     {
       const p = r.mobPosts!;
-      // Every marker on the TMX 'potwory' layer, with the roster its own name
-      // spells out. A creature belongs to the marker nearest it, and that
-      // marker has to be one that asked for its kind.
-      const CAMPS: [number, number, string, number][] = [
-        [4, 2, "sn", 7], [49, 2, "k", 7], [60, 0, "kKg", 9], [78, 3, "dgK", 8],
-        [5, 33, "ma", 7], [6, 40, "aum", 8], [63, 30, "GL", 8],
-        [46, 49, "rc", 7], [46, 76, "cer", 8], [46, 81, "hze", 6],
-      ];
-      const LETTER: Record<string, string> = {
-        snake: "s", bandit: "n", skeleton: "k", skeletonWarrior: "K", ghoul: "g",
-        demonSkeleton: "d", goblin: "G", goblinLegionary: "L", minotaur: "m",
-        minotaurArcher: "a", minotaurGuard: "u", orc: "r", orcArcher: "c",
-        orcWarrior: "e", orcShaman: "h", orcBerserker: "z",
+      // The outlines Radek drew over the minimap, as the box each family may
+      // stand in. One family per region; nothing of that family outside it.
+      const REGION: Record<string, [number, number, number, number]> = {
+        easy:     [0, 0, 52, 37],   // snakes and bandits, the north-west
+        undead:   [50, 0, 99, 27],  // the dark strip along the north shore
+        goblin:   [56, 27, 99, 53], // the green belt on the east flank
+        minotaur: [3, 31, 47, 99],  // the whole south-west landmass
+        orc:      [46, 50, 99, 99], // the south-east
       };
-      const nearest = (tx: number, ty: number) => CAMPS.reduce((a, b) =>
-        Math.hypot(tx - b[0], ty - b[1]) < Math.hypot(tx - a[0], ty - a[1]) ? b : a);
+      // Each family weakest first. That order is the order they are laid down
+      // as the ground climbs away from the sea.
+      const LADDER: Record<string, string[]> = {
+        easy: ["snake", "bandit"],
+        undead: ["skeleton", "ghoul", "skeletonWarrior", "demonSkeleton"],
+        goblin: ["goblin", "goblinLegionary"],
+        minotaur: ["minotaur", "minotaurArcher", "minotaurGuard"],
+        orc: ["orc", "orcArcher", "orcWarrior", "orcShaman", "orcBerserker"],
+      };
+      const familyOf = (k: string): string =>
+        k.startsWith("orc") ? "orc" : k.startsWith("minotaur") ? "minotaur"
+        : k.startsWith("goblin") ? "goblin"
+        : (k === "snake" || k === "bandit") ? "easy" : "undead";
 
-      ok(CAMPS.reduce((s2, c) => s2 + c[3], 0) === p.length,
-        `the ten camps account for every creature on the island (${p.length})`);
-      const strays = p.filter((m) => !nearest(m.tx, m.ty)[2].includes(LETTER[m.kind])).length;
-      ok(strays === 0,
-        "no creature stands in a camp that did not ask for its kind — no orc on minotaur soil");
-      const head = CAMPS.map((c) =>
-        p.filter((m) => nearest(m.tx, m.ty) === c).length);
-      ok(head.every((n, i) => n === CAMPS[i][3]),
-        `every camp musters the band it was drawn with (${head.join("/")})`);
-      const reach = Math.max(...p.map((m) => {
-        const c = nearest(m.tx, m.ty);
-        return Math.hypot(m.tx - c[0], m.ty - c[1]);
-      }));
-      ok(reach <= 10,
-        `nobody strays further than ten tiles from his marker (worst ${reach.toFixed(1)})`);
+      const HEAD: Record<string, number> = {
+        snake: 8, bandit: 6,
+        skeleton: 6, ghoul: 3, skeletonWarrior: 3, demonSkeleton: 1,
+        goblin: 5, goblinLegionary: 3,
+        minotaur: 9, minotaurArcher: 7, minotaurGuard: 4,
+        orc: 7, orcArcher: 5, orcWarrior: 4, orcShaman: 2, orcBerserker: 2,
+      };
+      const wrong = Object.entries(HEAD)
+        .filter(([k, n]) => p.filter((m) => m.kind === k).length !== n)
+        .map(([k]) => k);
+      ok(wrong.length === 0, `every kind musters the number drawn for it${wrong.length ? ` — off: ${wrong.join(", ")}` : ""}`);
 
-      // the ground between camps is empty — that is the whole point of camps
-      let open = 0;
-      for (let y = 0; y < r.h; y++) {
-        for (let x = 0; x < r.w; x++) {
-          if (r.tile[y][x] === T2.Water) continue;
-          if (CAMPS.every((c) => Math.hypot(x - c[0], y - c[1]) > 12)) open++;
-        }
+      const outside = p.filter((m) => {
+        const b = REGION[familyOf(m.kind)];
+        return m.tx < b[0] || m.ty < b[1] || m.tx > b[2] || m.ty > b[3];
+      }).length;
+      ok(outside === 0, "no creature strays out of its family's region");
+
+      /* --- spread, not knotted: this is what the camps got wrong --- */
+      const gap = (a: typeof p[0], list: typeof p) =>
+        Math.min(...list.filter((b) => b !== a).map((b) => Math.hypot(a.tx - b.tx, a.ty - b.ty)));
+      const nn = p.map((a) => gap(a, p));
+      ok(Math.min(...nn) >= 3,
+        `no two creatures stand on top of each other (closest pair ${Math.min(...nn).toFixed(1)})`);
+      ok(nn.reduce((s2, d) => s2 + d, 0) / nn.length >= 7,
+        `they are spread across their ground, not heaped (mean gap ${(nn.reduce((s2, d) => s2 + d, 0) / nn.length).toFixed(1)})`);
+      for (const fam of Object.keys(REGION)) {
+        const kin = p.filter((m) => familyOf(m.kind) === fam);
+        const inner = kin.map((a) => gap(a, kin));
+        ok(Math.min(...inner) >= 6,
+          `${fam}: six tiles clear between kin (worst ${Math.min(...inner).toFixed(1)})`);
       }
-      ok(open > 4000,
-        `most of the island is quiet ground you cross unmolested (${open} squares)`);
-      ok(p.every((m) => CAMPS.some((c) => Math.hypot(m.tx - c[0], m.ty - c[1]) <= 12)),
-        "…and not one creature is posted out in it");
+
+      /* --- the weak hold the shore, the heavy the interior --- */
+      const depth: number[][] = Array.from({ length: r.h }, () => new Array(r.w).fill(-1));
+      let front: [number, number][] = [];
+      for (let y = 0; y < r.h; y++) {
+        for (let x = 0; x < r.w; x++) if (r.tile[y][x] === T2.Water) { depth[y][x] = 0; front.push([x, y]); }
+      }
+      for (let d = 1; front.length; d++) {
+        const next: [number, number][] = [];
+        for (const [x, y] of front) {
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const i = x + dx, j = y + dy;
+            if (i >= 0 && j >= 0 && i < r.w && j < r.h && depth[j][i] < 0) { depth[j][i] = d; next.push([i, j]); }
+          }
+        }
+        front = next;
+      }
+      const meanDepth = (kind: string): number => {
+        const ps = p.filter((m) => m.kind === kind);
+        return ps.reduce((s2, m) => s2 + depth[m.ty][m.tx], 0) / ps.length;
+      };
+      for (const [fam, order] of Object.entries(LADDER)) {
+        const ds = order.map(meanDepth);
+        ok(ds.every((d, i) => i === 0 || d > ds[i - 1]),
+          `${fam}: every rank stands deeper inland than the one below it (${ds.map((d) => d.toFixed(1)).join(" < ")})`);
+      }
+      ok(p.every((m) => depth[m.ty][m.tx] >= 2),
+        "nobody is posted in the surf");
+
+      /* --- you arrive on the pad with room to draw --- */
+      ok(p.every((m) => Math.hypot(m.tx - sx, m.ty - sy) >= 8),
+        "eight clear tiles around the pad home, so nothing is already swinging when you land");
     }
 
     /* --- nothing tall stands on the waterline --- */
