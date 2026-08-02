@@ -398,15 +398,37 @@ those terms even if this repository is later made private.
 
 ## Terrain and props
 
-`public/home-terrain.png`, `public/town-terrain.png` and
-`public/cellar-terrain.png` are exported from Tiled
-maps painted with commercially licensed tile packs. The pack licence permits
-commercial use and modification, forbids redistributing the assets themselves
-(original or modified) and forbids their use in a logo or trademark.
+`public/home-terrain.png`, `public/town-terrain.png`, `public/cellar-terrain.png`
+and `public/reach-terrain.png` are exported from Tiled maps painted with tile
+packs by **Szadi art.** (szadiart), some bought and some taken from his free
+demo packs:
 
-> **TODO before release:** record each pack's name, version, source URL and
-> purchase date here. The licence text is identical for both the free and the
-> paid pack, but the packs must still be named.
+<https://szadiart.itch.io/>
+
+### Licence: Szadi art., one licence covering everything he publishes
+
+The terms are posted on his profile page and are stated to govern all of his
+assets, so the demo packs and the paid ones sit under the same rules. In
+summary: the art may be edited, cut and modified for commercial purposes; work
+made with it — games, animations, film — may be sold; and it may be published
+on sites concerned with graphics and games. Two things are ruled out: using it
+in a logo, trademark or service mark, and reselling it, whole or in part,
+original or modified. He asks for no credit, though he appreciates it.
+
+> **Correction.** An earlier version of this file summarised these terms as
+> forbidding *redistribution* of the assets. That was stricter than what the
+> licence actually says: the prohibition is on **reselling**, and publishing on
+> game-related sites is expressly allowed. A public source repository is
+> neither a resale nor a logo, so the terrain exports are not the problem this
+> file previously implied they were. Reselling remains firmly out.
+
+> **TODO before release:** name the individual packs. The licence question is
+> settled; what is still missing is the inventory — which of Szadi's packs each
+> map is painted with, paid or demo, and the purchase dates for the paid ones.
+> The Tiled project for the Bone Reach references `Water_tafle_4A`,
+> `32x32_DEMO`, `MainLev2.0`, `namiot`, `floor_and_deoratives` and `kosci`;
+> the filenames alone do not say which storefront pack each came from, and
+> whether every one of them is Szadi's has not been confirmed.
 
 `public/prop-tree.png`, `prop-rock.png`, `prop-stump.png`, `prop-rubble.png`,
 `prop-tree-dead.png` and `prop-tree-felled.png` were drawn from scratch for
@@ -525,32 +547,21 @@ front of anyone standing north of it.
 
 A 3200 x 3200 export of `mapa_srednia.tmx`, the project owner's own Tiled
 composition of the island behind the Time Sage's fourth pad. The layout is his
-work; the tiles it is painted with come from the packs credited elsewhere in
-this file, plus the tilesets that project references: `Water_tafle_4A`,
-`32x32_DEMO`, `MainLev2.0`, `namiot`, `floor_and_deoratives` and `kosci`.
+work; the tiles it is painted with are credited below.
 
 The file is committed exactly as exported; nothing was resampled or recoloured.
 Its dimensions are load-bearing — `terrainImage.ts` drops any export that is
 not exactly the grid size in tiles times 32, and falls back to the procedural
 bake.
 
-### `32x32_DEMO` — Szadi
+### Tilesets
 
-Identified by the project owner as **Szadi**'s (szadiart). He is not yet named
-anywhere else in this file, so this is his only entry: the long-standing TODO
-under "Terrain and props" above records a pack licence but names no pack and no
-author, and Szadi is one of the packs that TODO is about.
-
-> **TODO before release:** finish this entry — exact pack name and version,
-> store URL, purchase date, and the licence text as published. Note the terms
-> already recorded above for the terrain packs forbid redistributing the assets
-> themselves, original or modified. Whether a composed map export counts as
-> that is the question worth settling, because this repository is public and
-> `reach-terrain.png` is 3200 x 3200 of those tiles.
-
-> **TODO before release:** the other five tilesets in that Tiled project —
-> `Water_tafle_4A`, `MainLev2.0`, `namiot`, `floor_and_deoratives`, `kosci` —
-> still need an entry each: author, pack, source URL, licence.
+The Tiled project references `Water_tafle_4A`, `32x32_DEMO`, `MainLev2.0`,
+`namiot`, `floor_and_deoratives` and `kosci`. `32x32_DEMO` is one of **Szadi
+art.**'s demo packs, covered by the licence recorded under "Terrain and props"
+above — which permits exactly this: modified tiles composed into a commercial
+game and published on a game-related site. The remaining five still need
+pinning to specific packs.
 
 ## Everything else
 
