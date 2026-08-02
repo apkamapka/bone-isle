@@ -1,5 +1,6 @@
 /** Global game state: the three islands, the active one, and the player. */
 import { makeWorld } from "./world/generate.ts";
+import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC, CELLAR_SPEC } from "./world/handmade.ts";
 import { loadTerrainImages } from "./world/terrainImage.ts";
@@ -182,6 +183,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   const town = makeHandmadeWorld(TOWN_SPEC);
   const sanctum = makeHandmadeWorld(SANCTUM_SPEC);
   const cellar = makeHandmadeWorld(CELLAR_SPEC);
+  const reach = makeHandmadeWorld(REACH_SPEC);
   const wild = makeWorld({
     key: "wild", name: "Wildlands", safe: false, w: 104, h: 80,
     buildSpots: false, npcs: false,
@@ -211,7 +213,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   // …and every camp's lair floors, each from its own salted seed. The record
   // is completed by the loop below, hence the cast: TypeScript can't see that
   // LAIRS covers exactly the remaining WorldKey members.
-  const worlds = { home, town, sanctum, cellar, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
+  const worlds = { home, town, sanctum, cellar, reach, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
   loadMobSheets();           // directional walk cycles for humanoid creatures

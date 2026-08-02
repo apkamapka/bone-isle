@@ -18,6 +18,9 @@ export type Tile = (typeof Tile)[keyof typeof Tile];
 
 /** The surface islands, the Deep Wildlands, and the Bone Caverns (-1..-3). */
 export type WorldKey = "home" | "town" | "wild" | "deepwild" | "cave1" | "cave2" | "cave3"
+  // The Bone Reach — the island behind the Time Sage's fourth pad, traced from
+  // Tiled. Three descents are cut into it but not yet dug.
+  | "reach"
   // The Bone Sanctum — the crypt beneath the western temple; its level-gated
   // teleport chambers will link to quest realms in a future stage.
   | "sanctum"

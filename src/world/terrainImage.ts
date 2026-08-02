@@ -23,6 +23,7 @@ const TERRAIN_SRC: Partial<Record<WorldKey, string>> = {
   home: "./home-terrain.png",
   town: "./town-terrain.png",
   cellar: "./cellar-terrain.png",
+  reach: "./reach-terrain.png",
 };
 
 /**

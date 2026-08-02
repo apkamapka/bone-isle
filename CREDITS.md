@@ -521,6 +521,26 @@ front of anyone standing north of it.
 > campfire, this arrived without provenance, so it is the one asset in the repo
 > whose terms are unknown.
 
+## The Bone Reach terrain — `public/reach-terrain.png`
+
+A 3200 x 3200 export of `mapa_srednia.tmx`, the project owner's own Tiled
+composition of the island behind the Time Sage's fourth pad. The layout is his
+work; the tiles it is painted with come from the packs credited elsewhere in
+this file, plus the tilesets that project references — `Water_tafle_4A`,
+`32x32_DEMO`, `MainLev2.0`, `namiot`, `floor_and_deoratives` and `kosci`.
+
+> **TODO before release:** those six tilesets need the same treatment as
+> everything else here — author, pack, source URL and licence, one entry each.
+> `32x32_DEMO` in particular is the demo sheet flagged earlier in this project,
+> and a demo sheet is often a free sample of a paid pack, licensed for trying
+> out rather than for shipping. The composed export redistributes whatever they
+> contain, so this is the largest open licence question in the repo.
+
+The file is committed exactly as exported; nothing was resampled or recoloured.
+Its dimensions are load-bearing — `terrainImage.ts` drops any export that is
+not exactly the grid size in tiles times 32, and falls back to the procedural
+bake.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in

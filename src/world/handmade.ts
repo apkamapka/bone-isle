@@ -76,6 +76,22 @@ export interface HandmadeSpec {
   safeMaxY?: number;
   /** Glyph → creature posted on that tile (plain grass or road underneath). */
   monsters?: Readonly<Record<string, MonsterKind>>;
+  /**
+   * Optional second grid, the same shape as `rows`, giving the terrain under
+   * every square. Small hand-drawn islands do not need it — a feature glyph
+   * defaults to grass beneath and that is nearly always right. A map traced
+   * from Tiled does: half the Bone Reach is packed earth, and without this
+   * every totem, fire and creature on it would report grass to the minimap
+   * and to the fallback baker. Only the shared terrain glyphs are read here.
+   */
+  floor?: readonly string[];
+  /**
+   * Glyphs that are impassable and nothing else. The Tiled export already
+   * draws the boulder, tent or barrel; collision is the only thing that still
+   * needs telling about it, and painting a wall glyph instead would show as a
+   * ruin on the minimap and in the baked fallback.
+   */
+  solids?: string;
   /** Glyph → standing scenery on that tile. The tile is made solid, exactly
    *  like a tree's: these objects are taller than one square and the player
    *  walks BEHIND them, never through them. Glyphs are per-spec so a letter
@@ -107,6 +123,9 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
       throw new Error(`handmade ${spec.key}: row ${y} is ${rows[y].length} wide, expected ${W}`);
     }
   }
+  if (spec.floor && (spec.floor.length !== H || spec.floor.some((r) => r.length !== W))) {
+    throw new Error(`handmade ${spec.key}: floor grid does not match the ${W}x${H} rows`);
+  }
 
   const tile: Tile[][] = [];
   const solid: boolean[][] = [];
@@ -114,9 +133,10 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     tile[y] = [];
     solid[y] = [];
     for (let x = 0; x < W; x++) {
-      const t = baseTileOf(rows[y][x]);
+      const t = baseTileOf((spec.floor?.[y] ?? rows[y])[x]);
       tile[y][x] = t;
-      solid[y][x] = t === Tile.Water || t === Tile.Wall;
+      solid[y][x] = t === Tile.Water || t === Tile.Wall
+        || spec.solids?.includes(rows[y][x]) === true;
     }
   }
 
@@ -189,6 +209,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           w.buildSpots.push({ tx: x, ty: y, built: null });
           break;
         default: {
+          if (spec.solids?.includes(ch)) break; // painted obstacle; collision only
           const scn = spec.scenery?.[ch];
           if (scn) {
             w.scenery.push({ tx: x, ty: y, kind: scn });
@@ -559,7 +580,7 @@ export const CELLAR_SPEC: HandmadeSpec = {
     // Neither island has a way back to the cellar, so you arrive beside its own
     // gate to Bonetown and return that way — see the note in `travelTo`.
     c: { dest: "wild", label: "to the Wildlands", span: 2, floor: Tile.Cave },
-    d: { dest: "deepwild", label: "to the Deep Wildlands", span: 2, floor: Tile.Cave },
+    d: { dest: "reach", label: "to the Bone Reach", span: 2, floor: Tile.Cave },
     // and ten more the sage has not named yet
     "1": sealed("Sealed Rift I"),
     "2": sealed("Sealed Rift II"),

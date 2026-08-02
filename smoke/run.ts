@@ -2967,6 +2967,111 @@ async function main(): Promise<void> {
       "every world carries a scenery list");
   }
 
+  console.log("The Bone Reach is traced faithfully from Tiled:");
+  {
+    const fs = await import("node:fs");
+    const { REACH_SPEC } = await import("../src/world/reachSpec.ts");
+    const { CELLAR_SPEC } = await import("../src/world/handmade.ts");
+    const { Tile: T2 } = await import("../src/world/types.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds, WORLD_SEED);
+    const r = worlds.reach;
+
+    /* --- the export lines up with the grid, or the loader drops it --- */
+    const b = fs.readFileSync(new URL("../public/reach-terrain.png", import.meta.url));
+    ok(b.readUInt32BE(16) === r.w * 32 && b.readUInt32BE(20) === r.h * 32,
+      `the terrain export is exactly ${r.w * 32}x${r.h * 32}`);
+    ok(REACH_SPEC.rows.length === 100 && REACH_SPEC.rows.every((x) => x.length === 100),
+      "the grid is 100x100, as drawn");
+    ok(REACH_SPEC.floor?.length === 100, "…and the terrain grid matches it row for row");
+
+    /* --- everything the author marked actually landed --- */
+    ok(r.fires.length === 48, "all 48 campfires were placed");
+    ok(r.scenery.filter((s) => s.kind === "skullPole").length === 13,
+      "…and all 13 skull totems");
+    ok(r.mobPosts?.length === 107, "107 creature posts were written into the grid");
+    ok(r.monsters.length === 107, "…and every one of them spawned");
+    ok(r.monsters.filter((m) => m.kind === "demonSkeleton").length === 1,
+      "exactly one demon skeleton, as the map asks");
+
+    /* --- green ground grows, dead ground does not --- */
+    const onGrass = (t: { tx: number; ty: number }) => r.tile[t.ty][t.tx] === T2.Grass;
+    ok(r.trees.length > 0 && r.trees.every(onGrass), "living trees stand only on green ground");
+    ok(r.scenery.filter((s) => s.kind === "deadTree" || s.kind === "felledTree").length > 0,
+      "dead and felled trees were scattered too");
+    ok(r.scenery.filter((s) => s.kind === "deadTree").every((s) => r.tile[s.ty][s.tx] === T2.Dirt),
+      "…and they stand only where the ground is not green");
+    ok(r.rocks.some((k) => r.tile[k.ty][k.tx] === T2.Grass)
+      && r.rocks.some((k) => r.tile[k.ty][k.tx] === T2.Dirt),
+      "rock is worth mining on both halves of the island");
+
+    /* --- the separate terrain grid is doing its job --- */
+    ok(r.fires.some((f) => r.tile[f.ty][f.tx] === T2.Dirt),
+      "a fire on packed earth reports earth, not the grass a glyph would default to");
+
+    /* --- painted obstacles block without pretending to be ruins --- */
+    const painted = REACH_SPEC.rows.reduce((n, row) =>
+      n + [...row].filter((c) => c === "X" || c === "x").length, 0);
+    ok(painted === 188, "all 188 painted obstacles carry a collision glyph");
+    let blockedNotWall = 0;
+    for (let y = 0; y < r.h; y++) {
+      for (let x = 0; x < r.w; x++) {
+        if (REACH_SPEC.rows[y][x] === "X" || REACH_SPEC.rows[y][x] === "x") {
+          if (r.solid[y][x] && r.tile[y][x] !== T2.Wall) blockedNotWall++;
+        }
+      }
+    }
+    ok(blockedNotWall === 188, "…each one solid while the ground under it stays what it was");
+
+    /* --- the island is one landmass; nothing is marooned --- */
+    const back = r.portals.find((p) => p.dest === "cellar");
+    ok(back !== undefined && !back.inactive, "a live pad leads back to the cellar");
+    const sx = Math.floor(back!.x / 32), sy = Math.floor(back!.y / 32);
+    const seen = Array.from({ length: r.h }, () => new Array<boolean>(r.w).fill(false));
+    const q: [number, number][] = [[sx, sy]];
+    seen[sy][sx] = true;
+    let reached = 0;
+    while (q.length) {
+      const [x, y] = q.pop()!;
+      reached++;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = x + dx, c = y + dy;
+        if (a < 0 || c < 0 || a >= r.w || c >= r.h) continue;
+        if (seen[c][a] || r.solid[c][a] || r.tile[c][a] === T2.Water) continue;
+        seen[c][a] = true;
+        q.push([a, c]);
+      }
+    }
+    let walkable = 0;
+    for (let y = 0; y < r.h; y++) {
+      for (let x = 0; x < r.w; x++) if (!r.solid[y][x] && r.tile[y][x] !== T2.Water) walkable++;
+    }
+    ok(reached === walkable, `every walkable square is reachable from the pad (${reached})`);
+    ok(r.mobPosts!.every((p) => seen[p.ty][p.tx]), "…so no creature is marooned off it");
+
+    /* --- difficulty rises away from the pad, which is how it was drawn --- */
+    const meanDist = (kind: string): number => {
+      const ps = r.mobPosts!.filter((p) => p.kind === kind);
+      return ps.reduce((s, p) => s + Math.hypot(p.tx - sx, p.ty - sy), 0) / ps.length;
+    };
+    ok(meanDist("snake") < meanDist("orcBerserker"),
+      "snakes sit nearer the way home than orc berserkers");
+    ok(meanDist("skeleton") < meanDist("demonSkeleton"),
+      "…and plain skeletons nearer than the demon skeleton");
+
+    /* --- the descents are cut but not yet dug --- */
+    ok(r.portals.filter((p) => p.inactive).length === 3,
+      "three descents to -1 stand sealed until those floors exist");
+
+    /* --- the Time Sage's bottom-right pad now opens here --- */
+    ok(CELLAR_SPEC.portals.d.dest === "reach",
+      "the cellar's bottom-right pad leads to the Bone Reach");
+    ok(!CELLAR_SPEC.portals.d.inactive, "…and it is live, not dormant");
+    ok(!Object.values(CELLAR_SPEC.portals).some((p) => p.dest === "deepwild"),
+      "…and no pad points at the Deep Wildlands any more");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
