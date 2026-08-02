@@ -25,7 +25,7 @@ import { TILE } from "../config.ts";
 import { SPR, bakeTree } from "../gfx/sprites.ts";
 import { NPC_DATA, bakeWorldCanvas } from "./generate.ts";
 import { npcRest } from "../entities/npcs.ts";
-import { FOOTPRINT } from "../gfx/sceneryArt.ts";
+import { FOOTPRINT, BLOCK } from "../gfx/sceneryArt.ts";
 import type { MonsterKind, SceneryKind } from "./types.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldKey, NpcKey } from "./types.ts";
@@ -214,11 +214,14 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           const scn = spec.scenery?.[ch];
           if (scn) {
             w.scenery.push({ tx: x, ty: y, kind: scn });
-            // The glyph is the footprint's top-left square; seal all of it, or
-            // the player walks into the middle of a well.
+            // The glyph is the footprint's top-left square. Seal the near row of
+            // the block and nothing else: the far row is overhang the player is
+            // meant to walk behind, exactly as he walks under a tree's crown.
             const fp = FOOTPRINT[scn];
-            for (let j = y; j < Math.min(H, y + fp.h); j++) {
-              for (let i = x; i < Math.min(W, x + fp.w); i++) solid[j][i] = true;
+            const bk = BLOCK[scn];
+            const y0 = y + fp.h - bk.h;
+            for (let j = y0; j < Math.min(H, y0 + bk.h); j++) {
+              for (let i = x; i < Math.min(W, x + bk.w); i++) solid[j][i] = true;
             }
             break;
           }

@@ -2947,7 +2947,19 @@ async function main(): Promise<void> {
       ok(!scn.hasSceneryArt(kind), "…while headless the PNG never loads");
       ok(scn.scenerySprite(kind) !== undefined,
         "…and a baked sprite stands in for it instead");
+      const bk = scn.BLOCK[kind];
+      ok(bk !== undefined, `…and ${kind} says how much of that footprint refuses a walker`);
+      ok(bk.w >= 1 && bk.h >= 1 && bk.w <= fp.w && bk.h <= fp.h,
+        `…a block inside the footprint, never wider than it (${bk.w}x${bk.h} of ${fp.w}x${fp.h})`);
     }
+
+    /* --- one row deep means one row solid; deeper means overhang to hide in --- */
+    ok(scn.SCENERY_KINDS.every((k) => scn.BLOCK[k].h === 1),
+      "nothing blocks more than the near row — every prop is a tree at heart");
+    ok(scn.BLOCK.well.h < scn.FOOTPRINT.well.h && scn.BLOCK.tent.h < scn.FOOTPRINT.tent.h,
+      "…so the far row of a well and a tent is drawn but not walled");
+    ok(scn.BLOCK.deadTree.h === scn.FOOTPRINT.deadTree.h,
+      "…while a one-row prop keeps the single square it stands on");
 
     /* --- the totem is the drawn version of the pole the camps already plant --- */
     ok(scn.scenerySprite("skullPole") === gfx.SPR.skullPole,
@@ -3033,14 +3045,24 @@ async function main(): Promise<void> {
     ok(count("boulderA") + count("boulderB") === 24, "…and all 24 black boulders");
     ok(count("boulderA") > 0 && count("boulderB") > 0,
       "…drawn from both boulder variants rather than one stamp repeated");
-    let unsealed = 0;
+    const { BLOCK } = await import("../src/gfx/sceneryArt.ts");
+    let unsealed = 0, overhang = 0, walledOverhang = 0;
     for (const s of r.scenery) {
       const fp = FOOTPRINT[s.kind];
-      for (let j = 0; j < fp.h; j++) {
-        for (let i = 0; i < fp.w; i++) if (!r.solid[s.ty + j][s.tx + i]) unsealed++;
+      const bk = BLOCK[s.kind];
+      const y0 = s.ty + fp.h - bk.h;
+      for (let i = 0; i < bk.w; i++) if (!r.solid[y0][s.tx + i]) unsealed++;
+      for (let j = s.ty; j < y0; j++) {
+        for (let i = 0; i < fp.w; i++) {
+          overhang++;
+          if (r.solid[j][s.tx + i]) walledOverhang++;
+        }
       }
     }
-    ok(unsealed === 0, "every square of every footprint is solid, wells included");
+    ok(unsealed === 0, "the near row of every footprint is solid, wells included");
+    ok(overhang === 112, "…and the 43 tents and 13 wells put up 112 squares of overhang");
+    ok(walledOverhang === 0,
+      "…every one of them walkable, so you slip in behind a tent as you would under a crown");
     ok(!REACH_SPEC.rows.some((row) => row.includes("X") || row.includes("x")),
       "no collision-only glyphs remain: the export carries no props to stand in for");
 

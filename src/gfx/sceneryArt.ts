@@ -7,11 +7,13 @@
  * should be able to walk behind. A skull totem is a metre and a half of pole:
  * standing north of it, the player has to be hidden by it.
  *
- * So scenery works exactly like a tree instead. The object owns one tile, that
- * tile is solid, and the sprite is anchored bottom-centre from the depth-sorted
- * draw list — which means the part of it that overhangs the tile above is drawn
- * after (and therefore over) anything standing up there. No special case is
- * needed for the overhang; the y-sort already does it.
+ * So scenery works exactly like a tree instead. The object claims a block of
+ * tiles, only the bottom row of that block is solid, and the sprite is anchored
+ * bottom-centre from the depth-sorted draw list — which means the part of it
+ * that overhangs the rows above is drawn after (and therefore over) anything
+ * standing up there. No special case is needed for the overhang; the y-sort
+ * already does it. See `FOOTPRINT` for what an object claims and `BLOCK` for
+ * what it refuses.
  *
  * Loading is asynchronous and failure is harmless: each kind names a baked
  * sprite to stand in for it, so a missing or slow PNG costs looks and nothing
@@ -43,6 +45,33 @@ export const FOOTPRINT: Record<SceneryKind, { w: number; h: number }> = {
   felledTree: { w: 1, h: 1 },
   well: { w: 2, h: 2 },
   tent: { w: 2, h: 2 },
+  boulderA: { w: 2, h: 1 },
+  boulderB: { w: 2, h: 1 },
+};
+
+/**
+ * How much of that footprint actually stops a walker, measured in rows counted
+ * UP from the bottom of the block. The rest is overhang: drawn, never solid.
+ *
+ * A tree taught the rule. Its trunk owns one square, the crown leans a tile and
+ * a bit further north, and the player may stand under that crown — the y-sort
+ * puts the tree on top of him and he is half hidden by it. That reads as depth.
+ *
+ * A well and a tent are two squares deep, and sealing both of them threw the
+ * rule away: the far row is the BACK of the object, the side you should be able
+ * to stand behind, and a wall there stops you a full tile short of the thing you
+ * are walking behind. So only the near row blocks. Walk down past a tent and you
+ * slip in behind the canvas with your head over the ridge; the fabric takes your
+ * legs. The bottom row is still stone and still refuses.
+ *
+ * Anything one row deep has nothing to give back, and lists its own row here.
+ */
+export const BLOCK: Record<SceneryKind, { w: number; h: number }> = {
+  skullPole: { w: 1, h: 1 },
+  deadTree: { w: 1, h: 1 },
+  felledTree: { w: 1, h: 1 },
+  well: { w: 2, h: 1 },
+  tent: { w: 2, h: 1 },
   boulderA: { w: 2, h: 1 },
   boulderB: { w: 2, h: 1 },
 };
