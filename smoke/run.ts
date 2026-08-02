@@ -3160,7 +3160,39 @@ async function main(): Promise<void> {
           `${fam}: six tiles clear between kin (worst ${Math.min(...inner).toFixed(1)})`);
       }
 
-      /* --- the weak hold the shore, the heavy the interior --- */
+      /* --- rank closes in on the lair: the heaviest stand over the descent --- */
+      // Three regions have a hole cut down to -1; those are the cores. The two
+      // that do not take the squarest ground they own instead.
+      const CORE: Record<string, [number, number]> = {
+        easy: [33, 32], undead: [89, 13], goblin: [60, 44],
+        minotaur: [8, 85], orc: [79, 90],
+      };
+      const holes = r.portals.filter((q) => q.inactive)
+        .map((q) => `${Math.floor(q.x / 32)},${Math.floor(q.y / 32)}`);
+      for (const fam of ["undead", "minotaur", "orc"]) {
+        ok(holes.includes(CORE[fam].join(",")),
+          `${fam}: the core is the sealed descent itself, not a spot picked near it`);
+      }
+      const meanToCore = (kind: string): number => {
+        const c = CORE[familyOf(kind)];
+        const ps = p.filter((m) => m.kind === kind);
+        return ps.reduce((s2, m) => s2 + Math.hypot(m.tx - c[0], m.ty - c[1]), 0) / ps.length;
+      };
+      for (const [fam, order] of Object.entries(LADDER)) {
+        const ds = order.map(meanToCore);
+        ok(ds.every((d, i) => i === 0 || d < ds[i - 1]),
+          `${fam}: every rank stands closer to the lair than the one below it (${ds.map((d) => d.toFixed(1)).join(" > ")})`);
+      }
+      for (const [fam, order] of Object.entries(LADDER)) {
+        const top = order[order.length - 1];
+        const c = CORE[fam];
+        const nearest = Math.min(...p.filter((m) => m.kind === top)
+          .map((m) => Math.hypot(m.tx - c[0], m.ty - c[1])));
+        ok(nearest <= 12,
+          `${fam}: the heaviest of them is posted within a dozen tiles of the lair mouth (${top}, ${nearest.toFixed(1)})`);
+      }
+
+      /* --- and nobody stands in the surf --- */
       const depth: number[][] = Array.from({ length: r.h }, () => new Array(r.w).fill(-1));
       let front: [number, number][] = [];
       for (let y = 0; y < r.h; y++) {
@@ -3176,17 +3208,7 @@ async function main(): Promise<void> {
         }
         front = next;
       }
-      const meanDepth = (kind: string): number => {
-        const ps = p.filter((m) => m.kind === kind);
-        return ps.reduce((s2, m) => s2 + depth[m.ty][m.tx], 0) / ps.length;
-      };
-      for (const [fam, order] of Object.entries(LADDER)) {
-        const ds = order.map(meanDepth);
-        ok(ds.every((d, i) => i === 0 || d > ds[i - 1]),
-          `${fam}: every rank stands deeper inland than the one below it (${ds.map((d) => d.toFixed(1)).join(" < ")})`);
-      }
-      ok(p.every((m) => depth[m.ty][m.tx] >= 2),
-        "nobody is posted in the surf");
+      ok(p.every((m) => depth[m.ty][m.tx] >= 2), "nobody is posted in the surf");
 
       /* --- you arrive on the pad with room to draw --- */
       ok(p.every((m) => Math.hypot(m.tx - sx, m.ty - sy) >= 8),
@@ -3248,9 +3270,17 @@ async function main(): Promise<void> {
         "…and the leash is longer than the aggro range, so it never cuts a chase short");
     }
 
-    ok(meanDist("goblin") === meanDist("goblinLegionary")
-      || Math.abs(meanDist("goblin") - meanDist("goblinLegionary")) < 12,
-      "goblins and their legionaries hold the same ground");
+    // The legionaries are the deep guard of the goblin belt now, so they no
+    // longer sit the same distance from the pad as the rank and file. What
+    // still has to hold is that it is one band on one stretch of ground.
+    {
+      const gob = r.mobPosts!.filter((m) => m.kind === "goblin");
+      const leg = r.mobPosts!.filter((m) => m.kind === "goblinLegionary");
+      const apart = Math.max(...leg.map((l) =>
+        Math.min(...gob.map((q) => Math.hypot(l.tx - q.tx, l.ty - q.ty)))));
+      ok(apart <= 20,
+        `goblins and their legionaries hold one stretch of ground (worst ${apart.toFixed(1)} tiles apart)`);
+    }
     ok(r.monsters.filter((m) => m.kind === "goblinLegionary").length === 3,
       "three of that band wear the legionary's armour");
 
