@@ -563,6 +563,32 @@ above — which permits exactly this: modified tiles composed into a commercial
 game and published on a game-related site. The remaining five still need
 pinning to specific packs.
 
+## Bone Reach objects — `prop-tent.png`, `prop-well.png`, `prop-boulder-a.png`, `prop-boulder-b.png`
+
+Cut from the same **Szadi art.** sheets the island's terrain is painted with,
+under the licence recorded above, which permits cutting and modifying the art
+for commercial use.
+
+| File | Source sheet | Size | Footprint |
+| --- | --- | --- | --- |
+| `prop-tent.png` | `namiot.png` | 53 x 59 | 2 x 2 |
+| `prop-well.png` | `floor_and_deoratives.png` | 52 x 48 | 2 x 2 |
+| `prop-boulder-a.png` | `32x32_DEMO.png` | 60 x 44 | 2 x 1 |
+| `prop-boulder-b.png` | `32x32_DEMO.png` | 60 x 44 | 2 x 1 |
+
+Each was lifted as a single connected component rather than as a rectangle, so
+no fragment of a neighbouring object on the sheet came with it, and each was
+trimmed to its own bounds. No pixel was recoloured or rescaled.
+
+The two boulders are the same size and carry the same colours in the same
+proportions, which is why they look like one sprite stamped twice; they are
+not. They differ on 1528 pixels, so both were taken and the island alternates
+between them.
+
+These are drawn as scenery rather than baked into the terrain export: they
+stand taller than the square they occupy, and the player has to be able to walk
+behind them.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in

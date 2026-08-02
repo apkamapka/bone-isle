@@ -25,6 +25,7 @@ import { TILE } from "../config.ts";
 import { SPR, bakeTree } from "../gfx/sprites.ts";
 import { NPC_DATA, bakeWorldCanvas } from "./generate.ts";
 import { npcRest } from "../entities/npcs.ts";
+import { FOOTPRINT } from "../gfx/sceneryArt.ts";
 import type { MonsterKind, SceneryKind } from "./types.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldKey, NpcKey } from "./types.ts";
@@ -213,7 +214,12 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           const scn = spec.scenery?.[ch];
           if (scn) {
             w.scenery.push({ tx: x, ty: y, kind: scn });
-            solid[y][x] = true;
+            // The glyph is the footprint's top-left square; seal all of it, or
+            // the player walks into the middle of a well.
+            const fp = FOOTPRINT[scn];
+            for (let j = y; j < Math.min(H, y + fp.h); j++) {
+              for (let i = x; i < Math.min(W, x + fp.w); i++) solid[j][i] = true;
+            }
             break;
           }
           const mob = spec.monsters?.[ch];

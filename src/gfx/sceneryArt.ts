@@ -25,6 +25,26 @@ const SRC: Record<SceneryKind, string> = {
   skullPole: "./prop-skullpole.png",
   deadTree: "./prop-tree-dead.png",
   felledTree: "./prop-tree-felled.png",
+  well: "./prop-well.png",
+  tent: "./prop-tent.png",
+  boulderA: "./prop-boulder-a.png",
+  boulderB: "./prop-boulder-b.png",
+};
+
+/**
+ * How many tiles each kind stands on, growing right and down from the tile it
+ * names. A totem is a pole and owns its single square; a well is four squares
+ * of stonework and has to seal all four, or the player walks into the middle
+ * of it. The sprite is centred over the block, not over the corner tile.
+ */
+export const FOOTPRINT: Record<SceneryKind, { w: number; h: number }> = {
+  skullPole: { w: 1, h: 1 },
+  deadTree: { w: 1, h: 1 },
+  felledTree: { w: 1, h: 1 },
+  well: { w: 2, h: 2 },
+  tent: { w: 2, h: 2 },
+  boulderA: { w: 2, h: 1 },
+  boulderB: { w: 2, h: 1 },
 };
 
 /**
@@ -37,6 +57,10 @@ const FALLBACK: Record<SceneryKind, SpriteName> = {
   skullPole: "skullPole",
   deadTree: "stump",
   felledTree: "stump",
+  well: "rock",
+  tent: "tent",
+  boulderA: "rock",
+  boulderB: "rock",
 };
 
 export const SCENERY_KINDS = Object.keys(SRC) as SceneryKind[];

@@ -5,7 +5,7 @@ import { unstick, blockedAt, lineOfSight, portalCovers } from "./world/collision
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { campfireFrame } from "./gfx/fireSheet.ts";
-import { scenerySprite } from "./gfx/sceneryArt.ts";
+import { scenerySprite, FOOTPRINT } from "./gfx/sceneryArt.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, itemSprite, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
@@ -2158,8 +2158,9 @@ function render(): void {
   // tile, so the part that overhangs the tile above is drawn after anything
   // standing up there: walk north of a totem and it hides you, like a tree.
   for (const sc of world.scenery) {
-    const bx = sc.tx * TILE + TILE / 2;
-    const by = sc.ty * TILE + TILE;
+    const fp = FOOTPRINT[sc.kind];
+    const bx = sc.tx * TILE + (fp.w * TILE) / 2;
+    const by = (sc.ty + fp.h) * TILE;
     if (!inView(bx, by)) continue;
     drawList.push({ y: by, fn: () => {
       artShadow(bx, by, 10);

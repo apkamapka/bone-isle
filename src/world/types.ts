@@ -123,7 +123,8 @@ export interface Fire {
 }
 
 /** Scenery a map may plant. Artwork and fallbacks live in gfx/sceneryArt.ts. */
-export type SceneryKind = "skullPole" | "deadTree" | "felledTree";
+export type SceneryKind = "skullPole" | "deadTree" | "felledTree"
+  | "well" | "tent" | "boulderA" | "boulderB";
 
 /**
  * A standing object taller than its tile — a skull totem, a dead tree.
@@ -134,6 +135,8 @@ export type SceneryKind = "skullPole" | "deadTree" | "felledTree";
  * sprite overhangs upward from it.
  */
 export interface Scenery {
+  /** TOP-LEFT tile of the object's footprint, following the portal `span`
+   *  convention. Anything wider than one tile grows right and down from here. */
   tx: number;
   ty: number;
   kind: SceneryKind;

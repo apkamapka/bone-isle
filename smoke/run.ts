@@ -2926,15 +2926,23 @@ async function main(): Promise<void> {
       skullPole: "prop-skullpole.png",
       deadTree: "prop-tree-dead.png",
       felledTree: "prop-tree-felled.png",
+      well: "prop-well.png",
+      tent: "prop-tent.png",
+      boulderA: "prop-boulder-a.png",
+      boulderB: "prop-boulder-b.png",
     };
 
-    ok(scn.SCENERY_KINDS.length === 3, "three kinds of scenery are registered");
+    ok(scn.SCENERY_KINDS.length === 7, "seven kinds of scenery are registered");
     for (const kind of scn.SCENERY_KINDS) {
       const file = FILES[kind];
       ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
         `${kind} ships ${file}`);
       const [w, h] = png(file);
-      ok(h > T, `…and it stands taller than one tile (${w}x${h}), so it overhangs`);
+      const fp = scn.FOOTPRINT[kind];
+      ok(h > T || fp.h > 1,
+        `…and it is bigger than the square it names (${w}x${h}, footprint ${fp.w}x${fp.h})`);
+      ok(w <= fp.w * T + T && h <= fp.h * T + 2 * T,
+        "…without sprawling far past the footprint it seals");
       ok(credits.includes(file), `…and ${file} is credited by filename`);
       ok(!scn.hasSceneryArt(kind), "…while headless the PNG never loads");
       ok(scn.scenerySprite(kind) !== undefined,
@@ -3010,19 +3018,24 @@ async function main(): Promise<void> {
     ok(r.fires.some((f) => r.tile[f.ty][f.tx] === T2.Dirt),
       "a fire on packed earth reports earth, not the grass a glyph would default to");
 
-    /* --- painted obstacles block without pretending to be ruins --- */
-    const painted = REACH_SPEC.rows.reduce((n, row) =>
-      n + [...row].filter((c) => c === "X" || c === "x").length, 0);
-    ok(painted === 188, "all 188 painted obstacles carry a collision glyph");
-    let blockedNotWall = 0;
-    for (let y = 0; y < r.h; y++) {
-      for (let x = 0; x < r.w; x++) {
-        if (REACH_SPEC.rows[y][x] === "X" || REACH_SPEC.rows[y][x] === "x") {
-          if (r.solid[y][x] && r.tile[y][x] !== T2.Wall) blockedNotWall++;
-        }
+    /* --- every prop is an object now, none of it painted into the export --- */
+    const { FOOTPRINT } = await import("../src/gfx/sceneryArt.ts");
+    const count = (k: string) => r.scenery.filter((s) => s.kind === k).length;
+    ok(count("tent") === 43, "all 43 tents were planted");
+    ok(count("well") === 13, "…all 13 wells");
+    ok(count("boulderA") + count("boulderB") === 24, "…and all 24 black boulders");
+    ok(count("boulderA") > 0 && count("boulderB") > 0,
+      "…drawn from both boulder variants rather than one stamp repeated");
+    let unsealed = 0;
+    for (const s of r.scenery) {
+      const fp = FOOTPRINT[s.kind];
+      for (let j = 0; j < fp.h; j++) {
+        for (let i = 0; i < fp.w; i++) if (!r.solid[s.ty + j][s.tx + i]) unsealed++;
       }
     }
-    ok(blockedNotWall === 188, "…each one solid while the ground under it stays what it was");
+    ok(unsealed === 0, "every square of every footprint is solid, wells included");
+    ok(!REACH_SPEC.rows.some((row) => row.includes("X") || row.includes("x")),
+      "no collision-only glyphs remain: the export carries no props to stand in for");
 
     /* --- the island is one landmass; nothing is marooned --- */
     const back = r.portals.find((p) => p.dest === "cellar");
@@ -3059,6 +3072,21 @@ async function main(): Promise<void> {
       "snakes sit nearer the way home than orc berserkers");
     ok(meanDist("skeleton") < meanDist("demonSkeleton"),
       "…and plain skeletons nearer than the demon skeleton");
+    /* --- creatures are scattered, not knotted --- */
+    {
+      const p = r.mobPosts!;
+      const nn = p.map((a) => Math.min(...p.filter((b) => b !== a)
+        .map((b) => Math.hypot(a.tx - b.tx, a.ty - b.ty))));
+      const pairs = nn.filter((d) => d <= 2).length;
+      ok(pairs > 0 && pairs < p.length / 3,
+        `some creatures stand in pairs, most do not (${pairs} of ${p.length})`);
+      const crowd = Math.max(...p.map((a) =>
+        p.filter((b) => Math.hypot(a.tx - b.tx, a.ty - b.ty) <= 9).length));
+      ok(crowd <= 14, `no more than ${crowd} creatures within nine tiles of any one`);
+      const spread = p.filter((a) => nn[p.indexOf(a)] >= 4).length;
+      ok(spread > p.length / 2, "over half of them stand alone, four tiles clear or more");
+    }
+
     ok(meanDist("goblin") === meanDist("goblinLegionary")
       || Math.abs(meanDist("goblin") - meanDist("goblinLegionary")) < 12,
       "goblins and their legionaries hold the same ground");
