@@ -2987,9 +2987,16 @@ async function main(): Promise<void> {
     const r = worlds.reach;
 
     /* --- the export lines up with the grid, or the loader drops it --- */
-    const b = fs.readFileSync(new URL("../public/reach-terrain.png", import.meta.url));
-    ok(b.readUInt32BE(16) === r.w * 32 && b.readUInt32BE(20) === r.h * 32,
-      `the terrain export is exactly ${r.w * 32}x${r.h * 32}`);
+    // A missing file used to throw here and take the rest of this block with
+    // it; name the problem instead and carry on testing the island.
+    const terrain = new URL("../public/reach-terrain.png", import.meta.url);
+    if (!fs.existsSync(terrain)) {
+      ok(false, "public/reach-terrain.png is missing — the island falls back to the baked terrain");
+    } else {
+      const b = fs.readFileSync(terrain);
+      ok(b.readUInt32BE(16) === r.w * 32 && b.readUInt32BE(20) === r.h * 32,
+        `the terrain export is exactly ${r.w * 32}x${r.h * 32}`);
+    }
     ok(REACH_SPEC.rows.length === 100 && REACH_SPEC.rows.every((x) => x.length === 100),
       "the grid is 100x100, as drawn");
     ok(REACH_SPEC.floor?.length === 100, "…and the terrain grid matches it row for row");
@@ -3072,19 +3079,88 @@ async function main(): Promise<void> {
       "snakes sit nearer the way home than orc berserkers");
     ok(meanDist("skeleton") < meanDist("demonSkeleton"),
       "…and plain skeletons nearer than the demon skeleton");
-    /* --- creatures are scattered, not knotted --- */
+    /* --- creatures are scattered to the coast, not knotted inland --- */
     {
       const p = r.mobPosts!;
       const nn = p.map((a) => Math.min(...p.filter((b) => b !== a)
         .map((b) => Math.hypot(a.tx - b.tx, a.ty - b.ty))));
       const pairs = nn.filter((d) => d <= 2).length;
       ok(pairs > 0 && pairs < p.length / 3,
-        `some creatures stand in pairs, most do not (${pairs} of ${p.length})`);
+        `some stand in pairs, most do not (${pairs} of ${p.length})`);
+      ok(nn.filter((d) => d >= 4).length > p.length * 0.6,
+        "most of them stand alone, four tiles clear or more");
       const crowd = Math.max(...p.map((a) =>
         p.filter((b) => Math.hypot(a.tx - b.tx, a.ty - b.ty) <= 9).length));
-      ok(crowd <= 14, `no more than ${crowd} creatures within nine tiles of any one`);
-      const spread = p.filter((a) => nn[p.indexOf(a)] >= 4).length;
-      ok(spread > p.length / 2, "over half of them stand alone, four tiles clear or more");
+      ok(crowd <= 12, `never more than ${crowd} within nine tiles of any one`);
+
+      // the coast used to stand empty while the middle was packed
+      const toSea = (tx: number, ty: number): number => {
+        for (let rad = 1; rad < 40; rad++) {
+          for (let dy = -rad; dy <= rad; dy++) {
+            for (let dx = -rad; dx <= rad; dx++) {
+              if (Math.max(Math.abs(dx), Math.abs(dy)) !== rad) continue;
+              const a = tx + dx, c = ty + dy;
+              if (a < 0 || c < 0 || a >= r.w || c >= r.h || r.tile[c][a] === T2.Water) return rad;
+            }
+          }
+        }
+        return 40;
+      };
+      const shore = p.filter((m) => toSea(m.tx, m.ty) <= 6).length;
+      ok(shore > p.length / 2, `over half of them hunt within six tiles of the sea (${shore})`);
+
+      // and a band keeps to its own ground: no orc on minotaur soil
+      const PIN: [number, number, string][] = [
+        [49, 2, "undead"], [60, 0, "undead"], [78, 3, "undead"],
+        [5, 33, "minotaur"], [6, 40, "minotaur"],
+        [46, 49, "orc"], [46, 76, "orc"], [46, 81, "orc"],
+        [63, 30, "goblin"], [4, 2, "easy"],
+      ];
+      const family = (k: string): string =>
+        k.startsWith("orc") ? "orc" : k.startsWith("minotaur") ? "minotaur"
+        : k.startsWith("goblin") ? "goblin"
+        : (k === "snake" || k === "bandit") ? "easy" : "undead";
+      const strays = p.filter((m) => {
+        let best = PIN[0];
+        for (const q of PIN) {
+          if (Math.hypot(m.tx - q[0], m.ty - q[1]) < Math.hypot(m.tx - best[0], m.ty - best[1])) best = q;
+        }
+        return best[2] !== family(m.kind);
+      }).length;
+      ok(strays === 0, "every creature stands on its own family's ground");
+    }
+
+    /* --- nothing is stacked on anything else --- */
+    {
+      const claimed = new Map<string, string>();
+      let doubled = 0;
+      const claim = (x: number, y: number, what: string) => {
+        const k = `${x},${y}`;
+        if (claimed.has(k)) doubled++;
+        else claimed.set(k, what);
+      };
+      for (const s of r.scenery) {
+        const f = FOOTPRINT[s.kind];
+        for (let j = 0; j < f.h; j++) for (let i = 0; i < f.w; i++) claim(s.tx + i, s.ty + j, s.kind);
+      }
+      for (const f of r.fires) claim(f.tx, f.ty, "fire");
+      for (const t of r.trees) claim(t.tx, t.ty, "tree");
+      for (const k of r.rocks) claim(k.tx, k.ty, "rock");
+      for (const h of r.herbs) claim(h.tx, h.ty, "herb");
+      for (const m of r.mobPosts!) claim(m.tx, m.ty, "creature");
+      ok(doubled === 0,
+        `no tile carries two objects — no tent on a well, no rock on a rock (${claimed.size} occupied)`);
+    }
+
+    /* --- a posted creature is leashed to its post --- */
+    {
+      const { POST_LEASH_PX, MONSTER_AGGRO_RANGE } = await import("../src/config.ts");
+      ok(r.monsters.every((m) => m.hr === POST_LEASH_PX),
+        "every posted creature carries a leash back to where the map put it");
+      ok(r.monsters.every((m) => m.hx !== undefined && m.hy !== undefined),
+        "…anchored on the post itself");
+      ok(POST_LEASH_PX > MONSTER_AGGRO_RANGE,
+        "…and the leash is longer than the aggro range, so it never cuts a chase short");
     }
 
     ok(meanDist("goblin") === meanDist("goblinLegionary")

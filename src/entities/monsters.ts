@@ -1,6 +1,6 @@
 /** Monster definitions, danger-band spawning and the wander/chase/attack AI. */
 import { rnd, rndi, wrnd, dist } from "../util.ts";
-import { WILD_ENTRANCE_SAFE_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, SHOT_SPEED, TILE } from "../config.ts";
+import { WILD_ENTRANCE_SAFE_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, POST_LEASH_PX, SHOT_SPEED, TILE } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { randomWalkable, lineOfSight } from "../world/collision.ts";
 import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
@@ -473,6 +473,11 @@ export function spawnAtPost(
     if (clear && pushMonster(w, kind, { x: cx, y: cy })) {
       const m = w.monsters[w.monsters.length - 1];
       m.guard = { tx, ty };
+      // Leash it to its post. `guard` alone only decides where it comes back
+      // after dying; without this the creature wanders off its zone entirely.
+      m.hx = cx;
+      m.hy = cy;
+      m.hr = POST_LEASH_PX;
       return true;
     }
   }
@@ -499,8 +504,13 @@ export function spawnGuard(
       // never materialise on top of the player
       if (avoid && dist(cx, cy, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
       if (pushMonster(w, kind, { x: cx, y: cy })) {
-        // tag it so a slain guard respawns back onto its hoard
-        w.monsters[w.monsters.length - 1].guard = { tx, ty };
+        // tag it so a slain guard respawns back onto its hoard, and leash it
+        // to the post so it keeps to its own ground while idle
+        const g = w.monsters[w.monsters.length - 1];
+        g.guard = { tx, ty };
+        g.hx = tileCenter(tx);
+        g.hy = tileCenter(ty);
+        g.hr = POST_LEASH_PX;
         return true;
       }
     }

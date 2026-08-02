@@ -460,6 +460,20 @@ export const ITEM_MOVE_REACH_PX = 48;
  * with it (the aggro-on-hit timer below is the safety net if it's forgotten).
  */
 export const MONSTER_AGGRO_RANGE = 6 * TILE;
+
+/**
+ * How far a creature posted by a hand-drawn map may drift from its post while
+ * idle. Camp dwellers in the Deep Wildlands have always carried a leash like
+ * this; creatures placed by a map glyph did not, and `guard` — the only thing
+ * they were tagged with — governs where they RESPAWN, not where they wander.
+ * The result on a large authored island was zones bleeding into each other:
+ * orcs drifting up into the minotaur ground over the course of a session.
+ *
+ * Comfortably wider than MONSTER_AGGRO_RANGE, so the leash never cuts a chase
+ * short: it only applies while idle, and pulling home is what an idle creature
+ * does once it has strayed.
+ */
+export const POST_LEASH_PX = 10 * TILE;
 /**
  * After taking a hit a monster stays aggressive for this many seconds even
  * beyond its sight range (line of sight still required) — shooting something
