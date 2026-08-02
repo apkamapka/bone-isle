@@ -391,6 +391,19 @@ function carveCamp(w: World, spec: CampSpec, cx: number, cy: number): void {
       if (solidTile) w.solid[p.y][p.x] = true;
     }
   };
+  /**
+   * Camp fires are entities, not decorations. `spot()` spaces new picks away
+   * from existing decos, and a fire is not one, so the fire list is checked
+   * here as well or two fires could land on the same tile. They stay walkable:
+   * making them solid could seal a monster into a corner of its own camp.
+   */
+  const fires = (n: number): void => {
+    for (let i = 0; i < n; i++) {
+      const p = spot();
+      if (!p || w.fires.some((f) => f.tx === p.x && f.ty === p.y)) continue;
+      w.fires.push({ tx: p.x, ty: p.y, phase: wrnd(0, 1) });
+    }
+  };
 
   switch (spec.theme) {
     case "warren":
@@ -408,10 +421,10 @@ function carveCamp(w: World, spec: CampSpec, cx: number, cy: number): void {
       ringOfTrees(w, cx, cy, R + 2);
       break;
     case "goblin":
-      dress(SPR.hut, 4, true); dress(SPR.tent, 2, true); dress(SPR.campfire, 1); dress(SPR.bones, 3);
+      dress(SPR.hut, 4, true); dress(SPR.tent, 2, true); fires(1); dress(SPR.bones, 3);
       break;
     case "orc":
-      dress(SPR.hut, 5, true); dress(SPR.skullPole, 3, true); dress(SPR.campfire, 2); dress(SPR.bones, 3);
+      dress(SPR.hut, 5, true); dress(SPR.skullPole, 3, true); fires(2); dress(SPR.bones, 3);
       break;
     case "minotaur":
       dress(SPR.hut, 3, true); dress(SPR.skullPole, 2, true); dress(SPR.bones, 5); dress(SPR.stoneIcon, 3);

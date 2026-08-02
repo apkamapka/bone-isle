@@ -1000,8 +1000,8 @@ async function main(): Promise<void> {
     const { MONSTER_DEFS, MONSTER_KINDS, spawnMonster, updateMonsters } = await import("../src/entities/monsters.ts");
     const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S, TILE } = await import("../src/config.ts");
     const { killMonster } = await import("../src/systems/combat.ts");
-    // 30 + the dragon, then the two undead heavies of Etap 18
-    ok(MONSTER_KINDS.length === 33, `bestiary holds 33 kinds (32 + the dragon), got ${MONSTER_KINDS.length}`);
+    // 30 + the dragon, the two undead heavies of Etap 18, then the goblin legionary
+    ok(MONSTER_KINDS.length === 34, `bestiary holds 34 kinds (33 + the dragon), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -3059,6 +3059,11 @@ async function main(): Promise<void> {
       "snakes sit nearer the way home than orc berserkers");
     ok(meanDist("skeleton") < meanDist("demonSkeleton"),
       "…and plain skeletons nearer than the demon skeleton");
+    ok(meanDist("goblin") === meanDist("goblinLegionary")
+      || Math.abs(meanDist("goblin") - meanDist("goblinLegionary")) < 12,
+      "goblins and their legionaries hold the same ground");
+    ok(r.monsters.filter((m) => m.kind === "goblinLegionary").length === 5,
+      "five of that band wear the legionary's armour");
 
     /* --- the descents are cut but not yet dug --- */
     ok(r.portals.filter((p) => p.inactive).length === 3,

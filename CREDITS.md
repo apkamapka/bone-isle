@@ -526,20 +526,31 @@ front of anyone standing north of it.
 A 3200 x 3200 export of `mapa_srednia.tmx`, the project owner's own Tiled
 composition of the island behind the Time Sage's fourth pad. The layout is his
 work; the tiles it is painted with come from the packs credited elsewhere in
-this file, plus the tilesets that project references — `Water_tafle_4A`,
+this file, plus the tilesets that project references: `Water_tafle_4A`,
 `32x32_DEMO`, `MainLev2.0`, `namiot`, `floor_and_deoratives` and `kosci`.
-
-> **TODO before release:** those six tilesets need the same treatment as
-> everything else here — author, pack, source URL and licence, one entry each.
-> `32x32_DEMO` in particular is the demo sheet flagged earlier in this project,
-> and a demo sheet is often a free sample of a paid pack, licensed for trying
-> out rather than for shipping. The composed export redistributes whatever they
-> contain, so this is the largest open licence question in the repo.
 
 The file is committed exactly as exported; nothing was resampled or recoloured.
 Its dimensions are load-bearing — `terrainImage.ts` drops any export that is
 not exactly the grid size in tiles times 32, and falls back to the procedural
 bake.
+
+### `32x32_DEMO` — Szadi
+
+Identified by the project owner as **Szadi**'s (szadiart). He is not yet named
+anywhere else in this file, so this is his only entry: the long-standing TODO
+under "Terrain and props" above records a pack licence but names no pack and no
+author, and Szadi is one of the packs that TODO is about.
+
+> **TODO before release:** finish this entry — exact pack name and version,
+> store URL, purchase date, and the licence text as published. Note the terms
+> already recorded above for the terrain packs forbid redistributing the assets
+> themselves, original or modified. Whether a composed map export counts as
+> that is the question worth settling, because this repository is public and
+> `reach-terrain.png` is 3200 x 3200 of those tiles.
+
+> **TODO before release:** the other five tilesets in that Tiled project —
+> `Water_tafle_4A`, `MainLev2.0`, `namiot`, `floor_and_deoratives`, `kosci` —
+> still need an entry each: author, pack, source URL, licence.
 
 ## Everything else
 
