@@ -3017,8 +3017,8 @@ async function main(): Promise<void> {
     ok(r.fires.length === 48, "all 48 campfires were placed");
     ok(r.scenery.filter((s) => s.kind === "skullPole").length === 13,
       "…and all 13 skull totems");
-    ok(r.mobPosts?.length === 107, "107 creature posts were written into the grid");
-    ok(r.monsters.length === 107, "…and every one of them spawned");
+    ok(r.mobPosts?.length === 75, "75 creature posts were written into the grid");
+    ok(r.monsters.length === 75, "…and every one of them spawned");
     ok(r.monsters.filter((m) => m.kind === "demonSkeleton").length === 1,
       "exactly one demon skeleton, as the map asks");
 
@@ -3101,55 +3101,76 @@ async function main(): Promise<void> {
       "snakes sit nearer the way home than orc berserkers");
     ok(meanDist("skeleton") < meanDist("demonSkeleton"),
       "…and plain skeletons nearer than the demon skeleton");
-    /* --- creatures are scattered to the coast, not knotted inland --- */
+    /* --- creatures keep to the ten camps the map marks, and nowhere else --- */
     {
       const p = r.mobPosts!;
-      const nn = p.map((a) => Math.min(...p.filter((b) => b !== a)
-        .map((b) => Math.hypot(a.tx - b.tx, a.ty - b.ty))));
-      const pairs = nn.filter((d) => d <= 2).length;
-      ok(pairs > 0 && pairs < p.length / 3,
-        `some stand in pairs, most do not (${pairs} of ${p.length})`);
-      ok(nn.filter((d) => d >= 4).length > p.length * 0.6,
-        "most of them stand alone, four tiles clear or more");
-      const crowd = Math.max(...p.map((a) =>
-        p.filter((b) => Math.hypot(a.tx - b.tx, a.ty - b.ty) <= 9).length));
-      ok(crowd <= 12, `never more than ${crowd} within nine tiles of any one`);
-
-      // the coast used to stand empty while the middle was packed
-      const toSea = (tx: number, ty: number): number => {
-        for (let rad = 1; rad < 40; rad++) {
-          for (let dy = -rad; dy <= rad; dy++) {
-            for (let dx = -rad; dx <= rad; dx++) {
-              if (Math.max(Math.abs(dx), Math.abs(dy)) !== rad) continue;
-              const a = tx + dx, c = ty + dy;
-              if (a < 0 || c < 0 || a >= r.w || c >= r.h || r.tile[c][a] === T2.Water) return rad;
-            }
-          }
-        }
-        return 40;
-      };
-      const shore = p.filter((m) => toSea(m.tx, m.ty) <= 6).length;
-      ok(shore > p.length / 2, `over half of them hunt within six tiles of the sea (${shore})`);
-
-      // and a band keeps to its own ground: no orc on minotaur soil
-      const PIN: [number, number, string][] = [
-        [49, 2, "undead"], [60, 0, "undead"], [78, 3, "undead"],
-        [5, 33, "minotaur"], [6, 40, "minotaur"],
-        [46, 49, "orc"], [46, 76, "orc"], [46, 81, "orc"],
-        [63, 30, "goblin"], [4, 2, "easy"],
+      // Every marker on the TMX 'potwory' layer, with the roster its own name
+      // spells out. A creature belongs to the marker nearest it, and that
+      // marker has to be one that asked for its kind.
+      const CAMPS: [number, number, string, number][] = [
+        [4, 2, "sn", 7], [49, 2, "k", 7], [60, 0, "kKg", 9], [78, 3, "dgK", 8],
+        [5, 33, "ma", 7], [6, 40, "aum", 8], [63, 30, "GL", 8],
+        [46, 49, "rc", 7], [46, 76, "cer", 8], [46, 81, "hze", 6],
       ];
-      const family = (k: string): string =>
-        k.startsWith("orc") ? "orc" : k.startsWith("minotaur") ? "minotaur"
-        : k.startsWith("goblin") ? "goblin"
-        : (k === "snake" || k === "bandit") ? "easy" : "undead";
-      const strays = p.filter((m) => {
-        let best = PIN[0];
-        for (const q of PIN) {
-          if (Math.hypot(m.tx - q[0], m.ty - q[1]) < Math.hypot(m.tx - best[0], m.ty - best[1])) best = q;
+      const LETTER: Record<string, string> = {
+        snake: "s", bandit: "n", skeleton: "k", skeletonWarrior: "K", ghoul: "g",
+        demonSkeleton: "d", goblin: "G", goblinLegionary: "L", minotaur: "m",
+        minotaurArcher: "a", minotaurGuard: "u", orc: "r", orcArcher: "c",
+        orcWarrior: "e", orcShaman: "h", orcBerserker: "z",
+      };
+      const nearest = (tx: number, ty: number) => CAMPS.reduce((a, b) =>
+        Math.hypot(tx - b[0], ty - b[1]) < Math.hypot(tx - a[0], ty - a[1]) ? b : a);
+
+      ok(CAMPS.reduce((s2, c) => s2 + c[3], 0) === p.length,
+        `the ten camps account for every creature on the island (${p.length})`);
+      const strays = p.filter((m) => !nearest(m.tx, m.ty)[2].includes(LETTER[m.kind])).length;
+      ok(strays === 0,
+        "no creature stands in a camp that did not ask for its kind — no orc on minotaur soil");
+      const head = CAMPS.map((c) =>
+        p.filter((m) => nearest(m.tx, m.ty) === c).length);
+      ok(head.every((n, i) => n === CAMPS[i][3]),
+        `every camp musters the band it was drawn with (${head.join("/")})`);
+      const reach = Math.max(...p.map((m) => {
+        const c = nearest(m.tx, m.ty);
+        return Math.hypot(m.tx - c[0], m.ty - c[1]);
+      }));
+      ok(reach <= 10,
+        `nobody strays further than ten tiles from his marker (worst ${reach.toFixed(1)})`);
+
+      // the ground between camps is empty — that is the whole point of camps
+      let open = 0;
+      for (let y = 0; y < r.h; y++) {
+        for (let x = 0; x < r.w; x++) {
+          if (r.tile[y][x] === T2.Water) continue;
+          if (CAMPS.every((c) => Math.hypot(x - c[0], y - c[1]) > 12)) open++;
         }
-        return best[2] !== family(m.kind);
-      }).length;
-      ok(strays === 0, "every creature stands on its own family's ground");
+      }
+      ok(open > 4000,
+        `most of the island is quiet ground you cross unmolested (${open} squares)`);
+      ok(p.every((m) => CAMPS.some((c) => Math.hypot(m.tx - c[0], m.ty - c[1]) <= 12)),
+        "…and not one creature is posted out in it");
+    }
+
+    /* --- nothing tall stands on the waterline --- */
+    {
+      const rowsG = REACH_SPEC.rows;
+      const shore = (x: number, y: number): boolean => {
+        if (x < 2 || y < 2 || x >= 98 || y >= 98) return true;
+        for (let j = y - 2; j <= y + 2; j++) {
+          for (let i = x - 2; i <= x + 2; i++) if (rowsG[j][i] === "~") return true;
+        }
+        return false;
+      };
+      let wet = 0;
+      for (let y = 0; y < 100; y++) {
+        for (let x = 0; x < 100; x++) {
+          if ("TRVvH".includes(rowsG[y][x]) && shore(x, y)) wet++;
+        }
+      }
+      ok(wet === 0,
+        "no tree, rock, log or herb within two tiles of the sea — nothing paddles");
+      ok(r.trees.length === 94 && r.rocks.length === 115,
+        `the shore lost none of them, they moved inland (${r.trees.length} trees, ${r.rocks.length} rocks)`);
     }
 
     /* --- nothing is stacked on anything else --- */
@@ -3188,8 +3209,8 @@ async function main(): Promise<void> {
     ok(meanDist("goblin") === meanDist("goblinLegionary")
       || Math.abs(meanDist("goblin") - meanDist("goblinLegionary")) < 12,
       "goblins and their legionaries hold the same ground");
-    ok(r.monsters.filter((m) => m.kind === "goblinLegionary").length === 5,
-      "five of that band wear the legionary's armour");
+    ok(r.monsters.filter((m) => m.kind === "goblinLegionary").length === 3,
+      "three of that band wear the legionary's armour");
 
     /* --- the descents are cut but not yet dug --- */
     ok(r.portals.filter((p) => p.inactive).length === 3,
