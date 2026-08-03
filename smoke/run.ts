@@ -58,11 +58,11 @@ async function main(): Promise<void> {
   {
     const p = createPlayer({ x: 0, y: 0 });
     p.bag = items.emptyBag();
-    const ghost = tasks.TASKS.find((t) => t.id === "t_ghosts")!; // reward 20 boneArrow (20 oz)
-    ok(tasks.rewardFits(p, ghost), "light bag fits the arrow reward");
+    const ghouls = tasks.TASKS.find((t) => t.id === "t_ghouls")!; // reward 20 boneArrow (20 oz)
+    ok(tasks.rewardFits(p, ghouls), "light bag fits the arrow reward");
     // stuff the bag to the cap with stone (weight 14): cap 500 → 35 stones = 490 oz
     items.addItem(p.bag, "stone", 35);
-    ok(!tasks.rewardFits(p, ghost), "reward heavier than free cap is rejected");
+    ok(!tasks.rewardFits(p, ghouls), "reward heavier than free cap is rejected");
     ok(tasks.buyExchange(p, "x_arrows") === "poor", "no TP → poor");
     p.taskPoints = 20;
     ok(tasks.buyExchange(p, "x_arrows") === "heavy", "50 arrows over cap → heavy");
@@ -345,7 +345,7 @@ async function main(): Promise<void> {
     const worlds = buildWorlds(WORLD_SEED);
     const wild = worlds.wild;
     populateWorld(wild, WORLD_SEED);
-    ok(wild.monsters.length === 30, `wild fully populated (${wild.monsters.length}/30 — the trimmed surface roster)`);
+    ok(wild.monsters.length === 18, `wild fully populated (${wild.monsters.length}/18 — the trimmed surface roster)`);
     let minGap = Infinity;
     for (let i = 0; i < wild.monsters.length; i++) {
       for (let j = i + 1; j < wild.monsters.length; j++) {
@@ -608,15 +608,15 @@ async function main(): Promise<void> {
     {
       const { applyMonsterArmor } = await import("../src/systems/combat.ts");
       const armored = Object.values(MONSTER_DEFS).filter((d) => (d.armor ?? 0) > 0);
-      ok(armored.length >= 20, `${armored.length} creatures carry an armor rating`);
+      ok(armored.length >= 15, `${armored.length} creatures carry an armor rating`);
       ok(Object.values(MONSTER_DEFS).every((d) => (d.armor ?? 0) <= 20), "no creature's armor exceeds the dragon's");
       ok((MONSTER_DEFS.dragon.armor ?? 0) > (MONSTER_DEFS.goblin.armor ?? 0), "armor tracks the difficulty ladder");
-      ok((MONSTER_DEFS.ghost.armor ?? 0) === 0, "an incorporeal creature wears none");
+      ok((MONSTER_DEFS.snake.armor ?? 0) === 0, "a bare-scaled creature wears none");
       const m = { kind: "dragon" } as never;
       let floored = true;
       for (let i = 0; i < 500; i++) if (applyMonsterArmor(m, 5) < cfg.MIN_DAMAGE) floored = false;
       ok(floored, "armor can never reduce a hit below MIN_DAMAGE");
-      ok(applyMonsterArmor({ kind: "ghost" } as never, 50) === 50, "an unarmored creature takes the hit whole");
+      ok(applyMonsterArmor({ kind: "snake" } as never, 50) === 50, "an unarmored creature takes the hit whole");
     }
 
     resetSkills(); st.resetStance();
@@ -828,7 +828,7 @@ async function main(): Promise<void> {
 
     // resistances: sparse, meaningful, and never total immunity
     const withRes = Object.values(M.MONSTER_DEFS).filter((d) => d.resist);
-    ok(withRes.length >= 15 && withRes.length < Object.keys(M.MONSTER_DEFS).length,
+    ok(withRes.length >= 8 && withRes.length < Object.keys(M.MONSTER_DEFS).length,
       `${withRes.length} creatures carry resistances — the exception, not the rule`);
     let sane = true, anyWeak = false, anyStrong = false;
     for (const d of Object.values(M.MONSTER_DEFS)) {
@@ -844,7 +844,7 @@ async function main(): Promise<void> {
     ok(E.resistanceOf(undefined, "fire") === 1, "ordinary flesh resists nothing");
     ok((M.MONSTER_DEFS.dragon.resist?.fire ?? 1) < 1 && (M.MONSTER_DEFS.dragon.resist?.ice ?? 1) > 1,
       "a dragon shrugs off fire and hates the cold");
-    ok((M.MONSTER_DEFS.ghost.resist?.earth ?? 1) < 1, "earth barely touches something incorporeal");
+    ok((M.MONSTER_DEFS.snake.resist?.earth ?? 1) < 1, "earth barely touches a thing that lives in it");
 
     // damage: scales with tier and level, respects resistance, never zero
     const roll = (tier: 0 | 1 | 2, lv: number, res?: Record<string, number>): number => {
@@ -1000,8 +1000,10 @@ async function main(): Promise<void> {
     const { MONSTER_DEFS, MONSTER_KINDS, spawnMonster, updateMonsters } = await import("../src/entities/monsters.ts");
     const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S, TILE } = await import("../src/config.ts");
     const { killMonster } = await import("../src/systems/combat.ts");
-    // 30 + the dragon, the two undead heavies of Etap 18, then the goblin legionary
-    ok(MONSTER_KINDS.length === 34, `bestiary holds 34 kinds (33 + the dragon), got ${MONSTER_KINDS.length}`);
+    // Etap 19 cut the bestiary to the kinds that own drawn artwork: 17 with a
+    // walk sheet under public/, plus the dragon, which is kept on its bake
+    // because it is the boss the whole endgame curve hangs off.
+    ok(MONSTER_KINDS.length === 18, `bestiary holds 18 kinds (17 + the dragon), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -1016,16 +1018,16 @@ async function main(): Promise<void> {
     // provoke one and then retreat. What must hold: an UNPROVOKED monster never
     // attacks from beyond aggro, whatever its own range.
     const shooters = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].ranged);
-    ok(shooters.length === 8, `eight distance fighters in the bestiary, got ${shooters.length}`);
+    ok(shooters.length === 5, `five distance fighters in the bestiary, got ${shooters.length}`);
     ok(MONSTER_AGGRO_RANGE === 6 * TILE, "aggro range is a tight 6 tiles");
     {
-      // hunter's weapon range is 280 px (8.75 tiles) — well past aggro (192).
+      // the minotaur archer's reach is 300 px (9.4 tiles) — well past aggro (192).
       const arena = buildWorlds(WORLD_SEED).wild;
       arena.monsters.length = 0;
-      spawnMonster(arena, "hunter");
+      spawnMonster(arena, "minotaurArcher");
       const h = arena.monsters[0];
       // fresh target sat BEYOND aggro but INSIDE weapon range: must stay asleep
-      const far = { x: h.x + 240, y: h.y, dead: false }; // 240 > 192 aggro, < 280 range
+      const far = { x: h.x + 240, y: h.y, dead: false }; // 240 > 192 aggro, < 300 range
       let farShots = 0;
       for (let t = 0; t < 40; t++) updateMonsters(arena, 1 / 60, far, (_m, r) => { if (r) farShots++; }); // <1s ⇒ no wander drift
       ok(farShots === 0, "an unprovoked shooter beyond aggro never fires, even in weapon range");
@@ -1061,13 +1063,13 @@ async function main(): Promise<void> {
       ok(c3.respawns.length === 1 && c3.respawns[0].t === 600, "a slain dragon respawns after 600 s");
       ok(c3.corpses.length === 1 && c3.corpses[0].name === "dragon", "the dragon leaves a lootable corpse");
     }
-    // a shooter holds its ground and fires: park a hunter mid-range and step
+    // a shooter holds its ground and fires: park an archer mid-range and step
     // the AI — it must land ranged hits without ever closing to melee reach
     {
       const worlds = buildWorlds(WORLD_SEED);
       const wild = worlds.wild;
       wild.monsters.length = 0;
-      ok(spawnMonster(wild, "hunter"), "a hunter spawns for the AI test");
+      ok(spawnMonster(wild, "minotaurArcher"), "a minotaur archer spawns for the AI test");
       const h = wild.monsters[0];
       const targetP = { x: h.x + 100, y: h.y, dead: false };
       let rangedHits = 0, meleeHits = 0, minD = Infinity;
@@ -1075,8 +1077,8 @@ async function main(): Promise<void> {
         updateMonsters(wild, 1 / 60, targetP, (_m, ranged) => { if (ranged) rangedHits++; else meleeHits++; });
         minD = Math.min(minD, Math.hypot(h.x - targetP.x, h.y - targetP.y));
       }
-      ok(rangedHits >= 4 && meleeHits === 0, `the hunter fires from range (${rangedHits} shots, ${meleeHits} melee)`);
-      ok(minD > 13, `the hunter never closes to melee reach (min ${Math.round(minD)} px)`);
+      ok(rangedHits >= 4 && meleeHits === 0, `the archer fires from range (${rangedHits} shots, ${meleeHits} melee)`);
+      ok(minD > 13, `the archer never closes to melee reach (min ${Math.round(minD)} px)`);
       ok(wild.shots.length > 0 || rangedHits > 0, "monster shots spawn cosmetic projectiles");
     }
     // populations: every floor's roster references only defined kinds — and a
@@ -1088,7 +1090,7 @@ async function main(): Promise<void> {
       ok(worlds.cave3.monsters.filter((mm) => mm.kind === "dragon").length === 1,
         "exactly one dragon nests in Bone Caverns -3");
       ok(worlds.wild.monsters.some((mm) => mm.kind === "snake")
-        && worlds.wild.monsters.some((mm) => mm.kind === "amazon"), "the surface carries the new tier-1/2 kinds");
+        && worlds.wild.monsters.some((mm) => mm.kind === "goblin"), "the surface carries its tier-1/2 kinds");
       ok(worlds.cave2.monsters.some((mm) => mm.kind === "minotaurArcher"), "cavern -2 fields minotaur archers");
     }
     // new gear sanity: the progression slots between existing pieces
@@ -1184,10 +1186,10 @@ async function main(): Promise<void> {
         && inCamp("orcfort").some((m) => m.kind === "orcArcher")
         && inCamp("grave").some((m) => m.kind === "ghoul")
         && inCamp("bastion").some((m) => m.kind === "minotaur"), "garrisons match their settlement themes");
-      // the forest between camps belongs to the wolves — free roamers
+      // the forest between camps belongs to the raiders — free roamers
       const roamers = dw.monsters.filter((m) => !m.camp);
-      ok(roamers.length >= 15 && roamers.every((m) => m.kind === "wolf" || m.kind === "warWolf"),
-        `wolves lope through the open forest (${roamers.length} roamers)`);
+      ok(roamers.length >= 15 && roamers.every((m) => m.kind === "bandit" || m.kind === "goblin"),
+        `raiders work the open forest (${roamers.length} roamers)`);
       ok(roamers.every((m) => dw.camps.every((c) => dist(m.x, m.y, c.x, c.y) > c.r)),
         "roamers spawn outside every settlement");
       ok(roamers.every((m) => !m.hr), "roamers carry no leash — the woods are theirs");
@@ -1221,7 +1223,7 @@ async function main(): Promise<void> {
     ok(chainsOk, "every lair floor's ladders chain correctly (up to the camp, down to the next)");
     ok(filledOk, "every lair floor is populated (Etap 9b)");
     ok(worlds.roost3.monsters.some((m) => m.kind === "dragon"), "the second dragon nests at the Roost's heart");
-    ok(worlds.grave2.monsters.some((m) => m.kind === "mummy"), "the deep graveyard wakes its mummies");
+    ok(worlds.grave2.monsters.some((m) => m.kind === "skeletonWarrior"), "the deep graveyard fields its armoured dead");
     // deeper = larger (the future difficulty ramp has room to breathe)
     for (const spec of [["roost1", "roost2", "roost3"], ["goblin1", "goblin2"]] as const) {
       for (let i = 1; i < spec.length; i++) {
@@ -1295,8 +1297,8 @@ async function main(): Promise<void> {
     ok(hoardOk, "each chest is wrapped in a hoard zone");
     ok(guardsOk, "an elite guard detail is posted at every hoard");
     ok(postedOk, "the guards stand leashed to their chest");
-    ok(worlds.grave2.monsters.filter((m) => m.kind === "boneLord").length >= 3,
-      "the deep graveyard now fields bone lords beyond its roster (chest detail)");
+    ok(worlds.grave2.monsters.filter((m) => m.kind === "skeletonWarrior").length >= 3,
+      "the deep graveyard now fields skeleton warriors beyond its roster (chest detail)");
     // the shallow lairs and the mild camps stay chest-free
     ok((["warren1", "cove1", "hollow1", "hollow2", "goblin1", "orcfort1", "bastion1", "grave1", "roost1", "roost2"] as const)
       .every((k) => !worlds[k].structures.some((st) => st.key === "treasure")),
@@ -2400,7 +2402,7 @@ async function main(): Promise<void> {
         `no separate ${f} body — the ranks share one corpse`);
     }
 
-    ok(corpseSprite("spider") === null, "a creature with no body art gets none");
+    ok(corpseSprite("dragon") === null, "a creature with no body art gets none");
     ok(corpseSprite("minotaur") === null, "headless even a minotaur falls back…");
     ok(corpseSprite("bandit") === null, "…and so does a bandit…");
     ok(heroCorpse() === null, "…and so does the player's own body");
@@ -2832,8 +2834,8 @@ async function main(): Promise<void> {
       "the demon skeleton is below the dragon but in its weight class");
     ok(demon.exp < dragon.exp && demon.dmg[1] < dragon.dmg[1],
       "…worth less and hitting softer than the boss");
-    ok(demon.hp > MONSTER_DEFS.boneLord.hp,
-      "…yet clear of the Bone Lord, the next thing down");
+    ok(demon.hp > MONSTER_DEFS.minotaurGuard.hp * 2,
+      "…yet clear of the minotaur guard, the next thing down");
 
     // Both are melee. A ranged block on either would let it out-range the bow
     // it is meant to be fought with, and the demon has no breath to justify it.
