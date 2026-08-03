@@ -70,54 +70,56 @@ type DangerKey = "wild" | "cave1" | "cave2" | "cave3"
 // blocking + the 2-attacker shield cap, every extra creature in a pack now
 // matters (3rd+ hits pierce the shield), so adjust counts here after playtests.
 const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number>>>> = {
-  // Surface: tiers 1-2, the ~level 1-8 hunting grounds. Shooters debut gently
-  // (poison spider spit, amazon knives) before the cavern archers below.
-  // Trimmed ~25% after playtests — the open round island concentrated packs
-  // into one big crowd; the undergrounds are where the density lives now.
+  // Surface: tiers 1-2, the ~level 1-8 hunting grounds. Etap 19 emptied the
+  // vermin half of this roster along with their placeholder art, so the four
+  // survivors carry the whole beach — no shooter debuts up here any more, the
+  // orc archer on -1 is now the player's first ranged opponent.
   wild: {
-    bandit: 4, snake: 3, crab: 3, bat: 3, spider: 3, wasp: 2,
-    skeleton: 2, rotworm: 2, poisonSpider: 2, wolf: 2, goblin: 2, amazon: 2,
+    bandit: 6, snake: 5, skeleton: 4, goblin: 3,
   },
   // -1: tiers 2-3 (~level 8-13). The first spear-throwing orcs appear.
   cave1: {
-    skeleton: 3, rotworm: 3, goblin: 3, wolf: 3, warWolf: 3,
-    ghoul: 3, ghost: 3, orc: 3, orcArcher: 3, bear: 2,
+    skeleton: 5, goblin: 5, ghoul: 4, orc: 3, orcArcher: 3,
   },
   // -2: tiers 3-4 (~level 12-17). The orc war camp and the minotaur outposts.
   // Bumped after playtests: the floor is bigger than -1 but read as sparse.
   cave2: {
-    orc: 4, orcArcher: 3, bear: 3, orcWarrior: 5, hunter: 3, ghost: 3,
-    minotaur: 5, minotaurArcher: 3, troll: 3, orcShaman: 3, mummy: 3,
+    orc: 5, orcArcher: 4, orcWarrior: 5, goblinLegionary: 3,
+    minotaur: 6, minotaurArcher: 4, orcShaman: 3,
   },
   // -3: tier 5 (~level 17-20+) and the dragon's lair — ONE dragon nests in
   // the deepest band (danger 0.99, same as the Bone Lord) on a 10-minute
   // respawn, guarding the way to the Marrow Blade chest. Bumped like -2.
   cave3: {
-    troll: 3, mummy: 3, orcBerserker: 4, cyclops: 4,
-    minotaurGuard: 3, minotaurMage: 3, boneLord: 3, dragon: 1,
-    skeletonWarrior: 3, demonSkeleton: 1, // TEMP-ETAP18: until they get their own grounds
+    orcBerserker: 6, minotaurGuard: 4, minotaurMage: 4, dragon: 1,
+    skeletonWarrior: 4, demonSkeleton: 1, // TEMP-ETAP18: until they get their own grounds
   },
   // ---- Deep Wildlands camp lairs: each settlement's dungeon, difficulty ----
   // ---- rising floor by floor (Etap 9b). Floor -1s tested as "ok"; the    ----
   // ---- deeper floors are bigger and read as empty, so -2/-3 run ~double. ----
-  warren1:  { bandit: 5, bat: 4, snake: 3 },
-  cove1:    { crab: 7, wasp: 3 },
-  hollow1:  { spider: 5, poisonSpider: 4 },
-  hollow2:  { poisonSpider: 9, wasp: 7 },
-  goblin1:  { goblin: 6, rotworm: 3 },
-  goblin2:  { goblin: 10, warWolf: 6 },
+  warren1:  { bandit: 7, snake: 5 },
+  // Etap 19: the cove's crabs and the hollow's spiders went out with the
+  // art cull, and a floor with an empty roster spawns literally nothing —
+  // the density top-up draws from the roster too. These four keep their
+  // depth tier with stand-ins from the surviving bestiary until the camps
+  // are re-themed around creatures that actually have sheets.
+  cove1:    { snake: 7, bandit: 3 },
+  hollow1:  { skeleton: 5, goblin: 4 },
+  hollow2:  { goblin: 9, skeleton: 7 },
+  goblin1:  { goblin: 8 },
+  goblin2:  { goblin: 10, goblinLegionary: 6 },
   orcfort1: { orc: 4, orcArcher: 3, orcWarrior: 3 },
   orcfort2: { orcWarrior: 7, orcShaman: 5, orcBerserker: 4 },
   bastion1: { minotaur: 4, minotaurArcher: 3 },
   bastion2: { minotaurGuard: 5, minotaurMage: 4, minotaur: 6 },
-  grave1:   { skeleton: 4, ghoul: 4, ghost: 3 },
-  grave2:   { mummy: 8, ghost: 6, boneLord: 2,
-              skeletonWarrior: 3, demonSkeleton: 1 }, // TEMP-ETAP18: see cave3
-  roost1:   { bear: 3, warWolf: 3 },
-  roost2:   { cyclops: 5, orcBerserker: 4 },
+  grave1:   { skeleton: 6, ghoul: 5 },
+  grave2:   { skeleton: 8, ghoul: 6,
+              skeletonWarrior: 4, demonSkeleton: 1 }, // TEMP-ETAP18: see cave3
+  roost1:   { orc: 3, ghoul: 3 },
+  roost2:   { orcBerserker: 6, minotaurGuard: 3 },
   // the Roost's heart: the SECOND dragon (the cavern one guards the chest;
   // this one guards nothing but its hoard) with the same 10-minute clock
-  roost3:   { dragon: 1, cyclops: 5 },
+  roost3:   { dragon: 1, orcBerserker: 5 },
 };
 
 /**
@@ -128,15 +130,17 @@ const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number
  */
 const CAMP_POPULATIONS: Readonly<Record<string, Partial<Record<MonsterKind, number>>>> = {
   warren:  { bandit: 5, snake: 3 },
-  cove:    { crab: 6 },
-  hollow:  { spider: 4, poisonSpider: 3, wasp: 2 },
-  goblin:  { goblin: 5, warWolf: 2 },
+  cove:    { snake: 6 },
+  hollow:  { skeleton: 4, goblin: 3, bandit: 2 },
+  goblin:  { goblin: 5, goblinLegionary: 2 },
   orcfort: { orc: 4, orcArcher: 3, orcWarrior: 2 },
   bastion: { minotaur: 4, minotaurArcher: 2, minotaurGuard: 1 },
-  grave:   { skeleton: 4, ghoul: 3, ghost: 2 },
-  roost:   { warWolf: 3 },
+  grave:   { skeleton: 4, ghoul: 3 },
+  roost:   { ghoul: 3 },
 };
-const WILDERNESS_ROAMERS: Partial<Record<MonsterKind, number>> = { wolf: 26, warWolf: 10 };
+// Etap 19: the free roamers between camps were the two wolves. Bandits and
+// goblin raiders hold the open forest instead — same count, same no-leash rule.
+const WILDERNESS_ROAMERS: Partial<Record<MonsterKind, number>> = { bandit: 26, goblin: 10 };
 
 /**
  * One-time chest prizes by world (Etap 9c): the Marrow Blade's chest at the
