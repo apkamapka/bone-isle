@@ -206,14 +206,23 @@ export interface GroundItem {
   t: number;
 }
 
-/** Monster kinds present on the Wildlands and down the Bone Caverns. */
+/**
+ * Monster kinds present on the Wildlands and down the Bone Caverns.
+ *
+ * Etap 19 cut the bestiary down to the creatures that own real artwork: every
+ * kind listed here has a drawn walk sheet under `public/`. The sixteen that
+ * only ever existed as a baked pixel blob — spiders, bats, crabs, wasps,
+ * rotworms, wolves, war wolves, bears, ghosts, mummies, trolls, cyclopes,
+ * amazons, hunters and the bone lord — are gone, kind and sprite alike. The
+ * dragon is the one exception kept without art: it is the boss and the whole
+ * bottom of the difficulty curve hangs off it.
+ */
 export type MonsterKind =
-  | "bandit" | "spider" | "bat" | "skeleton" | "goblin" | "wolf"
-  | "ghost" | "orc" | "bear" | "minotaur" | "troll" | "cyclops" | "boneLord"
+  | "bandit" | "skeleton" | "goblin"
+  | "orc" | "minotaur"
   // Etap 8 — the extended bestiary (Tibia 8.6-inspired tiers to ~level 20)
-  | "snake" | "crab" | "wasp" | "poisonSpider" | "rotworm" | "amazon"
-  | "warWolf" | "ghoul" | "orcArcher" | "orcWarrior" | "hunter"
-  | "minotaurArcher" | "orcShaman" | "mummy" | "orcBerserker"
+  | "snake" | "ghoul" | "orcArcher" | "orcWarrior"
+  | "minotaurArcher" | "orcShaman" | "orcBerserker"
   | "minotaurGuard" | "minotaurMage"
   // The armoured goblin rank: the camps' answer to the orc warrior.
   | "goblinLegionary"
