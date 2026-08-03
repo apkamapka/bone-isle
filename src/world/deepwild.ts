@@ -71,11 +71,12 @@ export interface LairFloor {
   treasure?: boolean;
 }
 
-/** The camps whose deepest floor hoards a piece of the Marrow set. The orc
- *  fort and the dragon's roost used to be on this list; their two pieces —
- *  the plate and the greaves — were moved into the one chest on Orc Deep -1,
- *  so those floors are now a fight with no prize at the end. */
-const TREASURE_FLOORS: ReadonlySet<string> = new Set(["goblin2", "bastion2", "grave2"]);
+/** The camps whose deepest floor hoards a piece of the Marrow set — the
+ *  bastion alone, now. Four of the five pieces were lifted out of these lairs
+ *  and buried two to a chest on the floors under the Bone Reach, so the roost,
+ *  the orc fort, the graves and the goblin warren are a fight with no prize at
+ *  the end of it. */
+const TREASURE_FLOORS: ReadonlySet<string> = new Set(["bastion2"]);
 
 /**
  * The full lair catalog, derived from the camp chains. Floor sizes grow with

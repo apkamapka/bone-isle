@@ -399,8 +399,8 @@ those terms even if this repository is later made private.
 ## Terrain and props
 
 `public/home-terrain.png`, `public/town-terrain.png`, `public/cellar-terrain.png`,
-`public/reach-terrain.png` and `public/orcdeep-terrain.png` are exported from
-Tiled maps painted with tile
+`public/reach-terrain.png`, `public/orcdeep-terrain.png` and
+`public/minodeep-terrain.png` are exported from Tiled maps painted with tile
 packs by **Szadi art.** (szadiart), some bought and some taken from his free
 demo packs:
 
@@ -564,11 +564,13 @@ above — which permits exactly this: modified tiles composed into a commercial
 game and published on a game-related site. The remaining five still need
 pinning to specific packs.
 
-## Orc Deep -1 terrain — `public/orcdeep-terrain.png`
+## The floors under the Bone Reach — `public/orcdeep-terrain.png`, `public/minodeep-terrain.png`
 
-A 1280 x 1600 export of `-1_orki_srednia_mapa.tmx`, the project owner's own
-Tiled composition of the pit under the Bone Reach's southern descent. The
-layout is his work; the tiles it is painted with are credited below.
+A 1280 x 1600 export of `-1_orki_srednia_mapa.tmx` and a 1920 x 1600 export of
+`-1_minotaury_srednia_mapa.tmx` — the project owner's own Tiled compositions of
+the pit under the Bone Reach's southern descent and the labyrinth under its
+western one. The layouts are his work; the tiles they are painted with are
+credited below.
 
 The file is committed exactly as exported; nothing was resampled or recoloured.
 As with every other export, its dimensions are load-bearing — `terrainImage.ts`
@@ -576,7 +578,7 @@ drops anything that is not exactly the grid size in tiles times 32.
 
 ### Tilesets
 
-The Tiled project references a single tileset, `MainLev2.0hhh` — a variant of
+Both Tiled projects reference a single tileset, `MainLev2.0hhh` — a variant of
 the `MainLev2.0` pack already recorded under "Terrain and props" above, by
 **Szadi art.** (szadiart). The exact pack this variant was cut from still needs
 pinning, same as the other five listed for the Bone Reach.

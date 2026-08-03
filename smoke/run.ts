@@ -1258,8 +1258,8 @@ async function main(): Promise<void> {
     // of the Deep Wildlands and buried together on Orc Deep -1, so one chest
     // carries two pieces. Every piece of the set is still findable exactly once.
     const prizeWorlds = Object.keys(CHEST_PRIZES) as (keyof typeof CHEST_PRIZES)[];
-    ok(prizeWorlds.length === 5 && CHEST_PRIZES.cave3?.[0] === "marrowBlade",
-      "five chest worlds are mapped; the caverns still hold the blade");
+    ok(prizeWorlds.length === 4 && CHEST_PRIZES.cave3?.[0] === "marrowBlade",
+      "four chest worlds are mapped; the caverns still hold the blade");
     const allPrizes = Object.values(CHEST_PRIZES).flat();
     ok(new Set(allPrizes).size === allPrizes.length,
       `no prize is buried twice (${allPrizes.length} across ${prizeWorlds.length} chests)`);
@@ -1269,9 +1269,13 @@ async function main(): Promise<void> {
       && (CHEST_PRIZES.orcdeep1 ?? []).includes("marrowArmor")
       && (CHEST_PRIZES.orcdeep1 ?? []).includes("marrowLegs"),
       "the orc pit's hoard holds the plate and the greaves together");
-    ok(!("orcfort2" in CHEST_PRIZES) && !("roost3" in CHEST_PRIZES),
-      "…and the orc fort and the dragon's roost bury nothing any more");
-    const treasureLairs = ["goblin2", "bastion2", "grave2"] as const;
+    ok((CHEST_PRIZES.minodeep1 ?? []).length === 2
+      && (CHEST_PRIZES.minodeep1 ?? []).includes("marrowHelmet")
+      && (CHEST_PRIZES.minodeep1 ?? []).includes("marrowBoots"),
+      "the labyrinth's hoard holds the helm and the boots together");
+    ok(["orcfort2", "roost3", "grave2", "goblin2"].every((k) => !(k in CHEST_PRIZES)),
+      "…and the four Deep Wildlands lairs they came from bury nothing any more");
+    const treasureLairs = ["bastion2"] as const;
     let chestsOk = true, hoardOk = true, guardsOk = true, postedOk = true;
     for (const k of treasureLairs) {
       const lw = worlds[k];
@@ -1283,10 +1287,10 @@ async function main(): Promise<void> {
       if (detail.length < 2) guardsOk = false;
       if (!detail.every((m) => hoard && dist(m.x, m.y, hoard.x, hoard.y) <= hoard.r && m.hr)) postedOk = false;
     }
-    ok(chestsOk, "the three camps that still hoard have a chest on their deepest floor");
-    for (const k of ["orcfort2", "roost3"] as const) {
+    ok(chestsOk, "the bastion, the one camp that still hoards, has a chest on its deepest floor");
+    for (const k of ["orcfort2", "roost3", "grave2", "goblin2"] as const) {
       ok(!worlds[k].structures.some((st) => st.key === "treasure"),
-        `${k} no longer buries a chest — its piece moved to the orc pit`);
+        `${k} no longer buries a chest — its piece moved under the Reach`);
     }
     ok(hoardOk, "each chest is wrapped in a hoard zone");
     ok(guardsOk, "an elite guard detail is posted at every hoard");
@@ -3302,14 +3306,16 @@ async function main(): Promise<void> {
     ok(r.monsters.filter((m) => m.kind === "goblinLegionary").length === 3,
       "three of that band wear the legionary's armour");
 
-    /* --- one descent is dug, two are still cut and sealed --- */
-    ok(r.portals.filter((p) => p.inactive).length === 2,
-      "the minotaurs' and the dead's descents stand sealed until those floors exist");
-    {
-      const down = r.portals.find((p) => p.dest === "orcdeep1");
-      ok(down !== undefined && !down.inactive, "the orcs' descent is open and leads to Orc Deep -1");
-      ok(Math.floor(down!.x / 32) === 79 && Math.floor(down!.y / 32) === 90,
-        "…from the mouth the map cut at (79,90)");
+    /* --- two descents are dug, the dead's is still cut and sealed --- */
+    ok(r.portals.filter((p) => p.inactive).length === 1,
+      "only the dead's descent stands sealed now, until that floor exists");
+    for (const [dest, tx, ty, who] of [
+      ["orcdeep1", 79, 90, "orcs"], ["minodeep1", 8, 85, "minotaurs"],
+    ] as const) {
+      const down = r.portals.find((p) => p.dest === dest);
+      ok(down !== undefined && !down.inactive, `the ${who}' descent is open and leads to ${dest}`);
+      ok(Math.floor(down!.x / 32) === tx && Math.floor(down!.y / 32) === ty,
+        `…from the mouth the map cut at (${tx},${ty})`);
     }
 
     /* --- the Time Sage's bottom-right pad now opens here --- */
@@ -3320,119 +3326,141 @@ async function main(): Promise<void> {
       "…and no pad points at the Deep Wildlands any more");
   }
 
-  console.log("Orc Deep -1 is traced faithfully from Tiled:");
+  console.log("The two floors under the Reach are traced faithfully from Tiled:");
   {
     const fs = await import("node:fs");
     const { ORCDEEP_SPEC } = await import("../src/world/orcDeepSpec.ts");
+    const { MINODEEP_SPEC } = await import("../src/world/minoDeepSpec.ts");
     const { REACH_SPEC } = await import("../src/world/reachSpec.ts");
     const { Tile: T3 } = await import("../src/world/types.ts");
     const { populateAll, CHEST_PRIZES } = await import("../src/game.ts");
+    const { FOOTPRINT } = await import("../src/gfx/sceneryArt.ts");
     const worlds = buildWorlds(WORLD_SEED);
     populateAll(worlds, WORLD_SEED);
-    const o = worlds.orcdeep1;
 
-    /* --- the grid and the export agree, or the loader drops the picture --- */
-    ok(ORCDEEP_SPEC.rows.length === 50 && ORCDEEP_SPEC.rows.every((x) => x.length === 40),
-      "the grid is 40x50, as drawn");
-    ok(ORCDEEP_SPEC.floor?.length === 50, "…and the terrain grid matches it row for row");
-    const png = new URL("../public/orcdeep-terrain.png", import.meta.url);
-    if (!fs.existsSync(png)) {
-      ok(false, "public/orcdeep-terrain.png is missing — the pit falls back to the baked terrain");
-    } else {
-      const b = fs.readFileSync(png);
-      ok(b.readUInt32BE(16) === o.w * 32 && b.readUInt32BE(20) === o.h * 32,
-        `the terrain export is exactly ${o.w * 32}x${o.h * 32}`);
-    }
+    const FLOORS = [
+      {
+        key: "orcdeep1" as const, spec: ORCDEEP_SPEC, png: "orcdeep-terrain.png",
+        w: 40, h: 50, walls: 927, ladder: [32, 38], glyph: "2", chest: [8, 4],
+        fires: 18, wells: 2, boulders: 7,
+        head: { orcBerserker: 16, orcShaman: 10, orcWarrior: 5 }, total: 31,
+      },
+      {
+        key: "minodeep1" as const, spec: MINODEEP_SPEC, png: "minodeep-terrain.png",
+        w: 60, h: 50, walls: 1386, ladder: [10, 38], glyph: "1", chest: [46, 15],
+        fires: 27, wells: 4, boulders: 17,
+        head: { minotaur: 7, minotaurArcher: 11, minotaurGuard: 27 }, total: 45,
+      },
+    ];
 
-    /* --- the maze: walls from the collision layer, floor everywhere else --- */
-    let walls = 0, floorTiles = 0;
-    for (let y = 0; y < o.h; y++) {
-      for (let x = 0; x < o.w; x++) {
-        if (o.tile[y][x] === T3.Wall) walls++;
-        else if (o.tile[y][x] === T3.Cave) floorTiles++;
+    for (const f of FLOORS) {
+      const o = worlds[f.key];
+      const tag = f.spec.name;
+
+      /* --- the grid and the export agree, or the loader drops the picture --- */
+      ok(f.spec.rows.length === f.h && f.spec.rows.every((x) => x.length === f.w),
+        `${tag}: the grid is ${f.w}x${f.h}, as drawn`);
+      ok(f.spec.floor?.length === f.h, "…and the terrain grid matches it row for row");
+      const png = new URL(`../public/${f.png}`, import.meta.url);
+      if (!fs.existsSync(png)) {
+        ok(false, `public/${f.png} is missing — the floor falls back to the baked terrain`);
+      } else {
+        const b = fs.readFileSync(png);
+        ok(b.readUInt32BE(16) === o.w * 32 && b.readUInt32BE(20) === o.h * 32,
+          `…and the terrain export is exactly ${o.w * 32}x${o.h * 32}`);
       }
-    }
-    ok(walls === 927, `the rock wall came across whole (${walls} squares)`);
-    ok(floorTiles === 40 * 50 - 927, "…and everything that is not wall is cave floor, not grass");
-    ok(o.tile.every((row) => row.every((t) => t === T3.Wall || t === T3.Cave)),
-      "no square of the pit reports open sky");
 
-    /* --- one room, no pocket walled off from the ladder --- */
-    const up = o.portals.find((q) => q.dest === "reach");
-    ok(up !== undefined, "a ladder leads back up to the Bone Reach");
-    ok(Math.floor(up!.x / 32) === 32 && Math.floor(up!.y / 32) === 38,
-      "…on the tile the map marks for it, which is also where you land");
-    ok(REACH_SPEC.portals["2"].dest === "orcdeep1",
-      "…and the Reach's southern descent is the other end of it");
-    {
-      const seen = Array.from({ length: o.h }, () => new Array(o.w).fill(false));
-      const st: [number, number][] = [[Math.floor(up!.x / 32), Math.floor(up!.y / 32)]];
-      seen[st[0][1]][st[0][0]] = true;
-      let reached = 1;
-      while (st.length) {
-        const [x, y] = st.pop()!;
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const i = x + dx, j = y + dy;
-          if (i < 0 || j < 0 || i >= o.w || j >= o.h || seen[j][i] || o.solid[j][i]) continue;
-          seen[j][i] = true; reached++; st.push([i, j]);
+      /* --- walls from the collision layers, cave floor everywhere else --- */
+      let walls = 0;
+      for (let y = 0; y < o.h; y++) for (let x = 0; x < o.w; x++) if (o.tile[y][x] === T3.Wall) walls++;
+      ok(walls === f.walls, `${tag}: the rock came across whole (${walls} squares)`);
+      ok(o.tile.every((row) => row.every((t) => t === T3.Wall || t === T3.Cave)),
+        "…and no square of it reports open sky");
+
+      /* --- one space, no pocket walled off from the ladder --- */
+      const up = o.portals.find((q) => q.dest === "reach");
+      ok(up !== undefined, `${tag}: a ladder leads back up to the Bone Reach`);
+      ok(Math.floor(up!.x / 32) === f.ladder[0] && Math.floor(up!.y / 32) === f.ladder[1],
+        `…on the tile the map marks for it (${f.ladder.join(",")}), which is also where you land`);
+      ok(REACH_SPEC.portals[f.glyph].dest === f.key,
+        `…and the Reach's descent '${f.glyph}' is the other end of it`);
+      {
+        const seen = Array.from({ length: o.h }, () => new Array(o.w).fill(false));
+        const st: [number, number][] = [[f.ladder[0], f.ladder[1]]];
+        seen[f.ladder[1]][f.ladder[0]] = true;
+        let reached = 1;
+        while (st.length) {
+          const [x, y] = st.pop()!;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const i = x + dx, j = y + dy;
+            if (i < 0 || j < 0 || i >= o.w || j >= o.h || seen[j][i] || o.solid[j][i]) continue;
+            seen[j][i] = true; reached++; st.push([i, j]);
+          }
         }
+        let walkable = 0;
+        for (let y = 0; y < o.h; y++) for (let x = 0; x < o.w; x++) if (!o.solid[y][x]) walkable++;
+        ok(reached === walkable, `…and every open square is reachable from it (${reached})`);
       }
-      let walkable = 0;
-      for (let y = 0; y < o.h; y++) for (let x = 0; x < o.w; x++) if (!o.solid[y][x]) walkable++;
-      ok(reached === walkable, `every open square is reachable from the ladder (${reached})`);
-      ok(o.mobPosts!.every((m) => seen[m.ty][m.tx] || o.solid[m.ty][m.tx] === false),
-        "…so no orc is walled off in a pocket of his own");
+
+      /* --- everything the map drew actually landed --- */
+      ok(o.fires.length === f.fires, `${tag}: all ${f.fires} fires are burning`);
+      ok(o.scenery.filter((c) => c.kind === "well").length === f.wells, `…all ${f.wells} wells are sunk`);
+      ok(o.scenery.filter((c) => c.kind === "boulderA" || c.kind === "boulderB").length === f.boulders,
+        `…and all ${f.boulders} black boulders stand`);
+      ok(o.scenery.some((c) => c.kind === "boulderA") && o.scenery.some((c) => c.kind === "boulderB"),
+        "…drawn from both variants rather than one stamp repeated");
+      for (const [kind, n] of Object.entries(f.head)) {
+        ok(o.mobPosts!.filter((m) => m.kind === kind).length === n, `${n} ${kind}s posted`);
+        ok(o.monsters.filter((m) => m.kind === kind).length === n, `…and all ${n} of them spawned`);
+      }
+      ok(o.monsters.length === f.total,
+        `${tag}: ${f.total} creatures and nothing else — no roamers rolled in`);
+      ok(o.monsters.every((m) => m.hx !== undefined && m.hy !== undefined && m.hr),
+        "…every one leashed to the tile the map posted him on");
+
+      /* --- the hoard --- */
+      const chest = o.structures.find((st) => st.key === "treasure");
+      ok(chest !== undefined, `${tag}: the hoard sits in it`);
+      ok(chest!.tx === f.chest[0] && chest!.ty === f.chest[1],
+        `…on (${f.chest.join(",")})`);
+      ok(o.solid[chest!.ty][chest!.tx], "…and it is furniture: you open it from the next tile");
+      ok((CHEST_PRIZES[f.key] ?? []).length === 2, "…holding two pieces of the Marrow set");
+      ok(!o.camps.some((c) => c.key === "hoard"),
+        "…with no elite detail conjured around it — the garrison on the map is the guard");
+
+      /* --- nothing stacked on anything else --- */
+      {
+        const claimed = new Map<string, string>();
+        let doubled = 0;
+        const claim = (x: number, y: number, what: string) => {
+          const k = `${x},${y}`;
+          if (claimed.has(k)) doubled++; else claimed.set(k, what);
+        };
+        for (const c of o.scenery) {
+          const fp = FOOTPRINT[c.kind];
+          for (let j = 0; j < fp.h; j++) for (let i = 0; i < fp.w; i++) claim(c.tx + i, c.ty + j, c.kind);
+        }
+        for (const fi of o.fires) claim(fi.tx, fi.ty, "fire");
+        for (const m of o.mobPosts!) claim(m.tx, m.ty, "creature");
+        for (const st of o.structures) claim(st.tx, st.ty, st.key);
+        for (const q of o.portals) claim(Math.floor(q.x / 32), Math.floor(q.y / 32), "ladder");
+        ok(doubled === 0, `${tag}: no tile carries two objects (${claimed.size} occupied)`);
+        ok([...claimed.keys()].every((k) => {
+          const [x, y] = k.split(",").map(Number);
+          return o.tile[y][x] !== T3.Wall;
+        }), "…and nothing was drawn inside the rock");
+      }
     }
 
-    /* --- everything the map drew actually landed --- */
-    ok(o.fires.length === 18, "all 18 fires are burning");
-    ok(o.scenery.filter((c) => c.kind === "well").length === 2, "both wells are sunk");
-    ok(o.scenery.filter((c) => c.kind === "boulderA" || c.kind === "boulderB").length === 7,
-      "…and all 7 black boulders stand");
-    ok(o.scenery.some((c) => c.kind === "boulderA") && o.scenery.some((c) => c.kind === "boulderB"),
-      "…drawn from both variants rather than one stamp repeated");
-    const HEAD = { orcBerserker: 16, orcShaman: 10, orcWarrior: 5 };
-    for (const [kind, n] of Object.entries(HEAD)) {
-      ok(o.mobPosts!.filter((m) => m.kind === kind).length === n, `${n} ${kind}s posted`);
-      ok(o.monsters.filter((m) => m.kind === kind).length === n, `…and all ${n} of them spawned`);
-    }
-    ok(o.monsters.length === 31, "thirty-one orcs and nothing else — no roamers rolled in");
-    ok(o.monsters.every((m) => m.hx !== undefined && m.hy !== undefined && m.hr),
-      "every one of them is leashed to the tile the map posted him on");
-
-    /* --- the hoard --- */
-    const chest = o.structures.find((st) => st.key === "treasure");
-    ok(chest !== undefined, "the hoard sits in the pit");
-    ok(chest!.tx === 8 && chest!.ty === 4, "…in the north-west corner, where it was drawn");
-    ok(o.solid[chest!.ty][chest!.tx], "…and it is furniture: you open it from the next tile");
-    ok((CHEST_PRIZES.orcdeep1 ?? []).length === 2,
-      "…holding two pieces, which is what the one-chest-one-prize rule had to give up");
-    ok(!o.camps.some((c) => c.key === "hoard"),
-      "no elite detail is conjured around it — the sixteen berserkers are the guard");
-
-    /* --- nothing stacked on anything else --- */
+    /* --- the four markers dropped on a prop stepped aside, they were not lost --- */
     {
-      const claimed = new Map<string, string>();
-      let doubled = 0;
-      const claim = (x: number, y: number, what: string) => {
-        const k = `${x},${y}`;
-        if (claimed.has(k)) doubled++;
-        else claimed.set(k, what);
-      };
-      const { FOOTPRINT } = await import("../src/gfx/sceneryArt.ts");
-      for (const c of o.scenery) {
-        const f = FOOTPRINT[c.kind];
-        for (let j = 0; j < f.h; j++) for (let i = 0; i < f.w; i++) claim(c.tx + i, c.ty + j, c.kind);
-      }
-      for (const f of o.fires) claim(f.tx, f.ty, "fire");
-      for (const m of o.mobPosts!) claim(m.tx, m.ty, "orc");
-      for (const st of o.structures) claim(st.tx, st.ty, st.key);
-      for (const q of o.portals) claim(Math.floor(q.x / 32), Math.floor(q.y / 32), "ladder");
-      ok(doubled === 0, `no tile carries two objects (${claimed.size} occupied)`);
-      ok([...claimed.keys()].every((k) => {
-        const [x, y] = k.split(",").map(Number);
-        return o.tile[y][x] !== T3.Wall;
-      }), "…and nothing was drawn inside the rock");
+      const m = worlds.minodeep1;
+      const nudged: [number, number][] = [[40, 24], [6, 6], [49, 32], [41, 34]];
+      ok(nudged.every(([x, y]) => m.mobPosts!.some((q) => q.tx === x && q.ty === y)),
+        "the four minotaurs drawn on a fire or a well stand beside it instead");
+      const onProp = m.mobPosts!.filter((q) =>
+        m.fires.some((fi) => fi.tx === q.tx && fi.ty === q.ty));
+      ok(onProp.length === 0, "…and not one of the forty-five stands in the flames");
     }
   }
 
