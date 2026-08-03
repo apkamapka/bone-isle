@@ -209,6 +209,13 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
         case "B":
           w.buildSpots.push({ tx: x, ty: y, built: null });
           break;
+        case "$":
+          // A one-time hoard, the same furniture the cave floors bury at their
+          // bottom. Solid: you open it from the next tile, you do not stand in
+          // it. What is inside is game.ts's call, keyed by world.
+          w.structures.push({ key: "treasure", tx: x, ty: y, anim: 0 });
+          solid[y][x] = true;
+          break;
         default: {
           if (spec.solids?.includes(ch)) break; // painted obstacle; collision only
           const scn = spec.scenery?.[ch];

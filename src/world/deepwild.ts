@@ -71,8 +71,11 @@ export interface LairFloor {
   treasure?: boolean;
 }
 
-/** The camps whose deepest floor hoards a piece of the Marrow set. */
-const TREASURE_FLOORS: ReadonlySet<string> = new Set(["goblin2", "orcfort2", "bastion2", "grave2", "roost3"]);
+/** The camps whose deepest floor hoards a piece of the Marrow set. The orc
+ *  fort and the dragon's roost used to be on this list; their two pieces —
+ *  the plate and the greaves — were moved into the one chest on Orc Deep -1,
+ *  so those floors are now a fight with no prize at the end. */
+const TREASURE_FLOORS: ReadonlySet<string> = new Set(["goblin2", "bastion2", "grave2"]);
 
 /**
  * The full lair catalog, derived from the camp chains. Floor sizes grow with

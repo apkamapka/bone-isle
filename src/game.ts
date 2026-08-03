@@ -1,5 +1,6 @@
 /** Global game state: the three islands, the active one, and the player. */
 import { makeWorld } from "./world/generate.ts";
+import { ORCDEEP_SPEC } from "./world/orcDeepSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC, CELLAR_SPEC } from "./world/handmade.ts";
@@ -143,13 +144,15 @@ const WILDERNESS_ROAMERS: Partial<Record<MonsterKind, number>> = { wolf: 26, war
  * main.ts reads this map in openTreasure; worlds absent here fall back to the
  * classic blade, so old saves behave exactly as before.
  */
-export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, ItemKind>>> = {
-  cave3: "marrowBlade",
-  goblin2: "marrowBoots",   // the gentlest heist
-  orcfort2: "marrowLegs",
-  bastion2: "marrowShield",
-  grave2: "marrowHelmet",
-  roost3: "marrowArmor",    // pried from under the dragon
+export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ItemKind[]>>> = {
+  cave3: ["marrowBlade"],
+  goblin2: ["marrowBoots"],   // the gentlest heist
+  bastion2: ["marrowShield"],
+  grave2: ["marrowHelmet"],
+  // Orc Deep -1 holds two pieces in the one chest. The plate and the greaves
+  // used to be the prizes on roost3 and orcfort2; they were moved here, and
+  // those two floors no longer bury anything, so the set stays unique.
+  orcdeep1: ["marrowArmor", "marrowLegs"],
 };
 
 /**
@@ -159,10 +162,8 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, ItemKind>>> = {
  */
 const HOARD_GUARDS: Readonly<Partial<Record<WorldKey, Partial<Record<MonsterKind, number>>>>> = {
   goblin2: { warWolf: 3 },
-  orcfort2: { orcBerserker: 2, orcShaman: 1 },
   bastion2: { minotaurGuard: 2, minotaurMage: 1 },
   grave2: { boneLord: 2 },
-  roost3: { cyclops: 2, minotaurGuard: 1 },
 };
 const DANGER_KEYS = Object.keys(POPULATIONS) as DangerKey[];
 
@@ -184,6 +185,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   const sanctum = makeHandmadeWorld(SANCTUM_SPEC);
   const cellar = makeHandmadeWorld(CELLAR_SPEC);
   const reach = makeHandmadeWorld(REACH_SPEC);
+  const orcdeep1 = makeHandmadeWorld(ORCDEEP_SPEC);
   const wild = makeWorld({
     key: "wild", name: "Wildlands", safe: false, w: 104, h: 80,
     buildSpots: false, npcs: false,
@@ -213,7 +215,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   // …and every camp's lair floors, each from its own salted seed. The record
   // is completed by the loop below, hence the cast: TypeScript can't see that
   // LAIRS covers exactly the remaining WorldKey members.
-  const worlds = { home, town, sanctum, cellar, reach, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
+  const worlds = { home, town, sanctum, cellar, reach, orcdeep1, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
   loadMobSheets();           // directional walk cycles for humanoid creatures

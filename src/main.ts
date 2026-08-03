@@ -1198,12 +1198,15 @@ function openTreasure(s: Structure): void {
   const id = `treasure:${cw().key}:${s.tx},${s.ty}`;
   if (game.opened.includes(id)) { flash("the chest is empty", "#bdb59c"); return; }
   game.opened.push(id);
-  // world-keyed prizes (the Marrow set on the deepest lair floors); anything
-  // unmapped falls back to the classic blade, so old saves behave identically
-  const prize: ItemKind = CHEST_PRIZES[cw().key] ?? "marrowBlade";
-  const fits = freeCap(P) >= itemWeight(prize, 1) && addItem(P.bag, prize, 1) === 0;
-  if (!fits) dropToGround(prize, 1);
-  flash(`You have found a ${ITEMS[prize].name}.`, "#ffe9a8");
+  // World-keyed prizes (the Marrow set). A chest may hold more than one piece
+  // — Orc Deep -1 buries both plate pieces together — and anything unmapped
+  // falls back to the classic blade, so old saves behave identically.
+  const prizes: readonly ItemKind[] = CHEST_PRIZES[cw().key] ?? ["marrowBlade"];
+  for (const prize of prizes) {
+    const fits = freeCap(P) >= itemWeight(prize, 1) && addItem(P.bag, prize, 1) === 0;
+    if (!fits) dropToGround(prize, 1);
+  }
+  flash(`You have found ${prizes.map((k) => ITEMS[k].name).join(" and ")}.`, "#ffe9a8");
   beep(660, 0.18, "sine", 0.06, 220);
   saveGame(game);
 }

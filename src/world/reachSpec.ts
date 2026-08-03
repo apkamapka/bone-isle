@@ -1,6 +1,9 @@
 /**
  * The Bone Reach — the hunting ground behind the Time Sage's fourth pad.
  *
+ * The orcs' descent is open: glyph `2` drops into Orc Deep -1. The minotaurs'
+ * and the dead's are cut but still sealed.
+ *
  * Traced from `mapa_srednia.tmx` (100x100). The terrain, the coastline and the
  * collision come from that file; so does every campfire, totem, creature post
  * and descent, read straight off its object layers. Trees, rock and dead wood
@@ -45,7 +48,7 @@ export const REACH_SPEC: HandmadeSpec = {
   portals: {
     P: { dest: "cellar", label: "back to the Time Sage's cellar" },
     1: { dest: "reach", label: "down among the minotaurs (sealed)", style: "caveMouth", inactive: true, floor: Tile.Dirt },
-    2: { dest: "reach", label: "down among the orcs (sealed)", style: "caveMouth", inactive: true, floor: Tile.Dirt },
+    2: { dest: "orcdeep1", label: "down among the orcs", style: "caveMouth", floor: Tile.Dirt },
     3: { dest: "reach", label: "down among the dead (sealed)", style: "caveMouth", inactive: true, floor: Tile.Dirt },
   },
   scenery: {
