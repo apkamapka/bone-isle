@@ -42,9 +42,9 @@ export interface TaskDef {
 export const TASKS: readonly TaskDef[] = [
   // --- Tier 0 ---
   {
-    id: "t_spiders", title: "Cobweb Cull",
-    desc: "Spiders choke the trail. Put down 8 of them.",
-    goal: { kind: "kill", monster: "spider", need: 8 },
+    id: "t_snakes", title: "Snake Cull",
+    desc: "Snakes choke the trail. Put down 8 of them.",
+    goal: { kind: "kill", monster: "snake", need: 8 },
     reward: { points: 2, gold: 25, exp: 40 }, reqPoints: 0,
   },
   {
@@ -80,15 +80,15 @@ export const TASKS: readonly TaskDef[] = [
   },
   // --- Tier 2 (needs 16 lifetime points) ---
   {
-    id: "t_ghosts", title: "Restless Dead",
-    desc: "Ghosts drift the deep Wildlands. Banish 12.",
-    goal: { kind: "kill", monster: "ghost", need: 12 },
+    id: "t_ghouls", title: "Restless Dead",
+    desc: "Ghouls prowl the deep Wildlands. Put 12 back in the ground.",
+    goal: { kind: "kill", monster: "ghoul", need: 12 },
     reward: { points: 5, gold: 130, exp: 240, item: "boneArrow", itemN: 20 }, reqPoints: 16,
   },
   {
-    id: "t_trolls", title: "Troll Trophy",
-    desc: "Slay 6 trolls. The Huntress pays in rubies.",
-    goal: { kind: "kill", monster: "troll", need: 6 },
+    id: "t_berserkers", title: "Berserker Trophy",
+    desc: "Slay 6 orc berserkers. The Huntress pays in rubies.",
+    goal: { kind: "kill", monster: "orcBerserker", need: 6 },
     reward: { points: 6, gold: 220, exp: 420, item: "fireRuby", itemN: 1 }, reqPoints: 16,
   },
 ];

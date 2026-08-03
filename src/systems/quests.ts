@@ -23,8 +23,8 @@ export interface Quest {
 export const quests: Quest[] = [
   {
     id: "q1", title: "Pest Control",
-    desc: "The road to the Wildlands crawls with spiders. Cull 5 of them.",
-    goal: { kind: "kill", monster: "spider", need: 5 },
+    desc: "The road to the Wildlands crawls with snakes. Cull 5 of them.",
+    goal: { kind: "kill", monster: "snake", need: 5 },
     reward: { gold: 20, exp: 30 },
     progress: 0, done: false, claimed: false,
   },
@@ -50,9 +50,9 @@ export const quests: Quest[] = [
     progress: 0, done: false, claimed: false,
   },
   {
-    id: "q5", title: "Troll Toll",
-    desc: "Deep in the Wildlands lurk trolls. Slay 3 to prove your strength.",
-    goal: { kind: "kill", monster: "troll", need: 3 },
+    id: "q5", title: "Horns of the Deep",
+    desc: "Minotaurs hold the deep caverns. Slay 3 to prove your strength.",
+    goal: { kind: "kill", monster: "minotaur", need: 3 },
     reward: { item: "amulet", itemN: 1, gold: 100, exp: 200 },
     progress: 0, done: false, claimed: false,
   },
