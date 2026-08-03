@@ -609,7 +609,7 @@ async function main(): Promise<void> {
       const { applyMonsterArmor } = await import("../src/systems/combat.ts");
       const armored = Object.values(MONSTER_DEFS).filter((d) => (d.armor ?? 0) > 0);
       ok(armored.length >= 15, `${armored.length} creatures carry an armor rating`);
-      ok(Object.values(MONSTER_DEFS).every((d) => (d.armor ?? 0) <= 20), "no creature's armor exceeds the dragon's");
+      ok(Object.values(MONSTER_DEFS).every((d) => (d.armor ?? 0) <= 28), "no creature's armor exceeds the dragon's");
       ok((MONSTER_DEFS.dragon.armor ?? 0) > (MONSTER_DEFS.goblin.armor ?? 0), "armor tracks the difficulty ladder");
       ok((MONSTER_DEFS.snake.armor ?? 0) === 0, "a bare-scaled creature wears none");
       const m = { kind: "dragon" } as never;
@@ -1000,10 +1000,9 @@ async function main(): Promise<void> {
     const { MONSTER_DEFS, MONSTER_KINDS, spawnMonster, updateMonsters } = await import("../src/entities/monsters.ts");
     const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S, TILE } = await import("../src/config.ts");
     const { killMonster } = await import("../src/systems/combat.ts");
-    // Etap 19 cut the bestiary to the kinds that own drawn artwork: 17 with a
-    // walk sheet under public/, plus the dragon, which is kept on its bake
-    // because it is the boss the whole endgame curve hangs off.
-    ok(MONSTER_KINDS.length === 18, `bestiary holds 18 kinds (17 + the dragon), got ${MONSTER_KINDS.length}`);
+    // Etap 20 added the human ladder: 18 fantastic kinds plus 19 people
+    // running from beggar to chieftain, all still on the shared placeholder.
+    ok(MONSTER_KINDS.length === 37, `bestiary holds 37 kinds (18 + 19 humans), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -1018,7 +1017,7 @@ async function main(): Promise<void> {
     // provoke one and then retreat. What must hold: an UNPROVOKED monster never
     // attacks from beyond aggro, whatever its own range.
     const shooters = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].ranged);
-    ok(shooters.length === 5, `five distance fighters in the bestiary, got ${shooters.length}`);
+    ok(shooters.length === 8, `eight distance fighters in the bestiary, got ${shooters.length}`);
     ok(MONSTER_AGGRO_RANGE === 6 * TILE, "aggro range is a tight 6 tiles");
     {
       // the minotaur archer's reach is 300 px (9.4 tiles) — well past aggro (192).
@@ -2082,18 +2081,19 @@ async function main(): Promise<void> {
       "every townsperson stands somewhere you can reach them");
   }
 
-  console.log("Bandit — the tier-1 creature replacing the rat:");
+  console.log("Beggar — the floor of the ladder (the bandit's old job):");
   {
     const { MONSTER_DEFS, mobSprite, setMobArt } = await import("../src/entities/monsters.ts");
-    const b = MONSTER_DEFS.bandit;
-    ok(b !== undefined, "the bandit is a defined creature");
+    const b = MONSTER_DEFS.beggar;
+    ok(b !== undefined, "the beggar is a defined creature");
     ok(!("rat" in MONSTER_DEFS), "the rat is gone, not merely hidden");
 
     // "weak, from level 1": it must sit at the bottom of the ladder. Compare
     // against every other creature rather than hard-coding numbers, so the
-    // claim survives future rebalancing.
+    // claim survives future rebalancing. Etap 20 moved the bandit up to
+    // level 6 and put the beggar underneath it.
     const others = (Object.keys(MONSTER_DEFS) as Array<keyof typeof MONSTER_DEFS>)
-      .filter((k) => k !== "bandit")
+      .filter((k) => k !== "beggar")
       .map((k) => MONSTER_DEFS[k]);
     ok(others.every((o) => b.hp <= o.hp), "no creature has less health");
     ok(others.every((o) => b.exp <= o.exp), "none is worth less experience");
@@ -2103,13 +2103,13 @@ async function main(): Promise<void> {
     ok(b.gold[1] > 0, "being a person, it carries coin");
 
     // artwork: baked fallback headless, and installing a PNG must take over
-    ok(mobSprite("bandit") === b.spr, "headless it draws with the baked fallback");
+    ok(mobSprite("beggar") === b.spr, "headless it draws with the baked fallback");
     const art = document.createElement("canvas");
     art.width = 30; art.height = 53;
-    setMobArt("bandit", art);
-    ok(mobSprite("bandit") === art, "loaded artwork wins");
-    setMobArt("bandit", null);
-    ok(mobSprite("bandit") === b.spr, "clearing it restores the fallback");
+    setMobArt("beggar", art);
+    ok(mobSprite("beggar") === art, "loaded artwork wins");
+    setMobArt("beggar", null);
+    ok(mobSprite("beggar") === b.spr, "clearing it restores the fallback");
 
     // it must actually be in the world the newcomer reaches first
     const { populateWorld: pop } = await import("../src/game.ts");
@@ -2330,8 +2330,8 @@ async function main(): Promise<void> {
 
     // it stays at the bottom of the ladder: new art, same creature
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
-    ok(MONSTER_DEFS.snake.exp <= 10 && MONSTER_DEFS.snake.hp <= 20,
-      "the snake is still a level 1 creature");
+    ok(MONSTER_DEFS.snake.exp <= 25 && MONSTER_DEFS.snake.hp <= 40,
+      "the snake is still an opening-band creature");
   }
 
   console.log("Bodies on the ground:");
@@ -2819,14 +2819,22 @@ async function main(): Promise<void> {
     ok(png("mob-skeleton-warrior-walk.png")[0] / 9 > png("mob-skeleton-walk.png")[0] / 9,
       "the warrior is wider than the bare skeleton — the helmet and dagger stick out");
 
-    /* --- stats: the warrior shadows the minotaur guard, the demon the dragon --- */
+    /* --- stats: the warrior twins the gladiator, the demon shadows the dragon ---
+     * Etap 20 broke the old pairing. The skeleton warrior used to be the
+     * minotaur guard's equal; the re-tier sent the guard to level 36 and left
+     * the warrior at 28, where its new twin is the gladiator — the same fight
+     * fought by a man instead of a corpse. Guard vs warrior is now a gap, and
+     * asserting it stays one is what keeps the two bands from re-merging. */
     const guard = MONSTER_DEFS.minotaurGuard;
     const warrior = MONSTER_DEFS.skeletonWarrior;
+    const gladiator = MONSTER_DEFS.gladiator;
     const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= b * tol;
-    ok(near(warrior.hp, guard.hp, 0.1), "the skeleton warrior matches the guard's HP");
-    ok(near(warrior.exp, guard.exp, 0.1), "…and its experience");
-    ok(near(warrior.dmg[0], guard.dmg[0], 0.15) && near(warrior.dmg[1], guard.dmg[1], 0.15),
+    ok(near(warrior.hp, gladiator.hp, 0.1), "the skeleton warrior matches the gladiator's HP");
+    ok(near(warrior.exp, gladiator.exp, 0.1), "…and its experience");
+    ok(near(warrior.dmg[0], gladiator.dmg[0], 0.15) && near(warrior.dmg[1], gladiator.dmg[1], 0.15),
       "…and both ends of its damage roll");
+    ok(guard.hp > warrior.hp * 1.2 && guard.exp > warrior.exp * 1.2,
+      "…and the minotaur guard now stands a clear band above it");
 
     const dragon = MONSTER_DEFS.dragon;
     const demon = MONSTER_DEFS.demonSkeleton;
@@ -2834,8 +2842,8 @@ async function main(): Promise<void> {
       "the demon skeleton is below the dragon but in its weight class");
     ok(demon.exp < dragon.exp && demon.dmg[1] < dragon.dmg[1],
       "…worth less and hitting softer than the boss");
-    ok(demon.hp > MONSTER_DEFS.minotaurGuard.hp * 2,
-      "…yet clear of the minotaur guard, the next thing down");
+    ok(demon.hp > MONSTER_DEFS.minotaurGuard.hp && demon.exp > MONSTER_DEFS.minotaurMage.exp,
+      "…yet clear of the minotaur ranks, the next things down");
 
     // Both are melee. A ranged block on either would let it out-range the bow
     // it is meant to be fought with, and the demon has no breath to justify it.
@@ -3464,6 +3472,72 @@ async function main(): Promise<void> {
         m.fires.some((fi) => fi.tx === q.tx && fi.ty === q.ty));
       ok(onProp.length === 0, "…and not one of the forty-five stands in the flames");
     }
+  }
+
+  console.log("Etap 20 — the human ladder and the re-tiered bestiary:");
+  {
+    const M = await import("../src/entities/monsters.ts");
+    const { SPR } = await import("../src/gfx/sprites.ts");
+    const fs = await import("node:fs");
+    const D = M.MONSTER_DEFS;
+
+    /* --- the nineteen new people exist and are ordered --- */
+    const LOW = ["beggar", "vagrant", "thief", "poacher", "bandit",
+      "smuggler", "cutthroat", "deserter", "brigand", "highwayman"] as const;
+    const HIGH = ["mercenary", "corsair", "wildWarrior", "amazon", "hunter",
+      "gladiator", "barbarian", "raider", "warlord", "chieftain"] as const;
+    const HUMANS = [...LOW, ...HIGH];
+    ok(HUMANS.every((k) => D[k] !== undefined), `all ${HUMANS.length} human kinds are defined`);
+    let expRises = true, hpRises = true;
+    for (let i = 1; i < HUMANS.length; i++) {
+      if (D[HUMANS[i]].exp <= D[HUMANS[i - 1]].exp) expRises = false;
+      // HP is allowed to dip one rung at a time — the cutthroat and the two
+      // shooters are deliberately glassier than the rung below them, which is
+      // the whole point of those archetypes. Over three rungs it must climb.
+      if (i >= 3 && D[HUMANS[i]].hp <= D[HUMANS[i - 3]].hp) hpRises = false;
+    }
+    ok(expRises, "the human ladder's experience rises at every rung");
+    ok(hpRises, "…and its health climbs across every three-rung span");
+    ok(D.beggar.hp < D.chieftain.hp / 40, "the ladder spans a real range, beggar to chieftain");
+
+    /* --- one placeholder, shared, until each gets its own art --- */
+    const placeheld = HUMANS.filter((k) => D[k].spr === SPR.humanFoe);
+    ok(placeheld.length === HUMANS.length - 1,
+      `every new human shares one placeholder bake (${placeheld.length}), the bandit keeps its own`);
+    ok(D.bandit.spr !== SPR.humanFoe, "the bandit already has art and does not regress to the placeholder");
+    ok(M.mobSprite("chieftain") === SPR.humanFoe, "…and it is what actually draws until a PNG lands");
+
+    /* --- planning stage: NOT placed in the world yet --- */
+    const gameSrc = fs.readFileSync(new URL("../src/game.ts", import.meta.url), "utf8");
+    ok(HUMANS.filter((k) => k !== "bandit").every((k) => !gameSrc.includes(`${k}:`)),
+      "no new human is wired into a spawn roster yet — placement is a later step");
+    ok(HUMANS.filter((k) => k !== "bandit").every((k) => D[k].loot.length === 0),
+      "…and none carries a loot table yet either");
+    ok(HUMANS.every((k) => M.rollLoot(k).items !== undefined), "rolling an empty table still returns cleanly");
+
+    /* --- the re-tier: myth now outranks men of the same name --- */
+    ok(D.goblin.hp > D.highwayman.hp && D.skeleton.hp >= D.highwayman.hp,
+      "a goblin and a skeleton both outweigh the best of the road vermin");
+    ok(D.goblin.exp > 100 && D.skeleton.exp > 100,
+      "…and they pay like the level-15+ creatures they now are");
+    ok(D.mercenary.hp === D.goblin.hp && D.mercenary.exp === D.goblin.exp,
+      "the two families are interchangeable at equal level (mercenary = goblin)");
+    ok(D.chieftain.exp > D.minotaurMage.exp && D.chieftain.hp < D.demonSkeleton.hp,
+      "the top human slots between the minotaur mage and the demon skeleton");
+
+    /* --- the three new shooters, and the reason the poacher exists --- */
+    const shooters = M.MONSTER_KINDS.filter((k) => D[k].ranged);
+    ok(["poacher", "amazon", "hunter"].every((k) => shooters.includes(k as never)),
+      "the poacher, the amazon and the hunter all fight at distance");
+    const earliest = shooters.reduce((a, b) => (D[a].hp <= D[b].hp ? a : b));
+    ok(earliest === "poacher", "the poacher is the first shooter the player meets, by a wide margin");
+    ok((D.poacher.ranged?.range ?? 0) < (D.hunter.ranged?.range ?? 0),
+      "…with the shortest reach of the three");
+
+    /* --- nothing outruns a retreat, at any level --- */
+    const { PLAYER_BASE_SPEED } = await import("../src/config.ts");
+    ok(M.MONSTER_KINDS.every((k) => D[k].speed < PLAYER_BASE_SPEED),
+      "no creature in the bestiary is faster than a level 1 character on foot");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

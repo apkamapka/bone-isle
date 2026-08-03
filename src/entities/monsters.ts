@@ -164,112 +164,256 @@ export function monsterTierOf(hp: number): number {
 }
 
 export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
-  // Tier 1, the creature a fresh character meets first. A person rather than
-  // vermin, so it carries coin and the odd bit of kit — but the stats stay at
-  // the very bottom of the ladder: a level 1 player must be able to win.
+  /* ================================================================== *
+   *  THE HUMAN LADDER — levels 1-14: vermin of the road
+   *
+   *  Everything here is a person, and every one of them shares the
+   *  `humanFoe` placeholder bake until its own artwork exists. Stats are
+   *  read straight off the budget curves above at the level named in each
+   *  comment, then bent by archetype: a shooter trades HP and melee for
+   *  reach, a cutthroat trades HP for damage, an armoured rank trades speed
+   *  for armor. Nothing here carries loot yet — the tables come with the art.
+   * ================================================================== */
+  // lvl 1. The floor of the game: it must not be able to kill a fresh
+  // character even if the player walks away from the keyboard mid-fight.
+  beggar: {
+    spr: SPR.humanFoe, hp: 15, dmg: [3, 7], speed: 58, atkRate: 2.0, exp: 10, gold: [0, 2], danger: 0.02,
+    loot: [],
+  },
+  // lvl 2
+  vagrant: {
+    spr: SPR.humanFoe, hp: 25, dmg: [3, 9], speed: 60, atkRate: 2.0, exp: 15, gold: [0, 3], danger: 0.04, armor: 1,
+    loot: [],
+  },
+  // lvl 3. Quick and light — the first creature that can actually run the
+  // player down, which is what teaches that speed is a stat.
+  thief: {
+    spr: SPR.humanFoe, hp: 30, dmg: [4, 11], speed: 78, atkRate: 2.0, exp: 25, gold: [2, 6], danger: 0.05, armor: 1,
+    loot: [],
+  },
+  // lvl 5. THE first shooter in the game, and the reason it exists: with the
+  // spiders gone nothing taught kiting before the orc archer on cave1, which
+  // is twenty levels too late. A sling: short reach, weak in melee.
+  poacher: {
+    spr: SPR.humanFoe, hp: 45, dmg: [3, 8], speed: 66, atkRate: 2.0, exp: 40, gold: [2, 6], danger: 0.08, armor: 1,
+    ranged: { range: 160, dmg: [6, 17], color: "#a89a72" }, // slung stones
+    loot: [],
+  },
+  // lvl 6. Promoted out of the level-1 slot it used to hold: the bandit is
+  // now the "you can fight" checkpoint rather than the tutorial dummy.
   bandit: {
-    spr: SPR.rat, hp: 14, dmg: [1, 6], speed: 62, atkRate: 2.0, exp: 8, gold: [1, 4], danger: 0.06, armor: 1,
-    // Etap 19: silk used to come off the two spiders and nothing else, and the
-    // Alchemy Tower prices every research row in it. With the spiders gone the
-    // supply moved onto the two commonest early creatures — the bandit carries
-    // it as stolen cloth, the goblin as loot from a raided pack.
+    spr: SPR.rat, hp: 65, dmg: [7, 17], speed: 62, atkRate: 2.0, exp: 45, gold: [2, 8], danger: 0.06, armor: 3,
     loot: [{ kind: "hpPotion", chance: 0.08, n: [1, 1] }, { kind: "leatherArmor", chance: 0.03, n: [1, 1] },
            { kind: "silk", chance: 0.5, n: [1, 2] }],
   },
+  // lvl 8
+  smuggler: {
+    spr: SPR.humanFoe, hp: 85, dmg: [8, 21], speed: 64, atkRate: 2.0, exp: 60, gold: [4, 12], danger: 0.12, armor: 3,
+    loot: [],
+  },
+  // lvl 9. Glass cannon: hits a rank above its HP and moves faster than
+  // anything else at this depth, so it must be answered rather than tanked.
+  cutthroat: {
+    spr: SPR.humanFoe, hp: 80, dmg: [9, 23], speed: 80, atkRate: 2.0, exp: 80, gold: [4, 10], danger: 0.15, armor: 4,
+    loot: [],
+  },
+  // lvl 11. The first creature in real armour — flat reduction bites hardest
+  // against a hail of weak blows, so this is where a low-skill character
+  // learns its weapon matters.
+  deserter: {
+    spr: SPR.humanFoe, hp: 125, dmg: [10, 28], speed: 58, atkRate: 2.0, exp: 90, gold: [5, 12], danger: 0.18, armor: 7,
+    loot: [],
+  },
+  // lvl 12
+  brigand: {
+    spr: SPR.humanFoe, hp: 125, dmg: [11, 30], speed: 66, atkRate: 2.0, exp: 100, gold: [6, 14], danger: 0.2, armor: 6,
+    loot: [],
+  },
+  // lvl 14. The bridge into the fantastic bestiary: beat this and the
+  // skeletons and goblins at 15-16 are the next honest step.
+  highwayman: {
+    spr: SPR.humanFoe, hp: 160, dmg: [13, 34], speed: 70, atkRate: 2.0, exp: 130, gold: [8, 18], danger: 0.25, armor: 7,
+    loot: [],
+  },
+
+  /* ================================================================== *
+   *  THE FANTASTIC BESTIARY, lower rungs — levels 15-22
+   *
+   *  Re-tiered wholesale (Etap 20). In Tibia these are level-8 fodder; here
+   *  a goblin is a level-16 monster and a skeleton a level-15 one, because
+   *  a creature out of myth losing to a man with a knife reads wrong.
+   * ================================================================== */
+  // lvl 3. The one animal left, and the only creature that never wore armour:
+  // it stays down in the opening band beside the vagrants.
   snake: {
-    spr: SPR.snake, hp: 14, dmg: [2, 7], speed: 68, atkRate: 2.0, exp: 8, gold: [0, 1], danger: 0.1, resist: { earth: 0.6, ice: 1.5 },
+    spr: SPR.snake, hp: 30, dmg: [4, 11], speed: 68, atkRate: 2.0, exp: 20, gold: [0, 2], danger: 0.1, resist: { earth: 0.6, ice: 1.5 },
     loot: [{ kind: "venomGland", chance: 0.25, n: [1, 1] }],
   },
+  // lvl 15. Slowest thing in the game — it is meant to be outwalked, which is
+  // what makes fighting one a choice rather than an ambush.
   skeleton: {
-    spr: SPR.skeleton, hp: 34, dmg: [4, 11], speed: 40, atkRate: 2.0, exp: 18, gold: [1, 4], danger: 0.3, armor: 2, resist: { shadow: 0.6, fire: 1.3 },
+    spr: SPR.skeleton, hp: 160, dmg: [14, 36], speed: 48, atkRate: 2.0, exp: 135, gold: [1, 4], danger: 0.3, armor: 7, resist: { shadow: 0.6, fire: 1.3 },
     loot: [{ kind: "bones", chance: 0.9, n: [1, 3] }],
   },
+  // lvl 16
   goblin: {
-    spr: SPR.goblin, hp: 52, dmg: [6, 18], speed: 68, atkRate: 2.0, exp: 30, gold: [3, 8], danger: 0.4, armor: 2,
+    spr: SPR.goblin, hp: 175, dmg: [14, 38], speed: 70, atkRate: 2.0, exp: 150, gold: [3, 8], danger: 0.4, armor: 7,
     loot: [{ kind: "meat", chance: 0.4, n: [1, 1] }, { kind: "hpPotion", chance: 0.12, n: [1, 1] },
            { kind: "silk", chance: 0.5, n: [1, 2] }],
   },
+  // lvl 16. The human ladder's answer to the goblin, stat for stat — the two
+  // families are meant to be interchangeable at equal level.
+  mercenary: {
+    spr: SPR.humanFoe, hp: 175, dmg: [14, 38], speed: 62, atkRate: 2.0, exp: 150, gold: [8, 18], danger: 0.3, armor: 9,
+    loot: [],
+  },
+  // lvl 18
+  corsair: {
+    spr: SPR.humanFoe, hp: 190, dmg: [16, 42], speed: 72, atkRate: 2.0, exp: 185, gold: [10, 22], danger: 0.35, armor: 9,
+    loot: [],
+  },
+  // lvl 20. No armour at all, and more HP than anything near it: the mirror
+  // image of the deserter, and a fight your weapon choice barely changes.
+  wildWarrior: {
+    spr: SPR.humanFoe, hp: 250, dmg: [18, 46], speed: 66, atkRate: 2.0, exp: 200, gold: [8, 18], danger: 0.4,
+    loot: [],
+  },
+  // lvl 20
   ghoul: {
-    spr: SPR.ghoul, hp: 85, dmg: [7, 19], speed: 60, atkRate: 2.0, exp: 45, gold: [2, 8], danger: 0.5, armor: 3, resist: { shadow: 0.5, fire: 1.4 },
+    spr: SPR.ghoul, hp: 240, dmg: [18, 46], speed: 60, atkRate: 2.0, exp: 200, gold: [2, 8], danger: 0.5, armor: 9, resist: { shadow: 0.5, fire: 1.4 },
     loot: [{ kind: "bones", chance: 0.8, n: [1, 3] }, { kind: "ghoulClaw", chance: 0.2, n: [1, 1] }],
   },
+  // lvl 21
   orc: {
-    spr: SPR.orc, hp: 90, dmg: [8, 23], speed: 56, atkRate: 2.0, exp: 55, gold: [6, 14], danger: 0.62, armor: 4,
+    spr: SPR.orc, hp: 240, dmg: [18, 48], speed: 58, atkRate: 2.0, exp: 215, gold: [6, 14], danger: 0.62, armor: 11,
     loot: [{ kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "ironSword", chance: 0.06, n: [1, 1] }, { kind: "fireRuby", chance: 0.05, n: [1, 1] }],
   },
+  // lvl 22. Same fight as an orc warrior, wearing the same iron and swinging
+  // on the same two-second beat — the armour is what the rank is, not the
+  // goblin under it.
+  goblinLegionary: {
+    spr: SPR.goblin, hp: 270, dmg: [19, 51], speed: 64, atkRate: 2.0, exp: 230, gold: [8, 18], danger: 0.6, armor: 14,
+    loot: [],
+  },
+  // lvl 22. Thrown knives: real reach, but the shortest of any shooter, so
+  // she has to be chased rather than merely walked away from.
+  amazon: {
+    spr: SPR.humanFoe, hp: 220, dmg: [10, 26], speed: 74, atkRate: 2.0, exp: 245, gold: [10, 22], danger: 0.45, armor: 9,
+    ranged: { range: 190, dmg: [22, 57] },
+    loot: [],
+  },
+
+  /* ================================================================== *
+   *  MID LADDER — levels 25-32
+   * ================================================================== */
+  // lvl 25
   orcArcher: {
-    spr: SPR.orcArcher, hp: 80, dmg: [5, 13], speed: 64, atkRate: 2.0, exp: 58, gold: [5, 12], danger: 0.55, armor: 3,
-    ranged: { range: 220, dmg: [6, 17], color: "#b98a4e" }, // crossbow bolts
+    spr: SPR.orcArcher, hp: 240, dmg: [12, 29], speed: 64, atkRate: 2.0, exp: 280, gold: [5, 12], danger: 0.55, armor: 10,
+    ranged: { range: 220, dmg: [24, 64], color: "#b98a4e" }, // crossbow bolts
     loot: [{ kind: "boneArrow", chance: 0.4, n: [2, 6] }, { kind: "meat", chance: 0.3, n: [1, 1] }],
   },
-  // Same fight as an orc warrior, wearing the same iron and swinging on the same
-  // two-second beat — the armour is what the rank is, not the goblin under it.
-  // Marginally quicker and marginally softer than the orc, which is the goblin
-  // showing through: a smaller frame carries plate better but takes a hit worse.
-  goblinLegionary: {
-    spr: SPR.goblin, hp: 122, dmg: [10, 27], speed: 62, atkRate: 2.0, exp: 76, gold: [8, 18], danger: 0.6, armor: 8,
+  // lvl 25. The longest human reach in the game, and it out-ranges its own
+  // awareness by a wide margin — provoke one and retreat and it punishes you.
+  hunter: {
+    spr: SPR.humanFoe, hp: 240, dmg: [12, 29], speed: 68, atkRate: 2.0, exp: 305, gold: [10, 24], danger: 0.5, armor: 9,
+    ranged: { range: 280, dmg: [24, 64] },
     loot: [],
   },
+  // lvl 26
   orcWarrior: {
-    spr: SPR.orcWarrior, hp: 125, dmg: [10, 28], speed: 60, atkRate: 2.0, exp: 78, gold: [8, 18], danger: 0.6, armor: 8,
+    spr: SPR.orcWarrior, hp: 335, dmg: [22, 59], speed: 60, atkRate: 2.0, exp: 295, gold: [8, 18], danger: 0.6, armor: 16,
     loot: [{ kind: "chainArmor", chance: 0.04, n: [1, 1] }, { kind: "ironSword", chance: 0.08, n: [1, 1] }, { kind: "meat", chance: 0.4, n: [1, 1] }],
   },
+  // lvl 27
   minotaur: {
-    spr: SPR.minotaur, hp: 140, dmg: [12, 33], speed: 60, atkRate: 2.0, exp: 95, gold: [8, 18], danger: 0.8, armor: 6,
+    spr: SPR.minotaur, hp: 365, dmg: [23, 61], speed: 60, atkRate: 2.0, exp: 310, gold: [8, 18], danger: 0.8, armor: 14,
     loot: [{ kind: "bones", chance: 0.6, n: [1, 3] }, { kind: "meat", chance: 0.4, n: [1, 2] }, { kind: "ironSword", chance: 0.05, n: [1, 1] }],
   },
+  // lvl 28. No longer the minotaur guard's twin (it was, before the re-tier):
+  // the guard climbed to 36 and this one holds 28 as the heavy of its own
+  // band — same silhouette, eight levels apart.
+  skeletonWarrior: {
+    spr: SPR.skeleton, hp: 365, dmg: [24, 63], speed: 58, atkRate: 2.0, exp: 345, gold: [14, 30], danger: 0.85, armor: 18, resist: { shadow: 0.6, fire: 1.3 },
+    loot: [],
+  },
+  // lvl 28. Shield and plate: the human wall, and the armour rating is the
+  // whole fight — a trained character walks through it, an untrained one does not.
+  gladiator: {
+    spr: SPR.humanFoe, hp: 365, dmg: [24, 63], speed: 64, atkRate: 2.0, exp: 345, gold: [14, 30], danger: 0.6, armor: 15,
+    loot: [],
+  },
+  // lvl 30
   minotaurArcher: {
-    spr: SPR.minotaurArcher, hp: 130, dmg: [6, 16], speed: 60, atkRate: 2.0, exp: 100, gold: [8, 16], danger: 0.68, armor: 4,
-    ranged: { range: 300, dmg: [9, 26], color: "#efe9d6" }, // bone-tipped bolts
+    spr: SPR.minotaurArcher, hp: 325, dmg: [14, 35], speed: 60, atkRate: 2.0, exp: 385, gold: [8, 16], danger: 0.68, armor: 14,
+    ranged: { range: 300, dmg: [29, 75], color: "#efe9d6" }, // bone-tipped bolts
     loot: [{ kind: "boneArrow", chance: 0.6, n: [3, 10] }, { kind: "longbow", chance: 0.03, n: [1, 1] }],
   },
+  // lvl 30. The most HP of any human, the least armour of its tier: it dies
+  // to a good weapon and grinds down a bad one.
+  barbarian: {
+    spr: SPR.humanFoe, hp: 440, dmg: [26, 67], speed: 70, atkRate: 2.0, exp: 365, gold: [12, 28], danger: 0.65, armor: 14,
+    loot: [],
+  },
+  // lvl 31
   orcShaman: {
-    spr: SPR.orcShaman, hp: 110, dmg: [5, 13], speed: 52, atkRate: 2.0, exp: 115, gold: [10, 22], danger: 0.72, armor: 2, resist: { fire: 0.6, ice: 1.4 },
-    ranged: { range: 260, dmg: [8, 20], color: "#8a6cff" }, // crackling magic bolt
+    spr: SPR.orcShaman, hp: 300, dmg: [14, 36], speed: 52, atkRate: 2.0, exp: 440, gold: [10, 22], danger: 0.72, armor: 12, resist: { fire: 0.6, ice: 1.4 },
+    ranged: { range: 260, dmg: [30, 78], color: "#8a6cff" }, // crackling magic bolt
     loot: [{ kind: "fireCrystal", chance: 0.4, n: [1, 3] }, { kind: "healCrystal", chance: 0.2, n: [1, 2] }, { kind: "fireRuby", chance: 0.1, n: [1, 1] }],
   },
+  // lvl 32
+  raider: {
+    spr: SPR.humanFoe, hp: 440, dmg: [27, 71], speed: 68, atkRate: 2.0, exp: 420, gold: [14, 32], danger: 0.7, armor: 15,
+    loot: [],
+  },
+
+  /* ================================================================== *
+   *  TOP OF THE LADDER — levels 35-50
+   * ================================================================== */
+  // lvl 35. Fastest creature in the game at 88 — still under the player's
+  // base 116, because nothing should be able to outrun a retreat outright.
   orcBerserker: {
-    spr: SPR.orcBerserker, hp: 210, dmg: [15, 38], speed: 88, atkRate: 2.0, exp: 155, gold: [12, 26], danger: 0.8, armor: 7,
+    spr: SPR.orcBerserker, hp: 495, dmg: [29, 78], speed: 88, atkRate: 2.0, exp: 460, gold: [12, 26], danger: 0.8, armor: 18,
     loot: [{ kind: "battleAxe", chance: 0.06, n: [1, 1] }, { kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "fireRuby", chance: 0.12, n: [1, 1] }],
   },
+  // lvl 36
   minotaurGuard: {
-    spr: SPR.minotaurGuard, hp: 280, dmg: [16, 42], speed: 56, atkRate: 2.0, exp: 210, gold: [16, 34], danger: 0.85, armor: 12,
+    spr: SPR.minotaurGuard, hp: 565, dmg: [30, 80], speed: 56, atkRate: 2.0, exp: 480, gold: [16, 34], danger: 0.85, armor: 22,
     loot: [{ kind: "steelShield", chance: 0.05, n: [1, 1] }, { kind: "boneHelmet", chance: 0.04, n: [1, 1] }, { kind: "chainArmor", chance: 0.06, n: [1, 1] }, { kind: "bones", chance: 0.6, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] }],
   },
-  // A minotaur guard's equal, built out of the skeleton instead of the bull:
-  // same wall of HP, same heavy two-second swing, marginally quicker on its
-  // feet because it carries no shield. Pure melee — the dagger is a stabbing
-  // weapon, not a thrown one, so it must close the distance like the guard.
-  skeletonWarrior: {
-    spr: SPR.skeleton, hp: 275, dmg: [15, 41], speed: 58, atkRate: 2.0, exp: 205, gold: [14, 30], danger: 0.85, armor: 10, resist: { shadow: 0.6, fire: 1.3 },
+  // lvl 36. The human mini-boss: the heaviest armour on a person, meant to
+  // stand at the middle of a camp with a pack of raiders around him.
+  warlord: {
+    spr: SPR.humanFoe, hp: 540, dmg: [30, 80], speed: 60, atkRate: 2.0, exp: 555, gold: [20, 42], danger: 0.8, armor: 20,
     loot: [],
   },
+  // lvl 37
   minotaurMage: {
-    spr: SPR.minotaurMage, hp: 220, dmg: [8, 20], speed: 52, atkRate: 2.0, exp: 240, gold: [18, 38], danger: 0.9, armor: 4, resist: { storm: 0.5, earth: 1.4 },
-    ranged: { range: 280, dmg: [12, 32], color: "#ff8a3a", wide: true }, // fire bolt
+    spr: SPR.minotaurMage, hp: 410, dmg: [17, 42], speed: 52, atkRate: 2.0, exp: 605, gold: [18, 38], danger: 0.9, armor: 16, resist: { storm: 0.5, earth: 1.4 },
+    ranged: { range: 280, dmg: [35, 91], color: "#ff8a3a", wide: true }, // fire bolt
     loot: [{ kind: "fireCrystal", chance: 0.6, n: [2, 5] }, { kind: "fireRuby", chance: 0.2, n: [1, 1] }, { kind: "ring", chance: 0.06, n: [1, 1] }],
   },
-  // Second-hardest thing in the game, and deliberately shaped as the dragon's
-  // shadow: roughly three quarters of its damage, four fifths of its HP, three
-  // quarters of its experience. The difference that matters is reach — the
-  // dragon breathes, this one has only claws, so it can be fought at a bow's
-  // length in a way the dragon never allows. It is slightly faster to make the
-  // closing distance cost you something.
-  demonSkeleton: {
-    spr: SPR.skeleton, hp: 780, dmg: [36, 95], speed: 62, atkRate: 2.0, exp: 700, gold: [45, 105], danger: 0.97, armor: 16, resist: { fire: 0.5, shadow: 0.3, storm: 1.5 },
+  // lvl 40. The top of the human ladder, and deliberately the demon
+  // skeleton's equal in weight class: the two families meet at the end.
+  chieftain: {
+    spr: SPR.humanFoe, hp: 685, dmg: [33, 88], speed: 64, atkRate: 2.0, exp: 680, gold: [24, 52], danger: 0.9, armor: 21,
     loot: [],
   },
-  // The boss. One dragon nests in the deepest reaches of Bone Caverns -3
-  // (Tibia's Dragon Lair feel): a wall for anyone under ~level 15, a real but
-  // winnable fight at 18-20 with good gear and kite-and-shoot. Its lair refills
-  // on a long clock instead of the standard 12 s trickle.
+  // lvl 40. Second-hardest thing in the game and shaped as the dragon's
+  // shadow: about seven tenths of its HP, three quarters of its experience.
+  // The difference that matters is reach — the dragon breathes, this one has
+  // only claws, so it can be fought at a bow's length in a way the dragon
+  // never allows. It sits at 40 rather than 35 because nothing else would
+  // occupy the stretch between the minotaur mage and the boss.
+  demonSkeleton: {
+    spr: SPR.skeleton, hp: 710, dmg: [33, 88], speed: 62, atkRate: 2.0, exp: 655, gold: [45, 105], danger: 0.97, armor: 24, resist: { fire: 0.5, shadow: 0.3, storm: 1.5 },
+    loot: [],
+  },
+  // lvl 50. The boss. A brute that charges in, mauls with its paw for heavy
+  // hits, AND breathes fire at range — no backing away and plinking. Its lair
+  // refills on a long clock instead of the standard trickle.
   dragon: {
-    // The hardest thing in the game and now it plays like it: a brute that
-    // charges in, mauls with its paw (melee) for heavy hits, and breathes fire
-    // at range — no more backing away and plinking. Both rolls reach past 100
-    // on the high end, so a careless approach genuinely hurts.
-    spr: SPR.dragon, hp: 1000, dmg: [45, 120], speed: 60, atkRate: 2.0, exp: 900, gold: [60, 140], danger: 0.99, armor: 20, resist: { fire: 0.25, ice: 1.6 },
-    ranged: { range: 320, dmg: [38, 100], color: "#ff5a2a", wide: true, brute: true }, // dragon fire
+    spr: SPR.dragon, hp: 1000, dmg: [41, 109], speed: 60, atkRate: 2.0, exp: 900, gold: [60, 140], danger: 0.99, armor: 28, resist: { fire: 0.25, ice: 1.6 },
+    ranged: { range: 320, dmg: [47, 122], color: "#ff5a2a", wide: true, brute: true }, // dragon fire
     respawnS: 600,
     loot: [
       { kind: "dragonHam", chance: 0.9, n: [2, 5] },

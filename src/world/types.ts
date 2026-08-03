@@ -218,9 +218,22 @@ export interface GroundItem {
  * bottom of the difficulty curve hangs off it.
  */
 export type MonsterKind =
-  | "bandit" | "skeleton" | "goblin"
+  // The human ladder, low half: vermin of the road, levels 1-14. These are the
+  // creatures the fantastic bestiary used to cover and no longer does — with
+  // goblins and skeletons pushed up to level 15+, something has to hold the
+  // opening stretch, and a person with a knife is the honest answer.
+  | "beggar" | "vagrant" | "thief" | "poacher" | "bandit"
+  | "smuggler" | "cutthroat" | "deserter" | "brigand" | "highwayman"
+  // The human ladder, upper half: trained fighters, levels 16-40. They run
+  // beside the fantastic creatures rather than under them, so the whole
+  // mid-game has two parallel families instead of one.
+  | "mercenary" | "corsair" | "wildWarrior" | "amazon" | "hunter"
+  | "gladiator" | "barbarian" | "raider" | "warlord" | "chieftain"
+  // The fantastic bestiary. Deliberately NOT Tibia's tiering: there a goblin
+  // is a level-8 nuisance, here it is a level-16 monster, because a creature
+  // out of myth should outclass a man with a sword rather than lose to one.
+  | "skeleton" | "goblin"
   | "orc" | "minotaur"
-  // Etap 8 — the extended bestiary (Tibia 8.6-inspired tiers to ~level 20)
   | "snake" | "ghoul" | "orcArcher" | "orcWarrior"
   | "minotaurArcher" | "orcShaman" | "orcBerserker"
   | "minotaurGuard" | "minotaurMage"

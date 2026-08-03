@@ -178,6 +178,30 @@ export const PLAYER_MAP: readonly string[] = [
 
 export const SPR = {
   player: bake(PLAYER_MAP),
+  /**
+   * PLACEHOLDER, shared by every creature of the human ladder that has no art
+   * of its own yet (nineteen of them as of Etap 20). Deliberately ugly and
+   * deliberately identical: a slate-grey figure with a violet sash, so a
+   * screenshot instantly says "this one is not drawn yet" instead of quietly
+   * passing for finished work. Each creature gets its own sheet later and
+   * drops off this bake one at a time — see the mobArt registry, which already
+   * overrides this the moment a PNG lands.
+   */
+  humanFoe: bake([
+    "...ssss...",
+    "..ssssss..",
+    "..sessse..",
+    "..ssssss..",
+    "...ssss...",
+    "..xxxxxx..",
+    ".xxxxxxxx.",
+    ".xuuuuuux.",
+    "..xxxxxx..",
+    "..xxxxxx..",
+    "...x..x...",
+    "...x..x...",
+    "..kk..kk..",
+  ]),
   sword: bake(["..m", ".mm", ".m.", "mm.", "kk.", ".b."]),
   skeleton: bake([
     "...wwww...",
@@ -1155,7 +1179,7 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
  * into the terrain canvas from spriteSource() anyway.
  */
 const ACTORS = [
-  "skeleton", "goblin", "orc", "rat", "minotaur", "snake", "ghoul",
+  "skeleton", "goblin", "orc", "rat", "minotaur", "snake", "ghoul", "humanFoe",
   "orcArcher", "orcWarrior", "minotaurArcher", "orcShaman",
   "orcBerserker", "minotaurGuard", "minotaurMage", "dragon",
   "corpse", "npcSmith", "npcHerbalist", "npcElder",
