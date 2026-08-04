@@ -151,12 +151,12 @@ const WILDERNESS_ROAMERS: Partial<Record<MonsterKind, number>> = { bandit: 26, g
  */
 export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ItemKind[]>>> = {
   cave3: ["marrowBlade"],
-  bastion2: ["marrowShield"],
+  bastion2: ["knightShield"],
   // The two floors under the Bone Reach hold two pieces apiece. All four were
   // lifted out of the Deep Wildlands lairs (roost3, orcfort2, grave2, goblin2),
   // which now bury nothing, so every piece of the set is still findable once.
-  orcdeep1: ["marrowArmor", "marrowLegs"],
-  minodeep1: ["marrowHelmet", "marrowBoots"],
+  orcdeep1: ["knightBody", "knightLegs"],
+  minodeep1: ["knightHelm", "knightBoots"],
 };
 
 /**

@@ -22,22 +22,68 @@ export type ItemKind =
   | "bow" | "longbow" | "arrow" | "boneArrow"
   // practice ammo: blunt shafts fired only at the Archery Range (Etap 10)
   | "trainingArrow"
-  // gear
-  | "sword" | "ironSword" | "boneSword" | "marrowBlade"
-  | "battleAxe" | "fireSword"
-  | "helmet" | "armor" | "shieldItem" | "legs" | "boots" | "ring" | "amulet"
-  | "leatherArmor" | "chainArmor" | "dragonScaleArmor"
-  | "steelShield" | "dragonShield"
-  | "boneShield" | "boneHelmet" | "boneLegs" | "boneBoots"
-  // the Marrow set (Etap 9c): five one-time chest prizes matching the Marrow
-  // Blade — each piece hoarded on a different camp's deepest lair floor
-  | "marrowShield" | "marrowArmor" | "marrowHelmet" | "marrowLegs" | "marrowBoots"
+  /* ---- GEAR (Etap 22) --------------------------------------------------
+   * Six tiers, two parallel lines with the SAME silhouette of stats: the
+   * beast line carries one more point of armor on its body piece, the human
+   * line is roughly 15% lighter and faster on the boots. Wearing all four
+   * worn pieces of one set pays a bonus on top, which is what stops the
+   * obvious exploit of pairing the heavier beast plate with the quicker
+   * human boots — mixing costs more armor than the mismatch ever gains.
+   * -------------------------------------------------------------------- */
+  // tier 1 — Leather (human line) / Snakeskin (beast line)
+  | "leatherHelm" | "leatherBody" | "leatherLegs" | "leatherBoots" | "leatherShield"
+  | "snakeskinHelm" | "snakeskinBody" | "snakeskinLegs" | "snakeskinBoots" | "snakeskinShield"
+  // tier 2 — Studded (human line) / Goblin (beast line)
+  | "studdedHelm" | "studdedBody" | "studdedLegs" | "studdedBoots" | "studdedShield"
+  | "goblinHelm" | "goblinBody" | "goblinLegs" | "goblinBoots" | "goblinShield"
+  // tier 3 — Chain (human line) / Orcish (beast line)
+  | "chainHelm" | "chainBody" | "chainLegs" | "chainBoots" | "chainShield"
+  | "orcishHelm" | "orcishBody" | "orcishLegs" | "orcishBoots" | "orcishShield"
+  // tier 4 — Plate (human line) / Minotaur (beast line)
+  | "plateHelm" | "plateBody" | "plateLegs" | "plateBoots" | "plateShield"
+  | "minotaurHelm" | "minotaurBody" | "minotaurLegs" | "minotaurBoots" | "minotaurShield"
+  // tier 5 — Steel (human line) / Marrow (beast line)
+  | "steelHelm" | "steelBody" | "steelLegs" | "steelBoots" | "steelShield"
+  | "marrowHelm" | "marrowBody" | "marrowLegs" | "marrowBoots" | "marrowShield"
+  // tier 6 — Knight (human line) / Dragon (beast line)
+  | "knightHelm" | "knightBody" | "knightLegs" | "knightBoots" | "knightShield"
+  | "dragonHelm" | "dragonBody" | "dragonLegs" | "dragonBoots" | "dragonShield"
+  // weapons: the two lines diverge here rather than mirroring each other —
+  // human smiths make swords and hammers that guard as well as they cut,
+  // beasts carry axes and fangs that hit harder and defend far worse
+  | "shortSword" | "fangDagger" | "ironSword" | "goblinHatchet" | "mercBlade" | "warHammer" | "orcishAxe" | "gladius" | "boneSword" | "minotaurAxe" | "warlordBlade" | "steelMaul" | "demonCleaver" | "knightSword" | "fireSword" | "marrowBlade"
+  | "ring" | "amulet"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet"
   // containers & test gear (Etap 11)
   | "backpack" | "booster";
 
 export type EqSlot = "head" | "body" | "legs" | "boots" | "weapon" | "shield" | "ring" | "amulet";
+
+/** The twelve matched sets: six tiers, a human and a beast line at each. */
+export type SetKey = "leather" | "studded" | "chain" | "plate" | "steel" | "knight" | "snakeskin" | "goblin" | "orcish" | "minotaur" | "marrow" | "dragon";
+
+/**
+ * Armor paid for wearing head + body + legs + boots all from one set.
+ *
+ * This exists to kill one specific exploit. The beast line carries a point
+ * more armor on its body piece and the human line is lighter with faster
+ * boots, so without a bonus the optimal outfit is always beast plate over
+ * human boots — the two lines stop being a choice and become a shopping
+ * list. The bonus is set above the one-point gap on purpose: breaking the
+ * set to cherry-pick costs strictly more than the mismatch is worth.
+ */
+export const SET_BONUS: Readonly<Record<SetKey, number>> = {
+  leather: 2, snakeskin: 2,
+  studded: 2, goblin: 2,
+  chain: 2, orcish: 2,
+  plate: 2, minotaur: 2,
+  steel: 3, marrow: 3,
+  knight: 3, dragon: 3,
+};
+
+/** The four worn slots a set is counted across. Shields and weapons are out. */
+export const SET_SLOTS = ["head", "body", "legs", "boots"] as const;
 
 export interface GearStats {
   atk?: number;
@@ -63,6 +109,11 @@ export interface ItemDef {
   weight: number;
   slot?: EqSlot;
   gear?: GearStats;
+  /** Which matched set this piece belongs to, if any. Wearing head + body +
+   *  legs + boots all tagged the same pays SET_BONUS on top of their armor.
+   *  Shields and weapons deliberately carry no tag: a player should be free
+   *  to pick the guard in their hands on its own merits. */
+  set?: SetKey;
   /** Food: eating banks this many seconds of HP regeneration (Tibia-style). */
   food?: number;
   /** Consumable effect: hp restored on use (potions). */
@@ -155,41 +206,89 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   // wood), zero attack — pure Distance training fodder for the Archery Range.
   trainingArrow: { name: "Training Arrow", stack: 9999, value: 0, weight: 1, ammo: { dmg: 0 }, practice: true },
   boneArrow: { name: "Bone Arrow",   stack: 999, value: 2, weight: 1, ammo: { dmg: 14 } },
-  sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 6, def: 6, defBonus: 1 } },
-  ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 10, def: 10, defBonus: 2 } },
-  battleAxe: { name: "Battle Axe",   stack: 1, value: 80, weight: 45, slot: "weapon", gear: { atk: 13, def: 8, defBonus: 1 } },
-  boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 16, def: 16, defBonus: 3 } },
-  // Fire Sword — the dragon's rare blade: below the Marrow Blade (20) but
-  // obtainable without the cave-bottom chest run.
-  fireSword: { name: "Fire Sword",   stack: 1, value: 350, weight: 46, slot: "weapon", gear: { atk: 20, def: 20, defBonus: 3 } },
-  // Unique treasure: found only in the chest at the bottom of the Bone
-  // Caverns (-3). Deliberately absent from every shop and every loot table.
-  marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 24, def: 22, defBonus: 3 } },
-  helmet:    { name: "Iron Helmet",  stack: 1, value: 30, weight: 55, slot: "head",   gear: { def: 2 } },
-  leatherArmor:{ name: "Leather Armor", stack: 1, value: 25, weight: 70, slot: "body", gear: { def: 3 } },
-  chainArmor:{ name: "Chain Armor",  stack: 1, value: 45, weight: 95, slot: "body",  gear: { def: 5 } },
-  armor:     { name: "Plate Armor",  stack: 1, value: 70, weight: 120, slot: "body",  gear: { def: 7 } },
-  dragonScaleArmor:{ name: "Dragon Scale Armor", stack: 1, value: 400, weight: 100, slot: "body", gear: { def: 9 } },
-  shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, weight: 60, slot: "shield", gear: { def: 4 } },
-  steelShield:{ name: "Steel Shield", stack: 1, value: 70, weight: 65, slot: "shield", gear: { def: 8 } },
-  dragonShield:{ name: "Dragon Shield", stack: 1, value: 300, weight: 70, slot: "shield", gear: { def: 14 } },
-  // ---- the Marrow set: pale bone plate with a silver sheen and gold trim,
-  // ---- the armour counterpart of the Marrow Blade. One-time chest prizes.
-  marrowShield:{ name: "Marrow Shield",  stack: 1, value: 520, weight: 68, slot: "shield", gear: { def: 17 } },
-  marrowArmor: { name: "Marrow Plate",   stack: 1, value: 620, weight: 110, slot: "body",  gear: { def: 10 } },
-  marrowHelmet:{ name: "Marrow Helm",    stack: 1, value: 420, weight: 52, slot: "head",   gear: { def: 5 } },
-  marrowLegs:  { name: "Marrow Greaves", stack: 1, value: 460, weight: 84, slot: "legs",   gear: { def: 5 } },
-  marrowBoots: { name: "Marrow Boots",   stack: 1, value: 380, weight: 26, slot: "boots",  gear: { def: 2, speed: 16 } },
-  // ---- the Bone set: dull bone lashed over leather, the working armour of
-  // ---- Bonetown. Sits between plate and the Marrow prizes and is CRAFTED,
-  // ---- so the level 20-30 stretch has an upgrade you can work towards
-  // ---- rather than one you have to be lucky enough to loot.
-  boneShield:{ name: "Bone Shield",  stack: 1, value: 180, weight: 62, slot: "shield", gear: { def: 11 } },
-  boneHelmet:{ name: "Bone Helm",    stack: 1, value: 150, weight: 50, slot: "head",   gear: { def: 3 } },
-  boneLegs:  { name: "Bone Greaves", stack: 1, value: 170, weight: 82, slot: "legs",   gear: { def: 4 } },
-  boneBoots: { name: "Bone Treads",  stack: 1, value: 130, weight: 25, slot: "boots",  gear: { def: 2, speed: 8 } },
-  legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 3 } },
-  boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 12 } },
+  /* ---- weapons ---- */
+  shortSword: { name: "Short Sword", stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 6, def: 6, defBonus: 1 } },
+  fangDagger: { name: "Fang Dagger", stack: 1, value: 20, weight: 28, slot: "weapon", gear: { atk: 8, def: 2 } },
+  ironSword: { name: "Iron Sword", stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 10, def: 10, defBonus: 2 } },
+  goblinHatchet: { name: "Goblin Hatchet", stack: 1, value: 60, weight: 48, slot: "weapon", gear: { atk: 13, def: 5 } },
+  mercBlade: { name: "Mercenary Blade", stack: 1, value: 90, weight: 46, slot: "weapon", gear: { atk: 13, def: 13, defBonus: 2 } },
+  warHammer: { name: "War Hammer", stack: 1, value: 85, weight: 70, slot: "weapon", gear: { atk: 15, def: 6 } },
+  orcishAxe: { name: "Orcish Axe", stack: 1, value: 110, weight: 55, slot: "weapon", gear: { atk: 17, def: 7 } },
+  gladius: { name: "Gladius", stack: 1, value: 150, weight: 44, slot: "weapon", gear: { atk: 16, def: 16, defBonus: 3 } },
+  boneSword: { name: "Bone Sword", stack: 1, value: 170, weight: 48, slot: "weapon", gear: { atk: 18, def: 14, defBonus: 2 } },
+  minotaurAxe: { name: "Minotaur Axe", stack: 1, value: 200, weight: 62, slot: "weapon", gear: { atk: 21, def: 9, defBonus: 1 } },
+  warlordBlade: { name: "Warlord's Blade", stack: 1, value: 260, weight: 46, slot: "weapon", gear: { atk: 20, def: 20, defBonus: 3 } },
+  steelMaul: { name: "Steel Maul", stack: 1, value: 250, weight: 86, slot: "weapon", gear: { atk: 24, def: 9 } },
+  demonCleaver: { name: "Demon Cleaver", stack: 1, value: 300, weight: 68, slot: "weapon", gear: { atk: 25, def: 11, defBonus: 1 } },
+  knightSword: { name: "Knight's Longsword", stack: 1, value: 420, weight: 52, slot: "weapon", gear: { atk: 24, def: 22, defBonus: 3 } },
+  fireSword: { name: "Fire Sword", stack: 1, value: 460, weight: 46, slot: "weapon", gear: { atk: 26, def: 16, defBonus: 2 } },
+  marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 24, def: 24, defBonus: 4 } },
+  /* ---- tier 1: Leather / Snakeskin (set bonus +1 worn complete) ---- */
+  leatherHelm: { name: "Leather Helmet", stack: 1, value: 6, weight: 17, slot: "head", gear: { def: 1 }, set: "leather" },
+  snakeskinHelm: { name: "Snakeskin Hood", stack: 1, value: 7, weight: 20, slot: "head", gear: { def: 1 }, set: "snakeskin" },
+  leatherBody: { name: "Leather Armor", stack: 1, value: 12, weight: 60, slot: "body", gear: { def: 1 }, set: "leather" },
+  snakeskinBody: { name: "Snakeskin Mail", stack: 1, value: 14, weight: 70, slot: "body", gear: { def: 2 }, set: "snakeskin" },
+  leatherLegs: { name: "Leather Legs", stack: 1, value: 8, weight: 34, slot: "legs", gear: { def: 1 }, set: "leather" },
+  snakeskinLegs: { name: "Snakeskin Legs", stack: 1, value: 9, weight: 40, slot: "legs", gear: { def: 1 }, set: "snakeskin" },
+  leatherBoots: { name: "Leather Boots", stack: 1, value: 5, weight: 15, slot: "boots", gear: { def: 0, speed: 2 }, set: "leather" },
+  snakeskinBoots: { name: "Snakeskin Boots", stack: 1, value: 6, weight: 18, slot: "boots", gear: { def: 0 }, set: "snakeskin" },
+  leatherShield: { name: "Leather Shield", stack: 1, value: 10, weight: 51, slot: "shield", gear: { def: 4 } },
+  snakeskinShield: { name: "Snakeskin Buckler", stack: 1, value: 12, weight: 60, slot: "shield", gear: { def: 4 } },
+  /* ---- tier 2: Studded / Goblin (set bonus +1 worn complete) ---- */
+  studdedHelm: { name: "Studded Helmet", stack: 1, value: 15, weight: 26, slot: "head", gear: { def: 1 }, set: "studded" },
+  goblinHelm: { name: "Goblin Skull", stack: 1, value: 17, weight: 30, slot: "head", gear: { def: 1 }, set: "goblin" },
+  studdedBody: { name: "Studded Armor", stack: 1, value: 30, weight: 72, slot: "body", gear: { def: 3 }, set: "studded" },
+  goblinBody: { name: "Goblin Mail", stack: 1, value: 34, weight: 85, slot: "body", gear: { def: 4 }, set: "goblin" },
+  studdedLegs: { name: "Studded Legs", stack: 1, value: 21, weight: 51, slot: "legs", gear: { def: 2 }, set: "studded" },
+  goblinLegs: { name: "Goblin Legs", stack: 1, value: 24, weight: 60, slot: "legs", gear: { def: 2 }, set: "goblin" },
+  studdedBoots: { name: "Studded Boots", stack: 1, value: 12, weight: 17, slot: "boots", gear: { def: 1, speed: 4 }, set: "studded" },
+  goblinBoots: { name: "Goblin Boots", stack: 1, value: 14, weight: 20, slot: "boots", gear: { def: 1 }, set: "goblin" },
+  studdedShield: { name: "Studded Shield", stack: 1, value: 24, weight: 53, slot: "shield", gear: { def: 6 } },
+  goblinShield: { name: "Goblin Shield", stack: 1, value: 28, weight: 62, slot: "shield", gear: { def: 6 } },
+  /* ---- tier 3: Chain / Orcish (set bonus +2 worn complete) ---- */
+  chainHelm: { name: "Chain Helmet", stack: 1, value: 30, weight: 38, slot: "head", gear: { def: 2 }, set: "chain" },
+  orcishHelm: { name: "Orcish Helm", stack: 1, value: 34, weight: 45, slot: "head", gear: { def: 2 }, set: "orcish" },
+  chainBody: { name: "Chain Armor", stack: 1, value: 60, weight: 81, slot: "body", gear: { def: 4 }, set: "chain" },
+  orcishBody: { name: "Orcish Mail", stack: 1, value: 69, weight: 95, slot: "body", gear: { def: 5 }, set: "orcish" },
+  chainLegs: { name: "Chain Legs", stack: 1, value: 42, weight: 64, slot: "legs", gear: { def: 2 }, set: "chain" },
+  orcishLegs: { name: "Orcish Legs", stack: 1, value: 48, weight: 75, slot: "legs", gear: { def: 2 }, set: "orcish" },
+  chainBoots: { name: "Chain Boots", stack: 1, value: 24, weight: 20, slot: "boots", gear: { def: 1, speed: 6 }, set: "chain" },
+  orcishBoots: { name: "Orcish Boots", stack: 1, value: 28, weight: 24, slot: "boots", gear: { def: 1, speed: 2 }, set: "orcish" },
+  chainShield: { name: "Chain Shield", stack: 1, value: 48, weight: 55, slot: "shield", gear: { def: 8 } },
+  orcishShield: { name: "Orcish Shield", stack: 1, value: 55, weight: 65, slot: "shield", gear: { def: 8 } },
+  /* ---- tier 4: Plate / Minotaur (set bonus +2 worn complete) ---- */
+  plateHelm: { name: "Plate Helmet", stack: 1, value: 55, weight: 42, slot: "head", gear: { def: 3 }, set: "plate" },
+  minotaurHelm: { name: "Minotaur Helm", stack: 1, value: 63, weight: 50, slot: "head", gear: { def: 3 }, set: "minotaur" },
+  plateBody: { name: "Plate Armor", stack: 1, value: 110, weight: 102, slot: "body", gear: { def: 6 }, set: "plate" },
+  minotaurBody: { name: "Minotaur Mail", stack: 1, value: 126, weight: 120, slot: "body", gear: { def: 7 }, set: "minotaur" },
+  plateLegs: { name: "Plate Legs", stack: 1, value: 77, weight: 76, slot: "legs", gear: { def: 3 }, set: "plate" },
+  minotaurLegs: { name: "Minotaur Legs", stack: 1, value: 89, weight: 90, slot: "legs", gear: { def: 3 }, set: "minotaur" },
+  plateBoots: { name: "Plate Boots", stack: 1, value: 44, weight: 22, slot: "boots", gear: { def: 1, speed: 8 }, set: "plate" },
+  minotaurBoots: { name: "Minotaur Hooves", stack: 1, value: 51, weight: 26, slot: "boots", gear: { def: 1, speed: 4 }, set: "minotaur" },
+  plateShield: { name: "Plate Shield", stack: 1, value: 88, weight: 58, slot: "shield", gear: { def: 11 } },
+  minotaurShield: { name: "Minotaur Shield", stack: 1, value: 101, weight: 68, slot: "shield", gear: { def: 11 } },
+  /* ---- tier 5: Steel / Marrow (set bonus +3 worn complete) ---- */
+  steelHelm: { name: "Steel Helmet", stack: 1, value: 100, weight: 44, slot: "head", gear: { def: 3 }, set: "steel" },
+  marrowHelm: { name: "Marrow Helm", stack: 1, value: 115, weight: 52, slot: "head", gear: { def: 3 }, set: "marrow" },
+  steelBody: { name: "Steel Armor", stack: 1, value: 200, weight: 94, slot: "body", gear: { def: 8 }, set: "steel" },
+  marrowBody: { name: "Marrow Plate", stack: 1, value: 230, weight: 110, slot: "body", gear: { def: 9 }, set: "marrow" },
+  steelLegs: { name: "Steel Legs", stack: 1, value: 140, weight: 70, slot: "legs", gear: { def: 4 }, set: "steel" },
+  marrowLegs: { name: "Marrow Greaves", stack: 1, value: 161, weight: 82, slot: "legs", gear: { def: 4 }, set: "marrow" },
+  steelBoots: { name: "Steel Boots", stack: 1, value: 80, weight: 21, slot: "boots", gear: { def: 2, speed: 10 }, set: "steel" },
+  marrowBoots: { name: "Marrow Treads", stack: 1, value: 92, weight: 25, slot: "boots", gear: { def: 2, speed: 6 }, set: "marrow" },
+  steelShield: { name: "Steel Shield", stack: 1, value: 160, weight: 56, slot: "shield", gear: { def: 14 } },
+  marrowShield: { name: "Marrow Shield", stack: 1, value: 184, weight: 66, slot: "shield", gear: { def: 14 } },
+  /* ---- tier 6: Knight / Dragon (set bonus +3 worn complete) ---- */
+  knightHelm: { name: "Knight Helmet", stack: 1, value: 170, weight: 44, slot: "head", gear: { def: 5 }, set: "knight" },
+  dragonHelm: { name: "Dragon Helm", stack: 1, value: 195, weight: 52, slot: "head", gear: { def: 5 }, set: "dragon" },
+  knightBody: { name: "Knight Armor", stack: 1, value: 340, weight: 94, slot: "body", gear: { def: 9 }, set: "knight" },
+  dragonBody: { name: "Dragon Scale Mail", stack: 1, value: 391, weight: 110, slot: "body", gear: { def: 10 }, set: "dragon" },
+  knightLegs: { name: "Knight Legs", stack: 1, value: 238, weight: 71, slot: "legs", gear: { def: 5 }, set: "knight" },
+  dragonLegs: { name: "Dragon Scale Legs", stack: 1, value: 274, weight: 84, slot: "legs", gear: { def: 5 }, set: "dragon" },
+  knightBoots: { name: "Knight Boots", stack: 1, value: 136, weight: 22, slot: "boots", gear: { def: 2, speed: 12 }, set: "knight" },
+  dragonBoots: { name: "Dragon Scale Boots", stack: 1, value: 156, weight: 26, slot: "boots", gear: { def: 2, speed: 8 }, set: "dragon" },
+  knightShield: { name: "Knight Shield", stack: 1, value: 272, weight: 60, slot: "shield", gear: { def: 17 } },
+  dragonShield: { name: "Dragon Shield", stack: 1, value: 313, weight: 70, slot: "shield", gear: { def: 17 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
@@ -387,23 +486,29 @@ export interface Recipe {
   gold?: number;
 }
 export const RECIPES: readonly Recipe[] = [
-  { out: "sword",      cost: { wood: 3, stone: 4 } },
+  /* ---- weapons a smith can actually make: the human line, plus the two
+   * bone pieces that Bonetown's undead pay for. Everything beast-made is
+   * loot only — nobody in town knows how to forge an orcish axe. ---- */
+  { out: "shortSword", cost: { wood: 3, stone: 4 } },
   { out: "ironSword",  cost: { wood: 4, stone: 10 } },
+  { out: "mercBlade",  cost: { wood: 5, stone: 16, silk: 4 } },
+  { out: "warHammer",  cost: { wood: 6, stone: 22 } },
   { out: "boneSword",  cost: { bones: 16, stone: 6 } },
-  // the Bone set — bones are plentiful but the counts are steep on purpose:
-  // this is the armour you grind Bonetown's undead for
-  { out: "boneShield", cost: { bones: 20, wood: 6 } },
-  { out: "boneHelmet", cost: { bones: 14, silk: 4 } },
-  { out: "boneLegs",   cost: { bones: 18, silk: 5 } },
-  { out: "boneBoots",  cost: { bones: 10, silk: 6 } },
-  { out: "helmet",     cost: { stone: 8 } },
-  { out: "armor",      cost: { stone: 14, wood: 4 } },
-  { out: "shieldItem", cost: { wood: 8, stone: 3 } },
-  { out: "legs",       cost: { stone: 9, wood: 2 } },
-  { out: "boots",      cost: { wood: 6, silk: 4 } },
+  /* ---- the Leather set: the first matched outfit, cheap on purpose ---- */
+  { out: "leatherHelm",   cost: { silk: 4, wood: 2 } },
+  { out: "leatherBody",   cost: { silk: 8, wood: 3 } },
+  { out: "leatherLegs",   cost: { silk: 6, wood: 2 } },
+  { out: "leatherBoots",  cost: { silk: 5, wood: 2 } },
+  { out: "leatherShield", cost: { wood: 8, stone: 3 } },
+  /* ---- the Chain set: the level 20-30 goal you work towards rather than
+   * one you have to be lucky enough to loot ---- */
+  { out: "chainHelm",   cost: { stone: 10, bones: 4 } },
+  { out: "chainBody",   cost: { stone: 20, silk: 6 } },
+  { out: "chainLegs",   cost: { stone: 14, silk: 4 } },
+  { out: "chainBoots",  cost: { stone: 8, silk: 6 } },
+  { out: "chainShield", cost: { stone: 12, wood: 8 } },
   { out: "ring",       cost: { stone: 6, bones: 8 } },
   { out: "amulet",     cost: { bones: 12, silk: 6 } },
-  // Amulet of Loss — pure gold sink; protects items (not exp/skills) on death
   { out: "aolAmulet",  cost: {}, gold: 500 },
   // TEST ONLY: the Dopalacz — 1 gold, +5 levels, +20 every skill (see above)
   { out: "booster",    cost: {}, gold: 1 },
