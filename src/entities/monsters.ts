@@ -179,6 +179,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   beggar: {
     spr: SPR.humanFoe, hp: 15, dmg: [3, 7], speed: 58, atkRate: 2.0, exp: 10, gold: [1, 2], danger: 0.02,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "leatherHelm", chance: 0.03, n: [1, 1] },
       { kind: "leatherBody", chance: 0.03, n: [1, 1] },
       { kind: "leatherLegs", chance: 0.03, n: [1, 1] },
@@ -190,6 +191,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   vagrant: {
     spr: SPR.humanFoe, hp: 25, dmg: [3, 9], speed: 60, atkRate: 2.0, exp: 15, gold: [1, 4], danger: 0.04, armor: 1,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "leatherHelm", chance: 0.03, n: [1, 1] },
       { kind: "leatherBody", chance: 0.03, n: [1, 1] },
       { kind: "leatherLegs", chance: 0.03, n: [1, 1] },
@@ -203,6 +205,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   thief: {
     spr: SPR.humanFoe, hp: 30, dmg: [4, 11], speed: 78, atkRate: 2.0, exp: 25, gold: [2, 5], danger: 0.05, armor: 1,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "leatherHelm", chance: 0.04, n: [1, 1] },
       { kind: "leatherBody", chance: 0.04, n: [1, 1] },
       { kind: "leatherLegs", chance: 0.04, n: [1, 1] },
@@ -218,6 +221,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.humanFoe, hp: 45, dmg: [3, 8], speed: 66, atkRate: 2.0, exp: 40, gold: [3, 9], danger: 0.08, armor: 1,
     ranged: { range: 160, dmg: [6, 17], color: "#a89a72" }, // slung stones
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "leatherHelm", chance: 0.04, n: [1, 1] },
       { kind: "leatherBody", chance: 0.04, n: [1, 1] },
       { kind: "leatherLegs", chance: 0.04, n: [1, 1] },
@@ -232,6 +236,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   bandit: {
     spr: SPR.rat, hp: 65, dmg: [7, 17], speed: 62, atkRate: 2.0, exp: 45, gold: [4, 11], danger: 0.06, armor: 3,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "hpPotion", chance: 0.08, n: [1, 1] }, { kind: "silk", chance: 0.5, n: [1, 2] },
       { kind: "leatherHelm", chance: 0.06, n: [1, 1] },
       { kind: "leatherBody", chance: 0.06, n: [1, 1] },
@@ -245,6 +250,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   smuggler: {
     spr: SPR.humanFoe, hp: 85, dmg: [8, 21], speed: 64, atkRate: 2.0, exp: 60, gold: [5, 14], danger: 0.12, armor: 3,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.04, n: [1, 1] },
       { kind: "studdedBody", chance: 0.04, n: [1, 1] },
       { kind: "studdedLegs", chance: 0.04, n: [1, 1] },
@@ -258,6 +264,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   cutthroat: {
     spr: SPR.humanFoe, hp: 80, dmg: [9, 23], speed: 80, atkRate: 2.0, exp: 80, gold: [5, 16], danger: 0.15, armor: 4,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.05, n: [1, 1] },
       { kind: "studdedBody", chance: 0.05, n: [1, 1] },
       { kind: "studdedLegs", chance: 0.05, n: [1, 1] },
@@ -272,6 +279,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   deserter: {
     spr: SPR.humanFoe, hp: 125, dmg: [10, 28], speed: 58, atkRate: 2.0, exp: 90, gold: [7, 19], danger: 0.18, armor: 7,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.08, n: [1, 1] },
       { kind: "studdedBody", chance: 0.08, n: [1, 1] },
       { kind: "studdedLegs", chance: 0.08, n: [1, 1] },
@@ -284,6 +292,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   brigand: {
     spr: SPR.humanFoe, hp: 125, dmg: [11, 30], speed: 66, atkRate: 2.0, exp: 100, gold: [7, 21], danger: 0.2, armor: 6,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.08, n: [1, 1] },
       { kind: "studdedBody", chance: 0.08, n: [1, 1] },
       { kind: "studdedLegs", chance: 0.08, n: [1, 1] },
@@ -297,6 +306,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   highwayman: {
     spr: SPR.humanFoe, hp: 160, dmg: [13, 34], speed: 70, atkRate: 2.0, exp: 130, gold: [11, 32], danger: 0.25, armor: 7,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.15, n: [1, 1] },
       { kind: "studdedBody", chance: 0.15, n: [1, 1] },
       { kind: "studdedLegs", chance: 0.15, n: [1, 1] },
@@ -338,6 +348,9 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   goblin: {
     spr: SPR.goblin, hp: 175, dmg: [14, 38], speed: 70, atkRate: 2.0, exp: 150, gold: [7, 21], danger: 0.4, armor: 7,
     loot: [
+      { kind: "cursedRib", chance: 0.15, n: [1, 1] },
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "goblinFang", chance: 0.15, n: [1, 1] },
       { kind: "meat", chance: 0.4, n: [1, 1] }, { kind: "hpPotion", chance: 0.12, n: [1, 1] },
            { kind: "silk", chance: 0.5, n: [1, 2] },
       { kind: "goblinHelm", chance: 0.05, n: [1, 1] },
@@ -353,6 +366,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   mercenary: {
     spr: SPR.humanFoe, hp: 175, dmg: [14, 38], speed: 62, atkRate: 2.0, exp: 150, gold: [10, 28], danger: 0.3, armor: 9,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "chainHelm", chance: 0.1, n: [1, 1] },
       { kind: "chainBody", chance: 0.1, n: [1, 1] },
       { kind: "chainLegs", chance: 0.1, n: [1, 1] },
@@ -365,6 +379,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   corsair: {
     spr: SPR.humanFoe, hp: 190, dmg: [16, 42], speed: 72, atkRate: 2.0, exp: 185, gold: [11, 32], danger: 0.35, armor: 9,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "chainHelm", chance: 0.08, n: [1, 1] },
       { kind: "chainBody", chance: 0.08, n: [1, 1] },
       { kind: "chainLegs", chance: 0.08, n: [1, 1] },
@@ -378,6 +393,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   wildWarrior: {
     spr: SPR.humanFoe, hp: 250, dmg: [18, 46], speed: 66, atkRate: 2.0, exp: 200, gold: [12, 35], danger: 0.4,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "chainHelm", chance: 0.06, n: [1, 1] },
       { kind: "chainBody", chance: 0.06, n: [1, 1] },
       { kind: "chainLegs", chance: 0.06, n: [1, 1] },
@@ -395,6 +411,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   orc: {
     spr: SPR.orc, hp: 240, dmg: [18, 48], speed: 58, atkRate: 2.0, exp: 215, gold: [9, 27], danger: 0.62, armor: 11,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "orcEar", chance: 0.15, n: [1, 1] },
       { kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "fireRuby", chance: 0.05, n: [1, 1] },
       { kind: "orcishHelm", chance: 0.05, n: [1, 1] },
       { kind: "orcishBody", chance: 0.05, n: [1, 1] },
@@ -410,6 +428,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   goblinLegionary: {
     spr: SPR.goblin, hp: 270, dmg: [19, 51], speed: 64, atkRate: 2.0, exp: 230, gold: [13, 37], danger: 0.6, armor: 14,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "goblinFang", chance: 0.15, n: [1, 1] },
       { kind: "goblinHelm", chance: 0.2, n: [1, 1] },
       { kind: "goblinBody", chance: 0.2, n: [1, 1] },
       { kind: "goblinLegs", chance: 0.2, n: [1, 1] },
@@ -424,6 +444,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.humanFoe, hp: 220, dmg: [10, 26], speed: 74, atkRate: 2.0, exp: 245, gold: [13, 39], danger: 0.45, armor: 9,
     ranged: { range: 190, dmg: [22, 57] },
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "chainHelm", chance: 0.05, n: [1, 1] },
       { kind: "chainBody", chance: 0.05, n: [1, 1] },
       { kind: "chainLegs", chance: 0.05, n: [1, 1] },
@@ -442,6 +463,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.orcArcher, hp: 240, dmg: [12, 29], speed: 64, atkRate: 2.0, exp: 280, gold: [11, 32], danger: 0.55, armor: 10,
     ranged: { range: 220, dmg: [24, 64], color: "#b98a4e" }, // crossbow bolts
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "orcEar", chance: 0.15, n: [1, 1] },
       { kind: "boneArrow", chance: 0.4, n: [2, 6] }, { kind: "meat", chance: 0.3, n: [1, 1] },
       { kind: "orcishHelm", chance: 0.04, n: [1, 1] },
       { kind: "orcishBody", chance: 0.04, n: [1, 1] },
@@ -456,6 +479,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.humanFoe, hp: 240, dmg: [12, 29], speed: 68, atkRate: 2.0, exp: 305, gold: [15, 44], danger: 0.5, armor: 9,
     ranged: { range: 280, dmg: [24, 64] },
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "chainHelm", chance: 0.05, n: [1, 1] },
       { kind: "chainBody", chance: 0.05, n: [1, 1] },
       { kind: "chainLegs", chance: 0.05, n: [1, 1] },
@@ -469,6 +493,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   orcWarrior: {
     spr: SPR.orcWarrior, hp: 335, dmg: [22, 59], speed: 60, atkRate: 2.0, exp: 295, gold: [15, 44], danger: 0.6, armor: 16,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "orcEar", chance: 0.15, n: [1, 1] },
       { kind: "meat", chance: 0.4, n: [1, 1] },
       { kind: "orcishHelm", chance: 0.12, n: [1, 1] },
       { kind: "orcishBody", chance: 0.12, n: [1, 1] },
@@ -482,6 +508,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   minotaur: {
     spr: SPR.minotaur, hp: 365, dmg: [23, 61], speed: 60, atkRate: 2.0, exp: 310, gold: [12, 35], danger: 0.8, armor: 14,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "minotaurHorn", chance: 0.15, n: [1, 1] },
       { kind: "bones", chance: 0.6, n: [1, 3] }, { kind: "meat", chance: 0.4, n: [1, 2] },
       { kind: "minotaurHelm", chance: 0.05, n: [1, 1] },
       { kind: "minotaurBody", chance: 0.05, n: [1, 1] },
@@ -497,6 +525,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   skeletonWarrior: {
     spr: SPR.skeleton, hp: 365, dmg: [24, 63], speed: 58, atkRate: 2.0, exp: 345, gold: [16, 47], danger: 0.85, armor: 18, resist: { shadow: 0.6, fire: 1.3 },
     loot: [
+      { kind: "cursedRib", chance: 0.15, n: [1, 1] },
       { kind: "marrowHelm", chance: 0.05, n: [1, 1] },
       { kind: "marrowBody", chance: 0.05, n: [1, 1] },
       { kind: "marrowLegs", chance: 0.05, n: [1, 1] },
@@ -509,6 +538,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   gladiator: {
     spr: SPR.humanFoe, hp: 365, dmg: [24, 63], speed: 64, atkRate: 2.0, exp: 345, gold: [22, 64], danger: 0.6, armor: 15,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "plateHelm", chance: 0.15, n: [1, 1] },
       { kind: "plateBody", chance: 0.15, n: [1, 1] },
       { kind: "plateLegs", chance: 0.15, n: [1, 1] },
@@ -522,6 +552,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.minotaurArcher, hp: 325, dmg: [14, 35], speed: 60, atkRate: 2.0, exp: 385, gold: [14, 39], danger: 0.68, armor: 14,
     ranged: { range: 300, dmg: [29, 75], color: "#efe9d6" }, // bone-tipped bolts
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "minotaurHorn", chance: 0.15, n: [1, 1] },
       { kind: "boneArrow", chance: 0.6, n: [3, 10] }, { kind: "longbow", chance: 0.03, n: [1, 1] },
       { kind: "minotaurHelm", chance: 0.05, n: [1, 1] },
       { kind: "minotaurBody", chance: 0.05, n: [1, 1] },
@@ -535,6 +567,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   barbarian: {
     spr: SPR.humanFoe, hp: 440, dmg: [26, 67], speed: 70, atkRate: 2.0, exp: 365, gold: [18, 53], danger: 0.65, armor: 14,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "plateHelm", chance: 0.08, n: [1, 1] },
       { kind: "plateBody", chance: 0.08, n: [1, 1] },
       { kind: "plateLegs", chance: 0.08, n: [1, 1] },
@@ -548,6 +581,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.orcShaman, hp: 300, dmg: [14, 36], speed: 52, atkRate: 2.0, exp: 440, gold: [14, 40], danger: 0.72, armor: 12, resist: { fire: 0.6, ice: 1.4 },
     ranged: { range: 260, dmg: [30, 78], color: "#8a6cff" }, // crackling magic bolt
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "orcEar", chance: 0.15, n: [1, 1] },
       { kind: "fireCrystal", chance: 0.4, n: [1, 3] }, { kind: "healCrystal", chance: 0.2, n: [1, 2] }, { kind: "fireRuby", chance: 0.1, n: [1, 1] },
       { kind: "orcishHelm", chance: 0.04, n: [1, 1] },
       { kind: "orcishBody", chance: 0.04, n: [1, 1] },
@@ -560,6 +595,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   raider: {
     spr: SPR.humanFoe, hp: 440, dmg: [27, 71], speed: 68, atkRate: 2.0, exp: 420, gold: [25, 73], danger: 0.7, armor: 15,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "plateHelm", chance: 0.1, n: [1, 1] },
       { kind: "plateBody", chance: 0.1, n: [1, 1] },
       { kind: "plateLegs", chance: 0.1, n: [1, 1] },
@@ -577,6 +613,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   orcBerserker: {
     spr: SPR.orcBerserker, hp: 495, dmg: [29, 78], speed: 88, atkRate: 2.0, exp: 460, gold: [20, 59], danger: 0.8, armor: 18,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "orcEar", chance: 0.15, n: [1, 1] },
       { kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "fireRuby", chance: 0.12, n: [1, 1] },
       { kind: "orcishHelm", chance: 0.2, n: [1, 1] },
       { kind: "orcishBody", chance: 0.2, n: [1, 1] },
@@ -590,6 +628,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   minotaurGuard: {
     spr: SPR.minotaurGuard, hp: 565, dmg: [30, 80], speed: 56, atkRate: 2.0, exp: 480, gold: [21, 61], danger: 0.85, armor: 22,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "minotaurHorn", chance: 0.15, n: [1, 1] },
       { kind: "bones", chance: 0.6, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] },
       { kind: "minotaurHelm", chance: 0.2, n: [1, 1] },
       { kind: "minotaurBody", chance: 0.2, n: [1, 1] },
@@ -604,6 +644,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   warlord: {
     spr: SPR.humanFoe, hp: 540, dmg: [30, 80], speed: 60, atkRate: 2.0, exp: 555, gold: [28, 82], danger: 0.8, armor: 20,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "steelHelm", chance: 0.2, n: [1, 1] },
       { kind: "steelBody", chance: 0.2, n: [1, 1] },
       { kind: "steelLegs", chance: 0.2, n: [1, 1] },
@@ -617,6 +658,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.minotaurMage, hp: 410, dmg: [17, 42], speed: 52, atkRate: 2.0, exp: 605, gold: [22, 63], danger: 0.9, armor: 16, resist: { storm: 0.5, earth: 1.4 },
     ranged: { range: 280, dmg: [35, 91], color: "#ff8a3a", wide: true }, // fire bolt
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "minotaurHorn", chance: 0.15, n: [1, 1] },
       { kind: "fireCrystal", chance: 0.6, n: [2, 5] }, { kind: "fireRuby", chance: 0.2, n: [1, 1] },
       { kind: "minotaurHelm", chance: 0.08, n: [1, 1] },
       { kind: "minotaurBody", chance: 0.08, n: [1, 1] },
@@ -630,6 +673,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   chieftain: {
     spr: SPR.humanFoe, hp: 685, dmg: [33, 88], speed: 64, atkRate: 2.0, exp: 680, gold: [32, 91], danger: 0.9, armor: 21,
     loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "steelHelm", chance: 0.25, n: [1, 1] },
       { kind: "steelBody", chance: 0.25, n: [1, 1] },
       { kind: "steelLegs", chance: 0.25, n: [1, 1] },
@@ -647,6 +691,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   demonSkeleton: {
     spr: SPR.skeleton, hp: 710, dmg: [33, 88], speed: 62, atkRate: 2.0, exp: 655, gold: [23, 68], danger: 0.97, armor: 24, resist: { fire: 0.5, shadow: 0.3, storm: 1.5 },
     loot: [
+      { kind: "cursedRib", chance: 0.15, n: [1, 1] },
       { kind: "marrowHelm", chance: 0.2, n: [1, 1] },
       { kind: "marrowBody", chance: 0.2, n: [1, 1] },
       { kind: "marrowLegs", chance: 0.2, n: [1, 1] },

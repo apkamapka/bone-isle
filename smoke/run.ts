@@ -946,6 +946,107 @@ async function main(): Promise<void> {
     resetSkills(); st.resetStance();
   }
 
+  /* ---- Etap 24: smelting, coal and gem trophies ---------------------- */
+  {
+    const sm = await import("../src/systems/smelt.ts");
+    const { ITEMS } = await import("../src/items.ts");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    console.log("Etap 24 — smelting:");
+
+    // every new material and trophy exists and is priced
+    for (const k of ["iron", "steel", "essentialGem", "coal",
+                     "minotaurHorn", "orcEar", "goblinFang", "cursedRib"] as const) {
+      ok(ITEMS[k] !== undefined && ITEMS[k].value > 0, `${k} is in the catalog with a price`);
+    }
+    ok(ITEMS.steel.value === 100 && ITEMS.iron.value === 12, "iron 12g / steel 100g");
+    ok(ITEMS.essentialGem.value === 1000, "essential gem is worth 1000g");
+    // light on purpose — 600 iron + 550 steel has to be haulable
+    ok(ITEMS.iron.weight <= 6 && ITEMS.steel.weight <= 6, "metal is light enough to carry in bulk");
+
+    // organic gear never smelts, whatever tier it sits at
+    for (const k of ["leatherBody", "snakeskinBody", "marrowBody", "dragonBody",
+                     "boneSword", "marrowBlade", "bow", "longbow"] as const) {
+      ok(!sm.canSmelt(k), `${k} does not go in the furnace`);
+    }
+    // ...and the metal lines do
+    for (const k of ["chainBody", "plateShield", "knightSword", "orcishMail" as never] as const) {
+      if (k === ("orcishMail" as never)) continue;
+      ok(sm.canSmelt(k), `${k} smelts`);
+    }
+
+    // RULE 1: units are fixed by the piece, not by the furnace
+    for (const k of ["chainBody", "plateBody", "knightBody", "steelHelm", "minotaurBoots"] as const) {
+      const a = sm.smeltYield(k, 1, ITEMS[k].slot);
+      const b = sm.smeltYield(k, 2, ITEMS[k].slot);
+      ok(a.iron + a.steel === b.iron + b.steel, `${k}: same unit count at forge I and II`);
+    }
+    // RULE 2: a tier-I furnace pulls iron only
+    for (const k of ["knightBody", "plateBody", "steelShield"] as const) {
+      ok(sm.smeltYield(k, 1, ITEMS[k].slot).steel === 0, `${k}: no steel from a tier-I forge`);
+    }
+    // RULE 3: the human line gives up more steel than the beast line
+    const plate = sm.smeltYield("plateBody", 2, "body");
+    const mino = sm.smeltYield("minotaurBody", 2, "body");
+    ok(plate.steel > mino.steel, "human plate yields more steel than beast plate");
+    ok(sm.smeltYield("knightBody", 2, "body").steel === 3, "Knight Armor gives 3 steel");
+    ok(sm.smeltYield("chainBody", 2, "body").steel === 1, "Chain Armor gives 1 steel");
+    // nothing anywhere breaks the three-unit ceiling
+    {
+      let worst = 0;
+      for (const k of Object.keys(sm.SMELT_TIER) as (keyof typeof sm.SMELT_TIER)[]) {
+        for (const t of [1, 2, 3] as const) {
+          const y = sm.smeltYield(k, t, ITEMS[k]!.slot);
+          worst = Math.max(worst, y.iron + y.steel);
+        }
+      }
+      ok(worst === 3, `no piece yields more than 3 units (worst ${worst})`);
+    }
+
+    // the no-regret property: melting top gear must not feel like a robbery
+    {
+      const y = sm.smeltYield("knightBody", 2, "body");
+      const melt = y.iron * ITEMS.iron.value + y.steel * ITEMS.steel.value;
+      const sell = ITEMS.knightBody.value;
+      ok(Math.abs(melt - sell) / sell < 0.2, "Knight Armor: melting is within 20% of selling");
+    }
+    // ...while mid gear is clearly worth melting, so vendor trash is the feedstock
+    for (const k of ["chainBody", "plateBody", "steelBody"] as const) {
+      const y = sm.smeltYield(k, 2, "body");
+      const melt = y.iron * ITEMS.iron.value + y.steel * ITEMS.steel.value;
+      ok(melt > ITEMS[k].value, `${k}: melting beats selling`);
+    }
+
+    // coal comes from everything that makes camp, and from nothing else
+    const CAMPS = ["bandit", "mercenary", "chieftain", "orc", "goblin", "minotaur", "minotaurGuard"];
+    const NEVER = ["snake", "skeleton", "ghoul", "demonSkeleton", "dragon"];
+    const hasCoal = (m: string) =>
+      (MONSTER_DEFS as never as Record<string, { loot: { kind: string; chance: number }[] }>)[m]
+        .loot.some((l) => l.kind === "coal");
+    for (const m of CAMPS) ok(hasCoal(m), `${m} drops coal`);
+    for (const m of NEVER) ok(!hasCoal(m), `${m} drops no coal`);
+    // minotaurs matter specially: they are the iron source, so they must also
+    // supply the fuel to smelt what they drop
+    ok(hasCoal("minotaur") && hasCoal("minotaurGuard"), "the iron farm also fuels the furnace");
+
+    // trophies: one per family, humans deliberately excluded
+    const trophyOf = (m: string) =>
+      (MONSTER_DEFS as never as Record<string, { loot: { kind: string }[] }>)[m]
+        .loot.filter((l) => sm.isGemTrophy(l.kind as never)).map((l) => l.kind);
+    ok(trophyOf("minotaurMage").includes("minotaurHorn"), "minotaurs drop horns");
+    ok(trophyOf("orcBerserker").includes("orcEar"), "orcs drop ears");
+    ok(trophyOf("demonSkeleton").includes("cursedRib"), "skeletons drop ribs");
+    for (const m of ["bandit", "gladiator", "warlord", "chieftain"]) {
+      ok(trophyOf(m).length === 0, `${m} drops no trophy — people are not spare parts`);
+    }
+
+    // the gem recipe wants three DIFFERENT kinds: one rich spawn is not enough
+    const one = new Map([["minotaurHorn", 99]] as const);
+    const three = new Map([["minotaurHorn", 1], ["orcEar", 1], ["goblinFang", 1]] as const);
+    ok(!sm.gemReady(one as never, 99), "99 horns and nothing else makes no gem");
+    ok(sm.gemReady(three as never, 3), "three different trophies + 3 coal makes a gem");
+    ok(!sm.gemReady(three as never, 2), "short on coal, no gem");
+  }
+
   console.log("speed from level (no Speed skill — Tibia 8.6):");
   {
     const { playerSpeed } = await import("../src/entities/player.ts");

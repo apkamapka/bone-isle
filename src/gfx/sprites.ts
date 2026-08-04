@@ -751,6 +751,64 @@ export const SPR = {
     "rRRr.",
     ".rr..",
   ]),
+  /* ---- Etap 24: forge materials and creature trophies ----------------
+   * Ingots read by silhouette first (a trapezoid bar) and by tint second,
+   * because iron and steel sit next to each other in every bag and the
+   * difference between them has to survive a 16-px icon. */
+  ironIngot: bake([
+    ".....",
+    ".mmm.",
+    "mMMMm",
+    "mMMMm",
+    ".ddd.",
+  ], { m: "#9aa0a8", M: "#7b828b", d: "#4a5058" }),
+  steelIngot: bake([
+    ".....",
+    ".sss.",
+    "sSHSs",
+    "sSSSs",
+    ".ddd.",
+  ], { s: "#cfe3f2", S: "#9fc0d8", H: "#eaf6ff", d: "#5a6f80" }),
+  essentialGem: bake([
+    "..g..",
+    ".gGg.",
+    "gGHGg",
+    ".gGg.",
+    "..g..",
+  ], { g: "#7a4fc0", G: "#b58aff", H: "#f0e4ff" }),
+  coalLump: bake([
+    ".kk..",
+    "kKKk.",
+    "kKKKk",
+    ".kkk.",
+  ], { k: "#2b2b30", K: "#4a4a52" }),
+  minotaurHorn: bake([
+    "...hH",
+    "..hh.",
+    ".hh..",
+    "bhh..",
+    "bb...",
+  ], { h: "#d8cdb0", H: "#f2ecd8", b: "#8a7a58" }),
+  orcEar: bake([
+    "..e..",
+    ".eEe.",
+    "eEEe.",
+    ".eEe.",
+    "..e..",
+  ], { e: "#4e7a3c", E: "#7aa85c" }),
+  goblinFang: bake([
+    ".ff..",
+    ".fFf.",
+    "..ff.",
+    "..f..",
+  ], { f: "#d8d2c0", F: "#f4f0e2" }),
+  cursedRib: bake([
+    "..rr.",
+    ".rRr.",
+    ".rR..",
+    "rRr..",
+    "rr...",
+  ], { r: "#a8a290", R: "#ded8c4" }),
   // ---- Deep Wildlands camp decorations ----
   hut: bake([
     "......cc......",
@@ -1138,6 +1196,8 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   wood: SPR.wood, stone: SPR.stoneIcon, bones: SPR.bones, herb: SPR.herb, silk: SPR.silkIcon,
   venomGland: SPR.venomGland, shell: SPR.shellIcon, wolfFur: SPR.wolfFur,
   ghoulClaw: SPR.ghoulClaw, dragonScale: SPR.dragonScaleIcon,
+  minotaurHorn: SPR.minotaurHorn, orcEar: SPR.orcEar, goblinFang: SPR.goblinFang, cursedRib: SPR.cursedRib,
+  iron: SPR.ironIngot, steel: SPR.steelIngot, essentialGem: SPR.essentialGem, coal: SPR.coalLump,
   mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed, dragonHam: SPR.dragonHam,
   // Etap 22: every piece of the new catalog draws with ONE shared stub until
   // its own art lands. Slot-coloured so an outfit is still readable at a

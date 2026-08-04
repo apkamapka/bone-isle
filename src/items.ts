@@ -10,6 +10,13 @@ export type ItemKind =
   | "wood" | "stone" | "bones" | "herb" | "silk"
   // creature materials (Etap 8): loot-only, sold to shops / future research & tasks
   | "venomGland" | "shell" | "wolfFur" | "ghoulClaw" | "dragonScale"
+  // creature trophies (Etap 24): 15% from their family, the feedstock of Essential Gems
+  | "minotaurHorn" | "orcEar" | "goblinFang" | "cursedRib"
+  // forge materials (Etap 24): smelted from looted gear, never bought
+  | "iron" | "steel" | "essentialGem"
+  // furnace fuel: dropped by anything that makes camp — people, orcs,
+  // goblins, minotaurs. Not by beasts, and not by the undead.
+  | "coal"
   // consumables
   | "mushroom" | "meat" | "hpPotion" | "dragonHam"
   // crystals (charge-based spell replacements — one "use" per charge)
@@ -146,11 +153,26 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   bones:     { name: "Bones",        stack: 9999, value: 2, weight: 8 },
   herb:      { name: "Herb",         stack: 9999, value: 3, weight: 3 },
   silk:      { name: "Spider Silk",  stack: 9999, value: 4, weight: 2 },
-  venomGland:{ name: "Venom Gland",  stack: 9999, value: 5, weight: 2 },
-  shell:     { name: "Crab Shell",   stack: 9999, value: 3, weight: 6 },
-  wolfFur:   { name: "Wolf Fur",     stack: 9999, value: 6, weight: 5 },
-  ghoulClaw: { name: "Ghoul Claw",   stack: 9999, value: 8, weight: 3 },
+  venomGland:{ name: "Venom Gland",  stack: 9999, value: 15, weight: 2 },
+  shell:     { name: "Crab Shell",   stack: 9999, value: 15, weight: 6 },
+  wolfFur:   { name: "Wolf Fur",     stack: 9999, value: 18, weight: 5 },
+  ghoulClaw: { name: "Ghoul Claw",   stack: 9999, value: 25, weight: 3 },
   dragonScale:{ name: "Dragon Scale", stack: 999, value: 60, weight: 4 },
+  // ---- trophies. Priced to be worth selling once you have your gems, which
+  // ---- is exactly the regret the design wants: sell early, pay later.
+  minotaurHorn: { name: "Minotaur Horn", stack: 9999, value: 45, weight: 5 },
+  orcEar:       { name: "Orc Ear",       stack: 9999, value: 20, weight: 2 },
+  goblinFang:   { name: "Goblin Fang",   stack: 9999, value: 15, weight: 1 },
+  cursedRib:    { name: "Cursed Rib",    stack: 9999, value: 30, weight: 3 },
+  // ---- forge materials. Iron and steel are LIGHT on purpose: the Alchemy
+  // ---- Tower wants 600 iron and 550 steel, and at a realistic weight the
+  // ---- logistics of carrying them would be a bigger obstacle than earning
+  // ---- them. Storage Chests count towards build costs, so the haul is
+  // ---- spread over many trips either way.
+  iron:         { name: "Iron",          stack: 9999, value: 12, weight: 5 },
+  steel:        { name: "Steel",         stack: 9999, value: 100, weight: 6 },
+  essentialGem: { name: "Essential Gem", stack: 999, value: 1000, weight: 3 },
+  coal:         { name: "Coal",          stack: 9999, value: 4, weight: 4 },
   mushroom:  { name: "Mushroom",     stack: 999, value: 2, weight: 4, food: 60 },
   meat:      { name: "Raw Meat",     stack: 999, value: 3, weight: 8, food: 180 },
   dragonHam: { name: "Dragon Ham",   stack: 999, value: 8, weight: 10, food: 360 },
