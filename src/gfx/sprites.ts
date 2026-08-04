@@ -178,6 +178,63 @@ export const PLAYER_MAP: readonly string[] = [
 
 export const SPR = {
   player: bake(PLAYER_MAP),
+  /* ---- Etap 22 equipment stubs -------------------------------------- *
+   * Five shapes, one per slot, shared by all sixty pieces of the new gear
+   * catalog and every weapon in it. They exist so the catalog can go into
+   * the game before the pixel art does; each item peels off onto its own
+   * bake as the art arrives. Slot-distinct on purpose (a helm reads as a
+   * helm) but flat and ugly, so nothing here can quietly ship as final.
+   * ------------------------------------------------------------------ */
+  gearStubHead: bake([
+    "..llll..",
+    ".lllll l",
+    "l ll ll ",
+    "l lllll ",
+    ".l llll.",
+    "..l ll..",
+  ]),
+  gearStubBody: bake([
+    ".l llll.",
+    "llllllll",
+    "llll lll",
+    "llllllll",
+    "llll lll",
+    "llllllll",
+    ".llllll.",
+  ]),
+  gearStubLegs: bake([
+    "llllllll",
+    "llll lll",
+    "lll  lll",
+    "ll.  .ll",
+    "ll.  .ll",
+    "ll.  .ll",
+  ]),
+  gearStubBoots: bake([
+    "........",
+    "ll....ll",
+    "ll....ll",
+    "lll..lll",
+    "llll llll",
+  ]),
+  gearStubShield: bake([
+    ".llllll.",
+    "llllllll",
+    "lll  lll",
+    "llll lll",
+    ".llllll.",
+    "..llll..",
+    "...ll...",
+  ]),
+  gearStubWeapon: bake([
+    "....ll..",
+    "...lll..",
+    "..lll...",
+    ".lll....",
+    "lll.....",
+    "ll......",
+    "l.......",
+  ]),
   /**
    * PLACEHOLDER, shared by every creature of the human ladder that has no art
    * of its own yet (nineteen of them as of Etap 20). Deliberately ugly and
@@ -655,11 +712,6 @@ export const SPR = {
     "MMMMMM",
     ".MMMM.",
   ]),
-  swordIron: bake(["...m", "..mm", ".mm.", "mm..", "kk..", "b..."]),
-  swordBone: bake(["...w", "..ww", ".ww.", "ww..", "kk..", "c..."]),
-  // Marrow Blade — the unique cave-bottom treasure: pale bone blade with a
-  // silver sheen, gold cross-guard, dark grip. A touch taller than the rest.
-  swordMarrow: bake(["....w", "...wm", "..wm.", ".wm..", "cc...", "k....", "e...."]),
   crystalHeal: bake([
     "..ww..",
     ".wggw.",
@@ -806,39 +858,6 @@ export const SPR = {
     "rRrrrw.",
     ".rrrr..",
   ]),
-  axe: bake([
-    "mm..",
-    "mmb.",
-    "mmb.",
-    ".b..",
-    ".b..",
-    ".b..",
-  ]),
-  swordFire: bake([
-    "...r",
-    "..rc",
-    ".rc.",
-    "rc..",
-    "kk..",
-    "R...",
-  ]),
-  eqBodyLeather: bake(["t.tttt.t", "tttttttt", ".tbttbt.", ".tttttt.", ".tttttt."]),
-  eqBodyChain: bake(["M.MMMM.M", "MxMxMxMx", ".xMxMxM.", ".MxMxMx.", ".xMxMxM."]),
-  eqBodyDragon: bake(["g.gggg.g", "gggggggg", ".gGggGg.", ".gggggg.", ".gGggGg."]),
-  eqShieldSteel: bake([".MMMMMM.", ".MmmmmM.", ".MmMMmM.", "..MmmM..", "...MM..."]),
-  eqShieldDragon: bake([".gggggg.", ".gGggGg.", ".gggggg.", "..gGGg..", "...gg..."]),
-  // the Bone set: dull bone (W) with pale highlights (w) and dark lashings (k)
-  // — deliberately drabber than Marrow, which keeps its silver and gold
-  eqShieldBone: bake([".WWWWWW.", ".WwkkwW.", ".WWkkWW.", "..WwwW..", "...WW..."]),
-  eqHeadBone: bake(["..WWWW..", ".WwkkwW.", ".WkWWkW.", ".WW..WW."]),
-  eqLegsBone: bake([".WWWWWW.", ".Wk..kW.", ".Ww..wW.", ".WW..WW."]),
-  eqBootsBone: bake(["WW..WW..", "Wk..Wk..", "WWw.WWw.", "WWWWWWWW"]),
-  // the Marrow set: bone-white plate, silver sheen, gold trim (see swordMarrow)
-  eqShieldMarrow: bake([".wwwwww.", ".wmccmw.", ".wwmmww.", "..wwww..", "...ww..."]),
-  eqBodyMarrow: bake(["w.wwww.w", "wwmwwmww", ".wcwwcw.", ".wwmmww.", ".wwwwww."]),
-  eqHeadMarrow: bake(["..wwww..", ".wwmmww.", ".wcwwcw.", ".ww..ww."]),
-  eqLegsMarrow: bake([".wwwwww.", ".wm..mw.", ".wc..cw.", ".ww..ww."]),
-  eqBootsMarrow: bake(["ww..ww..", "wm..wm..", "wwc.wwc.", "wwwwwwww"]),
   bow: bake([
     ".hh.",
     "h..M",
@@ -1120,16 +1139,30 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   venomGland: SPR.venomGland, shell: SPR.shellIcon, wolfFur: SPR.wolfFur,
   ghoulClaw: SPR.ghoulClaw, dragonScale: SPR.dragonScaleIcon,
   mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed, dragonHam: SPR.dragonHam,
-  sword: SPR.sword, ironSword: SPR.swordIron, boneSword: SPR.swordBone, marrowBlade: SPR.swordMarrow,
-  battleAxe: SPR.axe, fireSword: SPR.swordFire,
-  helmet: SPR.eqHead, armor: SPR.eqBody, shieldItem: SPR.eqShield,
-  leatherArmor: SPR.eqBodyLeather, chainArmor: SPR.eqBodyChain, dragonScaleArmor: SPR.eqBodyDragon,
-  steelShield: SPR.eqShieldSteel, dragonShield: SPR.eqShieldDragon,
-  boneShield: SPR.eqShieldBone, boneHelmet: SPR.eqHeadBone,
-  boneLegs: SPR.eqLegsBone, boneBoots: SPR.eqBootsBone,
-  marrowShield: SPR.eqShieldMarrow, marrowArmor: SPR.eqBodyMarrow, marrowHelmet: SPR.eqHeadMarrow,
-  marrowLegs: SPR.eqLegsMarrow, marrowBoots: SPR.eqBootsMarrow,
-  legs: SPR.eqLegs, boots: SPR.eqBoots, ring: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
+  // Etap 22: every piece of the new catalog draws with ONE shared stub until
+  // its own art lands. Slot-coloured so an outfit is still readable at a
+  // glance, but deliberately crude — a placeholder that looks finished is a
+  // placeholder that never gets replaced.
+  ring: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
+  leatherHelm: SPR.gearStubHead, snakeskinHelm: SPR.gearStubHead, leatherBody: SPR.gearStubBody, snakeskinBody: SPR.gearStubBody,
+  leatherLegs: SPR.gearStubLegs, snakeskinLegs: SPR.gearStubLegs, leatherBoots: SPR.gearStubBoots, snakeskinBoots: SPR.gearStubBoots,
+  leatherShield: SPR.gearStubShield, snakeskinShield: SPR.gearStubShield, studdedHelm: SPR.gearStubHead, goblinHelm: SPR.gearStubHead,
+  studdedBody: SPR.gearStubBody, goblinBody: SPR.gearStubBody, studdedLegs: SPR.gearStubLegs, goblinLegs: SPR.gearStubLegs,
+  studdedBoots: SPR.gearStubBoots, goblinBoots: SPR.gearStubBoots, studdedShield: SPR.gearStubShield, goblinShield: SPR.gearStubShield,
+  chainHelm: SPR.gearStubHead, orcishHelm: SPR.gearStubHead, chainBody: SPR.gearStubBody, orcishBody: SPR.gearStubBody,
+  chainLegs: SPR.gearStubLegs, orcishLegs: SPR.gearStubLegs, chainBoots: SPR.gearStubBoots, orcishBoots: SPR.gearStubBoots,
+  chainShield: SPR.gearStubShield, orcishShield: SPR.gearStubShield, plateHelm: SPR.gearStubHead, minotaurHelm: SPR.gearStubHead,
+  plateBody: SPR.gearStubBody, minotaurBody: SPR.gearStubBody, plateLegs: SPR.gearStubLegs, minotaurLegs: SPR.gearStubLegs,
+  plateBoots: SPR.gearStubBoots, minotaurBoots: SPR.gearStubBoots, plateShield: SPR.gearStubShield, minotaurShield: SPR.gearStubShield,
+  steelHelm: SPR.gearStubHead, marrowHelm: SPR.gearStubHead, steelBody: SPR.gearStubBody, marrowBody: SPR.gearStubBody,
+  steelLegs: SPR.gearStubLegs, marrowLegs: SPR.gearStubLegs, steelBoots: SPR.gearStubBoots, marrowBoots: SPR.gearStubBoots,
+  steelShield: SPR.gearStubShield, marrowShield: SPR.gearStubShield, knightHelm: SPR.gearStubHead, dragonHelm: SPR.gearStubHead,
+  knightBody: SPR.gearStubBody, dragonBody: SPR.gearStubBody, knightLegs: SPR.gearStubLegs, dragonLegs: SPR.gearStubLegs,
+  knightBoots: SPR.gearStubBoots, dragonBoots: SPR.gearStubBoots, knightShield: SPR.gearStubShield, dragonShield: SPR.gearStubShield,
+  shortSword: SPR.gearStubWeapon, fangDagger: SPR.gearStubWeapon, ironSword: SPR.gearStubWeapon, goblinHatchet: SPR.gearStubWeapon,
+  mercBlade: SPR.gearStubWeapon, warHammer: SPR.gearStubWeapon, orcishAxe: SPR.gearStubWeapon, gladius: SPR.gearStubWeapon,
+  boneSword: SPR.gearStubWeapon, minotaurAxe: SPR.gearStubWeapon, warlordBlade: SPR.gearStubWeapon, steelMaul: SPR.gearStubWeapon,
+  demonCleaver: SPR.gearStubWeapon, knightSword: SPR.gearStubWeapon, fireSword: SPR.gearStubWeapon, marrowBlade: SPR.gearStubWeapon,
   healCrystal: SPR.crystalHeal, fireCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
   spearCrystal: SPR.crystalSpear, fireRuby: SPR.fireRuby,
   fireEmberShard: elementalIcon("fire", 0, "Shard"),
