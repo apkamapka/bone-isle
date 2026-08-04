@@ -3750,6 +3750,70 @@ async function main(): Promise<void> {
     ok(!knightInLoot, "no creature drops a piece of the Knight set — the chests are its only source");
   }
 
+  console.log("Etap 23 — purses, weapon drops and the boot outlier:");
+  {
+    const { MONSTER_DEFS, MONSTER_KINDS } = await import("../src/entities/monsters.ts");
+    const I = items.ITEMS;
+    const D = MONSTER_DEFS;
+    const HUMANS = ["beggar", "vagrant", "thief", "poacher", "bandit", "smuggler", "cutthroat",
+      "deserter", "brigand", "highwayman", "mercenary", "corsair", "wildWarrior", "amazon",
+      "hunter", "gladiator", "barbarian", "raider", "warlord", "chieftain"] as const;
+
+    /* --- every human now sheds armour AND a weapon of their rank --- */
+    const armed = HUMANS.filter((k) =>
+      (D[k].loot as { kind: string }[]).some((e) => I[e.kind as keyof typeof I].slot === "weapon"
+        || I[e.kind as keyof typeof I].bow !== undefined || I[e.kind as keyof typeof I].ammo !== undefined));
+    ok(armed.length === HUMANS.length - 1,
+      `${armed.length} of ${HUMANS.length} humans drop a weapon — only the beggar has none`);
+    ok(!(D.beggar.loot as { kind: string }[]).some((e) => I[e.kind as keyof typeof I].slot === "weapon"),
+      "…and a beggar carrying a sword would be a beggar with a job");
+    // the three human shooters shed the tool they actually fight with
+    for (const k of ["poacher", "amazon", "hunter"] as const) {
+      ok((D[k].loot as { kind: string }[]).some((e) => I[e.kind as keyof typeof I].ammo),
+        `the ${k} drops the ammunition it was firing`);
+    }
+
+    /* --- purses: people carry coin, beasts pay in gear --- */
+    const avgGold = (k: string): number => (D[k as never].gold[0] + D[k as never].gold[1]) / 2;
+    ok(avgGold("mercenary") > avgGold("goblin"),
+      "a mercenary carries more coin than a goblin of the same level");
+    ok(avgGold("chieftain") > avgGold("demonSkeleton"),
+      "…and a chieftain more than the demon skeleton that matches him");
+    ok(avgGold("minotaurGuard") > avgGold("minotaur"),
+      "an elite carries a fatter purse than the rank and file");
+    let risesWithDanger = true;
+    const byExp = [...MONSTER_KINDS].sort((a, b) => D[a].exp - D[b].exp);
+    for (let i = 5; i < byExp.length; i++) {
+      if (avgGold(byExp[i]) < avgGold(byExp[i - 5]) * 0.8) risesWithDanger = false;
+    }
+    ok(risesWithDanger, "purses climb with the bestiary rather than jumping about");
+    ok(avgGold("dragon") > avgGold("chieftain") * 1.5, "the dragon guards a hoard, not a purse");
+
+    /* --- Swift Boots: the deliberate outlier --- */
+    {
+      const swift = I.swiftBoots;
+      ok(swift.set === undefined, "Swift Boots belong to no set — that is the whole point");
+      const setBoots = (Object.keys(I) as (keyof typeof I)[])
+        .filter((k) => I[k].slot === "boots" && I[k].set);
+      ok(setBoots.every((k) => (I[k].gear?.speed ?? 0) < (swift.gear?.speed ?? 0)),
+        `no set boot is faster (${swift.gear?.speed})`);
+      // the real price is not the boot's own armor — it is the set bonus you
+      // give up by breaking the outfit, which is what makes this a decision
+      const { defenseArmor } = await import("../src/systems/skills.ts");
+      const p = createPlayer({ x: 0, y: 0 });
+      p.eq.head = "knightHelm"; p.eq.body = "knightBody"; p.eq.legs = "knightLegs";
+      p.eq.boots = "knightBoots";
+      const matched = defenseArmor(p.eq);
+      p.eq.boots = "swiftBoots";
+      const swiftly = defenseArmor(p.eq);
+      ok(matched - swiftly === 4,
+        `wearing them costs 4 armor: the boot gap plus the whole set bonus (${matched} → ${swiftly})`);
+      ok((swift.gear?.speed ?? 0) - (I.knightBoots.gear?.speed ?? 0) === 2,
+        "…bought with two points of speed over the best set boot in the game");
+      ok(!!items.RECIPES.find((r) => r.out === "swiftBoots"), "they are craftable from the start");
+    }
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
