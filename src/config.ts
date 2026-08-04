@@ -366,19 +366,38 @@ export const STANCE_DEF = { offensive: 1.0, balanced: 1.2, defensive: 2.0 } as c
 export const ARMOR_MIN_RATIO = 0.5;
 
 /** Shield block ceiling: (SHIELD_SKILL_FACTOR · Shielding + SHIELD_FLAT_FACTOR)
- *  · the defense of what is in your hands · stance. The actual block is rolled
- *  triangular over 0..ceiling, so defense is steady rather than a lottery.
- *  SHIELD_SKILL_FACTOR is the main attack↔defense dial of the game. */
-export const SHIELD_SKILL_FACTOR = 0.020;
+ *  · the defense pool in your hands · stance. The actual block is rolled
+ *  triangular over half..ceiling, so defense is steady rather than a lottery.
+ *  SHIELD_SKILL_FACTOR is the main attack↔defense dial of the game; it matches
+ *  the constant The Forgotten Server uses in Player::getDefense. */
+export const SHIELD_SKILL_FACTOR = 0.015;
 export const SHIELD_FLAT_FACTOR = 0.1;
 
-/** Hard ceiling on how much of one hit armor + shield may erase. Without it a
- *  well-geared character becomes literally untouchable by weaker attackers;
- *  as a PERCENTAGE it also guarantees that big hits always land for something. */
-export const DEFENSE_CAP_FRAC = 0.5;
+/**
+ * Physical damage has NO floor and NO percentage cap — Etap 21 replaced both.
+ *
+ * The old model summed armor and shield and then clipped the total at half the
+ * incoming hit. That clip was the reason a level 25 character in the best set
+ * in the game still took 8 damage from a bandit: armor 38 alone already
+ * exceeded half of a 16-point hit, so the cap bound every single time and the
+ * shield contributed literally nothing (removing it changed the damage by
+ * under one percent). Being well equipped could not, by construction, make a
+ * weak creature harmless.
+ *
+ * Tibia does it the other way around and that is what we now copy: the shield
+ * rolls first and, if it eats the hit outright, the hit is over at zero and
+ * armor is never consulted; whatever survives meets armor as a flat, uncapped
+ * subtraction that can also land on zero. A creature far below your gear ends
+ * up unable to scratch you, which is exactly the intended feel, while a big
+ * hitter is barely inconvenienced because flat reduction is a chip off a large
+ * number. Elemental damage keeps its own floor — see MIN_ELEMENTAL_DAMAGE.
+ */
+export const MIN_ELEMENTAL_DAMAGE = 1;
 
-/** Damage that always gets through, no matter the defense. */
-export const MIN_DAMAGE = 1;
+/** Player-to-monster floor. Monsters keep a floor where the player no longer
+ *  has one, because a creature whose armor exceeded your weapon would
+ *  otherwise be unkillable rather than merely tough. */
+export const MIN_DAMAGE_TO_MONSTER = 1;
 
 /** How long a blow you landed keeps you "in combat" for skill purposes.
  *  Long enough to cover repositioning and a healing pause, short enough that
@@ -409,28 +428,35 @@ export const DUMMY_SHIELD_RATE = 0.25;
  *  nothing better to buy, and every further point of power has to be
  *  trained. These functions are the design targets, checked against the
  *  real item table in the smoke tests rather than read by the game.
+ *
+ *  Etap 21 pulled all three curves sharply down. Once the damage pipeline
+ *  stopped capping reduction at half the hit, armor became a flat uncapped
+ *  subtraction — and at the old values (a 38-point set against a dragon whose
+ *  hardest swing is 109) it was a wall rather than a chip. Tibia keeps the
+ *  ratio near a tenth; these curves target roughly a fifth of a same-tier
+ *  creature's maximum hit for a full set, and a seventh for a shield, which
+ *  is what makes a creature several tiers below you unable to land anything
+ *  while leaving a same-tier one dangerous.
  * ------------------------------------------------------------------ */
 
 /** Best attack VALUE available at a level — fists included, so compare it
  *  against MELEE_FIST_ATK + the weapon's gear Attack, not the weapon alone. */
 export function bestWeaponAtk(level: number): number {
-  return Math.min(50, 12 + 0.45 * level);
+  return Math.min(31, 10.5 + 0.41 * level);
 }
 
 /** Best shield Defense available at a level. Unlike the weapon curve this one
  *  bends: defense climbs briskly to level 25, then flattens out, so the early
  *  game is where a shield upgrade is genuinely felt. */
 export function bestShieldDef(level: number): number {
-  const raw = level <= 25 ? 8 + 0.583 * (level - 1) : 22 + 0.307 * (level - 25);
-  return Math.min(45, raw);
+  return Math.min(17, 1.1 + 0.32 * level);
 }
 
 /** Best TOTAL armor rating of a full worn set (head + body + legs + boots).
  *  Same two-part shape as the shield, five points lower at the start — a
  *  beginner finds a shield before a matched set of plate. */
 export function bestArmorSet(level: number): number {
-  const raw = level <= 25 ? 5 + 0.71 * (level - 1) : 22 + 0.31 * (level - 25);
-  return Math.min(45, raw);
+  return Math.min(22, 0.4 + 0.43 * level);
 }
 
 /** Dropped items linger on the ground this long (seconds) before vanishing. */

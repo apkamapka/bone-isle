@@ -41,7 +41,14 @@ export type EqSlot = "head" | "body" | "legs" | "boots" | "weapon" | "shield" | 
 
 export interface GearStats {
   atk?: number;
+  /** Guard rating. On worn pieces it is armor; on a shield or a weapon it is
+   *  the defense pool — and those two do NOT stack, the larger one wins.
+   *  See defenseShield() for why, and for what defBonus does differently. */
   def?: number;
+  /** A weapon's always-on guard, added on top of whichever pool won. Small by
+   *  design: it is the reason a sword still defends better than a maul when
+   *  both are held behind the same shield. */
+  defBonus?: number;
   speed?: number;
   maxhp?: number;
 }
@@ -148,41 +155,41 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   // wood), zero attack — pure Distance training fodder for the Archery Range.
   trainingArrow: { name: "Training Arrow", stack: 9999, value: 0, weight: 1, ammo: { dmg: 0 }, practice: true },
   boneArrow: { name: "Bone Arrow",   stack: 999, value: 2, weight: 1, ammo: { dmg: 14 } },
-  sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 5 } },
-  ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 9 } },
-  battleAxe: { name: "Battle Axe",   stack: 1, value: 80, weight: 45, slot: "weapon", gear: { atk: 11 } },
-  boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 14 } },
+  sword:     { name: "Short Sword",  stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 6, def: 6, defBonus: 1 } },
+  ironSword: { name: "Iron Sword",   stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 10, def: 10, defBonus: 2 } },
+  battleAxe: { name: "Battle Axe",   stack: 1, value: 80, weight: 45, slot: "weapon", gear: { atk: 13, def: 8, defBonus: 1 } },
+  boneSword: { name: "Bone Sword",   stack: 1, value: 120, weight: 48, slot: "weapon", gear: { atk: 16, def: 16, defBonus: 3 } },
   // Fire Sword — the dragon's rare blade: below the Marrow Blade (20) but
   // obtainable without the cave-bottom chest run.
-  fireSword: { name: "Fire Sword",   stack: 1, value: 350, weight: 46, slot: "weapon", gear: { atk: 19 } },
+  fireSword: { name: "Fire Sword",   stack: 1, value: 350, weight: 46, slot: "weapon", gear: { atk: 20, def: 20, defBonus: 3 } },
   // Unique treasure: found only in the chest at the bottom of the Bone
   // Caverns (-3). Deliberately absent from every shop and every loot table.
-  marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 24 } },
-  helmet:    { name: "Iron Helmet",  stack: 1, value: 30, weight: 55, slot: "head",   gear: { def: 3 } },
+  marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 24, def: 22, defBonus: 3 } },
+  helmet:    { name: "Iron Helmet",  stack: 1, value: 30, weight: 55, slot: "head",   gear: { def: 2 } },
   leatherArmor:{ name: "Leather Armor", stack: 1, value: 25, weight: 70, slot: "body", gear: { def: 3 } },
-  chainArmor:{ name: "Chain Armor",  stack: 1, value: 45, weight: 95, slot: "body",  gear: { def: 6 } },
-  armor:     { name: "Plate Armor",  stack: 1, value: 70, weight: 120, slot: "body",  gear: { def: 9 } },
-  dragonScaleArmor:{ name: "Dragon Scale Armor", stack: 1, value: 400, weight: 100, slot: "body", gear: { def: 13 } },
-  shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, weight: 60, slot: "shield", gear: { def: 8 } },
-  steelShield:{ name: "Steel Shield", stack: 1, value: 70, weight: 65, slot: "shield", gear: { def: 13 } },
-  dragonShield:{ name: "Dragon Shield", stack: 1, value: 300, weight: 70, slot: "shield", gear: { def: 21 } },
+  chainArmor:{ name: "Chain Armor",  stack: 1, value: 45, weight: 95, slot: "body",  gear: { def: 5 } },
+  armor:     { name: "Plate Armor",  stack: 1, value: 70, weight: 120, slot: "body",  gear: { def: 7 } },
+  dragonScaleArmor:{ name: "Dragon Scale Armor", stack: 1, value: 400, weight: 100, slot: "body", gear: { def: 9 } },
+  shieldItem:{ name: "Wooden Shield", stack: 1, value: 25, weight: 60, slot: "shield", gear: { def: 4 } },
+  steelShield:{ name: "Steel Shield", stack: 1, value: 70, weight: 65, slot: "shield", gear: { def: 8 } },
+  dragonShield:{ name: "Dragon Shield", stack: 1, value: 300, weight: 70, slot: "shield", gear: { def: 14 } },
   // ---- the Marrow set: pale bone plate with a silver sheen and gold trim,
   // ---- the armour counterpart of the Marrow Blade. One-time chest prizes.
-  marrowShield:{ name: "Marrow Shield",  stack: 1, value: 520, weight: 68, slot: "shield", gear: { def: 28 } },
-  marrowArmor: { name: "Marrow Plate",   stack: 1, value: 620, weight: 110, slot: "body",  gear: { def: 15 } },
-  marrowHelmet:{ name: "Marrow Helm",    stack: 1, value: 420, weight: 52, slot: "head",   gear: { def: 8 } },
-  marrowLegs:  { name: "Marrow Greaves", stack: 1, value: 460, weight: 84, slot: "legs",   gear: { def: 10 } },
-  marrowBoots: { name: "Marrow Boots",   stack: 1, value: 380, weight: 26, slot: "boots",  gear: { def: 5, speed: 16 } },
+  marrowShield:{ name: "Marrow Shield",  stack: 1, value: 520, weight: 68, slot: "shield", gear: { def: 17 } },
+  marrowArmor: { name: "Marrow Plate",   stack: 1, value: 620, weight: 110, slot: "body",  gear: { def: 10 } },
+  marrowHelmet:{ name: "Marrow Helm",    stack: 1, value: 420, weight: 52, slot: "head",   gear: { def: 5 } },
+  marrowLegs:  { name: "Marrow Greaves", stack: 1, value: 460, weight: 84, slot: "legs",   gear: { def: 5 } },
+  marrowBoots: { name: "Marrow Boots",   stack: 1, value: 380, weight: 26, slot: "boots",  gear: { def: 2, speed: 16 } },
   // ---- the Bone set: dull bone lashed over leather, the working armour of
   // ---- Bonetown. Sits between plate and the Marrow prizes and is CRAFTED,
   // ---- so the level 20-30 stretch has an upgrade you can work towards
   // ---- rather than one you have to be lucky enough to loot.
-  boneShield:{ name: "Bone Shield",  stack: 1, value: 180, weight: 62, slot: "shield", gear: { def: 17 } },
-  boneHelmet:{ name: "Bone Helm",    stack: 1, value: 150, weight: 50, slot: "head",   gear: { def: 6 } },
-  boneLegs:  { name: "Bone Greaves", stack: 1, value: 170, weight: 82, slot: "legs",   gear: { def: 7 } },
-  boneBoots: { name: "Bone Treads",  stack: 1, value: 130, weight: 25, slot: "boots",  gear: { def: 3, speed: 8 } },
-  legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 4 } },
-  boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 2, speed: 12 } },
+  boneShield:{ name: "Bone Shield",  stack: 1, value: 180, weight: 62, slot: "shield", gear: { def: 11 } },
+  boneHelmet:{ name: "Bone Helm",    stack: 1, value: 150, weight: 50, slot: "head",   gear: { def: 3 } },
+  boneLegs:  { name: "Bone Greaves", stack: 1, value: 170, weight: 82, slot: "legs",   gear: { def: 4 } },
+  boneBoots: { name: "Bone Treads",  stack: 1, value: 130, weight: 25, slot: "boots",  gear: { def: 2, speed: 8 } },
+  legs:      { name: "Iron Legs",    stack: 1, value: 40, weight: 90, slot: "legs",   gear: { def: 3 } },
+  boots:     { name: "Swift Boots",  stack: 1, value: 30, weight: 24, slot: "boots",  gear: { def: 1, speed: 12 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
@@ -463,7 +470,15 @@ export function itemInfoLines(kind: ItemKind): string[] {
   else if (d.ammo) lines.push(`Ammo · Attack ${d.ammo.dmg}`);
   if (d.food) lines.push(`Feeds you for ${d.food}s`);
   if (d.gear?.atk) lines.push(`Attack +${d.gear.atk}`);
-  if (d.gear?.def) lines.push(`Defense +${d.gear.def}`);
+  if (d.gear?.def) {
+    // The same number means two different things depending on where it sits,
+    // and hiding that would make gear choices unreadable: worn pieces stack
+    // into armor, while a shield and a weapon compete for one guard pool and
+    // only the larger of the two is ever consulted.
+    const handHeld = d.slot === "shield" || d.slot === "weapon";
+    lines.push(handHeld ? `Defense ${d.gear.def} (higher of shield/weapon counts)` : `Armor +${d.gear.def}`);
+  }
+  if (d.gear?.defBonus) lines.push(`Defense +${d.gear.defBonus} even behind a shield`);
   if (d.gear?.speed) lines.push(`Speed +${d.gear.speed}`);
   if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
   if (d.crystal) lines.push(`Charge item (1 use per unit)`);
