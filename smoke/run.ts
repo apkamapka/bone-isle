@@ -3789,28 +3789,18 @@ async function main(): Promise<void> {
     ok(risesWithDanger, "purses climb with the bestiary rather than jumping about");
     ok(avgGold("dragon") > avgGold("chieftain") * 1.5, "the dragon guards a hoard, not a purse");
 
-    /* --- Swift Boots: the deliberate outlier --- */
+    /* --- every boot belongs to a set, and none is a free upgrade --- */
     {
-      const swift = I.swiftBoots;
-      ok(swift.set === undefined, "Swift Boots belong to no set — that is the whole point");
-      const setBoots = (Object.keys(I) as (keyof typeof I)[])
-        .filter((k) => I[k].slot === "boots" && I[k].set);
-      ok(setBoots.every((k) => (I[k].gear?.speed ?? 0) < (swift.gear?.speed ?? 0)),
-        `no set boot is faster (${swift.gear?.speed})`);
-      // the real price is not the boot's own armor — it is the set bonus you
-      // give up by breaking the outfit, which is what makes this a decision
-      const { defenseArmor } = await import("../src/systems/skills.ts");
-      const p = createPlayer({ x: 0, y: 0 });
-      p.eq.head = "knightHelm"; p.eq.body = "knightBody"; p.eq.legs = "knightLegs";
-      p.eq.boots = "knightBoots";
-      const matched = defenseArmor(p.eq);
-      p.eq.boots = "swiftBoots";
-      const swiftly = defenseArmor(p.eq);
-      ok(matched - swiftly === 4,
-        `wearing them costs 4 armor: the boot gap plus the whole set bonus (${matched} → ${swiftly})`);
-      ok((swift.gear?.speed ?? 0) - (I.knightBoots.gear?.speed ?? 0) === 2,
-        "…bought with two points of speed over the best set boot in the game");
-      ok(!!items.RECIPES.find((r) => r.out === "swiftBoots"), "they are craftable from the start");
+      // Swift Boots are gone (Etap 24). They were the one boot outside the
+      // set system, which made "best speed in the game" a thing you could
+      // wear with any outfit; the catalog is cleaner with the choice living
+      // entirely inside the sets, where the human line already IS the fast
+      // one. This assertion is the tripwire against quietly adding another.
+      const boots = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "boots");
+      ok(boots.length === 12, `twelve boots, one per set (${boots.length})`);
+      ok(boots.every((k) => I[k].set !== undefined), "every boot belongs to a set");
+      const fastest = boots.reduce((a, b) => ((I[a].gear?.speed ?? 0) >= (I[b].gear?.speed ?? 0) ? a : b));
+      ok(fastest === "knightBoots", `the quickest boot in the game is the human line's best (${fastest})`);
     }
   }
 
