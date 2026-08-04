@@ -1143,6 +1143,7 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   // its own art lands. Slot-coloured so an outfit is still readable at a
   // glance, but deliberately crude — a placeholder that looks finished is a
   // placeholder that never gets replaced.
+  swiftBoots: SPR.gearStubBoots,
   ring: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
   leatherHelm: SPR.gearStubHead, snakeskinHelm: SPR.gearStubHead, leatherBody: SPR.gearStubBody, snakeskinBody: SPR.gearStubBody,
   leatherLegs: SPR.gearStubLegs, snakeskinLegs: SPR.gearStubLegs, leatherBoots: SPR.gearStubBoots, snakeskinBoots: SPR.gearStubBoots,
