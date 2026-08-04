@@ -52,8 +52,6 @@ export type ItemKind =
   // human smiths make swords and hammers that guard as well as they cut,
   // beasts carry axes and fangs that hit harder and defend far worse
   | "shortSword" | "fangDagger" | "ironSword" | "goblinHatchet" | "mercBlade" | "warHammer" | "orcishAxe" | "gladius" | "boneSword" | "minotaurAxe" | "warlordBlade" | "steelMaul" | "demonCleaver" | "knightSword" | "fireSword" | "marrowBlade"
-  // Swift Boots: the one deliberate outlier of the boot ladder — see below
-  | "swiftBoots"
   | "ring" | "amulet"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet"
@@ -291,19 +289,6 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   dragonBoots: { name: "Dragon Scale Boots", stack: 1, value: 156, weight: 26, slot: "boots", gear: { def: 2, speed: 8 }, set: "dragon" },
   knightShield: { name: "Knight Shield", stack: 1, value: 272, weight: 60, slot: "shield", gear: { def: 17 } },
   dragonShield: { name: "Dragon Shield", stack: 1, value: 313, weight: 70, slot: "shield", gear: { def: 17 } },
-  /**
-   * Swift Boots — back in the ladder, and deliberately the only boot in the
-   * game with no set behind it.
-   *
-   * Etap 22 folded every boot into a matched set, which quietly deleted the
-   * one interesting choice the old catalog had: the pair that was worth
-   * wearing purely for the speed. This is that pair, rebuilt to fit. Its
-   * speed beats every set boot in the game, its armor is the worst of any
-   * boot past tier 1, and wearing it costs the whole set bonus (2-3 armor).
-   * A player who wants to kite, gather or outrun a berserker pays for it in
-   * defense — which is a decision, not an upgrade.
-   */
-  swiftBoots: { name: "Swift Boots", stack: 1, value: 70, weight: 22, slot: "boots", gear: { def: 1, speed: 14 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
@@ -522,7 +507,6 @@ export const RECIPES: readonly Recipe[] = [
   { out: "chainLegs",   cost: { stone: 14, silk: 4 } },
   { out: "chainBoots",  cost: { stone: 8, silk: 6 } },
   { out: "chainShield", cost: { stone: 12, wood: 8 } },
-  { out: "swiftBoots", cost: { wood: 6, silk: 8 } },
   { out: "ring",       cost: { stone: 6, bones: 8 } },
   { out: "amulet",     cost: { bones: 12, silk: 6 } },
   { out: "aolAmulet",  cost: {}, gold: 500 },
