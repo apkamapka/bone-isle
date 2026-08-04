@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   {
     const bag = items.emptyBag();
     ok(items.bagRoomFor(bag, "wood", 9999), "empty bag fits a full wood stack");
-    bag.fill({ kind: "sword", n: 1 });
+    bag.fill({ kind: "shortSword", n: 1 });
     ok(!items.bagRoomFor(bag, "wood", 1), "full bag of gear fits nothing");
     bag[0] = { kind: "wood", n: 9990 };
     ok(items.bagRoomFor(bag, "wood", 9), "partial stack still absorbs 9");
@@ -41,14 +41,14 @@ async function main(): Promise<void> {
     q2.progress = 6; q2.done = true;
     let expGiven = 0;
     // full bag → "full", nothing consumed / claimed
-    p.bag.fill({ kind: "helmet", n: 1 });
+    p.bag.fill({ kind: "chainHelm", n: 1 });
     ok(claimQuest(p, q2, (n) => { expGiven += n; }) === "full", "full bag blocks the claim");
     ok(!q2.claimed && expGiven === 0, "claim was fully rolled back (not claimed, no exp)");
     // free a slot → "ok", exp + item both granted
     p.bag[0] = null;
     ok(claimQuest(p, q2, (n) => { expGiven += n; }) === "ok", "claim succeeds with room");
     ok(expGiven === 50, "quest exp is granted via giveExp (was silently lost before)");
-    ok(items.bagCount(p.bag, "sword") === 1, "item reward landed in the bag");
+    ok(items.bagCount(p.bag, "shortSword") === 1, "item reward landed in the bag");
     ok(claimQuest(p, q2, (n) => { expGiven += n; }) === "no", "double-claim rejected");
     resetQuests();
     ok(quests.every((q) => !q.done && !q.claimed && q.progress === 0), "resetQuests wipes the chain");
@@ -272,15 +272,15 @@ async function main(): Promise<void> {
     const p = createPlayer({ x: 200, y: 200 });
     p.level = 1; // no death-drop side effects
     p.maxhp = 10_000_000; p.hp = p.maxhp;
-    p.eq.shield = "shieldItem"; // def 4 (guard pool)
-    p.eq.body = "armor";        // def 7 (armor side)
-    ok(defenseShield(p.eq) === 4 && defenseArmor(p.eq) === 7, "defense split: pool 4 / armor 7");
+    p.eq.shield = "leatherShield"; // def 4 (guard pool)
+    p.eq.body = "chainBody";       // def 4 (armor side)
+    ok(defenseShield(p.eq) === 4 && defenseArmor(p.eq) === 4, "defense split: pool 4 / armor 4");
     ok(shieldBlockMax(p.eq) > 0, "a held shield gives a non-zero block ceiling");
     // Gear the character up so the two defense layers are worth more than the
     // rounding noise, then compare AVERAGES — every reduction is now a roll,
     // so a single hit proves nothing.
-    p.eq.shield = "marrowShield"; p.eq.head = "marrowHelmet";
-    p.eq.body = "marrowArmor"; p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots";
+    p.eq.shield = "marrowShield"; p.eq.head = "marrowHelm";
+    p.eq.body = "marrowBody"; p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots";
     skills.shield.lv = 60;
     const RAW = 200;
     const sample = (n: number, engaged: boolean): number => {
@@ -304,7 +304,7 @@ async function main(): Promise<void> {
     resetSkills();
     const p2 = createPlayer({ x: 200, y: 200 });
     p2.level = 1; p2.maxhp = 100000; p2.hp = 100000;
-    p2.eq.shield = "shieldItem";
+    p2.eq.shield = "leatherShield";
     markBloodHit();
     hurtPlayer(worlds.home, p2, 200);
     hurtPlayer(worlds.home, p2, 200);
@@ -315,7 +315,7 @@ async function main(): Promise<void> {
     resetShieldWindow(); resetSkills(); resetBloodHit();
     const idle = createPlayer({ x: 200, y: 200 });
     idle.level = 1; idle.maxhp = 100000; idle.hp = 100000;
-    idle.eq.shield = "shieldItem";
+    idle.eq.shield = "leatherShield";
     for (let i = 0; i < 50; i++) { resetShieldWindow(); hurtPlayer(worlds.home, idle, 20); }
     ok(skills.shield.pts === 0, "50 hits taken without fighting back train NOTHING");
     markBloodHit();
@@ -528,10 +528,10 @@ async function main(): Promise<void> {
       const p = mk(60, "marrowBlade");
       st.setStance("offensive");
       const off = sk.attackPower(60, p.eq);
-      const offBlock = sk.shieldBlockMax({ ...p.eq, shield: "steelShield" } as never);
+      const offBlock = sk.shieldBlockMax({ ...p.eq, shield: "orcishShield" } as never);
       st.setStance("defensive");
       const def = sk.attackPower(60, p.eq);
-      const defBlock = sk.shieldBlockMax({ ...p.eq, shield: "steelShield" } as never);
+      const defBlock = sk.shieldBlockMax({ ...p.eq, shield: "orcishShield" } as never);
       ok(off > def, `offensive out-damages defensive (${off} vs ${def})`);
       ok(defBlock > offBlock, `defensive out-blocks offensive (${defBlock.toFixed(1)} vs ${offBlock.toFixed(1)})`);
       ok(Math.abs(def / off - cfg.STANCE_ATK.defensive / cfg.STANCE_ATK.offensive) < 0.02, "the stance ratio matches STANCE_ATK");
@@ -592,8 +592,8 @@ async function main(): Promise<void> {
       resetSkills(); resetShieldWindow(); st.resetStance();
       const p = createPlayer({ x: 200, y: 200 });
       p.level = 1; p.maxhp = 10_000_000; p.hp = p.maxhp;
-      p.eq.shield = "marrowShield"; p.eq.head = "marrowHelmet";
-      p.eq.body = "marrowArmor"; p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots";
+      p.eq.shield = "marrowShield"; p.eq.head = "marrowHelm";
+      p.eq.body = "marrowBody"; p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots";
       skills.shield.lv = 60;
       const avgOf = (raw: number): number => {
         let total = 0;
@@ -643,63 +643,80 @@ async function main(): Promise<void> {
     const defOf = (k: keyof typeof I): number => I[k].gear?.def ?? 0;
     const atkValue = (k: keyof typeof I): number => cfg.MELEE_FIST_ATK + (I[k].gear?.atk ?? 0);
 
-    // Each rung names the level it is meant to carry a character through.
-    // Etap 21 moved every rung up the level axis. The bestiary was re-tiered
-    // first (a goblin is a level 16 creature now, not a level 8 one) and the
-    // gear scale was then pulled down to keep flat armor a chip rather than a
-    // wall, so the level a given piece carries you through shifted twice.
-    const weapons = [["sword", 6], ["ironSword", 16], ["battleAxe", 23],
-      ["boneSword", 30], ["fireSword", 40], ["marrowBlade", 50]] as const;
-    const shields = [["shieldItem", 9], ["steelShield", 22], ["boneShield", 31],
-      ["dragonShield", 40], ["marrowShield", 50]] as const;
-    // full worn sets: head + body + legs + boots
+    // Etap 22 replaced the whole catalog with twelve matched sets: six tiers,
+    // a human and a beast line at each. The level beside every rung is the
+    // level that rung is designed to carry a character through, solved from
+    // the design curve rather than guessed — which is why the human and beast
+    // levels differ slightly at the same tier: the beast body piece carries
+    // one more point of armor, so it lands a rung further along the curve.
+    const weapons = [["shortSword", 6], ["ironSword", 16], ["mercBlade", 23],
+      ["gladius", 30], ["warlordBlade", 40], ["knightSword", 50]] as const;
+    const shields = [["leatherShield", 9], ["studdedShield", 15], ["chainShield", 22],
+      ["plateShield", 31], ["steelShield", 40], ["knightShield", 50]] as const;
+    const beastShields = [["snakeskinShield", 9], ["goblinShield", 15], ["orcishShield", 22],
+      ["minotaurShield", 31], ["marrowShield", 40], ["dragonShield", 50]] as const;
+    // full worn sets: head + body + legs + boots, both lines
     const sets = [
-      [["helmet", "leatherArmor", "legs", "boots"], 20],
-      [["helmet", "chainArmor", "legs", "boots"], 25],
-      [["helmet", "armor", "legs", "boots"], 29],
-      [["boneHelmet", "armor", "boneLegs", "boneBoots"], 36],
-      [["boneHelmet", "dragonScaleArmor", "boneLegs", "boneBoots"], 41],
+      [["leatherHelm", "leatherBody", "leatherLegs", "leatherBoots"], 6],
+      [["studdedHelm", "studdedBody", "studdedLegs", "studdedBoots"], 15],
+      [["chainHelm", "chainBody", "chainLegs", "chainBoots"], 20],
+      [["plateHelm", "plateBody", "plateLegs", "plateBoots"], 29],
+      [["steelHelm", "steelBody", "steelLegs", "steelBoots"], 39],
+      [["knightHelm", "knightBody", "knightLegs", "knightBoots"], 48],
     ] as const;
-    // The Marrow set is deliberately OFF the curve: a single one-time chest
-    // prize, the best gear in the game, and the only reward for the bottom of
-    // the Bone Caverns. It is checked separately — ahead of the curve, but not
-    // so far ahead that everything below it stops mattering.
-    const MARROW = ["marrowHelmet", "marrowArmor", "marrowLegs", "marrowBoots"] as const;
+    const beastSets = [
+      [["snakeskinHelm", "snakeskinBody", "snakeskinLegs", "snakeskinBoots"], 8],
+      [["goblinHelm", "goblinBody", "goblinLegs", "goblinBoots"], 18],
+      [["orcishHelm", "orcishBody", "orcishLegs", "orcishBoots"], 22],
+      [["minotaurHelm", "minotaurBody", "minotaurLegs", "minotaurBoots"], 32],
+      [["marrowHelm", "marrowBody", "marrowLegs", "marrowBoots"], 41],
+      [["dragonHelm", "dragonBody", "dragonLegs", "dragonBoots"], 50],
+    ] as const;
 
     let weaponsOk = true, shieldsOk = true, setsOk = true;
     for (const [k, lv] of weapons) {
       const want = cfg.bestWeaponAtk(lv);
       if (Math.abs(atkValue(k) - want) > want * 0.2) { weaponsOk = false; console.log(`    ${k}: ${atkValue(k)} vs target ${want.toFixed(1)} @ lv${lv}`); }
     }
-    for (const [k, lv] of shields) {
+    for (const [k, lv] of [...shields, ...beastShields]) {
       const want = cfg.bestShieldDef(lv);
       if (Math.abs(defOf(k) - want) > want * 0.2) { shieldsOk = false; console.log(`    ${k}: ${defOf(k)} vs target ${want.toFixed(1)} @ lv${lv}`); }
     }
-    for (const [pieces, lv] of sets) {
+    for (const [pieces, lv] of [...sets, ...beastSets]) {
       const total = pieces.reduce((n, k) => n + defOf(k as keyof typeof I), 0);
       const want = cfg.bestArmorSet(lv);
       if (Math.abs(total - want) > want * 0.2) { setsOk = false; console.log(`    set@${lv}: ${total} vs target ${want.toFixed(1)}`); }
     }
     ok(weaponsOk, "every weapon rung sits within 20% of bestWeaponAtk");
-    ok(shieldsOk, "every shield rung sits within 20% of bestShieldDef");
-    ok(setsOk, "every full armor set sits within 20% of bestArmorSet");
+    ok(shieldsOk, "every shield rung of BOTH lines sits within 20% of bestShieldDef");
+    ok(setsOk, "every full armor set of BOTH lines sits within 20% of bestArmorSet");
 
     // monotone: an upgrade must always BE an upgrade
     const mono = (xs: readonly (readonly [string, number])[], f: (k: never) => number): boolean =>
       xs.every((x, i) => i === 0 || f(x[0] as never) > f(xs[i - 1][0] as never));
+    const setTotal = (pieces: readonly string[]): number =>
+      pieces.reduce((n, k) => n + defOf(k as keyof typeof I), 0);
     ok(mono(weapons, atkValue as never), "weapons never step backwards");
-    ok(mono(shields, defOf as never), "shields never step backwards");
-    ok(sets.every((x, i) => i === 0 || x[0].reduce((n, k) => n + defOf(k as keyof typeof I), 0)
-      > sets[i - 1][0].reduce((n, k) => n + defOf(k as keyof typeof I), 0)), "armor sets never step backwards");
+    ok(mono(shields, defOf as never) && mono(beastShields, defOf as never), "shields never step backwards");
+    ok(sets.every((x, i) => i === 0 || setTotal(x[0]) > setTotal(sets[i - 1][0]))
+      && beastSets.every((x, i) => i === 0 || setTotal(x[0]) > setTotal(beastSets[i - 1][0])),
+      "armor sets never step backwards, in either line");
 
-    // the Marrow prize: above the curve, and above every craftable set
+    // ---- the two lines are a CHOICE, not a ranking ----
     {
-      const marrow = MARROW.reduce((n, k) => n + defOf(k), 0);
-      const best = sets[sets.length - 1][0].reduce((n, k) => n + defOf(k as keyof typeof I), 0);
-      const curveAtCeiling = cfg.bestArmorSet(50); // today's planned ceiling
-      ok(marrow > best, `the Marrow set (${marrow}) beats every craftable set (${best})`);
-      ok(marrow < curveAtCeiling * 1.5, `…but only ${(marrow / curveAtCeiling).toFixed(2)}× the curve — a prize, not a different game`);
-      ok(defOf("marrowShield") > defOf("dragonShield"), "the Marrow shield tops the shield ladder too");
+      const wt = (pieces: readonly string[]): number =>
+        pieces.reduce((n, k) => n + I[k as keyof typeof I].weight, 0);
+      let armorEdge = true, weightEdge = true, speedEdge = true;
+      for (let i = 0; i < sets.length; i++) {
+        if (setTotal(beastSets[i][0]) !== setTotal(sets[i][0]) + 1) armorEdge = false;
+        if (wt(sets[i][0]) >= wt(beastSets[i][0])) weightEdge = false;
+        const hb = I[sets[i][0][3] as keyof typeof I].gear?.speed ?? 0;
+        const bb = I[beastSets[i][0][3] as keyof typeof I].gear?.speed ?? 0;
+        if (hb <= bb) speedEdge = false;
+      }
+      ok(armorEdge, "at every tier the beast set carries exactly one more point of armor");
+      ok(weightEdge, "…and at every tier the human set is the lighter of the two");
+      ok(speedEdge, "…and its boots are the quicker of the two");
     }
 
     // the plateau is as important as the slope: gear stops, training does not
@@ -726,15 +743,19 @@ async function main(): Promise<void> {
       ok(sLv >= 40, `the shield ladder carries a character to level ${sLv}`);
     }
 
-    // the Bone set exists, is craftable, and fills the gap it was added for
-    for (const k of ["boneShield", "boneHelmet", "boneLegs", "boneBoots"] as const) {
+    // two full sets are craftable, so the early game has a goal you can work
+    // towards rather than one you have to be lucky enough to loot
+    for (const k of ["leatherHelm", "leatherBody", "leatherLegs", "leatherBoots", "leatherShield",
+      "chainHelm", "chainBody", "chainLegs", "chainBoots", "chainShield"] as const) {
       ok(!!items.RECIPES.find((r) => r.out === k), `${k} has a recipe`);
       ok(!!items.ITEMS[k].slot, `${k} is equippable`);
     }
-    const boneSet = defOf("boneHelmet") + defOf("armor") + defOf("boneLegs") + defOf("boneBoots");
-    const plateSet = defOf("helmet") + defOf("armor") + defOf("legs") + defOf("boots");
-    const marrowSet = defOf("marrowHelmet") + defOf("marrowArmor") + defOf("marrowLegs") + defOf("marrowBoots");
-    ok(boneSet > plateSet && boneSet < marrowSet, `Bone set (${boneSet}) sits between plate (${plateSet}) and Marrow (${marrowSet})`);
+    // …and every remaining piece is loot or a chest prize, never both routes
+    const craftable = new Set(items.RECIPES.map((r) => r.out));
+    const gearKeys = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].set);
+    ok(gearKeys.length === 48, `the catalog holds 48 worn set pieces (${gearKeys.length})`);
+    ok(gearKeys.filter((k) => craftable.has(k)).length === 8,
+      "only the Leather and Chain worn pieces can be forged");
   }
 
   console.log("training curve (Tibia 8.6 constants):");
@@ -935,8 +956,8 @@ async function main(): Promise<void> {
     p.level = 50;
     ok(playerSpeed(p) === PLAYER_BASE_SPEED + 49 * SPEED_PER_LEVEL, "level 50 gains the per-level bonus");
     const boots = createPlayer({ x: 0, y: 0 });
-    boots.eq.boots = "boots"; // Swift Boots — a world-pixel bonus, so it doubled with TILE
-    const bootSpeed = items.ITEMS.boots.gear!.speed!;
+    boots.eq.boots = "leatherBoots"; // the human line's quick boots — a world-pixel bonus, so it doubled with TILE
+    const bootSpeed = items.ITEMS.leatherBoots.gear!.speed!;
     ok(playerSpeed(boots) === PLAYER_BASE_SPEED + bootSpeed, "gear speed bonus still applies on top");
   }
 
@@ -983,8 +1004,12 @@ async function main(): Promise<void> {
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
     const { SHOPS } = await import("../src/entities/npcs.ts");
     const blade = items.ITEMS.marrowBlade;
-    ok((blade.gear?.atk ?? 0) > (items.ITEMS.fireSword.gear?.atk ?? 0) && blade.slot === "weapon",
-      `Marrow Blade tops the weapon ladder (${blade.gear?.atk} attack)`);
+    // Etap 22: the Fire Sword now out-attacks it (26 vs 24) — the Blade's
+    // claim to the top rung is its GUARD, the best defense pool of any weapon
+    // in the game, which is what a chest prize should be: different, not just
+    // bigger.
+    ok((blade.gear?.def ?? 0) > (items.ITEMS.fireSword.gear?.def ?? 0) && blade.slot === "weapon",
+      `Marrow Blade tops the weapon ladder on guard (def ${blade.gear?.def})`);
     // unobtainable anywhere but the chest: no loot table and no shop sells it
     let inLoot = false;
     for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
@@ -1065,7 +1090,7 @@ async function main(): Promise<void> {
     ok((dragon.respawnS ?? 0) >= 600, "the dragon's lair refills on a long clock");
     ok(MONSTER_KINDS.every((k) => (MONSTER_DEFS[k].respawnS ?? MONSTER_RESPAWN_S) === (k === "dragon" ? 600 : MONSTER_RESPAWN_S)),
       "only the dragon overrides the standard respawn");
-    for (const rare of ["dragonShield", "fireSword", "dragonScaleArmor"] as const) {
+    for (const rare of ["dragonShield", "fireSword", "dragonBody"] as const) {
       const only = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].loot.some((e) => e.kind === rare));
       ok(only.length === 1 && only[0] === "dragon", `${rare} drops from the dragon alone`);
     }
@@ -1111,11 +1136,11 @@ async function main(): Promise<void> {
       ok(worlds.cave2.monsters.some((mm) => mm.kind === "minotaurArcher"), "cavern -2 fields minotaur archers");
     }
     // new gear sanity: the progression slots between existing pieces
-    ok((items.ITEMS.battleAxe.gear?.atk ?? 0) > (items.ITEMS.ironSword.gear?.atk ?? 0)
+    ok((items.ITEMS.orcishAxe.gear?.atk ?? 0) > (items.ITEMS.ironSword.gear?.atk ?? 0)
       && (items.ITEMS.fireSword.gear?.atk ?? 0) > (items.ITEMS.boneSword.gear?.atk ?? 0),
-      "battle axe and fire sword slot into the weapon ladder in order");
-    ok((items.ITEMS.dragonShield.gear?.def ?? 0) > (items.ITEMS.steelShield.gear?.def ?? 0),
-      "dragon shield out-defends steel shield");
+      "orcish axe and fire sword slot into the weapon ladder in order");
+    ok((items.ITEMS.dragonShield.gear?.def ?? 0) > (items.ITEMS.orcishShield.gear?.def ?? 0),
+      "dragon shield out-defends the orcish one");
     ok((items.ITEMS.dragonHam.food ?? 0) > (items.ITEMS.meat.food ?? 0), "dragon ham out-feeds raw meat");
   }
 
@@ -1260,37 +1285,38 @@ async function main(): Promise<void> {
     const chestAgain = buildWorlds(WORLD_SEED).cave3.structures.find((st) => st.key === "treasure")!;
     ok(chest.tx === chestAgain.tx && chest.ty === chestAgain.ty, "existing islands still roll identically");
 
-    // ---- Etap 9c: the Marrow set — five chests, five deepest floors ----
-    console.log("the Marrow set & the hoard guards (Etap 9c):");
+    // ---- Etap 22: the chests now bury the KNIGHT set ----
+    // The Marrow set moved onto the undead heavies that wear it, and the
+    // chests took over the top rung of the HUMAN line instead — the one set
+    // with no wearer anywhere in the world, because the human ladder exists
+    // as creature kinds but nothing spawns it yet. Without the chests it
+    // would be a catalog entry no player could ever reach.
+    console.log("the chest set & the hoard guards (Etap 22):");
     const { CHEST_PRIZES } = await import("../src/game.ts");
-    const marrow = ["marrowShield", "marrowArmor", "marrowHelmet", "marrowLegs", "marrowBoots"] as const;
-    ok(marrow.every((k) => items.ITEMS[k]?.gear?.def), "all five Marrow pieces exist as gear");
-    ok((items.ITEMS.marrowShield.gear?.def ?? 0) > (items.ITEMS.dragonShield.gear?.def ?? 0)
-      && (items.ITEMS.marrowArmor.gear?.def ?? 0) > (items.ITEMS.dragonScaleArmor.gear?.def ?? 0)
-      && (items.ITEMS.marrowHelmet.gear?.def ?? 0) > (items.ITEMS.helmet.gear?.def ?? 0)
-      && (items.ITEMS.marrowLegs.gear?.def ?? 0) > (items.ITEMS.legs.gear?.def ?? 0)
-      && (items.ITEMS.marrowBoots.gear?.def ?? 0) > (items.ITEMS.boots.gear?.def ?? 0),
-      "every Marrow piece tops its slot's ladder");
-    ok(new Set(items.ITEMS && marrow.map((k) => items.ITEMS[k].slot)).size === 5,
+    const knight = ["knightShield", "knightBody", "knightHelm", "knightLegs", "knightBoots"] as const;
+    ok(knight.every((k) => items.ITEMS[k]?.gear?.def), "all five Knight pieces exist as gear");
+    ok((items.ITEMS.knightShield.gear?.def ?? 0) >= (items.ITEMS.steelShield.gear?.def ?? 0)
+      && (items.ITEMS.knightBody.gear?.def ?? 0) > (items.ITEMS.steelBody.gear?.def ?? 0)
+      && (items.ITEMS.knightHelm.gear?.def ?? 0) > (items.ITEMS.plateHelm.gear?.def ?? 0)
+      && (items.ITEMS.knightLegs.gear?.def ?? 0) > (items.ITEMS.steelLegs.gear?.def ?? 0),
+      "every Knight piece tops the human line's ladder");
+    ok(new Set(items.ITEMS && knight.map((k) => items.ITEMS[k].slot)).size === 5,
       "the set covers five distinct equipment slots");
-    // Five chest worlds now, not six: the plate and the greaves were lifted out
-    // of the Deep Wildlands and buried together on Orc Deep -1, so one chest
-    // carries two pieces. Every piece of the set is still findable exactly once.
     const prizeWorlds = Object.keys(CHEST_PRIZES) as (keyof typeof CHEST_PRIZES)[];
     ok(prizeWorlds.length === 4 && CHEST_PRIZES.cave3?.[0] === "marrowBlade",
       "four chest worlds are mapped; the caverns still hold the blade");
     const allPrizes = Object.values(CHEST_PRIZES).flat();
     ok(new Set(allPrizes).size === allPrizes.length,
       `no prize is buried twice (${allPrizes.length} across ${prizeWorlds.length} chests)`);
-    ok(marrow.every((k) => allPrizes.includes(k)),
-      "every piece of the Marrow set is buried somewhere");
+    ok(knight.every((k) => allPrizes.includes(k)),
+      "every piece of the Knight set is buried somewhere");
     ok((CHEST_PRIZES.orcdeep1 ?? []).length === 2
-      && (CHEST_PRIZES.orcdeep1 ?? []).includes("marrowArmor")
-      && (CHEST_PRIZES.orcdeep1 ?? []).includes("marrowLegs"),
-      "the orc pit's hoard holds the plate and the greaves together");
+      && (CHEST_PRIZES.orcdeep1 ?? []).includes("knightBody")
+      && (CHEST_PRIZES.orcdeep1 ?? []).includes("knightLegs"),
+      "the orc pit's hoard holds the cuirass and the legs together");
     ok((CHEST_PRIZES.minodeep1 ?? []).length === 2
-      && (CHEST_PRIZES.minodeep1 ?? []).includes("marrowHelmet")
-      && (CHEST_PRIZES.minodeep1 ?? []).includes("marrowBoots"),
+      && (CHEST_PRIZES.minodeep1 ?? []).includes("knightHelm")
+      && (CHEST_PRIZES.minodeep1 ?? []).includes("knightBoots"),
       "the labyrinth's hoard holds the helm and the boots together");
     ok(["orcfort2", "roost3", "grave2", "goblin2"].every((k) => !(k in CHEST_PRIZES)),
       "…and the four Deep Wildlands lairs they came from bury nothing any more");
@@ -2868,12 +2894,14 @@ async function main(): Promise<void> {
     ok(warrior.ranged === undefined, "the skeleton warrior fights in melee only");
     ok(demon.ranged === undefined, "…and so does the demon skeleton");
 
-    // Loot is being done wholesale later; an empty table must stay empty and
-    // must not crash the roller.
+    // Etap 22 filled the tables that Etap 18 left deliberately empty: both
+    // undead heavies now shed the Marrow set, the skeleton warrior at the
+    // rank-and-file rate and the demon at the elite one.
     const { rollLoot } = await import("../src/entities/monsters.ts");
     for (const k of ["skeletonWarrior", "demonSkeleton"] as const) {
-      ok(MONSTER_DEFS[k].loot.length === 0, `${k} carries no loot table yet`);
-      ok(rollLoot(k).items.length === 0, "…and rolling it yields nothing rather than throwing");
+      ok(MONSTER_DEFS[k].loot.some((e: { kind: string }) => e.kind.startsWith("marrow")),
+        `${k} sheds pieces of the Marrow set`);
+      ok(rollLoot(k).items !== undefined, "…and rolling the table returns cleanly");
     }
 
     /* --- they actually spawn somewhere, and it is flagged as temporary --- */
@@ -3529,8 +3557,10 @@ async function main(): Promise<void> {
     const gameSrc = fs.readFileSync(new URL("../src/game.ts", import.meta.url), "utf8");
     ok(HUMANS.filter((k) => k !== "bandit").every((k) => !gameSrc.includes(`${k}:`)),
       "no new human is wired into a spawn roster yet — placement is a later step");
-    ok(HUMANS.filter((k) => k !== "bandit").every((k) => D[k].loot.length === 0),
-      "…and none carries a loot table yet either");
+    // Etap 22 gave every one of them the human line's gear, so the day they
+    // are finally placed on a map they already pay out properly.
+    ok(HUMANS.every((k) => D[k].loot.length > 0),
+      "…but each already sheds its own line's armour, ready for the day it spawns");
     ok(HUMANS.every((k) => M.rollLoot(k).items !== undefined), "rolling an empty table still returns cleanly");
 
     /* --- the re-tier: myth now outranks men of the same name --- */
@@ -3575,31 +3605,32 @@ async function main(): Promise<void> {
     /* --- the guard pool takes the LARGER of shield and weapon, never the sum --- */
     {
       const p = fresh();
-      p.eq.shield = "marrowShield";           // def 17
-      p.eq.weapon = "sword";                  // def 6, defBonus 1
-      ok(defenseShield(p.eq) === 18, `shield wins the pool, weapon adds only its bonus (${defenseShield(p.eq)})`);
-      p.eq.weapon = "marrowBlade";            // def 22, defBonus 3
-      ok(defenseShield(p.eq) === 25, `a weapon that out-guards the shield takes over the pool (${defenseShield(p.eq)})`);
+      p.eq.shield = "marrowShield";           // def 14
+      p.eq.weapon = "shortSword";             // def 6, defBonus 1
+      ok(defenseShield(p.eq) === 15, `shield wins the pool, weapon adds only its bonus (${defenseShield(p.eq)})`);
+      p.eq.weapon = "marrowBlade";            // def 24, defBonus 4
+      ok(defenseShield(p.eq) === 28, `a weapon that out-guards the shield takes over the pool (${defenseShield(p.eq)})`);
       p.eq.shield = null;
-      ok(defenseShield(p.eq) === 25, "…and losing the shield costs such a build nothing");
-      p.eq.weapon = "sword";
+      ok(defenseShield(p.eq) === 28, "…and losing the shield costs such a build nothing");
+      p.eq.weapon = "shortSword";
       ok(defenseShield(p.eq) === 7, "a light blade alone guards far worse than one behind a shield");
-      ok(defenseShield(p.eq) < 17 + 6, "the two never stack — that was the bug the rebuild removed");
+      ok(defenseShield(p.eq) < 14 + 6, "the two never stack — that was the bug the rebuild removed");
     }
 
     /* --- worn armour still sums, as it always did --- */
     {
       const p = fresh();
-      p.eq.head = "marrowHelmet"; p.eq.body = "marrowArmor";
+      p.eq.head = "marrowHelm"; p.eq.body = "marrowBody";
       p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots";
-      ok(defenseArmor(p.eq) === 22, `the Marrow set totals 22 armor (${defenseArmor(p.eq)})`);
-      ok(Math.abs(defenseArmor(p.eq) - cfg2.bestArmorSet(50)) < 1, "…which is exactly the level 50 design target");
+      // 18 from the four pieces + 3 for wearing the set complete
+      ok(defenseArmor(p.eq) === 21, `the Marrow set totals 21 armor with its set bonus (${defenseArmor(p.eq)})`);
+      ok(Math.abs(defenseArmor(p.eq) - cfg2.bestArmorSet(48)) < 2, "…which lands on the level 48 design target");
     }
 
     /* --- no floor: a hit can be absorbed completely --- */
     {
       const p = fresh();
-      p.eq.head = "marrowHelmet"; p.eq.body = "marrowArmor";
+      p.eq.head = "marrowHelm"; p.eq.body = "marrowBody";
       p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots"; p.eq.shield = "marrowShield";
       skills.shield.lv = 76;
       let zeroes = 0, worst = 0;
@@ -3618,7 +3649,7 @@ async function main(): Promise<void> {
     /* --- a swarm still hurts: past the block cap only armour answers --- */
     {
       const p = fresh();
-      p.eq.head = "marrowHelmet"; p.eq.body = "marrowArmor";
+      p.eq.head = "marrowHelm"; p.eq.body = "marrowBody";
       p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots"; p.eq.shield = "marrowShield";
       skills.shield.lv = 76;
       // Measure the two paths separately rather than guessing which bucket a
@@ -3639,7 +3670,7 @@ async function main(): Promise<void> {
     /* --- and a dragon is barely inconvenienced by the same gear --- */
     {
       const p = fresh();
-      p.eq.head = "marrowHelmet"; p.eq.body = "marrowArmor";
+      p.eq.head = "marrowHelm"; p.eq.body = "marrowBody";
       p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots"; p.eq.shield = "marrowShield";
       skills.shield.lv = 76;
       let total = 0;
@@ -3647,6 +3678,76 @@ async function main(): Promise<void> {
       const avg = total / 2000;
       ok(avg > 25 && avg < 55, `a dragon swing still lands for ~${avg.toFixed(0)} of 75 through the best set in the game`);
     }
+  }
+
+  console.log("Etap 22 — the twelve matched sets:");
+  {
+    const I = items.ITEMS;
+    const { SET_BONUS, SET_SLOTS } = items;
+    const { setBonus, defenseArmor } = await import("../src/systems/skills.ts");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const defOf = (k: keyof typeof I): number => I[k].gear?.def ?? 0;
+    const LINES = [["leather", "studded", "chain", "plate", "steel", "knight"],
+                   ["snakeskin", "goblin", "orcish", "minotaur", "marrow", "dragon"]] as const;
+
+    /* --- the catalog is complete and every piece is tagged --- */
+    const worn = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].set);
+    ok(worn.length === 48, `48 worn pieces across twelve sets (${worn.length})`);
+    ok(worn.every((k) => SET_SLOTS.includes(I[k].slot as never)),
+      "every tagged piece sits in one of the four worn slots");
+    ok((Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "shield").length === 12,
+      "twelve shields, one per set — and none of them carries a set tag");
+    ok((Object.keys(I) as (keyof typeof I)[]).every((k) => I[k].slot !== "shield" || !I[k].set),
+      "…because a shield should be chosen on its own merits");
+
+    /* --- the set bonus, and the exploit it exists to kill --- */
+    {
+      const p = createPlayer({ x: 0, y: 0 });
+      p.eq.head = "minotaurHelm"; p.eq.body = "minotaurBody";
+      p.eq.legs = "minotaurLegs"; p.eq.boots = "minotaurBoots";
+      const matched = defenseArmor(p.eq);
+      ok(setBonus(p.eq) === SET_BONUS.minotaur, `a complete set pays +${setBonus(p.eq)} armor`);
+      // the cherry-pick: beast plate, human boots — heavier armour AND faster feet
+      p.eq.boots = "plateBoots";
+      ok(setBonus(p.eq) === 0, "one mismatched piece drops the whole bonus");
+      ok(defenseArmor(p.eq) < matched,
+        `mixing the lines costs more armor than the mismatch gains (${defenseArmor(p.eq)} vs ${matched})`);
+      // and the full human set beats the cherry-picked mongrel too
+      p.eq.head = "plateHelm"; p.eq.body = "plateBody"; p.eq.legs = "plateLegs";
+      ok(defenseArmor(p.eq) > matched - SET_BONUS.minotaur,
+        "…so committing to either line beats raiding both");
+    }
+
+    /* --- the bonus is set ABOVE the one-point gap, or it would not work --- */
+    for (let t = 0; t < 6; t++) {
+      const h = LINES[0][t], b = LINES[1][t];
+      ok(SET_BONUS[h] === SET_BONUS[b], `tier ${t + 1}: both lines pay the same set bonus`);
+      ok(SET_BONUS[b] > 1, `tier ${t + 1}: the bonus outweighs the one-point armour gap`);
+    }
+
+    /* --- drops: rank and file shed at a trickle, elites at a real rate --- */
+    const rate = (kind: string, piece: string): number =>
+      (MONSTER_DEFS[kind as never].loot as { kind: string; chance: number }[])
+        .find((e) => e.kind === piece)?.chance ?? 0;
+    ok(rate("minotaur", "minotaurBody") > 0 && rate("minotaurGuard", "minotaurBody") > 0,
+      "both minotaur ranks shed their own set");
+    ok(rate("minotaurGuard", "minotaurBody") === 4 * rate("minotaur", "minotaurBody"),
+      "…and the guard sheds it four times as often as the rank and file");
+    ok(rate("goblinLegionary", "goblinHelm") > rate("goblin", "goblinHelm")
+      && rate("orcBerserker", "orcishHelm") > rate("orc", "orcishHelm")
+      && rate("demonSkeleton", "marrowHelm") > rate("skeletonWarrior", "marrowHelm"),
+      "the same rank-and-file → elite step holds for goblins, orcs and the undead");
+    // every piece rolls on its own: five separate entries, never one bundle
+    const guardDrops = (MONSTER_DEFS.minotaurGuard.loot as { kind: string }[])
+      .filter((e) => e.kind.startsWith("minotaur")).length;
+    ok(guardDrops >= 5, `each piece rolls independently (${guardDrops} separate entries)`);
+
+    /* --- the Knight set is the one route that is NOT a drop --- */
+    let knightInLoot = false;
+    for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
+      if ((MONSTER_DEFS[k].loot as { kind: string }[]).some((e) => e.kind.startsWith("knight"))) knightInLoot = true;
+    }
+    ok(!knightInLoot, "no creature drops a piece of the Knight set — the chests are its only source");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
