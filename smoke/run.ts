@@ -272,9 +272,9 @@ async function main(): Promise<void> {
     const p = createPlayer({ x: 200, y: 200 });
     p.level = 1; // no death-drop side effects
     p.maxhp = 10_000_000; p.hp = p.maxhp;
-    p.eq.shield = "shieldItem"; // def 3 (shield side)
-    p.eq.body = "armor";        // def 4 (armor side)
-    ok(defenseShield(p.eq) === 8 && defenseArmor(p.eq) === 9, "defense split: shield 8 / armor 9");
+    p.eq.shield = "shieldItem"; // def 4 (guard pool)
+    p.eq.body = "armor";        // def 7 (armor side)
+    ok(defenseShield(p.eq) === 4 && defenseArmor(p.eq) === 7, "defense split: pool 4 / armor 7");
     ok(shieldBlockMax(p.eq) > 0, "a held shield gives a non-zero block ceiling");
     // Gear the character up so the two defense layers are worth more than the
     // rounding noise, then compare AVERAGES — every reduction is now a roll,
@@ -551,8 +551,12 @@ async function main(): Promise<void> {
         const r = sk.rollArmorReduction(20);
         min = Math.min(min, r); max = Math.max(max, r); sum += r;
       }
-      ok(min === 10 && max === 20, "armor 20 reduces by 10–20 (half to full)");
-      ok(Math.abs(sum / 20000 - 15) < 0.3, `average armor reduction ≈ 0.75× rating (${(sum / 20000).toFixed(1)}/20)`);
+      // Tibia's roll: half the rating up to rating-minus-one-or-two, which is
+      // why an odd total protects exactly as well as the even number below it.
+      ok(min === 10 && max === 19, "armor 20 reduces by 10–19 (Tibia's odd-top roll)");
+      ok(Math.abs(sum / 20000 - 14.5) < 0.3, `average armor reduction ≈ 0.72× rating (${(sum / 20000).toFixed(1)}/20)`);
+      ok(sk.rollArmorReduction(19) <= 17 && sk.rollArmorReduction(3) === 1 && sk.rollArmorReduction(0) === 0,
+        "an odd rating protects as the even below it, and 1–3 armor is a flat single point");
       ok(sk.rollArmorReduction(0) === 0, "no armor, no reduction");
     }
 
@@ -570,13 +574,18 @@ async function main(): Promise<void> {
         sum += b;
       }
       ok(!over, "a block never exceeds its ceiling");
-      ok(Math.abs(sum / N - ceil / 2) < ceil * 0.03, `triangular roll averages half the ceiling (${(sum / N).toFixed(1)}/${ceil.toFixed(1)})`);
+      ok(Math.abs(sum / N - ceil * 0.75) < ceil * 0.03, `a block rolls half..full, averaging 0.75× the ceiling (${(sum / N).toFixed(1)}/${ceil.toFixed(1)})`);
       const bare = sk.shieldBlockMax(createPlayer({ x: 0, y: 0 }).eq);
       ok(bare === 0, "empty hands block nothing");
       resetSkills();
     }
 
-    // ---- the invulnerability bug this whole pass exists to kill ----
+    // ---- Etap 21: gear is finally allowed to answer a weak creature ----
+    // The inverse of what this block used to assert. The old cap guaranteed a
+    // fully-geared character still ate half of every hit no matter the source,
+    // which is why a bandit could hurt a knight in the best set in the game.
+    // Now a creature far below your gear lands nothing, and a same-tier one
+    // still hurts — that gap IS the balance.
     {
       const { hurtPlayer, resetShieldWindow } = await import("../src/systems/combat.ts");
       const worlds = buildWorlds(WORLD_SEED);
@@ -586,11 +595,16 @@ async function main(): Promise<void> {
       p.eq.shield = "marrowShield"; p.eq.head = "marrowHelmet";
       p.eq.body = "marrowArmor"; p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots";
       skills.shield.lv = 60;
-      const raw = 29; // an average Minotaur Guard swing
-      let total = 0;
-      for (let i = 0; i < 400; i++) { resetShieldWindow(); const b = p.hp; hurtPlayer(worlds.home, p, raw); total += b - p.hp; }
-      const avg = total / 400;
-      ok(avg >= raw * cfg.DEFENSE_CAP_FRAC - 0.5, `a fully-geared character still takes ~${avg.toFixed(1)} of a ${raw} hit (was 1)`);
+      const avgOf = (raw: number): number => {
+        let total = 0;
+        for (let i = 0; i < 600; i++) { resetShieldWindow(); const b = p.hp; hurtPlayer(worlds.home, p, raw); total += b - p.hp; }
+        return total / 600;
+      };
+      const bandit = avgOf(12);   // an average bandit swing
+      const dragon = avgOf(75);   // an average dragon swing
+      ok(bandit < 0.5, `a bandit cannot scratch a fully-geared character (~${bandit.toFixed(2)} per swing)`);
+      ok(dragon > 20, `…while a dragon still lands real damage (~${dragon.toFixed(1)} per swing)`);
+      ok(dragon / Math.max(bandit, 0.01) > 40, "the gap between the two is the whole point of the rebuild");
       resetShieldWindow(); resetSkills();
     }
 
@@ -630,17 +644,21 @@ async function main(): Promise<void> {
     const atkValue = (k: keyof typeof I): number => cfg.MELEE_FIST_ATK + (I[k].gear?.atk ?? 0);
 
     // Each rung names the level it is meant to carry a character through.
-    const weapons = [["sword", 1], ["ironSword", 8], ["battleAxe", 15],
-      ["boneSword", 22], ["fireSword", 32], ["marrowBlade", 42]] as const;
-    const shields = [["shieldItem", 1], ["steelShield", 12], ["boneShield", 22],
-      ["dragonShield", 32], ["marrowShield", 42]] as const;
+    // Etap 21 moved every rung up the level axis. The bestiary was re-tiered
+    // first (a goblin is a level 16 creature now, not a level 8 one) and the
+    // gear scale was then pulled down to keep flat armor a chip rather than a
+    // wall, so the level a given piece carries you through shifted twice.
+    const weapons = [["sword", 6], ["ironSword", 16], ["battleAxe", 23],
+      ["boneSword", 30], ["fireSword", 40], ["marrowBlade", 50]] as const;
+    const shields = [["shieldItem", 9], ["steelShield", 22], ["boneShield", 31],
+      ["dragonShield", 40], ["marrowShield", 50]] as const;
     // full worn sets: head + body + legs + boots
     const sets = [
-      [["helmet", "leatherArmor", "legs", "boots"], 10],
-      [["helmet", "chainArmor", "legs", "boots"], 15],
-      [["helmet", "armor", "legs", "boots"], 20],
-      [["boneHelmet", "armor", "boneLegs", "boneBoots"], 26],
-      [["boneHelmet", "dragonScaleArmor", "boneLegs", "boneBoots"], 36],
+      [["helmet", "leatherArmor", "legs", "boots"], 20],
+      [["helmet", "chainArmor", "legs", "boots"], 25],
+      [["helmet", "armor", "legs", "boots"], 29],
+      [["boneHelmet", "armor", "boneLegs", "boneBoots"], 36],
+      [["boneHelmet", "dragonScaleArmor", "boneLegs", "boneBoots"], 41],
     ] as const;
     // The Marrow set is deliberately OFF the curve: a single one-time chest
     // prize, the best gear in the game, and the only reward for the bottom of
@@ -686,7 +704,7 @@ async function main(): Promise<void> {
 
     // the plateau is as important as the slope: gear stops, training does not
     ok(cfg.bestWeaponAtk(200) === cfg.bestWeaponAtk(100), "weapon curve plateaus and stays there");
-    ok(cfg.bestShieldDef(200) === 45 && cfg.bestArmorSet(200) === 45, "defense curves plateau at 45");
+    ok(cfg.bestShieldDef(200) === 17 && cfg.bestArmorSet(200) === 22, "defense curves plateau at 17 / 22");
     // …and across the covered range gear must grow slower than training does
     const gearGrowth = cfg.bestWeaponAtk(60) / cfg.bestWeaponAtk(1);
     ok(gearGrowth < 4, `best weapon grows only ${gearGrowth.toFixed(1)}× from level 1 to 60 (skillTerm grows ~4.5×)`);
@@ -3538,6 +3556,97 @@ async function main(): Promise<void> {
     const { PLAYER_BASE_SPEED } = await import("../src/config.ts");
     ok(M.MONSTER_KINDS.every((k) => D[k].speed < PLAYER_BASE_SPEED),
       "no creature in the bestiary is faster than a level 1 character on foot");
+  }
+
+  console.log("Etap 21 — the defence rebuild (Tibia's pipeline):");
+  {
+    const { hurtPlayer, resetShieldWindow } = await import("../src/systems/combat.ts");
+    const { defenseShield, defenseArmor, skills, resetSkills } = await import("../src/systems/skills.ts");
+    const { resetStance } = await import("../src/systems/stance.ts");
+    const cfg2 = await import("../src/config.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    const fresh = () => {
+      resetSkills(); resetShieldWindow(); resetStance();
+      const p = createPlayer({ x: 200, y: 200 });
+      p.level = 1; p.maxhp = 10_000_000; p.hp = p.maxhp;
+      return p;
+    };
+
+    /* --- the guard pool takes the LARGER of shield and weapon, never the sum --- */
+    {
+      const p = fresh();
+      p.eq.shield = "marrowShield";           // def 17
+      p.eq.weapon = "sword";                  // def 6, defBonus 1
+      ok(defenseShield(p.eq) === 18, `shield wins the pool, weapon adds only its bonus (${defenseShield(p.eq)})`);
+      p.eq.weapon = "marrowBlade";            // def 22, defBonus 3
+      ok(defenseShield(p.eq) === 25, `a weapon that out-guards the shield takes over the pool (${defenseShield(p.eq)})`);
+      p.eq.shield = null;
+      ok(defenseShield(p.eq) === 25, "…and losing the shield costs such a build nothing");
+      p.eq.weapon = "sword";
+      ok(defenseShield(p.eq) === 7, "a light blade alone guards far worse than one behind a shield");
+      ok(defenseShield(p.eq) < 17 + 6, "the two never stack — that was the bug the rebuild removed");
+    }
+
+    /* --- worn armour still sums, as it always did --- */
+    {
+      const p = fresh();
+      p.eq.head = "marrowHelmet"; p.eq.body = "marrowArmor";
+      p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots";
+      ok(defenseArmor(p.eq) === 22, `the Marrow set totals 22 armor (${defenseArmor(p.eq)})`);
+      ok(Math.abs(defenseArmor(p.eq) - cfg2.bestArmorSet(50)) < 1, "…which is exactly the level 50 design target");
+    }
+
+    /* --- no floor: a hit can be absorbed completely --- */
+    {
+      const p = fresh();
+      p.eq.head = "marrowHelmet"; p.eq.body = "marrowArmor";
+      p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots"; p.eq.shield = "marrowShield";
+      skills.shield.lv = 76;
+      let zeroes = 0, worst = 0;
+      for (let i = 0; i < 3000; i++) {
+        resetShieldWindow();
+        const before = p.hp;
+        hurtPlayer(worlds.home, p, 7 + Math.floor(Math.random() * 11)); // a bandit's 7-17
+        const took = before - p.hp;
+        if (took === 0) zeroes++;
+        worst = Math.max(worst, took);
+      }
+      ok(zeroes / 3000 > 0.95, `a bandit is absorbed outright ${(zeroes / 30).toFixed(0)}% of the time`);
+      ok(worst <= 6, `and its luckiest swing in 3000 tries still only landed ${worst}`);
+    }
+
+    /* --- a swarm still hurts: past the block cap only armour answers --- */
+    {
+      const p = fresh();
+      p.eq.head = "marrowHelmet"; p.eq.body = "marrowArmor";
+      p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots"; p.eq.shield = "marrowShield";
+      skills.shield.lv = 76;
+      // Measure the two paths separately rather than guessing which bucket a
+      // given hit fell into: the block window is wall-clock based, so an
+      // index-based split is only approximately right and made this flaky.
+      let blocked = 0, pierced = 0;
+      const N = 2000;
+      for (let i = 0; i < N; i++) {
+        resetShieldWindow();                    // this hit meets the shield
+        let b = p.hp; hurtPlayer(worlds.home, p, 60); blocked += b - p.hp;
+        for (let k = 0; k < cfg2.SHIELD_BLOCK_MAX; k++) hurtPlayer(worlds.home, p, 60);
+        b = p.hp; hurtPlayer(worlds.home, p, 60); pierced += b - p.hp;  // this one does not
+      }
+      ok(pierced > blocked * 1.3,
+        `past the block cap a swarm lands far harder (${(pierced / N).toFixed(0)} vs ${(blocked / N).toFixed(0)} per hit)`);
+    }
+
+    /* --- and a dragon is barely inconvenienced by the same gear --- */
+    {
+      const p = fresh();
+      p.eq.head = "marrowHelmet"; p.eq.body = "marrowArmor";
+      p.eq.legs = "marrowLegs"; p.eq.boots = "marrowBoots"; p.eq.shield = "marrowShield";
+      skills.shield.lv = 76;
+      let total = 0;
+      for (let i = 0; i < 2000; i++) { resetShieldWindow(); const b = p.hp; hurtPlayer(worlds.home, p, 75); total += b - p.hp; }
+      const avg = total / 2000;
+      ok(avg > 25 && avg < 55, `a dragon swing still lands for ~${avg.toFixed(0)} of 75 through the best set in the game`);
+    }
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
