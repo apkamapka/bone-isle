@@ -263,7 +263,16 @@ export function distanceHitChance(): number {
  * bonus that a wooden buckler would have given just as well.
  */
 export function defenseShield(eq: Equipment): number {
-  return gearStatOf(eq, "def", ["shield", "weapon"]);
+  const shield = gearStatOf(eq, "def", ["shield"]);
+  const weapon = gearStatOf(eq, "def", ["weapon"]);
+  // Etap 21, straight out of Player::getDefense in The Forgotten Server: the
+  // shield and the weapon do NOT add up. Whichever guard is larger is the one
+  // you fight behind, and the other is simply not consulted. A weapon's def
+  // therefore only matters when you carry no shield, or a worse one — which is
+  // what makes "big two-hander, no shield" a real build instead of a downgrade.
+  // What does always add is defBonus: the small always-on guard a weapon gives
+  // even from behind a shield (Tibia writes it as the "+3" in "Def: 25 +3").
+  return Math.max(shield, weapon) + gearStatOf(eq, "defBonus", ["weapon"]);
 }
 
 /** Armor-side rating: worn pieces (helmet, armor, legs, boots, jewellery).
@@ -284,8 +293,13 @@ export function defensePower(eq: Equipment): number {
  * read as chunky steps rather than a smooth dial.
  */
 export function rollArmorReduction(armor: number): number {
+  if (armor <= 0) return 0;
+  // Tibia's own curiosity, kept on purpose: below four points of armor the
+  // reduction is a flat single point, so 1, 2 and 3 armor all protect alike.
+  if (armor <= 3) return 1;
   const half = Math.floor(armor * ARMOR_MIN_RATIO);
-  return half + Math.floor(Math.random() * (armor - half + 1));
+  const top = armor - (armor % 2) - 1; // an odd total protects as the even below it
+  return half + Math.floor(Math.random() * (top - half + 1));
 }
 
 /** Ceiling of a shield block at the current Shielding skill and stance. */
@@ -301,6 +315,10 @@ export function shieldBlockMax(eq: Equipment): number {
  */
 export function rollShieldBlock(eq: Equipment): number {
   const max = shieldBlockMax(eq);
-  return ((Math.random() + Math.random()) / 2) * max;
+  // Rolled over HALF the ceiling to the ceiling, as Tibia rolls its defense.
+  // The old roll started at zero, which meant a third of blocks were near
+  // worthless and the shield read as a lottery; starting at half makes a good
+  // shield feel like armour you can plan around.
+  return max / 2 + Math.random() * (max / 2);
 }
 

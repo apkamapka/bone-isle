@@ -3,7 +3,7 @@ import {
   TILE,
   expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED, MONSTER_AGGRO_HIT_S,
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
-  SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S, DEFENSE_CAP_FRAC, MIN_DAMAGE,
+  SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S, MIN_ELEMENTAL_DAMAGE, MIN_DAMAGE_TO_MONSTER,
   DUMMY_RATE, DUMMY_SHIELD_RATE,
 } from "../config.ts";
 import { beep } from "../audio.ts";
@@ -26,14 +26,14 @@ import type { World, Monster, Structure } from "../world/types.ts";
 
 /**
  * Physical damage a creature actually takes: its armor is a flat roll off the
- * top, floored at MIN_DAMAGE so nothing is ever completely immune to steel.
+ * top, floored at one so nothing is ever completely immune to steel.
  * Elemental damage is meant to skip this function entirely — that bypass is
  * the whole argument for spending resources on crystals.
  */
 export function applyMonsterArmor(m: Monster, raw: number): number {
   const armor = MONSTER_DEFS[m.kind].armor ?? 0;
   if (armor <= 0) return raw;
-  return Math.max(MIN_DAMAGE, raw - rollArmorReduction(armor));
+  return Math.max(MIN_DAMAGE_TO_MONSTER, raw - rollArmorReduction(armor));
 }
 
 /** Player strikes a monster. Returns true if the monster died. */
@@ -89,7 +89,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   const el = ITEMS[arrowKind].element;
   const raw = rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg));
   const dmg = el
-    ? Math.max(MIN_DAMAGE, Math.round(raw * resistanceOf(MONSTER_DEFS[m.kind].resist, el)))
+    ? Math.max(MIN_ELEMENTAL_DAMAGE, Math.round(raw * resistanceOf(MONSTER_DEFS[m.kind].resist, el)))
     : applyMonsterArmor(m, raw);
   m.hp -= dmg;
   markBloodHit(); // you drew blood — Shielding may train for the next minute
@@ -255,14 +255,20 @@ export function resetShieldWindow(): void {
 }
 
 /**
- * Apply raw damage to the player: armor, then shield, then HP.
+ * Apply raw damage to the player: SHIELD first, then armor, then HP.
  *
- * Armor is a flat random subtraction that every hit meets. The shield is a
- * proportional roll that only the first SHIELD_BLOCK_MAX attackers of the
- * round run into. Their combined reduction is then capped at DEFENSE_CAP_FRAC
- * of the incoming hit, which is the one rule standing between a well-geared
- * character and outright invulnerability — and, because it is a percentage,
- * it also guarantees that a heavy blow always lands for something.
+ * The order is the whole point of Etap 21 and it is Tibia's order, out of
+ * Creature::blockHit. The shield rolls first, and only for the first
+ * SHIELD_BLOCK_MAX attackers of the round; if that roll eats the hit outright
+ * the hit ends at zero and armor is never consulted at all. Whatever survives
+ * meets armor as a flat, uncapped subtraction which may also land on zero.
+ *
+ * There is deliberately no percentage cap and no floor. The previous model had
+ * both, and together they guaranteed that a character in the best set in the
+ * game still took half of every hit from the weakest creature in the game —
+ * the cap bound on literally every swing, which also meant the shield was
+ * doing nothing at all. Uncapped flat reduction is what lets gear finally
+ * answer a bandit while leaving a dragon very nearly unaffected.
  *
  * Returns true if this killed them.
  */
@@ -273,17 +279,23 @@ export function hurtPlayer(world: World, p: Player, raw: number): boolean {
   const blocked = shieldBlockTimes.length < SHIELD_BLOCK_MAX;
   if (blocked) shieldBlockTimes.push(now);
 
-  const fromArmor = rollArmorReduction(defenseArmor(p.eq));
   const fromShield = blocked ? rollShieldBlock(p.eq) : 0;
-  const reduced = Math.min(fromArmor + fromShield, raw * DEFENSE_CAP_FRAC);
-  const dmg = Math.max(MIN_DAMAGE, Math.round(raw - reduced));
+  const afterShield = raw - fromShield;
+  // A hit stopped dead by the shield never reaches the armour, exactly as in
+  // Tibia — which is also why the two layers must not be summed.
+  const fromArmor = afterShield > 0 ? rollArmorReduction(defenseArmor(p.eq)) : 0;
+  const reduced = fromShield + fromArmor;
+  const dmg = Math.max(0, Math.round(raw - reduced));
   p.hp -= dmg;
 
   // Shielding trains only on hits the shield actually engaged — more than
   // SHIELD_BLOCK_MAX attackers won't train it faster, exactly like Tibia.
   if (blocked) addShieldXp(1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
-  // pierced hits (past the shield cap) glow hotter so a swarm reads as danger
-  addFloat(world, p.x, p.y - 36, `-${dmg}`, blocked ? "#ff6a5e" : "#ff9e3a");
+  // A hit fully absorbed shows no number at all, only the puff or spark below:
+  // eight bandits scratching uselessly at a knight should look quiet, not spam
+  // a column of "-0". Pierced hits (past the shield cap) glow hotter so a
+  // swarm still reads as danger.
+  if (dmg > 0) addFloat(world, p.x, p.y - 36, `-${dmg}`, blocked ? "#ff6a5e" : "#ff9e3a");
   // whichever layer did the most work announces itself: armor sparks, shield puffs
   if (reduced >= 1) {
     const shieldWon = fromShield > fromArmor;
