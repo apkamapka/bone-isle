@@ -32,7 +32,7 @@ export const quests: Quest[] = [
     id: "q2", title: "Rattle the Bones",
     desc: "Skeletons haunt the ruins. Bring peace to 6 of them.",
     goal: { kind: "kill", monster: "skeleton", need: 6 },
-    reward: { item: "sword", itemN: 1, exp: 50 },
+    reward: { item: "shortSword", itemN: 1, exp: 50 },
     progress: 0, done: false, claimed: false,
   },
   {

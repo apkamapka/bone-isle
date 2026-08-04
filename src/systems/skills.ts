@@ -1,6 +1,6 @@
 /** Tibia-style skills: levels that climb as you use them, plus gear bonuses. */
 import { beep } from "../audio.ts";
-import { gearStat, gearStatOf, equippedBow } from "../items.ts";
+import { gearStat, gearStatOf, equippedBow, ITEMS, SET_BONUS, SET_SLOTS } from "../items.ts";
 import {
   MELEE_FIST_ATK, MIN_HIT_RATIO,
   SKILL_TERM_PER, SKILL_TERM_PER_DIST, SKILL_TERM_FLAT,
@@ -278,7 +278,22 @@ export function defenseShield(eq: Equipment): number {
 /** Armor-side rating: worn pieces (helmet, armor, legs, boots, jewellery).
  *  Always applies, to every hit, no matter how many creatures are on you. */
 export function defenseArmor(eq: Equipment): number {
-  return gearStatOf(eq, "def", ["head", "body", "legs", "boots", "ring", "amulet"]);
+  return gearStatOf(eq, "def", ["head", "body", "legs", "boots", "ring", "amulet"]) + setBonus(eq);
+}
+
+/**
+ * The matched-set reward: wear head, body, legs and boots from one set and
+ * they pay extra armor together. Returns 0 for any mixed outfit — a single
+ * mismatched piece drops the whole bonus, which is the point.
+ */
+export function setBonus(eq: Equipment): number {
+  const first = eq.head ? ITEMS[eq.head].set : undefined;
+  if (!first) return 0;
+  for (const slot of SET_SLOTS) {
+    const k = eq[slot];
+    if (!k || ITEMS[k].set !== first) return 0;
+  }
+  return SET_BONUS[first];
 }
 
 /** Both ratings together — used by the UI, never by the damage pipeline. */
