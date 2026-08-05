@@ -327,14 +327,16 @@ async function main(): Promise<void> {
     resetBloodHit();
   }
 
-  console.log("Amulet of Loss recipe (gold cost):");
+  console.log("Amulet of Loss (moved to Oswin in Etap 24):");
   {
-    const r = items.RECIPES.find((x) => x.out === "aolAmulet")!;
-    ok(!!r && r.gold === 500, "AOL recipe exists at 500 gold");
+    const { SHOPS } = await import("../src/entities/npcs.ts");
     ok(items.ITEMS.aolAmulet.deathProtect === true && items.ITEMS.aolAmulet.slot === "amulet", "AOL is a death-protecting amulet");
-    ok(items.recipeCostText(r).includes("500 gold"), "cost text shows the gold");
-    const bag = items.emptyBag();
-    ok(items.canCraftAcross([bag], r), "materials-side of the recipe is free (gold checked by caller)");
+    ok(!items.RECIPES.some((x) => x.out === "aolAmulet"), "the forge no longer makes it");
+    // This is the whole point of the migration: the forge stopped making gear,
+    // and the ONLY protection against dropping your things on death must not
+    // quietly leave the game with it.
+    const sells = SHOPS.elder!.entries.filter((e) => e.buy > 0).map((e) => e.kind);
+    ok(sells.includes("aolAmulet"), "…but Oswin sells it, so death protection still exists");
   }
 
   console.log("spawn placement (spacing + never on the player):");
@@ -743,19 +745,27 @@ async function main(): Promise<void> {
       ok(sLv >= 40, `the shield ladder carries a character to level ${sLv}`);
     }
 
-    // two full sets are craftable, so the early game has a goal you can work
-    // towards rather than one you have to be lucky enough to loot
-    for (const k of ["leatherHelm", "leatherBody", "leatherLegs", "leatherBoots", "leatherShield",
-      "chainHelm", "chainBody", "chainLegs", "chainBoots", "chainShield"] as const) {
-      ok(!!items.RECIPES.find((r) => r.out === k), `${k} has a recipe`);
-      ok(!!items.ITEMS[k].slot, `${k} is equippable`);
-    }
-    // …and every remaining piece is loot or a chest prize, never both routes
+    // Etap 24: the forge stopped being a workshop. NO gear is craftable any
+    // more — the starter kit is bought from Borin and everything above it is
+    // looted. What matters is that the early game still has a floor to stand
+    // on, so the Leather set must remain purchasable.
     const craftable = new Set(items.RECIPES.map((r) => r.out));
     const gearKeys = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].set);
     ok(gearKeys.length === 48, `the catalog holds 48 worn set pieces (${gearKeys.length})`);
-    ok(gearKeys.filter((k) => craftable.has(k)).length === 8,
-      "only the Leather and Chain worn pieces can be forged");
+    ok(gearKeys.filter((k) => craftable.has(k)).length === 0, "no worn gear is craftable any more");
+    {
+      const { SHOPS } = await import("../src/entities/npcs.ts");
+      const smithSells = new Set(SHOPS.smith!.entries.filter((e) => e.buy > 0).map((e) => e.kind));
+      for (const k of ["leatherHelm", "leatherBody", "leatherLegs", "leatherBoots", "leatherShield",
+        "shortSword", "bow"] as const) {
+        ok(smithSells.has(k), `Borin still sells ${k} — the starter kit survives`);
+      }
+    }
+    // arrows stay craftable: an archer who has to walk to town for ammunition
+    // simply stops using the bow
+    for (const k of ["arrow", "trainingArrow"] as const) {
+      ok(craftable.has(k), `${k} is still forged`);
+    }
   }
 
   console.log("training curve (Tibia 8.6 constants):");
@@ -1045,6 +1055,185 @@ async function main(): Promise<void> {
     ok(!sm.gemReady(one as never, 99), "99 horns and nothing else makes no gem");
     ok(sm.gemReady(three as never, 3), "three different trophies + 3 coal makes a gem");
     ok(!sm.gemReady(three as never, 2), "short on coal, no gem");
+  }
+
+  /* ---- Etap 24B: structure tiers, the forge ladder, tower gating -------- */
+  {
+    const b = await import("../src/systems/building.ts");
+    const tw = await import("../src/systems/tower.ts");
+    const { createGame, homeChests } = await import("../src/game.ts");
+    const { canPlaceAt, tryPlace, tryUpgrade, STRUCTS, tierOf, bestTier, upgradeCost } = b;
+    console.log("Etap 24B — building tiers:");
+
+    // the Garden is gone and the War Dummy folded into the Training Dummy
+    ok(!("garden" in STRUCTS), "the Garden is no longer buildable");
+    ok(!("dummyII" in STRUCTS), "the War Dummy is no longer a separate structure");
+    ok(b.STRUCT_KEYS.length === 5, "five buildable structures");
+
+    // THE LADDER. This is the load-bearing claim of the whole design: no tier
+    // can be paid for without the tier below it having been built first.
+    ok(!("iron" in STRUCTS.forge.tiers[0].cost), "Forge I needs no iron — it is what makes iron");
+    ok("iron" in STRUCTS.forge.tiers[1].cost, "Forge II costs iron (from a Forge I)");
+    ok("steel" in STRUCTS.forge.tiers[2].cost, "Forge III costs steel (from a Forge II)");
+    ok("essentialGem" in STRUCTS.tower.tiers[2].cost, "Alchemy Tower III costs gems (from a Forge III)");
+    ok(!("steel" in STRUCTS.tower.tiers[0].cost) && !("iron" in STRUCTS.tower.tiers[0].cost),
+      "Tower I is buildable before any forge exists");
+    for (const k of ["forge", "tower", "dummy", "chest"] as const) {
+      ok(STRUCTS[k].tiers.length === 3, `${k} has three tiers`);
+    }
+    ok(STRUCTS.range.tiers.length === 1, "the Archery Range stays single-tier");
+
+    // dummy training climbs with the tier, and never reaches real combat
+    ok(b.DUMMY_TIER_SHIELD[0] === 0, "a tier-I dummy trains no Shielding");
+    ok(b.DUMMY_TIER_SHIELD[1] === 0.25 && b.DUMMY_TIER_RATE[1] === 0.5,
+      "tier II is exactly the old War Dummy");
+    ok(b.DUMMY_TIER_RATE[2] > b.DUMMY_TIER_RATE[1] && b.DUMMY_TIER_SHIELD[2] > b.DUMMY_TIER_SHIELD[1],
+      "tier III is faster on both");
+    for (let i = 0; i < 3; i++) {
+      ok(b.DUMMY_TIER_RATE[i] < 1, `tier ${i + 1} still trains slower than hunting`);
+      ok(b.DUMMY_TIER_SHIELD[i] < b.DUMMY_TIER_RATE[i] || b.DUMMY_TIER_SHIELD[i] === 0,
+        `tier ${i + 1}: Shielding lags melee`);
+    }
+
+    // upgrading in place, and what it costs
+    {
+      const g = createGame();
+      const home = g.worlds.home;
+      items.addItem(g.player.bag, "wood", 200);
+      items.addItem(g.player.bag, "stone", 200);
+      let placed = false;
+      outer2: for (let ty = 1; ty < home.h - 1; ty++)
+        for (let tx = 1; tx < home.w - 1; tx++)
+          if (canPlaceAt(home, "forge", tx, ty)) {
+            placed = tryPlace(home, g.player, "forge", tx * TILE + TILE, ty * TILE + TILE, homeChests(g));
+            if (placed) break outer2;
+          }
+      ok(placed, "a Forge is raised");
+      const forge = home.structures.find((st) => st.key === "forge")!;
+      ok(tierOf(forge) === 1, "…at tier I");
+      ok(bestTier(home, "forge") === 1, "bestTier reports it");
+      // no iron in the bag, so the upgrade must be refused
+      ok(!tryUpgrade(home, g.player, forge, []), "no iron, no Forge II");
+      ok(tierOf(forge) === 1, "…and the refusal costs nothing");
+      items.addItem(g.player.bag, "iron", 20);
+      items.addItem(g.player.bag, "stone", 100);
+      items.addItem(g.player.bag, "wood", 50);
+      ok(tryUpgrade(home, g.player, forge, []), "with iron, the Forge upgrades");
+      ok(tierOf(forge) === 2, "…to tier II, in place");
+      ok(home.structures.filter((st) => st.key === "forge").length === 1,
+        "…and it is still ONE forge, not a second building");
+      ok(items.bagCount(g.player.bag, "iron") === 0, "the iron was actually spent");
+      ok(upgradeCost("forge", 3) === null, "there is no tier IV");
+      ok(upgradeCost("range", 1) === null, "the range cannot be upgraded at all");
+    }
+
+    // the tower gate: building tier decides which crystal tier is researchable
+    const byId = (id: string) => tw.RESEARCH.find((r) => r.id === id)!;
+    ok(tw.towerTierFor(byId("fire1shard")) === 1, "Ember needs a tier-I tower");
+    ok(tw.towerTierFor(byId("fire2shard")) === 2, "Flame needs a tier-II tower");
+    ok(tw.towerTierFor(byId("fire3shard")) === 3, "Pyre needs a tier-III tower");
+    ok(tw.towerTierFor(byId("life")) === 1, "the four original crystals stay at tier I");
+    ok(!tw.towerTierOk(byId("fire3shard"), 2), "a tier-II tower cannot research Pyre");
+    ok(tw.towerTierOk(byId("fire3shard"), 3), "a tier-III tower can");
+    // every lane is gated identically — no element is secretly cheaper
+    for (const el of ["fire", "ice", "earth", "storm", "shadow"]) {
+      for (const t of [1, 2, 3]) {
+        const r = tw.RESEARCH.find((x) => x.id === `${el}${t}shard`);
+        ok(!!r && tw.towerTierFor(r) === t, `${el} tier ${t} shard needs tower ${t}`);
+      }
+    }
+  }
+
+  console.log("Etap 24B — save migration from the pre-tier world:");
+  {
+    const { createGame, homeChests } = await import("../src/game.ts");
+    const { saveGame, loadGame, deleteSave } = await import("../src/save.ts");
+    const { tierOf } = await import("../src/systems/building.ts");
+    deleteSave();
+    const g = createGame();
+    saveGame(g);
+    const raw = JSON.parse(localStorage.getItem("bone-isle-save-v2")!);
+    // hand-plant a save as it looked BEFORE tiers: a garden, a War Dummy and a
+    // flat 50-slot chest with something valuable in it.
+    raw.structures.home = [
+      { key: "garden", tx: 5, ty: 5, anim: 0 },
+      { key: "dummyII", tx: 9, ty: 5, anim: 0 },
+      { key: "chest", tx: 12, ty: 5, anim: 0, inv: [{ kind: "dragonScale", n: 9 }, ...Array(49).fill(null)] },
+      { key: "forge", tx: 15, ty: 5, anim: 0 },
+    ];
+    localStorage.setItem("bone-isle-save-v2", JSON.stringify(raw));
+    const g2 = loadGame()!;
+    ok(!!g2, "the old save still loads");
+    const st = g2.worlds.home.structures.filter((x) => x.key !== "treasure");
+    ok(!st.some((x) => x.key === "garden"), "the Garden is dropped on load");
+    ok(!st.some((x) => x.key === "dummyII"), "the War Dummy key is gone");
+    const dummy = st.find((x) => x.key === "dummy");
+    ok(!!dummy && tierOf(dummy!) === 2,
+      "…because it became a tier-II Training Dummy, which is what it always was");
+    const chest = st.find((x) => x.key === "chest")!;
+    ok(tierOf(chest) === 2, "a pre-tier chest lands at tier II, not tier I");
+    ok(chest.inv!.length === 50, "…keeping all 50 slots it used to have");
+    ok(items.bagCount(homeChests(g2)[0], "dragonScale") === 9,
+      "…and nothing stored inside was lost to the migration");
+    const forge = st.find((x) => x.key === "forge")!;
+    ok(tierOf(forge) === 1, "an untiered forge reads as tier I");
+    deleteSave();
+  }
+
+  console.log("Etap 24B — every rebuilt panel actually draws:");
+  {
+    // The forge and build windows were rewritten from scratch. A drawing bug
+    // there is invisible to every test above and fatal in the browser, so open
+    // each one against the canvas stub and make sure it does not throw.
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { tryPlace, canPlaceAt } = await import("../src/systems/building.ts");
+    const g = createGame();
+    const home = g.worlds.home;
+    items.addItem(g.player.bag, "wood", 400);
+    items.addItem(g.player.bag, "stone", 400);
+    items.addItem(g.player.bag, "coal", 20);
+    items.addItem(g.player.bag, "knightBody", 1);
+    items.addItem(g.player.bag, "minotaurHorn", 3);
+    items.addItem(g.player.bag, "orcEar", 3);
+    items.addItem(g.player.bag, "goblinFang", 3);
+    outer3: for (let ty = 1; ty < home.h - 1; ty++)
+      for (let tx = 1; tx < home.w - 1; tx++)
+        if (canPlaceAt(home, "forge", tx, ty)) {
+          tryPlace(home, g.player, "forge", tx * TILE + TILE, ty * TILE + TILE, []);
+          break outer3;
+        }
+    const noop = new Proxy({}, { get: () => () => {} });
+    const hud = {
+      ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+        .document.createElement("canvas").getContext("2d"),
+      scale: 2, screenW: 800, screenH: 600, touchInput: false,
+    } as never;
+    for (const kind of ["forge", "build", "tower", "bag", "skills"]) {
+      const ui = {
+        windows: [{ kind, offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
+        npc: null, stash: null, shopTab: "buy", forgeTab: "craft", upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      } as never;
+      let threw = "";
+      try {
+        drawPanels({ hud, ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 }, act: noop, hotspots: [], itemSlots: [] } as never);
+      } catch (e) { threw = String(e); }
+      ok(threw === "", `the ${kind} panel draws without throwing${threw ? " — " + threw : ""}`);
+    }
+    // …and each forge tab in turn, since only one is drawn per frame
+    for (const tab of ["craft", "smelt", "gems"] as const) {
+      const ui = {
+        windows: [{ kind: "forge", offset: { x: 0, y: 0 } }], placing: null, selSlot: null,
+        loot: null, npc: null, stash: null, shopTab: "buy", forgeTab: tab, upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      } as never;
+      let threw = "";
+      try {
+        drawPanels({ hud, ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 }, act: noop, hotspots: [], itemSlots: [] } as never);
+      } catch (e) { threw = String(e); }
+      ok(threw === "", `forge tab "${tab}" draws${threw ? " — " + threw : ""}`);
+    }
   }
 
   console.log("speed from level (no Speed skill — Tibia 8.6):");
@@ -1590,7 +1779,23 @@ async function main(): Promise<void> {
     ok(built === 2, "two chests raised on Home Isle");
     const invs = homeChests(g);
     ok(invs.length === 2 && invs[0] !== invs[1], "each chest owns a separate inventory");
-    ok(invs[0].length === 50 && invs[1].length === 50, "every chest has 50 slots");
+    // Etap 24: a fresh chest is tier I and holds ten slots; it grows to 50 and
+    // then 100 as it is upgraded, and an upgrade appends slots rather than
+    // rebuilding the array, so nothing stored can ever be lost to one.
+    ok(invs[0].length === 10 && invs[1].length === 10, "a fresh chest holds 10 slots");
+    {
+      const { tryUpgrade, CHEST_SLOTS, tierOf } = await import("../src/systems/building.ts");
+      const chest = home.structures.find((st) => st.key === "chest")!;
+      items.addItem(chest.inv!, "silk", 7);
+      g.player.bag.fill(null);
+      items.addItem(g.player.bag, "wood", 60);
+      items.addItem(g.player.bag, "stone", 60);
+      items.addItem(g.player.bag, "bones", 40);
+      ok(tryUpgrade(home, g.player, chest, []), "chest upgraded to tier II");
+      ok(tierOf(chest) === 2, "…and it reads back as tier II");
+      ok(chest.inv!.length === CHEST_SLOTS[1], `…with ${CHEST_SLOTS[1]} slots`);
+      ok(items.bagCount(chest.inv!, "silk") === 7, "…and the silk inside survived the upgrade");
+    }
     items.addItem(invs[0], "bones", 30);
     ok(items.bagCount(invs[0], "bones") === 30 && items.bagCount(invs[1], "bones") === 0,
       "items stored in one chest never appear in the other");
@@ -1600,8 +1805,12 @@ async function main(): Promise<void> {
     items.removeItem(g.player.bag, "wood", bagWood);
     items.addItem(invs[0], "wood", 22);
     items.addItem(g.player.bag, "stone", 6);
-    ok(canAfford(g.player.bag, STRUCTS.garden.cost, homeChests(g)),
+    // 22 wood sits in chest one, 12 herb in chest two, 6 stone in the backpack:
+    // only the three pooled together can pay this.
+    ok(canAfford(g.player.bag, { wood: 22, herb: 12, stone: 6 }, homeChests(g)),
       "a build cost split across bag + two chests still affords");
+    ok(!canAfford(g.player.bag, { wood: 22, herb: 12, stone: 6 }, []),
+      "…and the backpack alone cannot");
   }
 
   console.log("Etap 11 — chest persistence & legacy shared-stash migration:");
@@ -1924,7 +2133,6 @@ async function main(): Promise<void> {
       "reach constants doubled");
     ok(cfg.MELEE_REACH_PX > Math.SQRT2 * cfg.TILE && cfg.MELEE_REACH_PX < 2 * cfg.TILE,
       "melee still covers a diagonal neighbour and never a square two out");
-    ok(cfg.GARDEN_RADIUS / cfg.TILE === 2.5, "the garden aura still spans 2.5 tiles");
     ok(items.ITEMS.longbow.bow!.range / cfg.TILE === 5, "Hunter's Bow reaches 5 tiles");
     ok(items.ITEMS.bow.bow!.range / cfg.TILE === 5, "Short Bow reaches 5 tiles too");
     ok(cfg.MONSTER_AGGRO_RANGE >= items.ITEMS.longbow.bow!.range + cfg.TILE,
