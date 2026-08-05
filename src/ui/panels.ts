@@ -3,11 +3,11 @@ import { SPR, itemSprite, iconW, iconH } from "../gfx/sprites.ts";
 import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax } from "../systems/skills.ts";
 import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import { MIN_HIT_RATIO } from "../config.ts";
-import { STRUCTS, STRUCT_KEYS, canAfford, costText } from "../systems/building.ts";
-import { RESEARCH, isResearched } from "../systems/tower.ts";
+import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost } from "../systems/building.ts";
+import { RESEARCH, isResearched, towerTierOk, towerTierFor } from "../systems/tower.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
 import type { TaskReward } from "../systems/tasks.ts";
-import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, bestArrow, itemInfoLines } from "../items.ts";
+import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, bestArrow, itemInfoLines, countAcross } from "../items.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
@@ -16,6 +16,8 @@ import { heroPreviewFrame } from "../gfx/heroSheet.ts";
 import { hudText, type HudCtx } from "./hud.ts";
 import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
+import { bestTier } from "../systems/building.ts";
+import { smeltYield, canSmelt, COAL_PER_SMELT, GEM_TROPHIES, GEM_TROPHY_KINDS, GEM_COAL } from "../systems/smelt.ts";
 import type { EqSlot, ItemKind, Recipe } from "../items.ts";
 import type { Corpse, Npc, Structure } from "../world/types.ts";
 import { homeChests } from "../game.ts";
@@ -71,6 +73,10 @@ export interface UiState {
   /** The Storage Chest whose window is open (chests are independent now). */
   stash: Structure | null;
   shopTab: "buy" | "sell";
+  /** Which tab of the Forge window is showing (Etap 24). */
+  forgeTab: "craft" | "smelt" | "gems";
+  /** The structure whose upgrade is being offered in the build window. */
+  upgrading: Structure | null;
   dragging: boolean;
   /** Look/inspect mode: taps describe items instead of using them. */
   lookMode: boolean;
@@ -86,6 +92,9 @@ export interface PanelActions {
   equipItem: (kind: ItemKind, slotIndex: number) => void;
   unequip: (slot: EqSlot) => void;
   craft: (r: Recipe) => void;
+  smelt: (kind: ItemKind, index: number) => void;
+  makeGem: () => void;
+  upgrade: (s: Structure) => void;
   research: (id: string) => void;
   buyCrystal: (id: string) => void;
   takeLoot: (c: Corpse, index: number) => void;
@@ -425,33 +434,62 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
 function drawBuild(p: PanelInput): void {
   const { hud, player } = p;
   const { scale: S, screenW, screenH } = hud;
-  const w = 246 * S;
-  const rowH = 36 * S;
-  const h = 20 * S + STRUCT_KEYS.length * rowH + 22 * S;
+  const w = 268 * S;
+  const rowH = 44 * S;
+  const home = p.game.worlds.home;
+  const chests = homeChests(p.game);
+  const h = 20 * S + STRUCT_KEYS.length * rowH + 30 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  if (!goldPanel(p, x, y, w, h, "BUILD — choose a structure")) return;
+  if (!goldPanel(p, x, y, w, h, "BUILD — structures & upgrades")) return;
   let ry = y + 18 * S;
   for (const key of STRUCT_KEYS) {
     const def = STRUCTS[key];
-    const afford = canAfford(player.bag, def.cost, homeChests(p.game));
-    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && afford) {
+    // The best one standing decides what this row offers: nothing built yet
+    // means "build tier I", otherwise it means "raise the one you have".
+    let owned: Structure | null = null;
+    for (const st of home.structures) {
+      if (st.key === key && (!owned || tierOf(st) > tierOf(owned))) owned = st;
+    }
+    const tier = owned ? tierOf(owned) : 0;
+    const top = maxTier(key);
+    const nextCost = owned ? upgradeCost(key, tier) : buildCost(key);
+    const maxed = owned !== null && nextCost === null;
+    const afford = nextCost !== null && canAfford(player.bag, nextCost, chests);
+    const clickable = afford && !maxed;
+
+    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable) {
       hud.ctx.fillStyle = "rgba(202,162,58,.15)";
       hud.ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
     }
     const spr = def.spr;
-    const isc = Math.max(1, Math.floor((rowH - 10 * S) / iconH(spr, 1)));
+    const isc = Math.max(1, Math.floor((rowH - 14 * S) / iconH(spr, 1)));
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, isc)) / 2, isc);
-    hudText(hud, def.name, x + 48 * S, ry + 9 * S, 10 * S, afford ? "#f3eedd" : "#8a8070", "left", true);
-    hudText(hud, costText(def.cost), x + 48 * S, ry + 20 * S, 8 * S, afford ? "#b9e07f" : "#d96a5a");
-    hudText(hud, def.desc, x + 48 * S, ry + 29 * S, 7 * S, "rgba(220,214,190,.6)");
-    if (afford) {
+
+    const label = tier > 0 ? `${def.name}  ${"I".repeat(tier)}` : def.name;
+    hudText(hud, label, x + 48 * S, ry + 9 * S, 10 * S, clickable || maxed ? "#f3eedd" : "#8a8070", "left", true);
+    if (top > 1) {
+      hudText(hud, tier > 0 ? `tier ${tier} / ${top}` : `tier 0 / ${top}`, x + w - 12 * S, ry + 9 * S, 7 * S, "#e8dcc0", "right");
+    }
+    if (maxed) {
+      hudText(hud, "top tier reached", x + 48 * S, ry + 21 * S, 8 * S, "#9fe8a8");
+      hudText(hud, def.tiers[tier - 1].desc, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)");
+    } else if (nextCost) {
+      const verb = owned ? `Upgrade to ${"I".repeat(tier + 1)}:` : "Build:";
+      hudText(hud, `${verb} ${costText(nextCost)}`, x + 48 * S, ry + 21 * S, 8 * S, afford ? "#b9e07f" : "#d96a5a");
+      hudText(hud, def.tiers[tier].desc, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)");
+    }
+    if (clickable) {
       const ryy = ry;
-      p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.startPlacing(key) });
+      const target = owned;
+      p.hotspots.push({
+        x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S,
+        fn: target ? () => p.act.upgrade(target) : () => p.act.startPlacing(key),
+      });
     }
     ry += rowH;
   }
-  hudText(hud, "Costs draw from backpack + Storage Chest · [Esc] cancel", x + w / 2, y + h - 10 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+  hudText(hud, "Upgrades apply to the structure you already own · [Esc] cancel", x + w / 2, y + h - 10 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 
 function drawPlacingHint(p: { hud: HudCtx; ui: UiState }): void {
@@ -714,37 +752,159 @@ function drawBag(p: PanelInput): void {
   hudText(hud, hint, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 
-/* ---------------- Forge (crafting) ---------------- */
+/* ---------------- Forge (craft · smelt · gems) ---------------- */
+
+/** A row of tabs across the top of a panel. Returns the tab body's top Y. */
+function tabRow(
+  p: PanelInput, x: number, y: number, w: number,
+  tabs: readonly { id: string; label: string; on: boolean }[],
+  active: string, pick: (id: string) => void,
+): number {
+  const { ctx, scale: S } = p.hud;
+  const tw = (w - 8 * S) / tabs.length;
+  const th = 15 * S;
+  tabs.forEach((t, i) => {
+    const tx = x + 4 * S + i * tw;
+    const sel = t.id === active;
+    ctx.fillStyle = sel ? "rgba(202,162,58,.28)" : t.on ? "rgba(0,0,0,.22)" : "rgba(0,0,0,.4)";
+    ctx.fillRect(tx, y, tw - 2 * S, th);
+    hudText(p.hud, t.label, tx + (tw - 2 * S) / 2, y + 5 * S, 8 * S,
+      !t.on ? "#6d6659" : sel ? "#ffe9a8" : "#c8c0aa", "center", sel);
+    if (t.on) p.hotspots.push({ x: tx, y, w: tw - 2 * S, h: th, fn: () => pick(t.id) });
+  });
+  return y + th + 4 * S;
+}
 
 function drawForge(p: PanelInput): void {
-  const { hud, player } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
-  const w = 280 * S;
+  const { hud, player, ui } = p;
+  const { scale: S, screenW, screenH } = hud;
+  const tier = Math.max(1, bestTier(p.game.worlds.home, "forge"));
+  // Tabs the forge cannot serve stay visible but dead: a player who has not
+  // built a Forge III should be able to SEE that gem-cutting is what the
+  // third tier buys, otherwise the upgrade is a number with no picture.
+  if (ui.forgeTab === "gems" && tier < 3) ui.forgeTab = "smelt";
+
+  const smeltables = smeltableSlots(player);
   const rowH = 26 * S;
-  const h = 20 * S + RECIPES.length * rowH + 20 * S;
+  const bodyRows = ui.forgeTab === "craft" ? RECIPES.length
+    : ui.forgeTab === "smelt" ? Math.max(1, smeltables.length)
+    : Math.max(1, GEM_TROPHIES.length);
+  const w = 292 * S;
+  const h = 20 * S + 19 * S + Math.min(bodyRows, 12) * rowH + 22 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  if (!goldPanel(p, x, y, w, h, "FORGE — craft gear")) return;
+  if (!goldPanel(p, x, y, w, h, `FORGE ${"I".repeat(tier)}`)) return;
+
+  let ry = tabRow(p, x, y + 16 * S, w, [
+    { id: "craft", label: "CRAFT", on: true },
+    { id: "smelt", label: "SMELT", on: true },
+    { id: "gems", label: "GEMS", on: tier >= 3 },
+  ], ui.forgeTab, (id) => { ui.forgeTab = id as "craft" | "smelt" | "gems"; });
+
+  if (ui.forgeTab === "craft") ry = forgeCraft(p, x, ry, w, rowH);
+  else if (ui.forgeTab === "smelt") ry = forgeSmelt(p, x, ry, w, rowH, tier, smeltables);
+  else ry = forgeGems(p, x, ry, w);
+
+  const foot = ui.forgeTab === "craft" ? "Uses backpack + storage chest"
+    : ui.forgeTab === "smelt" ? `Burns ${COAL_PER_SMELT} coal per piece · tier ${tier} furnace`
+    : `${GEM_TROPHY_KINDS} different trophies + ${GEM_COAL} coal per gem`;
+  hudText(hud, foot, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+}
+
+function forgeCraft(p: PanelInput, x: number, ry: number, w: number, rowH: number): number {
+  const { hud, player } = p;
+  const S = hud.scale;
   const bags = [player.bag, ...homeChests(p.game)];
-  let ry = y + 18 * S;
   for (const r of RECIPES) {
     const ok = canCraftAcross(bags, r) && player.gold >= (r.gold ?? 0);
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && ok) {
-      ctx.fillStyle = "rgba(202,162,58,.15)";
-      ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
+      hud.ctx.fillStyle = "rgba(202,162,58,.15)";
+      hud.ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
     }
     const spr = itemSprite(r.out);
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
     hudText(hud, ITEMS[r.out].name, x + 34 * S, ry + 8 * S, 9 * S, ok ? "#f3eedd" : "#8a8070", "left", true);
     hudText(hud, recipeCostText(r), x + 34 * S, ry + 18 * S, 7 * S, ok ? "#b9e07f" : "#d96a5a");
     if (ok) {
-      const rr = r;
-      const ryy = ry;
+      const rr = r; const ryy = ry;
       p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.craft(rr) });
     }
     ry += rowH;
   }
-  hudText(hud, "Click a recipe to craft (uses backpack + storage chest)", x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+  return ry;
+}
+
+/** Backpack slots holding something the furnace will accept. */
+function smeltableSlots(player: Player): { kind: ItemKind; index: number }[] {
+  const out: { kind: ItemKind; index: number }[] = [];
+  player.bag.forEach((sl, i) => {
+    if (sl && canSmelt(sl.kind)) out.push({ kind: sl.kind, index: i });
+  });
+  return out;
+}
+
+function forgeSmelt(
+  p: PanelInput, x: number, ry: number, w: number, rowH: number,
+  tier: number, rows: { kind: ItemKind; index: number }[],
+): number {
+  const { hud, player } = p;
+  const S = hud.scale;
+  const coal = countAcross([player.bag, ...homeChests(p.game)], "coal");
+  if (!rows.length) {
+    hudText(hud, "Nothing in your backpack will melt.", x + w / 2, ry + 8 * S, 8 * S, "rgba(220,214,190,.55)", "center");
+    hudText(hud, "Leather, bone and dragon scale never do.", x + w / 2, ry + 18 * S, 7 * S, "rgba(220,214,190,.4)", "center");
+    return ry + rowH;
+  }
+  for (const row of rows.slice(0, 12)) {
+    const y = smeltYield(row.kind, tier as 1 | 2 | 3, ITEMS[row.kind].slot);
+    const ok = coal >= COAL_PER_SMELT;
+    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && ok) {
+      hud.ctx.fillStyle = "rgba(202,162,58,.15)";
+      hud.ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
+    }
+    const spr = itemSprite(row.kind);
+    icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
+    hudText(hud, ITEMS[row.kind].name, x + 34 * S, ry + 8 * S, 9 * S, ok ? "#f3eedd" : "#8a8070", "left", true);
+    const parts = [y.iron > 0 ? `${y.iron} iron` : "", y.steel > 0 ? `${y.steel} steel` : ""].filter(Boolean);
+    hudText(hud, `→ ${parts.join(" + ")}`, x + 34 * S, ry + 18 * S, 7 * S, ok ? "#b9e07f" : "#d96a5a");
+    hudText(hud, `${ITEMS[row.kind].value}g at Borin`, x + w - 12 * S, ry + 13 * S, 7 * S, "rgba(220,214,190,.45)", "right");
+    if (ok) {
+      const rr = row; const ryy = ry;
+      p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.smelt(rr.kind, rr.index) });
+    }
+    ry += rowH;
+  }
+  return ry;
+}
+
+function forgeGems(p: PanelInput, x: number, ry: number, w: number): number {
+  const { hud, player } = p;
+  const S = hud.scale;
+  const bags = [player.bag, ...homeChests(p.game)];
+  const coal = countAcross(bags, "coal");
+  const held = GEM_TROPHIES.map((t) => ({ t, n: countAcross(bags, t) }));
+  const kinds = held.filter((h) => h.n > 0).length;
+  const ready = kinds >= GEM_TROPHY_KINDS && coal >= GEM_COAL;
+
+  const btnH = 20 * S;
+  hud.ctx.fillStyle = ready ? "rgba(160,120,220,.32)" : "rgba(0,0,0,.3)";
+  hud.ctx.fillRect(x + 8 * S, ry, w - 16 * S, btnH);
+  hudText(hud, ready ? "CUT AN ESSENTIAL GEM" : `${kinds}/${GEM_TROPHY_KINDS} trophy kinds · ${coal}/${GEM_COAL} coal`,
+    x + w / 2, ry + 7 * S, 9 * S, ready ? "#e0ccff" : "#8a8070", "center", true);
+  if (ready) {
+    const ryy = ry;
+    p.hotspots.push({ x: x + 8 * S, y: ryy, w: w - 16 * S, h: btnH, fn: () => p.act.makeGem() });
+  }
+  ry += btnH + 6 * S;
+
+  for (const h of held) {
+    const spr = itemSprite(h.t);
+    icon(p, spr, x + 12 * S, ry + 2 * S, 2 * S);
+    hudText(hud, ITEMS[h.t].name, x + 34 * S, ry + 5 * S, 8 * S, h.n > 0 ? "#f3eedd" : "#6d6659", "left");
+    hudText(hud, String(h.n), x + w - 14 * S, ry + 5 * S, 8 * S, h.n > 0 ? "#b9e07f" : "#6d6659", "right");
+    ry += 15 * S;
+  }
+  return ry;
 }
 
 /* ---------------- Alchemy Tower ---------------- */
@@ -757,13 +917,17 @@ function drawTower(p: PanelInput): void {
   const h = 20 * S + RESEARCH.length * rowH + 22 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  if (!goldPanel(p, x, y, w, h, "ALCHEMY TOWER")) return;
+  const tt = bestTier(game.worlds.home, "tower");
+  if (!goldPanel(p, x, y, w, h, `ALCHEMY TOWER ${"I".repeat(Math.max(1, tt))}`)) return;
   let ry = y + 18 * S;
   for (const r of RESEARCH) {
     const researched = isResearched(r.id);
     const cost = researched ? r.buyCost : r.researchCost;
     const affordable = canAfford(player.bag, cost, homeChests(game));
-    const clickable = affordable; // research or buy both need materials
+    // The building is the gate. Buying charges of something already
+    // researched stays open at any tier — you paid for that lane once.
+    const tierOk = researched || towerTierOk(r, tt);
+    const clickable = affordable && tierOk;
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable) {
       ctx.fillStyle = "rgba(202,162,58,.15)";
       ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
@@ -777,8 +941,9 @@ function drawTower(p: PanelInput): void {
       hudText(hud, `Buy x${r.buyN}:  ${costText(r.buyCost)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a");
       hudText(hud, r.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
     } else {
-      hudText(hud, "LOCKED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
-      hudText(hud, `Research:  ${costText(r.researchCost)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#c9a6ff" : "#d96a5a");
+      hudText(hud, tierOk ? "LOCKED" : `TOWER ${"I".repeat(towerTierFor(r))}`, x + w - 12 * S, ry + 8 * S, 7 * S, tierOk ? "#c98a5a" : "#7f7466", "right");
+      hudText(hud, tierOk ? `Research:  ${costText(r.researchCost)}` : `Needs an Alchemy Tower ${"I".repeat(towerTierFor(r))}`,
+        x + 34 * S, ry + 19 * S, 7 * S, !tierOk ? "#7f7466" : affordable ? "#c9a6ff" : "#d96a5a");
       hudText(hud, r.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
     }
     if (clickable) {
