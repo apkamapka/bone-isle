@@ -4,7 +4,6 @@ import {
   expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED, MONSTER_AGGRO_HIT_S,
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
   SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S, MIN_ELEMENTAL_DAMAGE, MIN_DAMAGE_TO_MONSTER,
-  DUMMY_RATE, DUMMY_SHIELD_RATE,
 } from "../config.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
@@ -12,7 +11,7 @@ import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
 import { ITEMS, removeItem, emptyBag } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
-import { structCenter } from "./building.ts";
+import { structCenter, tierOf, DUMMY_TIER_RATE, DUMMY_TIER_SHIELD } from "./building.ts";
 import {
   addSkillXp, addShieldXp, markBloodHit, applySkillDeathLoss, attackPower, defenseArmor, distancePower,
   rollMeleeDamage, rollDistanceDamage, distanceHitChance,
@@ -121,13 +120,13 @@ export function shootDummy(world: World, p: Player, s: Structure, arrowKind: Ite
   world.shots.push({ fromX: p.x, fromY: p.y - 16, toX: tx, toY: ty - 12, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow" });
   if (Math.random() > distanceHitChance()) {
     addFloat(world, c.x, s.ty * TILE - 8, "miss", "#9aa0a8");
-    addSkillXp("dist", 1 * DUMMY_RATE, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+    addSkillXp("dist", 1 * DUMMY_TIER_RATE[0], (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
     return true;
   }
   const dmg = rollDistanceDamage(dp);
   addFloat(world, c.x, s.ty * TILE - 8, String(dmg), "#bfe08a");
   markBloodHit(); // a dummy still counts as swinging at something
-  addSkillXp("dist", 2 * DUMMY_RATE, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+  addSkillXp("dist", 2 * DUMMY_TIER_RATE[0], (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   beep(430, 0.06, "triangle", 0.045, -120);
   return true;
 }
@@ -139,11 +138,14 @@ export function hitDummy(world: World, p: Player, s: Structure): void {
   s.anim = 0;
   addFloat(world, structCenter(s).x, s.ty * TILE - 8, dmg > 0 ? String(dmg) : "poof", dmg > 0 ? "#d8d2c0" : "#9aa0a8");
   markBloodHit();
-  addSkillXp("sword", 1 * DUMMY_RATE, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
-  // The War Dummy hits back for training value: also trains Shielding, at the
-  // slowest rate in the game — one post is not the two attackers that justify
-  // Shielding's doubled cost in the first place.
-  if (s.key === "dummyII") addShieldXp(DUMMY_SHIELD_RATE, (t) => addFloat(world, p.x, p.y - 76, t, "#7dff9e"));
+  // Rate follows the post's tier now (Etap 24): the old standalone War Dummy
+  // became tier II of this same structure, and tier III is simply faster.
+  const dt = tierOf(s) - 1;
+  addSkillXp("sword", 1 * DUMMY_TIER_RATE[dt], (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+  // Shielding lags melee at every tier: its doubled cost is paid back by
+  // blocking two creatures at once, and a post in the ground is exactly one.
+  const shield = DUMMY_TIER_SHIELD[dt];
+  if (shield > 0) addShieldXp(shield, (t) => addFloat(world, p.x, p.y - 76, t, "#7dff9e"));
   beep(220, 0.05, "triangle", 0.05);
 }
 

@@ -52,6 +52,25 @@ export function researchAvailable(id: string, done: readonly string[]): boolean 
   return researchChain(id).every((r) => done.includes(r));
 }
 
+/**
+ * Which Alchemy Tower tier a project needs standing on Home Isle.
+ *
+ * The building IS the tier gate: a tier-I tower researches Ember, a tier-II
+ * tower Flame, a tier-III tower Pyre — and the same one step at a time in
+ * every other lane. The lane prerequisites stay on top of this, so depth
+ * costs two different things at once: a building you paid for, and a lane
+ * you committed to. The four original crystals predate the elemental line
+ * and sit at tier I, where they have always been.
+ */
+export function towerTierFor(r: Research): 1 | 2 | 3 {
+  return r.tier === undefined ? 1 : ((r.tier + 1) as 1 | 2 | 3);
+}
+
+/** Is this project buildable given the best tower the player owns? */
+export function towerTierOk(r: Research, towerTier: number): boolean {
+  return towerTier >= towerTierFor(r);
+}
+
 export const RESEARCH: readonly Research[] = [
   {
     id: "life",
