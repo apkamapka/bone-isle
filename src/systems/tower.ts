@@ -28,10 +28,15 @@ export interface Research {
   /** Element, for grouping the tower's project list by colour. */
   element?: Element;
   /**
-   * Project that must be researched first. This is what turns the tower from a
-   * shopping list into a progression: an element is a LANE you commit to, and
-   * the cost of the third tier is only worth paying in a lane you already use.
-   * Spreading across all five is legal and deliberately unaffordable.
+   * Project that must be researched first.
+   *
+   * RETIRED in Etap 24. The tower's own tier is now the progression, and the
+   * panel only ever shows the tier the building is at — which made these
+   * chains actively harmful: a player who upgraded to a tier-II tower without
+   * having researched Ember could no longer SEE Ember, and so could never
+   * research Flame either. The lane would be dead forever, with nothing on
+   * screen explaining why. The field is kept so old data and researchChain()
+   * still typecheck, but nothing sets it any more.
    */
   requires?: string;
 }
@@ -121,7 +126,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "fire",
-    requires: undefined,
   },
   {
     id: "fire1burst",
@@ -133,7 +137,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "fire",
-    requires: undefined,
   },
   {
     id: "fire2shard",
@@ -145,7 +148,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "fire",
-    requires: "fire1shard",
+    // was gated behind fire1shard
   },
   {
     id: "fire2burst",
@@ -157,7 +160,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "fire",
-    requires: "fire1burst",
+    // was gated behind fire1burst
   },
   {
     id: "fire3shard",
@@ -169,7 +172,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "fire",
-    requires: "fire2shard",
+    // was gated behind fire2shard
   },
   {
     id: "fire3burst",
@@ -181,7 +184,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "fire",
-    requires: "fire2burst",
+    // was gated behind fire2burst
   },
   {
     id: "firearrow",
@@ -193,7 +196,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 25,
     tier: 0,
     element: "fire",
-    requires: "fire1shard",
+    // was gated behind fire1shard
   },
   {
     id: "ice1shard",
@@ -205,7 +208,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "ice",
-    requires: undefined,
   },
   {
     id: "ice1burst",
@@ -217,7 +219,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "ice",
-    requires: undefined,
   },
   {
     id: "ice2shard",
@@ -229,7 +230,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "ice",
-    requires: "ice1shard",
+    // was gated behind ice1shard
   },
   {
     id: "ice2burst",
@@ -241,7 +242,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "ice",
-    requires: "ice1burst",
+    // was gated behind ice1burst
   },
   {
     id: "ice3shard",
@@ -253,7 +254,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "ice",
-    requires: "ice2shard",
+    // was gated behind ice2shard
   },
   {
     id: "ice3burst",
@@ -265,7 +266,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "ice",
-    requires: "ice2burst",
+    // was gated behind ice2burst
   },
   {
     id: "icearrow",
@@ -277,7 +278,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 25,
     tier: 0,
     element: "ice",
-    requires: "ice1shard",
+    // was gated behind ice1shard
   },
   {
     id: "earth1shard",
@@ -289,7 +290,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "earth",
-    requires: undefined,
   },
   {
     id: "earth1burst",
@@ -301,7 +301,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "earth",
-    requires: undefined,
   },
   {
     id: "earth2shard",
@@ -313,7 +312,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "earth",
-    requires: "earth1shard",
+    // was gated behind earth1shard
   },
   {
     id: "earth2burst",
@@ -325,7 +324,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "earth",
-    requires: "earth1burst",
+    // was gated behind earth1burst
   },
   {
     id: "earth3shard",
@@ -337,7 +336,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "earth",
-    requires: "earth2shard",
+    // was gated behind earth2shard
   },
   {
     id: "earth3burst",
@@ -349,7 +348,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "earth",
-    requires: "earth2burst",
+    // was gated behind earth2burst
   },
   {
     id: "eartharrow",
@@ -361,7 +360,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 25,
     tier: 0,
     element: "earth",
-    requires: "earth1shard",
+    // was gated behind earth1shard
   },
   {
     id: "storm1shard",
@@ -373,7 +372,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "storm",
-    requires: undefined,
   },
   {
     id: "storm1burst",
@@ -385,7 +383,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "storm",
-    requires: undefined,
   },
   {
     id: "storm2shard",
@@ -397,7 +394,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "storm",
-    requires: "storm1shard",
+    // was gated behind storm1shard
   },
   {
     id: "storm2burst",
@@ -409,7 +406,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "storm",
-    requires: "storm1burst",
+    // was gated behind storm1burst
   },
   {
     id: "storm3shard",
@@ -421,7 +418,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "storm",
-    requires: "storm2shard",
+    // was gated behind storm2shard
   },
   {
     id: "storm3burst",
@@ -433,7 +430,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "storm",
-    requires: "storm2burst",
+    // was gated behind storm2burst
   },
   {
     id: "stormarrow",
@@ -445,7 +442,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 25,
     tier: 0,
     element: "storm",
-    requires: "storm1shard",
+    // was gated behind storm1shard
   },
   {
     id: "shadow1shard",
@@ -457,7 +454,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "shadow",
-    requires: undefined,
   },
   {
     id: "shadow1burst",
@@ -469,7 +465,6 @@ export const RESEARCH: readonly Research[] = [
     buyN: 10,
     tier: 0,
     element: "shadow",
-    requires: undefined,
   },
   {
     id: "shadow2shard",
@@ -481,7 +476,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "shadow",
-    requires: "shadow1shard",
+    // was gated behind shadow1shard
   },
   {
     id: "shadow2burst",
@@ -493,7 +488,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 8,
     tier: 1,
     element: "shadow",
-    requires: "shadow1burst",
+    // was gated behind shadow1burst
   },
   {
     id: "shadow3shard",
@@ -505,7 +500,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "shadow",
-    requires: "shadow2shard",
+    // was gated behind shadow2shard
   },
   {
     id: "shadow3burst",
@@ -517,7 +512,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 6,
     tier: 2,
     element: "shadow",
-    requires: "shadow2burst",
+    // was gated behind shadow2burst
   },
   {
     id: "shadowarrow",
@@ -529,7 +524,7 @@ export const RESEARCH: readonly Research[] = [
     buyN: 25,
     tier: 0,
     element: "shadow",
-    requires: "shadow1shard",
+    // was gated behind shadow1shard
   },
 ];
 
