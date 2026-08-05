@@ -157,6 +157,8 @@ let last = performance.now();
 
 const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, stash: null, shopTab: "buy",
   forgeTab: "craft",
+  testPage: 0,
+  towerTab: "fire",
   upgrading: null, dragging: false, lookMode: false, inspect: null, split: null };
 
 /** The inventory of the chest whose window is open, or null. Every stash
@@ -369,6 +371,7 @@ const act: PanelActions = {
     beep(300, 0.08, "triangle", 0.05);
   },
   smelt: (kind: ItemKind, index: number) => { doSmelt(kind, index); },
+  testGrant: (kind: ItemKind) => { doTestGrant(kind); },
   makeGem: () => { doMakeGem(); },
   upgrade: (s: Structure) => { doUpgrade(s); },
   craft: (r: Recipe) => {
@@ -779,6 +782,22 @@ function craftAt(r: Recipe): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * TEST ONLY — 100 of anything for one gold.
+ *
+ * Weight is deliberately not checked: the point is to put a feature in front
+ * of the developer immediately, and refusing on encumbrance would defeat that.
+ * Bag SLOTS still apply, because a full backpack has nowhere to put them and
+ * silently eating the gold would be worse than saying so.
+ */
+function doTestGrant(kind: ItemKind): void {
+  if (P.gold < 1) { flash("no gold", "#d96a5a"); return; }
+  const left = addItem(P.bag, kind, 100);
+  if (left === 100) { flash("bag full", "#d96a5a"); return; }
+  P.gold -= 1;
+  flash(`TEST +${100 - left} ${ITEMS[kind].name}`, "#e08a7a");
 }
 
 /** Best Forge standing on Home Isle: 0 none, 1..3 otherwise. */
