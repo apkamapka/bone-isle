@@ -74,7 +74,11 @@ export interface UiState {
   stash: Structure | null;
   shopTab: "buy" | "sell";
   /** Which tab of the Forge window is showing (Etap 24). */
-  forgeTab: "craft" | "smelt" | "gems";
+  forgeTab: "craft" | "smelt" | "gems" | "test";
+  /** Which page of the Forge's TEST grid is showing. */
+  testPage: number;
+  /** Which elemental lane the Alchemy Tower window is showing. */
+  towerTab: string;
   /** The structure whose upgrade is being offered in the build window. */
   upgrading: Structure | null;
   dragging: boolean;
@@ -93,6 +97,7 @@ export interface PanelActions {
   unequip: (slot: EqSlot) => void;
   craft: (r: Recipe) => void;
   smelt: (kind: ItemKind, index: number) => void;
+  testGrant: (kind: ItemKind) => void;
   makeGem: () => void;
   upgrade: (s: Structure) => void;
   research: (id: string) => void;
@@ -788,6 +793,7 @@ function drawForge(p: PanelInput): void {
   const rowH = 26 * S;
   const bodyRows = ui.forgeTab === "craft" ? RECIPES.length
     : ui.forgeTab === "smelt" ? Math.max(1, smeltables.length)
+    : ui.forgeTab === "test" ? 10
     : Math.max(1, GEM_TROPHIES.length);
   const w = 292 * S;
   const h = 20 * S + 19 * S + Math.min(bodyRows, 12) * rowH + 22 * S;
@@ -799,14 +805,17 @@ function drawForge(p: PanelInput): void {
     { id: "craft", label: "CRAFT", on: true },
     { id: "smelt", label: "SMELT", on: true },
     { id: "gems", label: "GEMS", on: tier >= 3 },
-  ], ui.forgeTab, (id) => { ui.forgeTab = id as "craft" | "smelt" | "gems"; });
+    { id: "test", label: "TEST", on: true },
+  ], ui.forgeTab, (id) => { ui.forgeTab = id as "craft" | "smelt" | "gems" | "test"; });
 
   if (ui.forgeTab === "craft") ry = forgeCraft(p, x, ry, w, rowH);
   else if (ui.forgeTab === "smelt") ry = forgeSmelt(p, x, ry, w, rowH, tier, smeltables);
+  else if (ui.forgeTab === "test") ry = forgeTest(p, x, ry, w);
   else ry = forgeGems(p, x, ry, w);
 
   const foot = ui.forgeTab === "craft" ? "Uses backpack + storage chest"
     : ui.forgeTab === "smelt" ? `Burns ${COAL_PER_SMELT} coal per piece · tier ${tier} furnace`
+    : ui.forgeTab === "test" ? "TEST ONLY — 1 gold buys 100 of anything"
     : `${GEM_TROPHY_KINDS} different trophies + ${GEM_COAL} coal per gem`;
   hudText(hud, foot, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
@@ -877,6 +886,62 @@ function forgeSmelt(
   return ry;
 }
 
+/**
+ * TEST ONLY — a grid of the entire catalog, 100 of anything for a gold.
+ *
+ * This exists so a feature can be exercised without first farming for it: 500
+ * steel is a legitimate evening of play and a ridiculous prerequisite for
+ * checking that a panel lays out correctly. It is deliberately loud (its own
+ * tab, red heading, "TEST" in the label) so it cannot be mistaken for a real
+ * shop and cannot be shipped by accident.
+ */
+export const TEST_KINDS = Object.keys(ITEMS) as ItemKind[];
+const TEST_COLS = 10;
+const TEST_ROWS = 8;
+const TEST_PER_PAGE = TEST_COLS * TEST_ROWS;
+
+function forgeTest(p: PanelInput, x: number, ry: number, w: number): number {
+  const { hud, player, ui } = p;
+  const S = hud.scale;
+  const pages = Math.ceil(TEST_KINDS.length / TEST_PER_PAGE);
+  ui.testPage = ((ui.testPage % pages) + pages) % pages;
+
+  hudText(hud, "TEST — click an item for 100 @ 1 gold", x + w / 2, ry, 8 * S, "#e08a7a", "center", true);
+  // page arrows
+  const ay = ry - 1 * S;
+  for (const [glyph, dir, ax] of [["<", -1, x + 10 * S], [">", 1, x + w - 22 * S]] as const) {
+    hud.ctx.fillStyle = "rgba(0,0,0,.3)";
+    hud.ctx.fillRect(ax, ay, 12 * S, 11 * S);
+    hudText(hud, glyph, ax + 6 * S, ay + 2 * S, 8 * S, "#e8dcc0", "center", true);
+    const d = dir;
+    p.hotspots.push({ x: ax, y: ay, w: 12 * S, h: 11 * S, fn: () => { ui.testPage += d; } });
+  }
+  hudText(hud, `${ui.testPage + 1}/${pages}`, x + w - 34 * S, ry, 7 * S, "rgba(220,214,190,.6)", "right");
+  ry += 13 * S;
+
+  const cell = (w - 20 * S) / TEST_COLS;
+  const start = ui.testPage * TEST_PER_PAGE;
+  for (let i = 0; i < TEST_PER_PAGE; i++) {
+    const kind = TEST_KINDS[start + i];
+    if (!kind) break;
+    const cx = x + 10 * S + (i % TEST_COLS) * cell;
+    const cy = ry + Math.floor(i / TEST_COLS) * cell;
+    const hot = hovering(p, cx, cy, cell - 1 * S, cell - 1 * S);
+    hud.ctx.fillStyle = hot ? "rgba(202,162,58,.25)" : "rgba(0,0,0,.22)";
+    hud.ctx.fillRect(cx, cy, cell - 1 * S, cell - 1 * S);
+    const spr = itemSprite(kind);
+    const sc = Math.max(1, Math.floor((cell - 4 * S) / iconH(spr, 1)));
+    icon(p, spr, cx + (cell - 1 * S - iconH(spr, sc)) / 2, cy + (cell - 1 * S - iconH(spr, sc)) / 2, sc);
+    if (hot) hudText(hud, ITEMS[kind].name, x + w / 2, ry + TEST_ROWS * cell + 2 * S, 8 * S, "#ffe9a8", "center", true);
+    const k = kind;
+    p.hotspots.push({ x: cx, y: cy, w: cell - 1 * S, h: cell - 1 * S, fn: () => p.act.testGrant(k) });
+  }
+  if (player.gold < 1) {
+    hudText(hud, "(no gold)", x + w / 2, ry + TEST_ROWS * cell + 2 * S, 8 * S, "#d96a5a", "center");
+  }
+  return ry + TEST_ROWS * cell + 12 * S;
+}
+
 function forgeGems(p: PanelInput, x: number, ry: number, w: number): number {
   const { hud, player } = p;
   const S = hud.scale;
@@ -909,23 +974,60 @@ function forgeGems(p: PanelInput, x: number, ry: number, w: number): number {
 
 /* ---------------- Alchemy Tower ---------------- */
 
+/** The tower's tabs: the five elemental lanes, then everything older. */
+const TOWER_TABS = [
+  { id: "fire", label: "FIRE" },
+  { id: "ice", label: "ICE" },
+  { id: "earth", label: "EARTH" },
+  { id: "storm", label: "STORM" },
+  { id: "shadow", label: "SHADOW" },
+  { id: "other", label: "OTHER" },
+] as const;
+
+/**
+ * Which projects a tab shows.
+ *
+ * Elemental lanes show ONLY the tier matching the tower you have built — a
+ * tier-II tower offers Flame and nothing else. The exception is anything
+ * already researched, which stays on the list whatever tier it was: you paid
+ * to unlock that crystal, and hiding it would quietly cut off the charges you
+ * are still buying.
+ *
+ * The OTHER tab holds the four crystals that predate the elemental system
+ * (Life, Fire, Recall, Fire Spear). They are not part of the ladder and are
+ * never hidden — there is no better version of Recall waiting at tier III.
+ */
+export function towerRows(tab: string, towerTier: number): typeof RESEARCH[number][] {
+  if (tab === "other") return RESEARCH.filter((r) => r.element === undefined);
+  const want = Math.max(1, Math.min(3, towerTier));
+  return RESEARCH.filter((r) =>
+    r.element === tab && (towerTierFor(r) === want || isResearched(r.id)));
+}
+
 function drawTower(p: PanelInput): void {
-  const { hud, player, game } = p;
+  const { hud, player, game, ui } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
+  const tt = Math.max(1, bestTier(game.worlds.home, "tower"));
+  const rows = towerRows(ui.towerTab, tt);
   const w = 300 * S;
   const rowH = 34 * S;
-  const h = 20 * S + RESEARCH.length * rowH + 22 * S;
+  const h = 20 * S + 19 * S + Math.max(1, rows.length) * rowH + 22 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  const tt = bestTier(game.worlds.home, "tower");
-  if (!goldPanel(p, x, y, w, h, `ALCHEMY TOWER ${"I".repeat(Math.max(1, tt))}`)) return;
-  let ry = y + 18 * S;
-  for (const r of RESEARCH) {
+  if (!goldPanel(p, x, y, w, h, `ALCHEMY TOWER ${"I".repeat(tt)}`)) return;
+
+  let ry = tabRow(p, x, y + 16 * S, w,
+    TOWER_TABS.map((t) => ({ id: t.id, label: t.label, on: true })),
+    ui.towerTab, (id) => { ui.towerTab = id; });
+
+  if (!rows.length) {
+    hudText(hud, "Nothing at this tier yet.", x + w / 2, ry + 10 * S, 8 * S, "rgba(220,214,190,.55)", "center");
+    ry += rowH;
+  }
+  for (const r of rows) {
     const researched = isResearched(r.id);
     const cost = researched ? r.buyCost : r.researchCost;
     const affordable = canAfford(player.bag, cost, homeChests(game));
-    // The building is the gate. Buying charges of something already
-    // researched stays open at any tier — you paid for that lane once.
     const tierOk = researched || towerTierOk(r, tt);
     const clickable = affordable && tierOk;
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable) {
@@ -939,13 +1041,11 @@ function drawTower(p: PanelInput): void {
     if (researched) {
       hudText(hud, `owned: ${owned}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#e8dcc0", "right");
       hudText(hud, `Buy x${r.buyN}:  ${costText(r.buyCost)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a");
-      hudText(hud, r.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
     } else {
-      hudText(hud, tierOk ? "LOCKED" : `TOWER ${"I".repeat(towerTierFor(r))}`, x + w - 12 * S, ry + 8 * S, 7 * S, tierOk ? "#c98a5a" : "#7f7466", "right");
-      hudText(hud, tierOk ? `Research:  ${costText(r.researchCost)}` : `Needs an Alchemy Tower ${"I".repeat(towerTierFor(r))}`,
-        x + 34 * S, ry + 19 * S, 7 * S, !tierOk ? "#7f7466" : affordable ? "#c9a6ff" : "#d96a5a");
-      hudText(hud, r.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
+      hudText(hud, "LOCKED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
+      hudText(hud, `Research:  ${costText(r.researchCost)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#c9a6ff" : "#d96a5a");
     }
+    hudText(hud, r.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
     if (clickable) {
       const id = r.id;
       const ryy = ry;
@@ -954,7 +1054,10 @@ function drawTower(p: PanelInput): void {
     }
     ry += rowH;
   }
-  hudText(hud, "Research once to unlock · then buy charges · uses bag + chest", x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+  const foot = ui.towerTab === "other"
+    ? "The four originals — no tiers, never hidden"
+    : `Showing tier ${tt} · upgrade the tower to reach the next one`;
+  hudText(hud, foot, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 
 /* ---------------- Corpse loot ---------------- */
