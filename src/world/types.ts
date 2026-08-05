@@ -160,6 +160,9 @@ export interface Structure {
   key: string;
   tx: number;
   ty: number;
+  /** 1..3, upgraded in place (Etap 24). Absent on old saves and on
+   *  world-placed props like treasure chests — both read as tier I. */
+  tier?: number;
   anim: number;
   hurtT?: number;
   /** Storage Chests only: this chest's own inventory (Etap 11). Rides inside
