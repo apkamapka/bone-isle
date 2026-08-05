@@ -1305,6 +1305,69 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("Etap 24D — the smelt transaction end to end:");
+  {
+    const sm = await import("../src/systems/smelt.ts");
+    const mkBag = () => items.emptyStash(30);
+
+    // THE BUG THIS EXISTS FOR: the first version listed gear held in a storage
+    // chest and then refused to spend it, so the button looked dead. Gear in a
+    // chest must smelt exactly like gear in hand.
+    {
+      const bag = mkBag(); const chest = mkBag();
+      items.addItem(chest, "chainBody", 1);
+      items.addItem(bag, "coal", 5);
+      ok(sm.smeltBlocker([bag, chest], "chainBody", 2) === null, "gear in a CHEST can be smelted");
+      const y = sm.applySmelt([bag, chest], "chainBody", 2)!;
+      ok(!!y && y.iron === 1 && y.steel === 1, "…and yields 1 iron + 1 steel");
+      ok(items.bagCount(chest, "chainBody") === 0, "…the piece left the chest");
+      ok(items.bagCount(bag, "coal") === 4, "…and exactly one coal burned");
+    }
+    // coal may also live in the chest while the gear is in hand
+    {
+      const bag = mkBag(); const chest = mkBag();
+      items.addItem(bag, "plateBody", 1);
+      items.addItem(chest, "coal", 2);
+      ok(sm.applySmelt([bag, chest], "plateBody", 2) !== null, "coal in a chest fuels a backpack piece");
+      ok(items.bagCount(chest, "coal") === 1, "…and burns from the chest");
+    }
+    // every refusal names itself, so a dead button always has a reason
+    {
+      const bag = mkBag();
+      ok(sm.smeltBlocker([bag], "chainBody", 1) === "none-held", "nothing held → none-held");
+      items.addItem(bag, "chainBody", 1);
+      ok(sm.smeltBlocker([bag], "chainBody", 1) === "no-coal", "no fuel → no-coal");
+      items.addItem(bag, "coal", 1);
+      ok(sm.smeltBlocker([bag], "chainBody", 1) === null, "with both → allowed");
+      ok(sm.smeltBlocker([bag], "leatherBody", 1) === "not-smeltable", "leather → not-smeltable");
+      // and a refusal must never take anything
+      const before = items.bagCount(bag, "coal");
+      ok(sm.applySmelt([bag], "leatherBody", 1) === null, "a refused smelt returns null");
+      ok(items.bagCount(bag, "coal") === before, "…and burns no coal");
+    }
+    // tier I really does produce iron — the thing the report said was missing
+    {
+      const bag = mkBag();
+      items.addItem(bag, "plateBody", 1); items.addItem(bag, "coal", 1);
+      const y = sm.applySmelt([bag], "plateBody", 1)!;
+      ok(y.iron === 3 && y.steel === 0, "a Forge I turns Plate Armor into 3 iron");
+      ok(items.bagCount(bag, "plateBody") === 0, "…consuming the armour");
+    }
+    // gems: three different kinds, spent from the deepest stacks, coal included
+    {
+      const bag = mkBag(); const chest = mkBag();
+      items.addItem(bag, "minotaurHorn", 9);
+      items.addItem(chest, "orcEar", 2);
+      items.addItem(chest, "goblinFang", 1);
+      items.addItem(chest, "coal", 3);
+      const spent = sm.applyGem([bag, chest])!;
+      ok(!!spent && spent.length === 3 && new Set(spent).size === 3, "a gem spends 3 different trophies");
+      ok(items.bagCount(bag, "minotaurHorn") === 8, "…one horn from the deep stack");
+      ok(items.bagCount(chest, "coal") === 0, "…and all 3 coal");
+      ok(sm.applyGem([bag, chest]) === null, "…and a second gem is refused, kinds exhausted");
+    }
+  }
+
   console.log("speed from level (no Speed skill — Tibia 8.6):");
   {
     const { playerSpeed } = await import("../src/entities/player.ts");

@@ -18,7 +18,7 @@ import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
 import { bestTier } from "../systems/building.ts";
 import { smeltYield, canSmelt, COAL_PER_SMELT, GEM_TROPHIES, GEM_TROPHY_KINDS, GEM_COAL } from "../systems/smelt.ts";
-import type { EqSlot, ItemKind, Recipe } from "../items.ts";
+import type { EqSlot, ItemKind, Recipe, Bag } from "../items.ts";
 import type { Corpse, Npc, Structure } from "../world/types.ts";
 import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
@@ -96,7 +96,7 @@ export interface PanelActions {
   equipItem: (kind: ItemKind, slotIndex: number) => void;
   unequip: (slot: EqSlot) => void;
   craft: (r: Recipe) => void;
-  smelt: (kind: ItemKind, index: number) => void;
+  smelt: (kind: ItemKind) => void;
   testGrant: (kind: ItemKind) => void;
   makeGem: () => void;
   upgrade: (s: Structure) => void;
@@ -781,15 +781,15 @@ function tabRow(
 }
 
 function drawForge(p: PanelInput): void {
-  const { hud, player, ui } = p;
+  const { hud, player, ui, game } = p;
   const { scale: S, screenW, screenH } = hud;
-  const tier = Math.max(1, bestTier(p.game.worlds.home, "forge"));
+  const tier = Math.max(1, bestTier(game.worlds.home, "forge"));
   // Tabs the forge cannot serve stay visible but dead: a player who has not
   // built a Forge III should be able to SEE that gem-cutting is what the
   // third tier buys, otherwise the upgrade is a number with no picture.
   if (ui.forgeTab === "gems" && tier < 3) ui.forgeTab = "smelt";
 
-  const smeltables = smeltableSlots(player);
+  const smeltables = smeltableRows(player, homeChests(game));
   const rowH = 26 * S;
   const bodyRows = ui.forgeTab === "craft" ? RECIPES.length
     : ui.forgeTab === "smelt" ? Math.max(1, smeltables.length)
@@ -824,6 +824,9 @@ function forgeCraft(p: PanelInput, x: number, ry: number, w: number, rowH: numbe
   const { hud, player } = p;
   const S = hud.scale;
   const bags = [player.bag, ...homeChests(p.game)];
+  // Anyone hunting for "make iron" opens CRAFT first and finds three arrows.
+  hudText(hud, "Iron, steel and gems are not crafted -> see SMELT", x + w / 2, ry, 7 * S, "rgba(220,214,190,.55)", "center");
+  ry += 11 * S;
   for (const r of RECIPES) {
     const ok = canCraftAcross(bags, r) && player.gold >= (r.gold ?? 0);
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && ok) {
@@ -843,25 +846,42 @@ function forgeCraft(p: PanelInput, x: number, ry: number, w: number, rowH: numbe
   return ry;
 }
 
-/** Backpack slots holding something the furnace will accept. */
-function smeltableSlots(player: Player): { kind: ItemKind; index: number }[] {
-  const out: { kind: ItemKind; index: number }[] = [];
-  player.bag.forEach((sl, i) => {
-    if (sl && canSmelt(sl.kind)) out.push({ kind: sl.kind, index: i });
-  });
-  return out;
+/**
+ * Everything the furnace will accept, across the backpack AND every storage
+ * chest, one row per KIND with a count.
+ *
+ * Both halves of that matter. Reading only the backpack made the tab look
+ * empty for anyone who does the natural thing and dumps loot in a chest
+ * before walking to the forge. And one row per SLOT meant a stack of six
+ * breastplates drew six identical rows, which reads as a rendering bug.
+ */
+function smeltableRows(player: Player, chests: readonly Bag[]): { kind: ItemKind; n: number }[] {
+  const seen = new Map<ItemKind, number>();
+  for (const bag of [player.bag, ...chests]) {
+    for (const sl of bag) {
+      if (sl && canSmelt(sl.kind)) seen.set(sl.kind, (seen.get(sl.kind) ?? 0) + sl.n);
+    }
+  }
+  return [...seen].map(([kind, n]) => ({ kind, n }));
 }
 
 function forgeSmelt(
   p: PanelInput, x: number, ry: number, w: number, rowH: number,
-  tier: number, rows: { kind: ItemKind; index: number }[],
+  tier: number, rows: { kind: ItemKind; n: number }[],
 ): number {
   const { hud, player } = p;
   const S = hud.scale;
   const coal = countAcross([player.bag, ...homeChests(p.game)], "coal");
+  // Coal gets its own line rather than just grey rows. A row that is dark for
+  // an unstated reason is indistinguishable from a broken button.
+  if (coal < COAL_PER_SMELT) {
+    hudText(hud, "NO COAL — the furnace will not light.", x + w / 2, ry, 8 * S, "#d96a5a", "center", true);
+    hudText(hud, "Coal drops from people, orcs, goblins and minotaurs.", x + w / 2, ry + 10 * S, 7 * S, "rgba(220,214,190,.55)", "center");
+    ry += 22 * S;
+  }
   if (!rows.length) {
-    hudText(hud, "Nothing in your backpack will melt.", x + w / 2, ry + 8 * S, 8 * S, "rgba(220,214,190,.55)", "center");
-    hudText(hud, "Leather, bone and dragon scale never do.", x + w / 2, ry + 18 * S, 7 * S, "rgba(220,214,190,.4)", "center");
+    hudText(hud, "Nothing you own will melt.", x + w / 2, ry + 6 * S, 8 * S, "rgba(220,214,190,.55)", "center");
+    hudText(hud, "Leather, snakeskin, bone and dragon scale never do.", x + w / 2, ry + 16 * S, 7 * S, "rgba(220,214,190,.4)", "center");
     return ry + rowH;
   }
   for (const row of rows.slice(0, 12)) {
@@ -873,13 +893,14 @@ function forgeSmelt(
     }
     const spr = itemSprite(row.kind);
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
-    hudText(hud, ITEMS[row.kind].name, x + 34 * S, ry + 8 * S, 9 * S, ok ? "#f3eedd" : "#8a8070", "left", true);
+    const label = row.n > 1 ? `${ITEMS[row.kind].name}  x${row.n}` : ITEMS[row.kind].name;
+    hudText(hud, label, x + 34 * S, ry + 8 * S, 9 * S, ok ? "#f3eedd" : "#8a8070", "left", true);
     const parts = [y.iron > 0 ? `${y.iron} iron` : "", y.steel > 0 ? `${y.steel} steel` : ""].filter(Boolean);
-    hudText(hud, `→ ${parts.join(" + ")}`, x + 34 * S, ry + 18 * S, 7 * S, ok ? "#b9e07f" : "#d96a5a");
+    hudText(hud, `-> ${parts.join(" + ")}`, x + 34 * S, ry + 18 * S, 7 * S, ok ? "#b9e07f" : "#8a8070");
     hudText(hud, `${ITEMS[row.kind].value}g at Borin`, x + w - 12 * S, ry + 13 * S, 7 * S, "rgba(220,214,190,.45)", "right");
     if (ok) {
       const rr = row; const ryy = ry;
-      p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.smelt(rr.kind, rr.index) });
+      p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.smelt(rr.kind) });
     }
     ry += rowH;
   }

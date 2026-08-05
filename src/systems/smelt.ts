@@ -19,7 +19,8 @@
  * why nothing here has to make melting your own armour attractive — you are
  * never asked to.
  */
-import type { ItemKind } from "../items.ts";
+import { countAcross, removeAcross, ITEMS } from "../items.ts";
+import type { ItemKind, Bag } from "../items.ts";
 
 /** Which line a piece comes from. The human line is the metal line: its gear
  *  is forged, so it gives up steel readily. Beast gear is crude work and
@@ -152,4 +153,63 @@ export function gemReady(counts: ReadonlyMap<ItemKind, number>, coal: number): b
   let kinds = 0;
   for (const t of GEM_TROPHIES) if ((counts.get(t) ?? 0) > 0) kinds++;
   return kinds >= GEM_TROPHY_KINDS;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Transactions                                                       *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Why these live here and not in main.ts: the first version of the smelt
+ * action was written inline next to the click handler, where nothing could
+ * reach it, and it shipped with a bug that no test could have caught — it
+ * read gear out of the storage chests to build the list and then refused to
+ * spend from them. Anything that can silently refuse belongs behind a
+ * function a test can call.
+ */
+
+/** Why a smelt cannot happen, or null when it can. */
+export function smeltBlocker(
+  bags: readonly Bag[], kind: ItemKind, forgeTier: ForgeTier,
+): "not-smeltable" | "none-held" | "no-coal" | null {
+  if (!canSmelt(kind)) return "not-smeltable";
+  if (countAcross(bags, kind) < 1) return "none-held";
+  if (countAcross(bags, "coal") < COAL_PER_SMELT) return "no-coal";
+  const y = smeltYield(kind, forgeTier, ITEMS[kind].slot);
+  return y.iron + y.steel > 0 ? null : "not-smeltable";
+}
+
+/**
+ * Spend one piece and the coal, and report what came out. Consumes across
+ * every bag given — backpack and chests alike — and leaves the caller to put
+ * the metal somewhere.
+ */
+export function applySmelt(
+  bags: readonly Bag[], kind: ItemKind, forgeTier: ForgeTier,
+): SmeltYield | null {
+  if (smeltBlocker(bags, kind, forgeTier) !== null) return null;
+  const y = smeltYield(kind, forgeTier, ITEMS[kind].slot);
+  removeAcross(bags, kind, 1);
+  removeAcross(bags, "coal", COAL_PER_SMELT);
+  return y;
+}
+
+/** Trophy kinds that would be spent on the next gem, or null if none can be. */
+export function gemPick(bags: readonly Bag[]): ItemKind[] | null {
+  if (countAcross(bags, "coal") < GEM_COAL) return null;
+  const held = GEM_TROPHIES
+    .map((t) => ({ t, n: countAcross(bags, t) }))
+    .filter((h) => h.n > 0)
+    .sort((a, b) => b.n - a.n);
+  if (held.length < GEM_TROPHY_KINDS) return null;
+  return held.slice(0, GEM_TROPHY_KINDS).map((h) => h.t);
+}
+
+/** Spend the trophies and coal for one gem. Returns what was consumed. */
+export function applyGem(bags: readonly Bag[]): ItemKind[] | null {
+  const picked = gemPick(bags);
+  if (!picked) return null;
+  for (const t of picked) removeAcross(bags, t, 1);
+  removeAcross(bags, "coal", GEM_COAL);
+  return picked;
 }

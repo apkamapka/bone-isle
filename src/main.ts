@@ -15,7 +15,7 @@ import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWi
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier } from "./systems/building.ts";
-import { smeltYield, canSmelt, COAL_PER_SMELT, GEM_TROPHIES, GEM_TROPHY_KINDS, GEM_COAL, type ForgeTier } from "./systems/smelt.ts";
+import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
 import { useCrystal, tickCrystalCooldown } from "./systems/crystals.ts";
@@ -32,7 +32,7 @@ import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
-import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow, bestPracticeArrow, compactBag, countAcross, removeAcross } from "./items.ts";
+import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow, bestPracticeArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
@@ -370,7 +370,7 @@ const act: PanelActions = {
     refreshDerived(P);
     beep(300, 0.08, "triangle", 0.05);
   },
-  smelt: (kind: ItemKind, index: number) => { doSmelt(kind, index); },
+  smelt: (kind: ItemKind) => { doSmelt(kind); },
   testGrant: (kind: ItemKind) => { doTestGrant(kind); },
   makeGem: () => { doMakeGem(); },
   upgrade: (s: Structure) => { doUpgrade(s); },
@@ -818,50 +818,39 @@ function towerTier(): number {
  * nobody wants. Coal, being a bulk material like any other, may come from
  * the chest.
  */
-function doSmelt(kind: ItemKind, index: number): void {
-  if (!canSmelt(kind)) return;
+function doSmelt(kind: ItemKind): void {
   const bags = [P.bag, ...homeChests(game)];
-  if (countAcross(bags, "coal") < COAL_PER_SMELT) { flash("no coal for the furnace", "#d96a5a"); return; }
-  const y = smeltYield(kind, forgeTier(), ITEMS[kind].slot);
-  if (y.iron + y.steel <= 0) return;
-  const slot = P.bag[index];
-  if (!slot || slot.kind !== kind) return;
-  if (!canCarry(P, "iron", 0)) { /* weight is checked below against the real output */ }
-  // The metal is lighter than the plate it came from, so an overweight
-  // backpack can still take it — but a FULL one cannot, and eating the
-  // armour without handing anything back would be theft.
-  const spare = P.bag.filter((x) => x === null).length + 1; // the slot we free
-  if (spare < (y.iron > 0 ? 1 : 0) + (y.steel > 0 ? 1 : 0) && !(bagCount(P.bag, "iron") > 0 || bagCount(P.bag, "steel") > 0)) {
-    flash("bag full", "#d96a5a"); return;
-  }
-  removeItem(P.bag, kind, 1);
-  removeAcross(bags, "coal", COAL_PER_SMELT);
-  if (y.iron > 0) addItem(P.bag, "iron", y.iron);
-  if (y.steel > 0) addItem(P.bag, "steel", y.steel);
+  const why = smeltBlocker(bags, kind, forgeTier());
+  if (why === "no-coal") { flash("no coal for the furnace", "#d96a5a"); return; }
+  if (why !== null) return;
+  const y = applySmelt(bags, kind, forgeTier())!;
+  giveMaterial("iron", y.iron);
+  giveMaterial("steel", y.steel);
   const parts = [y.iron > 0 ? `${y.iron} iron` : "", y.steel > 0 ? `${y.steel} steel` : ""].filter(Boolean);
   flash(`smelted → ${parts.join(" + ")}`, "#b9e07f");
   beep(180, 0.16, "sawtooth", 0.05, 60);
+}
+
+/** Backpack first, then the chests, then the floor — never nowhere. */
+function giveMaterial(kind: ItemKind, n: number): void {
+  if (n <= 0) return;
+  let left = addItem(P.bag, kind, n);
+  for (const ch of homeChests(game)) { if (left <= 0) break; left = addItem(ch, kind, left); }
+  if (left <= 0) return;
+  const w0 = cw();
+  const near = w0.ground.find((gi) => gi.kind === kind && Math.hypot(gi.x - P.x, gi.y - P.y) < 14);
+  if (near) near.n += left;
+  else w0.ground.push({ kind, n: left, x: P.x, y: P.y, t: GROUND_DESPAWN_S });
+  flash(`${left} ${ITEMS[kind].name} dropped at your feet`, "#e0a06a");
 }
 
 /** Cut one Essential Gem from three DIFFERENT trophies plus coal. */
 function doMakeGem(): void {
   if (forgeTier() < 3) { flash("needs a Forge III", "#d96a5a"); return; }
   const bags = [P.bag, ...homeChests(game)];
-  if (countAcross(bags, "coal") < GEM_COAL) { flash("not enough coal", "#d96a5a"); return; }
-  const have = GEM_TROPHIES.filter((t) => countAcross(bags, t) > 0);
-  if (have.length < GEM_TROPHY_KINDS) {
-    flash(`needs ${GEM_TROPHY_KINDS} different trophies`, "#d96a5a"); return;
-  }
-  if (!canCarry(P, "essentialGem", 1)) { flash("too heavy", "#d96a5a"); return; }
-  if (addItem(P.bag, "essentialGem", 1) > 0) { flash("bag full", "#d96a5a"); return; }
-  // spend the three rarest kinds last: take from whichever the player has most
-  // of, so a gem never eats the one trophy they were short of anyway
-  const picked = have
-    .map((t) => ({ t, n: countAcross(bags, t) }))
-    .sort((a, b) => b.n - a.n)
-    .slice(0, GEM_TROPHY_KINDS);
-  for (const { t } of picked) removeAcross(bags, t, 1);
-  removeAcross(bags, "coal", GEM_COAL);
+  const spent = applyGem(bags);
+  if (!spent) { flash(`needs ${GEM_TROPHY_KINDS} different trophies + coal`, "#d96a5a"); return; }
+  giveMaterial("essentialGem", 1);
   flash("cut an Essential Gem", "#c9a6ff");
   beep(660, 0.2, "sine", 0.06, 140);
 }
