@@ -350,8 +350,8 @@ export const EQ_SLOT_KEYS: readonly EqSlot[] = [
 export function emptyBag(): Bag {
   return new Array<ItemStack | null>(BAG_SIZE).fill(null);
 }
-export function emptyStash(): Bag {
-  return new Array<ItemStack | null>(STASH_SIZE).fill(null);
+export function emptyStash(size: number = STASH_SIZE): Bag {
+  return new Array<ItemStack | null>(size).fill(null);
 }
 export function emptyEquipment(): Equipment {
   return { head: null, body: null, legs: null, boots: null, weapon: null, shield: null, ring: null, amulet: null };
@@ -507,41 +507,25 @@ export interface Recipe {
   /** Optional gold cost on top of materials (checked/paid by the caller). */
   gold?: number;
 }
+/**
+ * Forge recipes — what is left of them.
+ *
+ * The forge stopped being a workshop and became a foundry (Etap 24). Gear is
+ * looted, bought from Borin, or pulled out of a treasure chest; the only
+ * things still MADE here are arrows, because an archer who has to walk back
+ * to town for ammunition simply stops using the bow.
+ *
+ * Everything that used to live in this list — the sword ladder, the Leather
+ * and Chain sets, jewellery, potions, bows — now has a shop that sells it.
+ * See npcs.ts: moving the Amulet of Loss to Oswin was not optional, it is
+ * the only death protection in the game.
+ */
 export const RECIPES: readonly Recipe[] = [
-  /* ---- weapons a smith can actually make: the human line, plus the two
-   * bone pieces that Bonetown's undead pay for. Everything beast-made is
-   * loot only — nobody in town knows how to forge an orcish axe. ---- */
-  { out: "shortSword", cost: { wood: 3, stone: 4 } },
-  { out: "ironSword",  cost: { wood: 4, stone: 10 } },
-  { out: "mercBlade",  cost: { wood: 5, stone: 16, silk: 4 } },
-  { out: "warHammer",  cost: { wood: 6, stone: 22 } },
-  { out: "boneSword",  cost: { bones: 16, stone: 6 } },
-  /* ---- the Leather set: the first matched outfit, cheap on purpose ---- */
-  { out: "leatherHelm",   cost: { silk: 4, wood: 2 } },
-  { out: "leatherBody",   cost: { silk: 8, wood: 3 } },
-  { out: "leatherLegs",   cost: { silk: 6, wood: 2 } },
-  { out: "leatherBoots",  cost: { silk: 5, wood: 2 } },
-  { out: "leatherShield", cost: { wood: 8, stone: 3 } },
-  /* ---- the Chain set: the level 20-30 goal you work towards rather than
-   * one you have to be lucky enough to loot ---- */
-  { out: "chainHelm",   cost: { stone: 10, bones: 4 } },
-  { out: "chainBody",   cost: { stone: 20, silk: 6 } },
-  { out: "chainLegs",   cost: { stone: 14, silk: 4 } },
-  { out: "chainBoots",  cost: { stone: 8, silk: 6 } },
-  { out: "chainShield", cost: { stone: 12, wood: 8 } },
-  { out: "ring",       cost: { stone: 6, bones: 8 } },
-  { out: "amulet",     cost: { bones: 12, silk: 6 } },
-  { out: "aolAmulet",  cost: {}, gold: 500 },
-  // TEST ONLY: the Dopalacz — 1 gold, +5 levels, +20 every skill (see above)
-  { out: "booster",    cost: {}, gold: 1 },
-  { out: "hpPotion",   cost: { herb: 3, mushroom: 2 } },
-  // ranged: bows, then arrows in batches (the progression is in the ammo)
-  { out: "bow",        cost: { wood: 6, silk: 2 } },
-  { out: "longbow",    cost: { wood: 10, silk: 4, bones: 6 } },
-  { out: "arrow",      outN: 10, cost: { wood: 2 } },
+  { out: "arrow",         outN: 10, cost: { wood: 2 } },
   // practice ammo is deliberately dirt cheap: one log → a whole quiver
   { out: "trainingArrow", outN: 25, cost: { wood: 1 } },
-  { out: "boneArrow",  outN: 10, cost: { bones: 3, wood: 1 } },
+  // TEST ONLY: the Dopalacz — 1 gold, +5 levels, +20 every skill
+  { out: "booster",       cost: {}, gold: 1 },
 ];
 
 export function canCraft(bag: Bag, r: Recipe): boolean {

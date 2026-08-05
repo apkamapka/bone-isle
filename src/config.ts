@@ -267,12 +267,6 @@ export const TREE_REGROW_S = 90;
 export const ROCK_REGROW_S = 120;
 export const HERB_REGROW_S = 75;
 
-/** Garden aura: heal radius (px) and HP per second while standing near. */
-export const GARDEN_RADIUS = 80;
-export const GARDEN_HEAL_PER_S = 3;
-
-/** Passive max-HP bonus granted while you own a Garden on Home Isle. */
-export const GARDEN_HP_BONUS = 15;
 
 /** Crystals (charge-based, replace spells). Values are per single charge. */
 export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level*3
@@ -404,15 +398,8 @@ export const MIN_DAMAGE_TO_MONSTER = 1;
  *  walking away stops the clock. */
 export const BLOOD_HIT_WINDOW_S = 60;
 
-/** Training-dummy rate, as a fraction of real combat. A dummy costs no travel,
- *  no food, no arrows and cannot kill you — at parity it would be strictly
- *  better than hunting, which inverts the point of both. Half rate leaves it
- *  as what it should be: the safe, slower option for a rainy evening. */
-export const DUMMY_RATE = 0.5;
-/** Shielding on the War Dummy is slower still: the doubled Shielding cost
- *  (A=100) is paid back by blocking two creatures at once, and a post in the
- *  ground is exactly one creature. */
-export const DUMMY_SHIELD_RATE = 0.25;
+/** Retired in Etap 24 — see DUMMY_TIER_RATE / DUMMY_TIER_SHIELD in
+ *  systems/building.ts, which key the same numbers off the post's tier. */
 
 /* ------------------------------------------------------------------ *
  *  GEAR LADDER — the design curve the item table has to track

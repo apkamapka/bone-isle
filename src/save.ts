@@ -5,7 +5,7 @@ import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn, feetBlocked, worldSpawn } from "./world/collision.ts";
 import { placeWalker } from "./world/grid.ts";
-import { applyStructureSolidity, structureBonuses, canPlaceAt, STRUCTS } from "./systems/building.ts";
+import { applyStructureSolidity, canPlaceAt, STRUCTS, CHEST_SLOTS } from "./systems/building.ts";
 import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
@@ -150,8 +150,9 @@ export function loadGame(): Game | null {
       // against the rock). The freshly-built world already placed the correct
       // treasure chest; the opened-state is migrated to its coords below.
       worlds[k].structures = saved
-        .filter((s) => s.key !== "library" && s.key !== "treasure")
-        .map((s) => ({ ...s, ...(s.key === "chest" ? { inv: normalizeStash(s.inv) } : {}) }))
+        // "library" is the pre-Etap-5 tower; "garden" was removed in Etap 24.
+        .filter((s) => s.key !== "library" && s.key !== "garden" && s.key !== "treasure")
+        .map(migrateStructure)
         .concat(worlds[k].structures.filter((s) => s.key === "treasure"));
     }
     // Restore ground items + corpses (defensively — items validated by kind).
@@ -241,8 +242,8 @@ export function loadGame(): Game | null {
   loadOutfitSave(data.outfit); // absent in older saves → classic look
   applyOutfit(player);
 
-  setActiveBonus(structureBonuses(worlds.home));
-  refreshDerived(player, structureBonuses(worlds.home));
+  setActiveBonus({ maxhp: 0 });
+  refreshDerived(player, { maxhp: 0 });
   player.hp = Math.min(sp.hp, player.maxhp);
 
   const current = worlds[data.current] ?? worlds.home;
@@ -261,7 +262,7 @@ export function loadGame(): Game | null {
   for (const st of legacy) {
     if (!st) continue;
     let left = st.n;
-    if (firstChest) left = addItem((firstChest.inv ??= emptyStash()), st.kind, st.n);
+    if (firstChest) left = addItem((firstChest.inv ??= emptyStash(CHEST_SLOTS[1])), st.kind, st.n);
     if (left > 0) {
       const at = portalSpawn(worlds.home);
       worlds.home.ground.push({ kind: st.kind, n: left, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16, t: GROUND_DESPAWN_S });
@@ -320,8 +321,27 @@ function normalizeEquipment(eq: unknown): Equipment {
   return out;
 }
 
-function normalizeStash(stash: unknown): Bag {
-  const out = emptyStash();
+/**
+ * Fold a saved structure into the Etap 24 tier model.
+ *
+ * Two rewrites happen here. The old standalone War Dummy becomes a tier-II
+ * Training Dummy, which is exactly what it was — the same post that also
+ * trained Shielding. And every pre-tier Storage Chest becomes tier II rather
+ * than tier I: chests used to hold 50 slots flat, and dropping them to the
+ * new tier-I capacity of 10 would silently delete forty slots of somebody's
+ * belongings. Players keep the room they already had.
+ */
+function migrateStructure(s: Structure): Structure {
+  const key = s.key === "dummyII" ? "dummy" : s.key;
+  let tier = typeof s.tier === "number" ? s.tier : s.key === "dummyII" ? 2 : s.key === "chest" ? 2 : 1;
+  tier = Math.max(1, Math.min(3, Math.round(tier)));
+  const out: Structure = { ...s, key, tier };
+  if (key === "chest") out.inv = normalizeStash(s.inv, CHEST_SLOTS[tier - 1]);
+  return out;
+}
+
+function normalizeStash(stash: unknown, size?: number): Bag {
+  const out = emptyStash(size);
   if (Array.isArray(stash)) {
     for (let i = 0; i < out.length && i < stash.length; i++) {
       out[i] = validItem(stash[i]);
