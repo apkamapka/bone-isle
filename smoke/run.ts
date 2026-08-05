@@ -863,16 +863,16 @@ async function main(): Promise<void> {
     // tiers must climb, and each must require the one below it in its own lane
     ok(E.TIER_MULT[1] > E.TIER_MULT[0] * 2 && E.TIER_MULT[2] > E.TIER_MULT[1] * 2,
       "each tier more than doubles — an upgrade, not a percentage");
-    let chained = true, deepest = 0;
-    for (const r of T.RESEARCH) {
-      if (r.tier === undefined || r.tier === 0) continue;
-      const req = T.RESEARCH.find((x) => x.id === r.requires);
-      if (!req || req.element !== r.element || req.tier !== r.tier - 1) chained = false;
-      deepest = Math.max(deepest, T.researchChain(r.id).length);
-    }
-    ok(chained, "every tier requires the tier below it, in the same element and role");
-    ok(deepest === 2, `the deepest lane is ${deepest} projects — commitment, not a wall`);
-    ok(!T.researchAvailable("fire3shard", ["fire1shard"]), "tier III is locked behind tier II");
+    // Etap 24: the per-lane prerequisite chains are gone and the TOWER's tier
+    // is the only gate. They had to go: the panel now shows only the tier the
+    // building is at, so a chain would strand any player who reached tier II
+    // without having researched tier I — the lane would be permanently dead
+    // with nothing on screen to explain it.
+    ok(T.RESEARCH.every((r) => r.requires === undefined), "no project has a prerequisite any more");
+    ok(T.RESEARCH.every((r) => T.researchChain(r.id).length === 0), "…so every chain is empty");
+    ok(T.researchAvailable("fire3shard", []), "Pyre needs no earlier research — only a tier-III tower");
+    ok(!T.towerTierOk(T.RESEARCH.find((r) => r.id === "fire3shard")!, 2),
+      "…and a tier-II tower still cannot reach it");
     ok(T.researchAvailable("fire3shard", ["fire1shard", "fire2shard"]), "…and opens once the lane is walked");
 
     // resistances: sparse, meaningful, and never total immunity
@@ -1212,7 +1212,8 @@ async function main(): Promise<void> {
     for (const kind of ["forge", "build", "tower", "bag", "skills"]) {
       const ui = {
         windows: [{ kind, offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
-        npc: null, stash: null, shopTab: "buy", forgeTab: "craft", upgrading: null,
+        npc: null, stash: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
+        towerTab: "fire", upgrading: null,
         dragging: false, lookMode: false, inspect: null, split: null,
       } as never;
       let threw = "";
@@ -1222,10 +1223,11 @@ async function main(): Promise<void> {
       ok(threw === "", `the ${kind} panel draws without throwing${threw ? " — " + threw : ""}`);
     }
     // …and each forge tab in turn, since only one is drawn per frame
-    for (const tab of ["craft", "smelt", "gems"] as const) {
+    for (const tab of ["craft", "smelt", "gems", "test"] as const) {
       const ui = {
         windows: [{ kind: "forge", offset: { x: 0, y: 0 } }], placing: null, selSlot: null,
-        loot: null, npc: null, stash: null, shopTab: "buy", forgeTab: tab, upgrading: null,
+        loot: null, npc: null, stash: null, shopTab: "buy", forgeTab: tab, testPage: 0,
+        towerTab: "fire", upgrading: null,
         dragging: false, lookMode: false, inspect: null, split: null,
       } as never;
       let threw = "";
@@ -1233,6 +1235,73 @@ async function main(): Promise<void> {
         drawPanels({ hud, ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 }, act: noop, hotspots: [], itemSlots: [] } as never);
       } catch (e) { threw = String(e); }
       ok(threw === "", `forge tab "${tab}" draws${threw ? " — " + threw : ""}`);
+    }
+    for (const tab of ["fire", "ice", "earth", "storm", "shadow", "other"] as const) {
+      const ui = {
+        windows: [{ kind: "tower", offset: { x: 0, y: 0 } }], placing: null, selSlot: null,
+        loot: null, npc: null, stash: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
+        towerTab: tab, upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      } as never;
+      let threw = "";
+      try {
+        drawPanels({ hud, ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 }, act: noop, hotspots: [], itemSlots: [] } as never);
+      } catch (e) { threw = String(e); }
+      ok(threw === "", `tower tab "${tab}" draws${threw ? " — " + threw : ""}`);
+    }
+  }
+
+  console.log("Etap 24C — tower tabs, tier filtering and the TEST grid:");
+  {
+    const panels = await import("../src/ui/panels.ts");
+    const T = await import("../src/systems/tower.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { towerRows } = panels as never as {
+      towerRows: (tab: string, tier: number) => { id: string; element?: string; tier?: number }[];
+    };
+
+    // six tabs: the five lanes plus the untiered originals
+    const lanes = ["fire", "ice", "earth", "storm", "shadow"];
+    for (const el of lanes) {
+      for (const t of [1, 2, 3]) {
+        const rows = towerRows(el, t);
+        ok(rows.length > 0, `${el} tab at tower ${t} shows something`);
+        ok(rows.every((r) => r.element === el), `${el} tab shows only ${el}`);
+        // THE RULE: one tier at a time, and it is the tower's tier
+        ok(rows.every((r) => T.towerTierFor(r as never) === t),
+          `${el} tab at tower ${t} shows tier ${t} and nothing else`);
+      }
+    }
+    // the lanes partition the elemental catalog with nothing left over
+    {
+      const seen = new Set<string>();
+      for (const el of lanes) for (const t of [1, 2, 3]) for (const r of towerRows(el, t)) seen.add(r.id);
+      const elemental = T.RESEARCH.filter((r) => r.element !== undefined);
+      ok(seen.size === elemental.length,
+        `all ${elemental.length} elemental projects are reachable across the tabs (${seen.size})`);
+    }
+    // OTHER is the four originals, and they are never tier-filtered away —
+    // there is no better Recall waiting at tier III
+    for (const t of [1, 2, 3]) {
+      const other = towerRows("other", t);
+      ok(other.length === 4, `OTHER holds 4 projects at tower ${t}`);
+      ok(other.every((r) => r.element === undefined), "…none of them elemental");
+    }
+    ok(towerRows("other", 1).some((r) => r.id === "recall"), "Recall lives in OTHER");
+
+    // TEST grid: every single item is reachable, none listed twice
+    const kinds = panels as never as { TEST_KINDS: string[] };
+    ok(kinds.TEST_KINDS.length === Object.keys(items.ITEMS).length,
+      `the TEST grid covers the whole catalog (${kinds.TEST_KINDS.length})`);
+    ok(new Set(kinds.TEST_KINDS).size === kinds.TEST_KINDS.length, "…with no duplicates");
+
+    // and it actually hands over goods for a gold
+    {
+      const g = createGame();
+      g.player.gold = 5;
+      const before = items.bagCount(g.player.bag, "steel");
+      items.addItem(g.player.bag, "steel", 100);
+      ok(items.bagCount(g.player.bag, "steel") === before + 100, "100 of an item fits one stack");
     }
   }
 
