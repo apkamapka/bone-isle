@@ -4,7 +4,9 @@ import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax }
 import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import { MIN_HIT_RATIO } from "../config.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost } from "../systems/building.ts";
-import { RESEARCH, isResearched, towerTierOk, towerTierFor } from "../systems/tower.ts";
+import { RESEARCH, isResearched, towerTierOk, towerTierFor,
+  ATTUNEMENT, isAttuned, attunementOk } from "../systems/tower.ts";
+import { ELEMENT_LABEL, type Element } from "../systems/elements.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
 import type { TaskReward } from "../systems/tasks.ts";
 import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, bestArrow, itemInfoLines, countAcross } from "../items.ts";
@@ -100,6 +102,7 @@ export interface PanelActions {
   testGrant: (kind: ItemKind) => void;
   makeGem: () => void;
   upgrade: (s: Structure) => void;
+  attune: (el: Element) => void;
   research: (id: string) => void;
   buyCrystal: (id: string) => void;
   takeLoot: (c: Corpse, index: number) => void;
@@ -1025,14 +1028,28 @@ export function towerRows(tab: string, towerTier: number): typeof RESEARCH[numbe
     r.element === tab && (towerTierFor(r) === want || isResearched(r.id)));
 }
 
+/**
+ * One cost line, materials and gold together. Either half may be empty: the
+ * elemental line is gold-only, the four originals are materials-only, and the
+ * strongest crystals are both.
+ */
+function priceText(cost: Parameters<typeof costText>[0], gold: number | undefined): string {
+  const parts = [costText(cost), gold ? `${gold} gold` : ""].filter(Boolean);
+  return parts.join(" + ") || "free";
+}
+
 function drawTower(p: PanelInput): void {
   const { hud, player, game, ui } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
   const tt = Math.max(1, bestTier(game.worlds.home, "tower"));
   const rows = towerRows(ui.towerTab, tt);
+  // The attunement row is drawn ABOVE the tier-filtered list and only on an
+  // element tab. It is never filtered by tower tier — that is the whole point.
+  const el = ui.towerTab === "other" ? null : (ui.towerTab as Element);
+  const showAttune = el !== null && !isAttuned(el);
   const w = 300 * S;
   const rowH = 34 * S;
-  const h = 20 * S + 19 * S + Math.max(1, rows.length) * rowH + 22 * S;
+  const h = 20 * S + 19 * S + (showAttune ? rowH : 0) + Math.max(1, rows.length) * rowH + 22 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   if (!goldPanel(p, x, y, w, h, `ALCHEMY TOWER ${"I".repeat(tt)}`)) return;
@@ -1041,6 +1058,27 @@ function drawTower(p: PanelInput): void {
     TOWER_TABS.map((t) => ({ id: t.id, label: t.label, on: true })),
     ui.towerTab, (id) => { ui.towerTab = id; });
 
+  if (showAttune && el) {
+    const key = ATTUNEMENT[el];
+    const held = canAfford(player.bag, { [key]: 1 }, homeChests(game));
+    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && held) {
+      ctx.fillStyle = "rgba(202,162,58,.15)";
+      ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
+    }
+    const spr = itemSprite(key);
+    icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
+    hudText(hud, `Attune ${ELEMENT_LABEL[el]}`, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true);
+    hudText(hud, "SEALED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
+    hudText(hud, `Spend:  1 ${ITEMS[key].name}`, x + 34 * S, ry + 19 * S, 7 * S, held ? "#c9a6ff" : "#d96a5a");
+    hudText(hud, "Opens every project in this lane, at every tier.",
+      x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
+    if (held) {
+      const ryy = ry;
+      const e = el;
+      p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.attune(e) });
+    }
+    ry += rowH;
+  }
   if (!rows.length) {
     hudText(hud, "Nothing at this tier yet.", x + w / 2, ry + 10 * S, 8 * S, "rgba(220,214,190,.55)", "center");
     ry += rowH;
@@ -1048,9 +1086,10 @@ function drawTower(p: PanelInput): void {
   for (const r of rows) {
     const researched = isResearched(r.id);
     const cost = researched ? r.buyCost : r.researchCost;
-    const affordable = canAfford(player.bag, cost, homeChests(game));
+    const gold = researched ? r.buyGold : r.researchGold;
+    const affordable = canAfford(player.bag, cost, homeChests(game)) && player.gold >= (gold ?? 0);
     const tierOk = researched || towerTierOk(r, tt);
-    const clickable = affordable && tierOk;
+    const clickable = affordable && tierOk && (researched || attunementOk(r));
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable) {
       ctx.fillStyle = "rgba(202,162,58,.15)";
       ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
@@ -1061,10 +1100,14 @@ function drawTower(p: PanelInput): void {
     hudText(hud, r.name, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true);
     if (researched) {
       hudText(hud, `owned: ${owned}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#e8dcc0", "right");
-      hudText(hud, `Buy x${r.buyN}:  ${costText(r.buyCost)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a");
+      hudText(hud, `Buy x${r.buyN}:  ${priceText(r.buyCost, r.buyGold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a");
     } else {
-      hudText(hud, "LOCKED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
-      hudText(hud, `Research:  ${costText(r.researchCost)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#c9a6ff" : "#d96a5a");
+      const sealed = !attunementOk(r);
+      hudText(hud, sealed ? "SEALED" : "LOCKED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
+      const line = sealed
+        ? "Attune this element first"
+        : `Research:  ${priceText(r.researchCost, r.researchGold)}`;
+      hudText(hud, line, x + 34 * S, ry + 19 * S, 7 * S, sealed ? "#c98a5a" : (affordable ? "#c9a6ff" : "#d96a5a"));
     }
     hudText(hud, r.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
     if (clickable) {

@@ -20,11 +20,27 @@ export type ItemKind =
   // consumables
   | "mushroom" | "meat" | "hpPotion" | "dragonHam"
   // crystals (charge-based spell replacements — one "use" per charge)
-  | "healCrystal" | "fireCrystal" | "recallCrystal" | "spearCrystal"
+  //
+  // NOTE the name: this WAS "fireCrystal" until Etap 25, when the id was
+  // handed over to the attunement stone below. The old charge crystal keeps
+  // working exactly as before under a new name; saves are migrated on load.
+  | "healCrystal" | "flameCrystal" | "recallCrystal" | "spearCrystal"
   // elemental crystals: 5 elements x 3 tiers x 2 roles, plus tier-I arrows
   | "fireEmberShard" | "fireEmberBurst" | "fireFlameShard" | "fireFlameBurst" | "firePyreShard" | "firePyreBurst" | "iceFrostShard" | "iceFrostBurst" | "iceRimeShard" | "iceRimeBurst" | "iceGlacierShard" | "iceGlacierBurst" | "earthLoamShard" | "earthLoamBurst" | "earthStoneShard" | "earthStoneBurst" | "earthBedrockShard" | "earthBedrockBurst" | "stormSparkShard" | "stormSparkBurst" | "stormBoltShard" | "stormBoltBurst" | "stormTempestShard" | "stormTempestBurst" | "shadowGloomShard" | "shadowGloomBurst" | "shadowUmbraShard" | "shadowUmbraBurst" | "shadowEclipseShard" | "shadowEclipseBurst" | "fireArrow" | "iceArrow" | "earthArrow" | "stormArrow" | "shadowArrow"
-  // rare research materials (gate the Alchemy Tower's tech tree)
-  | "fireRuby"
+  /* ---- ATTUNEMENT STONES (Etap 25) -------------------------------------
+   * One per element, and the only key that opens that element's lane in the
+   * Alchemy Tower. They replace the Fire Ruby, which gated exactly one
+   * project and dropped from half the bestiary — a rare material common
+   * enough to be a formality. These drop from nothing at all: they are quest
+   * rewards, so opening a lane is a thing you DID rather than a thing that
+   * fell out of a corpse.
+   *
+   * The fiction maps the stone to the element rather than naming it after it:
+   * ice is researched with water, storm with wind, shadow with lightning.
+   * -------------------------------------------------------------------- */
+  | "fireCrystal" | "waterCrystal" | "earthCrystal" | "windCrystal" | "lightningCrystal"
+  /** Spent buying the strongest crystal of every element. Drops from the dragon. */
+  | "magicEssence"
   // ranged: bows (two-handed weapons) + arrows (consumable ammo)
   | "bow" | "longbow" | "arrow" | "boneArrow"
   // practice ammo: blunt shafts fired only at the Archery Range (Etap 10)
@@ -178,7 +194,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   dragonHam: { name: "Dragon Ham",   stack: 999, value: 8, weight: 10, food: 360 },
   hpPotion:  { name: "Health Potion", stack: 999, value: 12, weight: 5, heal: 45 },
   healCrystal:   { name: "Life Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
-  fireCrystal:   { name: "Fire Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
+  flameCrystal:  { name: "Flare Crystal",  stack: 999, value: 8, weight: 2, crystal: true },
   recallCrystal: { name: "Recall Crystal", stack: 999, value: 6, weight: 2, crystal: true },
   spearCrystal:  { name: "Spear Crystal",  stack: 999, value: 14, weight: 2, crystal: true },
   // ---- the elemental line. Naming runs Ember/Flame/Pyre by tier, and
@@ -220,7 +236,15 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   earthArrow: { name: "Loam Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "earth" },
   stormArrow: { name: "Spark Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "storm" },
   shadowArrow: { name: "Gloom Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "shadow" },
-  fireRuby:      { name: "Fire Ruby",      stack: 999, value: 40, weight: 3 },
+  /* Attunement stones and the Essence carry value 0 on purpose. A shop that
+   * buys them turns a quest reward into a lump of gold, and a lane you can
+   * sell is a lane you can lose. They are keys, not loot. */
+  fireCrystal:      { name: "Fire Crystal",      stack: 99, value: 0, weight: 3 },
+  waterCrystal:     { name: "Water Crystal",     stack: 99, value: 0, weight: 3 },
+  earthCrystal:     { name: "Earth Crystal",     stack: 99, value: 0, weight: 3 },
+  windCrystal:      { name: "Wind Crystal",      stack: 99, value: 0, weight: 3 },
+  lightningCrystal: { name: "Lightning Crystal", stack: 99, value: 0, weight: 3 },
+  magicEssence:     { name: "Essence of Magic",  stack: 99, value: 0, weight: 2 },
   bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 5 * TILE, power: 4 } },
   longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 5 * TILE, power: 9 } },
   arrow:     { name: "Arrow",        stack: 999, value: 1, weight: 1, ammo: { dmg: 8 } },

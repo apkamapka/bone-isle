@@ -87,13 +87,13 @@ export const TASKS: readonly TaskDef[] = [
   },
   {
     id: "t_berserkers", title: "Berserker Trophy",
-    desc: "Slay 6 orc berserkers. The Huntress pays in rubies.",
+    desc: "Slay 6 orc berserkers. The Huntress pays well for a quiet road.",
     goal: { kind: "kill", monster: "orcBerserker", need: 6 },
-    reward: { points: 6, gold: 220, exp: 420, item: "fireRuby", itemN: 1 }, reqPoints: 16,
+    reward: { points: 6, gold: 400, exp: 420 }, reqPoints: 16,
   },
 ];
 
-/** Spend Task Points here for rare materials that feed the Alchemy Tower. */
+/** Spend Task Points here for consumables that are tedious to farm. */
 export interface Exchange {
   id: string;
   item: ItemKind;
@@ -102,7 +102,6 @@ export interface Exchange {
   desc: string;
 }
 export const EXCHANGES: readonly Exchange[] = [
-  { id: "x_ruby", item: "fireRuby", itemN: 1, cost: 8, desc: "Gate material for tower research" },
   { id: "x_arrows", item: "boneArrow", itemN: 50, cost: 3, desc: "A full quiver of heavy arrows" },
   { id: "x_spears", item: "spearCrystal", itemN: 5, cost: 10, desc: "Ready-made spear charges" },
 ];

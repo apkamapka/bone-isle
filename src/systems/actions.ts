@@ -21,7 +21,7 @@ export const ACTION_SLOTS = 6;
  */
 export const actionSlots: (SlotAction | null)[] = [
   { type: "crystal", item: "healCrystal" },
-  { type: "crystal", item: "fireCrystal" },
+  { type: "crystal", item: "flameCrystal" },
   { type: "crystal", item: "recallCrystal" },
   { type: "crystal", item: "spearCrystal" },
   null,
@@ -63,4 +63,4 @@ export function loadSlots(data: unknown): void {
 }
 
 /** Crystal kinds that can be bound to a slot (used by the mobile rebind picker). */
-export const BINDABLE_CRYSTALS: readonly ItemKind[] = ["healCrystal", "fireCrystal", "recallCrystal", "spearCrystal"];
+export const BINDABLE_CRYSTALS: readonly ItemKind[] = ["healCrystal", "flameCrystal", "recallCrystal", "spearCrystal"];

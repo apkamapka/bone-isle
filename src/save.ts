@@ -7,7 +7,7 @@ import { portalSpawn, feetBlocked, worldSpawn } from "./world/collision.ts";
 import { placeWalker } from "./world/grid.ts";
 import { applyStructureSolidity, canPlaceAt, STRUCTS, CHEST_SLOTS } from "./systems/building.ts";
 import type { StructKey } from "./systems/building.ts";
-import { researchState, loadResearchState } from "./systems/tower.ts";
+import { researchState, loadResearchState, attunedState, loadAttunedState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
 import { serializeSlots, loadSlots, type SlotAction } from "./systems/actions.ts";
 import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./systems/outfit.ts";
@@ -22,16 +22,25 @@ import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
 const KEY = "bone-isle-save-v2";
 
 /**
- * Save format version. Bumped to 3 when TILE went 16 → 32 (Etap 17): every
- * stored WORLD-PIXEL coordinate (the player, loose ground stacks, corpses) is
- * twice what it used to be. Tile coordinates — structures — are unaffected, and
- * so is the storage key, so a v2 save loads straight into the new world with
- * its positions scaled on the way in.
+ * Save format version.
+ *
+ * v3: TILE went 16 → 32 (Etap 17). Every stored WORLD-PIXEL coordinate (the
+ * player, loose ground stacks, corpses) is twice what it used to be. Tile
+ * coordinates — structures — are unaffected, and so is the storage key, so a
+ * v2 save loads straight into the new world with its positions scaled on the
+ * way in.
+ *
+ * v4: the id "fireCrystal" changed hands (Etap 25). It used to be the charge
+ * crystal that throws fire; it is now the attunement stone that opens the
+ * fire lane in the tower. Both are valid items, so nothing would LOOK broken
+ * — a loaded v3 save would just quietly turn a starting stack of fifteen fire
+ * charges into fifteen lane keys and hand the player the whole fire tree.
+ * That is why this bump exists even though no field changed shape.
  */
-const SAVE_V = 3;
+const SAVE_V = 4;
 
 interface SaveData {
-  v: 2 | 3;
+  v: 2 | 3 | 4;
   seed: number;
   current: WorldKey;
   player: {
@@ -54,6 +63,10 @@ interface SaveData {
    *  read once on load and poured into the first Storage Chest. */
   stash?: Bag;
   research?: string[];
+  /** Elements whose tower lane has been opened with an attunement stone.
+   *  Absent in pre-Etap-25 saves — those load with every lane still sealed,
+   *  which is correct: nobody had spent a stone yet. */
+  attuned?: string[];
   tasks?: TaskSave;
   slots?: (SlotAction | null)[];
   /** Wardrobe: dye choices + owned/current outfit (Etap 10). */
@@ -102,6 +115,7 @@ export function saveGame(g: Game): void {
     ground: groundDump,
     corpses: corpseDump,
     research: researchState(),
+    attuned: attunedState(),
     tasks: taskState(),
     slots: serializeSlots(),
     outfit: outfitSave(),
@@ -127,7 +141,8 @@ export function loadGame(): Game | null {
   let data: SaveData;
   try {
     data = JSON.parse(raw) as SaveData;
-    if (data.v !== 2 && data.v !== SAVE_V) return null;
+    if (data.v !== 2 && data.v !== 3 && data.v !== SAVE_V) return null;
+    if (data.v < 4) data = migrateFireCrystal(data);
   } catch {
     return null;
   }
@@ -237,6 +252,7 @@ export function loadGame(): Game | null {
   }
 
   loadResearchState(data.research);
+  loadAttunedState(data.attuned);
   loadTaskState(data.tasks);
   loadSlots(data.slots);
   loadOutfitSave(data.outfit); // absent in older saves → classic look
@@ -286,6 +302,32 @@ export function deleteSave(): void {
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * v3 → v4: every stored "fireCrystal" means the OLD charge crystal, which is
+ * now called "flameCrystal".
+ *
+ * This walks the whole save rather than visiting bag, equipment, chests,
+ * ground stacks, corpse loot and action slots one by one. That is on purpose:
+ * an item id can be stored as a bare string (equipment, action slots) or as
+ * `{ kind }` (everywhere else), and the list of places holding one has grown
+ * every etap. A blanket rewrite of the exact string cannot miss a spot, and
+ * cannot hit a false positive either — no research id, world key, structure
+ * key or quest id is spelled "fireCrystal".
+ */
+function migrateFireCrystal(data: SaveData): SaveData {
+  const walk = (v: unknown): unknown => {
+    if (v === "fireCrystal") return "flameCrystal";
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(v)) out[k] = walk(val);
+      return out;
+    }
+    return v;
+  };
+  return walk(data) as SaveData;
 }
 
 function validItem(s: unknown): { kind: ItemKind; n: number } | null {

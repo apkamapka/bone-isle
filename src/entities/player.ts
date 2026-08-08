@@ -69,7 +69,7 @@ export function createPlayer(spawn: Vec): Player {
   const startSet = bakeOutfitSprites();
   // Starter crystals so the action bar is usable before the Alchemy Tower exists.
   addItem(bag, "healCrystal", 25);
-  addItem(bag, "fireCrystal", 15);
+  addItem(bag, "flameCrystal", 15);
   addItem(bag, "recallCrystal", 5);
   // Starter bow + arrows so ranged combat is usable before the Forge.
   addItem(bag, "bow", 1);

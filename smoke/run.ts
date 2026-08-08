@@ -1977,6 +1977,97 @@ async function main(): Promise<void> {
     deleteSave();
   }
 
+  console.log("Etap 25 — attunement, gold pricing & the Essence:");
+  {
+    const T = await import("../src/systems/tower.ts");
+    const E = await import("../src/systems/elements.ts");
+    const M = await import("../src/entities/monsters.ts");
+
+    // the Fire Ruby is gone from every surface it ever touched
+    ok(!("fireRuby" in items.ITEMS), "the Fire Ruby is no longer an item");
+    ok(!Object.values(M.MONSTER_DEFS).some((d) => d.loot.some((l) => (l.kind as string) === "fireRuby")),
+      "…nothing in the bestiary drops one");
+    ok(!T.RESEARCH.some((r) => "fireRuby" in r.researchCost), "…no project asks for one");
+    ok(!tasks.EXCHANGES.some((x) => (x.item as string) === "fireRuby")
+      && !tasks.TASKS.some((t) => (t.reward.item as string) === "fireRuby"),
+      "…and the task board stopped paying in rubies");
+
+    // the id handover: same charge crystal, new name
+    ok(items.ITEMS.flameCrystal.crystal === true, "the old fire charge crystal lives on as flameCrystal");
+    ok(items.ITEMS.fireCrystal.crystal !== true, "…and fireCrystal is now a stone, not a charge");
+
+    // one stone per lane, and none of them sellable
+    ok(E.ELEMENTS.every((el) => T.ATTUNEMENT[el] in items.ITEMS), "every element has an attunement stone");
+    ok(new Set(E.ELEMENTS.map((el) => T.ATTUNEMENT[el])).size === 5, "…no two lanes share one");
+    ok(E.ELEMENTS.every((el) => items.ITEMS[T.ATTUNEMENT[el]].value === 0),
+      "…and no shop will buy a lane key");
+
+    // the gate itself
+    T.loadAttunedState([]);
+    const fire1 = T.RESEARCH.find((r) => r.id === "fire1shard")!;
+    ok(!T.attunementOk(fire1), "a sealed lane blocks its own tier-I project");
+    ok(T.attunementOk(T.RESEARCH.find((r) => r.id === "life")!), "…the four originals are never sealed");
+    T.markAttuned("fire");
+    ok(T.attunementOk(fire1), "spending the stone opens the lane");
+    ok(!T.attunementOk(T.RESEARCH.find((r) => r.id === "ice1shard")!), "…and only that lane");
+    // this is the property that killed the old `requires` chain: a lane must
+    // never be reachable at one tower tier and invisible at another
+    ok(T.RESEARCH.filter((r) => r.element === "fire").every((r) => T.attunementOk(r)),
+      "one stone opens every tier of the lane, so no tower tier can strand a player");
+    T.loadAttunedState([]);
+
+    // gold pricing
+    const elemental = T.RESEARCH.filter((r) => r.element !== undefined);
+    ok(elemental.length === 35, "five lanes × seven projects");
+    ok(elemental.every((r) => Object.keys(r.researchCost).length === 0),
+      "no elemental project costs materials to research");
+    ok(elemental.every((r) => (r.researchGold ?? 0) > 0 && (r.buyGold ?? 0) > 0),
+      "…every one of them costs gold instead");
+    const MATS = ["wood", "bones", "stone", "herb", "silk"];
+    ok(elemental.every((r) => !MATS.some((m) => m in r.buyCost)),
+      "…and no firewood or bone changes hands anywhere in the line");
+    const price = (id: string): number => T.RESEARCH.find((r) => r.id === id)!.researchGold!;
+    ok(price("fire1shard") < price("fire2shard") && price("fire2shard") < price("fire3shard"),
+      "each tier costs more gold than the one below it");
+
+    // the Essence: one sink, one source
+    const needEssence = T.RESEARCH.filter((r) => "magicEssence" in r.buyCost);
+    ok(needEssence.length === 5, "exactly five crystals want an Essence — one per element");
+    ok(needEssence.every((r) => r.tier === 2 && r.id.endsWith("burst")),
+      "…and it is the strongest crystal of each element");
+    ok(new Set(needEssence.map((r) => r.element)).size === 5, "…with no element left out");
+    const droppers = Object.entries(M.MONSTER_DEFS)
+      .filter(([, d]) => d.loot.some((l) => l.kind === "magicEssence"))
+      .map(([k]) => k);
+    ok(droppers.length === 1 && droppers[0] === "dragon", "the dragon is the only source of the Essence");
+  }
+
+  console.log("Etap 25 — the fireCrystal id changes hands (save migration):");
+  {
+    const { createGame } = await import("../src/game.ts");
+    const { saveGame, loadGame, deleteSave } = await import("../src/save.ts");
+    const A = await import("../src/systems/actions.ts");
+    deleteSave();
+    saveGame(createGame());
+    const raw = JSON.parse(localStorage.getItem("bone-isle-save-v2")!);
+    // hand-plant a save as it looked BEFORE the handover: fifteen fire charges
+    // in the bag and a hotkey bound to them.
+    raw.v = 3;
+    raw.player.bag = [{ kind: "fireCrystal", n: 15 }, ...Array(15).fill(null)];
+    raw.slots = [{ type: "crystal", item: "fireCrystal" }, null, null, null, null, null];
+    localStorage.setItem("bone-isle-save-v2", JSON.stringify(raw));
+    const g2 = loadGame()!;
+    ok(!!g2, "a v3 save still loads");
+    ok(items.bagCount(g2.player.bag, "flameCrystal") === 15,
+      "…its fire charges are renamed, not reinterpreted");
+    ok(items.bagCount(g2.player.bag, "fireCrystal") === 0,
+      "…so nobody is quietly handed fifteen free lane keys");
+    const s0 = A.actionSlots[0];
+    ok(!!s0 && s0.type === "crystal" && s0.item === "flameCrystal",
+      "…and the hotkey bound to them still points at a charge crystal");
+    deleteSave();
+  }
+
   console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");
   {
     ok(items.ITEMS.backpack.pack?.slots === 8 && items.ITEMS.backpack.stack === 1,
@@ -2316,10 +2407,10 @@ async function main(): Promise<void> {
     ok(g2.worlds.home.ground[0]?.x === ttx * 32 + 16, "loose ground stacks scale too");
     ok(g2.worlds.home.corpses[0]?.x === ttx * 32 + 16, "and so do corpses");
 
-    // v3 round-trips without scaling a second time
+    // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 3, "saving writes the new v3 format");
+    ok(stored.v === 4, "saving writes the current v4 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");

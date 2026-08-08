@@ -25,7 +25,9 @@ import {
   hudUserScale, stepHudUserScale, hudMenuOpen, toggleHudMenu, applyHudPreset, snapHudGroup,
   type HudGroup,
 } from "./systems/hudLayout.ts";
-import { researchById, isResearched, markResearched, towerTierOk, towerTierFor } from "./systems/tower.ts";
+import { researchById, isResearched, markResearched, towerTierOk, towerTierFor,
+  ATTUNEMENT, isAttuned, markAttuned, attunementOk } from "./systems/tower.ts";
+import { ELEMENT_LABEL, type Element } from "./systems/elements.ts";
 import { loadPanelPrefs } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
@@ -378,6 +380,7 @@ const act: PanelActions = {
     // craft requires standing at a Forge; enforced by only opening forge there
     if (craftAt(r)) beep(360, 0.14, "square", 0.05);
   },
+  attune: (el: Element) => { doAttune(el); },
   research: (id: string) => { doResearch(id); },
   buyCrystal: (id: string) => { doBuyCrystal(id); },
   takeLoot: (c: Corpse, index: number) => { takeOne(c, index); },
@@ -863,12 +866,35 @@ function doUpgrade(s: Structure): void {
   tryUpgrade(game.worlds.home, P, s, homeChests(game));
 }
 
+/**
+ * Spend one attunement stone to open an element's lane.
+ *
+ * Deliberately separate from doResearch: attunement is not a project, has no
+ * tower-tier gate, and must stay reachable at every tier so a lane can never
+ * strand itself off the bottom of the panel.
+ */
+function doAttune(el: Element): void {
+  if (isAttuned(el)) return;
+  const key = ATTUNEMENT[el];
+  if (!canAfford(P.bag, { [key]: 1 }, homeChests(game))) {
+    flash(`needs a ${ITEMS[key].name}`, "#d96a5a");
+    return;
+  }
+  payCost(P.bag, { [key]: 1 }, homeChests(game));
+  markAttuned(el);
+  flash(`attuned to ${ELEMENT_LABEL[el]}`, "#c9a6ff");
+  beep(600, 0.22, "square", 0.06, 140);
+}
+
 function doResearch(id: string): void {
   const r = researchById(id);
   if (!r || isResearched(r.id)) return;
   if (!towerTierOk(r, towerTier())) { flash(`needs an Alchemy Tower ${"I".repeat(towerTierFor(r))}`, "#d96a5a"); return; }
+  if (!attunementOk(r)) { flash("attune this element first", "#d96a5a"); return; }
   if (!canAfford(P.bag, r.researchCost, homeChests(game))) { flash("need materials"); return; }
+  if (P.gold < (r.researchGold ?? 0)) { flash("need gold", "#d96a5a"); return; }
   payCost(P.bag, r.researchCost, homeChests(game));
+  P.gold -= r.researchGold ?? 0;
   markResearched(r.id);
   flash(`researched ${r.name}`, "#c9a6ff");
   beep(520, 0.18, "square", 0.06, 120);
@@ -878,10 +904,12 @@ function doBuyCrystal(id: string): void {
   const r = researchById(id);
   if (!r || !isResearched(r.id)) return;
   if (!canAfford(P.bag, r.buyCost, homeChests(game))) { flash("need materials"); return; }
+  if (P.gold < (r.buyGold ?? 0)) { flash("need gold", "#d96a5a"); return; }
   if (!canCarry(P, r.crystal, r.buyN)) { flash("too heavy"); return; }
   const moved = r.buyN - addItem(P.bag, r.crystal, r.buyN);
   if (moved < r.buyN) { if (moved > 0) removeItem(P.bag, r.crystal, moved); flash("bag full"); return; }
   payCost(P.bag, r.buyCost, homeChests(game));
+  P.gold -= r.buyGold ?? 0;
   flash(`+${r.buyN} ${ITEMS[r.crystal].name}`, "#b9e07f");
   beep(440, 0.12, "sine", 0.05, 120);
 }

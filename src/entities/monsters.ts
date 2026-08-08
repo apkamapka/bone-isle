@@ -413,7 +413,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "orcEar", chance: 0.15, n: [1, 1] },
-      { kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "fireRuby", chance: 0.05, n: [1, 1] },
+      { kind: "meat", chance: 0.5, n: [1, 2] },
       { kind: "orcishHelm", chance: 0.05, n: [1, 1] },
       { kind: "orcishBody", chance: 0.05, n: [1, 1] },
       { kind: "orcishLegs", chance: 0.05, n: [1, 1] },
@@ -583,7 +583,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "orcEar", chance: 0.15, n: [1, 1] },
-      { kind: "fireCrystal", chance: 0.4, n: [1, 3] }, { kind: "healCrystal", chance: 0.2, n: [1, 2] }, { kind: "fireRuby", chance: 0.1, n: [1, 1] },
+      { kind: "flameCrystal", chance: 0.4, n: [1, 3] }, { kind: "healCrystal", chance: 0.2, n: [1, 2] },
       { kind: "orcishHelm", chance: 0.04, n: [1, 1] },
       { kind: "orcishBody", chance: 0.04, n: [1, 1] },
       { kind: "orcishLegs", chance: 0.04, n: [1, 1] },
@@ -615,7 +615,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "orcEar", chance: 0.15, n: [1, 1] },
-      { kind: "meat", chance: 0.5, n: [1, 2] }, { kind: "fireRuby", chance: 0.12, n: [1, 1] },
+      { kind: "meat", chance: 0.5, n: [1, 2] },
       { kind: "orcishHelm", chance: 0.2, n: [1, 1] },
       { kind: "orcishBody", chance: 0.2, n: [1, 1] },
       { kind: "orcishLegs", chance: 0.2, n: [1, 1] },
@@ -630,7 +630,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "minotaurHorn", chance: 0.15, n: [1, 1] },
-      { kind: "bones", chance: 0.6, n: [2, 4] }, { kind: "fireRuby", chance: 0.15, n: [1, 1] },
+      { kind: "bones", chance: 0.6, n: [2, 4] },
       { kind: "minotaurHelm", chance: 0.2, n: [1, 1] },
       { kind: "minotaurBody", chance: 0.2, n: [1, 1] },
       { kind: "minotaurLegs", chance: 0.2, n: [1, 1] },
@@ -660,7 +660,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "minotaurHorn", chance: 0.15, n: [1, 1] },
-      { kind: "fireCrystal", chance: 0.6, n: [2, 5] }, { kind: "fireRuby", chance: 0.2, n: [1, 1] },
+      { kind: "flameCrystal", chance: 0.6, n: [2, 5] },
       { kind: "minotaurHelm", chance: 0.08, n: [1, 1] },
       { kind: "minotaurBody", chance: 0.08, n: [1, 1] },
       { kind: "minotaurLegs", chance: 0.08, n: [1, 1] },
@@ -710,7 +710,9 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [
       { kind: "dragonHam", chance: 0.9, n: [2, 5] },
       { kind: "dragonScale", chance: 0.6, n: [1, 3] },
-      { kind: "fireRuby", chance: 0.5, n: [2, 4] },
+      // the ONLY source of the Essence: the strongest crystal of every
+      // element is bought from the tower with something the dragon owns
+      { kind: "magicEssence", chance: 0.2, n: [1, 1] },
       { kind: "dragonHelm", chance: 0.15, n: [1, 1] },
       { kind: "dragonBody", chance: 0.15, n: [1, 1] },
       { kind: "dragonLegs", chance: 0.15, n: [1, 1] },

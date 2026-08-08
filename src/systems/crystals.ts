@@ -19,7 +19,7 @@ import type { World } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
 
 /** The crystal kinds, in the order they bind to default action slots. */
-export const CRYSTAL_KINDS: readonly ItemKind[] = ["healCrystal", "fireCrystal", "recallCrystal", "spearCrystal"];
+export const CRYSTAL_KINDS: readonly ItemKind[] = ["healCrystal", "flameCrystal", "recallCrystal", "spearCrystal"];
 
 export function isCrystal(kind: ItemKind): boolean {
   return CRYSTAL_KINDS.includes(kind);
@@ -107,7 +107,7 @@ function pickTarget(world: World, p: Player, range: number): World["monsters"][n
 }
 
 function offensiveStats(kind: ItemKind, level: number): { dmg: number; range: number } | null {
-  if (kind === "fireCrystal") return { dmg: FIRE_CRYSTAL_DMG + level, range: FIRE_CRYSTAL_RANGE };
+  if (kind === "flameCrystal") return { dmg: FIRE_CRYSTAL_DMG + level, range: FIRE_CRYSTAL_RANGE };
   if (kind === "spearCrystal") return { dmg: SPEAR_CRYSTAL_DMG + level * 2, range: SPEAR_CRYSTAL_RANGE };
   return null;
 }

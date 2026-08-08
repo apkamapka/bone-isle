@@ -744,13 +744,16 @@ export const SPR = {
     "Rrr...",
     "R.....",
   ]),
-  fireRuby: bake([
-    ".rr..",
-    "rRRr.",
-    "rRcRr",
-    "rRRr.",
-    ".rr..",
-  ]),
+  /* The Essence of Magic: no element of its own, so it borrows all of them —
+   * a pale core with the five tints caught in its facets. It is the one thing
+   * in the bag that should look like it does not belong to any single lane. */
+  magicEssence: bake([
+    "..W..",
+    ".WfW.",
+    "WiWeW",
+    ".WsW.",
+    "..h..",
+  ], { W: "#efe6ff", f: "#ff8a3a", i: "#7cd4ff", e: "#8ab661", s: "#ffce4a", h: "#b58aff" }),
   /* ---- Etap 24: forge materials and creature trophies ----------------
    * Ingots read by silhouette first (a trapezoid bar) and by tint second,
    * because iron and steel sit next to each other in every bag and the
@@ -1186,6 +1189,21 @@ const ELEMENT_RAMP: Readonly<Record<string, readonly [string, string, string]>> 
   shadow: ["#ded0ff", "#b58aff", "#4c2f7a"],
 };
 
+/**
+ * An attunement stone in one element's colours. Same cut as every other
+ * stone, so the shape says "lane key" and only the tint says which lane.
+ */
+function attuneIcon(element: string): HTMLCanvasElement {
+  const [a, b, c] = ELEMENT_RAMP[element];
+  return bake([
+    ".rr..",
+    "rRRr.",
+    "rRcRr",
+    "rRRr.",
+    ".rr..",
+  ], { r: c, R: b, c: a });
+}
+
 function elementalIcon(element: string, tier: number, role: "Shard" | "Burst"): HTMLCanvasElement {
   const [a, b, c] = ELEMENT_RAMP[element];
   const map = role === "Shard" ? SHARD_BY_TIER[tier] : BURST_BY_TIER[tier];
@@ -1223,8 +1241,11 @@ const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   mercBlade: SPR.gearStubWeapon, warHammer: SPR.gearStubWeapon, orcishAxe: SPR.gearStubWeapon, gladius: SPR.gearStubWeapon,
   boneSword: SPR.gearStubWeapon, minotaurAxe: SPR.gearStubWeapon, warlordBlade: SPR.gearStubWeapon, steelMaul: SPR.gearStubWeapon,
   demonCleaver: SPR.gearStubWeapon, knightSword: SPR.gearStubWeapon, fireSword: SPR.gearStubWeapon, marrowBlade: SPR.gearStubWeapon,
-  healCrystal: SPR.crystalHeal, fireCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
-  spearCrystal: SPR.crystalSpear, fireRuby: SPR.fireRuby,
+  healCrystal: SPR.crystalHeal, flameCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
+  spearCrystal: SPR.crystalSpear,
+  fireCrystal: attuneIcon("fire"), waterCrystal: attuneIcon("ice"), earthCrystal: attuneIcon("earth"),
+  windCrystal: attuneIcon("storm"), lightningCrystal: attuneIcon("shadow"),
+  magicEssence: SPR.magicEssence,
   fireEmberShard: elementalIcon("fire", 0, "Shard"),
   fireEmberBurst: elementalIcon("fire", 0, "Burst"),
   fireFlameShard: elementalIcon("fire", 1, "Shard"),

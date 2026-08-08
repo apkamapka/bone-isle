@@ -1,26 +1,47 @@
 /**
  * Alchemy Tower: a research tree that gates which charge crystals you can buy.
- * Each project is researched once (instant on payment, but some are gated by a
- * rare material like a Fire Ruby). Once researched, that crystal can be bought
- * repeatedly in batches. Costs draw from backpack + Storage Chest, same as
- * building, so the chest doubles as your alchemy stockpile.
+ * Each project is researched once (instant on payment). Once researched, that
+ * crystal can be bought repeatedly in batches. Material costs draw from
+ * backpack + Storage Chest, same as building, so the chest doubles as your
+ * alchemy stockpile.
+ *
+ * Etap 25 split the tree in two. The four ORIGINAL crystals still cost
+ * materials, because they are the early game and bones are what an early
+ * player has. The ELEMENTAL line costs gold and nothing else, with one
+ * exception: the strongest crystal of each element also wants an Essence of
+ * Magic, which only the dragon carries. The elemental line also wants an
+ * attunement stone before it opens at all — see ATTUNEMENT below.
  *
  * This is the permanent crystal source that replaces the Forge stopgap recipes.
  */
 import type { Cost } from "./building.ts";
 import type { ItemKind } from "../items.ts";
+import { ELEMENTS } from "./elements.ts";
 import type { Element, Tier } from "./elements.ts";
 
 export interface Research {
   id: string;
   name: string;
   desc: string;
-  /** One-time cost to unlock (may include a rare gating material). */
+  /** One-time material cost to unlock. Empty on the elemental line, which
+   *  is paid for in gold — see researchGold. */
   researchCost: Cost;
+  /**
+   * One-time GOLD cost to unlock, on top of researchCost.
+   *
+   * The elemental line stopped charging bones and stone in Etap 25. Those
+   * materials were the tree's only real sink, and paying for magic in
+   * firewood made every lane feel like a woodpile. They now leave the
+   * economy through the shop instead, which puts one number — gold — between
+   * everything you kill and everything you research.
+   */
+  researchGold?: number;
   /** The crystal this unlocks for purchase. */
   crystal: ItemKind;
-  /** Cost of one purchase once researched. */
+  /** Material cost of one purchase once researched. */
   buyCost: Cost;
+  /** Gold cost of one purchase, on top of buyCost. */
+  buyGold?: number;
   /** Charges granted per purchase. */
   buyN: number;
   /** Tier 0..2 for the elemental line; absent on the four original crystals. */
@@ -39,6 +60,60 @@ export interface Research {
    * still typecheck, but nothing sets it any more.
    */
   requires?: string;
+}
+
+/* ------------------------------------------------------------------ *
+ *  ATTUNEMENT — the key that opens a lane
+ *
+ *  Every elemental project is locked until its element is attuned, which
+ *  costs exactly one stone and happens once. The stone is spent, not held,
+ *  so a lane is a door you walk through rather than a key you carry.
+ *
+ *  This is deliberately NOT the retired `requires` chain. That failed
+ *  because the panel only ever shows the tier your tower is at, so a
+ *  prerequisite sitting at a tier you had already climbed past became
+ *  invisible and the lane died. Attunement lives OUTSIDE the tier-filtered
+ *  list — it is drawn at the head of every element tab at every tower tier,
+ *  so it can never fall off the screen.
+ * ------------------------------------------------------------------ */
+
+/** Which stone opens which lane. Ice is bought with water, storm with wind,
+ *  shadow with lightning — the stone names the source, not the spell. */
+export const ATTUNEMENT: Readonly<Record<Element, ItemKind>> = {
+  fire: "fireCrystal",
+  ice: "waterCrystal",
+  earth: "earthCrystal",
+  storm: "windCrystal",
+  shadow: "lightningCrystal",
+};
+
+const attuned = new Set<Element>();
+
+export function isAttuned(el: Element): boolean {
+  return attuned.has(el);
+}
+
+export function markAttuned(el: Element): void {
+  attuned.add(el);
+}
+
+/** Snapshot for saving. */
+export function attunedState(): Element[] {
+  return [...attuned];
+}
+
+/** Restore from a save (clears any current state first). */
+export function loadAttunedState(els: readonly string[] | undefined): void {
+  attuned.clear();
+  if (els) for (const el of els) if ((ELEMENTS as readonly string[]).includes(el)) attuned.add(el as Element);
+}
+
+/**
+ * Can this project be researched at all yet? The four originals have no
+ * element and are never gated; everything else waits on its stone.
+ */
+export function attunementOk(r: Research): boolean {
+  return r.element === undefined || isAttuned(r.element);
 }
 
 /** Every project that must be finished before `id` becomes available. */
@@ -88,10 +163,10 @@ export const RESEARCH: readonly Research[] = [
   },
   {
     id: "fire",
-    name: "Fire Crystals",
+    name: "Flare Crystals",
     desc: "Hurls fire at the nearest enemy.",
     researchCost: { bones: 12, stone: 10 },
-    crystal: "fireCrystal",
+    crystal: "flameCrystal",
     buyCost: { bones: 5, stone: 4 },
     buyN: 8,
   },
@@ -108,7 +183,7 @@ export const RESEARCH: readonly Research[] = [
     id: "spear",
     name: "Fire Spear Crystals",
     desc: "Heavy ranged damage, longer reach.",
-    researchCost: { bones: 15, stone: 12, fireRuby: 1 },
+    researchCost: { bones: 15, stone: 12 },
     crystal: "spearCrystal",
     buyCost: { bones: 8, stone: 6 },
     buyN: 4,
@@ -120,9 +195,11 @@ export const RESEARCH: readonly Research[] = [
     id: "fire1shard",
     name: "Ember Shards",
     desc: "Flame that armour cannot turn. Shards put it all into one target.",
-    researchCost: { bones: 14, stone: 10 },
+    researchCost: {},
+    researchGold: 400,
     crystal: "fireEmberShard",
-    buyCost: { bones: 5, stone: 4 },
+    buyCost: {},
+    buyGold: 120,
     buyN: 10,
     tier: 0,
     element: "fire",
@@ -131,9 +208,11 @@ export const RESEARCH: readonly Research[] = [
     id: "fire1burst",
     name: "Ember Bursts",
     desc: "Flame that armour cannot turn. Bursts split the blast across a pack.",
-    researchCost: { bones: 20, stone: 14 },
+    researchCost: {},
+    researchGold: 500,
     crystal: "fireEmberBurst",
-    buyCost: { bones: 7, stone: 5 },
+    buyCost: {},
+    buyGold: 150,
     buyN: 10,
     tier: 0,
     element: "fire",
@@ -142,9 +221,11 @@ export const RESEARCH: readonly Research[] = [
     id: "fire2shard",
     name: "Flame Shards",
     desc: "Flame that armour cannot turn. Shards put it all into one target.",
-    researchCost: { bones: 40, stone: 28 },
+    researchCost: {},
+    researchGold: 1600,
     crystal: "fireFlameShard",
-    buyCost: { bones: 12, stone: 8 },
+    buyCost: {},
+    buyGold: 400,
     buyN: 8,
     tier: 1,
     element: "fire",
@@ -154,9 +235,11 @@ export const RESEARCH: readonly Research[] = [
     id: "fire2burst",
     name: "Flame Bursts",
     desc: "Flame that armour cannot turn. Bursts split the blast across a pack.",
-    researchCost: { bones: 46, stone: 32 },
+    researchCost: {},
+    researchGold: 2000,
     crystal: "fireFlameBurst",
-    buyCost: { bones: 14, stone: 9 },
+    buyCost: {},
+    buyGold: 500,
     buyN: 8,
     tier: 1,
     element: "fire",
@@ -166,9 +249,11 @@ export const RESEARCH: readonly Research[] = [
     id: "fire3shard",
     name: "Pyre Shards",
     desc: "Flame that armour cannot turn. Shards put it all into one target.",
-    researchCost: { bones: 110, stone: 77 },
+    researchCost: {},
+    researchGold: 6000,
     crystal: "firePyreShard",
-    buyCost: { bones: 30, stone: 21 },
+    buyCost: {},
+    buyGold: 1200,
     buyN: 6,
     tier: 2,
     element: "fire",
@@ -178,9 +263,11 @@ export const RESEARCH: readonly Research[] = [
     id: "fire3burst",
     name: "Pyre Bursts",
     desc: "Flame that armour cannot turn. Bursts split the blast across a pack.",
-    researchCost: { bones: 116, stone: 81 },
+    researchCost: {},
+    researchGold: 7000,
     crystal: "firePyreBurst",
-    buyCost: { bones: 32, stone: 22 },
+    buyCost: { magicEssence: 1 },
+    buyGold: 1500,
     buyN: 6,
     tier: 2,
     element: "fire",
@@ -190,9 +277,11 @@ export const RESEARCH: readonly Research[] = [
     id: "firearrow",
     name: "Ember Arrows",
     desc: "Arrowheads that carry the fire. They meet resistance, never armour.",
-    researchCost: { bones: 18, stone: 12 },
+    researchCost: {},
+    researchGold: 250,
     crystal: "fireArrow",
-    buyCost: { bones: 3, stone: 2 },
+    buyCost: {},
+    buyGold: 60,
     buyN: 25,
     tier: 0,
     element: "fire",
@@ -202,9 +291,11 @@ export const RESEARCH: readonly Research[] = [
     id: "ice1shard",
     name: "Frost Shards",
     desc: "Cold that bites through plate. Shards put it all into one target.",
-    researchCost: { herb: 14, silk: 10 },
+    researchCost: {},
+    researchGold: 400,
     crystal: "iceFrostShard",
-    buyCost: { herb: 5, silk: 4 },
+    buyCost: {},
+    buyGold: 120,
     buyN: 10,
     tier: 0,
     element: "ice",
@@ -213,9 +304,11 @@ export const RESEARCH: readonly Research[] = [
     id: "ice1burst",
     name: "Frost Bursts",
     desc: "Cold that bites through plate. Bursts split the blast across a pack.",
-    researchCost: { herb: 20, silk: 14 },
+    researchCost: {},
+    researchGold: 500,
     crystal: "iceFrostBurst",
-    buyCost: { herb: 7, silk: 5 },
+    buyCost: {},
+    buyGold: 150,
     buyN: 10,
     tier: 0,
     element: "ice",
@@ -224,9 +317,11 @@ export const RESEARCH: readonly Research[] = [
     id: "ice2shard",
     name: "Rime Shards",
     desc: "Cold that bites through plate. Shards put it all into one target.",
-    researchCost: { herb: 40, silk: 28 },
+    researchCost: {},
+    researchGold: 1600,
     crystal: "iceRimeShard",
-    buyCost: { herb: 12, silk: 8 },
+    buyCost: {},
+    buyGold: 400,
     buyN: 8,
     tier: 1,
     element: "ice",
@@ -236,9 +331,11 @@ export const RESEARCH: readonly Research[] = [
     id: "ice2burst",
     name: "Rime Bursts",
     desc: "Cold that bites through plate. Bursts split the blast across a pack.",
-    researchCost: { herb: 46, silk: 32 },
+    researchCost: {},
+    researchGold: 2000,
     crystal: "iceRimeBurst",
-    buyCost: { herb: 14, silk: 9 },
+    buyCost: {},
+    buyGold: 500,
     buyN: 8,
     tier: 1,
     element: "ice",
@@ -248,9 +345,11 @@ export const RESEARCH: readonly Research[] = [
     id: "ice3shard",
     name: "Glacier Shards",
     desc: "Cold that bites through plate. Shards put it all into one target.",
-    researchCost: { herb: 110, silk: 77 },
+    researchCost: {},
+    researchGold: 6000,
     crystal: "iceGlacierShard",
-    buyCost: { herb: 30, silk: 21 },
+    buyCost: {},
+    buyGold: 1200,
     buyN: 6,
     tier: 2,
     element: "ice",
@@ -260,9 +359,11 @@ export const RESEARCH: readonly Research[] = [
     id: "ice3burst",
     name: "Glacier Bursts",
     desc: "Cold that bites through plate. Bursts split the blast across a pack.",
-    researchCost: { herb: 116, silk: 81 },
+    researchCost: {},
+    researchGold: 7000,
     crystal: "iceGlacierBurst",
-    buyCost: { herb: 32, silk: 22 },
+    buyCost: { magicEssence: 1 },
+    buyGold: 1500,
     buyN: 6,
     tier: 2,
     element: "ice",
@@ -272,9 +373,11 @@ export const RESEARCH: readonly Research[] = [
     id: "icearrow",
     name: "Frost Arrows",
     desc: "Arrowheads that carry the ice. They meet resistance, never armour.",
-    researchCost: { herb: 18, silk: 12 },
+    researchCost: {},
+    researchGold: 250,
     crystal: "iceArrow",
-    buyCost: { herb: 3, silk: 2 },
+    buyCost: {},
+    buyGold: 60,
     buyN: 25,
     tier: 0,
     element: "ice",
@@ -284,9 +387,11 @@ export const RESEARCH: readonly Research[] = [
     id: "earth1shard",
     name: "Loam Shards",
     desc: "Weight and grit, heedless of steel. Shards put it all into one target.",
-    researchCost: { stone: 14, wood: 10 },
+    researchCost: {},
+    researchGold: 400,
     crystal: "earthLoamShard",
-    buyCost: { stone: 5, wood: 4 },
+    buyCost: {},
+    buyGold: 120,
     buyN: 10,
     tier: 0,
     element: "earth",
@@ -295,9 +400,11 @@ export const RESEARCH: readonly Research[] = [
     id: "earth1burst",
     name: "Loam Bursts",
     desc: "Weight and grit, heedless of steel. Bursts split the blast across a pack.",
-    researchCost: { stone: 20, wood: 14 },
+    researchCost: {},
+    researchGold: 500,
     crystal: "earthLoamBurst",
-    buyCost: { stone: 7, wood: 5 },
+    buyCost: {},
+    buyGold: 150,
     buyN: 10,
     tier: 0,
     element: "earth",
@@ -306,9 +413,11 @@ export const RESEARCH: readonly Research[] = [
     id: "earth2shard",
     name: "Stone Shards",
     desc: "Weight and grit, heedless of steel. Shards put it all into one target.",
-    researchCost: { stone: 40, wood: 28 },
+    researchCost: {},
+    researchGold: 1600,
     crystal: "earthStoneShard",
-    buyCost: { stone: 12, wood: 8 },
+    buyCost: {},
+    buyGold: 400,
     buyN: 8,
     tier: 1,
     element: "earth",
@@ -318,9 +427,11 @@ export const RESEARCH: readonly Research[] = [
     id: "earth2burst",
     name: "Stone Bursts",
     desc: "Weight and grit, heedless of steel. Bursts split the blast across a pack.",
-    researchCost: { stone: 46, wood: 32 },
+    researchCost: {},
+    researchGold: 2000,
     crystal: "earthStoneBurst",
-    buyCost: { stone: 14, wood: 9 },
+    buyCost: {},
+    buyGold: 500,
     buyN: 8,
     tier: 1,
     element: "earth",
@@ -330,9 +441,11 @@ export const RESEARCH: readonly Research[] = [
     id: "earth3shard",
     name: "Bedrock Shards",
     desc: "Weight and grit, heedless of steel. Shards put it all into one target.",
-    researchCost: { stone: 110, wood: 77 },
+    researchCost: {},
+    researchGold: 6000,
     crystal: "earthBedrockShard",
-    buyCost: { stone: 30, wood: 21 },
+    buyCost: {},
+    buyGold: 1200,
     buyN: 6,
     tier: 2,
     element: "earth",
@@ -342,9 +455,11 @@ export const RESEARCH: readonly Research[] = [
     id: "earth3burst",
     name: "Bedrock Bursts",
     desc: "Weight and grit, heedless of steel. Bursts split the blast across a pack.",
-    researchCost: { stone: 116, wood: 81 },
+    researchCost: {},
+    researchGold: 7000,
     crystal: "earthBedrockBurst",
-    buyCost: { stone: 32, wood: 22 },
+    buyCost: { magicEssence: 1 },
+    buyGold: 1500,
     buyN: 6,
     tier: 2,
     element: "earth",
@@ -354,9 +469,11 @@ export const RESEARCH: readonly Research[] = [
     id: "eartharrow",
     name: "Loam Arrows",
     desc: "Arrowheads that carry the earth. They meet resistance, never armour.",
-    researchCost: { stone: 18, wood: 12 },
+    researchCost: {},
+    researchGold: 250,
     crystal: "earthArrow",
-    buyCost: { stone: 3, wood: 2 },
+    buyCost: {},
+    buyGold: 60,
     buyN: 25,
     tier: 0,
     element: "earth",
@@ -366,9 +483,11 @@ export const RESEARCH: readonly Research[] = [
     id: "storm1shard",
     name: "Spark Shards",
     desc: "A charge that finds its way in. Shards put it all into one target.",
-    researchCost: { silk: 14, stone: 10 },
+    researchCost: {},
+    researchGold: 400,
     crystal: "stormSparkShard",
-    buyCost: { silk: 5, stone: 4 },
+    buyCost: {},
+    buyGold: 120,
     buyN: 10,
     tier: 0,
     element: "storm",
@@ -377,9 +496,11 @@ export const RESEARCH: readonly Research[] = [
     id: "storm1burst",
     name: "Spark Bursts",
     desc: "A charge that finds its way in. Bursts split the blast across a pack.",
-    researchCost: { silk: 20, stone: 14 },
+    researchCost: {},
+    researchGold: 500,
     crystal: "stormSparkBurst",
-    buyCost: { silk: 7, stone: 5 },
+    buyCost: {},
+    buyGold: 150,
     buyN: 10,
     tier: 0,
     element: "storm",
@@ -388,9 +509,11 @@ export const RESEARCH: readonly Research[] = [
     id: "storm2shard",
     name: "Bolt Shards",
     desc: "A charge that finds its way in. Shards put it all into one target.",
-    researchCost: { silk: 40, stone: 28 },
+    researchCost: {},
+    researchGold: 1600,
     crystal: "stormBoltShard",
-    buyCost: { silk: 12, stone: 8 },
+    buyCost: {},
+    buyGold: 400,
     buyN: 8,
     tier: 1,
     element: "storm",
@@ -400,9 +523,11 @@ export const RESEARCH: readonly Research[] = [
     id: "storm2burst",
     name: "Bolt Bursts",
     desc: "A charge that finds its way in. Bursts split the blast across a pack.",
-    researchCost: { silk: 46, stone: 32 },
+    researchCost: {},
+    researchGold: 2000,
     crystal: "stormBoltBurst",
-    buyCost: { silk: 14, stone: 9 },
+    buyCost: {},
+    buyGold: 500,
     buyN: 8,
     tier: 1,
     element: "storm",
@@ -412,9 +537,11 @@ export const RESEARCH: readonly Research[] = [
     id: "storm3shard",
     name: "Tempest Shards",
     desc: "A charge that finds its way in. Shards put it all into one target.",
-    researchCost: { silk: 110, stone: 77 },
+    researchCost: {},
+    researchGold: 6000,
     crystal: "stormTempestShard",
-    buyCost: { silk: 30, stone: 21 },
+    buyCost: {},
+    buyGold: 1200,
     buyN: 6,
     tier: 2,
     element: "storm",
@@ -424,9 +551,11 @@ export const RESEARCH: readonly Research[] = [
     id: "storm3burst",
     name: "Tempest Bursts",
     desc: "A charge that finds its way in. Bursts split the blast across a pack.",
-    researchCost: { silk: 116, stone: 81 },
+    researchCost: {},
+    researchGold: 7000,
     crystal: "stormTempestBurst",
-    buyCost: { silk: 32, stone: 22 },
+    buyCost: { magicEssence: 1 },
+    buyGold: 1500,
     buyN: 6,
     tier: 2,
     element: "storm",
@@ -436,9 +565,11 @@ export const RESEARCH: readonly Research[] = [
     id: "stormarrow",
     name: "Spark Arrows",
     desc: "Arrowheads that carry the storm. They meet resistance, never armour.",
-    researchCost: { silk: 18, stone: 12 },
+    researchCost: {},
+    researchGold: 250,
     crystal: "stormArrow",
-    buyCost: { silk: 3, stone: 2 },
+    buyCost: {},
+    buyGold: 60,
     buyN: 25,
     tier: 0,
     element: "storm",
@@ -448,9 +579,11 @@ export const RESEARCH: readonly Research[] = [
     id: "shadow1shard",
     name: "Gloom Shards",
     desc: "Cold light that unmakes the undying. Shards put it all into one target.",
-    researchCost: { bones: 14, herb: 10 },
+    researchCost: {},
+    researchGold: 400,
     crystal: "shadowGloomShard",
-    buyCost: { bones: 5, herb: 4 },
+    buyCost: {},
+    buyGold: 120,
     buyN: 10,
     tier: 0,
     element: "shadow",
@@ -459,9 +592,11 @@ export const RESEARCH: readonly Research[] = [
     id: "shadow1burst",
     name: "Gloom Bursts",
     desc: "Cold light that unmakes the undying. Bursts split the blast across a pack.",
-    researchCost: { bones: 20, herb: 14 },
+    researchCost: {},
+    researchGold: 500,
     crystal: "shadowGloomBurst",
-    buyCost: { bones: 7, herb: 5 },
+    buyCost: {},
+    buyGold: 150,
     buyN: 10,
     tier: 0,
     element: "shadow",
@@ -470,9 +605,11 @@ export const RESEARCH: readonly Research[] = [
     id: "shadow2shard",
     name: "Umbra Shards",
     desc: "Cold light that unmakes the undying. Shards put it all into one target.",
-    researchCost: { bones: 40, herb: 28 },
+    researchCost: {},
+    researchGold: 1600,
     crystal: "shadowUmbraShard",
-    buyCost: { bones: 12, herb: 8 },
+    buyCost: {},
+    buyGold: 400,
     buyN: 8,
     tier: 1,
     element: "shadow",
@@ -482,9 +619,11 @@ export const RESEARCH: readonly Research[] = [
     id: "shadow2burst",
     name: "Umbra Bursts",
     desc: "Cold light that unmakes the undying. Bursts split the blast across a pack.",
-    researchCost: { bones: 46, herb: 32 },
+    researchCost: {},
+    researchGold: 2000,
     crystal: "shadowUmbraBurst",
-    buyCost: { bones: 14, herb: 9 },
+    buyCost: {},
+    buyGold: 500,
     buyN: 8,
     tier: 1,
     element: "shadow",
@@ -494,9 +633,11 @@ export const RESEARCH: readonly Research[] = [
     id: "shadow3shard",
     name: "Eclipse Shards",
     desc: "Cold light that unmakes the undying. Shards put it all into one target.",
-    researchCost: { bones: 110, herb: 77 },
+    researchCost: {},
+    researchGold: 6000,
     crystal: "shadowEclipseShard",
-    buyCost: { bones: 30, herb: 21 },
+    buyCost: {},
+    buyGold: 1200,
     buyN: 6,
     tier: 2,
     element: "shadow",
@@ -506,9 +647,11 @@ export const RESEARCH: readonly Research[] = [
     id: "shadow3burst",
     name: "Eclipse Bursts",
     desc: "Cold light that unmakes the undying. Bursts split the blast across a pack.",
-    researchCost: { bones: 116, herb: 81 },
+    researchCost: {},
+    researchGold: 7000,
     crystal: "shadowEclipseBurst",
-    buyCost: { bones: 32, herb: 22 },
+    buyCost: { magicEssence: 1 },
+    buyGold: 1500,
     buyN: 6,
     tier: 2,
     element: "shadow",
@@ -518,9 +661,11 @@ export const RESEARCH: readonly Research[] = [
     id: "shadowarrow",
     name: "Gloom Arrows",
     desc: "Arrowheads that carry the shadow. They meet resistance, never armour.",
-    researchCost: { bones: 18, herb: 12 },
+    researchCost: {},
+    researchGold: 250,
     crystal: "shadowArrow",
-    buyCost: { bones: 3, herb: 2 },
+    buyCost: {},
+    buyGold: 60,
     buyN: 25,
     tier: 0,
     element: "shadow",
