@@ -1295,6 +1295,13 @@ async function main(): Promise<void> {
       `the TEST grid covers the whole catalog (${kinds.TEST_KINDS.length})`);
     ok(new Set(kinds.TEST_KINDS).size === kinds.TEST_KINDS.length, "…with no duplicates");
 
+    // The grant amount reads the stack size. A flat 100 buried the backpack
+    // under a hundred swords the moment anyone clicked a weapon.
+    const grant = (k: string): number => Math.min(100, items.ITEMS[k as never].stack);
+    ok(grant("wood") === 100 && grant("arrow") === 100, "a TEST click grants a full stack of materials");
+    ok(grant("fireSword") === 1 && grant("knightBody") === 1, "…and exactly one piece of gear");
+    ok(kinds.TEST_KINDS.every((k) => grant(k) >= 1), "…never nothing, whatever you click");
+
     // and it actually hands over goods for a gold
     {
       const g = createGame();

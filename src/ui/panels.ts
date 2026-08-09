@@ -819,7 +819,7 @@ function drawForge(p: PanelInput): void {
 
   const foot = ui.forgeTab === "craft" ? "Uses backpack + storage chest"
     : ui.forgeTab === "smelt" ? `Burns ${COAL_PER_SMELT} coal per piece · tier ${tier} furnace`
-    : ui.forgeTab === "test" ? "TEST ONLY — 1 gold buys 100 of anything"
+    : ui.forgeTab === "test" ? "TEST ONLY — 1 gold buys a full stack, gear one piece"
     : `${GEM_TROPHY_KINDS} different trophies + ${GEM_COAL} coal per gem`;
   hudText(hud, foot, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
@@ -912,7 +912,8 @@ function forgeSmelt(
 }
 
 /**
- * TEST ONLY — a grid of the entire catalog, 100 of anything for a gold.
+ * TEST ONLY — a grid of the entire catalog, one slot's worth for a gold:
+ * a full stack of anything that stacks, a single piece of anything that does not.
  *
  * This exists so a feature can be exercised without first farming for it: 500
  * steel is a legitimate evening of play and a ridiculous prerequisite for
@@ -931,7 +932,7 @@ function forgeTest(p: PanelInput, x: number, ry: number, w: number): number {
   const pages = Math.ceil(TEST_KINDS.length / TEST_PER_PAGE);
   ui.testPage = ((ui.testPage % pages) + pages) % pages;
 
-  hudText(hud, "TEST — click an item for 100 @ 1 gold", x + w / 2, ry, 8 * S, "#e08a7a", "center", true);
+  hudText(hud, "TEST — click an item for a stack @ 1 gold", x + w / 2, ry, 8 * S, "#e08a7a", "center", true);
   // page arrows
   const ay = ry - 1 * S;
   for (const [glyph, dir, ax] of [["<", -1, x + 10 * S], [">", 1, x + w - 22 * S]] as const) {

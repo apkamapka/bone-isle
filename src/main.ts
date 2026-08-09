@@ -796,12 +796,23 @@ function craftAt(r: Recipe): boolean {
  * Bag SLOTS still apply, because a full backpack has nowhere to put them and
  * silently eating the gold would be worse than saying so.
  */
+/**
+ * TEST ONLY — a gold buys one slot's worth of anything.
+ *
+ * "One slot's worth" rather than a flat 100, because the two halves of the
+ * catalog want different numbers. Wood, arrows and coal are things you hold a
+ * hundred of, and handing over one is useless for testing. A sword is a thing
+ * you hold ONE of: a hundred of them buries the backpack, the chest and the
+ * carry limit under a single click, which is exactly what happened before
+ * this read the stack size.
+ */
 function doTestGrant(kind: ItemKind): void {
   if (P.gold < 1) { flash("no gold", "#d96a5a"); return; }
-  const left = addItem(P.bag, kind, 100);
-  if (left === 100) { flash("bag full", "#d96a5a"); return; }
+  const want = Math.min(100, ITEMS[kind].stack);
+  const left = addItem(P.bag, kind, want);
+  if (left === want) { flash("bag full", "#d96a5a"); return; }
   P.gold -= 1;
-  flash(`TEST +${100 - left} ${ITEMS[kind].name}`, "#e08a7a");
+  flash(`TEST +${want - left} ${ITEMS[kind].name}`, "#e08a7a");
 }
 
 /** Best Forge standing on Home Isle: 0 none, 1..3 otherwise. */
