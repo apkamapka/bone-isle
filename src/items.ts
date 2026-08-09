@@ -26,7 +26,21 @@ export type ItemKind =
   // working exactly as before under a new name; saves are migrated on load.
   | "healCrystal" | "flameCrystal" | "recallCrystal" | "spearCrystal"
   // elemental crystals: 5 elements x 3 tiers x 2 roles, plus tier-I arrows
-  | "fireEmberShard" | "fireEmberBurst" | "fireFlameShard" | "fireFlameBurst" | "firePyreShard" | "firePyreBurst" | "iceFrostShard" | "iceFrostBurst" | "iceRimeShard" | "iceRimeBurst" | "iceGlacierShard" | "iceGlacierBurst" | "earthLoamShard" | "earthLoamBurst" | "earthStoneShard" | "earthStoneBurst" | "earthBedrockShard" | "earthBedrockBurst" | "stormSparkShard" | "stormSparkBurst" | "stormBoltShard" | "stormBoltBurst" | "stormTempestShard" | "stormTempestBurst" | "shadowGloomShard" | "shadowGloomBurst" | "shadowUmbraShard" | "shadowUmbraBurst" | "shadowEclipseShard" | "shadowEclipseBurst" | "fireArrow" | "iceArrow" | "earthArrow" | "stormArrow" | "shadowArrow"
+  | "fireEmberShard" | "fireEmberBurst" | "fireEmberNova" | "fireEmberWave" | "fireEmberArrow"
+  | "fireFlameShard" | "fireFlameBurst" | "fireFlameNova" | "fireFlameWave" | "fireFlameArrow"
+  | "firePyreShard" | "firePyreBurst" | "firePyreNova" | "firePyreWave" | "firePyreArrow"
+  | "iceFrostShard" | "iceFrostBurst" | "iceFrostNova" | "iceFrostWave" | "iceFrostArrow"
+  | "iceRimeShard" | "iceRimeBurst" | "iceRimeNova" | "iceRimeWave" | "iceRimeArrow"
+  | "iceGlacierShard" | "iceGlacierBurst" | "iceGlacierNova" | "iceGlacierWave" | "iceGlacierArrow"
+  | "earthLoamShard" | "earthLoamBurst" | "earthLoamNova" | "earthLoamWave" | "earthLoamArrow"
+  | "earthStoneShard" | "earthStoneBurst" | "earthStoneNova" | "earthStoneWave" | "earthStoneArrow"
+  | "earthBedrockShard" | "earthBedrockBurst" | "earthBedrockNova" | "earthBedrockWave" | "earthBedrockArrow"
+  | "stormSparkShard" | "stormSparkBurst" | "stormSparkNova" | "stormSparkWave" | "stormSparkArrow"
+  | "stormBoltShard" | "stormBoltBurst" | "stormBoltNova" | "stormBoltWave" | "stormBoltArrow"
+  | "stormTempestShard" | "stormTempestBurst" | "stormTempestNova" | "stormTempestWave" | "stormTempestArrow"
+  | "shadowGloomShard" | "shadowGloomBurst" | "shadowGloomNova" | "shadowGloomWave" | "shadowGloomArrow"
+  | "shadowUmbraShard" | "shadowUmbraBurst" | "shadowUmbraNova" | "shadowUmbraWave" | "shadowUmbraArrow"
+  | "shadowEclipseShard" | "shadowEclipseBurst" | "shadowEclipseNova" | "shadowEclipseWave" | "shadowEclipseArrow"
   /* ---- ATTUNEMENT STONES (Etap 25) -------------------------------------
    * One per element, and the only key that opens that element's lane in the
    * Alchemy Tower. They replace the Fire Ruby, which gated exactly one
@@ -203,39 +217,79 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   // ---- when thirty of them share a backpack.
 fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal: true },
   fireEmberBurst: { name: "Ember Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  fireEmberNova: { name: "Ember Nova", stack: 999, value: 12, weight: 2, crystal: true },
+  fireEmberWave: { name: "Ember Wave", stack: 999, value: 16, weight: 2, crystal: true },
+  fireEmberArrow: { name: "Ember Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "fire" },
   fireFlameShard: { name: "Flame Shard", stack: 999, value: 23, weight: 2, crystal: true },
   fireFlameBurst: { name: "Flame Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  fireFlameNova: { name: "Flame Nova", stack: 999, value: 30, weight: 2, crystal: true },
+  fireFlameWave: { name: "Flame Wave", stack: 999, value: 40, weight: 2, crystal: true },
+  fireFlameArrow: { name: "Flame Arrow", stack: 999, value: 10, weight: 1, ammo: { dmg: 20 }, element: "fire" },
   firePyreShard: { name: "Pyre Shard", stack: 999, value: 58, weight: 2, crystal: true },
   firePyreBurst: { name: "Pyre Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  firePyreNova: { name: "Pyre Nova", stack: 999, value: 76, weight: 2, crystal: true },
+  firePyreWave: { name: "Pyre Wave", stack: 999, value: 100, weight: 2, crystal: true },
+  firePyreArrow: { name: "Pyre Arrow", stack: 999, value: 25, weight: 1, ammo: { dmg: 42 }, element: "fire" },
   iceFrostShard: { name: "Frost Shard", stack: 999, value: 9, weight: 2, crystal: true },
   iceFrostBurst: { name: "Frost Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  iceFrostNova: { name: "Frost Nova", stack: 999, value: 12, weight: 2, crystal: true },
+  iceFrostWave: { name: "Frost Wave", stack: 999, value: 16, weight: 2, crystal: true },
+  iceFrostArrow: { name: "Frost Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "ice" },
   iceRimeShard: { name: "Rime Shard", stack: 999, value: 23, weight: 2, crystal: true },
   iceRimeBurst: { name: "Rime Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  iceRimeNova: { name: "Rime Nova", stack: 999, value: 30, weight: 2, crystal: true },
+  iceRimeWave: { name: "Rime Wave", stack: 999, value: 40, weight: 2, crystal: true },
+  iceRimeArrow: { name: "Rime Arrow", stack: 999, value: 10, weight: 1, ammo: { dmg: 20 }, element: "ice" },
   iceGlacierShard: { name: "Glacier Shard", stack: 999, value: 58, weight: 2, crystal: true },
   iceGlacierBurst: { name: "Glacier Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  iceGlacierNova: { name: "Glacier Nova", stack: 999, value: 76, weight: 2, crystal: true },
+  iceGlacierWave: { name: "Glacier Wave", stack: 999, value: 100, weight: 2, crystal: true },
+  iceGlacierArrow: { name: "Glacier Arrow", stack: 999, value: 25, weight: 1, ammo: { dmg: 42 }, element: "ice" },
   earthLoamShard: { name: "Loam Shard", stack: 999, value: 9, weight: 2, crystal: true },
   earthLoamBurst: { name: "Loam Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  earthLoamNova: { name: "Loam Nova", stack: 999, value: 12, weight: 2, crystal: true },
+  earthLoamWave: { name: "Loam Wave", stack: 999, value: 16, weight: 2, crystal: true },
+  earthLoamArrow: { name: "Loam Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "earth" },
   earthStoneShard: { name: "Stone Shard", stack: 999, value: 23, weight: 2, crystal: true },
   earthStoneBurst: { name: "Stone Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  earthStoneNova: { name: "Stone Nova", stack: 999, value: 30, weight: 2, crystal: true },
+  earthStoneWave: { name: "Stone Wave", stack: 999, value: 40, weight: 2, crystal: true },
+  earthStoneArrow: { name: "Stone Arrow", stack: 999, value: 10, weight: 1, ammo: { dmg: 20 }, element: "earth" },
   earthBedrockShard: { name: "Bedrock Shard", stack: 999, value: 58, weight: 2, crystal: true },
   earthBedrockBurst: { name: "Bedrock Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  earthBedrockNova: { name: "Bedrock Nova", stack: 999, value: 76, weight: 2, crystal: true },
+  earthBedrockWave: { name: "Bedrock Wave", stack: 999, value: 100, weight: 2, crystal: true },
+  earthBedrockArrow: { name: "Bedrock Arrow", stack: 999, value: 25, weight: 1, ammo: { dmg: 42 }, element: "earth" },
   stormSparkShard: { name: "Spark Shard", stack: 999, value: 9, weight: 2, crystal: true },
   stormSparkBurst: { name: "Spark Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  stormSparkNova: { name: "Spark Nova", stack: 999, value: 12, weight: 2, crystal: true },
+  stormSparkWave: { name: "Spark Wave", stack: 999, value: 16, weight: 2, crystal: true },
+  stormSparkArrow: { name: "Spark Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "storm" },
   stormBoltShard: { name: "Bolt Shard", stack: 999, value: 23, weight: 2, crystal: true },
   stormBoltBurst: { name: "Bolt Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  stormBoltNova: { name: "Bolt Nova", stack: 999, value: 30, weight: 2, crystal: true },
+  stormBoltWave: { name: "Bolt Wave", stack: 999, value: 40, weight: 2, crystal: true },
+  stormBoltArrow: { name: "Bolt Arrow", stack: 999, value: 10, weight: 1, ammo: { dmg: 20 }, element: "storm" },
   stormTempestShard: { name: "Tempest Shard", stack: 999, value: 58, weight: 2, crystal: true },
   stormTempestBurst: { name: "Tempest Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  stormTempestNova: { name: "Tempest Nova", stack: 999, value: 76, weight: 2, crystal: true },
+  stormTempestWave: { name: "Tempest Wave", stack: 999, value: 100, weight: 2, crystal: true },
+  stormTempestArrow: { name: "Tempest Arrow", stack: 999, value: 25, weight: 1, ammo: { dmg: 42 }, element: "storm" },
   shadowGloomShard: { name: "Gloom Shard", stack: 999, value: 9, weight: 2, crystal: true },
   shadowGloomBurst: { name: "Gloom Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  shadowGloomNova: { name: "Gloom Nova", stack: 999, value: 12, weight: 2, crystal: true },
+  shadowGloomWave: { name: "Gloom Wave", stack: 999, value: 16, weight: 2, crystal: true },
+  shadowGloomArrow: { name: "Gloom Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "shadow" },
   shadowUmbraShard: { name: "Umbra Shard", stack: 999, value: 23, weight: 2, crystal: true },
   shadowUmbraBurst: { name: "Umbra Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  shadowUmbraNova: { name: "Umbra Nova", stack: 999, value: 30, weight: 2, crystal: true },
+  shadowUmbraWave: { name: "Umbra Wave", stack: 999, value: 40, weight: 2, crystal: true },
+  shadowUmbraArrow: { name: "Umbra Arrow", stack: 999, value: 10, weight: 1, ammo: { dmg: 20 }, element: "shadow" },
   shadowEclipseShard: { name: "Eclipse Shard", stack: 999, value: 58, weight: 2, crystal: true },
   shadowEclipseBurst: { name: "Eclipse Burst", stack: 999, value: 90, weight: 2, crystal: true },
-  fireArrow: { name: "Ember Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "fire" },
-  iceArrow: { name: "Frost Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "ice" },
-  earthArrow: { name: "Loam Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "earth" },
-  stormArrow: { name: "Spark Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "storm" },
-  shadowArrow: { name: "Gloom Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "shadow" },
+  shadowEclipseNova: { name: "Eclipse Nova", stack: 999, value: 76, weight: 2, crystal: true },
+  shadowEclipseWave: { name: "Eclipse Wave", stack: 999, value: 100, weight: 2, crystal: true },
+  shadowEclipseArrow: { name: "Eclipse Arrow", stack: 999, value: 25, weight: 1, ammo: { dmg: 42 }, element: "shadow" },
   /* Attunement stones and the Essence carry value 0 on purpose. A shop that
    * buys them turns a quest reward into a lump of gold, and a lane you can
    * sell is a lane you can lose. They are keys, not loot. */

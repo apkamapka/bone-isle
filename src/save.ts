@@ -37,10 +37,10 @@ const KEY = "bone-isle-save-v2";
  * charges into fifteen lane keys and hand the player the whole fire tree.
  * That is why this bump exists even though no field changed shape.
  */
-const SAVE_V = 4;
+const SAVE_V = 5;
 
 interface SaveData {
-  v: 2 | 3 | 4;
+  v: 2 | 3 | 4 | 5;
   seed: number;
   current: WorldKey;
   player: {
@@ -141,8 +141,9 @@ export function loadGame(): Game | null {
   let data: SaveData;
   try {
     data = JSON.parse(raw) as SaveData;
-    if (data.v !== 2 && data.v !== 3 && data.v !== SAVE_V) return null;
-    if (data.v < 4) data = migrateFireCrystal(data);
+    if (data.v !== 2 && data.v !== 3 && data.v !== 4 && data.v !== SAVE_V) return null;
+    if (data.v < 4) data = renameItems(data, { fireCrystal: "flameCrystal" });
+    if (data.v < 5) data = renameItems(data, ARROW_TIER_I);
   } catch {
     return null;
   }
@@ -305,8 +306,12 @@ export function deleteSave(): void {
 }
 
 /**
- * v3 → v4: every stored "fireCrystal" means the OLD charge crystal, which is
- * now called "flameCrystal".
+ * Item ids that changed hands or gained a tier.
+ *
+ * v3 → v4: "fireCrystal" was the old charge crystal, now called
+ * "flameCrystal" — the id went to the attunement stone.
+ * v4 → v5: the five untiered elemental arrows became the tier-I arrows of
+ * their line when every form gained three tiers.
  *
  * This walks the whole save rather than visiting bag, equipment, chests,
  * ground stacks, corpse loot and action slots one by one. That is on purpose:
@@ -316,9 +321,14 @@ export function deleteSave(): void {
  * cannot hit a false positive either — no research id, world key, structure
  * key or quest id is spelled "fireCrystal".
  */
-function migrateFireCrystal(data: SaveData): SaveData {
+const ARROW_TIER_I: Readonly<Record<string, string>> = {
+  fireArrow: "fireEmberArrow", iceArrow: "iceFrostArrow", earthArrow: "earthLoamArrow",
+  stormArrow: "stormSparkArrow", shadowArrow: "shadowGloomArrow",
+};
+
+function renameItems(data: SaveData, map: Readonly<Record<string, string>>): SaveData {
   const walk = (v: unknown): unknown => {
-    if (v === "fireCrystal") return "flameCrystal";
+    if (typeof v === "string" && v in map) return map[v];
     if (Array.isArray(v)) return v.map(walk);
     if (v && typeof v === "object") {
       const out: Record<string, unknown> = {};

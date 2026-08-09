@@ -1204,7 +1204,7 @@ function attuneIcon(element: string): HTMLCanvasElement {
   ], { r: c, R: b, c: a });
 }
 
-function elementalIcon(element: string, tier: number, role: "Shard" | "Burst"): HTMLCanvasElement {
+function elementalIcon(element: string, tier: number, role: "Shard" | "Burst" | "Nova" | "Wave"): HTMLCanvasElement {
   const [a, b, c] = ELEMENT_RAMP[element];
   const map = role === "Shard" ? SHARD_BY_TIER[tier] : BURST_BY_TIER[tier];
   return bake(map, { a, b, c });
@@ -1255,39 +1255,79 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   magicEssence: SPR.magicEssence,
   fireEmberShard: elementalIcon("fire", 0, "Shard"),
   fireEmberBurst: elementalIcon("fire", 0, "Burst"),
+  fireEmberNova: elementalIcon("fire", 0, "Nova"),
+  fireEmberWave: elementalIcon("fire", 0, "Wave"),
+  fireEmberArrow: elementalArrow("fire", 0),
   fireFlameShard: elementalIcon("fire", 1, "Shard"),
   fireFlameBurst: elementalIcon("fire", 1, "Burst"),
+  fireFlameNova: elementalIcon("fire", 1, "Nova"),
+  fireFlameWave: elementalIcon("fire", 1, "Wave"),
+  fireFlameArrow: elementalArrow("fire", 1),
   firePyreShard: elementalIcon("fire", 2, "Shard"),
   firePyreBurst: elementalIcon("fire", 2, "Burst"),
-  fireArrow: elementalArrow("fire"),
+  firePyreNova: elementalIcon("fire", 2, "Nova"),
+  firePyreWave: elementalIcon("fire", 2, "Wave"),
+  firePyreArrow: elementalArrow("fire", 2),
   iceFrostShard: elementalIcon("ice", 0, "Shard"),
   iceFrostBurst: elementalIcon("ice", 0, "Burst"),
+  iceFrostNova: elementalIcon("ice", 0, "Nova"),
+  iceFrostWave: elementalIcon("ice", 0, "Wave"),
+  iceFrostArrow: elementalArrow("ice", 0),
   iceRimeShard: elementalIcon("ice", 1, "Shard"),
   iceRimeBurst: elementalIcon("ice", 1, "Burst"),
+  iceRimeNova: elementalIcon("ice", 1, "Nova"),
+  iceRimeWave: elementalIcon("ice", 1, "Wave"),
+  iceRimeArrow: elementalArrow("ice", 1),
   iceGlacierShard: elementalIcon("ice", 2, "Shard"),
   iceGlacierBurst: elementalIcon("ice", 2, "Burst"),
-  iceArrow: elementalArrow("ice"),
+  iceGlacierNova: elementalIcon("ice", 2, "Nova"),
+  iceGlacierWave: elementalIcon("ice", 2, "Wave"),
+  iceGlacierArrow: elementalArrow("ice", 2),
   earthLoamShard: elementalIcon("earth", 0, "Shard"),
   earthLoamBurst: elementalIcon("earth", 0, "Burst"),
+  earthLoamNova: elementalIcon("earth", 0, "Nova"),
+  earthLoamWave: elementalIcon("earth", 0, "Wave"),
+  earthLoamArrow: elementalArrow("earth", 0),
   earthStoneShard: elementalIcon("earth", 1, "Shard"),
   earthStoneBurst: elementalIcon("earth", 1, "Burst"),
+  earthStoneNova: elementalIcon("earth", 1, "Nova"),
+  earthStoneWave: elementalIcon("earth", 1, "Wave"),
+  earthStoneArrow: elementalArrow("earth", 1),
   earthBedrockShard: elementalIcon("earth", 2, "Shard"),
   earthBedrockBurst: elementalIcon("earth", 2, "Burst"),
-  earthArrow: elementalArrow("earth"),
+  earthBedrockNova: elementalIcon("earth", 2, "Nova"),
+  earthBedrockWave: elementalIcon("earth", 2, "Wave"),
+  earthBedrockArrow: elementalArrow("earth", 2),
   stormSparkShard: elementalIcon("storm", 0, "Shard"),
   stormSparkBurst: elementalIcon("storm", 0, "Burst"),
+  stormSparkNova: elementalIcon("storm", 0, "Nova"),
+  stormSparkWave: elementalIcon("storm", 0, "Wave"),
+  stormSparkArrow: elementalArrow("storm", 0),
   stormBoltShard: elementalIcon("storm", 1, "Shard"),
   stormBoltBurst: elementalIcon("storm", 1, "Burst"),
+  stormBoltNova: elementalIcon("storm", 1, "Nova"),
+  stormBoltWave: elementalIcon("storm", 1, "Wave"),
+  stormBoltArrow: elementalArrow("storm", 1),
   stormTempestShard: elementalIcon("storm", 2, "Shard"),
   stormTempestBurst: elementalIcon("storm", 2, "Burst"),
-  stormArrow: elementalArrow("storm"),
+  stormTempestNova: elementalIcon("storm", 2, "Nova"),
+  stormTempestWave: elementalIcon("storm", 2, "Wave"),
+  stormTempestArrow: elementalArrow("storm", 2),
   shadowGloomShard: elementalIcon("shadow", 0, "Shard"),
   shadowGloomBurst: elementalIcon("shadow", 0, "Burst"),
+  shadowGloomNova: elementalIcon("shadow", 0, "Nova"),
+  shadowGloomWave: elementalIcon("shadow", 0, "Wave"),
+  shadowGloomArrow: elementalArrow("shadow", 0),
   shadowUmbraShard: elementalIcon("shadow", 1, "Shard"),
   shadowUmbraBurst: elementalIcon("shadow", 1, "Burst"),
+  shadowUmbraNova: elementalIcon("shadow", 1, "Nova"),
+  shadowUmbraWave: elementalIcon("shadow", 1, "Wave"),
+  shadowUmbraArrow: elementalArrow("shadow", 1),
   shadowEclipseShard: elementalIcon("shadow", 2, "Shard"),
   shadowEclipseBurst: elementalIcon("shadow", 2, "Burst"),
-  shadowArrow: elementalArrow("shadow"),
+  shadowEclipseNova: elementalIcon("shadow", 2, "Nova"),
+  shadowEclipseWave: elementalIcon("shadow", 2, "Wave"),
+  shadowEclipseArrow: elementalArrow("shadow", 2),
   bow: SPR.bow, longbow: SPR.longbow, arrow: SPR.arrow, boneArrow: SPR.boneArrow,
   trainingArrow: SPR.trainingArrow,
   backpack: SPR.pack, booster: SPR.boosterPotion,
@@ -1312,7 +1352,8 @@ const ACTORS = [
   for (const k of ACTORS) spr[k] = upscale(spriteSource(spr[k]), ACTOR_SCALE);
 }
 /** Elemental arrows: a plain shaft with the element burning on the head. */
-function elementalArrow(element: string): HTMLCanvasElement {
+function elementalArrow(element: string, tier = 0): HTMLCanvasElement {
+  void tier; // all three tiers share one baked arrow until the art lands
   const [a, b] = ELEMENT_RAMP[element];
   return bake(["....ab", "...abW", "..aWW.", ".WW...", "WW...."], { a, b, W: "#bdb59c" });
 }

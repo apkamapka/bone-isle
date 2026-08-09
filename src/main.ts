@@ -27,7 +27,7 @@ import {
   type HudGroup,
 } from "./systems/hudLayout.ts";
 import { researchById, isResearched, markResearched, towerTierOk, towerTierFor,
-  ATTUNEMENT, isAttuned, markAttuned, attunementOk } from "./systems/tower.ts";
+  ATTUNEMENT, isAttuned, markAttuned, attunementOk, offerById } from "./systems/tower.ts";
 import { ELEMENT_LABEL, type Element } from "./systems/elements.ts";
 import { loadPanelPrefs } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
@@ -382,6 +382,7 @@ const act: PanelActions = {
     if (craftAt(r)) beep(360, 0.14, "square", 0.05);
   },
   attune: (el: Element) => { doAttune(el); },
+  buyOffer: (id: string) => { doBuyOffer(id); },
   research: (id: string) => { doResearch(id); },
   buyCrystal: (id: string) => { doBuyCrystal(id); },
   takeLoot: (c: Corpse, index: number) => { takeOne(c, index); },
@@ -896,6 +897,24 @@ function doAttune(el: Element): void {
   markAttuned(el);
   flash(`attuned to ${ELEMENT_LABEL[el]}`, "#c9a6ff");
   beep(600, 0.22, "square", 0.06, 140);
+}
+
+/**
+ * Buy a batch off the elemental shelf. No research step: the stone opened the
+ * element, the tower sets the price, and gold does the rest.
+ */
+function doBuyOffer(id: string): void {
+  const o = offerById(id);
+  if (!o || !isAttuned(o.element)) return;
+  if (!canAfford(P.bag, o.cost, homeChests(game))) { flash("need materials"); return; }
+  if (P.gold < o.gold) { flash("need gold", "#d96a5a"); return; }
+  if (!canCarry(P, o.crystal, o.buyN)) { flash("too heavy"); return; }
+  const moved = o.buyN - addItem(P.bag, o.crystal, o.buyN);
+  if (moved < o.buyN) { if (moved > 0) removeItem(P.bag, o.crystal, moved); flash("bag full"); return; }
+  payCost(P.bag, o.cost, homeChests(game));
+  P.gold -= o.gold;
+  flash(`+${o.buyN} ${ITEMS[o.crystal].name}`, "#b9e07f");
+  beep(520, 0.18, "square", 0.05, 90);
 }
 
 function doResearch(id: string): void {

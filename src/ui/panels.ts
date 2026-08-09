@@ -5,8 +5,8 @@ import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax }
 import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import { MIN_HIT_RATIO } from "../config.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost } from "../systems/building.ts";
-import { RESEARCH, isResearched, towerTierOk, towerTierFor,
-  ATTUNEMENT, isAttuned, attunementOk } from "../systems/tower.ts";
+import { RESEARCH, isResearched, towerTierOk,
+  ATTUNEMENT, isAttuned, offersFor } from "../systems/tower.ts";
 import { ELEMENT_LABEL, type Element } from "../systems/elements.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
 import type { TaskReward } from "../systems/tasks.ts";
@@ -105,6 +105,7 @@ export interface PanelActions {
   upgrade: (s: Structure) => void;
   attune: (el: Element) => void;
   research: (id: string) => void;
+  buyOffer: (id: string) => void;
   buyCrystal: (id: string) => void;
   takeLoot: (c: Corpse, index: number) => void;
   takeGold: (c: Corpse) => void;
@@ -1023,11 +1024,12 @@ const TOWER_TABS = [
  * (Life, Fire, Recall, Fire Spear). They are not part of the ladder and are
  * never hidden — there is no better version of Recall waiting at tier III.
  */
-export function towerRows(tab: string, towerTier: number): typeof RESEARCH[number][] {
-  if (tab === "other") return RESEARCH.filter((r) => r.element === undefined);
-  const want = Math.max(1, Math.min(3, towerTier));
-  return RESEARCH.filter((r) =>
-    r.element === tab && (towerTierFor(r) === want || isResearched(r.id)));
+/**
+ * The four originals only. The elemental tabs are a shop rather than a
+ * research tree now, so they come from offersFor() instead.
+ */
+export function towerRows(tab: string, _towerTier: number): typeof RESEARCH[number][] {
+  return tab === "other" ? RESEARCH.filter((r) => r.element === undefined) : [];
 }
 
 /**
@@ -1044,14 +1046,17 @@ function drawTower(p: PanelInput): void {
   const { hud, player, game, ui } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
   const tt = Math.max(1, bestTier(game.worlds.home, "tower"));
-  const rows = towerRows(ui.towerTab, tt);
-  // The attunement row is drawn ABOVE the tier-filtered list and only on an
-  // element tab. It is never filtered by tower tier — that is the whole point.
   const el = ui.towerTab === "other" ? null : (ui.towerTab as Element);
+  const rows = towerRows(ui.towerTab, tt);
+  const offers = el ? offersFor(el, tt) : [];
+  // Before the stone is spent the shelf is EMPTY — not a list of locked rows.
+  // Naming what you cannot have teaches less than an empty shelf and makes
+  // choosing an element feel like a checklist instead of a decision.
   const showAttune = el !== null && !isAttuned(el);
   const w = 300 * S;
   const rowH = 34 * S;
-  const h = 20 * S + 19 * S + (showAttune ? rowH : 0) + Math.max(1, rows.length) * rowH + 22 * S;
+  const bodyRows = Math.max(1, rows.length + offers.length);
+  const h = 20 * S + 19 * S + (showAttune ? rowH : 0) + bodyRows * rowH + 22 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   if (!goldPanel(p, x, y, w, h, `ALCHEMY TOWER ${"I".repeat(tt)}`)) return;
@@ -1060,19 +1065,23 @@ function drawTower(p: PanelInput): void {
     TOWER_TABS.map((t) => ({ id: t.id, label: t.label, on: true })),
     ui.towerTab, (id) => { ui.towerTab = id; });
 
-  if (showAttune && el) {
-    const key = ATTUNEMENT[el];
-    const held = canAfford(player.bag, { [key]: 1 }, homeChests(game));
-    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && held) {
+  const row = (fill: boolean): void => {
+    if (fill) {
       ctx.fillStyle = "rgba(202,162,58,.15)";
       ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
     }
+  };
+
+  if (showAttune && el) {
+    const key = ATTUNEMENT[el];
+    const held = canAfford(player.bag, { [key]: 1 }, homeChests(game));
+    row(hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && held);
     const spr = itemSprite(key);
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
     hudText(hud, `Attune ${ELEMENT_LABEL[el]}`, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true);
     hudText(hud, "SEALED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
     hudText(hud, `Spend:  1 ${ITEMS[key].name}`, x + 34 * S, ry + 19 * S, 7 * S, held ? "#c9a6ff" : "#d96a5a");
-    hudText(hud, "Opens every project in this lane, at every tier.",
+    hudText(hud, "Opens this element for good. Choose carefully — stones are rare.",
       x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
     if (held) {
       const ryy = ry;
@@ -1081,35 +1090,47 @@ function drawTower(p: PanelInput): void {
     }
     ry += rowH;
   }
-  if (!rows.length) {
+
+  if (!rows.length && !offers.length && !showAttune) {
     hudText(hud, "Nothing at this tier yet.", x + w / 2, ry + 10 * S, 8 * S, "rgba(220,214,190,.55)", "center");
     ry += rowH;
   }
+
+  // --- the elemental shelf: five crystals, bought outright ---
+  for (const o of offers) {
+    const affordable = canAfford(player.bag, o.cost, homeChests(game)) && player.gold >= o.gold;
+    row(hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && affordable);
+    const spr = itemSprite(o.crystal);
+    icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
+    hudText(hud, ITEMS[o.crystal].name, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true);
+    hudText(hud, `owned: ${bagCount(player.bag, o.crystal)}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#e8dcc0", "right");
+    hudText(hud, `Buy x${o.buyN}:  ${priceText(o.cost, o.gold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a");
+    hudText(hud, o.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
+    if (affordable) {
+      const id = o.id;
+      const ryy = ry;
+      p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.buyOffer(id) });
+    }
+    ry += rowH;
+  }
+
+  // --- the four originals, still researched with materials ---
   for (const r of rows) {
     const researched = isResearched(r.id);
     const cost = researched ? r.buyCost : r.researchCost;
     const gold = researched ? r.buyGold : r.researchGold;
     const affordable = canAfford(player.bag, cost, homeChests(game)) && player.gold >= (gold ?? 0);
-    const tierOk = researched || towerTierOk(r, tt);
-    const clickable = affordable && tierOk && (researched || attunementOk(r));
-    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable) {
-      ctx.fillStyle = "rgba(202,162,58,.15)";
-      ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
-    }
+    const clickable = affordable && (researched || towerTierOk(r, tt));
+    row(hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable);
     const spr = itemSprite(r.crystal);
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
-    const owned = bagCount(player.bag, r.crystal);
     hudText(hud, r.name, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true);
     if (researched) {
-      hudText(hud, `owned: ${owned}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#e8dcc0", "right");
+      hudText(hud, `owned: ${bagCount(player.bag, r.crystal)}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#e8dcc0", "right");
       hudText(hud, `Buy x${r.buyN}:  ${priceText(r.buyCost, r.buyGold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a");
     } else {
-      const sealed = !attunementOk(r);
-      hudText(hud, sealed ? "SEALED" : "LOCKED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
-      const line = sealed
-        ? "Attune this element first"
-        : `Research:  ${priceText(r.researchCost, r.researchGold)}`;
-      hudText(hud, line, x + 34 * S, ry + 19 * S, 7 * S, sealed ? "#c98a5a" : (affordable ? "#c9a6ff" : "#d96a5a"));
+      hudText(hud, "LOCKED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
+      hudText(hud, `Research:  ${priceText(r.researchCost, r.researchGold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#c9a6ff" : "#d96a5a");
     }
     hudText(hud, r.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
     if (clickable) {
@@ -1120,9 +1141,12 @@ function drawTower(p: PanelInput): void {
     }
     ry += rowH;
   }
+
   const foot = ui.towerTab === "other"
     ? "The four originals — no tiers, never hidden"
-    : `Showing tier ${tt} · upgrade the tower to reach the next one`;
+    : showAttune
+      ? "Sealed. An attunement stone opens this element."
+      : `Showing tier ${tt} · upgrade the tower for the next five`;
   hudText(hud, foot, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 

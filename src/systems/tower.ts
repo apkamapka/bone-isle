@@ -188,492 +188,106 @@ export const RESEARCH: readonly Research[] = [
     buyCost: { bones: 8, stone: 6 },
     buyN: 4,
   },
-  // ---- the elemental line: five lanes, three tiers, two roles, plus the
-  // ---- tier-I arrowheads. Each tier requires the one below it in the SAME
-  // ---- lane and role, so depth is bought by commitment rather than by gold.
-  {
-    id: "fire1shard",
-    name: "Ember Shards",
-    desc: "Flame that armour cannot turn. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 400,
-    crystal: "fireEmberShard",
-    buyCost: {},
-    buyGold: 120,
-    buyN: 10,
-    tier: 0,
-    element: "fire",
-  },
-  {
-    id: "fire1burst",
-    name: "Ember Bursts",
-    desc: "Flame that armour cannot turn. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 500,
-    crystal: "fireEmberBurst",
-    buyCost: {},
-    buyGold: 150,
-    buyN: 10,
-    tier: 0,
-    element: "fire",
-  },
-  {
-    id: "fire2shard",
-    name: "Flame Shards",
-    desc: "Flame that armour cannot turn. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 1600,
-    crystal: "fireFlameShard",
-    buyCost: {},
-    buyGold: 400,
-    buyN: 8,
-    tier: 1,
-    element: "fire",
-    // was gated behind fire1shard
-  },
-  {
-    id: "fire2burst",
-    name: "Flame Bursts",
-    desc: "Flame that armour cannot turn. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 2000,
-    crystal: "fireFlameBurst",
-    buyCost: {},
-    buyGold: 500,
-    buyN: 8,
-    tier: 1,
-    element: "fire",
-    // was gated behind fire1burst
-  },
-  {
-    id: "fire3shard",
-    name: "Pyre Shards",
-    desc: "Flame that armour cannot turn. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 6000,
-    crystal: "firePyreShard",
-    buyCost: {},
-    buyGold: 1200,
-    buyN: 6,
-    tier: 2,
-    element: "fire",
-    // was gated behind fire2shard
-  },
-  {
-    id: "fire3burst",
-    name: "Pyre Bursts",
-    desc: "Flame that armour cannot turn. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 7000,
-    crystal: "firePyreBurst",
-    buyCost: { magicEssence: 1 },
-    buyGold: 1500,
-    buyN: 6,
-    tier: 2,
-    element: "fire",
-    // was gated behind fire2burst
-  },
-  {
-    id: "firearrow",
-    name: "Ember Arrows",
-    desc: "Arrowheads that carry the fire. They meet resistance, never armour.",
-    researchCost: {},
-    researchGold: 250,
-    crystal: "fireArrow",
-    buyCost: {},
-    buyGold: 60,
-    buyN: 25,
-    tier: 0,
-    element: "fire",
-    // was gated behind fire1shard
-  },
-  {
-    id: "ice1shard",
-    name: "Frost Shards",
-    desc: "Cold that bites through plate. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 400,
-    crystal: "iceFrostShard",
-    buyCost: {},
-    buyGold: 120,
-    buyN: 10,
-    tier: 0,
-    element: "ice",
-  },
-  {
-    id: "ice1burst",
-    name: "Frost Bursts",
-    desc: "Cold that bites through plate. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 500,
-    crystal: "iceFrostBurst",
-    buyCost: {},
-    buyGold: 150,
-    buyN: 10,
-    tier: 0,
-    element: "ice",
-  },
-  {
-    id: "ice2shard",
-    name: "Rime Shards",
-    desc: "Cold that bites through plate. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 1600,
-    crystal: "iceRimeShard",
-    buyCost: {},
-    buyGold: 400,
-    buyN: 8,
-    tier: 1,
-    element: "ice",
-    // was gated behind ice1shard
-  },
-  {
-    id: "ice2burst",
-    name: "Rime Bursts",
-    desc: "Cold that bites through plate. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 2000,
-    crystal: "iceRimeBurst",
-    buyCost: {},
-    buyGold: 500,
-    buyN: 8,
-    tier: 1,
-    element: "ice",
-    // was gated behind ice1burst
-  },
-  {
-    id: "ice3shard",
-    name: "Glacier Shards",
-    desc: "Cold that bites through plate. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 6000,
-    crystal: "iceGlacierShard",
-    buyCost: {},
-    buyGold: 1200,
-    buyN: 6,
-    tier: 2,
-    element: "ice",
-    // was gated behind ice2shard
-  },
-  {
-    id: "ice3burst",
-    name: "Glacier Bursts",
-    desc: "Cold that bites through plate. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 7000,
-    crystal: "iceGlacierBurst",
-    buyCost: { magicEssence: 1 },
-    buyGold: 1500,
-    buyN: 6,
-    tier: 2,
-    element: "ice",
-    // was gated behind ice2burst
-  },
-  {
-    id: "icearrow",
-    name: "Frost Arrows",
-    desc: "Arrowheads that carry the ice. They meet resistance, never armour.",
-    researchCost: {},
-    researchGold: 250,
-    crystal: "iceArrow",
-    buyCost: {},
-    buyGold: 60,
-    buyN: 25,
-    tier: 0,
-    element: "ice",
-    // was gated behind ice1shard
-  },
-  {
-    id: "earth1shard",
-    name: "Loam Shards",
-    desc: "Weight and grit, heedless of steel. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 400,
-    crystal: "earthLoamShard",
-    buyCost: {},
-    buyGold: 120,
-    buyN: 10,
-    tier: 0,
-    element: "earth",
-  },
-  {
-    id: "earth1burst",
-    name: "Loam Bursts",
-    desc: "Weight and grit, heedless of steel. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 500,
-    crystal: "earthLoamBurst",
-    buyCost: {},
-    buyGold: 150,
-    buyN: 10,
-    tier: 0,
-    element: "earth",
-  },
-  {
-    id: "earth2shard",
-    name: "Stone Shards",
-    desc: "Weight and grit, heedless of steel. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 1600,
-    crystal: "earthStoneShard",
-    buyCost: {},
-    buyGold: 400,
-    buyN: 8,
-    tier: 1,
-    element: "earth",
-    // was gated behind earth1shard
-  },
-  {
-    id: "earth2burst",
-    name: "Stone Bursts",
-    desc: "Weight and grit, heedless of steel. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 2000,
-    crystal: "earthStoneBurst",
-    buyCost: {},
-    buyGold: 500,
-    buyN: 8,
-    tier: 1,
-    element: "earth",
-    // was gated behind earth1burst
-  },
-  {
-    id: "earth3shard",
-    name: "Bedrock Shards",
-    desc: "Weight and grit, heedless of steel. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 6000,
-    crystal: "earthBedrockShard",
-    buyCost: {},
-    buyGold: 1200,
-    buyN: 6,
-    tier: 2,
-    element: "earth",
-    // was gated behind earth2shard
-  },
-  {
-    id: "earth3burst",
-    name: "Bedrock Bursts",
-    desc: "Weight and grit, heedless of steel. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 7000,
-    crystal: "earthBedrockBurst",
-    buyCost: { magicEssence: 1 },
-    buyGold: 1500,
-    buyN: 6,
-    tier: 2,
-    element: "earth",
-    // was gated behind earth2burst
-  },
-  {
-    id: "eartharrow",
-    name: "Loam Arrows",
-    desc: "Arrowheads that carry the earth. They meet resistance, never armour.",
-    researchCost: {},
-    researchGold: 250,
-    crystal: "earthArrow",
-    buyCost: {},
-    buyGold: 60,
-    buyN: 25,
-    tier: 0,
-    element: "earth",
-    // was gated behind earth1shard
-  },
-  {
-    id: "storm1shard",
-    name: "Spark Shards",
-    desc: "A charge that finds its way in. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 400,
-    crystal: "stormSparkShard",
-    buyCost: {},
-    buyGold: 120,
-    buyN: 10,
-    tier: 0,
-    element: "storm",
-  },
-  {
-    id: "storm1burst",
-    name: "Spark Bursts",
-    desc: "A charge that finds its way in. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 500,
-    crystal: "stormSparkBurst",
-    buyCost: {},
-    buyGold: 150,
-    buyN: 10,
-    tier: 0,
-    element: "storm",
-  },
-  {
-    id: "storm2shard",
-    name: "Bolt Shards",
-    desc: "A charge that finds its way in. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 1600,
-    crystal: "stormBoltShard",
-    buyCost: {},
-    buyGold: 400,
-    buyN: 8,
-    tier: 1,
-    element: "storm",
-    // was gated behind storm1shard
-  },
-  {
-    id: "storm2burst",
-    name: "Bolt Bursts",
-    desc: "A charge that finds its way in. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 2000,
-    crystal: "stormBoltBurst",
-    buyCost: {},
-    buyGold: 500,
-    buyN: 8,
-    tier: 1,
-    element: "storm",
-    // was gated behind storm1burst
-  },
-  {
-    id: "storm3shard",
-    name: "Tempest Shards",
-    desc: "A charge that finds its way in. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 6000,
-    crystal: "stormTempestShard",
-    buyCost: {},
-    buyGold: 1200,
-    buyN: 6,
-    tier: 2,
-    element: "storm",
-    // was gated behind storm2shard
-  },
-  {
-    id: "storm3burst",
-    name: "Tempest Bursts",
-    desc: "A charge that finds its way in. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 7000,
-    crystal: "stormTempestBurst",
-    buyCost: { magicEssence: 1 },
-    buyGold: 1500,
-    buyN: 6,
-    tier: 2,
-    element: "storm",
-    // was gated behind storm2burst
-  },
-  {
-    id: "stormarrow",
-    name: "Spark Arrows",
-    desc: "Arrowheads that carry the storm. They meet resistance, never armour.",
-    researchCost: {},
-    researchGold: 250,
-    crystal: "stormArrow",
-    buyCost: {},
-    buyGold: 60,
-    buyN: 25,
-    tier: 0,
-    element: "storm",
-    // was gated behind storm1shard
-  },
-  {
-    id: "shadow1shard",
-    name: "Gloom Shards",
-    desc: "Cold light that unmakes the undying. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 400,
-    crystal: "shadowGloomShard",
-    buyCost: {},
-    buyGold: 120,
-    buyN: 10,
-    tier: 0,
-    element: "shadow",
-  },
-  {
-    id: "shadow1burst",
-    name: "Gloom Bursts",
-    desc: "Cold light that unmakes the undying. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 500,
-    crystal: "shadowGloomBurst",
-    buyCost: {},
-    buyGold: 150,
-    buyN: 10,
-    tier: 0,
-    element: "shadow",
-  },
-  {
-    id: "shadow2shard",
-    name: "Umbra Shards",
-    desc: "Cold light that unmakes the undying. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 1600,
-    crystal: "shadowUmbraShard",
-    buyCost: {},
-    buyGold: 400,
-    buyN: 8,
-    tier: 1,
-    element: "shadow",
-    // was gated behind shadow1shard
-  },
-  {
-    id: "shadow2burst",
-    name: "Umbra Bursts",
-    desc: "Cold light that unmakes the undying. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 2000,
-    crystal: "shadowUmbraBurst",
-    buyCost: {},
-    buyGold: 500,
-    buyN: 8,
-    tier: 1,
-    element: "shadow",
-    // was gated behind shadow1burst
-  },
-  {
-    id: "shadow3shard",
-    name: "Eclipse Shards",
-    desc: "Cold light that unmakes the undying. Shards put it all into one target.",
-    researchCost: {},
-    researchGold: 6000,
-    crystal: "shadowEclipseShard",
-    buyCost: {},
-    buyGold: 1200,
-    buyN: 6,
-    tier: 2,
-    element: "shadow",
-    // was gated behind shadow2shard
-  },
-  {
-    id: "shadow3burst",
-    name: "Eclipse Bursts",
-    desc: "Cold light that unmakes the undying. Bursts split the blast across a pack.",
-    researchCost: {},
-    researchGold: 7000,
-    crystal: "shadowEclipseBurst",
-    buyCost: { magicEssence: 1 },
-    buyGold: 1500,
-    buyN: 6,
-    tier: 2,
-    element: "shadow",
-    // was gated behind shadow2burst
-  },
-  {
-    id: "shadowarrow",
-    name: "Gloom Arrows",
-    desc: "Arrowheads that carry the shadow. They meet resistance, never armour.",
-    researchCost: {},
-    researchGold: 250,
-    crystal: "shadowArrow",
-    buyCost: {},
-    buyGold: 60,
-    buyN: 25,
-    tier: 0,
-    element: "shadow",
-    // was gated behind shadow1shard
-  },
 ];
+/* ------------------------------------------------------------------ *
+ *  THE ELEMENTAL SHELF
+ *
+ *  The elemental line has no research step. An element is either attuned or
+ *  it is not, and once it is, the tower simply SELLS you its crystals for
+ *  gold. Nothing is listed before the stone is spent — a locked row that
+ *  spells out what you cannot have yet is a worse teacher than an empty
+ *  shelf, and the stones are meant to feel like picking a school of magic
+ *  rather than ticking off a checklist.
+ *
+ *  Which five appear is decided by the tower: an Alchemy Tower II shows the
+ *  five second-tier crystals and nothing else. Upgrading the building is the
+ *  only power curve here, which is why the tiers are named rather than
+ *  numbered — you buy Rime Waves, not "Wave (2)".
+ * ------------------------------------------------------------------ */
 
-/** Completed research ids. Mutated in place; persisted via save/load. */
+export interface Offer {
+  id: string;
+  element: Element;
+  tier: Tier;
+  /** The item bought. Its name carries the tier, so no label is needed. */
+  crystal: ItemKind;
+  desc: string;
+  gold: number;
+  /** Materials, on top of the gold. Empty for everything but the top shelf. */
+  cost: Cost;
+  buyN: number;
+}
+
+const FORMS = ["Shard", "Burst", "Nova", "Wave", "Arrow"] as const;
+
+const FORM_DESC: Readonly<Record<(typeof FORMS)[number], string>> = {
+  Shard: "One creature, longest reach.",
+  Burst: "Thrown. Goes off where it lands and catches the pack around it.",
+  Nova: "Every tile touching you at once. No aiming, and no safe distance.",
+  Wave: "Eleven tiles the way you are facing, widening as it goes.",
+  Arrow: "Arrowheads that carry the element. They meet resistance, never armour.",
+};
+
+const TIER_NAMES: Readonly<Record<Element, readonly [string, string, string]>> = {
+  fire: ["Ember", "Flame", "Pyre"],
+  ice: ["Frost", "Rime", "Glacier"],
+  earth: ["Loam", "Stone", "Bedrock"],
+  storm: ["Spark", "Bolt", "Tempest"],
+  shadow: ["Gloom", "Umbra", "Eclipse"],
+};
+
+/** Gold per batch, by tier and form. Arrows are cheap and bought by the score. */
+const PRICE: Readonly<Record<(typeof FORMS)[number], readonly [number, number, number]>> = {
+  Shard: [120, 400, 1200],
+  Burst: [150, 500, 1500],
+  Nova: [140, 460, 1400],
+  Wave: [170, 560, 1700],
+  Arrow: [60, 150, 400],
+};
+
+const BATCH: Readonly<Record<(typeof FORMS)[number], readonly [number, number, number]>> = {
+  Shard: [10, 8, 6], Burst: [10, 8, 6], Nova: [10, 8, 6], Wave: [10, 8, 6], Arrow: [25, 25, 25],
+};
+
+export const OFFERS: readonly Offer[] = (() => {
+  const out: Offer[] = [];
+  for (const el of ELEMENTS) {
+    for (let t = 0 as Tier; t < 3; t = (t + 1) as Tier) {
+      const n = TIER_NAMES[el][t];
+      for (const f of FORMS) {
+        out.push({
+          id: `${el}${n}${f}`,
+          element: el,
+          tier: t,
+          crystal: `${el}${n}${f}` as ItemKind,
+          desc: FORM_DESC[f],
+          gold: PRICE[f][t],
+          // The Essence gates the single most destructive shape of each
+          // element, and nothing else. One dragon-only material sitting on
+          // one crystal is a landmark; spread across five it is a tax.
+          cost: t === 2 && f === "Wave" ? { magicEssence: 1 } : {},
+          buyN: BATCH[f][t],
+        });
+      }
+    }
+  }
+  return out;
+})();
+
+export function offerById(id: string): Offer | undefined {
+  return OFFERS.find((o) => o.id === id);
+}
+
+/**
+ * What the shelf shows: nothing at all until the element is attuned, then the
+ * five crystals matching the tower's own tier.
+ */
+export function offersFor(el: Element, towerTier: number): readonly Offer[] {
+  if (!isAttuned(el)) return [];
+  return OFFERS.filter((o) => o.element === el && o.tier === Math.max(1, towerTier) - 1);
+}
+
+/** Projects finished. Only the four originals live here now. */
 const done = new Set<string>();
 
 export function isResearched(id: string): boolean {

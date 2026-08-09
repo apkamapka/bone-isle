@@ -10,11 +10,13 @@ import { ELEMENTS, ELEMENT_COLOR, crystalDamage, type Element, type Tier } from 
 import { MONSTER_DEFS } from "../entities/monsters.ts";
 import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
+import { TILE } from "../config.ts";
 import { bagCount, removeItem } from "../items.ts";
 import { HEAL_CRYSTAL_BASE, FIRE_CRYSTAL_DMG, FIRE_CRYSTAL_RANGE, SPEAR_CRYSTAL_DMG, SPEAR_CRYSTAL_RANGE, MONSTER_AGGRO_HIT_S, CRYSTAL_COOLDOWN_S } from "../config.ts";
 import { killMonster } from "./combat.ts";
 import { lineOfSight } from "../world/collision.ts";
 import type { Player } from "../entities/player.ts";
+import type { Facing } from "./outfit.ts";
 import type { World } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
 
@@ -47,11 +49,45 @@ export function tickCrystalCooldown(dt: number): void {
 export interface CrystalSpec {
   element: Element;
   tier: Tier;
-  role: "projectile" | "burst";
+  role: "shard" | "burst" | "nova" | "wave";
   base: readonly [number, number];
+  /** Cast range in px. 0 for the shapes anchored on the caster. */
   range: number;
-  /** Blast radius in px; 0 for a single-target shard. */
+  /** Blast radius in px around the point of impact. 0 when the shape is tiles. */
   splash: number;
+}
+
+/**
+ * Exori: the eight tiles touching the caster, and nothing further. No target
+ * to pick and no line of sight to check — you are standing in it. That is the
+ * trade: the widest damage in the game for the price of being in reach of
+ * everything it hits.
+ */
+const NOVA_TILES: readonly (readonly [number, number])[] = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, 0], [1, 0],
+  [-1, 1], [0, 1], [1, 1],
+];
+
+/**
+ * Exevo flam hur: three tiles wide at distance 1 and 2, five wide at 3.
+ * Eleven tiles, fired along the way the character is facing.
+ *
+ * Written here facing UP and rotated at cast time, so the shape is stated
+ * once. Getting a wave to point the right way is otherwise four copies of the
+ * same table that drift apart the first time anyone edits one.
+ */
+const WAVE_TILES: readonly (readonly [number, number])[] = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, -2], [0, -2], [1, -2],
+  [-2, -3], [-1, -3], [0, -3], [1, -3], [2, -3],
+];
+
+/** Turn an UP-facing offset to face where the player is looking. */
+function rotate(dx: number, dy: number, dir: Facing, face: 1 | -1): [number, number] {
+  if (dir === "up") return [dx, dy];
+  if (dir === "down") return [-dx, -dy];
+  return face === 1 ? [-dy, dx] : [dy, -dx];
 }
 
 const TIER_NAMES: Readonly<Record<Element, readonly [string, string, string]>> = {
@@ -62,14 +98,28 @@ const TIER_NAMES: Readonly<Record<Element, readonly [string, string, string]>> =
   shadow: ["Gloom", "Umbra", "Eclipse"],
 };
 
+/**
+ * Damage budgets per form. Every creature caught takes a FULL roll — the same
+ * rule Tibia runs on, where a wave that clips four creatures hurts all four.
+ * The forms are separated by base damage and by how hard their shape is to
+ * land, not by dividing one number up.
+ */
+const FORM_BASE: Readonly<Record<CrystalSpec["role"], readonly [number, number]>> = {
+  shard: [14, 22],  // one target, longest reach, safest
+  burst: [9, 15],   // thrown, lands on a pack at range
+  nova: [11, 17],   // everything touching you, no aiming, worst position
+  wave: [8, 14],    // eleven tiles, but only where you are looking
+};
+
 export const CRYSTAL_SPECS: Readonly<Record<string, CrystalSpec>> = (() => {
   const out: Record<string, CrystalSpec> = {};
   for (const el of ELEMENTS) {
     for (let t = 0 as Tier; t < 3; t = (t + 1) as Tier) {
       const n = TIER_NAMES[el][t];
-      // a shard concentrates, a burst spreads — same budget, different shape
-      out[`${el}${n}Shard`] = { element: el, tier: t, role: "projectile", base: [14, 22], range: 260 + t * 30, splash: 0 };
-      out[`${el}${n}Burst`] = { element: el, tier: t, role: "burst", base: [9, 15], range: 220 + t * 30, splash: 56 + t * 12 };
+      out[`${el}${n}Shard`] = { element: el, tier: t, role: "shard", base: FORM_BASE.shard, range: 260 + t * 30, splash: 0 };
+      out[`${el}${n}Burst`] = { element: el, tier: t, role: "burst", base: FORM_BASE.burst, range: 220 + t * 30, splash: 56 + t * 12 };
+      out[`${el}${n}Nova`] = { element: el, tier: t, role: "nova", base: FORM_BASE.nova, range: 0, splash: 0 };
+      out[`${el}${n}Wave`] = { element: el, tier: t, role: "wave", base: FORM_BASE.wave, range: 0, splash: 0 };
     }
   }
   return out;
@@ -104,6 +154,19 @@ function pickTarget(world: World, p: Player, range: number): World["monsters"][n
   }
   if (!best) addFloat(world, p.x, p.y - 44, "no target", "#ff9e6a");
   return best;
+}
+
+/** One creature takes one full elemental roll, straight past its armor. */
+function damageWithElement(
+  world: World, p: Player, m: World["monsters"][number], spec: CrystalSpec, col: string,
+): void {
+  const dmg = crystalDamage(spec.base, spec.tier, p.level, MONSTER_DEFS[m.kind].resist, spec.element);
+  m.hp -= dmg;
+  m.hurtT = 0.2;
+  m.aggroT = MONSTER_AGGRO_HIT_S;
+  const resisted = (MONSTER_DEFS[m.kind].resist?.[spec.element] ?? 1) < 1;
+  addFloat(world, m.x, m.y - 32, resisted ? `${dmg}!` : String(dmg), col);
+  if (m.hp <= 0) killMonster(world, p, m);
 }
 
 function offensiveStats(kind: ItemKind, level: number): { dmg: number; range: number } | null {
@@ -143,28 +206,50 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
       addFloat(world, p.x, p.y - 44, "not ready", "#8ab6ff");
       return false;
     }
+    const col = ELEMENT_COLOR[spec.element];
+
+    // Nova and Wave are anchored on the caster: no target to pick, no line of
+    // sight to fail. They resolve on TILES, so what they hit is exactly what
+    // the player can see themselves standing next to or looking at.
+    if (spec.role === "nova" || spec.role === "wave") {
+      const px = Math.floor(p.x / TILE);
+      const py = Math.floor(p.y / TILE);
+      const shape = spec.role === "nova"
+        ? NOVA_TILES.map(([dx, dy]) => [dx, dy] as [number, number])
+        : WAVE_TILES.map(([dx, dy]) => rotate(dx, dy, p.dir, p.face));
+      const hit = world.monsters.filter((m) => {
+        if (m.hp <= 0) return false;
+        const mx = Math.floor(m.x / TILE);
+        const my = Math.floor(m.y / TILE);
+        return shape.some(([dx, dy]) => mx === px + dx && my === py + dy);
+      });
+      // The charge is spent whether or not anything was standing there —
+      // aiming is the skill, and a wave that refunds itself on a miss is a
+      // wave you fire blindly.
+      removeItem(p.bag, kind, 1);
+      offensiveCd = CRYSTAL_COOLDOWN_S;
+      for (const [dx, dy] of shape) {
+        addFloat(world, (px + dx) * TILE + TILE / 2, (py + dy) * TILE + TILE / 2, "*", col);
+      }
+      if (hit.length) markBloodHit();
+      for (const m of hit) damageWithElement(world, p, m, spec, col);
+      beep(spec.role === "nova" ? 150 : 240, 0.22, "sawtooth", 0.07, spec.role === "nova" ? -200 : 180);
+      return true;
+    }
+
     const target = pickTarget(world, p, spec.range);
     if (!target) return false;
     removeItem(p.bag, kind, 1);
     offensiveCd = CRYSTAL_COOLDOWN_S;
     markBloodHit();
-    const col = ELEMENT_COLOR[spec.element];
-    // A burst splits its roll across everything caught in the blast; a shard
-    // puts all of it into one creature. Both go STRAIGHT to hp — elemental
-    // damage is the channel that armor does not get to stop, and that bypass
-    // is the entire reason to spend materials on crystals at all.
+    // A burst catches everything in its blast, a shard puts it all into one
+    // creature. Both go STRAIGHT to hp — elemental damage is the channel that
+    // armor does not get to stop, and that bypass is the entire reason to
+    // spend gold on crystals at all.
     const caught = spec.splash > 0
       ? world.monsters.filter((m) => m.hp > 0 && dist(m.x, m.y, target.x, target.y) <= spec.splash)
       : [target];
-    for (const m of caught) {
-      const dmg = crystalDamage(spec.base, spec.tier, p.level, MONSTER_DEFS[m.kind].resist, spec.element);
-      m.hp -= dmg;
-      m.hurtT = 0.2;
-      m.aggroT = MONSTER_AGGRO_HIT_S;
-      const resisted = (MONSTER_DEFS[m.kind].resist?.[spec.element] ?? 1) < 1;
-      addFloat(world, m.x, m.y - 32, resisted ? `${dmg}!` : String(dmg), col);
-      if (m.hp <= 0) killMonster(world, p, m);
-    }
+    for (const m of caught) damageWithElement(world, p, m, spec, col);
     beep(spec.role === "burst" ? 180 : 320, 0.2, "sawtooth", 0.06, spec.role === "burst" ? -160 : 120);
     return true;
   }

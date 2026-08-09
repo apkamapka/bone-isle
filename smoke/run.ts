@@ -850,30 +850,25 @@ async function main(): Promise<void> {
     const M = await import("../src/entities/monsters.ts");
 
     ok(E.ELEMENTS.length === 5, "five elements");
-    ok(Object.keys(C.CRYSTAL_SPECS).length === 30, "5 elements × 3 tiers × 2 roles = 30 crystals");
+    ok(Object.keys(C.CRYSTAL_SPECS).length === 60, "5 elements × 3 tiers × 4 cast forms = 60 crystals");
     for (const k of Object.keys(C.CRYSTAL_SPECS)) {
       ok(!!items.ITEMS[k as keyof typeof items.ITEMS]?.crystal, `${k} exists as a crystal item`);
     }
-    // every crystal and arrow must be reachable through the tower
-    const unlockable = new Set(T.RESEARCH.map((r) => r.crystal));
-    ok(Object.keys(C.CRYSTAL_SPECS).every((k) => unlockable.has(k as never)),
-      "every crystal has a research project — none are unobtainable");
-    ok(E.ELEMENTS.every((el) => unlockable.has(`${el}Arrow` as never)), "every element has an arrowhead project");
+    // every crystal and arrow must be reachable across a tower's three tiers
+    const sold = new Set(T.OFFERS.map((o) => o.crystal as string));
+    ok(Object.keys(C.CRYSTAL_SPECS).every((k) => sold.has(k)),
+      "every crystal is on the shelf — none are unobtainable");
+    ok(T.OFFERS.length === 75, "…and the shelf carries all 75, arrows included");
+    ok(E.ELEMENTS.every((el) => [0, 1, 2].every((t) =>
+      T.OFFERS.some((o) => o.element === el && o.tier === t && o.crystal.endsWith("Arrow")))),
+      "every element has an arrowhead at every tier");
 
-    // tiers must climb, and each must require the one below it in its own lane
+    // tiers must climb, and the tower is the only thing gating them
     ok(E.TIER_MULT[1] > E.TIER_MULT[0] * 2 && E.TIER_MULT[2] > E.TIER_MULT[1] * 2,
       "each tier more than doubles — an upgrade, not a percentage");
-    // Etap 24: the per-lane prerequisite chains are gone and the TOWER's tier
-    // is the only gate. They had to go: the panel now shows only the tier the
-    // building is at, so a chain would strand any player who reached tier II
-    // without having researched tier I — the lane would be permanently dead
-    // with nothing on screen to explain it.
-    ok(T.RESEARCH.every((r) => r.requires === undefined), "no project has a prerequisite any more");
-    ok(T.RESEARCH.every((r) => T.researchChain(r.id).length === 0), "…so every chain is empty");
-    ok(T.researchAvailable("fire3shard", []), "Pyre needs no earlier research — only a tier-III tower");
-    ok(!T.towerTierOk(T.RESEARCH.find((r) => r.id === "fire3shard")!, 2),
-      "…and a tier-II tower still cannot reach it");
-    ok(T.researchAvailable("fire3shard", ["fire1shard", "fire2shard"]), "…and opens once the lane is walked");
+    ok(T.RESEARCH.every((r) => r.element === undefined),
+      "the elemental line left the research tree entirely");
+    ok(T.RESEARCH.length === 4, "…only the four originals are still researched");
 
     // resistances: sparse, meaningful, and never total immunity
     const withRes = Object.values(M.MONSTER_DEFS).filter((d) => d.resist);
@@ -910,7 +905,9 @@ async function main(): Promise<void> {
 
     // the point of the whole channel: it goes around armor
     for (const el of E.ELEMENTS) {
-      ok(items.ITEMS[`${el}Arrow` as keyof typeof items.ITEMS]?.element === el, `${el} arrow carries its element`);
+      for (const tn of T.OFFERS.filter((o) => o.element === el && o.crystal.endsWith("Arrow"))) {
+        ok(items.ITEMS[tn.crystal]?.element === el, `${tn.crystal} carries its element`);
+      }
     }
     ok(!items.ITEMS.boneArrow.element, "a plain bone arrow carries none — it meets armor like steel does");
   }
@@ -1127,21 +1124,22 @@ async function main(): Promise<void> {
       ok(upgradeCost("range", 1) === null, "the range cannot be upgraded at all");
     }
 
-    // the tower gate: building tier decides which crystal tier is researchable
-    const byId = (id: string) => tw.RESEARCH.find((r) => r.id === id)!;
-    ok(tw.towerTierFor(byId("fire1shard")) === 1, "Ember needs a tier-I tower");
-    ok(tw.towerTierFor(byId("fire2shard")) === 2, "Flame needs a tier-II tower");
-    ok(tw.towerTierFor(byId("fire3shard")) === 3, "Pyre needs a tier-III tower");
-    ok(tw.towerTierFor(byId("life")) === 1, "the four original crystals stay at tier I");
-    ok(!tw.towerTierOk(byId("fire3shard"), 2), "a tier-II tower cannot research Pyre");
-    ok(tw.towerTierOk(byId("fire3shard"), 3), "a tier-III tower can");
-    // every lane is gated identically — no element is secretly cheaper
-    for (const el of ["fire", "ice", "earth", "storm", "shadow"]) {
+    // the tower gate: the building's tier decides which five are on the shelf
+    ok(tw.towerTierFor(tw.RESEARCH.find((r) => r.id === "life")!) === 1,
+      "the four original crystals stay at tier I");
+    tw.loadAttunedState(["fire"]);
+    ok(tw.offersFor("fire", 1).every((o) => o.tier === 0), "a tier-I tower shows only the first five");
+    ok(tw.offersFor("fire", 1).length === 5, "…and exactly five, one per form");
+    ok(tw.offersFor("fire", 3).every((o) => o.tier === 2), "a tier-III tower shows only the last five");
+    ok(tw.offersFor("ice", 3).length === 0, "an unattuned element shows nothing at any tier");
+    // every lane is priced and gated identically — no element is secretly cheaper
+    for (const el of ["fire", "ice", "earth", "storm", "shadow"] as const) {
+      tw.loadAttunedState([el]);
       for (const t of [1, 2, 3]) {
-        const r = tw.RESEARCH.find((x) => x.id === `${el}${t}shard`);
-        ok(!!r && tw.towerTierFor(r) === t, `${el} tier ${t} shard needs tower ${t}`);
+        ok(tw.offersFor(el, t).length === 5, `${el} shows five at tower ${t}`);
       }
     }
+    tw.loadAttunedState([]);
   }
 
   console.log("Etap 24B — save migration from the pre-tier world:");
@@ -1261,33 +1259,21 @@ async function main(): Promise<void> {
     };
 
     // six tabs: the five lanes plus the untiered originals
-    const lanes = ["fire", "ice", "earth", "storm", "shadow"];
+    const lanes = ["fire", "ice", "earth", "storm", "shadow"] as const;
     for (const el of lanes) {
+      T.loadAttunedState([]);
+      ok(T.offersFor(el, 1).length === 0, `${el} shows nothing before the stone is spent`);
+      T.loadAttunedState([el]);
       for (const t of [1, 2, 3]) {
-        const rows = towerRows(el, t);
-        ok(rows.length > 0, `${el} tab at tower ${t} shows something`);
+        const rows = T.offersFor(el, t);
+        ok(rows.length === 5, `${el} tab at tower ${t} shows five`);
         ok(rows.every((r) => r.element === el), `${el} tab shows only ${el}`);
         // THE RULE: one tier at a time, and it is the tower's tier
-        ok(rows.every((r) => T.towerTierFor(r as never) === t),
-          `${el} tab at tower ${t} shows tier ${t} and nothing else`);
+        ok(rows.every((r) => r.tier === t - 1), `${el} tab at tower ${t} shows tier ${t} and nothing else`);
       }
     }
-    // the lanes partition the elemental catalog with nothing left over
-    {
-      const seen = new Set<string>();
-      for (const el of lanes) for (const t of [1, 2, 3]) for (const r of towerRows(el, t)) seen.add(r.id);
-      const elemental = T.RESEARCH.filter((r) => r.element !== undefined);
-      ok(seen.size === elemental.length,
-        `all ${elemental.length} elemental projects are reachable across the tabs (${seen.size})`);
-    }
-    // OTHER is the four originals, and they are never tier-filtered away —
-    // there is no better Recall waiting at tier III
-    for (const t of [1, 2, 3]) {
-      const other = towerRows("other", t);
-      ok(other.length === 4, `OTHER holds 4 projects at tower ${t}`);
-      ok(other.every((r) => r.element === undefined), "…none of them elemental");
-    }
-    ok(towerRows("other", 1).some((r) => r.id === "recall"), "Recall lives in OTHER");
+    T.loadAttunedState([]);
+    ok(towerRows("other", 1).length === 4, "the OTHER tab keeps the four originals at every tier");
 
     // TEST grid: every single item is reachable, none listed twice
     const kinds = panels as never as { TEST_KINDS: string[] };
@@ -2009,40 +1995,31 @@ async function main(): Promise<void> {
     ok(E.ELEMENTS.every((el) => items.ITEMS[T.ATTUNEMENT[el]].value === 0),
       "…and no shop will buy a lane key");
 
-    // the gate itself
+    // the gate itself: an unattuned element is not listed at all
     T.loadAttunedState([]);
-    const fire1 = T.RESEARCH.find((r) => r.id === "fire1shard")!;
-    ok(!T.attunementOk(fire1), "a sealed lane blocks its own tier-I project");
-    ok(T.attunementOk(T.RESEARCH.find((r) => r.id === "life")!), "…the four originals are never sealed");
+    ok(T.offersFor("fire", 1).length === 0, "a sealed element shows an empty shelf, not a locked one");
     T.markAttuned("fire");
-    ok(T.attunementOk(fire1), "spending the stone opens the lane");
-    ok(!T.attunementOk(T.RESEARCH.find((r) => r.id === "ice1shard")!), "…and only that lane");
-    // this is the property that killed the old `requires` chain: a lane must
-    // never be reachable at one tower tier and invisible at another
-    ok(T.RESEARCH.filter((r) => r.element === "fire").every((r) => T.attunementOk(r)),
-      "one stone opens every tier of the lane, so no tower tier can strand a player");
+    ok(T.offersFor("fire", 1).length === 5, "spending the stone stocks the shelf");
+    ok(T.offersFor("ice", 1).length === 0, "…and only that element");
+    ok([1, 2, 3].every((t) => T.offersFor("fire", t).length === 5),
+      "one stone covers every tier, so upgrading the tower can never strand a lane");
     T.loadAttunedState([]);
 
-    // gold pricing
-    const elemental = T.RESEARCH.filter((r) => r.element !== undefined);
-    ok(elemental.length === 35, "five lanes × seven projects");
-    ok(elemental.every((r) => Object.keys(r.researchCost).length === 0),
-      "no elemental project costs materials to research");
-    ok(elemental.every((r) => (r.researchGold ?? 0) > 0 && (r.buyGold ?? 0) > 0),
-      "…every one of them costs gold instead");
+    // gold pricing: the elemental shelf never asks for materials…
     const MATS = ["wood", "bones", "stone", "herb", "silk"];
-    ok(elemental.every((r) => !MATS.some((m) => m in r.buyCost)),
-      "…and no firewood or bone changes hands anywhere in the line");
-    const price = (id: string): number => T.RESEARCH.find((r) => r.id === id)!.researchGold!;
-    ok(price("fire1shard") < price("fire2shard") && price("fire2shard") < price("fire3shard"),
+    ok(T.OFFERS.every((o) => !MATS.some((m) => m in o.cost)),
+      "no firewood or bone changes hands anywhere in the elemental line");
+    ok(T.OFFERS.every((o) => o.gold > 0), "…every crystal on the shelf costs gold");
+    const price = (id: string): number => T.OFFERS.find((o) => o.id === id)!.gold;
+    ok(price("fireEmberShard") < price("fireFlameShard") && price("fireFlameShard") < price("firePyreShard"),
       "each tier costs more gold than the one below it");
 
-    // the Essence: one sink, one source
-    const needEssence = T.RESEARCH.filter((r) => "magicEssence" in r.buyCost);
+    // the Essence: one sink per element, one source in the world
+    const needEssence = T.OFFERS.filter((o) => "magicEssence" in o.cost);
     ok(needEssence.length === 5, "exactly five crystals want an Essence — one per element");
-    ok(needEssence.every((r) => r.tier === 2 && r.id.endsWith("burst")),
-      "…and it is the strongest crystal of each element");
-    ok(new Set(needEssence.map((r) => r.element)).size === 5, "…with no element left out");
+    ok(needEssence.every((o) => o.tier === 2 && o.id.endsWith("Wave")),
+      "…and it is the widest shape at the top tier");
+    ok(new Set(needEssence.map((o) => o.element)).size === 5, "…with no element left out");
     const droppers = Object.entries(M.MONSTER_DEFS)
       .filter(([, d]) => d.loot.some((l) => l.kind === "magicEssence"))
       .map(([k]) => k);
@@ -2069,6 +2046,7 @@ async function main(): Promise<void> {
       "…its fire charges are renamed, not reinterpreted");
     ok(items.bagCount(g2.player.bag, "fireCrystal") === 0,
       "…so nobody is quietly handed fifteen free lane keys");
+    ok(items.bagCount(g2.player.bag, "fireEmberArrow") === 0, "…and no stray tier-I arrows appear from nowhere");
     const s0 = A.actionSlots[0];
     ok(!!s0 && s0.type === "crystal" && s0.item === "flameCrystal",
       "…and the hotkey bound to them still points at a charge crystal");
@@ -2441,7 +2419,7 @@ async function main(): Promise<void> {
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 4, "saving writes the current v4 format");
+    ok(stored.v === 5, "saving writes the current v5 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
