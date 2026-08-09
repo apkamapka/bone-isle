@@ -1,5 +1,6 @@
 /** All toggleable UI panels. Each draws itself and pushes clickable hotspots. */
-import { SPR, itemSprite, iconW, iconH } from "../gfx/sprites.ts";
+import { SPR, iconW, iconH } from "../gfx/sprites.ts";
+import { itemSprite } from "../gfx/itemArt.ts";
 import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax } from "../systems/skills.ts";
 import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import { MIN_HIT_RATIO } from "../config.ts";

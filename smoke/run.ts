@@ -2068,6 +2068,30 @@ async function main(): Promise<void> {
     deleteSave();
   }
 
+  console.log("Etap 25 — drawn item icons:");
+  {
+    const { readdirSync } = await import("node:fs");
+    const A = await import("../src/gfx/itemArt.ts");
+
+    ok(A.iconFile("shortSword") === "item-short-sword.png", "the filename is derived from the id");
+    ok(A.iconFile("hpPotion") === "item-hp-potion.png", "…camel humps become dashes");
+    ok(!/[A-Z]/.test(Object.keys(items.ITEMS).map((k) => A.iconFile(k as never)).join("")),
+      "…and never a capital, because Vercel serves from a case-sensitive disk");
+
+    // The real check: every PNG sitting in public/ must answer to a live item
+    // id. This is what catches a misspelt file — art nobody will ever see,
+    // silently, because a missing icon looks exactly like an item without art.
+    const files = readdirSync("public").filter((f) => f.startsWith("item-") && f.endsWith(".png"));
+    const expected = new Set(Object.keys(items.ITEMS).map((k) => A.iconFile(k as never)));
+    const orphans = files.filter((f) => !expected.has(f));
+    ok(orphans.length === 0, `every item-*.png maps to a real item${orphans.length ? " — stray: " + orphans.join(", ") : ""}`);
+    ok(files.length > 0, `public/ carries drawn icons (${files.length} of ${expected.size} items)`);
+
+    // headless, so nothing can have loaded — the baked icon must still answer
+    ok(!A.hasItemArt("shortSword"), "no artwork has loaded under Node");
+    ok(!!A.itemSprite("shortSword"), "…and itemSprite still returns the baked stand-in");
+  }
+
   console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");
   {
     ok(items.ITEMS.backpack.pack?.slots === 8 && items.ITEMS.backpack.stack === 1,

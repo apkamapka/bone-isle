@@ -1210,7 +1210,14 @@ function elementalIcon(element: string, tier: number, role: "Shard" | "Burst"): 
   return bake(map, { a, b, c });
 }
 
-const ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
+/**
+ * The procedurally drawn icon for every item.
+ *
+ * Exported for `itemArt.ts`, which loads drawn PNGs over the top and falls
+ * back here for anything that has no artwork yet. Draw code should call
+ * `itemSprite()` from that module, not read this table directly.
+ */
+export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   wood: SPR.wood, stone: SPR.stoneIcon, bones: SPR.bones, herb: SPR.herb, silk: SPR.silkIcon,
   venomGland: SPR.venomGland, shell: SPR.shellIcon, wolfFur: SPR.wolfFur,
   ghoulClaw: SPR.ghoulClaw, dragonScale: SPR.dragonScaleIcon,
@@ -1310,6 +1317,6 @@ function elementalArrow(element: string): HTMLCanvasElement {
   return bake(["....ab", "...abW", "..aWW.", ".WW...", "WW...."], { a, b, W: "#bdb59c" });
 }
 
-export function itemSprite(kind: ItemKind): HTMLCanvasElement {
-  return ITEM_SPR[kind];
-}
+/* `itemSprite()` used to live here. It moved to `itemArt.ts` when drawn PNGs
+ * arrived, so that one function answers "what do I draw for this item" whether
+ * the answer is artwork or the baked stand-in. Same shape as scenerySprite(). */

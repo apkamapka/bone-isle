@@ -10,6 +10,7 @@ import { loadPropArt } from "./world/propArt.ts";
 import { loadMobSheets } from "./gfx/mobSheet.ts";
 import { loadFireSheet } from "./gfx/fireSheet.ts";
 import { loadSceneryArt } from "./gfx/sceneryArt.ts";
+import { loadItemArt } from "./gfx/itemArt.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn, worldSpawn } from "./world/collision.ts";
@@ -224,6 +225,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   loadMobSheets();           // directional walk cycles for humanoid creatures
   loadFireSheet();           // the campfire flicker
   loadSceneryArt();          // totems and dead trees the player walks behind
+  loadItemArt();             // drawn icons over the baked stand-ins
   for (const l of LAIRS) {
     const lw = makeCaveWorld({
       key: l.key, name: l.name, w: l.w, h: l.h, seed: seed ^ keySalt(l.key),
