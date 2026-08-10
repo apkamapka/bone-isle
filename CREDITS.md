@@ -609,6 +609,47 @@ These are drawn as scenery rather than baked into the terrain export: they
 stand taller than the square they occupy, and the player has to be able to walk
 behind them.
 
+## Home Isle buildings — `public/build-*.png`
+
+> **TODO before this repo goes public / before release: fill in the source and
+> licence below.** Nothing else in this file is unresolved. If these came from
+> **CraftPix**, the files must NOT be committed while the repository is public —
+> the subscription licence forbids redistributing the source files, and a public
+> repo is redistribution. If they are **PixelLab** generations they are yours
+> outright and only need naming here.
+
+| File | Structure | Tier | Size | Footprint |
+| --- | --- | --- | --- | --- |
+| `build-forge-1.png` | Forge | I — timber | 96 x 96 | 2 x 2 |
+| `build-forge-2.png` | Forge | II — stone | 96 x 96 | 2 x 2 |
+| `build-forge-3.png` | Forge | III — steel | 96 x 96 | 2 x 2 |
+| `build-tower-1.png` | Alchemy Tower | I — timber | 64 x 96 | 2 x 2 |
+| `build-tower-2.png` | Alchemy Tower | II — stone | 64 x 96 | 2 x 2 |
+| `build-tower-3.png` | Alchemy Tower | III — amber | 64 x 96 | 2 x 2 |
+| `build-dummy-1.png` | Training Dummy | I | 128 x 128 (4 x 4 cells) | 1 x 1 |
+| `build-dummy-2.png` | Training Dummy | II | 128 x 128 (4 x 4 cells) | 1 x 1 |
+| `build-dummy-3.png` | Training Dummy | III | 128 x 128 (4 x 4 cells) | 1 x 1 |
+| `build-range.png` | Archery Range | (single tier) | 32 x 32 | 1 x 1 |
+
+Authored at world scale — TILE (32) px per tile — anchored bottom-centre, with
+no painted ground shadow (the renderer draws its own, sized off the footprint
+rather than the sprite: a two-tile forge is three tiles of roof, and a shadow
+as wide as the roof would put the whole pad in shade).
+
+The stills ship exactly as they were drawn. The three training-post sheets are
+the one exception: the generator placed the fourth facing seven pixels left of
+the other three, which slid the plinth sideways whenever the post changed which
+way it leaned. Each row was shifted so its plinth centres on the cell, and the
+whole sheet moved two pixels down so the plinth meets the edge the renderer
+anchors to. No pixel was recoloured, rescaled or redrawn.
+
+The post's sheet is four facings down the rows — north, east, west, south — by
+four frames across: column 0 is the rest pose, columns 1-3 are the lean. It is
+the only building that animates, and it plays once per blow rather than looping;
+see `src/gfx/buildingArt.ts`.
+
+The Storage Chest has no artwork yet and keeps its baked sprite at every tier.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in

@@ -4446,6 +4446,79 @@ async function main(): Promise<void> {
     ok(waterWall === 0, "…and none is a wall, so a throw can see the sea it is aimed at");
   }
 
+
+  console.log("Etap 27 — drawn buildings, one image per tier:");
+  {
+    const A = await import("../src/gfx/buildingArt.ts");
+    const B = await import("../src/systems/building.ts");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+
+    // Every structure that has artwork must have exactly as many images as it
+    // has tiers, or a Forge III quietly wears a Forge II's stonework. `range`
+    // is the honest single-tier case and is covered by the same rule.
+    for (const key of A.ART_KEYS) {
+      ok(key in B.STRUCTS, `'${key}' artwork belongs to a real structure`);
+      ok(A.artTiers(key) === B.STRUCTS[key as keyof typeof B.STRUCTS].tiers.length,
+        `…and ships one image per tier (${A.artTiers(key)})`);
+    }
+
+    // A missing PNG is a 404 in the browser and a baked sprite on the island —
+    // silent, and exactly the kind of thing a deploy should catch instead.
+    let missing = 0;
+    for (const key of A.ART_KEYS) {
+      for (const src of A.artSources(key)) {
+        if (!fs.existsSync(path.join("public", src.replace(/^\.\//, "")))) missing++;
+      }
+    }
+    ok(missing === 0, "every building image named by the code is in public/");
+
+    // slice() floors the cell size, so a sheet that is not a whole number of
+    // cells across would cut every frame short by a pixel or two.
+    for (const key of A.ART_KEYS) {
+      if (!A.isAnimatedBuilding(key)) continue;
+      let ragged = 0;
+      for (const src of A.artSources(key)) {
+        const buf = fs.readFileSync(path.join("public", src.replace(/^\.\//, "")));
+        const w = buf.readUInt32BE(16); // PNG IHDR
+        const h = buf.readUInt32BE(20);
+        if (w % A.RECOIL_COLS !== 0 || h % A.RECOIL_ROWS !== 0) ragged++;
+      }
+      ok(ragged === 0, `'${key}' sheets divide evenly into ${A.RECOIL_COLS}x${A.RECOIL_ROWS} cells`);
+    }
+
+    // The lean: three frames straight after the blow, then the rest pose for
+    // good. Column 0 must never open the cycle or the swing lands on a post
+    // that has not moved yet.
+    ok(A.recoilFrameIndex(0) === 1, "a fresh hit shows the first lean, not the rest pose");
+    const seen = new Set<number>();
+    for (let t = 0; t < 0.21; t += 1 / A.RECOIL_FPS / 4) seen.add(A.recoilFrameIndex(t));
+    ok([1, 2, 3].every((f) => seen.has(f)), "…and the whole lean plays before it settles");
+    ok(A.recoilFrameIndex(1) === 0 && A.recoilFrameIndex(6) === 0,
+      "a post nobody has touched stands at rest (anim free-runs from a random start)");
+    ok(A.recoilFrameIndex(-1) === 0, "…and so does one with a wrapped clock");
+
+    // The post leans AWAY from whoever hit it, deltas measured post − attacker.
+    ok(A.recoilRow(0, -40) === A.RECOIL_ROW.north, "a blow from the south throws the post north");
+    ok(A.recoilRow(0, 40) === A.RECOIL_ROW.south, "…from the north, south");
+    ok(A.recoilRow(40, 4) === A.RECOIL_ROW.east, "…from the west, east");
+    ok(A.recoilRow(-40, 4) === A.RECOIL_ROW.west, "…and from the east, west");
+    ok(A.recoilRow(30, 30) === A.RECOIL_ROW.south, "a tie falls to the front/back rows, as faceDelta does");
+
+    // Headless there is no Image, so the loader no-ops and every lookup has to
+    // fall through to the baked sprite rather than throwing or handing back a
+    // hole. This is the guarantee that a 404 costs looks and nothing else.
+    let holes = 0;
+    for (const key of B.STRUCT_KEYS) {
+      for (let t = 1; t <= 3; t++) if (B.structSprite(key, t) !== B.STRUCTS[key].spr) holes++;
+    }
+    ok(holes === 0, "with no artwork loaded every tier still draws its baked stand-in");
+    ok(B.structSprite("forge") === B.structSprite("forge", 1), "the tier argument defaults to I");
+    ok(!!B.structSprite("treasure"), "the world-placed treasure chest still resolves");
+    ok(A.buildingArt("forge", 1) === null && A.buildingFrame("dummy", 1, 0, 0) === null,
+      "…and the artwork lookups answer null rather than guessing");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

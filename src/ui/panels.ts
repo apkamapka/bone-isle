@@ -4,7 +4,7 @@ import { itemSprite } from "../gfx/itemArt.ts";
 import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax } from "../systems/skills.ts";
 import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import { MIN_HIT_RATIO } from "../config.ts";
-import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost } from "../systems/building.ts";
+import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost, structSprite } from "../systems/building.ts";
 import { RESEARCH, isResearched, towerTierOk,
   ATTUNEMENT, isAttuned, offersFor } from "../systems/tower.ts";
 import { ELEMENT_LABEL, type Element } from "../systems/elements.ts";
@@ -473,8 +473,16 @@ function drawBuild(p: PanelInput): void {
       hud.ctx.fillStyle = "rgba(202,162,58,.15)";
       hud.ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
     }
-    const spr = def.spr;
-    const isc = Math.max(1, Math.floor((rowH - 14 * S) / iconH(spr, 1)));
+    // Show the tier this row is OFFERING, not the one already standing: the
+    // picture beside "Upgrade to II" is then the thing being paid for. A maxed
+    // row has nothing left to offer and shows what it owns.
+    const shown = maxed ? tier : Math.min(top, tier + 1);
+    const spr = structSprite(key, shown);
+    // Drawn buildings stand three tiles tall and would burst the row, so the
+    // fit is allowed to go fractional below 1x. At or above it, whole steps
+    // only — that is what keeps the small baked sprites crisp.
+    const fit = (rowH - 12 * S) / iconH(spr, 1);
+    const isc = fit >= 1 ? Math.floor(fit) : fit;
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, isc)) / 2, isc);
 
     const label = tier > 0 ? `${def.name}  ${"I".repeat(tier)}` : def.name;

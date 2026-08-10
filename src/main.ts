@@ -15,7 +15,8 @@ import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/playe
 import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnAtPost } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier } from "./systems/building.ts";
+import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint } from "./systems/building.ts";
+import { buildingFrame, hasBuildingArt, recoilFrameIndex, recoilRow } from "./gfx/buildingArt.ts";
 import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
@@ -2193,7 +2194,7 @@ function render(): void {
     vctx.strokeStyle = ok ? "rgba(180,255,190,.9)" : "rgba(255,140,120,.9)";
     vctx.lineWidth = 2;
     vctx.strokeRect(gx + 1, gy + 1, TILE * n - 2, TILE * n - 2);
-    const spr = structSprite(key);
+    const spr = structSprite(key, 1);
     vctx.globalAlpha = 0.6;
     vctx.imageSmoothingEnabled = false;
     vctx.drawImage(spr, Math.round(gx + (TILE * n - spr.width) / 2), Math.round(gy + TILE * n - spr.height));
@@ -2349,18 +2350,30 @@ function render(): void {
       drawSprite(campfireFrame(waveT, fr.phase) ?? SPR.campfire, bx, by);
     } });
   }
-  // structures
+  // structures. Artwork splits a building by tier, so the tier has to be read
+  // before the sprite is; a training post goes further and answers with a cell
+  // of its recoil sheet, leaning away from whoever last hit it. The shadow is
+  // sized off the FOOTPRINT rather than the sprite: a building overhangs its
+  // pad by design (a two-tile forge is three tiles of roof), and a shadow as
+  // wide as the roof would put the whole pad in shade.
   for (const s of world.structures) {
-    const spr = structSprite(s.key);
+    const tier = tierOf(s);
     const c = structCenter(s);
     const bx = c.x;
     const by = c.baseY;
     if (!inView(bx, by)) continue;
+    const recoil = buildingFrame(s.key, tier, recoilRow(bx - P.x, by - P.y), recoilFrameIndex(s.anim ?? 0));
+    const spr = recoil ?? structSprite(s.key, tier);
+    const shadowW = footprint(s.key) * TILE * 0.42;
     drawList.push({ y: by, fn: () => {
-      drawShadow(bx, by, spr.width / 2);
-      const shake = s.hurtT ? Math.round(Math.sin(s.hurtT * 40) * 3) : 0;
+      drawShadow(bx, by, shadowW);
+      // A struck building jolts. A post that has its own lean is exempt —
+      // shaking a drawn recoil reads as noise on top of the reaction.
+      const shake = s.hurtT && !recoil ? Math.round(Math.sin(s.hurtT * 40) * 3) : 0;
       drawSprite(spr, bx + shake, by);
-      if (s.key === "forge") {
+      // The drawn forge has its fire burning in the doorway already; the ember
+      // below is what stood in for it over the baked sprite.
+      if (s.key === "forge" && !hasBuildingArt("forge", tier)) {
         vctx.fillStyle = `rgba(255,${140 + Math.round(Math.sin(waveT * 8) * 40)},60,.8)`;
         vctx.fillRect(Math.round(bx - cam.x - 4), Math.round(by - cam.y - 12 + Math.sin(waveT * 6) * 2), 4, 4);
       }

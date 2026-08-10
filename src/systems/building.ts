@@ -4,6 +4,7 @@ import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
 import { SPR, bakeForge, bakeLibrary, bakeDummy, bakeRange, bakeChest, bakeTreasureChest } from "../gfx/sprites.ts";
+import { buildingArt } from "../gfx/buildingArt.ts";
 import { countAcross, removeAcross, emptyStash } from "../items.ts";
 import { onStructureBuilt } from "./quests.ts";
 import { unstick } from "../world/collision.ts";
@@ -266,8 +267,16 @@ export function applyStructureSolidity(home: World): void {
 
 let treasureSpr: HTMLCanvasElement | null = null;
 
-/** Look up the sprite for a placed structure key. */
-export function structSprite(key: string): HTMLCanvasElement {
+/**
+ * Look up the sprite for a placed structure at a given tier.
+ *
+ * The tier matters because the drawn artwork rebuilds a structure in a better
+ * material as it climbs — a Forge III is stone and steel where a Forge I is
+ * planks. `def.spr` is the baked fallback and knows nothing of tiers, so every
+ * tier of an unrendered structure keeps sharing one sprite exactly as before;
+ * only the artwork splits them.
+ */
+export function structSprite(key: string, tier: number = 1): HTMLCanvasElement {
   if (key === "treasure") return (treasureSpr ??= bakeTreasureChest());
-  return STRUCTS[key as StructKey]?.spr ?? SPR.rock;
+  return buildingArt(key, tier) ?? STRUCTS[key as StructKey]?.spr ?? SPR.rock;
 }
