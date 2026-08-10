@@ -273,7 +273,6 @@ function placeDock(w: World): { tx: number; ty: number } {
   const inArea = (a: number, b: number): boolean => Math.max(Math.abs(a - tx), Math.abs(b - ty)) <= 2;
   w.trees = w.trees.filter((t) => { if (inArea(t.tx, t.ty)) { w.solid[t.ty][t.tx] = false; return false; } return true; });
   w.rocks = w.rocks.filter((t) => { if (inArea(t.tx, t.ty)) { w.solid[t.ty][t.tx] = false; return false; } return true; });
-  w.herbs = w.herbs.filter((t) => !inArea(t.tx, t.ty));
   w.decos = w.decos.filter((d) => !inArea(d.tx, d.ty));
   w.portals.push({ x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, dest: "town", label: "to Bonetown" });
   return spot;
@@ -340,7 +339,6 @@ function carveCamp(w: World, spec: CampSpec, cx: number, cy: number): void {
   const inside = (tx: number, ty: number): boolean => dist(tx, ty, cx, cy) <= R + 1;
   w.trees = w.trees.filter((t) => { if (inside(t.tx, t.ty)) { w.solid[t.ty][t.tx] = false; return false; } return true; });
   w.rocks = w.rocks.filter((t) => { if (inside(t.tx, t.ty)) { w.solid[t.ty][t.tx] = false; return false; } return true; });
-  w.herbs = w.herbs.filter((t) => !inside(t.tx, t.ty));
   w.decos = w.decos.filter((d) => !inside(d.tx, d.ty));
 
   // 2) dirt floor with a ragged, hand-worn edge

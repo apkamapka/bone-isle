@@ -127,7 +127,6 @@ export function makeWorld(opts: WorldOpts): World {
     reserved: [],
     trees: [],
     rocks: [],
-    herbs: [],
     decos: [],
     fires: [],
     scenery: [],
@@ -251,10 +250,14 @@ export function makeWorld(opts: WorldOpts): World {
       reserve(p.x, p.y, 2.2);
     }
   }
+  // Herb PATCHES were retired in Etap 26 along with the herb item, but the
+  // loop stays: it still draws the same numbers from the same generator in
+  // the same order, so every island keeps the exact layout it had. Only the
+  // payload changed — a green tuft you could pick became one you cannot.
   for (let i = 0; i < opts.herbs; i++) {
     const p = place();
     if (p) {
-      w.herbs.push({ tx: p.x, ty: p.y, picked: false, respawnT: 0 });
+      w.decos.push({ spr: SPR.mushroom, tx: p.x, ty: p.y });
       reserve(p.x, p.y, 1.6);
     }
   }

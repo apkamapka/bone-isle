@@ -98,14 +98,6 @@ export interface RockNode {
   hurtT: number;
 }
 
-/** Pickable herb patch (non-solid, one tap). */
-export interface HerbNode {
-  tx: number;
-  ty: number;
-  picked: boolean;
-  respawnT: number;
-}
-
 /** Ground decoration baked into the map canvas (non-interactive). */
 export interface Deco {
   spr: HTMLCanvasElement;
@@ -386,6 +378,7 @@ export interface WorldOpts {
   npcs: boolean;
   trees: number;
   rocks: number;
+  /** Retired as a resource in Etap 26 — still scattered, now as decor. */
   herbs: number;
   mushrooms: number;
   bones: number;
@@ -413,7 +406,6 @@ export interface World {
   reserved: Reserved[];
   trees: Tree[];
   rocks: RockNode[];
-  herbs: HerbNode[];
   decos: Deco[];
   fires: Fire[];
   scenery: Scenery[];

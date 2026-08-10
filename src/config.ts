@@ -265,15 +265,10 @@ export const PORTAL_DORMANT_CORE = "#e0574c";
  *  nodes and islands rather than farming one spot — paired with denser nodes. */
 export const TREE_REGROW_S = 90;
 export const ROCK_REGROW_S = 120;
-export const HERB_REGROW_S = 75;
 
 
 /** Crystals (charge-based, replace spells). Values are per single charge. */
 export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level*3
-export const FIRE_CRYSTAL_DMG = 18;     // damage = this + level
-export const FIRE_CRYSTAL_RANGE = 240;  // px the fire crystal can reach
-export const SPEAR_CRYSTAL_DMG = 40;    // Spear Crystal (tower-researched) = this + level*2
-export const SPEAR_CRYSTAL_RANGE = 320; // longer reach than a Fire Crystal
 /** Shared cooldown for OFFENSIVE crystals (Fire, Spear) — they were spammable
  *  into a machine-gun burst; one bolt per this many seconds now. */
 export const CRYSTAL_COOLDOWN_S = 1.5;

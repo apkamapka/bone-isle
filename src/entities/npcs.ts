@@ -47,14 +47,14 @@ export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
     entries: shop(
       ["shortSword", "ironSword", "leatherHelm", "leatherBody", "leatherLegs", "leatherBoots",
         "leatherShield", "trainingArrow", "bow", "backpack"],
-      ["wood", "stone", "bones", "shell", "iron", "steel", "coal", "leatherHelm", "snakeskinHelm", "leatherBody", "snakeskinBody", "leatherLegs", "snakeskinLegs", "leatherBoots", "snakeskinBoots", "leatherShield", "snakeskinShield", "studdedHelm", "goblinHelm", "studdedBody", "goblinBody", "studdedLegs", "goblinLegs", "studdedBoots", "goblinBoots", "studdedShield", "goblinShield", "chainHelm", "orcishHelm", "chainBody", "orcishBody", "chainLegs", "orcishLegs", "chainBoots", "orcishBoots", "chainShield", "orcishShield", "plateHelm", "minotaurHelm", "plateBody", "minotaurBody", "plateLegs", "minotaurLegs", "plateBoots", "minotaurBoots", "plateShield", "minotaurShield", "steelHelm", "marrowHelm", "steelBody", "marrowBody", "steelLegs", "marrowLegs", "steelBoots", "marrowBoots", "steelShield", "marrowShield", "knightHelm", "dragonHelm", "knightBody", "dragonBody", "knightLegs", "dragonLegs", "knightBoots", "dragonBoots", "knightShield", "dragonShield", "shortSword", "fangDagger", "ironSword", "goblinHatchet", "mercBlade", "warHammer", "orcishAxe", "gladius", "boneSword", "minotaurAxe", "warlordBlade", "steelMaul", "demonCleaver", "knightSword", "fireSword", "marrowBlade"],
+      ["wood", "stone", "bones", "iron", "steel", "coal", "leatherHelm", "snakeskinHelm", "leatherBody", "snakeskinBody", "leatherLegs", "snakeskinLegs", "leatherBoots", "snakeskinBoots", "leatherShield", "snakeskinShield", "studdedHelm", "goblinHelm", "studdedBody", "goblinBody", "studdedLegs", "goblinLegs", "studdedBoots", "goblinBoots", "studdedShield", "goblinShield", "chainHelm", "orcishHelm", "chainBody", "orcishBody", "chainLegs", "orcishLegs", "chainBoots", "orcishBoots", "chainShield", "orcishShield", "plateHelm", "minotaurHelm", "plateBody", "minotaurBody", "plateLegs", "minotaurLegs", "plateBoots", "minotaurBoots", "plateShield", "minotaurShield", "steelHelm", "marrowHelm", "steelBody", "marrowBody", "steelLegs", "marrowLegs", "steelBoots", "marrowBoots", "steelShield", "marrowShield", "knightHelm", "dragonHelm", "knightBody", "dragonBody", "knightLegs", "dragonLegs", "knightBoots", "dragonBoots", "knightShield", "dragonShield", "shortSword", "fangDagger", "ironSword", "goblinHatchet", "mercBlade", "warHammer", "orcishAxe", "gladius", "boneSword", "minotaurAxe", "warlordBlade", "steelMaul", "demonCleaver", "knightSword", "fireSword", "marrowBlade"],
     ),
   },
   herbalist: {
     greeting: "Potions, herbs, remedies — all freshly picked.",
     entries: shop(
       ["hpPotion", "healCrystal", "leatherBoots", "meat", "mushroom"],
-      ["herb", "mushroom", "silk", "meat", "venomGland", "wolfFur", "ghoulClaw", "dragonHam", "dragonScale",
+      ["mushroom", "meat", "venomGland", "ghoulClaw", "dragonHam", "dragonScale",
         "minotaurHorn", "orcEar", "goblinFang", "cursedRib"],
     ),
   },

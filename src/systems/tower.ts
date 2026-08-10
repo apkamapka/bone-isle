@@ -44,7 +44,13 @@ export interface Research {
   buyGold?: number;
   /** Charges granted per purchase. */
   buyN: number;
-  /** Tier 0..2 for the elemental line; absent on the four original crystals. */
+  /**
+   * Sold without a research step. Recall is the only project like this: the
+   * shelf shows it stocked from the first visit and the price does the
+   * gatekeeping.
+   */
+  openFromStart?: boolean;
+  /** Tier 0..2 for the elemental line; absent on the original crystals. */
   tier?: Tier;
   /** Element, for grouping the tower's project list by colour. */
   element?: Element;
@@ -139,7 +145,7 @@ export function researchAvailable(id: string, done: readonly string[]): boolean 
  * tower Flame, a tier-III tower Pyre — and the same one step at a time in
  * every other lane. The lane prerequisites stay on top of this, so depth
  * costs two different things at once: a building you paid for, and a lane
- * you committed to. The four original crystals predate the elemental line
+ * you committed to. The two surviving originals predate the elemental line
  * and sit at tier I, where they have always been.
  */
 export function towerTierFor(r: Research): 1 | 2 | 3 {
@@ -156,39 +162,30 @@ export const RESEARCH: readonly Research[] = [
     id: "life",
     name: "Life Crystals",
     desc: "Restores HP on use.",
-    researchCost: { herb: 10, silk: 8 },
+    researchCost: {},
+    researchGold: 150,
     crystal: "healCrystal",
-    buyCost: { herb: 4, silk: 3 },
+    buyCost: {},
+    buyGold: 80,
     buyN: 10,
   },
   {
-    id: "fire",
-    name: "Flare Crystals",
-    desc: "Hurls fire at the nearest enemy.",
-    researchCost: { bones: 12, stone: 10 },
-    crystal: "flameCrystal",
-    buyCost: { bones: 5, stone: 4 },
-    buyN: 8,
-  },
-  {
+    // Recall skips research entirely. The old herb-and-silk gate was busywork
+    // in front of a convenience, and 800 gold a charge is a far better brake
+    // than a one-off unlock: you can always afford the trip home, you just
+    // have to decide every single time whether it was worth it.
     id: "recall",
     name: "Recall Crystals",
     desc: "Teleports you back to Home Isle.",
-    researchCost: { silk: 10, bones: 8 },
+    researchCost: {},
+    openFromStart: true,
     crystal: "recallCrystal",
-    buyCost: { silk: 4, bones: 3 },
-    buyN: 4,
-  },
-  {
-    id: "spear",
-    name: "Fire Spear Crystals",
-    desc: "Heavy ranged damage, longer reach.",
-    researchCost: { bones: 15, stone: 12 },
-    crystal: "spearCrystal",
-    buyCost: { bones: 8, stone: 6 },
-    buyN: 4,
+    buyCost: {},
+    buyGold: 800,
+    buyN: 1,
   },
 ];
+
 /* ------------------------------------------------------------------ *
  *  THE ELEMENTAL SHELF
  *
@@ -287,11 +284,12 @@ export function offersFor(el: Element, towerTier: number): readonly Offer[] {
   return OFFERS.filter((o) => o.element === el && o.tier === Math.max(1, towerTier) - 1);
 }
 
-/** Projects finished. Only the four originals live here now. */
+/** Projects finished. Only Life Crystals can land here now. */
 const done = new Set<string>();
 
 export function isResearched(id: string): boolean {
-  return done.has(id);
+  if (done.has(id)) return true;
+  return RESEARCH.some((r) => r.id === id && r.openFromStart === true);
 }
 
 export function markResearched(id: string): void {

@@ -868,7 +868,11 @@ async function main(): Promise<void> {
       "each tier more than doubles — an upgrade, not a percentage");
     ok(T.RESEARCH.every((r) => r.element === undefined),
       "the elemental line left the research tree entirely");
-    ok(T.RESEARCH.length === 4, "…only the four originals are still researched");
+    ok(T.RESEARCH.length === 2, "…only Life and Recall are left on the originals' shelf");
+    ok(T.RESEARCH.every((r) => Object.keys(r.researchCost).length === 0 && Object.keys(r.buyCost).length === 0),
+      "…and neither of them asks for a material any more — gold only");
+    ok(T.RESEARCH.every((r) => r.openFromStart || (r.researchGold ?? 0) > 0),
+      "…every project either costs gold to unlock or needs no unlocking");
 
     // resistances: sparse, meaningful, and never total immunity
     const withRes = Object.values(M.MONSTER_DEFS).filter((d) => d.resist);
@@ -1273,7 +1277,9 @@ async function main(): Promise<void> {
       }
     }
     T.loadAttunedState([]);
-    ok(towerRows("other", 1).length === 4, "the OTHER tab keeps the four originals at every tier");
+    ok(towerRows("other", 1).length === 2, "the OTHER tab keeps both originals at every tier");
+    ok(T.isResearched("recall"), "Recall is stocked from the first visit — the price is the gate");
+    ok(!T.isResearched("life"), "…while Life still has to be researched once");
 
     // TEST grid: every single item is reachable, none listed twice
     const kinds = panels as never as { TEST_KINDS: string[] };
@@ -1911,7 +1917,7 @@ async function main(): Promise<void> {
     {
       const { tryUpgrade, CHEST_SLOTS, tierOf } = await import("../src/systems/building.ts");
       const chest = home.structures.find((st) => st.key === "chest")!;
-      items.addItem(chest.inv!, "silk", 7);
+      items.addItem(chest.inv!, "coal", 7);
       g.player.bag.fill(null);
       items.addItem(g.player.bag, "wood", 60);
       items.addItem(g.player.bag, "stone", 60);
@@ -1919,22 +1925,22 @@ async function main(): Promise<void> {
       ok(tryUpgrade(home, g.player, chest, []), "chest upgraded to tier II");
       ok(tierOf(chest) === 2, "…and it reads back as tier II");
       ok(chest.inv!.length === CHEST_SLOTS[1], `…with ${CHEST_SLOTS[1]} slots`);
-      ok(items.bagCount(chest.inv!, "silk") === 7, "…and the silk inside survived the upgrade");
+      ok(items.bagCount(chest.inv!, "coal") === 7, "…and the coal inside survived the upgrade");
     }
     items.addItem(invs[0], "bones", 30);
     ok(items.bagCount(invs[0], "bones") === 30 && items.bagCount(invs[1], "bones") === 0,
       "items stored in one chest never appear in the other");
     // costs still draw from the backpack + EVERY chest combined
-    items.addItem(invs[1], "herb", 12);
+    items.addItem(invs[1], "coal", 12);
     const bagWood = items.bagCount(g.player.bag, "wood");
     items.removeItem(g.player.bag, "wood", bagWood);
     items.addItem(invs[0], "wood", 22);
     items.addItem(g.player.bag, "stone", 6);
-    // 22 wood sits in chest one, 12 herb in chest two, 6 stone in the backpack:
+    // 22 wood sits in chest one, 12 coal in chest two, 6 stone in the backpack:
     // only the three pooled together can pay this.
-    ok(canAfford(g.player.bag, { wood: 22, herb: 12, stone: 6 }, homeChests(g)),
+    ok(canAfford(g.player.bag, { wood: 22, coal: 12, stone: 6 }, homeChests(g)),
       "a build cost split across bag + two chests still affords");
-    ok(!canAfford(g.player.bag, { wood: 22, herb: 12, stone: 6 }, []),
+    ok(!canAfford(g.player.bag, { wood: 22, coal: 12, stone: 6 }, []),
       "…and the backpack alone cannot");
   }
 
@@ -1953,10 +1959,10 @@ async function main(): Promise<void> {
           tryPlace(home, g.player, "chest", tx * TILE + TILE, ty * TILE + TILE, homeChests(g));
           break outer;
         }
-    items.addItem(homeChests(g)[0], "silk", 44);
+    items.addItem(homeChests(g)[0], "coal", 44);
     saveGame(g);
     const g2 = loadGame();
-    ok(!!g2 && items.bagCount(homeChests(g2!)[0], "silk") === 44,
+    ok(!!g2 && items.bagCount(homeChests(g2!)[0], "coal") === 44,
       "a chest's own inventory survives the save round-trip");
     // legacy: strip the chest inv and plant the pre-Etap-11 shared stash field
     const raw = JSON.parse(localStorage.getItem("bone-isle-save-v2")!);
@@ -1985,9 +1991,11 @@ async function main(): Promise<void> {
       && !tasks.TASKS.some((t) => (t.reward.item as string) === "fireRuby"),
       "…and the task board stopped paying in rubies");
 
-    // the id handover: same charge crystal, new name
-    ok(items.ITEMS.flameCrystal.crystal === true, "the old fire charge crystal lives on as flameCrystal");
-    ok(items.ITEMS.fireCrystal.crystal !== true, "…and fireCrystal is now a stone, not a charge");
+    // the id handover, finished: the charge crystal it was renamed FOR is gone
+    // too, so "fireCrystal" is now unambiguously the attunement stone.
+    ok(!("flameCrystal" in items.ITEMS), "the old fire charge crystal is retired outright");
+    ok(!("spearCrystal" in items.ITEMS), "…and so is the spear charge");
+    ok(items.ITEMS.fireCrystal.crystal !== true, "…leaving fireCrystal as a stone, not a charge");
 
     // one stone per lane, and none of them sellable
     ok(E.ELEMENTS.every((el) => T.ATTUNEMENT[el] in items.ITEMS), "every element has an attunement stone");
@@ -2006,7 +2014,7 @@ async function main(): Promise<void> {
     T.loadAttunedState([]);
 
     // gold pricing: the elemental shelf never asks for materials…
-    const MATS = ["wood", "bones", "stone", "herb", "silk"];
+    const MATS = ["wood", "bones", "stone", "coal", "iron"];
     ok(T.OFFERS.every((o) => !MATS.some((m) => m in o.cost)),
       "no firewood or bone changes hands anywhere in the elemental line");
     ok(T.OFFERS.every((o) => o.gold > 0), "…every crystal on the shelf costs gold");
@@ -2026,30 +2034,34 @@ async function main(): Promise<void> {
     ok(droppers.length === 1 && droppers[0] === "dragon", "the dragon is the only source of the Essence");
   }
 
-  console.log("Etap 25 — the fireCrystal id changes hands (save migration):");
+  console.log("Etap 26 — the retired crystals leave old saves (migration):");
   {
     const { createGame } = await import("../src/game.ts");
     const { saveGame, loadGame, deleteSave } = await import("../src/save.ts");
+    const T = await import("../src/systems/tower.ts");
     const A = await import("../src/systems/actions.ts");
     deleteSave();
     saveGame(createGame());
     const raw = JSON.parse(localStorage.getItem("bone-isle-save-v2")!);
-    // hand-plant a save as it looked BEFORE the handover: fifteen fire charges
-    // in the bag and a hotkey bound to them.
+    // Hand-plant a save from before the handover: fifteen fire charges in the
+    // bag, a hotkey bound to them, and both retired projects researched.
     raw.v = 3;
-    raw.player.bag = [{ kind: "fireCrystal", n: 15 }, ...Array(15).fill(null)];
-    raw.slots = [{ type: "crystal", item: "fireCrystal" }, null, null, null, null, null];
+    raw.player.bag = [{ kind: "fireCrystal", n: 15 }, { kind: "spearCrystal", n: 9 }, ...Array(14).fill(null)];
+    raw.slots = [{ type: "crystal", item: "fireCrystal" }, { type: "crystal", item: "spearCrystal" }, null, null, null, null];
+    raw.research = ["life", "fire", "recall", "spear"];
     localStorage.setItem("bone-isle-save-v2", JSON.stringify(raw));
     const g2 = loadGame()!;
     ok(!!g2, "a v3 save still loads");
-    ok(items.bagCount(g2.player.bag, "flameCrystal") === 15,
-      "…its fire charges are renamed, not reinterpreted");
     ok(items.bagCount(g2.player.bag, "fireCrystal") === 0,
-      "…so nobody is quietly handed fifteen free lane keys");
+      "…and nobody is quietly handed fifteen free lane keys");
+    ok(g2.player.bag.every((st) => !st || (st.kind !== "flameCrystal" && st.kind !== "spearCrystal")),
+      "…the retired charges evaporate rather than riding along as dead ids");
     ok(items.bagCount(g2.player.bag, "fireEmberArrow") === 0, "…and no stray tier-I arrows appear from nowhere");
-    const s0 = A.actionSlots[0];
-    ok(!!s0 && s0.type === "crystal" && s0.item === "flameCrystal",
-      "…and the hotkey bound to them still points at a charge crystal");
+    ok(A.actionSlots[0] === null && A.actionSlots[1] === null,
+      "…hotkeys bound to a retired crystal come back empty, not broken");
+    ok(T.isResearched("life"), "…Life Crystals stay researched");
+    ok(!T.researchState().includes("fire") && !T.researchState().includes("spear"),
+      "…and the two dead project ids are scrubbed from the save");
     deleteSave();
   }
 
@@ -2419,7 +2431,7 @@ async function main(): Promise<void> {
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 5, "saving writes the current v5 format");
+    ok(stored.v === 6, "saving writes the current v6 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
@@ -2490,7 +2502,7 @@ async function main(): Promise<void> {
     ok(home.mapImage === undefined, "headless: no terrain image, the baked canvas carries on");
     ok(home.trees.length === 12, "all 12 authored trees made it across");
     ok(home.rocks.length === 10, "…and all 10 rocks (the duplicate marker is gone)");
-    ok(home.herbs.length === 0 && home.decos.length === 0, "no scattered decoration was added");
+    ok(home.decos.length === 0, "no scattered decoration was added");
     ok(home.portals.length === 1 && home.portals[0].dest === "town", "one portal, to Bonetown");
 
     // the authored spawn tile is honoured and is somewhere you can stand
@@ -3872,7 +3884,7 @@ async function main(): Promise<void> {
       for (const f of r.fires) claim(f.tx, f.ty, "fire");
       for (const t of r.trees) claim(t.tx, t.ty, "tree");
       for (const k of r.rocks) claim(k.tx, k.ty, "rock");
-      for (const h of r.herbs) claim(h.tx, h.ty, "herb");
+      for (const d of r.decos) claim(d.tx, d.ty, "decor");
       for (const m of r.mobPosts!) claim(m.tx, m.ty, "creature");
       ok(doubled === 0,
         `no tile carries two objects — no tent on a well, no rock on a rock (${claimed.size} occupied)`);
@@ -4343,6 +4355,95 @@ async function main(): Promise<void> {
       const fastest = boots.reduce((a, b) => ((I[a].gear?.speed ?? 0) >= (I[b].gear?.speed ?? 0) ? a : b));
       ok(fastest === "knightBoots", `the quickest boot in the game is the human line's best (${fastest})`);
     }
+  }
+
+  console.log("Etap 26 — the ammo slot is loaded by hand:");
+  {
+    const { createGame } = await import("../src/game.ts");
+    const g = await Promise.resolve(createGame());
+    const P = g.player;
+
+    // the whole point: every arrow in the registry is reachable, not just two
+    ok(items.AMMO_KINDS.length > 2, `${items.AMMO_KINDS.length} arrow kinds can be loaded, not a hard-coded pair`);
+    ok(items.AMMO_KINDS.includes("shadowGloomArrow"),
+      "…including the elemental arrows that used to sit in the bag doing nothing");
+    ok(!items.AMMO_KINDS.includes("trainingArrow"),
+      "…but never practice arrows, which are not for shooting monsters with");
+    ok(items.AMMO_KINDS.every((k) => k in items.ITEMS && items.ITEMS[k].ammo),
+      "every listed kind is real ammo");
+
+    P.bag.fill(null);
+    items.addItem(P.bag, "arrow", 20);
+    items.addItem(P.bag, "shadowGloomArrow", 5);
+    ok(items.activeArrow(P.bag, null) === "shadowGloomArrow",
+      "with no pick the bow falls back to the hardest-hitting arrow carried");
+    ok(items.activeArrow(P.bag, "arrow") === "arrow",
+      "…but an explicit pick beats the automatic one, however weak");
+
+    // cycling only ever visits what you are actually carrying
+    const seen = new Set<string>();
+    let cur: typeof P.ammo = null;
+    for (let i = 0; i < 6; i++) { cur = items.cycleArrow(P.bag, cur); if (cur) seen.add(cur); }
+    ok(seen.size === 2 && seen.has("arrow") && seen.has("shadowGloomArrow"),
+      "cycling walks the carried kinds and nothing else");
+
+    // running a chosen stack dry must not silently disarm the bow
+    items.removeItem(P.bag, "shadowGloomArrow", 5);
+    ok(items.activeArrow(P.bag, "shadowGloomArrow") === "arrow",
+      "a pick that runs out falls back instead of leaving the bow empty");
+    P.bag.fill(null);
+    ok(items.activeArrow(P.bag, "arrow") === null && items.cycleArrow(P.bag, null) === null,
+      "an empty quiver stays empty");
+  }
+
+  console.log("Etap 26 — the retired six leave no loose ends:");
+  {
+    const M = await import("../src/entities/monsters.ts");
+    const tasks = await import("../src/systems/tasks.ts");
+    const T = await import("../src/systems/tower.ts");
+    const A = await import("../src/systems/actions.ts");
+    const { createGame } = await import("../src/game.ts");
+    const GONE = ["herb", "silk", "shell", "wolfFur", "flameCrystal", "spearCrystal"];
+
+    for (const k of GONE) ok(!(k in items.ITEMS), `${k} is gone from the registry`);
+    ok(!Object.values(M.MONSTER_DEFS).some((d) => d.loot.some((l) => GONE.includes(l.kind as string))),
+      "…nothing in the bestiary drops one");
+    ok(!T.RESEARCH.some((r) => GONE.some((k) => k in r.researchCost || k in r.buyCost)),
+      "…no tower project asks for one");
+    ok(!tasks.EXCHANGES.some((x) => GONE.includes(x.item as string)),
+      "…and the task board stopped paying in them");
+    ok(!A.actionSlots.some((sl) => sl?.type === "crystal" && GONE.includes(sl.item as string)),
+      "…no default hotkey points at one");
+
+    // offence really is behind attunement now
+    ok(A.BINDABLE_CRYSTALS.includes("fireEmberShard"),
+      "elemental crystals can be bound to a hotkey — they are the only offence left");
+    const P = createGame().player;
+    ok(items.AMMO_KINDS.some((k) => items.bagCount(P.bag, k) > 0),
+      "a fresh character still starts with something to shoot");
+    ok(!(Object.keys(items.ITEMS) as (keyof typeof items.ITEMS)[])
+      .some((k) => items.ITEMS[k].crystal && items.bagCount(P.bag, k) > 0),
+      "…but not one crystal of any kind: magic is bought, never issued");
+  }
+
+  console.log("Etap 26 — the sea swallows what you throw in it:");
+  {
+    const { WORLD_SEED } = await import("../src/config.ts");
+    const { Tile } = await import("../src/world/types.ts");
+    const home = buildWorlds(WORLD_SEED).wild;
+
+    // the rule the throw code leans on: water is unwalkable but not a wall,
+    // so a stack can reach it while line of sight still passes over it
+    let water = 0, waterSolid = 0, waterWall = 0;
+    for (let y = 0; y < home.h; y++) for (let x = 0; x < home.w; x++) {
+      if (home.tile[y][x] !== Tile.Water) continue;
+      water++;
+      if (home.solid[y][x]) waterSolid++;
+      if ((home.tile[y][x] as number) === (Tile.Wall as number)) waterWall++;
+    }
+    ok(water > 0, `the Wildlands coast offers ${water} water tiles to throw into`);
+    ok(waterSolid === water, "…every one of them blocks walking, so nothing lands there by accident");
+    ok(waterWall === 0, "…and none is a wall, so a throw can see the sea it is aimed at");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

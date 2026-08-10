@@ -6,7 +6,7 @@ import { toTile, tileCenter } from "../world/grid.ts";
 import { activeBonus } from "../systems/derived.ts";
 import { emptyBag, emptyEquipment, gearStat, itemWeight, bagWeight, addItem } from "../items.ts";
 import type { Bag, Equipment, ItemKind } from "../items.ts";
-import type { Vec, Monster, Tree, RockNode, HerbNode, Structure, Corpse, Npc, GroundItem } from "../world/types.ts";
+import type { Vec, Monster, Tree, RockNode, Structure, Corpse, Npc, GroundItem } from "../world/types.ts";
 
 /**
  * What the player is currently auto-acting on. A discriminated union so the
@@ -24,7 +24,7 @@ export type Target =
 export type GatherTask =
   | { kind: "tree"; obj: Tree }
   | { kind: "rock"; obj: RockNode }
-  | { kind: "herb"; obj: HerbNode };
+;
 
 export interface Player {
   x: number;
@@ -50,6 +50,13 @@ export interface Player {
   dest: Vec | null;
   target: Target | null;
   gather: GatherTask | null;
+  /**
+   * The arrow kind the player loaded into the Ammo slot, or null for "let the
+   * bow decide". Kept as a kind rather than a stack: arrows stay in the bag
+   * and the slot only points at them, so a pick never strands ammo somewhere
+   * the weight and stack maths cannot see.
+   */
+  ammo: ItemKind | null;
   dead: boolean;
   deadT: number;
   tpCd: number;
@@ -67,10 +74,10 @@ export interface Player {
 export function createPlayer(spawn: Vec): Player {
   const bag = emptyBag();
   const startSet = bakeOutfitSprites();
-  // Starter crystals so the action bar is usable before the Alchemy Tower exists.
-  addItem(bag, "healCrystal", 25);
-  addItem(bag, "flameCrystal", 15);
-  addItem(bag, "recallCrystal", 5);
+  // No crystals at all. Every one of them — even the healing kind — is now
+  // something the Alchemy Tower sells you, and the action slots start bound
+  // to two you cannot yet afford on purpose: the empty counts are the hint.
+  // Until then a bow and a blade are the whole arsenal.
   // Starter bow + arrows so ranged combat is usable before the Forge.
   addItem(bag, "bow", 1);
   addItem(bag, "arrow", 30);
@@ -94,6 +101,7 @@ export function createPlayer(spawn: Vec): Player {
     dest: null,
     target: null,
     gather: null,
+    ammo: null,
     dead: false,
     deadT: 0,
     tpCd: 0,

@@ -184,7 +184,6 @@ export function canPlaceAt(home: World, key: StructKey, tx: number, ty: number, 
       if (x < 1 || y < 1 || x >= home.w - 1 || y >= home.h - 1) return false;
       if (home.tile[y][x] !== Tile.Grass) return false;
       if (home.solid[y][x]) return false;
-      if (home.herbs.some((hb) => hb.tx === x && hb.ty === y)) return false;
       if (home.decos.some((d) => d.tx === x && d.ty === y)) return false;
     }
   }

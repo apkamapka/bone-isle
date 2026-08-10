@@ -7,9 +7,9 @@ import type { Element } from "./systems/elements.ts";
 
 export type ItemKind =
   // resources
-  | "wood" | "stone" | "bones" | "herb" | "silk"
+  | "wood" | "stone" | "bones"
   // creature materials (Etap 8): loot-only, sold to shops / future research & tasks
-  | "venomGland" | "shell" | "wolfFur" | "ghoulClaw" | "dragonScale"
+  | "venomGland" | "ghoulClaw" | "dragonScale"
   // creature trophies (Etap 24): 15% from their family, the feedstock of Essential Gems
   | "minotaurHorn" | "orcEar" | "goblinFang" | "cursedRib"
   // forge materials (Etap 24): smelted from looted gear, never bought
@@ -21,10 +21,11 @@ export type ItemKind =
   | "mushroom" | "meat" | "hpPotion" | "dragonHam"
   // crystals (charge-based spell replacements — one "use" per charge)
   //
-  // NOTE the name: this WAS "fireCrystal" until Etap 25, when the id was
-  // handed over to the attunement stone below. The old charge crystal keeps
-  // working exactly as before under a new name; saves are migrated on load.
-  | "healCrystal" | "flameCrystal" | "recallCrystal" | "spearCrystal"
+  // Only the two UTILITY crystals survive. Flare and Spear — the originals'
+  // offensive pair — were retired in Etap 26: the elemental line does that
+  // job now, and keeping a free, unattuned fire crystal in the starting bag
+  // undercut the whole point of attunement. Offence is something you unlock.
+  | "healCrystal" | "recallCrystal"
   // elemental crystals: 5 elements x 3 tiers x 2 roles, plus tier-I arrows
   | "fireEmberShard" | "fireEmberBurst" | "fireEmberNova" | "fireEmberWave" | "fireEmberArrow"
   | "fireFlameShard" | "fireFlameBurst" | "fireFlameNova" | "fireFlameWave" | "fireFlameArrow"
@@ -181,11 +182,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   wood:      { name: "Wood",         stack: 9999, value: 1, weight: 10 },
   stone:     { name: "Stone",        stack: 9999, value: 1, weight: 14 },
   bones:     { name: "Bones",        stack: 9999, value: 2, weight: 8 },
-  herb:      { name: "Herb",         stack: 9999, value: 3, weight: 3 },
-  silk:      { name: "Spider Silk",  stack: 9999, value: 4, weight: 2 },
   venomGland:{ name: "Venom Gland",  stack: 9999, value: 15, weight: 2 },
-  shell:     { name: "Crab Shell",   stack: 9999, value: 15, weight: 6 },
-  wolfFur:   { name: "Wolf Fur",     stack: 9999, value: 18, weight: 5 },
   ghoulClaw: { name: "Ghoul Claw",   stack: 9999, value: 25, weight: 3 },
   dragonScale:{ name: "Dragon Scale", stack: 999, value: 60, weight: 4 },
   // ---- trophies. Priced to be worth selling once you have your gems, which
@@ -208,9 +205,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   dragonHam: { name: "Dragon Ham",   stack: 999, value: 8, weight: 10, food: 360 },
   hpPotion:  { name: "Health Potion", stack: 999, value: 12, weight: 5, heal: 45 },
   healCrystal:   { name: "Life Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
-  flameCrystal:  { name: "Flare Crystal",  stack: 999, value: 8, weight: 2, crystal: true },
   recallCrystal: { name: "Recall Crystal", stack: 999, value: 6, weight: 2, crystal: true },
-  spearCrystal:  { name: "Spear Crystal",  stack: 999, value: 14, weight: 2, crystal: true },
   // ---- the elemental line. Naming runs Ember/Flame/Pyre by tier, and
   // ---- Shard/Burst by role: a Shard flies at one target, a Burst goes off
   // ---- where it lands. Tier is legible from the name alone, which matters
@@ -531,14 +526,29 @@ export function equippedBow(eq: Equipment): { range: number; power: number } | n
 }
 
 /**
- * Pick the best COMBAT arrow kind present in the bag (Bone > plain), or null
- * if none. "Best" = highest ammo damage among kinds you actually carry.
+ * Every kind that can be loaded into the Ammo slot, in a stable display order:
+ * the two plain shafts first, then the elemental arrows in registry order.
  * Practice arrows are deliberately excluded — they never fire at monsters.
+ *
+ * Derived from the registry rather than typed out, so a new arrow tier is
+ * shootable the moment it exists. The old hard-coded ["boneArrow", "arrow"]
+ * pair was exactly why the fifteen elemental arrows sat in the bag doing
+ * nothing: they were valid ammo the bow was never allowed to see.
+ */
+export const AMMO_KINDS: readonly ItemKind[] = (Object.keys(ITEMS) as ItemKind[])
+  .filter((k) => ITEMS[k].ammo && !ITEMS[k].practice);
+
+/**
+ * Pick the best COMBAT arrow kind present in the bag, or null if none.
+ * "Best" = highest ammo damage among kinds you actually carry.
+ *
+ * This is now only the FALLBACK for an empty or exhausted Ammo slot — the
+ * player's own pick wins whenever they have one. See `activeArrow`.
  */
 export function bestArrow(bag: Bag): ItemKind | null {
   let best: ItemKind | null = null;
   let bestDmg = -1;
-  for (const kind of ["boneArrow", "arrow"] as const) {
+  for (const kind of AMMO_KINDS) {
     const def = ITEMS[kind].ammo;
     if (def && bagCount(bag, kind) > 0 && def.dmg > bestDmg) { best = kind; bestDmg = def.dmg; }
   }
@@ -546,13 +556,40 @@ export function bestArrow(bag: Bag): ItemKind | null {
 }
 
 /**
+ * The arrow a bow actually fires: the player's chosen kind while they still
+ * carry it, otherwise the best thing left in the bag.
+ *
+ * Tibia loads a quiver by hand and so does this — with seventeen arrow kinds
+ * in circulation, any automatic pick is wrong half the time. "Strongest
+ * first" would burn Pyre Arrows on rats; "cheapest first" would mean the
+ * good ammo never leaves the bag. The fallback exists only so that running
+ * a stack dry mid-fight doesn't silently disarm you.
+ */
+export function activeArrow(bag: Bag, pick: ItemKind | null): ItemKind | null {
+  if (pick && bagCount(bag, pick) > 0) return pick;
+  return bestArrow(bag);
+}
+
+/**
+ * Next ammo kind to select when the Ammo slot is clicked: cycles through the
+ * kinds actually carried, so the list is short even though the registry is
+ * long. Returns null when the bag holds no ammo at all.
+ */
+export function cycleArrow(bag: Bag, pick: ItemKind | null): ItemKind | null {
+  const carried = AMMO_KINDS.filter((k) => bagCount(bag, k) > 0);
+  if (!carried.length) return null;
+  const i = pick ? carried.indexOf(pick) : -1;
+  return carried[(i + 1) % carried.length];
+}
+
+/**
  * Arrow pick when shooting the Archery Range: training arrows first (that's
  * what they're for — save the real ammo), falling back to combat arrows so a
  * hunter without practice shafts can still use the butt.
  */
-export function bestPracticeArrow(bag: Bag): ItemKind | null {
+export function bestPracticeArrow(bag: Bag, pick: ItemKind | null = null): ItemKind | null {
   if (bagCount(bag, "trainingArrow") > 0) return "trainingArrow";
-  return bestArrow(bag);
+  return activeArrow(bag, pick);
 }
 
 /** Sum a gear stat across all equipped items. */

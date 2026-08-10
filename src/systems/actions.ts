@@ -16,14 +16,15 @@ export type SlotAction =
 export const ACTION_SLOTS = 6;
 
 /**
- * The live binding. Default layout for now: the three crystals in slots 1–3,
- * the rest empty. A rebinding UI will overwrite these entries later.
+ * The live binding. Default layout: the two utility crystals in slots 1–2,
+ * the rest empty and waiting for whichever element the player attunes to.
+ * A fresh character genuinely has no attack binding, and that is deliberate.
  */
 export const actionSlots: (SlotAction | null)[] = [
   { type: "crystal", item: "healCrystal" },
-  { type: "crystal", item: "flameCrystal" },
   { type: "crystal", item: "recallCrystal" },
-  { type: "crystal", item: "spearCrystal" },
+  null,
+  null,
   null,
   null,
 ];
@@ -62,5 +63,13 @@ export function loadSlots(data: unknown): void {
   }
 }
 
-/** Crystal kinds that can be bound to a slot (used by the mobile rebind picker). */
-export const BINDABLE_CRYSTALS: readonly ItemKind[] = ["healCrystal", "flameCrystal", "recallCrystal", "spearCrystal"];
+/**
+ * Crystal kinds that can be bound to a slot (used by the mobile rebind picker).
+ *
+ * Derived from the registry now rather than listed by hand. With the two
+ * originals gone, a hard-coded list would have left the player no offensive
+ * binding at all — every attack crystal in the game is elemental, so every
+ * elemental crystal has to be bindable.
+ */
+export const BINDABLE_CRYSTALS: readonly ItemKind[] =
+  (Object.keys(ITEMS) as ItemKind[]).filter((k) => ITEMS[k].crystal);

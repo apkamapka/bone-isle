@@ -103,7 +103,6 @@ export interface Exchange {
 }
 export const EXCHANGES: readonly Exchange[] = [
   { id: "x_arrows", item: "boneArrow", itemN: 50, cost: 3, desc: "A full quiver of heavy arrows" },
-  { id: "x_spears", item: "spearCrystal", itemN: 5, cost: 10, desc: "Ready-made spear charges" },
 ];
 
 /* ---------------- runtime state (persisted via save.ts) ---------------- */

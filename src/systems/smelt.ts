@@ -128,7 +128,7 @@ export function canSmelt(kind: ItemKind): boolean {
  */
 export const GEM_TROPHIES: readonly ItemKind[] = [
   "minotaurHorn", "orcEar", "goblinFang", "cursedRib",
-  "venomGland", "ghoulClaw", "wolfFur", "shell", "dragonScale",
+  "venomGland", "ghoulClaw", "dragonScale",
 ];
 
 export function isGemTrophy(kind: ItemKind): boolean {

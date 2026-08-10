@@ -15,7 +15,7 @@ import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { stance, setStance, STANCES, type Stance } from "./systems/stance.ts";
 import { quests } from "./systems/quests.ts";
-import { emptyBag, emptyStash, emptyEquipment, addItem, ITEMS } from "./items.ts";
+import { emptyBag, emptyStash, emptyEquipment, addItem, ITEMS, AMMO_KINDS } from "./items.ts";
 import type { Bag, Equipment, ItemKind } from "./items.ts";
 import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
 
@@ -37,10 +37,10 @@ const KEY = "bone-isle-save-v2";
  * charges into fifteen lane keys and hand the player the whole fire tree.
  * That is why this bump exists even though no field changed shape.
  */
-const SAVE_V = 5;
+const SAVE_V = 6;
 
 interface SaveData {
-  v: 2 | 3 | 4 | 5;
+  v: 2 | 3 | 4 | 5 | 6;
   seed: number;
   current: WorldKey;
   player: {
@@ -48,6 +48,8 @@ interface SaveData {
     hp: number; maxhp: number;
     gold: number; taskPoints?: number; level: number; exp: number; expNext: number;
     fedS?: number;
+    /** Ammo slot pick. Absent in pre-Etap-26 saves — those load as "auto". */
+    ammo?: string;
     bag: Bag; eq: Equipment;
   };
   skills: Record<SkillKey, { lv: number; pts: number }>;
@@ -106,6 +108,7 @@ export function saveGame(g: Game): void {
       hp: p.hp, maxhp: p.maxhp,
       gold: p.gold, taskPoints: p.taskPoints, level: p.level, exp: p.exp, expNext: p.expNext,
       fedS: p.fedS,
+      ammo: p.ammo ?? undefined,
       bag: p.bag, eq: p.eq,
     },
     skills: skillDump,
@@ -141,9 +144,10 @@ export function loadGame(): Game | null {
   let data: SaveData;
   try {
     data = JSON.parse(raw) as SaveData;
-    if (data.v !== 2 && data.v !== 3 && data.v !== 4 && data.v !== SAVE_V) return null;
+    if (data.v !== 2 && data.v !== 3 && data.v !== 4 && data.v !== 5 && data.v !== SAVE_V) return null;
     if (data.v < 4) data = renameItems(data, { fireCrystal: "flameCrystal" });
     if (data.v < 5) data = renameItems(data, ARROW_TIER_I);
+    if (data.v < 6) data = dropResearch(data, RETIRED_RESEARCH);
   } catch {
     return null;
   }
@@ -239,6 +243,11 @@ export function loadGame(): Game | null {
   // rebuild bag/eq defensively (older/partial saves)
   player.bag = normalizeBag(sp.bag);
   player.eq = normalizeEquipment(sp.eq);
+  // A pick naming an arrow that no longer exists falls back to "auto" rather
+  // than sticking the bow with a kind it can never fire.
+  player.ammo = typeof sp.ammo === "string" && AMMO_KINDS.includes(sp.ammo as ItemKind)
+    ? (sp.ammo as ItemKind)
+    : null;
 
   (Object.keys(skills) as SkillKey[]).forEach((k) => {
     const s = data.skills?.[k];
@@ -325,6 +334,25 @@ const ARROW_TIER_I: Readonly<Record<string, string>> = {
   fireArrow: "fireEmberArrow", iceArrow: "iceFrostArrow", earthArrow: "earthLoamArrow",
   stormArrow: "stormSparkArrow", shadowArrow: "shadowGloomArrow",
 };
+
+/**
+ * Research ids retired in Etap 26 along with their crystals. Left in a save
+ * they would be harmless — nothing reads them — but they would also travel
+ * forever, and a stale id is exactly the kind of thing that quietly comes
+ * back to life when an id gets reused.
+ *
+ * The RETIRED ITEMS themselves need no list. Every reader of a saved stack
+ * (`validItem`, `normalizeEquipment`, `loadSlots`) already checks the kind
+ * against the live registry and drops what it does not recognise, so the six
+ * ids that stopped existing evaporate on load wherever they were stored —
+ * bag, equipment, chests, ground, corpses or action bindings.
+ */
+const RETIRED_RESEARCH: readonly string[] = ["fire", "spear"];
+
+function dropResearch(data: SaveData, ids: readonly string[]): SaveData {
+  if (!data.research) return data;
+  return { ...data, research: data.research.filter((id) => !ids.includes(id)) };
+}
 
 function renameItems(data: SaveData, map: Readonly<Record<string, string>>): SaveData {
   const walk = (v: unknown): unknown => {

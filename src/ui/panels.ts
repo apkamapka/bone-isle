@@ -10,7 +10,7 @@ import { RESEARCH, isResearched, towerTierOk,
 import { ELEMENT_LABEL, type Element } from "../systems/elements.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
 import type { TaskReward } from "../systems/tasks.ts";
-import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, bestArrow, itemInfoLines, countAcross } from "../items.ts";
+import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross } from "../items.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
@@ -123,6 +123,7 @@ export interface PanelActions {
   look: (kind: ItemKind) => void;
   toggleLook: () => void;
   openBag: () => void;
+  cycleAmmo: () => void;
   splitConfirm: (mode: "store" | "take" | "drop" | "throw") => void;
   close: (kind: PanelKind) => void;
 }
@@ -596,8 +597,8 @@ const SLOT_LABEL: Readonly<Record<EqSlot, string>> = {
 
 /**
  * Equipment grid arranged like Tibia's paperdoll: amulet & head up top, the two
- * hands flanking the body, ring & legs below, boots at the foot, and a read-only
- * ammo slot showing which arrows a bow would fire. Empty cells keep the diamond.
+ * hands flanking the body, ring & legs below, boots at the foot, and the ammo
+ * slot the player loads by hand. Empty cells keep the diamond.
  */
 type EqCell = EqSlot | "ammo" | "backpack" | null;
 const EQ_LAYOUT: readonly EqCell[] = [
@@ -622,7 +623,7 @@ function drawEquip(p: PanelInput): void {
   if (!goldPanel(p, x, y, w, h, "EQUIPMENT")) return;
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
-  const ammoKind = bestArrow(player.bag);
+  const ammoKind = activeArrow(player.bag, player.ammo);
   EQ_LAYOUT.forEach((cell, i) => {
     if (cell === null) return;
     const cx = gx + (i % cols) * (slot + gap);
@@ -634,7 +635,9 @@ function drawEquip(p: PanelInput): void {
       ctx.strokeStyle = "#caa23a";
       ctx.lineWidth = S;
       ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
-      const spr = SPR.pack;
+      // The item sprite, not SPR.pack: the slot that opens your backpack should
+      // show the same backpack the backpack itself does.
+      const spr = itemSprite("backpack");
       icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
       hudText(hud, "Bag", cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.85)", "center");
       p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => p.act.openBag() });
@@ -655,10 +658,18 @@ function drawEquip(p: PanelInput): void {
         const n = bagCount(player.bag, ammoKind);
         hudText(hud, `${n}`, cx + slot - 3 * S, cy + slot - 6 * S, 7 * S, "#ffe9a8", "right");
         if (hovering(p, cx, cy, slot, slot)) tooltipKind = ammoKind;
-        const k = ammoKind;
-        p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => p.act.look(k) });
       }
-      hudText(hud, "Ammo", cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.7)", "center");
+      // Clicking cycles through the ammo actually in the bag. Look mode still
+      // inspects, so the slot never stops being readable.
+      const k = ammoKind;
+      p.hotspots.push({
+        x: cx, y: cy, w: slot, h: slot,
+        fn: () => (p.ui.lookMode && k ? p.act.look(k) : p.act.cycleAmmo()),
+      });
+      // An explicit pick is worth showing: "auto" and "I chose these" behave
+      // differently the moment the stack runs out.
+      const label = player.ammo && ammoKind === player.ammo ? "Ammo *" : "Ammo";
+      hudText(hud, label, cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.7)", "center");
       return;
     }
 
@@ -1143,7 +1154,7 @@ function drawTower(p: PanelInput): void {
   }
 
   const foot = ui.towerTab === "other"
-    ? "The four originals — no tiers, never hidden"
+    ? "The originals — no tiers, never hidden"
     : showAttune
       ? "Sealed. An attunement stone opens this element."
       : `Showing tier ${tt} · upgrade the tower for the next five`;

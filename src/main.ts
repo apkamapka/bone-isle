@@ -35,7 +35,7 @@ import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
-import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, bestArrow, bestPracticeArrow, compactBag } from "./items.ts";
+import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
@@ -433,6 +433,13 @@ const act: PanelActions = {
   look: (kind: ItemKind) => { ui.inspect = kind; },
   toggleLook: () => { ui.lookMode = !ui.lookMode; if (!ui.lookMode) ui.inspect = null; },
   openBag: () => { openWindow("bag"); },
+  cycleAmmo: () => {
+    const next = cycleArrow(P.bag, P.ammo);
+    if (!next) { flash("no ammo to load", "#cfa86a"); return; }
+    P.ammo = next;
+    flash(`ammo: ${ITEMS[next].name}`, "#ffe9a8");
+    beep(520, 0.05, "sine", 0.04, 60);
+  },
   setOutfitColor: (zone: OutfitZone, idx: number) => {
     setOutfitColor(P, zone, idx);
     beep(480, 0.05, "sine", 0.04, 60);
@@ -462,14 +469,28 @@ function storePartial(index: number, n: number): void {
   beep(360, 0.06, "sine", 0.04);
 }
 
+/** Is this pixel over open water? */
+function waterAt(w: World, px: number, py: number): boolean {
+  const x = Math.floor(px / TILE);
+  const y = Math.floor(py / TILE);
+  if (x < 0 || y < 0 || x >= w.w || y >= w.h) return false;
+  return w.tile[y][x] === Tile.Water;
+}
+
 /**
  * Where a throw aimed at (tx,ty) actually lands. The target is clamped to
  * THROW_RANGE_PX from the player, snapped to the tile centre, then — if that
  * tile is solid or out of sight — slides back along the throw line toward the
  * player half a tile at a time until it's legal (Tibia does the same: an item
  * thrown at a wall falls at its foot). Worst case it lands at your feet.
+ *
+ * WATER is a legal landing spot even though it is not walkable, and `sank`
+ * says so. The sea is the game's rubbish bin: what goes in does not come
+ * back, there is no prompt, and the throw range is the ordinary one — the
+ * whole gesture has to be as cheap as throwing onto grass or it stops being
+ * a way to get rid of things.
  */
-function resolveThrowTarget(tx: number, ty: number): { x: number; y: number } {
+function resolveThrowTarget(tx: number, ty: number): { x: number; y: number; sank: boolean } {
   const world = cw();
   let dx = tx - P.x;
   let dy = ty - P.y;
@@ -482,9 +503,18 @@ function resolveThrowTarget(tx: number, ty: number): { x: number; y: number } {
     // snap to the tile centre so thrown loot sits tidily on the grid
     const cx = Math.floor(px / TILE) * TILE + TILE / 2;
     const cy = Math.floor(py / TILE) * TILE + TILE / 2;
-    if (!blockedAt(world, cx, cy) && lineOfSight(world, P.x, P.y, cx, cy)) return { x: cx, y: cy };
+    if (!lineOfSight(world, P.x, P.y, cx, cy)) continue;
+    const wet = waterAt(world, cx, cy);
+    if (wet || !blockedAt(world, cx, cy)) return { x: cx, y: cy, sank: wet };
   }
-  return { x: P.x, y: P.y + 4 };
+  return { x: P.x, y: P.y + 4, sank: false };
+}
+
+/** Swallow a stack thrown into the sea. Nothing is recoverable. */
+function sink(kind: ItemKind, n: number, x: number, y: number): void {
+  addFloat(cw(), x, y - 12, "splash", "#8ecfff");
+  flash(`${n} ${ITEMS[kind].name} sank`, "#8ecfff");
+  beep(150, 0.18, "sine", 0.05, -90);
 }
 
 /**
@@ -529,6 +559,7 @@ function dropToGround(kind: ItemKind, n: number, tx?: number, ty?: number): void
     // aimed at a portal → the stack takes the trip instead of landing
     const pt = portalAt(t.x, t.y);
     if (pt) { sendThroughPortal(kind, n, pt); return; }
+    if (t.sank) { sink(kind, n, t.x, t.y); return; }
     gx = t.x; gy = t.y;
   } else {
     const jitter = () => (Math.random() - 0.5) * 16;
@@ -555,6 +586,13 @@ function throwGroundItem(gi: GroundItem, tx: number, ty: number): void {
     const idx = world.ground.indexOf(gi);
     if (idx >= 0) world.ground.splice(idx, 1);
     sendThroughPortal(gi.kind, gi.n, pt);
+    return;
+  }
+  // ...and shoving one into the sea loses it, exactly like a bag throw
+  if (t.sank) {
+    const idx = world.ground.indexOf(gi);
+    if (idx >= 0) world.ground.splice(idx, 1);
+    sink(gi.kind, gi.n, t.x, t.y);
     return;
   }
   const near = world.ground.find((g) => g !== gi && g.kind === gi.kind && Math.hypot(g.x - t.x, g.y - t.y) < 14);
@@ -1465,17 +1503,6 @@ function worldClick(w: Vec): void {
       return;
     }
   }
-  // herbs
-  for (const hb of world.herbs) {
-    if (hb.picked) continue;
-    const cx = hb.tx * TILE + TILE / 2;
-    const cy = hb.ty * TILE + TILE / 2;
-    if (Math.abs(w.x - cx) < 16 && Math.abs(w.y - cy) < 16) {
-      P.gather = { kind: "herb", obj: hb };
-      P.target = null; P.dest = null; moveMarker = null; pendingLoot = null;
-      return;
-    }
-  }
   // otherwise: walk there
   P.dest = { x: w.x, y: w.y };
   P.target = null; P.gather = null; pendingLoot = null;
@@ -1515,8 +1542,8 @@ function attackMode(): { ranged: boolean; reach: number; arrow: ItemKind | null 
     // against anything else only combat arrows count.
     const t = P.target;
     const arrow = t?.kind === "dummy" && t.s.key === "range"
-      ? bestPracticeArrow(P.bag)
-      : bestArrow(P.bag);
+      ? bestPracticeArrow(P.bag, P.ammo)
+      : activeArrow(P.bag, P.ammo);
     if (arrow) return { ranged: true, reach: bow.range, arrow };
   }
   return { ranged: false, reach: MELEE_REACH_PX, arrow: null };
@@ -2248,7 +2275,7 @@ function render(): void {
     vctx.fillText(`${gt.lv}`, Math.round(gx) - 6, Math.round(gy) - 10);
   }
 
-  // gather nodes: trees, rocks, herbs (sorted by y with actors below)
+  // gather nodes: trees and rocks (sorted by y with actors below)
   type Drawable = { y: number; fn: () => void };
   const drawList: Drawable[] = [];
   // Viewport culling: anything whose base sits outside the camera view (plus
@@ -2321,13 +2348,6 @@ function render(): void {
     drawList.push({ y: by, fn: () => {
       drawSprite(campfireFrame(waveT, fr.phase) ?? SPR.campfire, bx, by);
     } });
-  }
-  for (const hb of world.herbs) {
-    if (hb.picked) continue;
-    const bx = hb.tx * TILE + TILE / 2;
-    const by = hb.ty * TILE + TILE;
-    if (!inView(bx, by)) continue;
-    drawList.push({ y: by, fn: () => drawSprite(SPR.herb, bx, by) });
   }
   // structures
   for (const s of world.structures) {

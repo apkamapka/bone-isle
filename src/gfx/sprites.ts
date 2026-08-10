@@ -678,18 +678,6 @@ export const SPR = {
     ".WwwWWwwW.",
     "..w....w..",
   ]),
-  herb: bake([
-    ".g.g.",
-    "gGgGg",
-    ".ggg.",
-    "..G..",
-  ]),
-  silkIcon: bake([
-    ".mm..mm.",
-    "m..mm..m",
-    ".mm..mm.",
-    "m..mm..m",
-  ]),
   meatIcon: bake([
     ".rrrr..",
     "rrrRrr.",
@@ -720,14 +708,6 @@ export const SPR = {
     ".gGGg.",
     "..GG..",
   ]),
-  crystalFire: bake([
-    "..yy..",
-    ".yrry.",
-    "yrrrry",
-    "rrrrrr",
-    ".rRRr.",
-    "..RR..",
-  ]),
   crystalRecall: bake([
     "..ww..",
     ".wmmw.",
@@ -735,14 +715,6 @@ export const SPR = {
     "mmmmmm",
     ".mMMm.",
     "..MM..",
-  ]),
-  crystalSpear: bake([
-    "..c...",
-    ".ccy..",
-    ".rcc..",
-    "rrrc..",
-    "Rrr...",
-    "R.....",
   ]),
   /* The Essence of Magic: no element of its own, so it borrows all of them —
    * a pale core with the five tints caught in its facets. It is the one thing
@@ -885,19 +857,6 @@ export const SPR = {
     "gGggg",
     "ggGgg",
     ".ggg.",
-  ]),
-  shellIcon: bake([
-    ".mmmm.",
-    "mMrrMm",
-    "mrMMrm",
-    "mMrrMm",
-    ".mmmm.",
-  ]),
-  wolfFur: bake([
-    "Mx.xMM",
-    "xMMMxM",
-    "MMxMMx",
-    "xMMMMx",
   ]),
   ghoulClaw: bake([
     "w..w.",
@@ -1218,8 +1177,8 @@ function elementalIcon(element: string, tier: number, role: "Shard" | "Burst" | 
  * `itemSprite()` from that module, not read this table directly.
  */
 export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
-  wood: SPR.wood, stone: SPR.stoneIcon, bones: SPR.bones, herb: SPR.herb, silk: SPR.silkIcon,
-  venomGland: SPR.venomGland, shell: SPR.shellIcon, wolfFur: SPR.wolfFur,
+  wood: SPR.wood, stone: SPR.stoneIcon, bones: SPR.bones,
+  venomGland: SPR.venomGland,
   ghoulClaw: SPR.ghoulClaw, dragonScale: SPR.dragonScaleIcon,
   minotaurHorn: SPR.minotaurHorn, orcEar: SPR.orcEar, goblinFang: SPR.goblinFang, cursedRib: SPR.cursedRib,
   iron: SPR.ironIngot, steel: SPR.steelIngot, essentialGem: SPR.essentialGem, coal: SPR.coalLump,
@@ -1248,8 +1207,7 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   mercBlade: SPR.gearStubWeapon, warHammer: SPR.gearStubWeapon, orcishAxe: SPR.gearStubWeapon, gladius: SPR.gearStubWeapon,
   boneSword: SPR.gearStubWeapon, minotaurAxe: SPR.gearStubWeapon, warlordBlade: SPR.gearStubWeapon, steelMaul: SPR.gearStubWeapon,
   demonCleaver: SPR.gearStubWeapon, knightSword: SPR.gearStubWeapon, fireSword: SPR.gearStubWeapon, marrowBlade: SPR.gearStubWeapon,
-  healCrystal: SPR.crystalHeal, flameCrystal: SPR.crystalFire, recallCrystal: SPR.crystalRecall,
-  spearCrystal: SPR.crystalSpear,
+  healCrystal: SPR.crystalHeal, recallCrystal: SPR.crystalRecall,
   fireCrystal: attuneIcon("fire"), waterCrystal: attuneIcon("ice"), earthCrystal: attuneIcon("earth"),
   windCrystal: attuneIcon("storm"), lightningCrystal: attuneIcon("shadow"),
   magicEssence: SPR.magicEssence,

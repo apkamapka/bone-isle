@@ -1,5 +1,5 @@
-/** Resource gathering: chop trees, mine rocks, pick herbs. */
-import { TREE_REGROW_S, ROCK_REGROW_S, HERB_REGROW_S, TILE } from "../config.ts";
+/** Resource gathering: chop trees, mine rocks. */
+import { TREE_REGROW_S, ROCK_REGROW_S, TILE } from "../config.ts";
 import { dist } from "../util.ts";
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
@@ -17,7 +17,7 @@ export type GatherFx = (text: string) => void;
 export function gatherTick(world: World, p: Player, g: GatherTask, fx?: GatherFx): void {
   p.atkCd = p.atkRate;
   // Stop if the backpack is too full to hold what this node yields.
-  const yields: Record<GatherTask["kind"], ItemKind> = { tree: "wood", rock: "stone", herb: "herb" };
+  const yields: Record<GatherTask["kind"], ItemKind> = { tree: "wood", rock: "stone" };
   if (!canCarry(p, yields[g.kind])) {
     addFloat(world, p.x, p.y - 26, "too heavy!", "#ff9a5e");
     p.gather = null;
@@ -41,7 +41,7 @@ export function gatherTick(world: World, p: Player, g: GatherTask, fx?: GatherFx
       p.gather = null;
     }
     syncCollectQuests(p, fx);
-  } else if (g.kind === "rock") {
+  } else {
     const rk = g.obj;
     rk.hp--;
     rk.hurtT = 0.15;
@@ -59,21 +59,11 @@ export function gatherTick(world: World, p: Player, g: GatherTask, fx?: GatherFx
       p.gather = null;
     }
     syncCollectQuests(p, fx);
-  } else {
-    const hb = g.obj;
-    addItem(p.bag, "herb", 1);
-    onItemCollected("herb", 1);
-    addFloat(world, hb.tx * TILE + TILE / 2, hb.ty * TILE - 8, "+1 herb", "#9fe08a");
-    beep(360, 0.06, "sine", 0.05);
-    hb.picked = true;
-    hb.respawnT = HERB_REGROW_S;
-    p.gather = null;
-    syncCollectQuests(p, fx);
   }
 }
 
 /**
- * Tick regrowth for trees/rocks/herbs. A node won't pop back while the player
+ * Tick regrowth for trees/rocks. A node won't pop back while the player
  * stands on its tile (avoids trapping them inside a solid).
  */
 export function tickRegrowth(world: World, dt: number, px: number, py: number, playerHere: boolean): void {
@@ -94,10 +84,5 @@ export function tickRegrowth(world: World, dt: number, px: number, py: number, p
       rk.hp = rk.maxhp;
       world.solid[rk.ty][rk.tx] = true;
     }
-  }
-  for (const hb of world.herbs) {
-    if (!hb.picked) continue;
-    hb.respawnT -= dt;
-    if (hb.respawnT <= 0) hb.picked = false;
   }
 }

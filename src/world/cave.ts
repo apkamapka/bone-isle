@@ -153,7 +153,6 @@ export function makeCaveWorld(opts: CaveOpts): World {
     reserved: [],
     trees: [],
     rocks: [],
-    herbs: [],
     decos: [],
     fires: [],
     scenery: [],
@@ -337,7 +336,6 @@ export function addCaveEntrance(w: World, dest: WorldKey, seed: number): void {
   const inClearing = (tx: number, ty: number) => Math.hypot(tx - spot.tx, ty - spot.ty) <= R + 0.3;
   w.trees = w.trees.filter((t) => !inClearing(t.tx, t.ty));
   w.rocks = w.rocks.filter((r) => !inClearing(r.tx, r.ty));
-  w.herbs = w.herbs.filter((h) => !inClearing(h.tx, h.ty));
   w.decos = w.decos.filter((d) => !inClearing(d.tx, d.ty));
 
   // paint the clearing onto the already-baked map canvas so it shows up. That

@@ -11,7 +11,7 @@
  *
  * Glyph legend (shared):
  *   ~ water    . grass    , sand    # ruined wall
- *   T tree     R rock     H herb    M mushroom (decor)   o bones (decor)
+ *   T tree     R rock     H/M mushroom (decor)   o bones (decor)
  *   : dirt trail (walkable)   = cave floor (underground maps)
  *   (structures are placed free-form at runtime — no build-pad glyphs)
  * Per-map glyphs (portals & NPCs) are resolved through the spec's own maps, so
@@ -153,7 +153,6 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     reserved: [],
     trees: [],
     rocks: [],
-    herbs: [],
     decos: [],
     fires: [],
     scenery: [],
@@ -191,7 +190,9 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           solid[y][x] = true;
           break;
         case "H":
-          w.herbs.push({ tx: x, ty: y, picked: false, respawnT: 0 });
+          // Herbs are gone (Etap 26); the character survives as plain decor so
+          // hand-authored maps keep their scatter without an edit pass.
+          w.decos.push({ spr: SPR.mushroom, tx: x, ty: y });
           break;
         case "M":
           w.decos.push({ spr: SPR.mushroom, tx: x, ty: y });
