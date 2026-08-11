@@ -648,6 +648,13 @@ four frames across: column 0 is the rest pose, columns 1-3 are the lean. It is
 the only building that animates, and it plays once per blow rather than looping;
 see `src/gfx/buildingArt.ts`.
 
+The forge and the tower are stills that the renderer animates on top of:
+firelight and embers in the hearth, smoke off the flue, and motes lifting from
+the basin in that tier's colour. Those effects are code, not artwork
+(`src/gfx/buildingFx.ts`), but their anchor points were measured off these
+files — the hearth mouth, the chimney and the middle of the pool — so replacing
+an image means re-measuring them.
+
 The Storage Chest has no artwork yet and keeps its baked sprite at every tier.
 
 ## Everything else

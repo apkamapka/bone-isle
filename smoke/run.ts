@@ -4517,6 +4517,81 @@ async function main(): Promise<void> {
     ok(!!B.structSprite("treasure"), "the world-placed treasure chest still resolves");
     ok(A.buildingArt("forge", 1) === null && A.buildingFrame("dummy", 1, 0, 0) === null,
       "…and the artwork lookups answer null rather than guessing");
+
+    // A building drawn in three-quarter view does not meet the ground across
+    // its whole pad, and a footprint-wide ellipse under one that does not is
+    // the dark blob the tower was wearing.
+    const pad2 = 2 * 32 * 0.42;
+    ok(A.buildingShadow("forge", pad2).w === pad2, "a building square on its plot keeps the footprint shadow");
+    ok(A.buildingShadow("tower", pad2).w < pad2 && A.buildingShadow("tower", pad2).dy < 0,
+      "…the tower's tucks under the drum instead of pooling round the steps");
+    for (const key of A.ART_KEYS) {
+      const sh = A.buildingShadow(key, pad2);
+      ok(sh.w > 0 && sh.dy <= 0, `'${key}' shadow is a real ellipse, never below the anchor`);
+    }
+  }
+
+  console.log("Etap 27 — buildings that look lived in:");
+  {
+    const F = await import("../src/gfx/buildingFx.ts");
+
+    ok(F.hasBuildingFx("forge") && F.hasBuildingFx("tower"), "the forge and the tower have something to do");
+    ok(!F.hasBuildingFx("dummy") && !F.hasBuildingFx("range"), "…a post and a target just stand there");
+
+    // Two forges side by side must not flicker in step, and one forge must
+    // flicker the same way after a reload — hence a seed off the tile rather
+    // than off a clock or a roll.
+    ok(F.fxSeed(12, 7) === F.fxSeed(12, 7), "a building's phase is the same every time it is drawn");
+    ok(F.fxSeed(12, 7) !== F.fxSeed(13, 7), "…and neighbours do not share one");
+    const spread = new Set<number>();
+    for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) spread.add(F.fxSeed(x, y));
+    ok(spread.size >= 8, `…across a plot the phases spread out (${spread.size} of 16)`);
+
+    // Play both buildings out over twelve seconds against a recording context.
+    // Nothing here can be seen from a test, but a NaN coordinate or a particle
+    // that wanders off into the map is exactly what would not be noticed until
+    // it was live.
+    const rects: number[][] = [];
+    const rec = new Proxy({}, {
+      get(_t, prop) {
+        if (prop === "fillRect") return (...a: number[]) => { rects.push(a); };
+        if (prop === "createRadialGradient") return () => ({ addColorStop() { /* noop */ } });
+        return () => undefined;
+      },
+      set() { return true; },
+    }) as unknown as CanvasRenderingContext2D;
+
+    const SX = 400, SY = 300;
+    let threw = 0;
+    for (const key of ["forge", "tower"]) {
+      for (let tier = 1; tier <= 3; tier++) {
+        for (let t = 0; t < 12; t += 0.05) {
+          try { F.drawBuildingFx(rec, key, tier, SX, SY, t, F.fxSeed(3, 5)); } catch { threw++; }
+        }
+      }
+    }
+    ok(threw === 0, "twelve seconds of both buildings at every tier draws without throwing");
+    ok(rects.length > 500, `…and actually emits something (${rects.length} specks)`);
+    ok(rects.every((r) => r.every(Number.isFinite)), "no particle lands on a NaN");
+    const loose = rects.filter((r) => Math.abs(r[0] - SX) > 60 || r[1] > SY + 8 || r[1] < SY - 140);
+    ok(loose.length === 0, "…and none drifts off the building it belongs to");
+
+    // Same clock, same seed, same picture — the whole module is a function of
+    // its arguments, which is what keeps it out of the save file.
+    const again: number[][] = [];
+    const rec2 = new Proxy({}, {
+      get(_t, prop) {
+        if (prop === "fillRect") return (...a: number[]) => { again.push(a); };
+        if (prop === "createRadialGradient") return () => ({ addColorStop() { /* noop */ } });
+        return () => undefined;
+      },
+      set() { return true; },
+    }) as unknown as CanvasRenderingContext2D;
+    for (let t = 0; t < 3; t += 0.05) F.drawBuildingFx(rec2, "tower", 2, SX, SY, t, 0.25);
+    const once = again.length;
+    for (let t = 0; t < 3; t += 0.05) F.drawBuildingFx(rec2, "tower", 2, SX, SY, t, 0.25);
+    ok(again.length === once * 2 && again.slice(0, once).every((r, i) => r.every((v, j) => v === again[once + i][j])),
+      "replaying the same seconds paints the same specks");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

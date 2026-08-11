@@ -41,6 +41,33 @@ const SHEET: Record<string, readonly string[]> = {
   dummy: ["./build-dummy-1.png", "./build-dummy-2.png", "./build-dummy-3.png"],
 };
 
+/**
+ * Where a building actually meets the ground, when that is not the whole pad.
+ *
+ * The default — a shadow as wide as the footprint, sitting on the anchor line —
+ * is right for a building drawn square on its plot, and wrong for everything
+ * else. The alchemy tower is the clear case: it is a narrow drum with a
+ * staircase running down towards the viewer, so a footprint-wide ellipse
+ * centred on the sprite's bottom edge pools out around the steps instead of
+ * tucking under the drum, which is exactly the dark blob it looked like.
+ *
+ * `w` is the ellipse's half-width in world px; `dy` lifts it above the anchor.
+ * Measured against the artwork, not calculated: the contact point of a drawing
+ * in three-quarter view is a judgement about where the eye reads the ground,
+ * and the widest opaque row is not it.
+ */
+const SHADOW: Record<string, { w: number; dy: number }> = {
+  tower: { w: 20, dy: -5 },  // the drum, not the steps in front of it
+  range: { w: 9, dy: -2 },   // a target on a narrow trestle
+  dummy: { w: 7, dy: -1 },   // an 11-px plinth
+};
+
+/** The ellipse to lay under a building, given the fallback its footprint
+ *  implies. Buildings drawn square on their plot keep the fallback. */
+export function buildingShadow(key: string, footprintW: number): { w: number; dy: number } {
+  return SHADOW[key] ?? { w: footprintW, dy: 0 };
+}
+
 /** Structures whose artwork this module supplies, in any form. */
 export const ART_KEYS: readonly string[] = [...Object.keys(STILL), ...Object.keys(SHEET)];
 

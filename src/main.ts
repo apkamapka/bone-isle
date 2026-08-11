@@ -16,7 +16,8 @@ import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWi
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint } from "./systems/building.ts";
-import { buildingFrame, hasBuildingArt, recoilFrameIndex, recoilRow } from "./gfx/buildingArt.ts";
+import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow } from "./gfx/buildingArt.ts";
+import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
@@ -2363,17 +2364,24 @@ function render(): void {
     const by = c.baseY;
     if (!inView(bx, by)) continue;
     const recoil = buildingFrame(s.key, tier, recoilRow(bx - P.x, by - P.y), recoilFrameIndex(s.anim ?? 0));
+    const drawn = hasBuildingArt(s.key, tier);
     const spr = recoil ?? structSprite(s.key, tier);
-    const shadowW = footprint(s.key) * TILE * 0.42;
+    const sh = buildingShadow(s.key, footprint(s.key) * TILE * 0.42);
     drawList.push({ y: by, fn: () => {
-      drawShadow(bx, by, shadowW);
+      drawShadow(bx, by + sh.dy, sh.w);
       // A struck building jolts. A post that has its own lean is exempt —
       // shaking a drawn recoil reads as noise on top of the reaction.
       const shake = s.hurtT && !recoil ? Math.round(Math.sin(s.hurtT * 40) * 3) : 0;
       drawSprite(spr, bx + shake, by);
-      // The drawn forge has its fire burning in the doorway already; the ember
-      // below is what stood in for it over the baked sprite.
-      if (s.key === "forge" && !hasBuildingArt("forge", tier)) {
+      // Firelight, smoke and alchemical motes ride on top of the artwork, and
+      // only on the artwork: their anchors are measured off the drawing, so
+      // over a baked stand-in they would land nowhere in particular.
+      if (drawn && hasBuildingFx(s.key)) {
+        drawBuildingFx(vctx, s.key, tier, Math.round(bx - cam.x + shake), Math.round(by - cam.y), waveT, fxSeed(s.tx, s.ty));
+      }
+      // The ember that stood in for the forge's fire before there was a forge
+      // to draw. The artwork burns its own.
+      if (s.key === "forge" && !drawn) {
         vctx.fillStyle = `rgba(255,${140 + Math.round(Math.sin(waveT * 8) * 40)},60,.8)`;
         vctx.fillRect(Math.round(bx - cam.x - 4), Math.round(by - cam.y - 12 + Math.sin(waveT * 6) * 2), 4, 4);
       }
