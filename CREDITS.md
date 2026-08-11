@@ -626,9 +626,9 @@ behind them.
 | `build-tower-1.png` | Alchemy Tower | I — timber | 64 x 96 | 2 x 2 |
 | `build-tower-2.png` | Alchemy Tower | II — stone | 64 x 96 | 2 x 2 |
 | `build-tower-3.png` | Alchemy Tower | III — amber | 64 x 96 | 2 x 2 |
-| `build-dummy-1.png` | Training Dummy | I | 128 x 128 (4 x 4 cells) | 1 x 1 |
-| `build-dummy-2.png` | Training Dummy | II | 128 x 128 (4 x 4 cells) | 1 x 1 |
-| `build-dummy-3.png` | Training Dummy | III | 128 x 128 (4 x 4 cells) | 1 x 1 |
+| `build-dummy-1.png` | Training Dummy | I | 256 x 256 (4 x 4 cells of 64) | 1 x 1 |
+| `build-dummy-2.png` | Training Dummy | II | 256 x 256 (4 x 4 cells of 64) | 1 x 1 |
+| `build-dummy-3.png` | Training Dummy | III | 256 x 256 (4 x 4 cells of 64) | 1 x 1 |
 | `build-range.png` | Archery Range | (single tier) | 32 x 32 | 1 x 1 |
 | `build-chest-1.png` | Storage Chest | I | 64 x 64 | 2 x 2 |
 | `build-chest-2.png` | Storage Chest | II | 64 x 64 | 2 x 2 |
@@ -639,12 +639,20 @@ no painted ground shadow (the renderer draws its own, sized off the footprint
 rather than the sprite: a two-tile forge is three tiles of roof, and a shadow
 as wide as the roof would put the whole pad in shade).
 
-The stills ship exactly as they were drawn. The three training-post sheets are
-the one exception: the generator placed the fourth facing seven pixels left of
-the other three, which slid the plinth sideways whenever the post changed which
-way it leaned. Each row was shifted so its plinth centres on the cell, and the
-whole sheet moved two pixels down so the plinth meets the edge the renderer
-anchors to. No pixel was recoloured, rescaled or redrawn.
+The stills ship exactly as they were drawn. The three training-post sheets do
+not: they arrived as 32 x 32 cells, which put the post at roughly waist height
+beside the player, and were doubled to 64 with Scale2x (EPX) the same way the
+chests were — so they too are twice the pixel size of the buildings around
+them. Redrawing them at 64 at source would be sharper.
+
+The same pass fixed the alignment. The generator placed the fourth facing seven
+pixels left of the other three, which slid the plinth sideways whenever the post
+changed which way it leaned; each row is now centred on its own plinth and
+seated so the lowest pixel meets the edge the renderer anchors to. Frames are
+composed one cell at a time rather than shifted in place, which is what keeps a
+row's offset from bleeding a column into the frame beside it. Nothing was
+recoloured or redrawn, and the small plinth wobble inside rows 1 and 2 is the
+original animation, left alone.
 
 The post's sheet is four facings down the rows — north, east, west, south — by
 four frames across: column 0 is the rest pose, columns 1-3 are the lean. It is

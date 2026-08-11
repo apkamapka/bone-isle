@@ -4485,6 +4485,14 @@ async function main(): Promise<void> {
         if (w % A.RECOIL_COLS !== 0 || h % A.RECOIL_ROWS !== 0) ragged++;
       }
       ok(ragged === 0, `'${key}' sheets divide evenly into ${A.RECOIL_COLS}x${A.RECOIL_ROWS} cells`);
+
+      // Every tier of one structure must cut to the same cell, or upgrading a
+      // post would resize it mid-animation.
+      const cells = A.artSources(key).map((src) => {
+        const buf = fs.readFileSync(path.join("public", src.replace(/^\.\//, "")));
+        return `${buf.readUInt32BE(16) / A.RECOIL_COLS}x${buf.readUInt32BE(20) / A.RECOIL_ROWS}`;
+      });
+      ok(new Set(cells).size === 1, `…and every tier of '${key}' cuts to the same cell (${cells[0]})`);
     }
 
     // The lean: three frames straight after the blow, then the rest pose for

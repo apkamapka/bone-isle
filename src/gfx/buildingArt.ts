@@ -60,7 +60,7 @@ const SHEET: Record<string, readonly string[]> = {
 const SHADOW: Record<string, { w: number; dy: number }> = {
   tower: { w: 20, dy: -5 },  // the drum, not the steps in front of it
   range: { w: 9, dy: -2 },   // a target on a narrow trestle
-  dummy: { w: 7, dy: -1 },   // an 11-px plinth
+  dummy: { w: 12, dy: -2 },  // the plinth, measured: 22 px across at world scale
   chest: { w: 28, dy: -9 },  // furniture: a box sits flat, so it hides nearly all of its own shadow
 };
 
