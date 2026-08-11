@@ -630,6 +630,9 @@ behind them.
 | `build-dummy-2.png` | Training Dummy | II | 128 x 128 (4 x 4 cells) | 1 x 1 |
 | `build-dummy-3.png` | Training Dummy | III | 128 x 128 (4 x 4 cells) | 1 x 1 |
 | `build-range.png` | Archery Range | (single tier) | 32 x 32 | 1 x 1 |
+| `build-chest-1.png` | Storage Chest | I | 64 x 64 | 2 x 2 |
+| `build-chest-2.png` | Storage Chest | II | 64 x 64 | 2 x 2 |
+| `build-chest-3.png` | Storage Chest | III | 64 x 64 | 2 x 2 |
 
 Authored at world scale — TILE (32) px per tile — anchored bottom-centre, with
 no painted ground shadow (the renderer draws its own, sized off the footprint
@@ -655,7 +658,15 @@ the basin in that tier's colour. Those effects are code, not artwork
 files — the hearth mouth, the chimney and the middle of the pool — so replacing
 an image means re-measuring them.
 
-The Storage Chest has no artwork yet and keeps its baked sprite at every tier.
+The three Storage Chests are the one set that is not shipped as drawn. They
+arrived at 32 x 32 — a single tile, on a structure that occupies four — and were
+enlarged to fill the plot with Scale2x (EPX), the pixel-art doubling that
+rounds a diagonal instead of stepping it. That makes them derivative works of
+the originals: same provenance, same licence, and they are twice the pixel size
+of every other building here, which is visible if you look for it. Redrawing
+them at 64 x 64 at source would be sharper. Each was then trimmed and seated on
+the anchor line so the box sits on the ground rather than hovering over its own
+shadow.
 
 ## Everything else
 

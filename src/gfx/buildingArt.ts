@@ -8,9 +8,9 @@
  * stone → steel for the Forge, wood → stone → amber for the Alchemy Tower).
  * That is the whole reason `structSprite()` grew a tier argument.
  *
- * The Storage Chest is deliberately absent — its artwork has not been drawn
- * yet, so it keeps its baked sprite at every tier. Adding it later is one line
- * in `STILL` and three PNGs; nothing else has to change.
+ * Every buildable now has artwork, so the baked sprites survive only as the
+ * fallback for a failed load. Adding a new one is one line in `STILL` and its
+ * PNGs; nothing else has to change.
  *
  * The training post is the one building that MOVES, so it ships as a 4x4 sheet
  * instead of a still: four facings down the rows, four frames of a hit recoil
@@ -34,6 +34,7 @@ const STILL: Record<string, readonly string[]> = {
   forge: ["./build-forge-1.png", "./build-forge-2.png", "./build-forge-3.png"],
   tower: ["./build-tower-1.png", "./build-tower-2.png", "./build-tower-3.png"],
   range: ["./build-range.png"],
+  chest: ["./build-chest-1.png", "./build-chest-2.png", "./build-chest-3.png"],
 };
 
 /** The training post's recoil sheets, one per tier. */
@@ -60,6 +61,7 @@ const SHADOW: Record<string, { w: number; dy: number }> = {
   tower: { w: 20, dy: -5 },  // the drum, not the steps in front of it
   range: { w: 9, dy: -2 },   // a target on a narrow trestle
   dummy: { w: 7, dy: -1 },   // an 11-px plinth
+  chest: { w: 23, dy: -2 },  // a box in three-quarter view: the base is the widest row, not the lowest
 };
 
 /** The ellipse to lay under a building, given the fallback its footprint
