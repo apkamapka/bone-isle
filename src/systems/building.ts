@@ -34,6 +34,18 @@ export interface StructDef {
   solid: boolean;
   /** Occupies a single tile instead of the full 2×2 pad. */
   single?: boolean;
+  /**
+   * How many rows of the pad, counted from the FRONT (the bottom edge, where
+   * the artwork rests), actually block movement. Omitted means all of them.
+   *
+   * A building you walk around wants the whole pad: the forge is a house, and
+   * there is no standing inside it. Furniture is different — a chest is waist
+   * high, you can see over it, and being unable to step behind one reads as an
+   * invisible wall in the grass. Giving those a shorter block lets the player
+   * stand in the row behind, where the depth sort already draws the structure
+   * over them: the same thing that happens behind a tree.
+   */
+  solidRows?: number;
   /** Tier I first. A one-entry list means the structure has no upgrades. */
   tiers: readonly TierDef[];
 }
@@ -79,7 +91,9 @@ export const STRUCTS: Record<StructKey, StructDef> = {
     tiers: [{ cost: { wood: 20, stone: 10 }, desc: "Shoot it to train Distance Fighting" }],
   },
   chest: {
-    name: "Storage Chest", spr: bakeChest(), solid: true,
+    // Waist-high furniture, not a building: only the row it rests on blocks,
+    // so the player can stand behind it the way they stand behind a tree.
+    name: "Storage Chest", spr: bakeChest(), solid: true, solidRows: 1,
     tiers: [
       { cost: { wood: 10, stone: 5 }, desc: "10 slots" },
       { cost: { wood: 60, stone: 60, bones: 40 }, desc: "50 slots" },
@@ -153,6 +167,22 @@ export function costText(cost: Cost): string {
   return (Object.entries(cost) as [string, number][]).map(([k, v]) => `${v} ${k}`).join(" + ");
 }
 
+/**
+ * How many rows of a structure's pad block movement, counted from the front.
+ *
+ * Equal to the footprint for anything that does not say otherwise, so the only
+ * structure this reports differently is the one that is furniture rather than a
+ * building. Exported because the renderer needs the same answer: the tiles a
+ * structure blocks are exactly the tiles where a click means "use it" instead
+ * of "walk there".
+ */
+export function solidRows(key: string): number {
+  const n = footprint(key);
+  const def = STRUCTS[key as StructKey];
+  if (!def?.solid) return 0;
+  return Math.min(Math.max(1, def.solidRows ?? n), n);
+}
+
 /** Footprint side length in tiles: 1 for `single` structures, else 2. */
 export function footprint(key: string): number {
   if (key === "treasure") return 1; // world-placed chest, not a buildable
@@ -201,12 +231,20 @@ export function canPlaceAt(home: World, key: StructKey, tx: number, ty: number, 
   return true;
 }
 
-/** Apply a structure's footprint to the solidity grid. */
+/**
+ * Apply a structure's footprint to the solidity grid.
+ *
+ * Blocking is counted from the front — the last rows of the pad — because that
+ * is the end the artwork sits on. A structure that blocks fewer rows than it
+ * occupies still owns the whole pad for placement purposes; nothing else may
+ * be built there, the player may simply walk in.
+ */
 function markSolid(home: World, key: string, tx: number, ty: number): void {
   const def = STRUCTS[key as StructKey];
   if (!def?.solid) return;
   const n = footprint(key);
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) home.solid[ty + j][tx + i] = true;
+  const rows = solidRows(key);
+  for (let j = n - rows; j < n; j++) for (let i = 0; i < n; i++) home.solid[ty + j][tx + i] = true;
 }
 
 /**

@@ -4529,6 +4529,57 @@ async function main(): Promise<void> {
       const sh = A.buildingShadow(key, pad2);
       ok(sh.w > 0 && sh.dy <= 0, `'${key}' shadow is a real ellipse, never below the anchor`);
     }
+
+    // Furniture occludes its own shadow: a chest sits flat on the grass, so
+    // only a rim at the base may clear its bottom edge. Pitched at the anchor
+    // line the ellipse pools out below instead and the box reads as floating
+    // over a puddle, which is what this pins. drawShadow() centres at
+    // y + dy + 2 with a half-height of w * 0.4.
+    const spill = (k: string) => { const s = A.buildingShadow(k, pad2); return s.dy + 2 + s.w * 0.4; };
+    ok(spill("chest") <= 5, `the chest's shadow stays tucked under it (${spill("chest").toFixed(1)} px clear)`);
+    ok(spill("chest") > 0, "…but not so far that it vanishes and the box floats");
+  }
+
+  console.log("Etap 27 — furniture you can stand behind:");
+  {
+    const B = await import("../src/systems/building.ts");
+
+    // A building is a building and a chest is furniture. The forge is a house
+    // with no inside; the chest is waist high and being unable to step behind
+    // one reads as an invisible wall in the grass.
+    ok(B.solidRows("forge") === 2 && B.solidRows("tower") === 2, "the buildings block their whole pad");
+    ok(B.solidRows("chest") === 1, "the chest blocks only the row it rests on");
+    ok(B.solidRows("dummy") === 1 && B.solidRows("range") === 1, "single-tile structures block their one tile");
+    for (const key of B.STRUCT_KEYS) {
+      const r = B.solidRows(key);
+      ok(r >= 1 && r <= B.footprint(key), `'${key}' blocks between one row and its whole pad (${r})`);
+    }
+
+    const home = buildWorlds(WORLD_SEED).home;
+    const spot = { tx: 0, ty: 0 };
+    outer: for (let y = 2; y < home.h - 4; y++) {
+      for (let x = 2; x < home.w - 4; x++) {
+        if (B.canPlaceAt(home, "chest", x, y)) { spot.tx = x; spot.ty = y; break outer; }
+      }
+    }
+    ok(spot.tx > 0, `found somewhere to stand a chest (${spot.tx},${spot.ty})`);
+
+    home.structures.push({ key: "chest", tx: spot.tx, ty: spot.ty, tier: 1, anim: 0, hurtT: 0 });
+    B.applyStructureSolidity(home);
+    ok(home.solid[spot.ty + 1][spot.tx] && home.solid[spot.ty + 1][spot.tx + 1], "the front row of the pad blocks");
+    ok(!home.solid[spot.ty][spot.tx] && !home.solid[spot.ty][spot.tx + 1],
+      "…and the row behind is walkable, so the player can step in and be drawn behind it");
+
+    // The pad is still the chest's, walkable half included: two structures
+    // sharing tiles would draw through each other and both claim the clicks.
+    ok(!B.canPlaceAt(home, "forge", spot.tx, spot.ty - 1), "nothing else may be built into the walkable row");
+    ok(!B.canPlaceAt(home, "chest", spot.tx, spot.ty), "…nor on top of the chest itself");
+
+    // A structure sorts at the front edge of its pad and the player at their
+    // own centre, so a player in the row behind sorts first and is covered.
+    const c = B.structCenter(home.structures[home.structures.length - 1]);
+    const behindY = (spot.ty + 0.5) * 32;
+    ok(behindY < c.baseY, "standing behind the chest sorts under it, as with a tree canopy");
   }
 
   console.log("Etap 27 — buildings that look lived in:");

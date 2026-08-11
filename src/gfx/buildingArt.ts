@@ -61,7 +61,7 @@ const SHADOW: Record<string, { w: number; dy: number }> = {
   tower: { w: 20, dy: -5 },  // the drum, not the steps in front of it
   range: { w: 9, dy: -2 },   // a target on a narrow trestle
   dummy: { w: 7, dy: -1 },   // an 11-px plinth
-  chest: { w: 23, dy: -2 },  // a box in three-quarter view: the base is the widest row, not the lowest
+  chest: { w: 28, dy: -9 },  // furniture: a box sits flat, so it hides nearly all of its own shadow
 };
 
 /** The ellipse to lay under a building, given the fallback its footprint
