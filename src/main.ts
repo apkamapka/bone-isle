@@ -1,7 +1,7 @@
 import "./style.css";
 import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
-import { unstick, blockedAt, lineOfSight, portalCovers } from "./world/collision.ts";
+import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { campfireFrame } from "./gfx/fireSheet.ts";
@@ -21,7 +21,7 @@ import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
-import { useCrystal, tickCrystalCooldown } from "./systems/crystals.ts";
+import { useCrystal, tickCrystalCooldown, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
 import { actionSlots, setSlot, BINDABLE_CRYSTALS } from "./systems/actions.ts";
 import {
   hudLocked, toggleHudLock, placeHud, moveHudGroup, saveHudLayout, resetHudLayout, loadHudLayout,
@@ -30,7 +30,7 @@ import {
 } from "./systems/hudLayout.ts";
 import { researchById, isResearched, markResearched, towerTierOk, towerTierFor,
   ATTUNEMENT, isAttuned, markAttuned, attunementOk, offerById } from "./systems/tower.ts";
-import { ELEMENT_LABEL, type Element } from "./systems/elements.ts";
+import { ELEMENT_LABEL, ELEMENT_COLOR, type Element } from "./systems/elements.ts";
 import { loadPanelPrefs } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
@@ -182,6 +182,13 @@ let suppressClick = false;
 let itemDrag: { src: "bag" | "stash" | "ground" | "eq"; index: number; kind: ItemKind; n: number; sx: number; sy: number; active: boolean; gi?: GroundItem; eqSlot?: EqSlot; touch?: boolean } | null = null;
 /** Pending mobile throw (chosen in the quantity popup): next world tap aims it. */
 let throwPending: { kind: ItemKind; n: number } | null = null;
+/**
+ * An armed Burst. Selecting the crystal does not cast it — it puts the game in
+ * targeting mode and the NEXT world click says where the fireball lands, which
+ * is how Tibia has always thrown a great fireball. Cleared by the click either
+ * way, by Escape, by right-click, and by dying.
+ */
+let aimPending: ItemKind | null = null;
 
 /** Begin a (not yet active) drag of a loose ground item under (sx,sy).
  *  Shared by mouse pointerdown and the touch drag hooks. A plain tap/click
@@ -1032,6 +1039,17 @@ function swapWeapon(): void {
 function useCrystalItem(kind: ItemKind): void {
   if (P.dead) return;
   if (kind === "recallCrystal") { doRecall(); return; }
+  if (isAimedCrystal(kind)) {
+    // selecting the armed crystal again puts the cursor away, the same toggle
+    // clicking your own target uses to stop attacking
+    if (aimPending === kind) { aimPending = null; flash("cast cancelled", "#8ab6ff"); return; }
+    // check the stack BEFORE arming, so selecting an empty one says so now
+    // rather than after the player has picked a square
+    if (bagCount(P.bag, kind) <= 0) { flash("no crystal", "#8ab6ff"); return; }
+    aimPending = kind;
+    flash(`${ITEMS[kind].name}: click a target`, "#ffce4a");
+    return;
+  }
   useCrystal(cw(), P, kind);
 }
 
@@ -1152,6 +1170,15 @@ function handleWorldTap(sx: number, sy: number): void {
     if (idx >= 0) dropFromBag(idx, t.n, w.x, w.y);
     return;
   }
+  // an armed Burst lands here. The cursor is spent by the click whether or not
+  // the throw was legal, exactly as Tibia spends it — a miss costs the aim,
+  // never the charge, and re-arming is one click.
+  if (aimPending) {
+    const kind = aimPending;
+    aimPending = null;
+    useCrystal(cw(), P, kind, { x: w.x, y: w.y });
+    return;
+  }
   if (ui.placing) {
     if (cw() !== game.worlds.home) {
       flash("you can only build on Home Isle", "#e0a06a");
@@ -1204,6 +1231,7 @@ initInput(screen, {
   },
   onEscape: () => {
     if (throwPending) { throwPending = null; flash("throw cancelled", "#8ab6ff"); return; }
+    if (aimPending) { aimPending = null; flash("cast cancelled", "#8ab6ff"); return; }
     if (assignSlot !== null) { assignSlot = null; return; }
     if (ui.split) { ui.split = null; return; }
     if (ui.inspect) { ui.inspect = null; return; }
@@ -1217,6 +1245,9 @@ initInput(screen, {
     if (button === 2) {
       // right-click: pure "walk here", ignore targets (Tibia-style)
       if (P.dead || ui.dragging) return;
+      // …except while aiming, where it puts the cursor away instead of
+      // marching the player into his own fireball
+      if (aimPending) { aimPending = null; flash("cast cancelled", "#8ab6ff"); return; }
       if (ui.placing) return;
       // don't walk when the click lands on an open panel
       if (pointInOpenPanel(sx, sy)) return;
@@ -2530,6 +2561,33 @@ function render(): void {
   // went into the depth sort above
   drawSpellBolts(vctx, world, cam.x, cam.y);
 
+  // Aiming a Burst: show the twenty-five tiles it would cover, under the
+  // cursor, before a charge is spent. Tibia never drew this and never had to —
+  // its players knew the shape by heart from a decade of throwing them. A
+  // footprint this size, invented this week, has to show its work.
+  if (aimPending) {
+    const spec = CRYSTAL_SPECS[aimPending];
+    const wx = mouse.sx / vScale + cam.x;
+    const wy = mouse.sy / vScale + cam.y;
+    const legal = dist(P.x, P.y, wx, wy) <= spec.range && lineOfSight(world, P.x, P.y, wx, wy);
+    const ox = Math.floor(wx / TILE);
+    const oy = Math.floor(wy / TILE);
+    vctx.strokeStyle = legal ? ELEMENT_COLOR[spec.element] : "#ff5a4a";
+    vctx.lineWidth = 1;
+    vctx.globalAlpha = 0.75;
+    for (const [dx, dy] of BURST_TILES) {
+      const tx = ox + dx;
+      const ty = oy + dy;
+      if (groundBlocked(world, tx, ty)) continue;
+      vctx.strokeRect(tx * TILE - cam.x + 0.5, ty * TILE - cam.y + 0.5, TILE - 1, TILE - 1);
+    }
+    // the centre square marked harder, so the player is aiming at a point
+    // rather than somewhere inside a cloud of outlines
+    vctx.lineWidth = 2;
+    vctx.globalAlpha = 1;
+    vctx.strokeRect(ox * TILE - cam.x + 1, oy * TILE - cam.y + 1, TILE - 2, TILE - 2);
+  }
+
   // target reticle
   if (P.target && (P.target.kind === "mob" || P.target.kind === "dummy")) {
     const tp = targetPoint();
@@ -2891,6 +2949,7 @@ function overTouchButton(sx: number, sy: number): boolean {
   if (assignSlot !== null) return true; // rebind picker open — absorb all touches
   if (hudEditing()) return true;        // edit mode — no walking while arranging
   if (throwPending) return true;        // aiming a throw — the tap must land, not steer
+  if (aimPending) return true;          // aiming a Burst — likewise
   for (const b of touchButtons) {
     if (sx >= b.x && sx < b.x + b.w && sy >= b.y && sy < b.y + b.h) return true;
   }

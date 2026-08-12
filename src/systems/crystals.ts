@@ -240,10 +240,32 @@ function damageWithElement(
 }
 
 /**
+ * Crystals the player AIMS rather than points at a creature.
+ *
+ * A Burst is thrown at GROUND, not at a target: twenty-five tiles land where
+ * you put them, so letting it pick the nearest creature threw away the only
+ * decision the shape exists to offer. This is Tibia's great fireball — select
+ * the rune, then click the square.
+ *
+ * Everything else keeps auto-targeting. A Shard is one bolt at one creature
+ * and a second click to say which would be ceremony, and Nova and Wave are
+ * anchored on the caster with nothing to aim at.
+ */
+export function isAimedCrystal(kind: ItemKind): boolean {
+  return CRYSTAL_SPECS[kind]?.role === "burst";
+}
+
+/**
  * Apply a Life or elemental crystal. Returns true if a charge was consumed.
  * Recall is NOT handled here — the caller (main loop) does travel + charge.
+ *
+ * `aim` is the world point an aimed crystal was thrown at. An aimed crystal
+ * with no aim point refuses the cast and keeps the charge: that is the signal
+ * for the caller to arm its targeting cursor instead of guessing a target.
  */
-export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
+export function useCrystal(
+  world: World, p: Player, kind: ItemKind, aim?: { x: number; y: number },
+): boolean {
   if (p.dead) return false;
   if (bagCount(p.bag, kind) <= 0) {
     addFloat(world, p.x, p.y - 44, "no crystal", "#8ab6ff");
@@ -301,19 +323,46 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
       return true;
     }
 
-    const target = pickTarget(world, p, spec.range);
-    if (!target) return false;
+    // Where this one is going. A Burst goes where it was AIMED and nowhere
+    // else; a Shard still finds its own creature.
+    let toX: number;
+    let toY: number;
+    let target: World["monsters"][number] | null = null;
+    if (spec.role === "burst") {
+      // No aim point means the caller has not asked the player yet. Refuse
+      // quietly and keep the charge — the cursor gets armed instead.
+      if (!aim) return false;
+      if (dist(p.x, p.y, aim.x, aim.y) > spec.range) {
+        addFloat(world, p.x, p.y - 44, "too far", "#ff9e6a");
+        return false;
+      }
+      if (!lineOfSight(world, p.x, p.y, aim.x, aim.y)) {
+        addFloat(world, p.x, p.y - 44, "no line of sight", "#ff9e6a");
+        return false;
+      }
+      if (groundBlocked(world, Math.floor(aim.x / TILE), Math.floor(aim.y / TILE))) {
+        addFloat(world, p.x, p.y - 44, "you cannot throw there", "#ff9e6a");
+        return false;
+      }
+      toX = aim.x;
+      toY = aim.y;
+    } else {
+      target = pickTarget(world, p, spec.range);
+      if (!target) return false;
+      toX = target.x;
+      toY = target.y;
+    }
     removeItem(p.bag, kind, 1);
     offensiveCd = CRYSTAL_COOLDOWN_S;
     markBloodHit();
-    p.face = target.x < p.x ? -1 : 1;
+    p.face = toX < p.x ? -1 : 1;
 
     // The projectile is cosmetic and the hit is already resolved, exactly as
     // an arrow's is — but the BLOOM waits for it to arrive, so an explosion
-    // never beats its own fireball to the target.
-    const flight = addBolt(world, p.x, p.y - 16, target.x, target.y - 12, spec.element, spec.tier);
-    const ox = Math.floor(target.x / TILE);
-    const oy = Math.floor(target.y / TILE);
+    // never beats its own fireball to the ground.
+    const flight = addBolt(world, p.x, p.y - 16, toX, toY - 12, spec.element, spec.tier);
+    const ox = Math.floor(toX / TILE);
+    const oy = Math.floor(toY / TILE);
     const shape: Struck[] = spec.role === "burst"
       ? BURST_TILES.map(([dx, dy]) => ({
         tx: ox + dx, ty: oy + dy,
@@ -326,7 +375,7 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
     // one creature. Both go STRAIGHT to hp — elemental damage is the channel
     // that armor does not get to stop, and that bypass is the entire reason to
     // spend gold on crystals at all.
-    const caught = spec.role === "burst" ? caughtOn(world, shape) : [target];
+    const caught = spec.role === "burst" ? caughtOn(world, shape) : [target!];
     for (const m of caught) damageWithElement(world, p, m, spec, col);
     beep(spec.role === "burst" ? 180 : 320, 0.2, "sawtooth", 0.06, spec.role === "burst" ? -160 : 120);
     return true;

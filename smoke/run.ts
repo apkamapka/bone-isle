@@ -4862,6 +4862,66 @@ async function main(): Promise<void> {
       X.clearSpellFx();
     }
 
+    // --- Burst is aimed, not auto-targeted (Tibia's great fireball) ---
+    {
+      const { groundBlocked: gb } = await import("../src/world/collision.ts");
+      ok(C.isAimedCrystal("fireEmberBurst"), "a Burst is aimed");
+      ok(!C.isAimedCrystal("fireEmberShard"), "a Shard is not — one bolt, one creature");
+      ok(!C.isAimedCrystal("fireEmberNova") && !C.isAimedCrystal("fireEmberWave"),
+        "…and neither are the shapes anchored on the caster");
+      ok(!C.isAimedCrystal("healCrystal"), "…nor anything that is not an elemental crystal");
+
+      // open ground with room for a 3-tile diamond and a clear line to it
+      let spot: [number, number] | null = null;
+      for (let y = 6; y < hw.h - 6 && !spot; y++) {
+        for (let x = 6; x < hw.w - 6; x++) {
+          let clear = true;
+          for (let oy = -4; oy <= 4 && clear; oy++) {
+            for (let ox = -4; ox <= 4; ox++) if (gb(hw, x + ox, y + oy)) { clear = false; break; }
+          }
+          if (clear) { spot = [x, y]; break; }
+        }
+      }
+      ok(spot !== null, "the home map has open ground wide enough for a Burst");
+      const [bx, by2] = spot!;
+      const p3 = createPlayer({ x: 0, y: 0 });
+      p3.bag = items.emptyBag();
+      p3.x = bx * TILE + TILE / 2;
+      p3.y = by2 * TILE + TILE / 2;
+      p3.bag[0] = { kind: "fireEmberBurst", n: 5 };
+
+      X.clearSpellFx();
+      C.tickCrystalCooldown(99);
+      ok(!C.useCrystal(hw, p3, "fireEmberBurst"), "with no aim point the cast is refused");
+      ok(items.bagCount(p3.bag, "fireEmberBurst") === 5, "…and the charge is kept, not burnt");
+      ok(X.spellFxCounts().blasts === 0, "…and nothing is drawn");
+
+      // two tiles east: inside the 220 px reach, clear line
+      const aim = { x: (bx + 2) * TILE + TILE / 2, y: by2 * TILE + TILE / 2 };
+      C.tickCrystalCooldown(99);
+      ok(C.useCrystal(hw, p3, "fireEmberBurst", aim), "aimed at open ground it goes off");
+      ok(items.bagCount(p3.bag, "fireEmberBurst") === 4, "…spending exactly one charge");
+      ok(X.spellFxCounts().blasts === 25, "…lighting all twenty-five tiles of the diamond");
+      ok(X.spellFxCounts().bolts === 1, "…behind a fireball that has to get there first");
+      X.clearSpellFx();
+
+      // out of reach: refused, charge kept, cursor's problem not the bag's
+      C.tickCrystalCooldown(99);
+      const far = { x: p3.x + C.CRYSTAL_SPECS.fireEmberBurst.range + 64, y: p3.y };
+      ok(!C.useCrystal(hw, p3, "fireEmberBurst", far), "a square beyond its reach is refused");
+      ok(items.bagCount(p3.bag, "fireEmberBurst") === 4, "…and still costs nothing");
+      ok(X.spellFxCounts().blasts === 0, "…with no explosion anywhere");
+      X.clearSpellFx();
+
+      // a Shard ignores the aim point entirely and still finds its own target
+      C.tickCrystalCooldown(99);
+      p3.bag[1] = { kind: "fireEmberShard", n: 1 };
+      ok(!C.useCrystal(hw, p3, "fireEmberShard", aim),
+        "a Shard aimed at empty ground still refuses — it wants a creature, not a square");
+      ok(items.bagCount(p3.bag, "fireEmberShard") === 1, "…keeping its charge");
+      X.clearSpellFx();
+    }
+
     // --- depth: a flame sorts by its tile CENTRE, so actors stay in front ---
     {
       X.clearSpellFx();
