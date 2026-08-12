@@ -34,7 +34,7 @@
  * procedural bloom instead. Headless there is no `Image` and no `document`, so
  * the loader no-ops and the smoke tests run against the fallback.
  */
-import { ELEMENTS, type Element, type Tier } from "../systems/elements.ts";
+import { ELEMENTS, ELEMENT_COLOR, type Element, type Tier } from "../systems/elements.ts";
 
 /** The five pictures a spell can ask for. */
 export type FxSlot = "bolt" | "burst" | "wave" | "nova" | "hit";
@@ -64,13 +64,35 @@ export function fxFile(el: Element, tier: Tier, slot: FxSlot): string {
 }
 
 /** Frames per second for the tile effects (burst, wave, nova). */
-export const FX_FPS = 18;
+export const FX_FPS = 15;
 
 /** Frames per second the projectile cycles at while it flies. */
 export const BOLT_FPS = 14;
 
-/** `strips[element][tier][slot]` once loaded. */
-const strips: Partial<Record<string, HTMLCanvasElement[]>> = {};
+/**
+ * How far the baked glow spreads, in SOURCE pixels. Three is enough to read as
+ * a halo at every zoom the camera offers and small enough that the padded
+ * canvas stays cheap.
+ */
+const GLOW_PAD = 4;
+
+/** One loaded sheet: the artwork, and a halo baked from it. */
+export interface Sheet {
+  /** The frames as drawn. */
+  base: HTMLCanvasElement[];
+  /**
+   * The same frames as a dilated silhouette flooded with the element's colour.
+   * Drawn UNDER the artwork in additive mode, which is what makes a spell
+   * legible on grass — and the only thing that saves tier III, whose artwork
+   * is near-black and adds almost nothing to a lit scene by itself.
+   */
+  glow: HTMLCanvasElement[];
+  /** How much wider the glow canvas is than the frame, as a ratio. */
+  glowScale: number;
+}
+
+/** `strips[element|tier|slot]` once loaded. */
+const strips: Partial<Record<string, Sheet>> = {};
 
 function key(el: Element, tier: Tier, slot: FxSlot): string {
   return `${el}|${tier}|${slot}`;
@@ -83,6 +105,56 @@ function key(el: Element, tier: Tier, slot: FxSlot): string {
  * nine frames because nothing else it could be makes sense, and inferring it
  * removes the one number an artist and a programmer can disagree about.
  */
+/**
+ * Flood a frame with one colour, keeping its shape.
+ *
+ * `source-in` paints only where the frame already has pixels, so what comes
+ * back is the silhouette in the element's colour — bright regardless of how
+ * dark the artwork underneath happens to be.
+ */
+function tint(frame: HTMLCanvasElement, color: string): HTMLCanvasElement {
+  const cv = document.createElement("canvas");
+  cv.width = frame.width;
+  cv.height = frame.height;
+  const x = cv.getContext("2d")!;
+  x.imageSmoothingEnabled = false;
+  x.drawImage(frame, 0, 0);
+  x.globalCompositeOperation = "source-in";
+  x.fillStyle = color;
+  x.fillRect(0, 0, cv.width, cv.height);
+  return cv;
+}
+
+/**
+ * Spread a silhouette outwards into a halo.
+ *
+ * A proper blur would want `ctx.filter`, which not every browser we care about
+ * implements the same way. Stamping the silhouette around a small ring is a
+ * dilate by hand: it costs a dozen blits ONCE at load, needs nothing exotic,
+ * and at this resolution the difference is not visible.
+ */
+function halo(frame: HTMLCanvasElement, color: string): HTMLCanvasElement {
+  const t = tint(frame, color);
+  const cv = document.createElement("canvas");
+  cv.width = frame.width + GLOW_PAD * 2;
+  cv.height = frame.height + GLOW_PAD * 2;
+  const x = cv.getContext("2d")!;
+  x.imageSmoothingEnabled = false;
+  // Rings of decreasing strength rather than one hard ring at full radius.
+  // A single ring dilates into a sticker outline; stacking four gives the
+  // falloff that reads as light instead of a border.
+  const RING = [0.16, 0.11, 0.07, 0.04];
+  for (let r = 1; r <= GLOW_PAD; r++) {
+    x.globalAlpha = RING[r - 1] ?? 0.03;
+    for (let k = 0; k < 12; k++) {
+      const ang = (k / 12) * Math.PI * 2;
+      x.drawImage(t, GLOW_PAD + Math.round(Math.cos(ang) * r), GLOW_PAD + Math.round(Math.sin(ang) * r));
+    }
+  }
+  x.globalAlpha = 1;
+  return cv;
+}
+
 function slice(img: HTMLImageElement): HTMLCanvasElement[] {
   const fh = img.naturalHeight;
   const n = Math.max(1, Math.round(img.naturalWidth / Math.max(1, fh)));
@@ -115,7 +187,15 @@ export function loadSpellArt(): void {
         const k = key(el, t, slot);
         if (strips[k]) continue;
         const img = new Image();
-        img.onload = () => { strips[k] = slice(img); };
+        img.onload = () => {
+          const base = slice(img);
+          const col = ELEMENT_COLOR[el];
+          strips[k] = {
+            base,
+            glow: base.map((f) => halo(f, col)),
+            glowScale: base.length ? (base[0].width + GLOW_PAD * 2) / base[0].width : 1,
+          };
+        };
         img.onerror = () => { /* no artwork yet — the procedural bloom stands in */ };
         img.src = `./${fxFile(el, t, slot)}`;
       }
@@ -127,7 +207,7 @@ export function loadSpellArt(): void {
  * The frames for one effect, walking the fallback chain, or null while there
  * is no artwork for it at all.
  */
-export function spellFrames(el: Element, tier: Tier, slot: FxSlot): HTMLCanvasElement[] | null {
+export function spellSheet(el: Element, tier: Tier, slot: FxSlot): Sheet | null {
   let s: FxSlot | null = slot;
   // bounded by the chain, which is two links deep at its longest
   for (let guard = 0; s && guard < FX_SLOTS.length; guard++) {
@@ -140,7 +220,7 @@ export function spellFrames(el: Element, tier: Tier, slot: FxSlot): HTMLCanvasEl
 
 /** True once this effect has real artwork behind it (directly or via fallback). */
 export function hasSpellArt(el: Element, tier: Tier, slot: FxSlot): boolean {
-  return spellFrames(el, tier, slot) !== null;
+  return spellSheet(el, tier, slot) !== null;
 }
 
 /**

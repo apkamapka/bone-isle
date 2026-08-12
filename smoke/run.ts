@@ -4778,18 +4778,21 @@ async function main(): Promise<void> {
     ok(A.loopFrameIndex(0, 8) === 0 && A.loopFrameIndex(8 / A.BOLT_FPS, 8) === 0,
       "the bolt loops back round rather than ending");
     ok(A.loopFrameIndex(-5, 8) >= 0, "…and a negative clock never indexes off the front");
-    ok(A.spellFrames("fire", 0, "burst") === null, "headless there is no artwork, so lookups return null");
+    ok(A.spellSheet("fire", 0, "burst") === null, "headless there is no artwork, so lookups return null");
 
     // --- the footprints the player can count ---
-    ok(C.BURST_TILES.length === 13, "a Burst covers thirteen tiles");
-    ok(C.BURST_TILES.every(([dx, dy]) => Math.abs(dx) + Math.abs(dy) <= 2), "…all within two steps");
+    ok(C.BURST_TILES.length === 25, "a Burst covers twenty-five tiles");
+    ok(C.BURST_TILES.every(([dx, dy]) => Math.abs(dx) + Math.abs(dy) <= C.BURST_REACH),
+      "…all within three steps");
     ok(C.BURST_TILES.some(([dx, dy]) => dx === 0 && dy === 0), "…including the tile it landed on");
-    ok(C.BURST_TILES.some(([dx, dy]) => dx === 2 && dy === 0)
-      && !C.BURST_TILES.some(([dx, dy]) => dx === 2 && dy === 1), "…a diamond, not a square");
-    ok(new Set(C.BURST_TILES.map(([dx, dy]) => `${dx},${dy}`)).size === 13, "…with no tile counted twice");
+    ok(C.BURST_TILES.some(([dx, dy]) => dx === 3 && dy === 0)
+      && !C.BURST_TILES.some(([dx, dy]) => dx === 3 && dy === 1), "…a diamond, not a square");
+    ok(new Set(C.BURST_TILES.map(([dx, dy]) => `${dx},${dy}`)).size === 25, "…with no tile counted twice");
     ok(C.NOVA_TILES.length === 8 && !C.NOVA_TILES.some(([dx, dy]) => dx === 0 && dy === 0),
       "a Nova is the eight tiles around you and never your own");
-    ok(C.WAVE_TILES.length === 11, "a Wave is eleven tiles");
+    ok(C.WAVE_TILES.length === 16, "a Wave is sixteen tiles");
+    ok(Math.min(...C.WAVE_TILES.map(([, dy]) => dy)) === -4, "…reaching four tiles ahead");
+    ok(C.WAVE_TILES.filter(([, dy]) => dy === -4).length === 5, "…five wide at its far edge");
     ok(Object.values(C.CRYSTAL_SPECS).every((sp) => !("splash" in sp)),
       "the pixel splash radius is gone — every area is tiles now");
 

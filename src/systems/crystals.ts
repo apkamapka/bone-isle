@@ -74,8 +74,8 @@ const NOVA_TILES: readonly (readonly [number, number])[] = [
 ];
 
 /**
- * Exevo flam hur: three tiles wide at distance 1 and 2, five wide at 3.
- * Eleven tiles, fired along the way the character is facing.
+ * Exevo flam hur: three tiles wide at distance 1 and 2, five wide at 3 and 4.
+ * Sixteen tiles, fired along the way the character is facing.
  *
  * Written here facing UP and rotated at cast time, so the shape is stated
  * once. Getting a wave to point the right way is otherwise four copies of the
@@ -85,6 +85,7 @@ const WAVE_TILES: readonly (readonly [number, number])[] = [
   [-1, -1], [0, -1], [1, -1],
   [-1, -2], [0, -2], [1, -2],
   [-2, -3], [-1, -3], [0, -3], [1, -3], [2, -3],
+  [-2, -4], [-1, -4], [0, -4], [1, -4], [2, -4],
 ];
 
 /**
@@ -98,11 +99,13 @@ const WAVE_TILES: readonly (readonly [number, number])[] = [
  * footprint the player can count, and it is the same every tier — a Pyre
  * Burst hits HARDER than an Ember Burst, not WIDER.
  */
+export const BURST_REACH = 3;
+
 const BURST_TILES: readonly (readonly [number, number])[] = (() => {
   const out: [number, number][] = [];
-  for (let dy = -2; dy <= 2; dy++) {
-    for (let dx = -2; dx <= 2; dx++) {
-      if (Math.abs(dx) + Math.abs(dy) <= 2) out.push([dx, dy]);
+  for (let dy = -BURST_REACH; dy <= BURST_REACH; dy++) {
+    for (let dx = -BURST_REACH; dx <= BURST_REACH; dx++) {
+      if (Math.abs(dx) + Math.abs(dy) <= BURST_REACH) out.push([dx, dy]);
     }
   }
   return out;

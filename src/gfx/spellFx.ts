@@ -26,7 +26,7 @@
 import { TILE } from "../config.ts";
 import { ELEMENT_COLOR, type Element, type Tier } from "../systems/elements.ts";
 import {
-  FX_FPS, BOLT_FPS, fxFrameIndex, fxDuration, loopFrameIndex, spellFrames, type FxSlot,
+  FX_FPS, BOLT_FPS, fxFrameIndex, fxDuration, loopFrameIndex, spellSheet, type FxSlot,
 } from "./spellArt.ts";
 import type { World } from "../world/types.ts";
 
@@ -36,6 +36,41 @@ import type { World } from "../world/types.ts";
  * game looks like until the sheets land, and it has to be worth watching.
  */
 const BARE_BLAST_S = 0.42;
+
+/**
+ * How large an effect is drawn, in TILES.
+ *
+ * One frame used to cover exactly one tile, which sounded right and looked
+ * wrong: the wave's flame is only THIRTEEN pixels across inside its 32-px
+ * frame, so a tile-sized draw put a sliver on the ground next to a hero who
+ * stands two tiles tall. These numbers are the fix, and they are the first
+ * knob to reach for if a spell still reads small.
+ *
+ * The blast shapes are the ones that had to grow: burst peaks at 30 px and can
+ * afford less, the rising flames are thin and need more. Bolt is nudged up
+ * only enough to stop looking like a thrown pebble.
+ */
+const SCALE: Readonly<Record<FxSlot, number>> = {
+  bolt: 1.25,
+  burst: 1.35,
+  hit: 1.35,
+  wave: 1.4,
+  nova: 1.4,
+};
+
+/**
+ * Shapes that grow UP from the ground rather than blooming around a point.
+ * A flame's base belongs on the tile it burns; an explosion's centre does.
+ */
+const GROUNDED: Readonly<Record<FxSlot, boolean>> = {
+  bolt: false, burst: false, hit: false, wave: true, nova: true,
+};
+
+/** How bright the baked halo is drawn behind the artwork. */
+const GLOW_ALPHA = 0.55;
+
+/** How bright the pool of light under an effect is at its peak. */
+const POOL_ALPHA = 0.1;
 
 /** A one-shot animation sitting on a single tile. */
 interface Blast {
@@ -100,8 +135,8 @@ export function addBolt(
 
 /** How long one blast lives, given whatever artwork it has right now. */
 function blastLife(b: Blast): number {
-  const frames = spellFrames(b.el, b.tier, b.slot);
-  return frames ? fxDuration(frames.length, FX_FPS) : BARE_BLAST_S;
+  const sheet = spellSheet(b.el, b.tier, b.slot);
+  return sheet ? fxDuration(sheet.base.length, FX_FPS) : BARE_BLAST_S;
 }
 
 export function updateSpellFx(dt: number): void {
@@ -115,6 +150,33 @@ export function updateSpellFx(dt: number): void {
     s.t += dt;
     if (s.t >= s.dur) bolts.splice(i, 1);
   }
+}
+
+/**
+ * A pool of light on the ground under an effect.
+ *
+ * Four additive rings rather than a radial gradient: the gradient looks
+ * marginally better and needs a `CanvasGradient`, which is one more thing that
+ * has to exist for the headless tests to draw a frame. Stacked translucent
+ * circles in `lighter` fall off much the same way.
+ *
+ * This is the part that makes a spell read in a dark cave. The artwork can be
+ * as black as tier III likes; the ground still lights up underneath it.
+ */
+function pool(
+  vctx: CanvasRenderingContext2D, sx: number, sy: number, r: number, a: number, col: string,
+): void {
+  if (a <= 0.001) return;
+  vctx.globalCompositeOperation = "lighter";
+  vctx.fillStyle = col;
+  for (const f of [1, 0.78, 0.55, 0.32]) {
+    vctx.globalAlpha = a;
+    vctx.beginPath();
+    vctx.arc(sx, sy, r * f, 0, Math.PI * 2);
+    vctx.fill();
+  }
+  vctx.globalAlpha = 1;
+  vctx.globalCompositeOperation = "source-over";
 }
 
 /**
@@ -155,13 +217,33 @@ export function drawSpellFx(
     if (b.world !== world || b.t < 0) continue;
     const sx = Math.round(b.x - camX);
     const sy = Math.round(b.y - camY);
-    const frames = spellFrames(b.el, b.tier, b.slot);
-    if (frames) {
-      const i = fxFrameIndex(b.t, frames.length, FX_FPS);
-      if (i >= 0) vctx.drawImage(frames[i], sx - TILE / 2, sy - TILE / 2, TILE, TILE);
-    } else {
-      bareBlast(vctx, sx, sy, b.t / BARE_BLAST_S, ELEMENT_COLOR[b.el]);
+    const col = ELEMENT_COLOR[b.el];
+    const sheet = spellSheet(b.el, b.tier, b.slot);
+    if (!sheet) {
+      bareBlast(vctx, sx, sy, b.t / BARE_BLAST_S, col);
+      continue;
     }
+    const i = fxFrameIndex(b.t, sheet.base.length, FX_FPS);
+    if (i < 0) continue;
+
+    // Brightest at the start and dying with the animation, which is how the
+    // eye expects light from a fire to behave.
+    const life = 1 - i / sheet.base.length;
+    const size = Math.round(TILE * SCALE[b.slot]);
+    pool(vctx, sx, sy, TILE * 0.75, POOL_ALPHA * life, col);
+
+    // Bottom-anchored shapes stand ON the tile; the rest bloom around its
+    // centre. Either way the halo shares the artwork's centre exactly, so a
+    // wider glow canvas never shifts the picture inside it.
+    const left = sx - size / 2;
+    const top = GROUNDED[b.slot] ? sy + TILE / 2 - size : sy - size / 2;
+    const gs = size * sheet.glowScale;
+    vctx.globalCompositeOperation = "lighter";
+    vctx.globalAlpha = GLOW_ALPHA;
+    vctx.drawImage(sheet.glow[i], left + size / 2 - gs / 2, top + size / 2 - gs / 2, gs, gs);
+    vctx.globalAlpha = 1;
+    vctx.globalCompositeOperation = "source-over";
+    vctx.drawImage(sheet.base[i], left, top, size, size);
   }
 
   for (const s of bolts) {
@@ -171,17 +253,25 @@ export function drawSpellFx(
     const cy = s.fromY + (s.toY - s.fromY) * p;
     const sx = Math.round(cx - camX);
     const sy = Math.round(cy - camY);
-    const frames = spellFrames(s.el, s.tier, "bolt");
-    if (frames) {
+    const sheet = spellSheet(s.el, s.tier, "bolt");
+    if (sheet) {
       // The sheets are drawn pointing RIGHT, so the rotation is the raw angle
       // with no correction term — one convention, stated once, and a new
       // element cannot get it wrong by drawing its fireball facing up.
       const ang = Math.atan2(s.toY - s.fromY, s.toX - s.fromX);
-      const f = frames[loopFrameIndex(s.t, frames.length, BOLT_FPS)];
+      const i = loopFrameIndex(s.t, sheet.base.length, BOLT_FPS);
+      const size = Math.round(TILE * SCALE.bolt);
+      const gs = size * sheet.glowScale;
+      pool(vctx, sx, sy, TILE * 0.5, POOL_ALPHA, ELEMENT_COLOR[s.el]);
       vctx.save();
       vctx.translate(sx, sy);
       vctx.rotate(ang);
-      vctx.drawImage(f, -TILE / 2, -TILE / 2, TILE, TILE);
+      vctx.globalCompositeOperation = "lighter";
+      vctx.globalAlpha = GLOW_ALPHA;
+      vctx.drawImage(sheet.glow[i], -gs / 2, -gs / 2, gs, gs);
+      vctx.globalAlpha = 1;
+      vctx.globalCompositeOperation = "source-over";
+      vctx.drawImage(sheet.base[i], -size / 2, -size / 2, size, size);
       vctx.restore();
     } else {
       vctx.fillStyle = ELEMENT_COLOR[s.el];
