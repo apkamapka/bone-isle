@@ -4818,29 +4818,63 @@ async function main(): Promise<void> {
     X.clearSpellFx();
     ok(X.spellFxCounts().bolts === 0 && X.spellFxCounts().blasts === 0, "clearSpellFx wipes both lists");
 
-    // --- a spell never blooms inside a tree, a rock or a wall ---
+    // --- water and walls swallow a flame; trees and rocks do not ---
     {
-      const p2 = createPlayer({ x: 0, y: 0 });
-      p2.bag = items.emptyBag();
-      let solid: [number, number] | null = null;
-      for (let y = 2; y < hw.h - 2 && !solid; y++) {
-        for (let x = 2; x < hw.w - 2; x++) {
-          if (!walk(hw, x, y) && walk(hw, x - 2, y)) { solid = [x, y]; break; }
+      const { groundBlocked } = await import("../src/world/collision.ts");
+      const { Tile: TL } = await import("../src/world/types.ts");
+      // a tree's tile is solid to walk on but is still ground that can burn —
+      // this is the whole distinction, and it is the bug that put a hole in
+      // every blast that clipped a trunk
+      const tree = hw.trees.find((t) => !t.stump);
+      ok(!!tree, "the home map has a tree to test against");
+      ok(!walk(hw, tree!.tx, tree!.ty), "…standing on a tile you cannot walk onto");
+      ok(!groundBlocked(hw, tree!.tx, tree!.ty), "…which nonetheless takes fire");
+      let water: [number, number] | null = null;
+      for (let y = 0; y < hw.h && !water; y++) {
+        for (let x = 0; x < hw.w; x++) {
+          if (hw.tile[y][x] === TL.Water) { water = [x, y]; break; }
         }
       }
-      ok(solid !== null, "the home map has a solid tile with open ground beside it");
-      const [sx2, sy2] = solid!;
-      // stand two tiles west of the obstacle and fire a Nova: the ring of eight
-      // straddles it, so exactly the open tiles should light up
+      ok(water !== null && groundBlocked(hw, water![0], water![1]), "open water does not");
+      ok(groundBlocked(hw, -1, 0) && groundBlocked(hw, 0, -1), "…and neither does off-map");
+
+      const p2 = createPlayer({ x: 0, y: 0 });
+      p2.bag = items.emptyBag();
+      // stand next to water and fire a Nova: the ring of eight straddles the
+      // shoreline, so exactly the dry tiles should light up
+      let shore: [number, number] | null = null;
+      for (let y = 2; y < hw.h - 2 && !shore; y++) {
+        for (let x = 2; x < hw.w - 2; x++) {
+          if (groundBlocked(hw, x, y) && !groundBlocked(hw, x - 2, y)) { shore = [x, y]; break; }
+        }
+      }
+      ok(shore !== null, "the home map has a shoreline with dry ground beside it");
+      const [sx2, sy2] = shore!;
       p2.x = (sx2 - 2) * TILE + TILE / 2;
       p2.y = sy2 * TILE + TILE / 2;
       p2.bag[0] = { kind: "fireEmberNova", n: 1 };
       X.clearSpellFx();
       C.tickCrystalCooldown(99);
-      const open = C.NOVA_TILES.filter(([dx, dy]) => walk(hw, sx2 - 2 + dx, sy2 + dy)).length;
+      const dry = C.NOVA_TILES.filter(([dx, dy]) => !groundBlocked(hw, sx2 - 2 + dx, sy2 + dy)).length;
       C.useCrystal(hw, p2, "fireEmberNova");
-      ok(X.spellFxCounts().blasts === open && open < 8,
-        `a Nova lights only its walkable tiles (${X.spellFxCounts().blasts} of 8)`);
+      ok(X.spellFxCounts().blasts === dry && dry < 8,
+        `a Nova lights only its dry tiles (${X.spellFxCounts().blasts} of 8)`);
+      X.clearSpellFx();
+    }
+
+    // --- depth: a flame sorts by its tile CENTRE, so actors stay in front ---
+    {
+      X.clearSpellFx();
+      X.addBlast(hw, 10, 10, "fire", 0, "nova", 0);
+      const [d] = X.spellBlastDrawables(hw);
+      ok(!!d, "a live blast offers itself to the draw list");
+      ok(d.y === 10 * TILE + TILE / 2, "…sorted on its tile centre");
+      ok(d.y < 10 * TILE + TILE, "…which is ahead of a tree anchored on the same tile");
+      ok(d.y > 9 * TILE + TILE / 2, "…and behind anything standing one tile north");
+      ok(X.spellBlastDrawables(worldsFx.town).length === 0, "…and offers nothing to another island");
+      X.clearSpellFx();
+      X.addBlast(hw, 10, 10, "fire", 0, "nova", 5);
+      ok(X.spellBlastDrawables(hw).length === 0, "a blast still waiting out its delay draws nothing");
       X.clearSpellFx();
     }
 
@@ -4852,13 +4886,16 @@ async function main(): Promise<void> {
     }) as unknown as CanvasRenderingContext2D;
     X.clearSpellFx();
     X.addBlast(hw, 4, 4, "fire", 0, "burst", 0);
-    X.addBolt(hw, 0, 0, 300, 0, "fire", 0);
-    X.drawSpellFx(rec3, hw, 0, 0);
+    for (const d of X.spellBlastDrawables(hw)) d.fn(rec3, 0, 0);
     ok(calls.length > 0, "the bare fallback paints something when no sheet has loaded");
     ok(!calls.includes("drawImage"), "…and it is drawn, not blitted (there is no image headless)");
     calls.length = 0;
-    X.drawSpellFx(rec3, worldsFx.town, 0, 0);
-    ok(calls.length === 0, "an explosion on Home Isle draws nothing over Town");
+    X.addBolt(hw, 0, 0, 300, 0, "fire", 0);
+    X.drawSpellBolts(rec3, hw, 0, 0);
+    ok(calls.length > 0, "a bolt in flight paints too");
+    calls.length = 0;
+    X.drawSpellBolts(rec3, worldsFx.town, 0, 0);
+    ok(calls.length === 0, "a bolt over Home Isle draws nothing over Town");
     X.clearSpellFx();
   }
 

@@ -15,8 +15,7 @@ import { TILE } from "../config.ts";
 import { bagCount, removeItem } from "../items.ts";
 import { HEAL_CRYSTAL_BASE, MONSTER_AGGRO_HIT_S, CRYSTAL_COOLDOWN_S } from "../config.ts";
 import { killMonster } from "./combat.ts";
-import { lineOfSight } from "../world/collision.ts";
-import { walkable } from "../world/grid.ts";
+import { lineOfSight, groundBlocked } from "../world/collision.ts";
 import { addBlast, addBolt } from "../gfx/spellFx.ts";
 import type { Player } from "../entities/player.ts";
 import type { Facing } from "./outfit.ts";
@@ -199,16 +198,20 @@ interface Struck {
 /**
  * Light up a footprint.
  *
- * Solid tiles are SKIPPED. A fireball does not bloom inside a tree trunk or
- * halfway up a cave wall — in Tibia the effect simply is not drawn there, and
- * a wave whose far end vanishes into rock tells the player exactly where the
- * room ends. Nothing can stand on a solid tile anyway, so this costs no damage.
+ * Only the GROUND can refuse a flame — water, a cave wall, a palisade. A tree
+ * or a rock does not: the tile burns and the prop stands in front of the fire,
+ * exactly the way it stands in front of the player who walks behind it. The
+ * first version skipped those tiles too and punched a visible hole in every
+ * blast that clipped a trunk.
+ *
+ * A wave whose far end vanishes into rock still tells the player where the
+ * room ends — that part was right, and walls keep doing it.
  */
 function paint(
   world: World, tiles: readonly Struck[], el: Element, tier: Tier, slot: "burst" | "wave" | "nova" | "hit",
 ): void {
   for (const s of tiles) {
-    if (!walkable(world, s.tx, s.ty)) continue;
+    if (groundBlocked(world, s.tx, s.ty)) continue;
     addBlast(world, s.tx, s.ty, el, tier, slot, s.delay);
   }
 }

@@ -39,7 +39,7 @@ import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
 import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
-import { updateSpellFx, drawSpellFx } from "./gfx/spellFx.ts";
+import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
@@ -2350,6 +2350,16 @@ function render(): void {
       drawSprite(scenerySprite(sc.kind), bx, by);
     } });
   }
+  // Spell effects. In the sort like everything else: a flame north of the
+  // player is drawn before him and so passes behind his shoulders, and a
+  // flame on a tree's tile is drawn before the trunk and burns behind it.
+  // Pushed HERE — ahead of corpses, creatures and the player — so that when a
+  // flame ties with an actor on the same tile the actor wins and stays legible.
+  for (const bd of spellBlastDrawables(world)) {
+    if (!inView(bd.x, bd.y)) continue;
+    drawList.push({ y: bd.y, fn: () => bd.fn(vctx, cam.x, cam.y) });
+  }
+
   // Campfires. Unlike every other piece of scenery these are NOT baked into
   // the map canvas: the flame has to be recut each frame, so they ride the
   // depth-sorted list and the player can walk behind one. `waveT` is the same
@@ -2516,9 +2526,9 @@ function render(): void {
     vctx.stroke();
   }
 
-  // spells: over the sorted scene, because an explosion hidden behind the
-  // creature it just killed is an explosion the player has to be told about
-  drawSpellFx(vctx, world, cam.x, cam.y);
+  // spell projectiles fly overhead, with the arrows — the blasts they leave
+  // went into the depth sort above
+  drawSpellBolts(vctx, world, cam.x, cam.y);
 
   // target reticle
   if (P.target && (P.target.kind === "mob" || P.target.kind === "dummy")) {

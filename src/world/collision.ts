@@ -18,10 +18,30 @@ export function blockedAt(w: World, px: number, py: number): boolean {
   return !walkable(w, Math.floor(px / TILE), Math.floor(py / TILE));
 }
 
+/**
+ * True if the GROUND here cannot carry a spell effect: off-map, open water, a
+ * cave wall or a palisade.
+ *
+ * Deliberately NOT `walkable()`. That one folds terrain and props into a
+ * single `solid` grid, so asking it whether a tile takes fire also refuses
+ * every tile with a tree or a rock on it — and a fireball that skips the tree
+ * square leaves a hole in the blast instead of burning behind the trunk. A
+ * tree is something to stand behind, not a hole in the world, and the depth
+ * sort already knows how to put a flame behind one.
+ *
+ * Water and walls stay out: fire on a lake reads as a bug, and a wall is
+ * painted into the map canvas rather than depth-sorted, so anything drawn on
+ * its tile lands on TOP of the rock face instead of behind it.
+ */
+export function groundBlocked(w: World, tx: number, ty: number): boolean {
+  if (tx < 0 || ty < 0 || tx >= w.w || ty >= w.h) return true;
+  const t = w.tile[ty][tx];
+  return t === Tile.Water || t === Tile.Wall || t === Tile.Palisade;
+}
+
 /** True if the pixel sits on a sight-blocking tile (Wall) or off-map. Trees,
  *  rocks and water don't block sight — only proper walls do, so cave chambers
- *  and ruins genuinely break line of sight the way the cave design intends. */
-function sightBlockedAt(w: World, px: number, py: number): boolean {
+ *  and ruins genuinely break line of sight the way the cave design intends. */function sightBlockedAt(w: World, px: number, py: number): boolean {
   const x = Math.floor(px / TILE);
   const y = Math.floor(py / TILE);
   if (x < 0 || y < 0 || x >= w.w || y >= w.h) return true;

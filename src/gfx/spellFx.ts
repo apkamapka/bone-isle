@@ -169,7 +169,7 @@ function pool(
   if (a <= 0.001) return;
   vctx.globalCompositeOperation = "lighter";
   vctx.fillStyle = col;
-  for (const f of [1, 0.78, 0.55, 0.32]) {
+  for (const f of [1, 0.85, 0.7, 0.55, 0.42, 0.3]) {
     vctx.globalAlpha = a;
     vctx.beginPath();
     vctx.arc(sx, sy, r * f, 0, Math.PI * 2);
@@ -204,27 +204,54 @@ function bareBlast(
 }
 
 /**
- * Draw everything belonging to `world`, offset by the camera.
+ * One tile's worth of fire, ready for the depth-sorted draw list.
  *
- * Called after the depth-sorted scene: a spell goes off in FRONT of whatever
- * it hits, because an explosion hidden behind a minotaur is an explosion the
- * player has to be told about.
+ * Effects USED to be painted after the whole scene, which put every flame on
+ * top of everything — a Nova drew over the caster's face and a Burst hid the
+ * creatures it was killing. They belong in the sort like any other sprite, so
+ * this hands main the two numbers it needs (where to cull, where to sort) and
+ * a closure that paints when its turn comes.
  */
-export function drawSpellFx(
-  vctx: CanvasRenderingContext2D, world: World, camX: number, camY: number,
-): void {
+export interface SpellDrawable {
+  /** Tile centre, for the viewport cull. */
+  x: number;
+  /**
+   * Depth key: the tile CENTRE, not its bottom edge.
+   *
+   * That choice is what settles the two ties that matter. A tree anchors at
+   * the bottom of its tile, so a flame on the same tile sorts first and burns
+   * behind the trunk. A grid-locked player sits at his tile's centre exactly,
+   * so a flame beside him ties — and because blasts are pushed into the list
+   * before the player is, the stable sort leaves him in front.
+   */
+  y: number;
+  fn: (vctx: CanvasRenderingContext2D, camX: number, camY: number) => void;
+}
+
+/** Every blast in `world` that is past its delay, as sortable drawables. */
+export function spellBlastDrawables(world: World): SpellDrawable[] {
+  const out: SpellDrawable[] = [];
   for (const b of blasts) {
     if (b.world !== world || b.t < 0) continue;
+    out.push({ x: b.x, y: b.y, fn: (v, cx, cy) => drawBlast(v, b, cx, cy) });
+  }
+  return out;
+}
+
+function drawBlast(
+  vctx: CanvasRenderingContext2D, b: Blast, camX: number, camY: number,
+): void {
+  {
     const sx = Math.round(b.x - camX);
     const sy = Math.round(b.y - camY);
     const col = ELEMENT_COLOR[b.el];
     const sheet = spellSheet(b.el, b.tier, b.slot);
     if (!sheet) {
       bareBlast(vctx, sx, sy, b.t / BARE_BLAST_S, col);
-      continue;
+      return;
     }
     const i = fxFrameIndex(b.t, sheet.base.length, FX_FPS);
-    if (i < 0) continue;
+    if (i < 0) return;
 
     // Brightest at the start and dying with the animation, which is how the
     // eye expects light from a fire to behave.
@@ -245,7 +272,19 @@ export function drawSpellFx(
     vctx.globalCompositeOperation = "source-over";
     vctx.drawImage(sheet.base[i], left, top, size, size);
   }
+}
 
+/**
+ * Projectiles, drawn OVER the sorted scene.
+ *
+ * Unlike a blast, a bolt is not standing on a tile — it is in the air on its
+ * way somewhere, exactly like an arrow, and it is drawn with the arrows for
+ * the same reason: something crossing the map has to stay visible while it
+ * crosses.
+ */
+export function drawSpellBolts(
+  vctx: CanvasRenderingContext2D, world: World, camX: number, camY: number,
+): void {
   for (const s of bolts) {
     if (s.world !== world) continue;
     const p = Math.min(1, s.t / s.dur);
