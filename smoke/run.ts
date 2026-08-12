@@ -4447,6 +4447,100 @@ async function main(): Promise<void> {
   }
 
 
+  console.log("Etap 28 — more than one chest:");
+  {
+    const B = await import("../src/systems/building.ts");
+
+    // Exactly one structure may be owned twice. Everything else is THE forge,
+    // THE tower, and its row must keep offering an upgrade rather than a copy.
+    ok(B.STRUCTS.chest.multi === true, "the chest is the structure you may own several of");
+    const others = B.STRUCT_KEYS.filter((k) => k !== "chest" && B.STRUCTS[k].multi === true);
+    ok(others.length === 0, `…and the only one (${others.join(", ") || "nothing else claims it"})`);
+
+    // The first is the catalog price; each copy after it doubles. Structures
+    // that cannot be owned twice ignore the count entirely.
+    const c0 = B.buildCost("chest", 0);
+    const c1 = B.buildCost("chest", 1);
+    const c3 = B.buildCost("chest", 3);
+    ok(JSON.stringify(c0) === JSON.stringify(B.STRUCTS.chest.tiers[0].cost), "the first chest costs the catalog price");
+    ok((c1.wood ?? 0) === (c0.wood ?? 0) * 2, `…the second costs double (${c1.wood} wood)`);
+    ok((c3.wood ?? 0) === (c0.wood ?? 0) * 8, `…and the fourth eight times as much (${c3.wood} wood)`);
+    ok(JSON.stringify(B.buildCost("forge", 4)) === JSON.stringify(B.buildCost("forge")),
+      "a structure you can only own once ignores the count");
+
+    // The point of the curve: spamming cheap chests must not retire the
+    // upgrade ladder. Four tier-I chests hold 40 slots; one tier-II chest
+    // holds 50 and has to be the better buy in wood by the time you get there.
+    let spam = 0;
+    for (let i = 0; i < 4; i++) spam += B.buildCost("chest", i).wood ?? 0;
+    const raise = (B.upgradeCost("chest", 1)?.wood ?? 0) + (B.buildCost("chest", 0).wood ?? 0);
+    ok(spam > raise, `four tier-I chests (${spam} wood) cost more than one raised to II (${raise} wood)`);
+
+    // Placing a second chest has to work end to end, at full price, with its
+    // own inventory — the old build panel could only ever raise the best one,
+    // so a second chest was unreachable and unraisable.
+    const items = await import("../src/items.ts");
+    const { createGame, homeChests } = await import("../src/game.ts");
+    const g = createGame();
+    const home = g.worlds.home;
+    items.addItem(g.player.bag, "wood", 400);
+    items.addItem(g.player.bag, "stone", 400);
+    items.addItem(g.player.bag, "bones", 200);
+
+    const spots: { tx: number; ty: number }[] = [];
+    outer2: for (let y = 2; y < home.h - 4; y++) {
+      for (let x = 2; x < home.w - 4; x += 4) {
+        if (B.canPlaceAt(home, "chest", x, y)) {
+          spots.push({ tx: x, ty: y });
+          if (spots.length === 2) break outer2;
+        }
+      }
+    }
+    ok(spots.length === 2, "found room for two chests");
+
+    const player = g.player;
+    const put = (i: number) => B.tryPlace(home, player, "chest", (spots[i].tx + 1) * 32, (spots[i].ty + 1) * 32, homeChests(g));
+    ok(put(0), "the first chest goes up");
+    ok(B.countOwned(home, "chest") === 1, "…and the island knows it owns one");
+    ok(put(1), "the second goes up too");
+    ok(B.countOwned(home, "chest") === 2, "…and now two");
+
+    const [a, b] = home.structures.filter((s) => s.key === "chest");
+    ok(B.tierOf(a) === 1 && B.tierOf(b) === 1, "every chest is born at tier I, however many came before it");
+    ok(!!a.inv && !!b.inv && a.inv !== b.inv, "…each with its own inventory, not a shared one");
+
+    // Raising one must leave the other alone: that is the whole reason the
+    // upgrade moved into the chest's own window.
+    ok(B.tryUpgrade(home, player, b, homeChests(g)), "the second chest can be raised on its own");
+    ok(B.tierOf(b) === 2 && B.tierOf(a) === 1, "…and the first is untouched");
+    ok((b.inv?.length ?? 0) > (a.inv?.length ?? 0), `…only the raised one grew (${b.inv?.length} vs ${a.inv?.length} slots)`);
+
+    // The upgrade button lives in the chest window now, so that window has to
+    // survive being opened on a chest at every tier — including the top one,
+    // where there is no next tier to price and the button is replaced by a
+    // line of text.
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const hud = {
+      ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+        .document.createElement("canvas").getContext("2d"),
+      scale: 2, screenW: 800, screenH: 600, touchInput: false,
+    } as never;
+    for (const tier of [1, 2, 3]) {
+      b.tier = tier as never;
+      const ui = {
+        windows: [{ kind: "stash", offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
+        npc: null, stash: b, shopTab: "buy", forgeTab: "craft", testPage: 0,
+        towerTab: "fire", upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      } as never;
+      let threw = "";
+      try {
+        drawPanels({ hud, ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 }, act: {} as never, hotspots: [], itemSlots: [] } as never);
+      } catch (e) { threw = String(e); }
+      ok(threw === "", `the chest window draws at tier ${tier}${threw ? " — " + threw : ""}`);
+    }
+  }
+
   console.log("Etap 27 — drawn buildings, one image per tier:");
   {
     const A = await import("../src/gfx/buildingArt.ts");

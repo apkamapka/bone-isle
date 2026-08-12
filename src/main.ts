@@ -15,7 +15,7 @@ import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/playe
 import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnAtPost } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint } from "./systems/building.ts";
+import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
 import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow } from "./gfx/buildingArt.ts";
 import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
@@ -1174,7 +1174,7 @@ function handleWorldTap(sx: number, sy: number): void {
       recomputeBonuses();
       ui.placing = null; // placed — leave build mode
       placeGhost = null;
-    } else if (!canAfford(P.bag, buildCost(key), homeChests(game))) {
+    } else if (!canAfford(P.bag, buildCost(key, countOwned(game.worlds.home, key)), homeChests(game))) {
       flash("not enough materials", "#d96a5a");
       ui.placing = null;
       placeGhost = null;
@@ -1458,11 +1458,19 @@ function worldClick(w: Vec): void {
       return;
     }
   }
-  // structures (dummy to hit, forge/chest to use). Hitbox anchored to the
-  // structure's real footprint centre (1×1 dummies vs 2×2 buildings).
+  // structures (dummy to hit, forge/chest to use). The hitbox covers the tiles
+  // the structure BLOCKS: a click there could never have been a step, so
+  // reading it as "use this" costs nothing, and a click anywhere else stays a
+  // walk order. That keeps the row behind a chest reachable — it is walkable,
+  // so it is not part of the box — while making the wide drawn buildings
+  // clickable across their whole base instead of a 30 px patch in the middle,
+  // which is all the old fixed box covered once the artwork trebled in size.
   for (const s of world.structures) {
     const c = structCenter(s);
-    if (Math.abs(w.x - c.x) < SPR.corpse.width / 2 && w.y > c.baseY - SPR.corpse.height * 2 && w.y < c.baseY + 8) {
+    const n = footprint(s.key);
+    const half = Math.max(SPR.corpse.width / 2, (n * TILE) / 2);
+    const reach = Math.max(SPR.corpse.height * 2, solidRows(s.key) * TILE);
+    if (Math.abs(w.x - c.x) < half && w.y > c.baseY - reach && w.y < c.baseY + 8) {
       if (s.key === "dummy" || s.key === "range") {
         // re-clicking the dummy you're training on stops the attack (toggle)
         if (P.target?.kind === "dummy" && P.target.s === s) {

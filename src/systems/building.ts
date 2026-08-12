@@ -46,6 +46,17 @@ export interface StructDef {
    * over them: the same thing that happens behind a tree.
    */
   solidRows?: number;
+  /**
+   * May the player own more than one of these?
+   *
+   * Everything else on the island is THE forge, THE tower — one of a kind, and
+   * the only way forward is to raise it. A chest is a container: two of them
+   * are useful for sorting long before a bigger one is useful for volume, and
+   * a player who wants ore in one and bones in another should not have to pay
+   * a tier upgrade for the privilege. Each new one is born at tier I and is
+   * raised separately, from its own window.
+   */
+  multi?: boolean;
   /** Tier I first. A one-entry list means the structure has no upgrades. */
   tiers: readonly TierDef[];
 }
@@ -93,7 +104,7 @@ export const STRUCTS: Record<StructKey, StructDef> = {
   chest: {
     // Waist-high furniture, not a building: only the row it rests on blocks,
     // so the player can stand behind it the way they stand behind a tree.
-    name: "Storage Chest", spr: bakeChest(), solid: true, solidRows: 1,
+    name: "Storage Chest", spr: bakeChest(), solid: true, solidRows: 1, multi: true,
     tiers: [
       { cost: { wood: 10, stone: 5 }, desc: "10 slots" },
       { cost: { wood: 60, stone: 60, bones: 40 }, desc: "50 slots" },
@@ -136,9 +147,40 @@ export function upgradeCost(key: string, tier: number): Cost | null {
   return def.tiers[tier].cost;
 }
 
-/** Cost of building this structure fresh (always tier I). */
-export function buildCost(key: string): Cost {
-  return STRUCTS[key as StructKey]?.tiers[0].cost ?? {};
+/** How many of `key` already stand on Home Isle. */
+export function countOwned(home: World, key: string): number {
+  let n = 0;
+  for (const s of home.structures) if (s.key === key) n++;
+  return n;
+}
+
+/**
+ * What each extra copy multiplies the tier-I price by.
+ *
+ * Storage is the one thing a player can buy twice, and at a flat price they
+ * would never upgrade: five tier-I chests hold the same fifty slots as one
+ * tier-II chest for less wood, less stone and no bones at all, which retires
+ * the upgrade ladder the day multiple chests ship. Doubling keeps the second
+ * and third chest cheap enough to be worth it for sorting, and makes the sixth
+ * absurd next to simply raising one you own — a wall the player runs into by
+ * reading the price rather than by being told a limit.
+ */
+const EXTRA_COST_STEP = 2;
+
+/**
+ * Cost of building this structure fresh, always at tier I.
+ *
+ * `owned` is how many already stand; it only matters for structures that may
+ * be owned more than once, and everything else ignores it and charges the
+ * catalog price forever.
+ */
+export function buildCost(key: string, owned = 0): Cost {
+  const base = STRUCTS[key as StructKey]?.tiers[0].cost ?? {};
+  if (!STRUCTS[key as StructKey]?.multi || owned <= 0) return base;
+  const mult = EXTRA_COST_STEP ** owned;
+  const out: Cost = {};
+  for (const [k, v] of Object.entries(base) as [keyof Cost, number][]) out[k] = v * mult;
+  return out;
 }
 
 /**
@@ -256,7 +298,7 @@ export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy:
   const n = def.single ? 1 : 2;
   const tx = Math.round(wx / TILE - n / 2);
   const ty = Math.round(wy / TILE - n / 2);
-  const cost = buildCost(key);
+  const cost = buildCost(key, countOwned(home, key));
   if (!canPlaceAt(home, key, tx, ty)) return false;
   if (!canAfford(p.bag, cost, stash)) return false;
 

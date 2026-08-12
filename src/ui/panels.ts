@@ -4,7 +4,7 @@ import { itemSprite } from "../gfx/itemArt.ts";
 import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax } from "../systems/skills.ts";
 import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import { MIN_HIT_RATIO } from "../config.ts";
-import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost, structSprite } from "../systems/building.ts";
+import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost, structSprite, countOwned } from "../systems/building.ts";
 import { RESEARCH, isResearched, towerTierOk,
   ATTUNEMENT, isAttuned, offersFor } from "../systems/tower.ts";
 import { ELEMENT_LABEL, type Element } from "../systems/elements.ts";
@@ -458,14 +458,22 @@ function drawBuild(p: PanelInput): void {
     const def = STRUCTS[key];
     // The best one standing decides what this row offers: nothing built yet
     // means "build tier I", otherwise it means "raise the one you have".
+    //
+    // Structures you may own several of never offer an upgrade here, because
+    // the row cannot say WHICH one it would raise — it used to silently pick
+    // the best, which left every other copy unraisable. Those are upgraded
+    // from their own window instead, where the player has already picked one
+    // by opening it, and this row only ever sells another at tier I.
     let owned: Structure | null = null;
     for (const st of home.structures) {
       if (st.key === key && (!owned || tierOf(st) > tierOf(owned))) owned = st;
     }
+    const many = def.multi === true;
+    const count = many ? countOwned(home, key) : 0;
     const tier = owned ? tierOf(owned) : 0;
     const top = maxTier(key);
-    const nextCost = owned ? upgradeCost(key, tier) : buildCost(key);
-    const maxed = owned !== null && nextCost === null;
+    const nextCost = many ? buildCost(key, count) : owned ? upgradeCost(key, tier) : buildCost(key);
+    const maxed = !many && owned !== null && nextCost === null;
     const afford = nextCost !== null && canAfford(player.bag, nextCost, chests);
     const clickable = afford && !maxed;
 
@@ -476,7 +484,7 @@ function drawBuild(p: PanelInput): void {
     // Show the tier this row is OFFERING, not the one already standing: the
     // picture beside "Upgrade to II" is then the thing being paid for. A maxed
     // row has nothing left to offer and shows what it owns.
-    const shown = maxed ? tier : Math.min(top, tier + 1);
+    const shown = many ? 1 : maxed ? tier : Math.min(top, tier + 1);
     const spr = structSprite(key, shown);
     // Drawn buildings stand three tiles tall and would burst the row, so the
     // fit is allowed to go fractional below 1x. At or above it, whole steps
@@ -485,22 +493,26 @@ function drawBuild(p: PanelInput): void {
     const isc = fit >= 1 ? Math.floor(fit) : fit;
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, isc)) / 2, isc);
 
-    const label = tier > 0 ? `${def.name}  ${"I".repeat(tier)}` : def.name;
+    const label = many
+      ? (count > 0 ? `${def.name}  x${count}` : def.name)
+      : tier > 0 ? `${def.name}  ${"I".repeat(tier)}` : def.name;
     hudText(hud, label, x + 48 * S, ry + 9 * S, 10 * S, clickable || maxed ? "#f3eedd" : "#8a8070", "left", true);
     if (top > 1) {
-      hudText(hud, tier > 0 ? `tier ${tier} / ${top}` : `tier 0 / ${top}`, x + w - 12 * S, ry + 9 * S, 7 * S, "#e8dcc0", "right");
+      const right = many ? `${count} built` : tier > 0 ? `tier ${tier} / ${top}` : `tier 0 / ${top}`;
+      hudText(hud, right, x + w - 12 * S, ry + 9 * S, 7 * S, "#e8dcc0", "right");
     }
     if (maxed) {
       hudText(hud, "top tier reached", x + 48 * S, ry + 21 * S, 8 * S, "#9fe8a8");
       hudText(hud, def.tiers[tier - 1].desc, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)");
     } else if (nextCost) {
-      const verb = owned ? `Upgrade to ${"I".repeat(tier + 1)}:` : "Build:";
+      const verb = many ? (count > 0 ? "Build another:" : "Build:") : owned ? `Upgrade to ${"I".repeat(tier + 1)}:` : "Build:";
       hudText(hud, `${verb} ${costText(nextCost)}`, x + 48 * S, ry + 21 * S, 8 * S, afford ? "#b9e07f" : "#d96a5a");
-      hudText(hud, def.tiers[tier].desc, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)");
+      const note = many ? "Starts at tier I — raise it from the chest itself" : def.tiers[tier].desc;
+      hudText(hud, note, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)");
     }
     if (clickable) {
       const ryy = ry;
-      const target = owned;
+      const target = many ? null : owned;
       p.hotspots.push({
         x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S,
         fn: target ? () => p.act.upgrade(target) : () => p.act.startPlacing(key),
@@ -1490,8 +1502,9 @@ function drawGrid(
 function drawStash(p: PanelInput): void {
   const { hud, player } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
-  const inv = p.ui.stash?.inv;
-  if (!inv) return;
+  const chest = p.ui.stash;
+  const inv = chest?.inv;
+  if (!chest || !inv) return;
   const cols = 10;
   const cell = 26 * S;
   const gap = 3 * S;
@@ -1500,7 +1513,13 @@ function drawStash(p: PanelInput): void {
   const bagRows = Math.ceil(player.bag.length / cols);
   const w = gridW + 24 * S;
   const headH = 12 * S;
-  const h = 20 * S + headH + stashRows * (cell + gap) + 14 * S + headH + bagRows * (cell + gap) + 10 * S;
+  // Chests are the one structure a player can own several of, so raising one
+  // has to happen here rather than in the build panel: the window belongs to a
+  // particular chest, which answers "which one?" before it can be asked.
+  const chestTier = tierOf(chest);
+  const upCost = upgradeCost(chest.key, chestTier);
+  const upH = 22 * S;
+  const h = 20 * S + headH + stashRows * (cell + gap) + 14 * S + headH + bagRows * (cell + gap) + 10 * S + upH;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   if (!goldPanel(p, x, y, w, h, "STORAGE CHEST")) return;
@@ -1520,6 +1539,28 @@ function drawStash(p: PanelInput): void {
   hudText(hud, "Backpack — click to store", x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
   gy += headH;
   drawGrid(p, player.bag, gx, gy, cols, cell, gap, (i) => p.act.moveStack("bag", i), "bag");
+  gy += bagRows * (cell + gap) + 4 * S;
+
+  const roman = "I".repeat(chestTier);
+  if (!upCost) {
+    hudText(hud, `Tier ${roman} — top tier reached`, x + 12 * S, gy + 8 * S, 8 * S, "#9fe8a8", "left");
+    return;
+  }
+  const canPay = canAfford(player.bag, upCost, homeChests(p.game));
+  const bw = 150 * S;
+  const bx = x + w - bw - 12 * S;
+  const by = gy + 2 * S;
+  const bh = 14 * S;
+  const hot = hovering(p, bx, by, bw, bh);
+  hudText(hud, `Tier ${roman} — ${inv.length} slots`, x + 12 * S, gy + 9 * S, 8 * S, "#cfe8d2", "left");
+  ctx.fillStyle = canPay ? (hot ? "rgba(140,200,110,.34)" : "rgba(90,140,70,.24)") : "rgba(60,50,40,.5)";
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = canPay ? "#b9e07f" : "#6e571f";
+  ctx.lineWidth = S;
+  ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, bh - S);
+  hudText(hud, `Upgrade to ${"I".repeat(chestTier + 1)}: ${costText(upCost)}`, bx + bw / 2, by + 9 * S, 7 * S,
+    canPay ? "#b9e07f" : "#d96a5a", "center");
+  if (canPay) p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.upgrade(chest) });
 }
 
 /* ---------------- Wardrobe (outfit dyes) ---------------- */

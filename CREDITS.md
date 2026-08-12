@@ -611,12 +611,31 @@ behind them.
 
 ## Home Isle buildings — `public/build-*.png`
 
-> **TODO before this repo goes public / before release: fill in the source and
-> licence below.** Nothing else in this file is unresolved. If these came from
-> **CraftPix**, the files must NOT be committed while the repository is public —
-> the subscription licence forbids redistributing the source files, and a public
-> repo is redistribution. If they are **PixelLab** generations they are yours
-> outright and only need naming here.
+Source: **CraftPix.net**, standard (non-Enterprise) licence —
+https://craftpix.net/file-licenses/
+
+Commercial use is granted outright: unlimited free and commercial projects
+(1.1.5), the right to sell and distribute games containing the art (1.1.4), no
+royalty, and continued use of anything already downloaded after a subscription
+ends (1.1.6). The licence imposes no attribution requirement on paid products,
+so this section is a record of provenance rather than an obligation.
+
+Clause 3.1.1 forbids using these assets to train, develop or improve AI or ML
+systems. Editing them with an AI tool for use in this game is not that — it is
+the adaptation right granted by 1.1.1 — but the distinction is worth keeping in
+mind, since it is the assets as training data that the clause is about.
+
+> **These files must not sit in a public repository.** Clause 1.1.3 —
+> "Distribution of source files is NOT permitted" — and 1.2.1, which forbids
+> redistributing the art "in a manner that would make some or all of the art
+> files useable to another end user". A public GitHub repo hands the PNGs to
+> anyone who clicks; the deployed game does not, and 1.2.1 says so explicitly:
+> "An app that uses the art as part of the game is fine." Serving these from
+> Vercel is fine. Hosting them in a public repo is not — and deleting them
+> later does not help, because git keeps every blob it has ever seen.
+
+Modifications made here (resizing, re-seating, Scale2x) are permitted by 1.1.1,
+which grants the right to adapt and prepare derivative works.
 
 | File | Structure | Tier | Size | Footprint |
 | --- | --- | --- | --- | --- |
