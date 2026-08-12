@@ -16,6 +16,8 @@ import { bagCount, removeItem } from "../items.ts";
 import { HEAL_CRYSTAL_BASE, MONSTER_AGGRO_HIT_S, CRYSTAL_COOLDOWN_S } from "../config.ts";
 import { killMonster } from "./combat.ts";
 import { lineOfSight } from "../world/collision.ts";
+import { walkable } from "../world/grid.ts";
+import { addBlast, addBolt } from "../gfx/spellFx.ts";
 import type { Player } from "../entities/player.ts";
 import type { Facing } from "./outfit.ts";
 import type { World } from "../world/types.ts";
@@ -57,8 +59,6 @@ export interface CrystalSpec {
   base: readonly [number, number];
   /** Cast range in px. 0 for the shapes anchored on the caster. */
   range: number;
-  /** Blast radius in px around the point of impact. 0 when the shape is tiles. */
-  splash: number;
 }
 
 /**
@@ -86,6 +86,30 @@ const WAVE_TILES: readonly (readonly [number, number])[] = [
   [-1, -2], [0, -2], [1, -2],
   [-2, -3], [-1, -3], [0, -3], [1, -3], [2, -3],
 ];
+
+/**
+ * Exevo gran mas flam: the diamond, thirteen tiles, every square within two
+ * steps counted the way you walk them — |dx| + |dy| <= 2.
+ *
+ * This replaced a splash measured in PIXELS, which was the older and worse
+ * idea: the blast was a circle of 56-80 px that the player could not see, so
+ * whether the goblin one tile past the target was caught came down to
+ * sub-tile positioning nobody could read. A footprint drawn in tiles is a
+ * footprint the player can count, and it is the same every tier — a Pyre
+ * Burst hits HARDER than an Ember Burst, not WIDER.
+ */
+const BURST_TILES: readonly (readonly [number, number])[] = (() => {
+  const out: [number, number][] = [];
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      if (Math.abs(dx) + Math.abs(dy) <= 2) out.push([dx, dy]);
+    }
+  }
+  return out;
+})();
+
+/** The Burst footprint, for the tower blurb and the tests. */
+export { BURST_TILES, NOVA_TILES, WAVE_TILES };
 
 /** Turn an UP-facing offset to face where the player is looking. */
 function rotate(dx: number, dy: number, dir: Facing, face: 1 | -1): [number, number] {
@@ -120,10 +144,10 @@ export const CRYSTAL_SPECS: Readonly<Record<string, CrystalSpec>> = (() => {
   for (const el of ELEMENTS) {
     for (let t = 0 as Tier; t < 3; t = (t + 1) as Tier) {
       const n = TIER_NAMES[el][t];
-      out[`${el}${n}Shard`] = { element: el, tier: t, role: "shard", base: FORM_BASE.shard, range: 260 + t * 30, splash: 0 };
-      out[`${el}${n}Burst`] = { element: el, tier: t, role: "burst", base: FORM_BASE.burst, range: 220 + t * 30, splash: 56 + t * 12 };
-      out[`${el}${n}Nova`] = { element: el, tier: t, role: "nova", base: FORM_BASE.nova, range: 0, splash: 0 };
-      out[`${el}${n}Wave`] = { element: el, tier: t, role: "wave", base: FORM_BASE.wave, range: 0, splash: 0 };
+      out[`${el}${n}Shard`] = { element: el, tier: t, role: "shard", base: FORM_BASE.shard, range: 260 + t * 30 };
+      out[`${el}${n}Burst`] = { element: el, tier: t, role: "burst", base: FORM_BASE.burst, range: 220 + t * 30 };
+      out[`${el}${n}Nova`] = { element: el, tier: t, role: "nova", base: FORM_BASE.nova, range: 0 };
+      out[`${el}${n}Wave`] = { element: el, tier: t, role: "wave", base: FORM_BASE.wave, range: 0 };
     }
   }
   return out;
@@ -158,6 +182,42 @@ function pickTarget(world: World, p: Player, range: number): World["monsters"][n
   }
   if (!best) addFloat(world, p.x, p.y - 44, "no target", "#ff9e6a");
   return best;
+}
+
+/** One tile of a spell's footprint: where it lands and when it goes off. */
+interface Struck {
+  tx: number;
+  ty: number;
+  /** Seconds to wait before this tile lights up. Turns thirteen simultaneous
+   *  explosions into something that reads as a blast travelling outwards. */
+  delay: number;
+}
+
+/**
+ * Light up a footprint.
+ *
+ * Solid tiles are SKIPPED. A fireball does not bloom inside a tree trunk or
+ * halfway up a cave wall — in Tibia the effect simply is not drawn there, and
+ * a wave whose far end vanishes into rock tells the player exactly where the
+ * room ends. Nothing can stand on a solid tile anyway, so this costs no damage.
+ */
+function paint(
+  world: World, tiles: readonly Struck[], el: Element, tier: Tier, slot: "burst" | "wave" | "nova" | "hit",
+): void {
+  for (const s of tiles) {
+    if (!walkable(world, s.tx, s.ty)) continue;
+    addBlast(world, s.tx, s.ty, el, tier, slot, s.delay);
+  }
+}
+
+/** Every living creature standing on one of these tiles. */
+function caughtOn(world: World, tiles: readonly Struck[]): World["monsters"] {
+  return world.monsters.filter((m) => {
+    if (m.hp <= 0) return false;
+    const mx = Math.floor(m.x / TILE);
+    const my = Math.floor(m.y / TILE);
+    return tiles.some((s) => s.tx === mx && s.ty === my);
+  });
 }
 
 /** One creature takes one full elemental roll, straight past its armor. */
@@ -212,23 +272,23 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
     if (spec.role === "nova" || spec.role === "wave") {
       const px = Math.floor(p.x / TILE);
       const py = Math.floor(p.y / TILE);
-      const shape = spec.role === "nova"
-        ? NOVA_TILES.map(([dx, dy]) => [dx, dy] as [number, number])
-        : WAVE_TILES.map(([dx, dy]) => rotate(dx, dy, p.dir, p.face));
-      const hit = world.monsters.filter((m) => {
-        if (m.hp <= 0) return false;
-        const mx = Math.floor(m.x / TILE);
-        const my = Math.floor(m.y / TILE);
-        return shape.some(([dx, dy]) => mx === px + dx && my === py + dy);
-      });
+      // A Nova goes off all at once — you are standing in the middle of it.
+      // A Wave travels, so its rows light up in order, and the delay is read
+      // off the offset BEFORE rotation: `dy` is -1, -2, -3 no matter which way
+      // the caster is looking, which is the one number that survives the turn.
+      const shape: Struck[] = spec.role === "nova"
+        ? NOVA_TILES.map(([dx, dy]) => ({ tx: px + dx, ty: py + dy, delay: 0 }))
+        : WAVE_TILES.map(([dx, dy]) => {
+          const [rx, ry] = rotate(dx, dy, p.dir, p.face);
+          return { tx: px + rx, ty: py + ry, delay: (Math.abs(dy) - 1) * 0.05 };
+        });
+      const hit = caughtOn(world, shape);
       // The charge is spent whether or not anything was standing there —
       // aiming is the skill, and a wave that refunds itself on a miss is a
       // wave you fire blindly.
       removeItem(p.bag, kind, 1);
       offensiveCd = CRYSTAL_COOLDOWN_S;
-      for (const [dx, dy] of shape) {
-        addFloat(world, (px + dx) * TILE + TILE / 2, (py + dy) * TILE + TILE / 2, "*", col);
-      }
+      paint(world, shape, spec.element, spec.tier, spec.role);
       if (hit.length) markBloodHit();
       for (const m of hit) damageWithElement(world, p, m, spec, col);
       beep(spec.role === "nova" ? 150 : 240, 0.22, "sawtooth", 0.07, spec.role === "nova" ? -200 : 180);
@@ -240,13 +300,27 @@ export function useCrystal(world: World, p: Player, kind: ItemKind): boolean {
     removeItem(p.bag, kind, 1);
     offensiveCd = CRYSTAL_COOLDOWN_S;
     markBloodHit();
-    // A burst catches everything in its blast, a shard puts it all into one
-    // creature. Both go STRAIGHT to hp — elemental damage is the channel that
-    // armor does not get to stop, and that bypass is the entire reason to
+    p.face = target.x < p.x ? -1 : 1;
+
+    // The projectile is cosmetic and the hit is already resolved, exactly as
+    // an arrow's is — but the BLOOM waits for it to arrive, so an explosion
+    // never beats its own fireball to the target.
+    const flight = addBolt(world, p.x, p.y - 16, target.x, target.y - 12, spec.element, spec.tier);
+    const ox = Math.floor(target.x / TILE);
+    const oy = Math.floor(target.y / TILE);
+    const shape: Struck[] = spec.role === "burst"
+      ? BURST_TILES.map(([dx, dy]) => ({
+        tx: ox + dx, ty: oy + dy,
+        delay: flight + (Math.abs(dx) + Math.abs(dy)) * 0.045,
+      }))
+      : [{ tx: ox, ty: oy, delay: flight }];
+    paint(world, shape, spec.element, spec.tier, spec.role === "burst" ? "burst" : "hit");
+
+    // A burst catches everything on its footprint, a shard puts it all into
+    // one creature. Both go STRAIGHT to hp — elemental damage is the channel
+    // that armor does not get to stop, and that bypass is the entire reason to
     // spend gold on crystals at all.
-    const caught = spec.splash > 0
-      ? world.monsters.filter((m) => m.hp > 0 && dist(m.x, m.y, target.x, target.y) <= spec.splash)
-      : [target];
+    const caught = spec.role === "burst" ? caughtOn(world, shape) : [target];
     for (const m of caught) damageWithElement(world, p, m, spec, col);
     beep(spec.role === "burst" ? 180 : 320, 0.2, "sawtooth", 0.06, spec.role === "burst" ? -160 : 120);
     return true;

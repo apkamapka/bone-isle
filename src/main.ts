@@ -39,6 +39,7 @@ import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
 import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
+import { updateSpellFx, drawSpellFx } from "./gfx/spellFx.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
@@ -1823,6 +1824,7 @@ function update(dt: number): void {
     P.deadT -= dt;
     if (P.deadT <= 0) respawnAtHome(game);
     updateFloats(dt);
+    updateSpellFx(dt);  // the spell that killed you still gets to finish
     return;
   }
 
@@ -1980,6 +1982,9 @@ function update(dt: number): void {
     sh.p += dt / sh.dur;
     if (sh.p >= 1) world.shots.splice(i, 1);
   }
+
+  // spell bolts and the blooms they leave (also cosmetic, same rule)
+  updateSpellFx(dt);
 
   tickRegrowth(world, dt, P.x, P.y, true);
   tickNpcTalk(world);
@@ -2510,6 +2515,10 @@ function render(): void {
     vctx.lineTo(px + dx, py + dy);
     vctx.stroke();
   }
+
+  // spells: over the sorted scene, because an explosion hidden behind the
+  // creature it just killed is an explosion the player has to be told about
+  drawSpellFx(vctx, world, cam.x, cam.y);
 
   // target reticle
   if (P.target && (P.target.kind === "mob" || P.target.kind === "dummy")) {

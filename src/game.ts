@@ -11,6 +11,7 @@ import { loadMobSheets } from "./gfx/mobSheet.ts";
 import { loadFireSheet } from "./gfx/fireSheet.ts";
 import { loadSceneryArt } from "./gfx/sceneryArt.ts";
 import { loadBuildingArt } from "./gfx/buildingArt.ts";
+import { loadSpellArt } from "./gfx/spellArt.ts";
 import { loadItemArt } from "./gfx/itemArt.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
 import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
@@ -228,6 +229,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   loadSceneryArt();          // totems and dead trees the player walks behind
   loadBuildingArt();         // the forge, the tower and the posts, one image per tier
   loadItemArt();             // drawn icons over the baked stand-ins
+  loadSpellArt();            // bolts and blooms, one strip per element and tier
   for (const l of LAIRS) {
     const lw = makeCaveWorld({
       key: l.key, name: l.name, w: l.w, h: l.h, seed: seed ^ keySalt(l.key),

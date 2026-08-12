@@ -4747,6 +4747,118 @@ async function main(): Promise<void> {
       "replaying the same seconds paints the same specks");
   }
 
+  console.log("spell fx (naming, playback, footprints):");
+  {
+    const A = await import("../src/gfx/spellArt.ts");
+    const X = await import("../src/gfx/spellFx.ts");
+    const C = await import("../src/systems/crystals.ts");
+    const E = await import("../src/systems/elements.ts");
+    const { walkable: walk } = await import("../src/world/grid.ts");
+    const { buildWorlds: bw } = await import("../src/game.ts");
+
+    // --- the naming contract. If this drifts, artwork silently 404s. ---
+    ok(A.fxFile("fire", 0, "burst") === "fx-fire-1-burst.png", "tier is 1-based in the filename");
+    ok(A.fxFile("shadow", 2, "bolt") === "fx-shadow-3-bolt.png", "…and the top tier is 3, not 2");
+    const names = new Set<string>();
+    for (const el of E.ELEMENTS) {
+      for (let t = 0; t < 3; t++) {
+        for (const sl of A.FX_SLOTS) names.add(A.fxFile(el, t as 0 | 1 | 2, sl));
+      }
+    }
+    ok(names.size === 75, "5 elements × 3 tiers × 5 slots = 75 distinct filenames");
+    ok([...names].every((n) => n === n.toLowerCase()), "every filename is lowercase (Linux serves these)");
+    ok([...names].every((n) => /^fx-[a-z]+-[123]-[a-z]+\.png$/.test(n)), "…and every one matches the documented shape");
+
+    // --- playback maths, no canvas needed ---
+    ok(A.fxFrameIndex(-0.1, 9) === -1, "a delayed blast shows nothing before it starts");
+    ok(A.fxFrameIndex(0, 9) === 0, "…the first frame at t=0");
+    ok(A.fxFrameIndex(8 / A.FX_FPS + 0.001, 9) === 8, "…the last frame just before it ends");
+    ok(A.fxFrameIndex(9 / A.FX_FPS + 0.001, 9) === -1, "…and is over after nine frames");
+    ok(Math.abs(A.fxDuration(9) - 9 / A.FX_FPS) < 1e-9, "duration is frames ÷ fps");
+    ok(A.loopFrameIndex(0, 8) === 0 && A.loopFrameIndex(8 / A.BOLT_FPS, 8) === 0,
+      "the bolt loops back round rather than ending");
+    ok(A.loopFrameIndex(-5, 8) >= 0, "…and a negative clock never indexes off the front");
+    ok(A.spellFrames("fire", 0, "burst") === null, "headless there is no artwork, so lookups return null");
+
+    // --- the footprints the player can count ---
+    ok(C.BURST_TILES.length === 13, "a Burst covers thirteen tiles");
+    ok(C.BURST_TILES.every(([dx, dy]) => Math.abs(dx) + Math.abs(dy) <= 2), "…all within two steps");
+    ok(C.BURST_TILES.some(([dx, dy]) => dx === 0 && dy === 0), "…including the tile it landed on");
+    ok(C.BURST_TILES.some(([dx, dy]) => dx === 2 && dy === 0)
+      && !C.BURST_TILES.some(([dx, dy]) => dx === 2 && dy === 1), "…a diamond, not a square");
+    ok(new Set(C.BURST_TILES.map(([dx, dy]) => `${dx},${dy}`)).size === 13, "…with no tile counted twice");
+    ok(C.NOVA_TILES.length === 8 && !C.NOVA_TILES.some(([dx, dy]) => dx === 0 && dy === 0),
+      "a Nova is the eight tiles around you and never your own");
+    ok(C.WAVE_TILES.length === 11, "a Wave is eleven tiles");
+    ok(Object.values(C.CRYSTAL_SPECS).every((sp) => !("splash" in sp)),
+      "the pixel splash radius is gone — every area is tiles now");
+
+    // --- the effect list itself ---
+    const worldsFx = bw(WORLD_SEED);
+    const hw = worldsFx.home;
+    X.clearSpellFx();
+    ok(X.spellFxCounts().blasts === 0, "the list starts empty");
+    X.addBlast(hw, 5, 5, "fire", 0, "burst", 0);
+    X.addBlast(hw, 6, 5, "fire", 0, "burst", 0.5);
+    ok(X.spellFxCounts().blasts === 2, "two blasts queued");
+    X.updateSpellFx(0.5);
+    ok(X.spellFxCounts().blasts === 1, "the undelayed one expired, the delayed one has not started");
+    X.updateSpellFx(1);
+    ok(X.spellFxCounts().blasts === 0, "…and it expires in its turn");
+    const dur = X.addBolt(hw, 0, 0, X.BOLT_SPEED, 0, "fire", 0);
+    ok(Math.abs(dur - 1) < 1e-6, "a bolt's flight time is distance ÷ speed");
+    ok(X.spellFxCounts().bolts === 1, "the bolt is in flight");
+    X.updateSpellFx(1.01);
+    ok(X.spellFxCounts().bolts === 0, "…and lands");
+    X.addBolt(hw, 0, 0, 0, 0, "fire", 0);
+    ok(X.spellFxCounts().bolts === 1, "a zero-length bolt still gets a frame on screen");
+    X.clearSpellFx();
+    ok(X.spellFxCounts().bolts === 0 && X.spellFxCounts().blasts === 0, "clearSpellFx wipes both lists");
+
+    // --- a spell never blooms inside a tree, a rock or a wall ---
+    {
+      const p2 = createPlayer({ x: 0, y: 0 });
+      p2.bag = items.emptyBag();
+      let solid: [number, number] | null = null;
+      for (let y = 2; y < hw.h - 2 && !solid; y++) {
+        for (let x = 2; x < hw.w - 2; x++) {
+          if (!walk(hw, x, y) && walk(hw, x - 2, y)) { solid = [x, y]; break; }
+        }
+      }
+      ok(solid !== null, "the home map has a solid tile with open ground beside it");
+      const [sx2, sy2] = solid!;
+      // stand two tiles west of the obstacle and fire a Nova: the ring of eight
+      // straddles it, so exactly the open tiles should light up
+      p2.x = (sx2 - 2) * TILE + TILE / 2;
+      p2.y = sy2 * TILE + TILE / 2;
+      p2.bag[0] = { kind: "fireEmberNova", n: 1 };
+      X.clearSpellFx();
+      C.tickCrystalCooldown(99);
+      const open = C.NOVA_TILES.filter(([dx, dy]) => walk(hw, sx2 - 2 + dx, sy2 + dy)).length;
+      C.useCrystal(hw, p2, "fireEmberNova");
+      ok(X.spellFxCounts().blasts === open && open < 8,
+        `a Nova lights only its walkable tiles (${X.spellFxCounts().blasts} of 8)`);
+      X.clearSpellFx();
+    }
+
+    // --- drawing survives a context that answers everything with undefined ---
+    const calls: string[] = [];
+    const rec3 = new Proxy({}, {
+      get(_t, prop) { return () => { calls.push(String(prop)); }; },
+      set() { return true; },
+    }) as unknown as CanvasRenderingContext2D;
+    X.clearSpellFx();
+    X.addBlast(hw, 4, 4, "fire", 0, "burst", 0);
+    X.addBolt(hw, 0, 0, 300, 0, "fire", 0);
+    X.drawSpellFx(rec3, hw, 0, 0);
+    ok(calls.length > 0, "the bare fallback paints something when no sheet has loaded");
+    ok(!calls.includes("drawImage"), "…and it is drawn, not blitted (there is no image headless)");
+    calls.length = 0;
+    X.drawSpellFx(rec3, worldsFx.town, 0, 0);
+    ok(calls.length === 0, "an explosion on Home Isle draws nothing over Town");
+    X.clearSpellFx();
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
