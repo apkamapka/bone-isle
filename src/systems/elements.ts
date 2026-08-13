@@ -22,7 +22,7 @@ export const ELEMENT_LABEL: Readonly<Record<Element, string>> = {
   ice: "Ice",
   earth: "Earth",
   storm: "Storm",
-  shadow: "Shadow",
+  shadow: "Wind",
 };
 
 /** Float-text and projectile colours, on the game's existing ramp. */
@@ -32,6 +32,43 @@ export const ELEMENT_COLOR: Readonly<Record<Element, string>> = {
   earth: "#8ab661",
   storm: "#ffce4a",
   shadow: "#b58aff",
+};
+
+/**
+ * The tier words that BUILD ITEM IDS: `shadow` + `Gloom` + `Shard` is the key
+ * `shadowGloomShard`, in save files, in every chest, on the ground, in action
+ * slots and in the icon filename `item-shadow-gloom-shard.png`.
+ *
+ * Frozen. Editing a word here silently renames items out from under every
+ * existing save and orphans fifteen PNGs. Rename what the PLAYER reads in
+ * TIER_NAME and in the `name` fields of `ITEMS` — that is free.
+ *
+ * `shadow` is the element the fiction now calls Wind. The id kept its old
+ * spelling on purpose: renaming it would touch seventy-five item keys, thirty
+ * filenames and a save migration, to change a string nobody sees.
+ */
+export const TIER_CODE: Readonly<Record<Element, readonly [string, string, string]>> = {
+  fire: ["Ember", "Flame", "Pyre"],
+  ice: ["Frost", "Rime", "Glacier"],
+  earth: ["Loam", "Stone", "Bedrock"],
+  storm: ["Spark", "Bolt", "Tempest"],
+  shadow: ["Gloom", "Umbra", "Eclipse"],
+};
+
+/**
+ * What the player reads. Free to change; nothing is keyed off it.
+ *
+ * Wind runs Zephyr / Squall / Cyclone against art that goes violet, black,
+ * white — the gentlest named wind, then the black line of a squall, then the
+ * whole system turning. None of them collides with Storm's Spark/Bolt/Tempest,
+ * which matters because the two elements sit next to each other on the shelf.
+ */
+export const TIER_NAME: Readonly<Record<Element, readonly [string, string, string]>> = {
+  fire: ["Ember", "Flame", "Pyre"],
+  ice: ["Frost", "Rime", "Glacier"],
+  earth: ["Loam", "Stone", "Bedrock"],
+  storm: ["Spark", "Bolt", "Tempest"],
+  shadow: ["Zephyr", "Squall", "Cyclone"],
 };
 
 /** Tier of a crystal. Roman numerals in the fiction, 0..2 in the code. */

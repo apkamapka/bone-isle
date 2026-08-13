@@ -7,7 +7,7 @@
  */
 import { beep } from "../audio.ts";
 import { markBloodHit } from "./skills.ts";
-import { ELEMENTS, ELEMENT_COLOR, crystalDamage, type Element, type Tier } from "./elements.ts";
+import { ELEMENTS, ELEMENT_COLOR, TIER_CODE, crystalDamage, type Element, type Tier } from "./elements.ts";
 import { MONSTER_DEFS } from "../entities/monsters.ts";
 import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
@@ -120,13 +120,6 @@ function rotate(dx: number, dy: number, dir: Facing, face: 1 | -1): [number, num
   return face === 1 ? [-dy, dx] : [dy, -dx];
 }
 
-const TIER_NAMES: Readonly<Record<Element, readonly [string, string, string]>> = {
-  fire: ["Ember", "Flame", "Pyre"],
-  ice: ["Frost", "Rime", "Glacier"],
-  earth: ["Loam", "Stone", "Bedrock"],
-  storm: ["Spark", "Bolt", "Tempest"],
-  shadow: ["Gloom", "Umbra", "Eclipse"],
-};
 
 /**
  * Damage budgets per form. Every creature caught takes a FULL roll — the same
@@ -145,7 +138,7 @@ export const CRYSTAL_SPECS: Readonly<Record<string, CrystalSpec>> = (() => {
   const out: Record<string, CrystalSpec> = {};
   for (const el of ELEMENTS) {
     for (let t = 0 as Tier; t < 3; t = (t + 1) as Tier) {
-      const n = TIER_NAMES[el][t];
+      const n = TIER_CODE[el][t];
       out[`${el}${n}Shard`] = { element: el, tier: t, role: "shard", base: FORM_BASE.shard, range: 260 + t * 30 };
       out[`${el}${n}Burst`] = { element: el, tier: t, role: "burst", base: FORM_BASE.burst, range: 220 + t * 30 };
       out[`${el}${n}Nova`] = { element: el, tier: t, role: "nova", base: FORM_BASE.nova, range: 0 };

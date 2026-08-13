@@ -16,7 +16,7 @@
  */
 import type { Cost } from "./building.ts";
 import type { ItemKind } from "../items.ts";
-import { ELEMENTS } from "./elements.ts";
+import { ELEMENTS, TIER_CODE } from "./elements.ts";
 import type { Element, Tier } from "./elements.ts";
 
 export interface Research {
@@ -89,8 +89,8 @@ export const ATTUNEMENT: Readonly<Record<Element, ItemKind>> = {
   fire: "fireCrystal",
   ice: "waterCrystal",
   earth: "earthCrystal",
-  storm: "windCrystal",
-  shadow: "lightningCrystal",
+  storm: "lightningCrystal",
+  shadow: "windCrystal",
 };
 
 const attuned = new Set<Element>();
@@ -225,13 +225,6 @@ const FORM_DESC: Readonly<Record<(typeof FORMS)[number], string>> = {
   Arrow: "Arrowheads that carry the element. They meet resistance, never armour.",
 };
 
-const TIER_NAMES: Readonly<Record<Element, readonly [string, string, string]>> = {
-  fire: ["Ember", "Flame", "Pyre"],
-  ice: ["Frost", "Rime", "Glacier"],
-  earth: ["Loam", "Stone", "Bedrock"],
-  storm: ["Spark", "Bolt", "Tempest"],
-  shadow: ["Gloom", "Umbra", "Eclipse"],
-};
 
 /** Gold per batch, by tier and form. Arrows are cheap and bought by the score. */
 const PRICE: Readonly<Record<(typeof FORMS)[number], readonly [number, number, number]>> = {
@@ -250,7 +243,7 @@ export const OFFERS: readonly Offer[] = (() => {
   const out: Offer[] = [];
   for (const el of ELEMENTS) {
     for (let t = 0 as Tier; t < 3; t = (t + 1) as Tier) {
-      const n = TIER_NAMES[el][t];
+      const n = TIER_CODE[el][t];
       for (const f of FORMS) {
         out.push({
           id: `${el}${n}${f}`,
