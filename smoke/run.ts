@@ -4862,6 +4862,20 @@ async function main(): Promise<void> {
       X.clearSpellFx();
     }
 
+    // --- the anchor is read off the pixels, not declared per slot ---
+    {
+      // A sheet is grounded when its weight sits low in the frame. Fire's wave
+      // is a rising column and measures ~0.68; storm's is a centred starburst
+      // at ~0.50. Same slot, same filename shape, opposite anchors — which is
+      // exactly why the slot cannot be the one to decide.
+      const heavy = [0.2, 0.4, 0.5, 0.57, 0.579];
+      const low = [0.581, 0.6, 0.68, 0.8, 0.95];
+      ok(heavy.every((v) => v <= A.GROUNDED_AT), "centred art stays centred");
+      ok(low.every((v) => v > A.GROUNDED_AT), "bottom-heavy art stands on the tile");
+      ok(A.GROUNDED_AT > 0.5 && A.GROUNDED_AT < 0.7,
+        "…with the threshold between the two shapes we actually ship");
+    }
+
     // --- Burst is aimed, not auto-targeted (Tibia's great fireball) ---
     {
       const { groundBlocked: gb } = await import("../src/world/collision.ts");

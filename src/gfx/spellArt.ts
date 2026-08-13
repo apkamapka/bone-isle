@@ -89,6 +89,18 @@ export interface Sheet {
   glow: HTMLCanvasElement[];
   /** How much wider the glow canvas is than the frame, as a ratio. */
   glowScale: number;
+  /**
+   * True when this artwork stands ON the ground rather than blooming around a
+   * point — read off the picture, not declared anywhere.
+   *
+   * Fire's wave is a column that rises: its pixels pile up at the bottom of
+   * the frame and its base belongs on the tile's bottom edge. Storm's wave is
+   * a starburst, radially symmetric about the middle, and bottom-anchoring it
+   * would hang it half a tile in the air. Both arrive through the same
+   * filename in the same slot, so the slot cannot decide this — only the
+   * pixels can.
+   */
+  grounded: boolean;
 }
 
 /** `strips[element|tier|slot]` once loaded. */
@@ -155,6 +167,37 @@ function halo(frame: HTMLCanvasElement, color: string): HTMLCanvasElement {
   return cv;
 }
 
+/**
+ * Where the artwork's weight sits vertically, as a fraction of frame height.
+ *
+ * Measured across the whole strip rather than per frame, so a sheet picks one
+ * anchor and keeps it — an effect that switched anchors mid-animation would
+ * visibly hop. A rising flame lands near 0.68, a centred burst near 0.50, and
+ * the gap between them is wide enough to decide on without a table.
+ */
+function weightY(frames: HTMLCanvasElement[]): number {
+  let sum = 0;
+  let wsum = 0;
+  for (const f of frames) {
+    const x = f.getContext("2d", { willReadFrequently: true })!;
+    const d = x.getImageData(0, 0, f.width, f.height).data;
+    for (let y = 0; y < f.height; y++) {
+      for (let px = 0; px < f.width; px++) {
+        const a = d[(y * f.width + px) * 4 + 3];
+        if (a) { sum += a * y; wsum += a; }
+      }
+    }
+  }
+  return wsum ? sum / wsum / Math.max(1, frames[0].height) : 0.5;
+}
+
+/**
+ * Bottom-heavy enough to be standing on the tile. Halfway between the two
+ * shapes we have measured, with room on each side for art that is merely
+ * lopsided rather than genuinely grounded.
+ */
+export const GROUNDED_AT = 0.58;
+
 function slice(img: HTMLImageElement): HTMLCanvasElement[] {
   const fh = img.naturalHeight;
   const n = Math.max(1, Math.round(img.naturalWidth / Math.max(1, fh)));
@@ -190,10 +233,19 @@ export function loadSpellArt(): void {
         img.onload = () => {
           const base = slice(img);
           const col = ELEMENT_COLOR[el];
+          let grounded = false;
+          // Reading pixels back needs an untainted canvas. Ours are, being
+          // served from our own origin — but a CDN rewrite or a future asset
+          // host could change that, and losing the anchor is not worth losing
+          // the artwork over.
+          try {
+            grounded = weightY(base) > GROUNDED_AT;
+          } catch { /* keep it centred */ }
           strips[k] = {
             base,
             glow: base.map((f) => halo(f, col)),
             glowScale: base.length ? (base[0].width + GLOW_PAD * 2) / base[0].width : 1,
+            grounded,
           };
         };
         img.onerror = () => { /* no artwork yet — the procedural bloom stands in */ };

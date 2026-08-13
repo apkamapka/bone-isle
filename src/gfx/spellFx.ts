@@ -58,14 +58,6 @@ const SCALE: Readonly<Record<FxSlot, number>> = {
   nova: 1.4,
 };
 
-/**
- * Shapes that grow UP from the ground rather than blooming around a point.
- * A flame's base belongs on the tile it burns; an explosion's centre does.
- */
-const GROUNDED: Readonly<Record<FxSlot, boolean>> = {
-  bolt: false, burst: false, hit: false, wave: true, nova: true,
-};
-
 /** How bright the baked halo is drawn behind the artwork. */
 const GLOW_ALPHA = 0.55;
 
@@ -263,7 +255,7 @@ function drawBlast(
     // centre. Either way the halo shares the artwork's centre exactly, so a
     // wider glow canvas never shifts the picture inside it.
     const left = sx - size / 2;
-    const top = GROUNDED[b.slot] ? sy + TILE / 2 - size : sy - size / 2;
+    const top = sheet.grounded ? sy + TILE / 2 - size : sy - size / 2;
     const gs = size * sheet.glowScale;
     vctx.globalCompositeOperation = "lighter";
     vctx.globalAlpha = GLOW_ALPHA;
