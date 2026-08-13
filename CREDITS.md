@@ -695,6 +695,68 @@ them at 64 x 64 at source would be sharper. Each was then trimmed and seated on
 the anchor line so the box sits on the ground rather than hovering over its own
 shadow.
 
+## Spell effects — `public/fx-*.png`
+
+Source: **CraftPix.net**, standard (non-Enterprise) licence —
+https://craftpix.net/file-licenses/
+
+Same licence, same grant and the same one hard limit as the Home Isle buildings
+above: commercial use and sale of the game are permitted outright, attribution
+is a courtesy rather than an obligation, and clause 3.1.1 still forbids feeding
+these files to a model as training data.
+
+> **These files must not sit in a public repository.** The warning on the
+> buildings applies here word for word — 1.1.3 forbids distributing source
+> files, 1.2.1 forbids redistributing the art in any form another end user
+> could take and use, and a public GitHub repo is exactly that. Serving them
+> from Vercel as part of the running game is explicitly fine. Note that git
+> keeps every blob it has ever stored, so a file that has been pushed once is
+> not removed by deleting it in a later commit.
+
+Every sheet is a horizontal strip of 32 x 32 frames. The frame count is read
+off the image at load time rather than declared anywhere, so a redrawn strip of
+a different length needs no code change (`src/gfx/spellArt.ts`).
+
+| Element | `bolt` — projectile | `burst` — tile bloom | Tier colours |
+| --- | --- | --- | --- |
+| Fire | comet, 8 fr | starburst, 9 fr | orange / blue / black |
+| Ice | snowflake, 13 fr | rising spike, 12 fr | pale / blue / deep blue |
+| Earth | tumbling rock, 12 fr | ground spikes, 11 fr | earth / slate / dark |
+| Storm | arrowhead, 12 fr | starburst, 17 fr | yellow / violet / grey |
+| Wind (`shadow`) | crescent scythe, 12 fr | tornado, 11 fr | violet / black / white |
+
+Fire and Storm also ship a `wave` strip — a rising column and a starburst
+respectively. The other three do not: `wave` falls back to `burst`, and `nova`
+falls back through `wave` to the same place, so two files are a complete
+element and a third is an element choosing to look different.
+
+### What was changed
+
+Nothing was recoloured or redrawn. Two edits, both permitted by 1.1.1:
+
+**Bolts were mirrored where they faced the wrong way.** The renderer rotates a
+projectile toward its target from a single convention — artwork points RIGHT,
+and the rotation is the raw `atan2` with no correction term. Earth, Wind and
+Storm arrived facing left and each frame was flipped horizontally, individually
+rather than flipping the strip, so frame order survives. Fire and Ice were
+already right-facing and ship untouched.
+
+**Storm's sheets were renamed.** They arrived as `fx-storm-1-wave_png.png` and
+so on; the doubled extension meant the loader never found them. The pixels are
+unchanged. Storm's `nova` strip was byte-identical to its `wave` and is not
+shipped at all, since the loader already falls back.
+
+The anchor — whether a bloom stands on the tile or blooms around its centre —
+is measured from the pixels, not stored here. Art whose weight sits low in the
+frame (Fire's column at 0.68, Earth's spikes at 0.70) is seated on the tile's
+bottom edge; art centred in its frame (Storm's starburst at 0.50) is centred on
+the tile. See `GROUNDED_AT` in `src/gfx/spellArt.ts`.
+
+The coloured halo behind every effect is code, not artwork
+(`src/gfx/spellFx.ts`): a silhouette of each frame flooded with the element's
+colour and spread outwards, baked once at load. It is what keeps Fire's
+near-black tier III and Wind's black tier II legible against grass.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in
