@@ -51,7 +51,7 @@ export type ItemKind =
    * fell out of a corpse.
    *
    * The fiction maps the stone to the element rather than naming it after it:
-   * ice is researched with water, storm with wind, shadow with lightning.
+   * ice is researched with water, storm with lightning, wind with wind.
    * -------------------------------------------------------------------- */
   | "fireCrystal" | "waterCrystal" | "earthCrystal" | "windCrystal" | "lightningCrystal"
   /** Spent buying the strongest crystal of every element. Drops from the dragon. */
@@ -270,21 +270,21 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   stormTempestNova: { name: "Tempest Nova", stack: 999, value: 76, weight: 2, crystal: true },
   stormTempestWave: { name: "Tempest Wave", stack: 999, value: 100, weight: 2, crystal: true },
   stormTempestArrow: { name: "Tempest Arrow", stack: 999, value: 25, weight: 1, ammo: { dmg: 42 }, element: "storm" },
-  shadowGloomShard: { name: "Gloom Shard", stack: 999, value: 9, weight: 2, crystal: true },
-  shadowGloomBurst: { name: "Gloom Burst", stack: 999, value: 14, weight: 2, crystal: true },
-  shadowGloomNova: { name: "Gloom Nova", stack: 999, value: 12, weight: 2, crystal: true },
-  shadowGloomWave: { name: "Gloom Wave", stack: 999, value: 16, weight: 2, crystal: true },
-  shadowGloomArrow: { name: "Gloom Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "shadow" },
-  shadowUmbraShard: { name: "Umbra Shard", stack: 999, value: 23, weight: 2, crystal: true },
-  shadowUmbraBurst: { name: "Umbra Burst", stack: 999, value: 36, weight: 2, crystal: true },
-  shadowUmbraNova: { name: "Umbra Nova", stack: 999, value: 30, weight: 2, crystal: true },
-  shadowUmbraWave: { name: "Umbra Wave", stack: 999, value: 40, weight: 2, crystal: true },
-  shadowUmbraArrow: { name: "Umbra Arrow", stack: 999, value: 10, weight: 1, ammo: { dmg: 20 }, element: "shadow" },
-  shadowEclipseShard: { name: "Eclipse Shard", stack: 999, value: 58, weight: 2, crystal: true },
-  shadowEclipseBurst: { name: "Eclipse Burst", stack: 999, value: 90, weight: 2, crystal: true },
-  shadowEclipseNova: { name: "Eclipse Nova", stack: 999, value: 76, weight: 2, crystal: true },
-  shadowEclipseWave: { name: "Eclipse Wave", stack: 999, value: 100, weight: 2, crystal: true },
-  shadowEclipseArrow: { name: "Eclipse Arrow", stack: 999, value: 25, weight: 1, ammo: { dmg: 42 }, element: "shadow" },
+  shadowGloomShard: { name: "Zephyr Shard", stack: 999, value: 9, weight: 2, crystal: true },
+  shadowGloomBurst: { name: "Zephyr Burst", stack: 999, value: 14, weight: 2, crystal: true },
+  shadowGloomNova: { name: "Zephyr Nova", stack: 999, value: 12, weight: 2, crystal: true },
+  shadowGloomWave: { name: "Zephyr Wave", stack: 999, value: 16, weight: 2, crystal: true },
+  shadowGloomArrow: { name: "Zephyr Arrow", stack: 999, value: 4, weight: 1, ammo: { dmg: 10 }, element: "shadow" },
+  shadowUmbraShard: { name: "Squall Shard", stack: 999, value: 23, weight: 2, crystal: true },
+  shadowUmbraBurst: { name: "Squall Burst", stack: 999, value: 36, weight: 2, crystal: true },
+  shadowUmbraNova: { name: "Squall Nova", stack: 999, value: 30, weight: 2, crystal: true },
+  shadowUmbraWave: { name: "Squall Wave", stack: 999, value: 40, weight: 2, crystal: true },
+  shadowUmbraArrow: { name: "Squall Arrow", stack: 999, value: 10, weight: 1, ammo: { dmg: 20 }, element: "shadow" },
+  shadowEclipseShard: { name: "Cyclone Shard", stack: 999, value: 58, weight: 2, crystal: true },
+  shadowEclipseBurst: { name: "Cyclone Burst", stack: 999, value: 90, weight: 2, crystal: true },
+  shadowEclipseNova: { name: "Cyclone Nova", stack: 999, value: 76, weight: 2, crystal: true },
+  shadowEclipseWave: { name: "Cyclone Wave", stack: 999, value: 100, weight: 2, crystal: true },
+  shadowEclipseArrow: { name: "Cyclone Arrow", stack: 999, value: 25, weight: 1, ammo: { dmg: 42 }, element: "shadow" },
   /* Attunement stones and the Essence carry value 0 on purpose. A shop that
    * buys them turns a quest reward into a lump of gold, and a lane you can
    * sell is a lane you can lose. They are keys, not loot. */
