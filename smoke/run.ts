@@ -4862,6 +4862,29 @@ async function main(): Promise<void> {
       X.clearSpellFx();
     }
 
+    // --- the shelf reads its labels off the element table ---
+    {
+      const P2 = await import("../src/ui/panels.ts");
+      const labels = P2.TOWER_TABS.map((t) => t.label);
+      ok(P2.TOWER_TABS.length === E.ELEMENTS.length + 1, "one tab per element, plus OTHER");
+      ok(!labels.includes("SHADOW"), "no tab still says SHADOW");
+      ok(labels.includes("WIND"), "…the wind lane says WIND");
+      ok(P2.TOWER_TABS.some((t) => t.id === "shadow" && t.label === "WIND"),
+        "…while its id stays `shadow`, which is what keys the items");
+      for (const el of E.ELEMENTS) {
+        ok(P2.TOWER_TABS.some((t) => t.id === el && t.label === E.ELEMENT_LABEL[el].toUpperCase()),
+          `${el}'s tab is derived, not typed`);
+      }
+      // the same rename must not have leaked into anything that keys an item
+      ok(E.TIER_CODE.shadow.join() === "Gloom,Umbra,Eclipse", "the id words are untouched");
+      ok(E.TIER_NAME.shadow.join() === "Zephyr,Squall,Cyclone", "…and the read words are the new ones");
+      const I = await import("../src/items.ts");
+      ok(I.ITEMS.shadowGloomShard.name === "Zephyr Shard",
+        "an item keeps its old key and shows its new name");
+      ok(Object.keys(I.ITEMS).some((k) => k.startsWith("shadowEclipse")),
+        "…and no save-breaking key rename crept in");
+    }
+
     // --- the anchor is read off the pixels, not declared per slot ---
     {
       // A sheet is grounded when its weight sits low in the frame. Fire's wave

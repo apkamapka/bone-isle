@@ -7,7 +7,7 @@ import { MIN_HIT_RATIO } from "../config.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost, structSprite, countOwned } from "../systems/building.ts";
 import { RESEARCH, isResearched, towerTierOk,
   ATTUNEMENT, isAttuned, offersFor } from "../systems/tower.ts";
-import { ELEMENT_LABEL, type Element } from "../systems/elements.ts";
+import { ELEMENT_LABEL, ELEMENTS, type Element } from "../systems/elements.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
 import type { TaskReward } from "../systems/tasks.ts";
 import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross } from "../items.ts";
@@ -1032,15 +1032,19 @@ function forgeGems(p: PanelInput, x: number, ry: number, w: number): number {
 
 /* ---------------- Alchemy Tower ---------------- */
 
-/** The tower's tabs: the five elemental lanes, then everything older. */
-const TOWER_TABS = [
-  { id: "fire", label: "FIRE" },
-  { id: "ice", label: "ICE" },
-  { id: "earth", label: "EARTH" },
-  { id: "storm", label: "STORM" },
-  { id: "shadow", label: "SHADOW" },
+/**
+ * The tower's tabs: the five elemental lanes, then everything older.
+ *
+ * Labels are DERIVED from `ELEMENT_LABEL` rather than typed out. They used to
+ * be a hand-written list beside the ids, which is how the shelf went on saying
+ * SHADOW for a week after the element was renamed Wind everywhere else — the
+ * id is still `shadow` and always will be, since it keys seventy-five items,
+ * so a literal label here has nothing tying it to the truth.
+ */
+export const TOWER_TABS: readonly { id: string; label: string }[] = [
+  ...ELEMENTS.map((el) => ({ id: el, label: ELEMENT_LABEL[el].toUpperCase() })),
   { id: "other", label: "OTHER" },
-] as const;
+];
 
 /**
  * Which projects a tab shows.

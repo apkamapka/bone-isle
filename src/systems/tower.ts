@@ -219,9 +219,9 @@ const FORMS = ["Shard", "Burst", "Nova", "Wave", "Arrow"] as const;
 
 const FORM_DESC: Readonly<Record<(typeof FORMS)[number], string>> = {
   Shard: "One creature, longest reach.",
-  Burst: "Thrown. Goes off where it lands and catches the pack around it.",
+  Burst: "Aimed. Select it, then click the square: 25 tiles, everything on them.",
   Nova: "Every tile touching you at once. No aiming, and no safe distance.",
-  Wave: "Eleven tiles the way you are facing, widening as it goes.",
+  Wave: "Sixteen tiles the way you are facing, four deep, widening as it goes.",
   Arrow: "Arrowheads that carry the element. They meet resistance, never armour.",
 };
 
