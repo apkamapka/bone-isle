@@ -48,8 +48,12 @@ export const FX_SLOTS: readonly FxSlot[] = ["bolt", "burst", "wave", "nova", "hi
  */
 const FALLBACK: Readonly<Record<FxSlot, FxSlot | null>> = {
   bolt: null,
+  // Burst is the one tile effect an element cannot do without: Wave borrows it
+  // when there is no column of its own, and Nova borrows Wave's borrowing. So
+  // a complete element is two files — a projectile and a bloom — and anything
+  // past that is an element choosing to look different, not needing to.
   burst: null,
-  wave: null,
+  wave: "burst",
   nova: "wave",
   hit: "burst",
 };

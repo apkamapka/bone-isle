@@ -1209,7 +1209,7 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   demonCleaver: SPR.gearStubWeapon, knightSword: SPR.gearStubWeapon, fireSword: SPR.gearStubWeapon, marrowBlade: SPR.gearStubWeapon,
   healCrystal: SPR.crystalHeal, recallCrystal: SPR.crystalRecall,
   fireCrystal: attuneIcon("fire"), waterCrystal: attuneIcon("ice"), earthCrystal: attuneIcon("earth"),
-  windCrystal: attuneIcon("storm"), lightningCrystal: attuneIcon("shadow"),
+  windCrystal: attuneIcon("shadow"), lightningCrystal: attuneIcon("storm"),
   magicEssence: SPR.magicEssence,
   fireEmberShard: elementalIcon("fire", 0, "Shard"),
   fireEmberBurst: elementalIcon("fire", 0, "Burst"),
