@@ -120,6 +120,67 @@ cropped to the body.
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
+## The human ladder — beggar, vagrant, thief, poacher, cutthroat, deserter
+
+`public/mob-beggar-walk.png`, `mob-vagrant-walk.png`, `mob-thief-walk.png`,
+`mob-poacher-walk.png`, `mob-cutthroat-walk.png`, `mob-deserter-walk.png`, plus
+the bodies `mob-beggar-dead.png`, `mob-vagrant-dead.png`, `mob-thief-dead.png`,
+`mob-poacher-dead.png`, `mob-cutthroat-dead.png` and `mob-deserter-dead.png`.
+
+All six are composed from the same **Universal LPC Spritesheet Character
+Generator** as the player and the bandit, under the same licences as the layers
+listed above. They share one body base (`Body_Color_light`) and one head
+(`Human_Male_light`) with the player himself — they are men of the same island,
+and only the clothing, the beard and the weapon tell one rank from the next.
+
+Reproducible character configurations:
+
+- Beggar —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&beard=Winter_Beard_gray&mustache=Big_Mustache_gray&hair=Buzzcut_gray&legs=Cuffed_Pants_maroon&shoes=Ghillies_walnut&clothes=Cardigan_leather&hat=Tricorne_leather>
+- Vagrant —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&beard=Trimmed_Beard_light_brown&mustache=Chevron_Mustache_light_brown&hair=Buzzcut_gray&legs=Formal_Pants_gray&shoes=Basic_Shoes_black&clothes=Longsleeve_gray&bandana=Pirate_Bandana_brown>
+- Thief —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Mop_light_brown&facial_eyes=Eyepatch_Ambidextrous_black&clothes=Shortsleeve_walnut&jacket=Frock_coat_black&legs=Leggings_red&shoes=Basic_Shoes_black&gloves=Gloves_bronze>
+- Poacher —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Bob_chestnut&hat_accessory=Cavalier_feather_black&clothes=Shortsleeve_forest&jacket=Frock_coat_leather&legs=Leggings_forest&shoes=Basic_Shoes_forest&weapon=Slingshot_slingshot>
+- Cutthroat —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=High_and_tight_dark_brown&bandana=Bordered_Bandana_purple&clothes=Sleeveless_2_red&legs=Leggings_gray&shoes=Basic_Boots_black&weapon=Hammer_iron>
+- Deserter —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&beard=Trimmed_Beard_black&mustache=Handlebar_Mustache_black&shoes=Basic_Boots_black&legs=Leggings_black&jacket=Frock_coat_blue&armour=Leather_walnut&hair=Relm_Short_black&weapon=Dagger_dagger>
+
+Beyond the collections listed under the player, these characters draw on the
+beard, moustache, buzzcut, mop, bob, high-and-tight and Relm-short hair layers,
+the tricorne, pirate- and bordered-bandana, cavalier-feather and eyepatch
+accessories, the cardigan, longsleeve, shortsleeve, sleeveless, frock-coat,
+leather-armour, cuffed-trouser, formal-trouser and leggings clothing layers, the
+ghillie, basic-shoe and basic-boot footwear, the bronze gloves, and the dagger,
+iron-hammer and slingshot weapon layers of the ULPC project; the generator's own
+credits export is authoritative for the per-layer author list.
+
+From each export only the walk block was kept — rows 8-11 (up, left, down,
+right), nine frames each — repacked into a 9x4 grid and cropped to one rectangle
+shared by every frame, symmetric about the source cell's centre line (see
+`src/gfx/mobSheet.ts`). No pixel was repainted. Frame sizes: 32x53 beggar,
+32x49 vagrant, 32x52 thief, 46x56 poacher (the cavalier feather adds the height,
+the slung sling the width), 54x49 cutthroat (his hammer held out sideways makes
+him the widest human in the game), 40x50 deserter.
+
+The bodies are the last frame of the hurt row (row 20, column 6) of each export,
+cropped to the body — 34px wide for all six. Unlike the orc and minotaur ranks
+these are **not** shared: what tells one man of the road from the next is his
+clothing, so a single anonymous heap would have made the ladder unreadable on
+the ground. The one edit to any of them: the deserter's death frame throws his
+dagger clear of the body, and those pixels were deleted, because gear lying
+beside a corpse reads as loot the game will not let you pick up.
+
+> **TODO before release:** download "Credits (CSV)" from the generator for each
+> of these six configurations and paste the per-layer author lists here. The
+> URLs reproduce the characters, but a URL is not an attribution.
+
+**ShareAlike:** these twelve files are derivative works of CC-BY-SA 3.0 artwork
+and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
+available on those terms even if this repository is later made private.
+
 ## Minotaurs — `public/mob-minotaur-walk.png`, `public/mob-minotaur-archer-walk.png`, `public/mob-minotaur-guard-walk.png`, `public/mob-minotaur-mage-walk.png`, `public/mob-minotaur-dead.png`
 
 All four minotaur ranks are composed from the same **Universal LPC Spritesheet

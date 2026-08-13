@@ -63,7 +63,13 @@ const SIDE_ONLY = new Set<string>(["snake"]);
  * and one loader means one place where the LPC layout is spelled out.
  */
 const SHEET_SRC: Record<string, string> = {
+  beggar: "./mob-beggar-walk.png",
+  vagrant: "./mob-vagrant-walk.png",
+  thief: "./mob-thief-walk.png",
+  poacher: "./mob-poacher-walk.png",
   bandit: "./mob-bandit-walk.png",
+  cutthroat: "./mob-cutthroat-walk.png",
+  deserter: "./mob-deserter-walk.png",
   snake: "./mob-snake-walk.png",
   skeleton: "./mob-skeleton-walk.png",
   goblin: "./mob-goblin-walk.png",
@@ -110,9 +116,21 @@ const sheets: Record<string, Cut | undefined> = {};
  * helmet and dagger, or a demon skeleton of its wings, and what is left on the
  * ground is the same heap of bones the plain skeleton leaves. Drawing three
  * near-identical piles would have been three downloads to say one thing.
+ *
+ * The human ladder goes the other way: each rank keeps its own body, because
+ * what distinguishes one man of the road from the next IS his clothing. Strip
+ * an orc rank of its gear and you still have an orc; strip a beggar of his
+ * rags and a cutthroat of his red vest and the two corpses become one anonymous
+ * heap, which would make the ladder unreadable on the ground.
  */
 const CORPSE_SRC: Record<string, string> = {
+  beggar: "./mob-beggar-dead.png",
+  vagrant: "./mob-vagrant-dead.png",
+  thief: "./mob-thief-dead.png",
+  poacher: "./mob-poacher-dead.png",
   bandit: "./mob-bandit-dead.png",
+  cutthroat: "./mob-cutthroat-dead.png",
+  deserter: "./mob-deserter-dead.png",
   snake: "./mob-snake-dead.png",
   skeleton: "./mob-skeleton-dead.png",
   skeletonWarrior: "./mob-skeleton-dead.png",

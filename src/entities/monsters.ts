@@ -167,12 +167,20 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   /* ================================================================== *
    *  THE HUMAN LADDER — levels 1-14: vermin of the road
    *
-   *  Everything here is a person, and every one of them shares the
-   *  `humanFoe` placeholder bake until its own artwork exists. Stats are
-   *  read straight off the budget curves above at the level named in each
-   *  comment, then bent by archetype: a shooter trades HP and melee for
-   *  reach, a cutthroat trades HP for damage, an armoured rank trades speed
-   *  for armor. Nothing here carries loot yet — the tables come with the art.
+   *  Everything here is a person. Six of the ten now have their own LPC
+   *  walk sheet and body — beggar, vagrant, thief, poacher, cutthroat and
+   *  deserter, plus the bandit who always had one; the remaining three
+   *  (smuggler, brigand, highwayman) still share the `humanFoe` placeholder
+   *  bake until their artwork exists. Stats are read straight off the budget
+   *  curves above at the level named in each comment, then bent by archetype:
+   *  a shooter trades HP and melee for reach, a cutthroat trades HP for
+   *  damage, an armoured rank trades speed for armor.
+   *
+   *  Where a rank now carries a visible weapon, the loot table names that
+   *  weapon: the cutthroat swings a hammer and drops one, the deserter wears
+   *  a blade and drops an iron sword. A drop the player never saw the corpse
+   *  holding reads as a slot-machine payout; a drop he watched swing at him
+   *  reads as spoils.
    * ================================================================== */
   // lvl 1. The floor of the game: it must not be able to kill a fresh
   // character even if the player walks away from the keyboard mid-fight.
@@ -270,7 +278,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "studdedLegs", chance: 0.05, n: [1, 1] },
       { kind: "studdedBoots", chance: 0.05, n: [1, 1] },
       { kind: "studdedShield", chance: 0.05, n: [1, 1] },
-      { kind: "ironSword", chance: 0.04, n: [1, 1] },
+      // The hammer in his hands, not a sword he was never drawn holding. It
+      // hits harder than anything else available at this depth (atk 15 against
+      // the iron sword's 10) and pays for it in defence — a real trade, and
+      // the first time the ladder offers one.
+      { kind: "warHammer", chance: 0.03, n: [1, 1] },
     ],
   },
   // lvl 11. The first creature in real armour — flat reduction bites hardest
@@ -285,7 +297,10 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "studdedLegs", chance: 0.08, n: [1, 1] },
       { kind: "studdedBoots", chance: 0.08, n: [1, 1] },
       { kind: "studdedShield", chance: 0.08, n: [1, 1] },
-      { kind: "ironSword", chance: 0.06, n: [1, 1] },
+      // He is the sword drop of the human ladder. At 6% it was a rounding
+      // error nobody would notice; at 12% killing deserters is a way to arm a
+      // second character, which is what an army's runaway should be worth.
+      { kind: "ironSword", chance: 0.12, n: [1, 1] },
     ],
   },
   // lvl 12

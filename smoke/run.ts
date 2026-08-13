@@ -2845,6 +2845,91 @@ async function main(): Promise<void> {
       "…and so do the three loners");
   }
 
+  console.log("Six ranks of the human ladder walk and leave their own bodies:");
+  {
+    const fs = await import("node:fs");
+    const { mobFrame, corpseSprite } = await import("../src/gfx/mobSheet.ts");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const sheetSrc = fs.readFileSync(
+      new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+
+    const png = (file: string): [number, number] => {
+      const b = fs.readFileSync(new URL(`../public/${file}`, import.meta.url));
+      return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    };
+
+    const RANKS = ["beggar", "vagrant", "thief", "poacher", "cutthroat", "deserter"];
+
+    for (const kind of RANKS) {
+      const walk = `mob-${kind}-walk.png`;
+      const dead = `mob-${kind}-dead.png`;
+      ok(sheetSrc.includes(`${kind}: "./${walk}"`), `${kind} has a walk sheet registered`);
+      ok(fs.existsSync(new URL(`../public/${walk}`, import.meta.url)),
+        `…and ${walk} is actually shipped`);
+      const [w, h] = png(walk);
+      ok(w % 9 === 0 && h % 4 === 0,
+        `…laid out as the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(h / 4 > 40 && h / 4 < 64, `…a human-sized frame, not a minotaur's (${h / 4}px tall)`);
+      ok(sheetSrc.includes(`${kind}: "./${dead}"`), `${kind} leaves a body of its own`);
+      ok(fs.existsSync(new URL(`../public/${dead}`, import.meta.url)),
+        `…and ${dead} is shipped`);
+      ok(credits.includes(walk) && credits.includes(dead),
+        `…and both are credited by filename`);
+      ok(mobFrame(kind as never, "down", true, 0) === null,
+        "…while headless it still falls back to the baked sprite");
+      ok(corpseSprite(kind) === null, "…and so does the body");
+    }
+
+    // Six men in the same clothes would be one monster wearing six labels. The
+    // ranks are told apart by dress, so no two bodies may be the same file.
+    const bodies = new Set(RANKS.map((k) => `mob-${k}-dead.png`));
+    ok(bodies.size === RANKS.length, "no two ranks share a corpse — the clothing IS the rank");
+
+    // The weapon a rank carries has to be the weapon it drops, or the drop
+    // reads as a payout rather than as spoils.
+    ok(MONSTER_DEFS.cutthroat.loot.some((l) => l.kind === "warHammer"),
+      "the cutthroat drops the hammer he swings");
+    ok(!MONSTER_DEFS.cutthroat.loot.some((l) => l.kind === "ironSword"),
+      "…and no longer a sword he was never drawn holding");
+    const sword = MONSTER_DEFS.deserter.loot.find((l) => l.kind === "ironSword");
+    ok(sword !== undefined && sword.chance >= 0.1,
+      "the deserter's sword drops often enough to be worth hunting");
+
+    // Gear on the ground beside a body is loot the game will not hand over.
+    // The deserter's death frame drops his dagger; the crop has to lose it, so
+    // his body must be no wider than the five that were never armed.
+    const widest = Math.max(...RANKS.filter((k) => k !== "deserter")
+      .map((k) => png(`mob-${k}-dead.png`)[0]));
+    ok(png("mob-deserter-dead.png")[0] <= widest,
+      "the deserter's dropped dagger was cut from his body");
+
+    // The cutthroat's hammer is held out sideways, which is what the crop is
+    // measuring — he must be wider than the unarmed ranks and no taller.
+    ok(png("mob-cutthroat-walk.png")[0] / 9 > png("mob-vagrant-walk.png")[0] / 9,
+      "the cutthroat's hammer widens his frame");
+    ok(png("mob-poacher-walk.png")[1] / 4 > png("mob-vagrant-walk.png")[1] / 4,
+      "…and the poacher's hat feather heightens his");
+
+    ok(credits.includes("Human_Male_light") && credits.includes("Bordered_Bandana_purple")
+      && credits.includes("Slingshot_slingshot") && credits.includes("Frock_coat_blue"),
+      "the generator recipes that reproduce all six are recorded");
+    ok(credits.includes("Cardigan_leather") && credits.includes("Pirate_Bandana_brown")
+      && credits.includes("Eyepatch_Ambidextrous_black") && credits.includes("Hammer_iron"),
+      "…layer by layer, including the gear that tells the ranks apart");
+
+    // The poacher is the ladder's shooter and must stay one — his sling is the
+    // reason he exists at level 5.
+    ok(MONSTER_DEFS.poacher.ranged !== undefined, "the poacher still shoots");
+
+    // Three ranks are still waiting for artwork; if that changes, this line is
+    // the reminder that the credits and the corpse table change with it.
+    for (const k of ["smuggler", "brigand", "highwayman"]) {
+      ok(!sheetSrc.includes(`${k}: "./mob-${k}-walk.png"`),
+        `${k} is still on the placeholder bake`);
+    }
+  }
+
   console.log("The orc spearman is an archer now:");
   {
     const fs = await import("node:fs");
