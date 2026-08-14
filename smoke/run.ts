@@ -2845,11 +2845,11 @@ async function main(): Promise<void> {
       "…and so do the three loners");
   }
 
-  console.log("Six ranks of the human ladder walk and leave their own bodies:");
+  console.log("Every human rank walks and leaves a body of its own:");
   {
     const fs = await import("node:fs");
     const { mobFrame, corpseSprite } = await import("../src/gfx/mobSheet.ts");
-    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const { MONSTER_DEFS, MONSTER_KINDS } = await import("../src/entities/monsters.ts");
     const sheetSrc = fs.readFileSync(
       new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
     const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
@@ -2859,7 +2859,9 @@ async function main(): Promise<void> {
       return [b.readUInt32BE(16), b.readUInt32BE(20)];
     };
 
-    const RANKS = ["beggar", "vagrant", "thief", "poacher", "cutthroat", "deserter"];
+    const RANKS = ["beggar", "vagrant", "thief", "poacher", "smuggler", "cutthroat",
+      "deserter", "brigand", "highwayman", "mercenary", "corsair", "amazon",
+      "wildWarrior", "hunter"];
 
     for (const kind of RANKS) {
       const walk = `mob-${kind}-walk.png`;
@@ -2871,6 +2873,7 @@ async function main(): Promise<void> {
       ok(w % 9 === 0 && h % 4 === 0,
         `…laid out as the 9x4 grid the slicer expects (${w}x${h})`);
       ok(h / 4 > 40 && h / 4 < 64, `…a human-sized frame, not a minotaur's (${h / 4}px tall)`);
+      ok(w / 9 <= 64, "…and no wider than the cell LPC drew it in");
       ok(sheetSrc.includes(`${kind}: "./${dead}"`), `${kind} leaves a body of its own`);
       ok(fs.existsSync(new URL(`../public/${dead}`, import.meta.url)),
         `…and ${dead} is shipped`);
@@ -2881,53 +2884,77 @@ async function main(): Promise<void> {
       ok(corpseSprite(kind) === null, "…and so does the body");
     }
 
-    // Six men in the same clothes would be one monster wearing six labels. The
-    // ranks are told apart by dress, so no two bodies may be the same file.
+    // Fourteen men in the same clothes would be one monster wearing fourteen
+    // labels. The ranks are told apart by dress, so no two bodies may be the
+    // same file.
     const bodies = new Set(RANKS.map((k) => `mob-${k}-dead.png`));
     ok(bodies.size === RANKS.length, "no two ranks share a corpse — the clothing IS the rank");
 
+    // Five human ranks are still waiting for artwork, and the dragon is not a
+    // man at all. Every human def keeps `spr: SPR.humanFoe` as its fallback
+    // even after its sheet lands, so what separates the two groups is whether
+    // a sheet is registered — not the bake. Pin the list: when one of them
+    // gets a sheet, this line remembers that the credits change with it.
+    const WAITING = ["gladiator", "barbarian", "raider", "warlord", "chieftain"];
+    const onPlaceholder = MONSTER_KINDS.filter((k) =>
+      MONSTER_DEFS[k].spr === MONSTER_DEFS.gladiator.spr
+      && !sheetSrc.includes(`${k}: "./mob-${k}-walk.png"`));
+    ok(onPlaceholder.length === WAITING.length
+      && WAITING.every((k) => onPlaceholder.includes(k as never)),
+      `still on the placeholder bake, and only these: ${onPlaceholder.join(", ")}`);
+    ok(!RANKS.some((k) => onPlaceholder.includes(k as never)),
+      "…and no rank that has a sheet is still counted among them");
+
     // The weapon a rank carries has to be the weapon it drops, or the drop
     // reads as a payout rather than as spoils.
-    ok(MONSTER_DEFS.cutthroat.loot.some((l) => l.kind === "warHammer"),
-      "the cutthroat drops the hammer he swings");
-    ok(!MONSTER_DEFS.cutthroat.loot.some((l) => l.kind === "ironSword"),
-      "…and no longer a sword he was never drawn holding");
+    const drops = (k: string, item: string): boolean =>
+      MONSTER_DEFS[k as never].loot.some((l: { kind: string }) => l.kind === item);
+    ok(drops("cutthroat", "warHammer"), "the cutthroat drops the hammer he swings");
+    ok(!drops("cutthroat", "ironSword"), "…and no longer a sword he was never drawn holding");
+    ok(drops("wildWarrior", "gladius"), "the wild warrior drops a blade, as he carries one");
+    ok(!drops("wildWarrior", "warHammer"),
+      "…and not the hammer a cutthroat already hands out eleven levels earlier");
     const sword = MONSTER_DEFS.deserter.loot.find((l) => l.kind === "ironSword");
     ok(sword !== undefined && sword.chance >= 0.1,
       "the deserter's sword drops often enough to be worth hunting");
 
-    // Gear on the ground beside a body is loot the game will not hand over.
-    // The deserter's death frame drops his dagger; the crop has to lose it, so
-    // his body must be no wider than the five that were never armed.
-    const widest = Math.max(...RANKS.filter((k) => k !== "deserter")
-      .map((k) => png(`mob-${k}-dead.png`)[0]));
-    ok(png("mob-deserter-dead.png")[0] <= widest,
-      "the deserter's dropped dagger was cut from his body");
+    // Gear on the ground beside a body is loot the game will not hand over, so
+    // the death frame's dropped weapon is cut. Every body that had one ends up
+    // no wider than the ranks that were drawn empty-handed.
+    const unarmedWidth = png("mob-amazon-dead.png")[0];
+    for (const k of ["deserter", "smuggler", "highwayman", "corsair", "hunter",
+      "brigand", "mercenary"]) {
+      ok(png(`mob-${k}-dead.png`)[0] <= unarmedWidth,
+        `the ${k}'s dropped weapon was cut from his body`);
+    }
 
-    // The cutthroat's hammer is held out sideways, which is what the crop is
-    // measuring — he must be wider than the unarmed ranks and no taller.
-    ok(png("mob-cutthroat-walk.png")[0] / 9 > png("mob-vagrant-walk.png")[0] / 9,
-      "the cutthroat's hammer widens his frame");
+    // The two spearmen fill the whole cell LPC gave them; the unarmed ranks
+    // are a body's width and nothing more.
+    ok(png("mob-brigand-walk.png")[0] / 9 === 64 && png("mob-mercenary-walk.png")[0] / 9 === 64,
+      "a levelled spear fills the frame edge to edge");
+    ok(png("mob-vagrant-walk.png")[0] / 9 === 32,
+      "…while a man with empty hands is half that");
     ok(png("mob-poacher-walk.png")[1] / 4 > png("mob-vagrant-walk.png")[1] / 4,
       "…and the poacher's hat feather heightens his");
 
-    ok(credits.includes("Human_Male_light") && credits.includes("Bordered_Bandana_purple")
-      && credits.includes("Slingshot_slingshot") && credits.includes("Frock_coat_blue"),
-      "the generator recipes that reproduce all six are recorded");
-    ok(credits.includes("Cardigan_leather") && credits.includes("Pirate_Bandana_brown")
-      && credits.includes("Eyepatch_Ambidextrous_black") && credits.includes("Hammer_iron"),
-      "…layer by layer, including the gear that tells the ranks apart");
-
-    // The poacher is the ladder's shooter and must stay one — his sling is the
-    // reason he exists at level 5.
-    ok(MONSTER_DEFS.poacher.ranged !== undefined, "the poacher still shoots");
-
-    // Three ranks are still waiting for artwork; if that changes, this line is
-    // the reminder that the credits and the corpse table change with it.
-    for (const k of ["smuggler", "brigand", "highwayman"]) {
-      ok(!sheetSrc.includes(`${k}: "./mob-${k}-walk.png"`),
-        `${k} is still on the placeholder bake`);
+    // Both shooters that were given a sling in the art sling stones in the
+    // game — the colour is the tell, and it must match the poacher's.
+    ok(MONSTER_DEFS.amazon.ranged?.color === MONSTER_DEFS.poacher.ranged?.color,
+      "the amazon throws what the poacher throws, now that she carries his sling");
+    for (const k of ["poacher", "amazon", "hunter"]) {
+      ok(MONSTER_DEFS[k as never].ranged !== undefined, `the ${k} still shoots`);
     }
+
+    ok(credits.includes("Human_Male_light") && credits.includes("Human_Female_light")
+      && credits.includes("sex=muscular"),
+      "all three body bases the ranks are built on are recorded");
+    ok(credits.includes("Spear_medium") && credits.includes("Spear_steel")
+      && credits.includes("Saber_saber") && credits.includes("Crossbow_crossbow")
+      && credits.includes("Arming_Sword_steel") && credits.includes("Hammer_iron"),
+      "…and every weapon layer that widened a frame");
+    ok(credits.includes("Skull_Bandana_Overlay_white") && credits.includes("Backpack_green")
+      && credits.includes("Plain_Mask_leather") && credits.includes("Crest_steel"),
+      "…layer by layer, including the gear that tells the ranks apart");
   }
 
   console.log("The orc spearman is an archer now:");

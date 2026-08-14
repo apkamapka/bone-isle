@@ -167,20 +167,19 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   /* ================================================================== *
    *  THE HUMAN LADDER — levels 1-14: vermin of the road
    *
-   *  Everything here is a person. Six of the ten now have their own LPC
-   *  walk sheet and body — beggar, vagrant, thief, poacher, cutthroat and
-   *  deserter, plus the bandit who always had one; the remaining three
-   *  (smuggler, brigand, highwayman) still share the `humanFoe` placeholder
-   *  bake until their artwork exists. Stats are read straight off the budget
-   *  curves above at the level named in each comment, then bent by archetype:
-   *  a shooter trades HP and melee for reach, a cutthroat trades HP for
-   *  damage, an armoured rank trades speed for armor.
+   *  Everything here is a person, and every rank now has its own LPC walk
+   *  sheet and its own body — the `humanFoe` bake in each `spr` field is only
+   *  the fallback for the moment before the sheet lands. Stats are read
+   *  straight off the budget curves above at the level named in each comment,
+   *  then bent by archetype: a shooter trades HP and melee for reach, a
+   *  cutthroat trades HP for damage, an armoured rank trades speed for armor.
    *
-   *  Where a rank now carries a visible weapon, the loot table names that
-   *  weapon: the cutthroat swings a hammer and drops one, the deserter wears
-   *  a blade and drops an iron sword. A drop the player never saw the corpse
-   *  holding reads as a slot-machine payout; a drop he watched swing at him
-   *  reads as spoils.
+   *  Where a rank carries a visible weapon, the loot table names that weapon:
+   *  the cutthroat swings a hammer and drops one, the deserter wears a blade
+   *  and drops an iron sword. A drop the player never saw the corpse holding
+   *  reads as a slot-machine payout; a drop he watched swing at him reads as
+   *  spoils. Two ranks are exceptions the item list forces — the brigand and
+   *  the mercenary fight with spears, and there is no spear to drop.
    * ================================================================== */
   // lvl 1. The floor of the game: it must not be able to kill a fresh
   // character even if the player walks away from the keyboard mid-fight.
@@ -402,8 +401,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "mercBlade", chance: 0.06, n: [1, 1] },
     ],
   },
-  // lvl 20. No armour at all, and more HP than anything near it: the mirror
-  // image of the deserter, and a fight your weapon choice barely changes.
+  // lvl 20. No armour at all in the numbers, and more HP than anything near
+  // it: the mirror image of the deserter, and a fight your weapon choice
+  // barely changes. Note the artwork disagrees — he was generated in full
+  // legion steel, the same suit the brigand wears eight levels below him. If
+  // that reads wrong at the tile, it is the sheet to change, not this line.
   wildWarrior: {
     spr: SPR.humanFoe, hp: 250, dmg: [18, 46], speed: 66, atkRate: 2.0, exp: 200, gold: [12, 35], danger: 0.4,
     loot: [
@@ -413,7 +415,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "chainLegs", chance: 0.06, n: [1, 1] },
       { kind: "chainBoots", chance: 0.06, n: [1, 1] },
       { kind: "chainShield", chance: 0.06, n: [1, 1] },
-      { kind: "warHammer", chance: 0.06, n: [1, 1] },
+      // The arming sword in his hands. He used to drop a war hammer, which
+      // now falls off a cutthroat eleven levels earlier — a level-20 kill
+      // handing out a level-9 weapon is a rung that leads nowhere. The
+      // gladius is the first blade past the mercenary blade and had no
+      // source below the gladiator at 29.
+      { kind: "gladius", chance: 0.05, n: [1, 1] },
     ],
   },
   // lvl 20
@@ -452,11 +459,13 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "goblinHatchet", chance: 0.12, n: [1, 1] },
     ],
   },
-  // lvl 22. Thrown knives: real reach, but the shortest of any shooter, so
-  // she has to be chased rather than merely walked away from.
+  // lvl 22. A sling, like the poacher's, but thrown from twice the muscle:
+  // real reach, and still the shortest of any shooter, so she has to be
+  // chased rather than merely walked away from. The bow in her loot is the
+  // poacher's compromise repeated — there is no sling to drop.
   amazon: {
     spr: SPR.humanFoe, hp: 220, dmg: [10, 26], speed: 74, atkRate: 2.0, exp: 245, gold: [13, 39], danger: 0.45, armor: 9,
-    ranged: { range: 190, dmg: [22, 57] },
+    ranged: { range: 190, dmg: [22, 57], color: "#a89a72" }, // slung stones
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "chainHelm", chance: 0.05, n: [1, 1] },

@@ -120,18 +120,25 @@ cropped to the body.
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
-## The human ladder — beggar, vagrant, thief, poacher, cutthroat, deserter
+## The human ranks — fourteen men and one woman of the road
 
 `public/mob-beggar-walk.png`, `mob-vagrant-walk.png`, `mob-thief-walk.png`,
-`mob-poacher-walk.png`, `mob-cutthroat-walk.png`, `mob-deserter-walk.png`, plus
-the bodies `mob-beggar-dead.png`, `mob-vagrant-dead.png`, `mob-thief-dead.png`,
-`mob-poacher-dead.png`, `mob-cutthroat-dead.png` and `mob-deserter-dead.png`.
+`mob-poacher-walk.png`, `mob-smuggler-walk.png`, `mob-cutthroat-walk.png`,
+`mob-deserter-walk.png`, `mob-brigand-walk.png`, `mob-highwayman-walk.png`,
+`mob-mercenary-walk.png`, `mob-corsair-walk.png`, `mob-amazon-walk.png`,
+`mob-wildWarrior-walk.png`, `mob-hunter-walk.png`, and a body apiece:
+`mob-beggar-dead.png`, `mob-vagrant-dead.png`, `mob-thief-dead.png`,
+`mob-poacher-dead.png`, `mob-smuggler-dead.png`, `mob-cutthroat-dead.png`,
+`mob-deserter-dead.png`, `mob-brigand-dead.png`, `mob-highwayman-dead.png`,
+`mob-mercenary-dead.png`, `mob-corsair-dead.png`, `mob-amazon-dead.png`,
+`mob-wildWarrior-dead.png`, `mob-hunter-dead.png`.
 
-All six are composed from the same **Universal LPC Spritesheet Character
+All of them are composed from the same **Universal LPC Spritesheet Character
 Generator** as the player and the bandit, under the same licences as the layers
-listed above. They share one body base (`Body_Color_light`) and one head
+listed above. Thirteen share one body base (`Body_Color_light`) and one head
 (`Human_Male_light`) with the player himself — they are men of the same island,
 and only the clothing, the beard and the weapon tell one rank from the next.
+The mercenary is built on the `muscular` base and the amazon on the female one.
 
 Reproducible character configurations:
 
@@ -143,43 +150,75 @@ Reproducible character configurations:
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Mop_light_brown&facial_eyes=Eyepatch_Ambidextrous_black&clothes=Shortsleeve_walnut&jacket=Frock_coat_black&legs=Leggings_red&shoes=Basic_Shoes_black&gloves=Gloves_bronze>
 - Poacher —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Bob_chestnut&hat_accessory=Cavalier_feather_black&clothes=Shortsleeve_forest&jacket=Frock_coat_leather&legs=Leggings_forest&shoes=Basic_Shoes_forest&weapon=Slingshot_slingshot>
+- Smuggler —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hairextl=Left_Braid_orange&hair=Halfmessy_orange&bandana=Bandana_green&backpack=Backpack_green&jacket=Frock_coat_green&legs=Pants_red&shoes=Basic_Boots_red&weapon=Dagger_dagger>
 - Cutthroat —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=High_and_tight_dark_brown&bandana=Bordered_Bandana_purple&clothes=Sleeveless_2_red&legs=Leggings_gray&shoes=Basic_Boots_black&weapon=Hammer_iron>
 - Deserter —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&beard=Trimmed_Beard_black&mustache=Handlebar_Mustache_black&shoes=Basic_Boots_black&legs=Leggings_black&jacket=Frock_coat_blue&armour=Leather_walnut&hair=Relm_Short_black&weapon=Dagger_dagger>
+- Brigand —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Bedhead_gray&hat=Spangenhelm_steel&shoulders=Legion_steel&armour=Legion_steel&legs=Armour_steel&shoes=Armour_steel&weapon=Spear_medium>
+- Highwayman —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Cowlick_dark_brown&facial_mask=Plain_Mask_leather&armour=Leather_brown&weapon=Dagger_dagger&shoes=Basic_Boots_leather&legs=Cuffed_Pants_leather>
+- Mercenary —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_light&head=Human_Male_light&expression=Angry_light&hair=Messy1_raven&accessory=Crest_steel&earrings=Moon_earrings_silver&shoes=Armour_all.lpcr.emerald&weapon=Spear_steel&shoulders=Legion_all.lpcr.swamp&legs=Striped_Formal_Pants_forest>
+- Corsair —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Bangslong_black&bandana=Pirate_Bandana_black&bandana_overlay=Skull_Bandana_Overlay_white&jacket=Frock_coat_black&legs=Pants_black&shoes=Basic_Boots_black&weapon=Saber_saber>
+- Amazon —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=female&body=Body_Color_light&head=Human_Female_light&expression=Neutral_light&hair=Loose_red&earrings=Moon_earrings_copper&legs=Legion_skirt_orange&armour=Leather_orange&weapon=Slingshot_slingshot&eyes=Eye_Color_green>
+- Wild Warrior —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Curly_long_dark_gray&shoulders=Legion_steel&armour=Legion_steel&legs=Armour_steel&shoes=Armour_steel&weapon=Arming_Sword_steel>
+- Hunter —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Page2_raven&gloves=Gloves_all.lpcr.mustard&armour=Leather_green&shoes=Basic_Boots_forest&legs=Shorts_forest&weapon=Crossbow_crossbow>
 
 Beyond the collections listed under the player, these characters draw on the
-beard, moustache, buzzcut, mop, bob, high-and-tight and Relm-short hair layers,
-the tricorne, pirate- and bordered-bandana, cavalier-feather and eyepatch
-accessories, the cardigan, longsleeve, shortsleeve, sleeveless, frock-coat,
-leather-armour, cuffed-trouser, formal-trouser and leggings clothing layers, the
-ghillie, basic-shoe and basic-boot footwear, the bronze gloves, and the dagger,
-iron-hammer and slingshot weapon layers of the ULPC project; the generator's own
-credits export is authoritative for the per-layer author list.
+beard, moustache and a long list of hair layers (buzzcut, mop, bob,
+high-and-tight, Relm short, halfmessy with a left braid, bedhead, cowlick,
+messy, bangslong, page, loose and curly long); the tricorne, spangenhelm,
+pirate-, bordered- and plain-bandana with skull overlay, cavalier feather,
+eyepatch, plain leather mask, steel crest and moon earrings; the cardigan,
+longsleeve, shortsleeve, sleeveless, frock coat, backpack, legion armour and
+shoulders, leather armour, legion skirt, cuffed, formal, striped formal and
+plain trousers, shorts and leggings; the ghillie, basic shoe, basic boot and
+armour footwear; the bronze and mustard gloves; and the dagger, iron hammer,
+slingshot, medium and steel spear, saber, arming sword and crossbow weapon
+layers of the ULPC project. The generator's own credits export is authoritative
+for the per-layer author list.
 
 From each export only the walk block was kept — rows 8-11 (up, left, down,
 right), nine frames each — repacked into a 9x4 grid and cropped to one rectangle
 shared by every frame, symmetric about the source cell's centre line (see
-`src/gfx/mobSheet.ts`). No pixel was repainted. Frame sizes: 32x53 beggar,
-32x49 vagrant, 32x52 thief, 46x56 poacher (the cavalier feather adds the height,
-the slung sling the width), 54x49 cutthroat (his hammer held out sideways makes
-him the widest human in the game), 40x50 deserter.
+`src/gfx/mobSheet.ts`). No pixel was repainted in any walk frame. Frame sizes:
+32x53 beggar, 32x49 vagrant, 32x52 thief, 46x56 poacher, 40x55 smuggler,
+54x49 cutthroat, 40x50 deserter, 64x52 brigand, 40x50 highwayman,
+64x54 mercenary, 50x53 corsair, 46x50 amazon, 58x51 wild warrior, 44x49 hunter.
+The widths are the weapons: a levelled spear fills the whole 64px cell, a hammer
+held out sideways takes 54, and the poacher's height is his hat feather.
 
 The bodies are the last frame of the hurt row (row 20, column 6) of each export,
-cropped to the body — 34px wide for all six. Unlike the orc and minotaur ranks
-these are **not** shared: what tells one man of the road from the next is his
-clothing, so a single anonymous heap would have made the ladder unreadable on
-the ground. The one edit to any of them: the deserter's death frame throws his
-dagger clear of the body, and those pixels were deleted, because gear lying
-beside a corpse reads as loot the game will not let you pick up.
+cropped to the body — 34px wide for all but the wild warrior, whose hair spreads
+to 40. Unlike the orc and minotaur ranks these are **not** shared: what tells one
+man of the road from the next is his clothing, so a single anonymous heap would
+have made the ladder unreadable on the ground.
+
+These are the only files in the project with pixels deleted. LPC's death frame
+lets a character drop what he was holding, and gear lying beside a corpse reads
+as loot the game will not hand over, so a weapon thrown clear of the body was
+cut: the deserter's and smuggler's and highwayman's daggers, the hunter's
+crossbow, the ends of the brigand's and mercenary's spears. The corsair's saber
+came to rest under his own hand, where a straight cut would have taken the hand
+with it, so it was lifted out by colour instead — the two greys the blade is
+painted in appear nowhere else on that frame. Nothing was added, and gear still
+tangled with the body was left alone: the wild warrior's sword under his hand,
+and the length of spear the two spearmen came to rest on.
 
 > **TODO before release:** download "Credits (CSV)" from the generator for each
-> of these six configurations and paste the per-layer author lists here. The
-> URLs reproduce the characters, but a URL is not an attribution.
+> of these fourteen configurations and paste the per-layer author lists here.
+> The URLs reproduce the characters, but a URL is not an attribution.
 
-**ShareAlike:** these twelve files are derivative works of CC-BY-SA 3.0 artwork
-and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
-available on those terms even if this repository is later made private.
+**ShareAlike:** these twenty-eight files are derivative works of CC-BY-SA 3.0
+artwork and are themselves published under **CC-BY-SA 3.0**. They must stay
+publicly available on those terms even if this repository is later made private.
 
 ## Minotaurs — `public/mob-minotaur-walk.png`, `public/mob-minotaur-archer-walk.png`, `public/mob-minotaur-guard-walk.png`, `public/mob-minotaur-mage-walk.png`, `public/mob-minotaur-dead.png`
 
