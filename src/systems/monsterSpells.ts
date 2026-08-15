@@ -12,18 +12,23 @@
  * and gains a list of BIG attacks: cooldown-gated, aimed at ground rather than
  * at a body, and — the part that matters — TELEGRAPHED.
  *
- * ## Why the windup exists
+ * ## The windup, and why nothing is painted on the floor
  *
- * A footprint that lands the instant it is decided is not an attack, it is a
- * tax: nothing the player does changes the outcome, so the only counterplay is
- * more HP. Every shape here glows on the ground for `windupS` seconds before
- * anything happens, and the caster stands still while it does. That turns the
- * dragon from a wall into something you read — which is the entire difference
- * between a fight and an arithmetic problem.
+ * Every cast commits to its footprint, then waits `windupS` before anything
+ * lands. The caster is ROOTED for that time, and that root is the whole tell:
+ * a creature that stops dead is what a Tibia player reads, and it costs the
+ * fight nothing to leave it as the only cue.
  *
- * The telegraph is drawn procedurally (a pulsing outline in the element's
- * colour) rather than from a sheet. It is deliberately plain: `fx-warn.png`
- * can replace it later without touching a line of this file.
+ * An earlier pass also painted the committed tiles on the ground. It worked
+ * exactly as designed and that was the problem — the shape appeared, you
+ * walked off it, nothing happened, and a monster meant to be frightening
+ * became a puzzle with the answer printed underneath. The windups are short
+ * now (a beat, not a dodge window) and the floor stays clean.
+ *
+ * `telegraphTiles()` survives anyway. It costs nothing, the tests use it to
+ * prove a committed footprint never re-aims, and re-enabling the overlay is
+ * one loop in the renderer if a later creature wants a readable wind-up that
+ * this one deliberately does not get.
  *
  * ## What the shapes are
  *
@@ -63,7 +68,11 @@ export interface MonsterSpell {
   /** Cast range in px. 0 for the shapes anchored on the caster. */
   range: number;
   cooldownS: number;
-  /** Seconds the footprint glows before it lands. Never zero. */
+  /**
+   * Seconds between committing to the shape and it landing. Never zero — the
+   * caster is rooted for this long, and a cast with no root has no tell at
+   * all, just damage appearing out of a creature that never paused.
+   */
   windupS: number;
   /** cone: how many rows deep. Ignored by the other shapes. */
   depth?: number;
@@ -311,11 +320,12 @@ function land(
 }
 
 /**
- * The telegraphs to paint under the scene, as raw rectangles.
+ * The tiles every committed cast is currently aimed at.
  *
- * Returned as data rather than drawn here so the renderer keeps its single
- * canvas and this module keeps its single job. `heat` runs 0 to 1 across the
- * windup, which is what lets the warning tighten as the moment approaches.
+ * NOT drawn by the game — see the note at the top of this file. It stays
+ * exported because it is the only window onto the "a footprint is fixed the
+ * moment it is cast" rule, which the tests check and which is easy to break
+ * by accident. `heat` runs 0 to 1 across the windup.
  */
 export function telegraphTiles(w: World): { tx: number; ty: number; heat: number; color: string }[] {
   const out: { tx: number; ty: number; heat: number; color: string }[] = [];

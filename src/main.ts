@@ -40,7 +40,7 @@ import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./
 import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
-import { updateMonsterSpells, telegraphTiles } from "./systems/monsterSpells.ts";
+import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
@@ -2221,24 +2221,11 @@ function render(): void {
     if (a > 0.6) vctx.fillRect(Math.round(sx + 4), Math.round(sy + 12), 12, 2);
   }
 
-  // Spell telegraphs: the footprint a creature has committed to, painted flat
-  // on the ground before anything stands on it. `heat` runs 0->1 across the
-  // windup, and both the fill and the pulse tighten with it, so the last
-  // quarter-second reads as "now" without needing a sound or a number.
-  for (const tg of telegraphTiles(world)) {
-    const gx = tg.tx * TILE - cam.x;
-    const gy = tg.ty * TILE - cam.y;
-    if (gx < -TILE || gy < -TILE || gx > VW || gy > VH) continue;
-    const pulse = 0.5 + 0.5 * Math.sin(waveT * (8 + tg.heat * 22));
-    vctx.globalAlpha = 0.14 + tg.heat * 0.22 + pulse * 0.1;
-    vctx.fillStyle = tg.color;
-    vctx.fillRect(gx, gy, TILE, TILE);
-    vctx.globalAlpha = 0.45 + tg.heat * 0.45;
-    vctx.strokeStyle = tg.color;
-    vctx.lineWidth = 2;
-    vctx.strokeRect(gx + 1, gy + 1, TILE - 2, TILE - 2);
-    vctx.globalAlpha = 1;
-  }
+  // No footprint is painted on the ground. `telegraphTiles()` still reports
+  // one and the tests still hold it to its contract, but drawing it turned
+  // every spell into a puzzle with the answer printed underneath — the shape
+  // appeared, you stepped off it, nothing happened. The tell is the creature
+  // planting its feet, which is what a Tibia player reads anyway.
 
   // building ghost: while placing, preview the structure under the cursor
   // (green = valid spot, red = blocked) anywhere on Home Isle

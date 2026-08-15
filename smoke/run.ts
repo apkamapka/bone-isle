@@ -5131,7 +5131,9 @@ async function main(): Promise<void> {
     ok(art.fxFile("fire", 0, "field") === "fx-fire-1-field.png",
       "…whose filename is the one sitting in public/");
     ok(mob.hasWalkSheet("dragon") === false || true, "the dragon is in the sheet registry");
-    ok(MONSTER_DEFS.dragon.spells!.length === 2, "the dragon carries two spells");
+    ok(MONSTER_DEFS.dragon.spells!.length === 3, "the dragon carries three spells");
+    ok(MONSTER_DEFS.dragon.spells!.map((x) => x.shape).join(",") === "nova,cone,field",
+      "…ordered so that being adjacent is answered first");
     ok(MONSTER_DEFS.dragon.ranged!.fx!.el === "fire", "…and its jab draws as fire");
     ok(MONSTER_DEFS.orcShaman.ranged!.fx!.el === "shadow",
       "the shaman's 'crackling magic bolt' finally is one");
@@ -5144,13 +5146,15 @@ async function main(): Promise<void> {
     for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
       const sp = MONSTER_DEFS[k].spells;
       if (!sp) continue;
-      ok(sp.every((x) => x.windupS > 0), `${k}: every spell warns before it lands`);
-      ok(sp.every((x) => x.cooldownS > 0), `${k}: …and none of them is spammable`);
+      ok(sp.every((x) => x.windupS > 0), `${k}: every spell roots the caster first`);
+      ok(sp.every((x) => x.cooldownS > x.windupS), `${k}: …for less time than it then waits`);
     }
 
     // --- footprints ---
-    const breath = MONSTER_DEFS.dragon.spells![0];
-    const field = MONSTER_DEFS.dragon.spells![1];
+    const roar = MONSTER_DEFS.dragon.spells!.find((x) => x.shape === "nova")!;
+    const breath = MONSTER_DEFS.dragon.spells!.find((x) => x.shape === "cone")!;
+    const field = MONSTER_DEFS.dragon.spells!.find((x) => x.shape === "field")!;
+    ok(breath.depth === 4, "the breath reaches four rows");
     // find a patch of open ground with room around it
     let ox = 0;
     let oy = 0;
@@ -5168,15 +5172,24 @@ async function main(): Promise<void> {
     ok(ox > 0, "found open ground to aim across");
 
     const east = MS.spellFootprint(w, breath, ox, oy, ox + 4, oy);
-    ok(east.length === 7, "a three-deep breath covers seven tiles");
+    ok(east.length === 10, "a four-deep breath covers ten tiles");
     ok(east.every((t) => t.tx > ox), "…all of them in front of the caster");
     ok(!east.some((t) => t.tx === ox && t.ty === oy), "…and none of them under it");
     ok(east.filter((t) => t.tx === ox + 1).length === 1, "the first row is a single tile");
     ok(east.filter((t) => t.tx === ox + 2).length === 3, "…and it opens to three");
-    ok(east.filter((t) => t.tx === ox + 3).length === 3, "…and stops opening");
+    ok(east.filter((t) => t.tx === ox + 4).length === 3, "…and stops opening");
     const d1 = east.find((t) => t.tx === ox + 1)!.delay;
-    const d3 = east.find((t) => t.tx === ox + 3)!.delay;
+    const d3 = east.find((t) => t.tx === ox + 4)!.delay;
     ok(d3 > d1, "the far row lands after the near one, so it reads as travelling");
+
+    // the roar is the ring and nothing else — no reach, no aim, no escape by
+    // standing on the far side of it
+    const ring = MS.spellFootprint(w, roar, ox, oy, ox + 6, oy);
+    ok(ring.length === 8, "the roar covers the eight tiles touching the caster");
+    ok(!ring.some((t) => t.tx === ox && t.ty === oy), "…but not the one it stands on");
+    ok(ring.every((t) => Math.abs(t.tx - ox) <= 1 && Math.abs(t.ty - oy) <= 1),
+      "…and nothing further, however far away it was aimed");
+    ok(ring.every((t) => t.delay === 0), "…all of it at once");
 
     const west = MS.spellFootprint(w, breath, ox, oy, ox - 4, oy);
     ok(west.every((t) => t.tx < ox), "aimed west, the breath goes west");
@@ -5232,16 +5245,16 @@ async function main(): Promise<void> {
     MS.updateMonsterSpells(w, breath.windupS * 0.5, tgtIn, () => { hits++; });
     ok(hits === 0, "nothing lands during the windup");
     ok(X.spellFxCounts().blasts === 0, "…and nothing is even drawn yet");
-    ok(MS.telegraphTiles(w).length === 7, "…but all seven tiles are glowing");
+    ok(MS.telegraphTiles(w).length === 10, "…but all ten tiles are committed");
     ok(MS.telegraphTiles(w)[0].heat > 0 && MS.telegraphTiles(w)[0].heat < 1,
-      "…and the warning is partway through");
-    ok(MS.telegraphTiles(ws.town).length === 0, "…with nothing glowing on another island");
+      "…and the cast is partway through");
+    ok(MS.telegraphTiles(ws.town).length === 0, "…with nothing pending on another island");
 
     MS.updateMonsterSpells(w, breath.windupS, tgtIn, () => { hits++; });
     ok(hits === 1, "standing in the footprint costs exactly one hit");
     ok(!MS.isCasting(drag), "…the caster is free again");
-    ok(MS.telegraphTiles(w).length === 0, "…and the warning is gone");
-    ok(X.spellFxCounts().blasts === 7, "…with a bloom on every tile");
+    ok(MS.telegraphTiles(w).length === 0, "…and the cast is off the books");
+    ok(X.spellFxCounts().blasts === 10, "…with a bloom on every tile");
     X.clearSpellFx();
 
     // the telegraph is a promise: stepping out of it works

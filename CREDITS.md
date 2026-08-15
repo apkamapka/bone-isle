@@ -759,11 +759,12 @@ things were done to them:
    raising saturation while leaving value untouched, so the shading ladder
    survives intact. Only the purple family moved; the gold wing membrane, the
    pale belly plates and the red mouth are the pack's own colours.
-2. **Halved to 80 x 38 per frame.** 2:1 by majority vote over each 2 x 2 block
-   rather than plain nearest, which drops every other column and eats the
-   one-pixel outline along the spine. Ties break toward the darker survivor,
-   which is the outline in every case here. At 1:1 the creature is 4.4 tiles
-   wide; halved it is 2.5, against an orc's 1.
+2. **Cropped, not rescaled.** The frames are used at their native 1:1
+   resolution: 160 x 75 each, five tiles wide and a little over two tall. A
+   half-scale cut was tried first and read as a lizard rather than a dragon —
+   the player's own sprite is 64 x 80, so a creature 38 px tall stood shorter
+   than the man fighting it. Going back to 1:1 also means no resampling of any
+   kind, which is the crispest this art can be.
 3. **Packed into the engine's sheet layout.** One 6 x 4 grid: column 0 is
    `Idle1` (the standing pose), columns 1-5 are `Walk1`-`Walk5`. The crop
    rectangle is shared by all six frames and kept symmetric about the source
@@ -775,8 +776,8 @@ things were done to them:
 `Hurt1` and `Hurt2` are byte-for-byte duplicates of `Death1` and `Death2`, so
 the pack has no hurt animation despite the filenames. The four attack frames
 are unused: monsters have no attack animation in this engine yet. The corpse
-is `Death5`, the last frame of the death sequence, cropped and halved the same
-way.
+is `Death5`, the last frame of the death sequence, cropped to its own bounds
+and likewise left at 1:1.
 
 ## Fire field — `public/fx-fire-1-field.png`
 

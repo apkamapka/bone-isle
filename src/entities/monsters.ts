@@ -759,27 +759,36 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // long clock instead of the standard trickle.
   //
   // The first creature in the game with real SPELLS. Its jab is a fireball
-  // that now flies as an actual bolt; on top of that sit two telegraphed
-  // shapes, and between them they change what fighting it is like. Standing
-  // toe to toe was always correct against a brute — the breath makes the tile
-  // directly in front of it the worst place to be, and the field makes waiting
-  // out a cooldown in one spot cost you. Neither can kill on its own; both
-  // punish standing still, which is the one thing the old dragon rewarded.
+  // that now flies as an actual bolt; on top of that sit three shapes, and
+  // between them they change what fighting it is like. It is a brute, so it
+  // is always closing — the point of the kit is that there is no comfortable
+  // distance to settle at. Roar punishes hugging it, Breath punishes standing
+  // in front of it, and the Field punishes standing anywhere for long.
   //
-  // Ordering is priority: the breath is tried first because it is the answer
-  // to being close, and the field second because it is the answer to being far.
+  // Ordering IS priority: the first spell off cooldown and in range wins the
+  // beat. Roar is first so that being adjacent is answered immediately;
+  // Breath second because it reaches past the ring; Field last, since it is
+  // the one that works at any distance and should not crowd out the others.
+  //
+  // Playtest pass: the first cut ran 9 s and 15 s cooldowns behind a painted
+  // warning, and the whole thing read as harmless. Both were roughly halved,
+  // the windups cut to a beat, and the floor overlay dropped.
   dragon: {
     spr: SPR.dragon, hp: 1000, dmg: [41, 109], speed: 60, atkRate: 2.0, exp: 900, gold: [90, 210], danger: 0.99, armor: 28, resist: { fire: 0.25, ice: 1.6 },
     ranged: { range: 320, dmg: [47, 122], color: "#ff5a2a", wide: true, brute: true, fx: { el: "fire", tier: 0 } }, // dragon fire
     spells: [
-      // Seven tiles, three deep, out of the mouth. Slightly under the jab's
-      // damage: it can catch you through a wall of bodies and it is the one
-      // shape that is genuinely dodgeable, so it should not also hit hardest.
-      { name: "Fire Breath", element: "fire", tier: 0, shape: "cone", dmg: [36, 94], range: 4 * TILE, cooldownS: 9, windupS: 0.65, depth: 3 },
-      // A plus of burning ground under your feet. No damage on impact at all —
-      // dodge it cleanly and it costs nothing, ignore it and it bills you every
-      // second. Long cooldown because the tiles outlive it by six.
-      { name: "Fire Field", element: "fire", tier: 0, shape: "field", dmg: [0, 0], range: 8 * TILE, cooldownS: 15, windupS: 0.5, fieldS: 6 },
+      // The eight tiles touching it. `range` on a caster-anchored shape is not
+      // reach — the footprint is fixed — it is "how close before this is worth
+      // spending". Just under two tiles means it fires when you are actually
+      // in the ring and never at a shooter across the room.
+      { name: "Searing Roar", element: "fire", tier: 0, shape: "nova", dmg: [30, 78], range: 1.9 * TILE, cooldownS: 7, windupS: 0.25 },
+      // Nine tiles, four deep, out of the mouth. Under the jab's damage: it
+      // catches through a wall of bodies and reaches well past melee, so it
+      // should not also hit hardest.
+      { name: "Fire Breath", element: "fire", tier: 0, shape: "cone", dmg: [36, 94], range: 5 * TILE, cooldownS: 4.5, windupS: 0.25, depth: 4 },
+      // A plus of burning ground under your feet. No impact damage of its own —
+      // the fire IS the attack, and it bills you every second you stand in it.
+      { name: "Fire Field", element: "fire", tier: 0, shape: "field", dmg: [0, 0], range: 8 * TILE, cooldownS: 7, windupS: 0.25, fieldS: 8 },
     ],
     respawnS: 600,
     loot: [
