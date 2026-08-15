@@ -6,11 +6,13 @@ import { randomWalkable, lineOfSight } from "../world/collision.ts";
 import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
 import { inHavenBand } from "../world/collision.ts";
 import { stepFacing } from "../gfx/mobSheet.ts";
+import { addBlast, addBolt } from "../gfx/spellFx.ts";
+import { beginCast, isCasting, type MonsterSpell } from "../systems/monsterSpells.ts";
 import type { Occupied } from "../world/grid.ts";
 import { Tile } from "../world/types.ts";
 import type { World, Monster, MonsterKind, Camp } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
-import type { Resistances } from "../systems/elements.ts";
+import type { Resistances, Element, Tier } from "../systems/elements.ts";
 
 /** A weighted loot entry: item, drop chance, and min/max quantity. */
 export interface LootEntry {
@@ -30,6 +32,18 @@ export interface RangedDef {
   color?: string;
   /** Thicker projectile stroke (fireballs). */
   wide?: boolean;
+  /**
+   * Draw this attack as a real spell bolt instead of a coloured stroke.
+   *
+   * Purely cosmetic — the hit is rolled and applied identically either way,
+   * exactly as an arrow's is. It exists because half the bestiary's "ranged
+   * attack" is explicitly magic in its own comment (a shaman's crackling
+   * bolt, a mage's fire bolt, dragon fire) and was being drawn as a two-pixel
+   * line, while a full elemental FX pipeline sat one import away serving only
+   * the player. `tier` picks the ARTWORK, nothing else; a creature's damage
+   * has never had anything to do with a crystal's tier.
+   */
+  fx?: { el: Element; tier: Tier };
   /** Brute shooter (the dragon): does NOT kite. It keeps advancing like a
    *  melee monster, breathes at range, then switches to its paw (the melee
    *  `dmg` roll) once it reaches you — so it both closes in AND blasts fire,
@@ -72,6 +86,20 @@ export interface MonsterDef {
   ranged?: RangedDef;
   /** Respawn override in seconds (the dragon's lair refills slowly). */
   respawnS?: number;
+  /**
+   * Big, telegraphed attacks on their own cooldowns — see `monsterSpells.ts`.
+   *
+   * Separate from `ranged` on purpose. `ranged` is the jab: it fires on the
+   * ordinary attack cadence, aims at a body, and governs whether the creature
+   * kites or charges. These are the haymakers: they aim at GROUND, they draw
+   * a warning first, and the creature stands still while they wind up. A
+   * caster wants both, and collapsing them into one field would mean choosing
+   * between "attacks every two seconds" and "has a shape you can dodge".
+   *
+   * Listed strongest first. The AI casts the first one that is off cooldown
+   * and in range, so ordering IS priority.
+   */
+  spells?: readonly MonsterSpell[];
 }
 
 /**
@@ -602,7 +630,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 31
   orcShaman: {
     spr: SPR.orcShaman, hp: 300, dmg: [14, 36], speed: 52, atkRate: 2.0, exp: 440, gold: [14, 40], danger: 0.72, armor: 12, resist: { fire: 0.6, ice: 1.4 },
-    ranged: { range: 260, dmg: [30, 78], color: "#8a6cff" }, // crackling magic bolt
+    ranged: { range: 260, dmg: [30, 78], color: "#8a6cff", fx: { el: "shadow", tier: 0 } }, // crackling magic bolt
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "orcEar", chance: 0.15, n: [1, 1] },
@@ -679,7 +707,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 37
   minotaurMage: {
     spr: SPR.minotaurMage, hp: 410, dmg: [17, 42], speed: 52, atkRate: 2.0, exp: 605, gold: [22, 63], danger: 0.9, armor: 16, resist: { storm: 0.5, earth: 1.4 },
-    ranged: { range: 280, dmg: [35, 91], color: "#ff8a3a", wide: true }, // fire bolt
+    ranged: { range: 280, dmg: [35, 91], color: "#ff8a3a", wide: true, fx: { el: "fire", tier: 0 } }, // fire bolt
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "minotaurHorn", chance: 0.15, n: [1, 1] },
@@ -726,12 +754,33 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "demonCleaver", chance: 0.15, n: [1, 1] },
     ],
   },
-  // lvl 50. The boss. A brute that charges in, mauls with its paw for heavy
-  // hits, AND breathes fire at range — no backing away and plinking. Its lair
-  // refills on a long clock instead of the standard trickle.
+  // lvl 50. A brute that charges in, mauls with its paw for heavy hits, AND
+  // throws fire at range — no backing away and plinking. Its lair refills on a
+  // long clock instead of the standard trickle.
+  //
+  // The first creature in the game with real SPELLS. Its jab is a fireball
+  // that now flies as an actual bolt; on top of that sit two telegraphed
+  // shapes, and between them they change what fighting it is like. Standing
+  // toe to toe was always correct against a brute — the breath makes the tile
+  // directly in front of it the worst place to be, and the field makes waiting
+  // out a cooldown in one spot cost you. Neither can kill on its own; both
+  // punish standing still, which is the one thing the old dragon rewarded.
+  //
+  // Ordering is priority: the breath is tried first because it is the answer
+  // to being close, and the field second because it is the answer to being far.
   dragon: {
     spr: SPR.dragon, hp: 1000, dmg: [41, 109], speed: 60, atkRate: 2.0, exp: 900, gold: [90, 210], danger: 0.99, armor: 28, resist: { fire: 0.25, ice: 1.6 },
-    ranged: { range: 320, dmg: [47, 122], color: "#ff5a2a", wide: true, brute: true }, // dragon fire
+    ranged: { range: 320, dmg: [47, 122], color: "#ff5a2a", wide: true, brute: true, fx: { el: "fire", tier: 0 } }, // dragon fire
+    spells: [
+      // Seven tiles, three deep, out of the mouth. Slightly under the jab's
+      // damage: it can catch you through a wall of bodies and it is the one
+      // shape that is genuinely dodgeable, so it should not also hit hardest.
+      { name: "Fire Breath", element: "fire", tier: 0, shape: "cone", dmg: [36, 94], range: 4 * TILE, cooldownS: 9, windupS: 0.65, depth: 3 },
+      // A plus of burning ground under your feet. No damage on impact at all —
+      // dodge it cleanly and it costs nothing, ignore it and it bills you every
+      // second. Long cooldown because the tiles outlive it by six.
+      { name: "Fire Field", element: "fire", tier: 0, shape: "field", dmg: [0, 0], range: 8 * TILE, cooldownS: 15, windupS: 0.5, fieldS: 6 },
+    ],
     respawnS: 600,
     loot: [
       { kind: "dragonHam", chance: 0.9, n: [2, 5] },
@@ -1122,7 +1171,13 @@ export function updateMonsters(
     m.hurtT = Math.max(0, m.hurtT - dt);
     m.aggroT = Math.max(0, m.aggroT - dt);
     m.atkCd -= dt;
+    if (m.spellCd) for (let i = 0; i < m.spellCd.length; i++) m.spellCd[i] -= dt;
     const occ = occOf(m);
+    // A creature winding up a spell is rooted. That is not a limitation, it
+    // is the tell: the moment it plants its feet is the moment you know a
+    // footprint is coming, and a caster that kept walking would make the
+    // warning on the ground the only cue in a fight full of moving bodies.
+    if (isCasting(m)) continue;
     // Evict anything already standing on a portal — from an older save, or
     // shoved there before this rule existed. `occ` only stops a creature
     // ENTERING a pad, so without this a squatter would never leave. Step it
@@ -1151,17 +1206,46 @@ export function updateMonsters(
       glideWalker(m, m.speed * dt);
       continue;
     }
+    // ---- the big attacks, ahead of everything else ----
+    // Tried before melee and before the jab: a dragon that is being hugged
+    // should answer with the shape that hits the tile it is standing next to,
+    // not keep swinging while its breath sits on cooldown forever. Nothing is
+    // spent unless the footprint actually lands somewhere.
+    const spells = MONSTER_DEFS[m.kind].spells;
+    if (spells && !target.dead && provoked
+      && lineOfSight(w, m.x, m.y, target.x, target.y)) {
+      if (!m.spellCd) m.spellCd = spells.map(() => 0);
+      for (let i = 0; i < spells.length; i++) {
+        const sp = spells[i];
+        if (m.spellCd[i] > 0) continue;
+        if (sp.range > 0 && d > sp.range) continue;
+        if (!beginCast(w, m, sp, ptx, pty)) continue;
+        m.spellCd[i] = sp.cooldownS;
+        // The jab shares the cast: a creature does not breathe fire AND stab
+        // you in the same beat, and without this the windup would be free.
+        m.atkCd = Math.max(m.atkCd, sp.windupS + 0.3);
+        break;
+      }
+      if (isCasting(m)) continue;
+    }
     if (rd && !target.dead && provoked && cheb > 1 && d <= rd.range
       && lineOfSight(w, m.x, m.y, target.x, target.y)) {
       if (m.atkCd <= 0) {
         m.atkCd = m.atkRate;
         // cosmetic projectile, instant hit — same contract as the player's bow
-        w.shots.push({
-          fromX: m.x, fromY: m.y - 16,
-          toX: target.x, toY: target.y - 12,
-          p: 0, dur: Math.max(0.06, d / SHOT_SPEED),
-          bone: false, color: rd.color ?? "#cfd8da", wide: rd.wide,
-        });
+        if (rd.fx) {
+          // A magic jab flies as a real bolt and blooms where it lands. The
+          // bloom is timed off the bolt's own flight so the two never separate.
+          const tt = addBolt(w, m.x, m.y - 16, target.x, target.y - 12, rd.fx.el, rd.fx.tier);
+          addBlast(w, ptx, pty, rd.fx.el, rd.fx.tier, "hit", tt);
+        } else {
+          w.shots.push({
+            fromX: m.x, fromY: m.y - 16,
+            toX: target.x, toY: target.y - 12,
+            p: 0, dur: Math.max(0.06, d / SHOT_SPEED),
+            bone: false, color: rd.color ?? "#cfd8da", wide: rd.wide,
+          });
+        }
         onHit(m, true);
       }
       if (!rd.brute) {
