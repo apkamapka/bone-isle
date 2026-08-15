@@ -40,6 +40,7 @@ const WALK_FPS = 8;
  */
 const SHEET_COLS: Record<string, number> = {
   snake: 7,
+  dragon: 6,
 };
 
 const colsOf = (id: string): number => SHEET_COLS[id] ?? COLS;
@@ -54,8 +55,13 @@ const colsOf = (id: string): number => SHEET_COLS[id] ?? COLS;
  * than pretending to look at the camera. Both vertical rows of its sheet still
  * carry the side view, because a monster spawns facing "down" before it has
  * taken a single step.
+ *
+ * The dragon arrived the same way: a pack of side-view frames and nothing
+ * else. A quadruped reads better for it than it did for the snake — a big
+ * animal crossing the screen in profile is what a dragon looks like in every
+ * game that has one — but the rule is identical and so is the reason.
  */
-const SIDE_ONLY = new Set<string>(["snake"]);
+const SIDE_ONLY = new Set<string>(["snake", "dragon"]);
 
 /**
  * Sheets to load, keyed by creature. Townsfolk live in the same registry under
@@ -99,6 +105,7 @@ const SHEET_SRC: Record<string, string> = {
   goblinLegionary: "./mob-goblin-legionary-walk.png",
   skeletonWarrior: "./mob-skeleton-warrior-walk.png",
   demonSkeleton: "./mob-demon-skeleton-walk.png",
+  dragon: "./mob-dragon-walk.png",
   "npc:smith": "./npc-smith.png",
   "npc:herbalist": "./npc-herbalist.png",
   "npc:elder": "./npc-elder.png",
@@ -173,6 +180,7 @@ const CORPSE_SRC: Record<string, string> = {
   minotaurArcher: "./mob-minotaur-dead.png",
   minotaurGuard: "./mob-minotaur-dead.png",
   minotaurMage: "./mob-minotaur-dead.png",
+  dragon: "./mob-dragon-dead.png",
 };
 
 /** Loaded bodies, keyed by URL — four kinds share one file, one fetch. */

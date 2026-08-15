@@ -19,6 +19,10 @@
  *          hit   optional. A Shard's single-target impact. Falls back to
  *                `burst`, so one tile of the explosion stands in until there
  *                is something better
+ *          field optional. A flame that STANDS on a tile and keeps burning —
+ *                the only slot that loops instead of playing once, because a
+ *                field outlives its own animation. Falls back to `wave`,
+ *                which pops rather than burns but is the right colour
  *
  * A sheet is a HORIZONTAL STRIP of square frames and the frame count is read
  * off the image — `width / height`, rounded. Nobody has to declare that an
@@ -37,9 +41,9 @@
 import { ELEMENTS, ELEMENT_COLOR, type Element, type Tier } from "../systems/elements.ts";
 
 /** The five pictures a spell can ask for. */
-export type FxSlot = "bolt" | "burst" | "wave" | "nova" | "hit";
+export type FxSlot = "bolt" | "burst" | "wave" | "nova" | "hit" | "field";
 
-export const FX_SLOTS: readonly FxSlot[] = ["bolt", "burst", "wave", "nova", "hit"];
+export const FX_SLOTS: readonly FxSlot[] = ["bolt", "burst", "wave", "nova", "hit", "field"];
 
 /**
  * Which slot stands in when a file is missing, so artwork can arrive in any
@@ -56,6 +60,7 @@ const FALLBACK: Readonly<Record<FxSlot, FxSlot | null>> = {
   wave: "burst",
   nova: "wave",
   hit: "burst",
+  field: "wave",
 };
 
 /**

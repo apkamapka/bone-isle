@@ -15,6 +15,12 @@
  *   BOLT   the projectile, drawn between two points and rotated to face the
  *          way it flies. Purely cosmetic: the hit resolved when it was cast,
  *          exactly as an arrow's does.
+ *   FIELD  a flame LEFT BEHIND on a tile, looping until its life runs out.
+ *          The odd one out: a blast is over when its animation is, a field
+ *          outlives its animation and so has to loop and be told when to
+ *          stop. It is also the only effect that is still dangerous after the
+ *          cast that made it — the damage lives in monsterSpells, this module
+ *          only knows how to keep the tile alight.
  *
  * Both are world-bound so an explosion on Bone Reach does not flash over Home
  * Isle, the same guard `fx.ts` puts on floating text.
@@ -56,6 +62,7 @@ const SCALE: Readonly<Record<FxSlot, number>> = {
   hit: 1.35,
   wave: 1.4,
   nova: 1.4,
+  field: 1.3,
 };
 
 /** How bright the baked halo is drawn behind the artwork. */
@@ -90,8 +97,35 @@ interface Bolt {
   dur: number;
 }
 
+/**
+ * A tile that has been set alight and stays that way.
+ *
+ * `life` is the WHOLE burn, not the animation's length: the sheet loops
+ * underneath for as long as the field lasts. The last fifth fades out so a
+ * field expires instead of vanishing between one frame and the next — a flame
+ * that blinks off is the clearest way to tell a player the rules changed
+ * without warning them.
+ */
+interface Field {
+  world: World;
+  /** Tile indices, so the damage tick can compare them without arithmetic. */
+  tx: number;
+  ty: number;
+  /** Tile CENTRE in world px. */
+  x: number;
+  y: number;
+  el: Element;
+  tier: Tier;
+  t: number;
+  life: number;
+}
+
 const blasts: Blast[] = [];
 const bolts: Bolt[] = [];
+const fields: Field[] = [];
+
+/** How much of a field's life is spent fading out. */
+const FIELD_FADE = 0.2;
 
 /** How fast a bolt crosses the map, px/s. Matches the arrow so a fireball and
  *  an arrow fired at the same creature arrive together. */
@@ -125,6 +159,42 @@ export function addBolt(
   return dur;
 }
 
+/**
+ * Set a tile alight for `life` seconds. Re-lighting a tile that is already
+ * burning REFRESHES it rather than stacking a second flame on the same square:
+ * two fields on one tile draw at double brightness and read as a bug, and the
+ * damage tick would charge twice for standing still once.
+ */
+export function addField(
+  world: World, tx: number, ty: number, el: Element, tier: Tier, life: number,
+): void {
+  const live = fields.find((f) => f.world === world && f.tx === tx && f.ty === ty);
+  if (live) {
+    live.el = el;
+    live.tier = tier;
+    live.t = 0;
+    live.life = Math.max(live.life, life);
+    return;
+  }
+  fields.push({
+    world, tx, ty,
+    x: tx * TILE + TILE / 2,
+    y: ty * TILE + TILE / 2,
+    el, tier, t: 0, life,
+  });
+}
+
+/**
+ * The tiles burning in `world` right now, for whoever has to decide that
+ * standing there hurts. Returned as a fresh array: the caller must not be able
+ * to reach in and edit the list it is iterating.
+ */
+export function burningTiles(world: World): { tx: number; ty: number; el: Element }[] {
+  return fields
+    .filter((f) => f.world === world)
+    .map((f) => ({ tx: f.tx, ty: f.ty, el: f.el }));
+}
+
 /** How long one blast lives, given whatever artwork it has right now. */
 function blastLife(b: Blast): number {
   const sheet = spellSheet(b.el, b.tier, b.slot);
@@ -141,6 +211,11 @@ export function updateSpellFx(dt: number): void {
     const s = bolts[i];
     s.t += dt;
     if (s.t >= s.dur) bolts.splice(i, 1);
+  }
+  for (let i = fields.length - 1; i >= 0; i--) {
+    const f = fields[i];
+    f.t += dt;
+    if (f.t >= f.life) fields.splice(i, 1);
   }
 }
 
@@ -220,14 +295,60 @@ export interface SpellDrawable {
   fn: (vctx: CanvasRenderingContext2D, camX: number, camY: number) => void;
 }
 
-/** Every blast in `world` that is past its delay, as sortable drawables. */
+/**
+ * Every ground effect in `world` that is currently visible, as sortable
+ * drawables — blasts past their delay, and every burning tile.
+ *
+ * Fields go in FIRST so that a blast landing on a tile that is already alight
+ * paints over the steady flame rather than under it. Both share the depth key,
+ * so only insertion order separates them and the stable sort keeps it.
+ */
 export function spellBlastDrawables(world: World): SpellDrawable[] {
   const out: SpellDrawable[] = [];
+  for (const f of fields) {
+    if (f.world !== world) continue;
+    out.push({ x: f.x, y: f.y, fn: (v, cx, cy) => drawField(v, f, cx, cy) });
+  }
   for (const b of blasts) {
     if (b.world !== world || b.t < 0) continue;
     out.push({ x: b.x, y: b.y, fn: (v, cx, cy) => drawBlast(v, b, cx, cy) });
   }
   return out;
+}
+
+/**
+ * One burning tile. Same anchoring rules as a blast — the difference is only
+ * that the frame index wraps instead of ending, and that the whole thing dims
+ * over the last stretch of its life.
+ */
+function drawField(
+  vctx: CanvasRenderingContext2D, f: Field, camX: number, camY: number,
+): void {
+  const sx = Math.round(f.x - camX);
+  const sy = Math.round(f.y - camY);
+  const col = ELEMENT_COLOR[f.el];
+  const left = f.life - f.t;
+  const fade = left < f.life * FIELD_FADE ? Math.max(0, left / (f.life * FIELD_FADE)) : 1;
+  const sheet = spellSheet(f.el, f.tier, "field");
+  if (!sheet) {
+    vctx.globalAlpha = fade;
+    bareBlast(vctx, sx, sy, (f.t % BARE_BLAST_S) / BARE_BLAST_S, col);
+    vctx.globalAlpha = 1;
+    return;
+  }
+  const i = loopFrameIndex(f.t, sheet.base.length, FX_FPS);
+  const size = Math.round(TILE * SCALE.field);
+  pool(vctx, sx, sy, TILE * 0.75, POOL_ALPHA * fade, col);
+  const leftPx = sx - size / 2;
+  const top = sheet.grounded ? sy + TILE / 2 - size : sy - size / 2;
+  const gs = size * sheet.glowScale;
+  vctx.globalCompositeOperation = "lighter";
+  vctx.globalAlpha = GLOW_ALPHA * fade;
+  vctx.drawImage(sheet.glow[i], leftPx + size / 2 - gs / 2, top + size / 2 - gs / 2, gs, gs);
+  vctx.globalCompositeOperation = "source-over";
+  vctx.globalAlpha = fade;
+  vctx.drawImage(sheet.base[i], leftPx, top, size, size);
+  vctx.globalAlpha = 1;
 }
 
 function drawBlast(
@@ -314,12 +435,13 @@ export function drawSpellBolts(
 }
 
 /** Live counts. Tests and nothing else. */
-export function spellFxCounts(): { blasts: number; bolts: number } {
-  return { blasts: blasts.length, bolts: bolts.length };
+export function spellFxCounts(): { blasts: number; bolts: number; fields: number } {
+  return { blasts: blasts.length, bolts: bolts.length, fields: fields.length };
 }
 
 /** Wipe every effect — used when travelling, and by the tests. */
 export function clearSpellFx(): void {
   blasts.length = 0;
   bolts.length = 0;
+  fields.length = 0;
 }
