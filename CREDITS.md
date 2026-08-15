@@ -120,25 +120,31 @@ cropped to the body.
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
-## The human ranks — fourteen men and one woman of the road
+## The human ranks — eighteen men and one woman of the road
 
 `public/mob-beggar-walk.png`, `mob-vagrant-walk.png`, `mob-thief-walk.png`,
 `mob-poacher-walk.png`, `mob-smuggler-walk.png`, `mob-cutthroat-walk.png`,
 `mob-deserter-walk.png`, `mob-brigand-walk.png`, `mob-highwayman-walk.png`,
 `mob-mercenary-walk.png`, `mob-corsair-walk.png`, `mob-amazon-walk.png`,
-`mob-wildWarrior-walk.png`, `mob-hunter-walk.png`, and a body apiece:
+`mob-wildWarrior-walk.png`, `mob-hunter-walk.png`, `mob-gladiator-walk.png`,
+`mob-barbarian-walk.png`, `mob-raider-walk.png`, `mob-warlord-walk.png`,
+`mob-chieftain-walk.png`, and a body apiece:
 `mob-beggar-dead.png`, `mob-vagrant-dead.png`, `mob-thief-dead.png`,
 `mob-poacher-dead.png`, `mob-smuggler-dead.png`, `mob-cutthroat-dead.png`,
 `mob-deserter-dead.png`, `mob-brigand-dead.png`, `mob-highwayman-dead.png`,
 `mob-mercenary-dead.png`, `mob-corsair-dead.png`, `mob-amazon-dead.png`,
-`mob-wildWarrior-dead.png`, `mob-hunter-dead.png`.
+`mob-wildWarrior-dead.png`, `mob-hunter-dead.png`, `mob-gladiator-dead.png`,
+`mob-barbarian-dead.png`, `mob-raider-dead.png`, `mob-warlord-dead.png`,
+`mob-chieftain-dead.png`. Every human in the bestiary is here; the dragon is the
+only monster still on a placeholder, and LPC has no dragon to give it.
 
 All of them are composed from the same **Universal LPC Spritesheet Character
 Generator** as the player and the bandit, under the same licences as the layers
-listed above. Thirteen share one body base (`Body_Color_light`) and one head
+listed above. Seventeen share one body base (`Body_Color_light`) and one head
 (`Human_Male_light`) with the player himself — they are men of the same island,
 and only the clothing, the beard and the weapon tell one rank from the next.
-The mercenary is built on the `muscular` base and the amazon on the female one.
+The mercenary and the barbarian are built on the `muscular` base and the amazon
+on the female one.
 
 Reproducible character configurations:
 
@@ -170,6 +176,16 @@ Reproducible character configurations:
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Curly_long_dark_gray&shoulders=Legion_steel&armour=Legion_steel&legs=Armour_steel&shoes=Armour_steel&weapon=Arming_Sword_steel>
 - Hunter —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Page2_raven&gloves=Gloves_all.lpcr.mustard&armour=Leather_green&shoes=Basic_Boots_forest&legs=Shorts_forest&weapon=Crossbow_crossbow>
+- Gladiator —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hat=Greathelm_steel&armour=Plate_steel&arms=Armour_steel&legs=Armour_steel&shoes=Armour_steel&gloves=Gloves_steel&shield=Round_Shield_black&weapon=Halberd_halberd>
+- Barbarian —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Dreadlocks_short_green&facial_mask=Plain_Mask_red&gloves=Gloves_all.lpcr.emerald&wrists=Cuffs_red&shoulders=Pauldrons_forest&legs=Legion_skirt_red&shoes=Sandals_green&shield=Heater_Shield_Base_all.lpcr.green&weapon=Spear_red>
+- Raider —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Parted_2_black&hat=Barbarian_Viking_bronze&chainmail=Chainmail_bronze&gloves=Gloves_bronze&shoes=Armour_bronze&legs=Armour_bronze&shield=Spartan_Shield_spartan&weapon=Saber_saber>
+- Warlord —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Parted_2_black&gloves=Gloves_silver&shoes=Armour_silver&legs=Armour_silver&weapon=Longsword_longsword&shield=Plus_shield_plus&armour=Plate_silver&arms=Armour_silver&shoulders=Mantal_tan&hat=Horned_helmet_silver>
+- Chieftain —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Bedhead_red&hat=Close_helm_copper&visor=Horned_visor_silver&accessory=Centurion_Plumage_slate&shoes=Armour_copper&legs=Armour_silver&armour=Legion_copper&ring=Stud_Ring_red&arms=Armour_silver&bauldron=Bauldron_red&shoulders=Epaulets_red&gloves=Gloves_copper&weapon=Longsword_longsword&shield=Crusader_shield_crusader>
 
 Beyond the collections listed under the player, these characters draw on the
 beard, moustache and a long list of hair layers (buzzcut, mop, bob,
@@ -180,9 +196,13 @@ eyepatch, plain leather mask, steel crest and moon earrings; the cardigan,
 longsleeve, shortsleeve, sleeveless, frock coat, backpack, legion armour and
 shoulders, leather armour, legion skirt, cuffed, formal, striped formal and
 plain trousers, shorts and leggings; the ghillie, basic shoe, basic boot and
-armour footwear; the bronze and mustard gloves; and the dagger, iron hammer,
-slingshot, medium and steel spear, saber, arming sword and crossbow weapon
-layers of the ULPC project. The generator's own credits export is authoritative
+armour footwear and sandals; the bronze, mustard, steel, silver, copper and
+emerald gloves; the greathelm, close helm, horned helm, horned visor, viking
+helm, centurion plumage, epaulets, bauldron, mantle, pauldrons, cuffs and stud
+ring; the steel, silver and copper plate, legion and chainmail armour; the
+round, heater, spartan, plus and crusader shields; and the dagger, iron hammer,
+slingshot, medium, steel and red spear, saber, arming sword, longsword, halberd
+and crossbow weapon layers of the ULPC project. The generator's own credits export is authoritative
 for the per-layer author list.
 
 From each export only the walk block was kept — rows 8-11 (up, left, down,
@@ -191,7 +211,8 @@ shared by every frame, symmetric about the source cell's centre line (see
 `src/gfx/mobSheet.ts`). No pixel was repainted in any walk frame. Frame sizes:
 32x53 beggar, 32x49 vagrant, 32x52 thief, 46x56 poacher, 40x55 smuggler,
 54x49 cutthroat, 40x50 deserter, 64x52 brigand, 40x50 highwayman,
-64x54 mercenary, 50x53 corsair, 46x50 amazon, 58x51 wild warrior, 44x49 hunter.
+64x54 mercenary, 50x53 corsair, 46x50 amazon, 58x51 wild warrior, 44x49 hunter,
+64x51 gladiator, 64x52 barbarian, 50x53 raider, 64x56 warlord, 64x59 chieftain.
 The widths are the weapons: a levelled spear fills the whole 64px cell, a hammer
 held out sideways takes 54, and the poacher's height is his hat feather.
 
@@ -208,15 +229,20 @@ cut: the deserter's and smuggler's and highwayman's daggers, the hunter's
 crossbow, the ends of the brigand's and mercenary's spears. The corsair's saber
 came to rest under his own hand, where a straight cut would have taken the hand
 with it, so it was lifted out by colour instead — the two greys the blade is
-painted in appear nowhere else on that frame. Nothing was added, and gear still
-tangled with the body was left alone: the wild warrior's sword under his hand,
-and the length of spear the two spearmen came to rest on.
+painted in appear nowhere else on that frame. The last five ranks die holding
+two things apiece, a weapon and a shield, and both fall beside them: all five
+were cut back to the body's own edge. Nothing was added, and gear still tangled
+with the body was left alone — the wild warrior's sword under his hand, the
+length of spear the two spearmen came to rest on, and the few pixels of shield
+and blade that overlap the outlines of the top five. Those five could not be
+lifted by colour: their shields are painted in the same palette as their
+armour, so a colour lift would have taken the corpse with it.
 
 > **TODO before release:** download "Credits (CSV)" from the generator for each
-> of these fourteen configurations and paste the per-layer author lists here.
+> of these nineteen configurations and paste the per-layer author lists here.
 > The URLs reproduce the characters, but a URL is not an attribution.
 
-**ShareAlike:** these twenty-eight files are derivative works of CC-BY-SA 3.0
+**ShareAlike:** these thirty-eight files are derivative works of CC-BY-SA 3.0
 artwork and are themselves published under **CC-BY-SA 3.0**. They must stay
 publicly available on those terms even if this repository is later made private.
 

@@ -701,6 +701,10 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "steelLegs", chance: 0.25, n: [1, 1] },
       { kind: "steelBoots", chance: 0.25, n: [1, 1] },
       { kind: "steelShield", chance: 0.25, n: [1, 1] },
+      // He is drawn with a longsword, and the item that matches it is the
+      // Knight's Longsword — which he must not drop. The Knight set is the
+      // one tier in the game that is never loot: it is bought and dug up, and
+      // that is what makes it feel earned rather than rolled. The maul stays.
       { kind: "steelMaul", chance: 0.12, n: [1, 1] },
     ],
   },

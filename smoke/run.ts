@@ -2861,7 +2861,8 @@ async function main(): Promise<void> {
 
     const RANKS = ["beggar", "vagrant", "thief", "poacher", "smuggler", "cutthroat",
       "deserter", "brigand", "highwayman", "mercenary", "corsair", "amazon",
-      "wildWarrior", "hunter"];
+      "wildWarrior", "hunter", "gladiator", "barbarian", "raider", "warlord",
+      "chieftain"];
 
     for (const kind of RANKS) {
       const walk = `mob-${kind}-walk.png`;
@@ -2884,26 +2885,22 @@ async function main(): Promise<void> {
       ok(corpseSprite(kind) === null, "…and so does the body");
     }
 
-    // Fourteen men in the same clothes would be one monster wearing fourteen
+    // Nineteen men in the same clothes would be one monster wearing nineteen
     // labels. The ranks are told apart by dress, so no two bodies may be the
     // same file.
     const bodies = new Set(RANKS.map((k) => `mob-${k}-dead.png`));
     ok(bodies.size === RANKS.length, "no two ranks share a corpse — the clothing IS the rank");
 
-    // Five human ranks are still waiting for artwork, and the dragon is not a
-    // man at all. Every human def keeps `spr: SPR.humanFoe` as its fallback
-    // even after its sheet lands, so what separates the two groups is whether
-    // a sheet is registered — not the bake. Pin the list: when one of them
-    // gets a sheet, this line remembers that the credits change with it.
-    const WAITING = ["gladiator", "barbarian", "raider", "warlord", "chieftain"];
+    // Every human in the bestiary now has a sheet. The defs keep
+    // `spr: SPR.humanFoe` as the fallback for the moment before the PNG
+    // lands, so what separates "has art" from "waiting" is registration, not
+    // the bake. If a twentieth man is ever added, this is the line that will
+    // notice he went in on the placeholder.
     const onPlaceholder = MONSTER_KINDS.filter((k) =>
-      MONSTER_DEFS[k].spr === MONSTER_DEFS.gladiator.spr
+      MONSTER_DEFS[k].spr === MONSTER_DEFS.beggar.spr
       && !sheetSrc.includes(`${k}: "./mob-${k}-walk.png"`));
-    ok(onPlaceholder.length === WAITING.length
-      && WAITING.every((k) => onPlaceholder.includes(k as never)),
-      `still on the placeholder bake, and only these: ${onPlaceholder.join(", ")}`);
-    ok(!RANKS.some((k) => onPlaceholder.includes(k as never)),
-      "…and no rank that has a sheet is still counted among them");
+    ok(onPlaceholder.length === 0,
+      `no human is left on the placeholder bake (${onPlaceholder.join(", ") || "none"})`);
 
     // The weapon a rank carries has to be the weapon it drops, or the drop
     // reads as a payout rather than as spoils.
@@ -2914,6 +2911,12 @@ async function main(): Promise<void> {
     ok(drops("wildWarrior", "gladius"), "the wild warrior drops a blade, as he carries one");
     ok(!drops("wildWarrior", "warHammer"),
       "…and not the hammer a cutthroat already hands out eleven levels earlier");
+    // The chieftain and the warlord are drawn with longswords, and the item
+    // that matches is the Knight's Longsword — which is exactly the weapon
+    // they must NOT drop. The Knight tier is the one route in the game that
+    // is never loot, and a rank carrying the look of it does not earn it.
+    ok(!drops("chieftain", "knightSword") && !drops("warlord", "knightSword"),
+      "the longsword the top ranks carry stays out of their loot");
     const sword = MONSTER_DEFS.deserter.loot.find((l) => l.kind === "ironSword");
     ok(sword !== undefined && sword.chance >= 0.1,
       "the deserter's sword drops often enough to be worth hunting");
