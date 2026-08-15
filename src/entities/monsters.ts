@@ -805,6 +805,47 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "fireSword", chance: 0.08, n: [1, 1] },
     ],
   },
+
+  // lvl 50, the dragon's opposite number. Same weight class, different fight.
+  //
+  // Where the dragon is a slow wall that fills space with fire, the knight is
+  // a man who CLOSES. He is quicker on his feet, hits marginally harder in the
+  // exchange, and carries the heaviest armor in the bestiary — but his shapes
+  // are narrow. The lightning line is one tile wide and blocked by walls,
+  // where the breath is three wide and pours around them, so terrain that is
+  // useless against the dragon is genuine cover against him, and standing in
+  // the open is the mistake he punishes.
+  //
+  // Storm-resistant, obviously, and grounded through plate: earth goes through
+  // him. Both are the levers a player has once he works out what he is facing.
+  //
+  // Armor is 28, TIED with the dragon rather than above it. 32 was the first
+  // number and the balance-budget test rejected it; the band exists so this
+  // stops being decided by feel, and his identity does not need to rest on
+  // the one stat the curve caps hardest.
+  blackKnight: {
+    spr: SPR.humanFoe, hp: 950, dmg: [44, 112], speed: 68, atkRate: 2.0, exp: 880, gold: [80, 190], danger: 0.98, armor: 28, resist: { storm: 0.3, shadow: 0.6, earth: 1.35 },
+    ranged: { range: 300, dmg: [42, 106], color: "#7dd8ff", fx: { el: "storm", tier: 0 }, brute: true }, // arcing bolt
+    spells: [
+      // The ring, for when he is being hugged — same role as the dragon's
+      // Roar and a beat quicker, because he does not have to draw breath.
+      { name: "Thunderclap", element: "storm", tier: 0, shape: "nova", dmg: [32, 84], range: 1.9 * TILE, cooldownS: 6, windupS: 0.22 },
+      // Six tiles in a straight line and the hardest single hit either caster
+      // owns. It can afford to be: one tile wide, and a wall stops it dead.
+      { name: "Chain Lightning", element: "storm", tier: 0, shape: "line", dmg: [40, 100], range: 7 * TILE, cooldownS: 4, windupS: 0.22, depth: 6 },
+    ],
+    respawnS: 600,
+    loot: [
+      { kind: "steel", chance: 0.5, n: [1, 3] },
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "bones", chance: 0.5, n: [2, 4] },
+      // The first REPEATABLE source of the Knight's Longsword, which until now
+      // could only be bought. His armour is deliberately not here: the knight
+      // SET is chest loot, findable exactly once apiece, and turning it into a
+      // farmable drop would undo that on the day this creature gets a lair.
+      { kind: "knightSword", chance: 0.12, n: [1, 1] },
+    ],
+  },
 };
 
 export const MONSTER_KINDS = Object.keys(MONSTER_DEFS) as MonsterKind[];

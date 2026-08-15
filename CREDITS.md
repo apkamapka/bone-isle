@@ -737,6 +737,39 @@ These are drawn as scenery rather than baked into the terrain export: they
 stand taller than the square they occupy, and the player has to be able to walk
 behind them.
 
+## Black Knight — `public/mob-black-knight-walk.png`, `public/mob-black-knight-dead.png`
+
+Source: **Universal LPC Spritesheet Character Generator**, CC-BY-SA 3.0 —
+the same terms, and the same ShareAlike obligation, as every other LPC
+creature in this project. See the LPC section above for the full attribution
+list and the per-layer note.
+
+Reproducible generator URL (paste it in and the exact character loads):
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_black&head=Human_Male_black&expression=Neutral_black&hair=Cowlick_black&hat=Flattop_all.lpcr.black&accessory=Short_Horns_all.lpcr.black&earring_left=Simple_Earring_Left_black&chainmail=Chainmail_all.lpcr.black&wrists=Lace_Cuffs_black&shoulders=Legion_all.lpcr.black&ring=Stud_Ring_black&arms=Armour_all.lpcr.black&cape_trim=Cape_Trim_black&cape=Solid_black&legs=Armour_all.lpcr.black&shoes=Armour_all.lpcr.black&shield=Kite_kite%20gray&weapon=Longsword_longsword>
+
+Layers used: black body, human male head, neutral expression, cowlick hair,
+flattop helm, short horns, simple left earring, chainmail, lace cuffs, legion
+shoulders, stud ring, plate arms, cape with trim (solid black), plate legs,
+plate shoes, grey kite shield, longsword.
+
+### Cutting method
+
+The standard recipe every LPC creature here uses, unchanged: rows 8-11 of the
+full export are the walk (up, left, down, right, nine frames each) and row 20
+is the death sequence, whose last frame is the corpse. One crop rectangle is
+shared by all thirty-six walk frames and kept symmetric about the source cell's
+centre line, x=32, so the body cannot drift as the cycle plays or as it turns.
+
+The drawn sword reaches both cell edges, so the crop comes out at the cell's
+full width: 64 x 55 per frame, two tiles across. Nothing was recoloured,
+rescaled or redrawn — the generator output is used as exported.
+
+**ShareAlike applies.** This sheet is an adaptation of CC-BY-SA 3.0 artwork and
+is itself CC-BY-SA 3.0; anyone may take it from this repository under those
+terms. The per-layer CSV attribution still owed before release covers these
+layers too.
+
 ## Dragon — `public/mob-dragon-walk.png`, `public/mob-dragon-dead.png`
 
 Source: **CraftPix.net**, standard (non-Enterprise) licence —

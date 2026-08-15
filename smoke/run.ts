@@ -347,7 +347,9 @@ async function main(): Promise<void> {
     const worlds = buildWorlds(WORLD_SEED);
     const wild = worlds.wild;
     populateWorld(wild, WORLD_SEED);
-    ok(wild.monsters.length === 18, `wild fully populated (${wild.monsters.length}/18 — the trimmed surface roster)`);
+    // 18 from the trimmed surface roster + the two TEMP-ETAP28 test specimens
+    // posted at the island's ends. Drops back to 18 when they get real grounds.
+    ok(wild.monsters.length === 20, `wild fully populated (${wild.monsters.length}/20 — roster + 2 test posts)`);
     let minGap = Infinity;
     for (let i = 0; i < wild.monsters.length; i++) {
       for (let j = i + 1; j < wild.monsters.length; j++) {
@@ -625,7 +627,8 @@ async function main(): Promise<void> {
       const { applyMonsterArmor } = await import("../src/systems/combat.ts");
       const armored = Object.values(MONSTER_DEFS).filter((d) => (d.armor ?? 0) > 0);
       ok(armored.length >= 15, `${armored.length} creatures carry an armor rating`);
-      ok(Object.values(MONSTER_DEFS).every((d) => (d.armor ?? 0) <= 28), "no creature's armor exceeds the dragon's");
+      ok(Object.values(MONSTER_DEFS).every((d) => (d.armor ?? 0) <= 28),
+        "28 is the armor ceiling, shared by the dragon and the black knight");
       ok((MONSTER_DEFS.dragon.armor ?? 0) > (MONSTER_DEFS.goblin.armor ?? 0), "armor tracks the difficulty ladder");
       ok((MONSTER_DEFS.snake.armor ?? 0) === 0, "a bare-scaled creature wears none");
       const m = { kind: "dragon" } as never;
@@ -1465,8 +1468,9 @@ async function main(): Promise<void> {
     const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S, TILE } = await import("../src/config.ts");
     const { killMonster } = await import("../src/systems/combat.ts");
     // Etap 20 added the human ladder: 18 fantastic kinds plus 19 people
-    // running from beggar to chieftain, all still on the shared placeholder.
-    ok(MONSTER_KINDS.length === 37, `bestiary holds 37 kinds (18 + 19 humans), got ${MONSTER_KINDS.length}`);
+    // running from beggar to chieftain. Etap 28 added the black knight, the
+    // twentieth man and the first one who is not on the ladder at all.
+    ok(MONSTER_KINDS.length === 38, `bestiary holds 38 kinds (18 + 20 humans), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -1481,7 +1485,7 @@ async function main(): Promise<void> {
     // provoke one and then retreat. What must hold: an UNPROVOKED monster never
     // attacks from beyond aggro, whatever its own range.
     const shooters = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].ranged);
-    ok(shooters.length === 8, `eight distance fighters in the bestiary, got ${shooters.length}`);
+    ok(shooters.length === 9, `nine distance fighters in the bestiary, got ${shooters.length}`);
     ok(MONSTER_AGGRO_RANGE === 6 * TILE, "aggro range is a tight 6 tiles");
     {
       // the minotaur archer's reach is 300 px (9.4 tiles) — well past aggro (192).
@@ -1509,8 +1513,10 @@ async function main(): Promise<void> {
     const dragon = MONSTER_DEFS.dragon;
     ok(dragon.hp === 1000 && dragon.exp === 900, "dragon is the 1000 hp / 900 exp boss");
     ok((dragon.respawnS ?? 0) >= 600, "the dragon's lair refills on a long clock");
-    ok(MONSTER_KINDS.every((k) => (MONSTER_DEFS[k].respawnS ?? MONSTER_RESPAWN_S) === (k === "dragon" ? 600 : MONSTER_RESPAWN_S)),
-      "only the dragon overrides the standard respawn");
+    const slowRespawn = new Set(["dragon", "blackKnight"]);
+    ok(MONSTER_KINDS.every((k) => (MONSTER_DEFS[k].respawnS ?? MONSTER_RESPAWN_S)
+      === (slowRespawn.has(k) ? 600 : MONSTER_RESPAWN_S)),
+      "only the two top-of-curve creatures override the standard respawn");
     for (const rare of ["dragonShield", "fireSword", "dragonBody"] as const) {
       const only = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].loot.some((e) => e.kind === rare));
       ok(only.length === 1 && only[0] === "dragon", `${rare} drops from the dragon alone`);
@@ -2898,7 +2904,11 @@ async function main(): Promise<void> {
     // notice he went in on the placeholder.
     const onPlaceholder = MONSTER_KINDS.filter((k) =>
       MONSTER_DEFS[k].spr === MONSTER_DEFS.beggar.spr
-      && !sheetSrc.includes(`${k}: "./mob-${k}-walk.png"`));
+      // Registered, not named a particular way. The old form demanded the file
+      // be `mob-${k}-walk.png`, which multi-word kinds have never obeyed —
+      // demonSkeleton has always loaded mob-demon-skeleton-walk.png — so it
+      // only ever worked by accident, on the kinds that are one word long.
+      && !sheetSrc.includes(`${k}: "./mob-`));
     ok(onPlaceholder.length === 0,
       `no human is left on the placeholder bake (${onPlaceholder.join(", ") || "none"})`);
 
@@ -4411,9 +4421,25 @@ async function main(): Promise<void> {
     ok(guardDrops >= 5, `each piece rolls independently (${guardDrops} separate entries)`);
 
     /* --- the Knight set is the one route that is NOT a drop --- */
+    const { ITEMS } = await import("../src/items.ts");
+    // What is guarded is the knight's GEAR, excluded by slot rather than by a
+    // name exception. The old form matched the "knight" prefix and so also
+    // swept in knightSword, which the black knight now drops on purpose.
+    //
+    // Excluding by slot rather than by `set: "knight"` is deliberate: no
+    // shield in the game carries a set tag — that is consistent across all
+    // eleven of them, sets are the four armour slots — so keying on the tag
+    // would have quietly stopped guarding knightShield.
+    const knightSet = (Object.keys(ITEMS) as (keyof typeof ITEMS)[])
+      .filter((id) => String(id).startsWith("knight")
+        && (ITEMS[id] as { slot?: string }).slot !== "weapon");
+    ok(knightSet.length === 5,
+      `the knight's gear is five pieces, sword aside (${knightSet.length})`);
+    ok(knightSet.includes("knightShield" as never), "…the shield among them");
     let knightInLoot = false;
     for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
-      if ((MONSTER_DEFS[k].loot as { kind: string }[]).some((e) => e.kind.startsWith("knight"))) knightInLoot = true;
+      if ((MONSTER_DEFS[k].loot as { kind: string }[])
+        .some((e) => knightSet.includes(e.kind as never))) knightInLoot = true;
     }
     ok(!knightInLoot, "no creature drops a piece of the Knight set — the chests are its only source");
   }
@@ -5113,6 +5139,114 @@ async function main(): Promise<void> {
     X.drawSpellBolts(rec3, worldsFx.town, 0, 0);
     ok(calls.length === 0, "a bolt over Home Isle draws nothing over Town");
     X.clearSpellFx();
+  }
+
+  console.log("the Black Knight (lightning, and where the two casters stand):");
+  {
+    const MS = await import("../src/systems/monsterSpells.ts");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const { groundBlocked } = await import("../src/world/collision.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const D = MONSTER_DEFS.blackKnight;
+
+    // --- weight class: he is the dragon's opposite number, not its junior ---
+    const drg = MONSTER_DEFS.dragon;
+    ok(D.hp > drg.hp * 0.85 && D.hp < drg.hp * 1.15, "he stands in the dragon's weight class");
+    ok(D.exp > drg.exp * 0.85, "…and pays out like it");
+    ok(D.speed > drg.speed, "…but closes faster, being a man and not a lizard");
+    ok(D.armor === drg.armor, "…behind armor tied with the dragon's, at the curve's ceiling");
+    ok(D.resist!.storm! < 1, "his own element barely touches him");
+    ok(D.resist!.earth! > 1, "…and the ground he is armoured against goes through him");
+    ok(D.ranged!.fx!.el === "storm", "his jab arcs rather than flies");
+    ok(D.spells!.every((x) => x.element === "storm"), "every spell he owns is lightning");
+    ok(D.spells!.every((x) => x.tier === 0), "…all of it tier 1");
+    ok(D.spells!.map((x) => x.shape).join(",") === "nova,line",
+      "…shaped as a ring for the clinch and a line for the room");
+
+    // the longsword had no drop source at all before him — only a shop shelf
+    ok(D.loot!.some((l) => l.kind === "knightSword"), "he drops the longsword he carries");
+    const others = (Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[])
+      .filter((k) => k !== "blackKnight")
+      .filter((k) => (MONSTER_DEFS[k].loot ?? []).some((l) => l.kind === "knightSword"));
+    ok(others.length === 0,
+      `…and nothing else in the bestiary does (${others.join(",") || "none"})`);
+    ok(!D.loot!.some((l) => String(l.kind).startsWith("knight") && l.kind !== "knightSword"),
+      "his ARMOUR is not farmable — the knight set stays chest loot");
+
+    // --- the line: narrow, long, and stopped by walls ---
+    const ws2 = buildWorlds(WORLD_SEED);
+    const w2 = ws2.home;
+    const bolt = D.spells!.find((x) => x.shape === "line")!;
+    let ax = -1;
+    let ay = -1;
+    outer2: for (let ty = 4; ty < w2.h - 4; ty++) {
+      for (let tx = 4; tx < w2.w - 12; tx++) {
+        let clear = true;
+        // a bolt needs a clear RUN, not a clear plaza: the caster's tile plus
+        // seven east, one row deep
+        for (let r = 0; r <= 7; r++) {
+          if (groundBlocked(w2, tx + r, ty)) { clear = false; break; }
+        }
+        if (clear) { ax = tx; ay = ty; break outer2; }
+      }
+    }
+    ok(ax > 0, "found a clear run to fire a bolt down");
+    const ln = MS.spellFootprint(w2, bolt, ax, ay, ax + 6, ay);
+    ok(ln.length === 6, "the bolt is six tiles long");
+    ok(ln.every((t) => t.ty === ay), "…and exactly one tile wide, unlike a breath");
+    ok(ln.every((t) => t.tx > ax), "…all of it in front of him");
+    ok(!ln.some((t) => t.tx === ax && t.ty === ay), "…and none of it under him");
+    const near = ln.find((t) => t.tx === ax + 1)!.delay;
+    const far = ln.find((t) => t.tx === ax + 6)!.delay;
+    ok(far > near, "the far end lands after the near, so it reads as travelling");
+    const breath2 = MONSTER_DEFS.dragon.spells!.find((x) => x.shape === "cone")!;
+    const cone2 = MS.spellFootprint(w2, breath2, ax, ay, ax + 4, ay);
+    ok(cone2.filter((t) => t.tx === ax + 2).length
+      > ln.filter((t) => t.tx === ax + 2).length,
+      "a breath is wider than a bolt at the same distance");
+    ok(ln.length > cone2.filter((t) => t.ty === ay).length,
+      "…and a bolt reaches further along its own axis than a breath does");
+
+    // A wall is cover against lightning and is NOT cover against fire. That
+    // asymmetry is most of what separates the two casters, so it is pinned.
+    let bx = -1;
+    let by = -1;
+    for (let r = 1; r <= 6 && bx < 0; r++) {
+      if (groundBlocked(w2, ax + r, ay)) { bx = ax + r; by = ay; }
+    }
+    if (bx < 0) {
+      // no wall on that ray in this world — build the case by aiming into the
+      // map edge instead, which groundBlocked treats identically
+      const edge = MS.spellFootprint(w2, bolt, 1, ay, -6, ay);
+      ok(edge.length <= 1, "a bolt fired at the map edge stops at it");
+    } else {
+      const stopped = MS.spellFootprint(w2, bolt, ax, ay, bx + 2, by);
+      ok(!stopped.some((t) => t.tx >= bx), "a bolt stops at the first thing it cannot pass");
+      const through = MS.spellFootprint(w2, breath2, ax, ay, bx + 2, by);
+      ok(through.some((t) => t.tx > bx), "…while a breath pours around it");
+    }
+
+    // --- TEMP-ETAP28: both specimens actually reach the Wildlands ---
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds, WORLD_SEED);
+    const wild = worlds.wild;
+    const dr = wild.monsters.filter((m) => m.kind === "dragon");
+    const bk = wild.monsters.filter((m) => m.kind === "blackKnight");
+    ok(dr.length === 1, `exactly one dragon stands on the Wildlands (got ${dr.length})`);
+    ok(bk.length === 1, "…and exactly one black knight");
+    // `spawnAtPost` falls back to nearby ground when the exact tile is water or
+    // rock, so what is pinned is the HALF of the island, not the coordinate.
+    ok(dr[0].ty < wild.h / 2, "the dragon is on the northern half");
+    ok(bk[0].ty > wild.h / 2, "the knight is on the southern half");
+    ok(Math.abs(dr[0].ty - bk[0].ty) > wild.h / 3,
+      "…far enough apart that neither wanders into the other's fight");
+    ok(!wild.solid[dr[0].ty][dr[0].tx] && !wild.solid[bk[0].ty][bk[0].tx],
+      "both landed on ground a creature can actually stand on");
+    ok(dr[0].hr !== undefined && bk[0].hr !== undefined,
+      "…and both are leashed to their post rather than roaming the island");
+    // the surface roster is untouched by them
+    ok(wild.monsters.filter((m) => m.kind === "bandit").length > 0,
+      "the ordinary Wildlands roster still spawns alongside");
   }
 
   console.log("walk cadence (a stride is a gait, not a frame count):");

@@ -171,6 +171,53 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ItemKind[]
 const HOARD_GUARDS: Readonly<Partial<Record<WorldKey, Partial<Record<MonsterKind, number>>>>> = {
   bastion2: { minotaurGuard: 2, minotaurMage: 1 },
 };
+/**
+ * TEMP-ETAP28: single specimens parked on the open Wildlands for playtesting.
+ *
+ * Both of these are top-of-the-curve creatures with no hunting grounds of
+ * their own yet — the dragon nests two descents down and the knight has
+ * nowhere at all — so there is no way to fight either one repeatedly without
+ * clearing a cave first. Posting one of each at opposite ends of the surface
+ * island makes them reachable in a minute from the dock, and keeps them far
+ * enough apart that neither wanders into the other's fight.
+ *
+ * Deliberately NOT in `POPULATIONS`: that table is the danger-band roster and
+ * scatters its creatures across the whole map by distance from the beach,
+ * which is exactly what is not wanted here.
+ *
+ * The post is stated as a COMPASS SIDE rather than a coordinate. The Wildlands
+ * is procedural and radial, so no fixed tile is guaranteed to be land — the
+ * first attempt at this put the dragon at (52,11) and dropped it in the sea,
+ * where it silently failed to spawn at all. `edgePost` walks the island's
+ * spine instead and finds real ground, which also survives a change of seed.
+ *
+ * Grep TEMP-ETAP28 to pull both when they get proper grounds.
+ */
+const TEST_POSTS: Readonly<Partial<Record<string, readonly {
+  kind: MonsterKind; side: "north" | "south";
+}[]>>> = {
+  wild: [
+    { kind: "dragon", side: "north" },
+    { kind: "blackKnight", side: "south" },
+  ],
+};
+
+/**
+ * A tile near the north or south end of a map's central column, a few steps
+ * inland from the coast so the creature is not standing in the surf.
+ */
+function edgePost(w: World, side: "north" | "south"): { tx: number; ty: number } {
+  const tx = Math.floor(w.w / 2);
+  const step = side === "north" ? 1 : -1;
+  const from = side === "north" ? 0 : w.h - 1;
+  for (let ty = from; ty >= 0 && ty < w.h; ty += step) {
+    if (w.solid[ty]?.[tx] === false && (w.tile[ty]?.[tx] ?? 0) > 0) {
+      return { tx, ty: Math.min(w.h - 1, Math.max(0, ty + step * 3)) };
+    }
+  }
+  return { tx, ty: Math.floor(w.h / 2) };
+}
+
 const DANGER_KEYS = Object.keys(POPULATIONS) as DangerKey[];
 
 /** Stable per-key salt so each world's RNG stream is its own. */
@@ -328,6 +375,14 @@ export function populateWorld(w: World, seed = WORLD_SEED): void {
       spawnMonster(w, kind, undefined, crowded);
       guard++;
     }
+  }
+
+  // Test specimens last, so they are never displaced by the roster or by the
+  // density top-up above — both of those fill space and would happily park a
+  // bandit on the tile the dragon was meant to stand on.
+  for (const post of TEST_POSTS[w.key] ?? []) {
+    const at = edgePost(w, post.side);
+    spawnAtPost(w, post.kind, at.tx, at.ty);
   }
 
   // the Marrow chest's elite guard detail, posted around the hoard

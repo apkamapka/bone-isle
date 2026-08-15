@@ -35,6 +35,12 @@
  *   bolt   one tile, under the target. The jab, promoted to real artwork.
  *   cone   a breath: rows fanning out from the caster toward the target,
  *          each row lighting a beat after the one in front of it.
+ *   line   a bolt: one tile wide, reaching further than a cone and arriving
+ *          faster, and — unlike every other shape — STOPPED by anything it
+ *          cannot pass. A cone skips a blocked tile and carries on behind it,
+ *          which is right for a spreading gas and wrong for a discharge. Walls
+ *          are cover against lightning and are not cover against fire, and
+ *          that difference is most of what separates the two casters.
  *   field  a plus of tiles that KEEPS BURNING after the cast, hurting anyone
  *          who stands in it. The only shape that outlives its own animation.
  *   nova   the eight tiles touching the caster. The answer to being hugged.
@@ -51,7 +57,7 @@ import { rndi } from "../util.ts";
 import type { Monster, World } from "../world/types.ts";
 
 /** The four footprints a monster can throw. */
-export type SpellShape = "bolt" | "cone" | "field" | "nova";
+export type SpellShape = "bolt" | "cone" | "line" | "field" | "nova";
 
 export interface MonsterSpell {
   /** Shown in the float text when it lands, so a player can name what hit. */
@@ -74,7 +80,7 @@ export interface MonsterSpell {
    * all, just damage appearing out of a creature that never paused.
    */
   windupS: number;
-  /** cone: how many rows deep. Ignored by the other shapes. */
+  /** cone/line: how many tiles deep. Ignored by the other shapes. */
   depth?: number;
   /** field: how long each tile burns, seconds. */
   fieldS?: number;
@@ -189,6 +195,22 @@ export function spellFootprint(
     case "field":
       for (const [ox, oy] of PLUS) push(toTx + ox, toTy + oy, 0);
       break;
+    case "line": {
+      const [dx, dy] = step8(fromTx, fromTy, toTx, toTy);
+      const reach = Math.max(1, spell.depth ?? 5);
+      for (let r = 1; r <= reach; r++) {
+        const tx = fromTx + dx * r;
+        const ty = fromTy + dy * r;
+        // The one shape that stops rather than skipping. `push` would quietly
+        // drop the blocked tile and keep painting past it, which would let a
+        // bolt reach through a wall and hit someone in the next room.
+        if (groundBlocked(w, tx, ty)) break;
+        // Tighter than a cone's 0.07: lightning crosses the room, it does not
+        // roll across it.
+        push(tx, ty, (r - 1) * 0.03);
+      }
+      break;
+    }
     case "cone": {
       const [dx, dy] = step8(fromTx, fromTy, toTx, toTy);
       // Perpendicular in the same eight-way space. For a diagonal breath this

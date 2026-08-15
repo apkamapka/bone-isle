@@ -241,7 +241,11 @@ export type MonsterKind =
   // The first caster proper: it charges, breathes, and leaves the ground on
   // fire. Not a boss — a strong monster that happens to sit at the top of the
   // curve today, and will have company above it later.
-  | "dragon";
+  | "dragon"
+  // …and here is that company. A man in black plate who fights the dragon's
+  // fight with lightning instead of fire: narrower shapes, shorter cooldowns,
+  // and legs fast enough to close the gap the dragon has to lumber across.
+  | "blackKnight";
 
 /** A live monster instance. */
 export interface Monster {

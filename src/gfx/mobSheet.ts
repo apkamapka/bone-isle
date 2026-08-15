@@ -134,6 +134,7 @@ const SHEET_SRC: Record<string, string> = {
   skeletonWarrior: "./mob-skeleton-warrior-walk.png",
   demonSkeleton: "./mob-demon-skeleton-walk.png",
   dragon: "./mob-dragon-walk.png",
+  blackKnight: "./mob-black-knight-walk.png",
   "npc:smith": "./npc-smith.png",
   "npc:herbalist": "./npc-herbalist.png",
   "npc:elder": "./npc-elder.png",
@@ -209,6 +210,7 @@ const CORPSE_SRC: Record<string, string> = {
   minotaurGuard: "./mob-minotaur-dead.png",
   minotaurMage: "./mob-minotaur-dead.png",
   dragon: "./mob-dragon-dead.png",
+  blackKnight: "./mob-black-knight-dead.png",
 };
 
 /** Loaded bodies, keyed by URL — four kinds share one file, one fetch. */
