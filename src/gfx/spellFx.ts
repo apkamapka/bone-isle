@@ -62,7 +62,10 @@ const SCALE: Readonly<Record<FxSlot, number>> = {
   hit: 1.35,
   wave: 1.4,
   nova: 1.4,
-  field: 1.3,
+  // Under one tile on purpose, and the only slot that is. Every other effect
+  // is a moment and can spill past its square; a field PERSISTS, five at a
+  // time, around a player who has to keep reading the fight through them.
+  field: 1.05,
 };
 
 /** How bright the baked halo is drawn behind the artwork. */
@@ -126,6 +129,9 @@ const fields: Field[] = [];
 
 /** How much of a field's life is spent fading out. */
 const FIELD_FADE = 0.2;
+
+/** A field's share of the usual glow — see `drawField`. */
+const FIELD_GLOW = 0.45;
 
 /** How fast a bolt crosses the map, px/s. Matches the arrow so a fireball and
  *  an arrow fired at the same creature arrive together. */
@@ -307,7 +313,12 @@ export function spellBlastDrawables(world: World): SpellDrawable[] {
   const out: SpellDrawable[] = [];
   for (const f of fields) {
     if (f.world !== world) continue;
-    out.push({ x: f.x, y: f.y, fn: (v, cx, cy) => drawField(v, f, cx, cy) });
+    // Sorted on the tile's TOP edge, not its centre. A field is ground: a
+    // creature standing in one has to draw over it, and at the centre the two
+    // tie and the flame wins, which buried the player under his own square.
+    // Half a tile of bias is enough to lose every tie and changes nothing
+    // about how a field orders against the tiles around it.
+    out.push({ x: f.x, y: f.y - TILE / 2, fn: (v, cx, cy) => drawField(v, f, cx, cy) });
   }
   for (const b of blasts) {
     if (b.world !== world || b.t < 0) continue;
@@ -343,7 +354,10 @@ function drawField(
   const top = sheet.grounded ? sy + TILE / 2 - size : sy - size / 2;
   const gs = size * sheet.glowScale;
   vctx.globalCompositeOperation = "lighter";
-  vctx.globalAlpha = GLOW_ALPHA * fade;
+  // Dimmer than a blast's. A blast's glow is on screen for a third of a
+  // second; a field's is there for eight, and at full strength five of them
+  // washed out everything standing between them.
+  vctx.globalAlpha = GLOW_ALPHA * FIELD_GLOW * fade;
   vctx.drawImage(sheet.glow[i], leftPx + size / 2 - gs / 2, top + size / 2 - gs / 2, gs, gs);
   vctx.globalCompositeOperation = "source-over";
   vctx.globalAlpha = fade;

@@ -274,18 +274,26 @@ export function resetShieldWindow(): void {
  *
  * Returns true if this killed them.
  */
-export function hurtPlayer(world: World, p: Player, raw: number): boolean {
+export function hurtPlayer(
+  world: World, p: Player, raw: number, elemental = false,
+): boolean {
   if (p.dead) return false;
   const now = performance.now() / 1000;
   shieldBlockTimes = shieldBlockTimes.filter((t) => now - t < SHIELD_BLOCK_WINDOW_S);
-  const blocked = shieldBlockTimes.length < SHIELD_BLOCK_MAX;
+  // Elemental damage lands whole: no shield, no armor, no block training.
+  // This is the mirror of the rule the player already fights under — a
+  // crystal goes "straight past its armor", and that bypass is the entire
+  // reason to carry one. A dragon's fire had been running the full defence
+  // pipeline, which is why a field rolling 14-30 was showing up as -4 and
+  // reading as harmless. A shield cannot be raised against a burning floor.
+  const blocked = !elemental && shieldBlockTimes.length < SHIELD_BLOCK_MAX;
   if (blocked) shieldBlockTimes.push(now);
 
   const fromShield = blocked ? rollShieldBlock(p.eq) : 0;
   const afterShield = raw - fromShield;
   // A hit stopped dead by the shield never reaches the armour, exactly as in
   // Tibia — which is also why the two layers must not be summed.
-  const fromArmor = afterShield > 0 ? rollArmorReduction(defenseArmor(p.eq)) : 0;
+  const fromArmor = !elemental && afterShield > 0 ? rollArmorReduction(defenseArmor(p.eq)) : 0;
   const reduced = fromShield + fromArmor;
   const dmg = Math.max(0, Math.round(raw - reduced));
   p.hp -= dmg;

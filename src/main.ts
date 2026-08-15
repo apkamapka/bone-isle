@@ -2025,8 +2025,12 @@ function update(dt: number): void {
   // deliberately the same `hurtPlayer` the melee exchange uses — elemental
   // damage ignores armor on its own, inside the damage roll.
   updateMonsterSpells(world, dt, { tx: P.tx, ty: P.ty, dead: P.dead }, (dmg, el, name) => {
-    hurtPlayer(world, P, dmg);
-    addFloat(world, P.x, P.y - 26, name, ELEMENT_COLOR[el]);
+    hurtPlayer(world, P, dmg, true);
+    // Only the discrete hits announce themselves. The per-second burn passes
+    // `null`: it already draws a number every tick, and stacking the word
+    // "burning" on top of it once a second buried the player under his own
+    // damage log while he was standing in a fire he can plainly see.
+    if (name) addFloat(world, P.x, P.y - 26, name, ELEMENT_COLOR[el]);
   });
 
   tickRegrowth(world, dt, P.x, P.y, true);
@@ -2092,6 +2096,20 @@ function resolveTarget(): void {
 }
 
 /* ---------------- render ---------------- */
+
+/**
+ * How wide a creature's shadow is, when the default 16 is wrong.
+ *
+ * Hand-tuned per kind, the same arrangement the buildings use, and for the
+ * same reason: the number that looks right is the width of what actually
+ * TOUCHES the ground, which no sprite dimension reports. The dragon's frame
+ * is 160 px across, but most of that is tail and wing — half of it is over
+ * the animal's four planted feet, and deriving the shadow from frame width
+ * would put it under the tail as well.
+ */
+const MOB_SHADOW: Readonly<Record<string, number>> = {
+  dragon: 40,
+};
 
 function drawShadow(x: number, y: number, w = 16): void {
   vctx.fillStyle = "rgba(0,0,0,.22)";
@@ -2534,7 +2552,7 @@ function render(): void {
     const bob = walk ? 0 : Math.sin(m.bob) * 3;
     const spr = walk ?? m.spr;
     drawList.push({ y: m.y, fn: () => {
-      drawShadow(m.x, m.y);
+      drawShadow(m.x, m.y, MOB_SHADOW[m.kind]);
       vctx.globalAlpha = m.hurtT > 0 && Math.sin(m.hurtT * 60) > 0 ? 0.5 : 1;
       drawSprite(spr, m.x, m.y, 1, bob);
       vctx.globalAlpha = 1;

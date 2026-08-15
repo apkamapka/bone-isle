@@ -5350,12 +5350,18 @@ async function main(): Promise<void> {
     X.clearSpellFx();
     ok(X.spellFxCounts().fields === 0, "clearSpellFx puts every fire out");
 
-    // a field joins the depth sort like any other ground effect
+    // A field joins the depth sort, but half a tile HIGHER than a blast on
+    // the same square: it is ground, and anything standing in it must draw
+    // over it. Without the bias the two tie on the tile centre and a player
+    // standing in five fields disappears behind his own square.
     X.clearSpellFx();
     X.addField(w, 10, 10, "fire", 0, 3);
+    X.addBlast(w, 10, 10, "fire", 0, "burst", 0);
     const fd = X.spellBlastDrawables(w);
-    ok(fd.length === 1 && fd[0].y === 10 * TILE + TILE / 2,
-      "a field sorts on its tile centre, exactly as a blast does");
+    ok(fd.length === 2, "a field and a blast on one tile are both drawable");
+    ok(fd[0].y === 10 * TILE, "the field sorts on its tile's top edge");
+    ok(fd[1].y === 10 * TILE + TILE / 2, "…and the blast still sorts on the centre");
+    ok(fd[0].y < fd[1].y, "…so the field is always the one underneath");
     const rec4 = new Proxy({}, {
       get(_t, prop) { return () => { void prop; }; },
       set() { return true; },
@@ -5363,6 +5369,52 @@ async function main(): Promise<void> {
     fd[0].fn(rec4, 0, 0);
     ok(true, "…and paints without a real canvas");
     X.clearSpellFx();
+
+    // --- the regression that mattered ---
+    // The spell attempt has to sit ABOVE the melee branch in `updateMonsters`,
+    // which ends in an unconditional `continue`. With the two the wrong way
+    // round — which is how this shipped once — a creature standing next to the
+    // player never reached its own spell list, so hugging the dragon meant paw
+    // swings and nothing else, while every fire it owned sat off cooldown.
+    // Driving the real AI is the only way to catch that; testing
+    // `spellFootprint` in isolation passes either way.
+    const { updateMonsters } = await import("../src/entities/monsters.ts");
+    MS.clearMonsterSpells();
+    MS.resetMonsterSpellClock();
+    X.clearSpellFx();
+    drag.tx = ox; drag.ty = oy;
+    drag.x = ox * TILE + TILE / 2; drag.y = oy * TILE + TILE / 2;
+    drag.spellCd = undefined;
+    drag.atkCd = 0;
+    drag.aggroT = 99;
+    // one tile east: as close as the player can physically stand
+    const adj = {
+      x: (ox + 1) * TILE + TILE / 2, y: oy * TILE + TILE / 2,
+      tx: ox + 1, ty: oy, dead: false,
+    };
+    updateMonsters(w, 0.05, adj, () => {});
+    ok(MS.isCasting(drag), "a dragon standing next to the player still casts");
+    const hugged = MS.telegraphTiles(w);
+    ok(hugged.length === 8, "…and reaches for the ring-shaped one first");
+    ok(hugged.some((t) => t.tx === adj.tx && t.ty === adj.ty),
+      "…which covers the square the player is actually on");
+
+    // …and it does not swing in the same beat it casts
+    let swings = 0;
+    MS.clearMonsterSpells();
+    drag.spellCd = undefined;
+    drag.atkCd = 0;
+    updateMonsters(w, 0.05, adj, () => { swings++; });
+    ok(swings === 0, "a creature that just cast does not also melee that frame");
+    ok(MS.isCasting(drag), "…because it is busy casting");
+
+    // rooted: the cast must not be re-entered every frame while it winds up
+    MS.updateMonsterSpells(w, 0.02, adj, () => {});
+    updateMonsters(w, 0.02, adj, () => {});
+    ok(MS.pendingCastCount() === 1, "a caster mid-windup does not stack a second cast");
+    MS.clearMonsterSpells();
+    X.clearSpellFx();
+    drag.spellCd = undefined;
 
     // travelling wipes committed casts — see travelTo
     MS.beginCast(w, drag, breath, ox + 3, oy);

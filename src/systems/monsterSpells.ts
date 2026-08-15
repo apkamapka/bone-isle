@@ -228,13 +228,14 @@ export function beginCast(
  * Advance every pending cast and every burning tile.
  *
  * `hurt` is handed the damage rather than the roll so the caller stays a
- * one-liner: this module already knows the element ignores armor, and the
- * combat system does not need to learn what a monster spell is.
+ * one-liner. `name` is null for damage that needs no announcement — see the
+ * burning-ground tick, which fires once a second and would otherwise paper
+ * the screen with its own label.
  */
 export function updateMonsterSpells(
   w: World, dt: number,
   target: { tx: number; ty: number; dead: boolean },
-  hurt: (dmg: number, el: Element, name: string) => void,
+  hurt: (dmg: number, el: Element, name: string | null) => void,
 ): void {
   clock += dt;
   for (let i = pending.length - 1; i >= 0; i--) {
@@ -262,7 +263,8 @@ export function updateMonsterSpells(
     const next = fieldClock.get(key) ?? 0;
     if (clock < next) continue;
     fieldClock.set(key, clock + FIELD_TICK_S);
-    hurt(rndi(FIELD_TICK_DMG[0], FIELD_TICK_DMG[1]), f.el, "burning");
+    // No label: the fire under your feet is the label.
+    hurt(rndi(FIELD_TICK_DMG[0], FIELD_TICK_DMG[1]), f.el, null);
   }
   // Tiles that have gone out stop taking up space in the clock.
   if (fieldClock.size > 64) {
@@ -286,7 +288,7 @@ const FIELD_TICK_DMG: readonly [number, number] = [14, 30];
 function land(
   w: World, p: Pending,
   target: { tx: number; ty: number; dead: boolean },
-  hurt: (dmg: number, el: Element, name: string) => void,
+  hurt: (dmg: number, el: Element, name: string | null) => void,
 ): void {
   const { spell, caster } = p;
   for (const { tx, ty, delay } of p.tiles) {

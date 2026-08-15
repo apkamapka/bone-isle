@@ -1202,24 +1202,13 @@ export function updateMonsters(
     const provoked = d < MONSTER_AGGRO_RANGE || m.aggroT > 0;
     const rd = MONSTER_DEFS[m.kind].ranged;
 
-    // ---- attacks (cadence-gated, independent of the glide phase) ----
-    if (!target.dead && provoked && cheb <= 1) {
-      // adjacent: the ordinary melee exchange — shooters stab with their
-      // (weaker) melee roll when cornered, exactly the old behaviour
-      if (m.atkCd <= 0) {
-        m.atkCd = m.atkRate;
-        onHit(m, false);
-      }
-      // an adjacent creature holds its square (no movement) — but still
-      // finish any glide already in flight so it settles on its centre
-      glideWalker(m, m.speed * dt);
-      continue;
-    }
     // ---- the big attacks, ahead of everything else ----
-    // Tried before melee and before the jab: a dragon that is being hugged
-    // should answer with the shape that hits the tile it is standing next to,
-    // not keep swinging while its breath sits on cooldown forever. Nothing is
-    // spent unless the footprint actually lands somewhere.
+    // This block MUST stay above the melee branch below it, which ends in an
+    // unconditional `continue`: with the order reversed a creature standing
+    // next to you never reaches this code at all, and the dragon answers a
+    // player in its face with nothing but paw swings while every spell it
+    // owns sits ready. Being hugged is exactly when the ring-shaped one is
+    // supposed to go off. Nothing is spent unless the footprint lands.
     const spells = MONSTER_DEFS[m.kind].spells;
     if (spells && !target.dead && provoked
       && lineOfSight(w, m.x, m.y, target.x, target.y)) {
@@ -1236,6 +1225,19 @@ export function updateMonsters(
         break;
       }
       if (isCasting(m)) continue;
+    }
+    // ---- attacks (cadence-gated, independent of the glide phase) ----
+    if (!target.dead && provoked && cheb <= 1) {
+      // adjacent: the ordinary melee exchange — shooters stab with their
+      // (weaker) melee roll when cornered, exactly the old behaviour
+      if (m.atkCd <= 0) {
+        m.atkCd = m.atkRate;
+        onHit(m, false);
+      }
+      // an adjacent creature holds its square (no movement) — but still
+      // finish any glide already in flight so it settles on its centre
+      glideWalker(m, m.speed * dt);
+      continue;
     }
     if (rd && !target.dead && provoked && cheb > 1 && d <= rd.range
       && lineOfSight(w, m.x, m.y, target.x, target.y)) {
