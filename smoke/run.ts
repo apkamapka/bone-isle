@@ -2928,8 +2928,8 @@ async function main(): Promise<void> {
     ok(!drops("chieftain", "knightSword") && !drops("warlord", "knightSword"),
       "the longsword the top ranks carry stays out of their loot");
     const sword = MONSTER_DEFS.deserter.loot.find((l) => l.kind === "ironSword");
-    ok(sword !== undefined && sword.chance >= 0.1,
-      "the deserter's sword drops often enough to be worth hunting");
+    ok(sword !== undefined && sword.chance === 0.08,
+      "the deserter's sword sits at the gear ceiling — the best odds any rank offers");
 
     // Gear on the ground beside a body is loot the game will not hand over, so
     // the death frame's dropped weapon is cut. Every body that had one ends up
@@ -4286,10 +4286,10 @@ async function main(): Promise<void> {
       p.eq.shield = "marrowShield";           // def 14
       p.eq.weapon = "shortSword";             // def 6, defBonus 1
       ok(defenseShield(p.eq) === 15, `shield wins the pool, weapon adds only its bonus (${defenseShield(p.eq)})`);
-      p.eq.weapon = "marrowBlade";            // def 24, defBonus 4
-      ok(defenseShield(p.eq) === 28, `a weapon that out-guards the shield takes over the pool (${defenseShield(p.eq)})`);
+      p.eq.weapon = "marrowBlade";            // def 21, defBonus 4
+      ok(defenseShield(p.eq) === 25, `a weapon that out-guards the shield takes over the pool (${defenseShield(p.eq)})`);
       p.eq.shield = null;
-      ok(defenseShield(p.eq) === 28, "…and losing the shield costs such a build nothing");
+      ok(defenseShield(p.eq) === 25, "…and losing the shield costs such a build nothing");
       p.eq.weapon = "shortSword";
       ok(defenseShield(p.eq) === 7, "a light blade alone guards far worse than one behind a shield");
       ok(defenseShield(p.eq) < 14 + 6, "the two never stack — that was the bug the rebuild removed");
@@ -4409,8 +4409,10 @@ async function main(): Promise<void> {
         .find((e) => e.kind === piece)?.chance ?? 0;
     ok(rate("minotaur", "minotaurBody") > 0 && rate("minotaurGuard", "minotaurBody") > 0,
       "both minotaur ranks shed their own set");
-    ok(rate("minotaurGuard", "minotaurBody") === 4 * rate("minotaur", "minotaurBody"),
-      "…and the guard sheds it four times as often as the rank and file");
+    ok(rate("minotaurGuard", "minotaurBody") > rate("minotaur", "minotaurBody"),
+      "…and the guard sheds it more often than the rank and file");
+    ok(rate("minotaurGuard", "minotaurBody") === 0.08,
+      "…at the 8% ceiling every gear drop in the game now shares");
     ok(rate("goblinLegionary", "goblinHelm") > rate("goblin", "goblinHelm")
       && rate("orcBerserker", "orcishHelm") > rate("orc", "orcishHelm")
       && rate("demonSkeleton", "marrowHelm") > rate("skeletonWarrior", "marrowHelm"),
@@ -4436,12 +4438,19 @@ async function main(): Promise<void> {
     ok(knightSet.length === 5,
       `the knight's gear is five pieces, sword aside (${knightSet.length})`);
     ok(knightSet.includes("knightShield" as never), "…the shield among them");
-    let knightInLoot = false;
+    // The set became farmable off the black knight (5% a piece); the four
+    // chests are still the only OTHER source, and no lesser rank may touch it.
+    const knightDroppers: string[] = [];
     for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
       if ((MONSTER_DEFS[k].loot as { kind: string }[])
-        .some((e) => knightSet.includes(e.kind as never))) knightInLoot = true;
+        .some((e) => knightSet.includes(e.kind as never))) knightDroppers.push(k);
     }
-    ok(!knightInLoot, "no creature drops a piece of the Knight set — the chests are its only source");
+    ok(knightDroppers.join(",") === "blackKnight",
+      `only the black knight sheds the Knight set (${knightDroppers.join(",") || "none"})`);
+    const knightRates = (MONSTER_DEFS.blackKnight.loot as { kind: string; chance: number }[])
+      .filter((e) => knightSet.includes(e.kind as never));
+    ok(knightRates.length === 5, `all five pieces roll separately (${knightRates.length})`);
+    ok(knightRates.every((e) => e.chance === 0.05), "…each at a flat 5%");
   }
 
   console.log("Etap 23 — purses, weapon drops and the boot outlier:");
@@ -5170,8 +5179,13 @@ async function main(): Promise<void> {
       .filter((k) => (MONSTER_DEFS[k].loot ?? []).some((l) => l.kind === "knightSword"));
     ok(others.length === 0,
       `…and nothing else in the bestiary does (${others.join(",") || "none"})`);
-    ok(!D.loot!.some((l) => String(l.kind).startsWith("knight") && l.kind !== "knightSword"),
-      "his ARMOUR is not farmable — the knight set stays chest loot");
+    const knightPieces = D.loot!.filter((l) => String(l.kind).startsWith("knight"));
+    ok(knightPieces.length === 6,
+      `he sheds the whole suit — five pieces and the sword (${knightPieces.length})`);
+    ok(knightPieces.every((l) => l.chance === 0.05),
+      "…every one of them at a flat 5%, the hardest fight paying the rarest gear");
+    ok(!D.loot!.some((l) => l.kind === "bones"),
+      "a man in full plate leaves steel and coal, not a pile of bones");
 
     // --- the line: narrow, long, and stopped by walls ---
     const ws2 = buildWorlds(WORLD_SEED);
@@ -5588,6 +5602,53 @@ async function main(): Promise<void> {
 
     w.monsters.splice(w.monsters.indexOf(drag), 1);
     X.clearSpellFx();
+  }
+
+  console.log("Etap 29 — the gear ceiling:");
+  {
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const I = items.ITEMS;
+    const WORN = ["weapon", "head", "body", "legs", "boots", "shield"];
+    const isGear = (k: string): boolean =>
+      WORN.includes((I[k as never] as { slot?: string }).slot ?? "");
+
+    // The rule the whole pass exists for: a corpse hands over at most one
+    // piece in twelve. Before this, an orc berserker shed its set at 20% a
+    // piece and a whole suit off one body was a 1-in-3125 roll — common
+    // enough that players were seeing it. At 8% the same suit is 1-in-30,517.
+    const over: string[] = [];
+    for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
+      for (const l of MONSTER_DEFS[k].loot as { kind: string; chance: number }[]) {
+        if (isGear(l.kind) && l.chance > 0.08) over.push(`${k}:${l.kind}@${l.chance}`);
+      }
+    }
+    ok(over.length === 0, `no rank sheds gear above 8% (${over.join(" ") || "clean"})`);
+
+    // The two level-50 fights are stricter still: their gear is the end of the
+    // ladder, so it comes off at 5% rather than the general ceiling.
+    for (const boss of ["dragon", "blackKnight"] as const) {
+      const gear = (MONSTER_DEFS[boss].loot as { kind: string; chance: number }[])
+        .filter((l) => isGear(l.kind));
+      ok(gear.length > 0 && gear.every((l) => l.chance === 0.05),
+        `${boss}: every piece of gear at a flat 5% (${gear.length} entries)`);
+    }
+
+    // Materials, food, trophies and ammo are deliberately NOT capped — the
+    // ceiling is about gear, and coal at 8% would strangle the forge.
+    const coal = (MONSTER_DEFS.orc.loot as { kind: string; chance: number }[])
+      .find((l) => l.kind === "coal");
+    ok(coal !== undefined && coal.chance === 0.4, "coal is untouched by the gear ceiling");
+    const ham = (MONSTER_DEFS.dragon.loot as { kind: string; chance: number }[])
+      .find((l) => l.kind === "dragonHam");
+    ok(ham !== undefined && ham.chance === 0.9, "…and so is the dragon's larder");
+
+    // The Marrow Blade drops under the Knight's Longsword in both pools and
+    // keeps only its defBonus edge — see items.ts.
+    const mb = I.marrowBlade.gear!;
+    const ks = I.knightSword.gear!;
+    ok(mb.atk === 23 && mb.def === 21, `marrow blade re-cut to 23/21 (${mb.atk}/${mb.def})`);
+    ok(mb.atk! < ks.atk! && mb.def! < ks.def!, "…now behind the longsword on both numbers");
+    ok(mb.defBonus! > ks.defBonus!, "…and ahead of it only on the always-on guard");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

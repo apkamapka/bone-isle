@@ -317,7 +317,7 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   demonCleaver: { name: "Demon Cleaver", stack: 1, value: 300, weight: 68, slot: "weapon", gear: { atk: 25, def: 11, defBonus: 1 } },
   knightSword: { name: "Knight's Longsword", stack: 1, value: 420, weight: 52, slot: "weapon", gear: { atk: 24, def: 22, defBonus: 3 } },
   fireSword: { name: "Fire Sword", stack: 1, value: 460, weight: 46, slot: "weapon", gear: { atk: 26, def: 16, defBonus: 2 } },
-  marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 24, def: 24, defBonus: 4 } },
+  marrowBlade: { name: "Marrow Blade", stack: 1, value: 480, weight: 52, slot: "weapon", gear: { atk: 23, def: 21, defBonus: 4 } },
   /* ---- tier 1: Leather / Snakeskin (set bonus +1 worn complete) ---- */
   leatherHelm: { name: "Leather Helmet", stack: 1, value: 6, weight: 17, slot: "head", gear: { def: 1 }, set: "leather" },
   snakeskinHelm: { name: "Snakeskin Hood", stack: 1, value: 7, weight: 20, slot: "head", gear: { def: 1 }, set: "snakeskin" },

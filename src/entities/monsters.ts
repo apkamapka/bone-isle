@@ -327,7 +327,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       // He is the sword drop of the human ladder. At 6% it was a rounding
       // error nobody would notice; at 12% killing deserters is a way to arm a
       // second character, which is what an army's runaway should be worth.
-      { kind: "ironSword", chance: 0.12, n: [1, 1] },
+      { kind: "ironSword", chance: 0.08, n: [1, 1] },
     ],
   },
   // lvl 12
@@ -349,11 +349,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.humanFoe, hp: 160, dmg: [13, 34], speed: 70, atkRate: 2.0, exp: 130, gold: [11, 32], danger: 0.25, armor: 7,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
-      { kind: "studdedHelm", chance: 0.15, n: [1, 1] },
-      { kind: "studdedBody", chance: 0.15, n: [1, 1] },
-      { kind: "studdedLegs", chance: 0.15, n: [1, 1] },
-      { kind: "studdedBoots", chance: 0.15, n: [1, 1] },
-      { kind: "studdedShield", chance: 0.15, n: [1, 1] },
+      { kind: "studdedHelm", chance: 0.08, n: [1, 1] },
+      { kind: "studdedBody", chance: 0.08, n: [1, 1] },
+      { kind: "studdedLegs", chance: 0.08, n: [1, 1] },
+      { kind: "studdedBoots", chance: 0.08, n: [1, 1] },
+      { kind: "studdedShield", chance: 0.08, n: [1, 1] },
       { kind: "ironSword", chance: 0.06, n: [1, 1] },
       { kind: "mercBlade", chance: 0.03, n: [1, 1] },
     ],
@@ -408,11 +408,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.humanFoe, hp: 175, dmg: [14, 38], speed: 62, atkRate: 2.0, exp: 150, gold: [10, 28], danger: 0.3, armor: 9,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
-      { kind: "chainHelm", chance: 0.1, n: [1, 1] },
-      { kind: "chainBody", chance: 0.1, n: [1, 1] },
-      { kind: "chainLegs", chance: 0.1, n: [1, 1] },
-      { kind: "chainBoots", chance: 0.1, n: [1, 1] },
-      { kind: "chainShield", chance: 0.1, n: [1, 1] },
+      { kind: "chainHelm", chance: 0.08, n: [1, 1] },
+      { kind: "chainBody", chance: 0.08, n: [1, 1] },
+      { kind: "chainLegs", chance: 0.08, n: [1, 1] },
+      { kind: "chainBoots", chance: 0.08, n: [1, 1] },
+      { kind: "chainShield", chance: 0.08, n: [1, 1] },
       { kind: "mercBlade", chance: 0.08, n: [1, 1] },
     ],
   },
@@ -479,12 +479,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "goblinFang", chance: 0.15, n: [1, 1] },
-      { kind: "goblinHelm", chance: 0.2, n: [1, 1] },
-      { kind: "goblinBody", chance: 0.2, n: [1, 1] },
-      { kind: "goblinLegs", chance: 0.2, n: [1, 1] },
-      { kind: "goblinBoots", chance: 0.2, n: [1, 1] },
-      { kind: "goblinShield", chance: 0.2, n: [1, 1] },
-      { kind: "goblinHatchet", chance: 0.12, n: [1, 1] },
+      { kind: "goblinHelm", chance: 0.08, n: [1, 1] },
+      { kind: "goblinBody", chance: 0.08, n: [1, 1] },
+      { kind: "goblinLegs", chance: 0.08, n: [1, 1] },
+      { kind: "goblinBoots", chance: 0.08, n: [1, 1] },
+      { kind: "goblinShield", chance: 0.08, n: [1, 1] },
+      { kind: "goblinHatchet", chance: 0.08, n: [1, 1] },
     ],
   },
   // lvl 22. A sling, like the poacher's, but thrown from twice the muscle:
@@ -536,7 +536,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "chainLegs", chance: 0.05, n: [1, 1] },
       { kind: "chainBoots", chance: 0.05, n: [1, 1] },
       { kind: "chainShield", chance: 0.05, n: [1, 1] },
-      { kind: "longbow", chance: 0.1, n: [1, 1] },
+      { kind: "longbow", chance: 0.08, n: [1, 1] },
       { kind: "boneArrow", chance: 0.45, n: [1, 3] },
     ],
   },
@@ -547,12 +547,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "orcEar", chance: 0.15, n: [1, 1] },
       { kind: "meat", chance: 0.4, n: [1, 1] },
-      { kind: "orcishHelm", chance: 0.12, n: [1, 1] },
-      { kind: "orcishBody", chance: 0.12, n: [1, 1] },
-      { kind: "orcishLegs", chance: 0.12, n: [1, 1] },
-      { kind: "orcishBoots", chance: 0.12, n: [1, 1] },
-      { kind: "orcishShield", chance: 0.12, n: [1, 1] },
-      { kind: "orcishAxe", chance: 0.1, n: [1, 1] },
+      { kind: "orcishHelm", chance: 0.08, n: [1, 1] },
+      { kind: "orcishBody", chance: 0.08, n: [1, 1] },
+      { kind: "orcishLegs", chance: 0.08, n: [1, 1] },
+      { kind: "orcishBoots", chance: 0.08, n: [1, 1] },
+      { kind: "orcishShield", chance: 0.08, n: [1, 1] },
+      { kind: "orcishAxe", chance: 0.08, n: [1, 1] },
     ],
   },
   // lvl 27
@@ -590,11 +590,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.humanFoe, hp: 365, dmg: [24, 63], speed: 64, atkRate: 2.0, exp: 345, gold: [22, 64], danger: 0.6, armor: 15,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
-      { kind: "plateHelm", chance: 0.15, n: [1, 1] },
-      { kind: "plateBody", chance: 0.15, n: [1, 1] },
-      { kind: "plateLegs", chance: 0.15, n: [1, 1] },
-      { kind: "plateBoots", chance: 0.15, n: [1, 1] },
-      { kind: "plateShield", chance: 0.15, n: [1, 1] },
+      { kind: "plateHelm", chance: 0.08, n: [1, 1] },
+      { kind: "plateBody", chance: 0.08, n: [1, 1] },
+      { kind: "plateLegs", chance: 0.08, n: [1, 1] },
+      { kind: "plateBoots", chance: 0.08, n: [1, 1] },
+      { kind: "plateShield", chance: 0.08, n: [1, 1] },
       { kind: "gladius", chance: 0.08, n: [1, 1] },
     ],
   },
@@ -647,11 +647,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.humanFoe, hp: 440, dmg: [27, 71], speed: 68, atkRate: 2.0, exp: 420, gold: [25, 73], danger: 0.7, armor: 15,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
-      { kind: "plateHelm", chance: 0.1, n: [1, 1] },
-      { kind: "plateBody", chance: 0.1, n: [1, 1] },
-      { kind: "plateLegs", chance: 0.1, n: [1, 1] },
-      { kind: "plateBoots", chance: 0.1, n: [1, 1] },
-      { kind: "plateShield", chance: 0.1, n: [1, 1] },
+      { kind: "plateHelm", chance: 0.08, n: [1, 1] },
+      { kind: "plateBody", chance: 0.08, n: [1, 1] },
+      { kind: "plateLegs", chance: 0.08, n: [1, 1] },
+      { kind: "plateBoots", chance: 0.08, n: [1, 1] },
+      { kind: "plateShield", chance: 0.08, n: [1, 1] },
       { kind: "gladius", chance: 0.06, n: [1, 1] },
     ],
   },
@@ -667,12 +667,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "orcEar", chance: 0.15, n: [1, 1] },
       { kind: "meat", chance: 0.5, n: [1, 2] },
-      { kind: "orcishHelm", chance: 0.2, n: [1, 1] },
-      { kind: "orcishBody", chance: 0.2, n: [1, 1] },
-      { kind: "orcishLegs", chance: 0.2, n: [1, 1] },
-      { kind: "orcishBoots", chance: 0.2, n: [1, 1] },
-      { kind: "orcishShield", chance: 0.2, n: [1, 1] },
-      { kind: "orcishAxe", chance: 0.15, n: [1, 1] },
+      { kind: "orcishHelm", chance: 0.08, n: [1, 1] },
+      { kind: "orcishBody", chance: 0.08, n: [1, 1] },
+      { kind: "orcishLegs", chance: 0.08, n: [1, 1] },
+      { kind: "orcishBoots", chance: 0.08, n: [1, 1] },
+      { kind: "orcishShield", chance: 0.08, n: [1, 1] },
+      { kind: "orcishAxe", chance: 0.08, n: [1, 1] },
     ],
   },
   // lvl 36
@@ -682,12 +682,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "minotaurHorn", chance: 0.15, n: [1, 1] },
       { kind: "bones", chance: 0.6, n: [2, 4] },
-      { kind: "minotaurHelm", chance: 0.2, n: [1, 1] },
-      { kind: "minotaurBody", chance: 0.2, n: [1, 1] },
-      { kind: "minotaurLegs", chance: 0.2, n: [1, 1] },
-      { kind: "minotaurBoots", chance: 0.2, n: [1, 1] },
-      { kind: "minotaurShield", chance: 0.2, n: [1, 1] },
-      { kind: "minotaurAxe", chance: 0.15, n: [1, 1] },
+      { kind: "minotaurHelm", chance: 0.08, n: [1, 1] },
+      { kind: "minotaurBody", chance: 0.08, n: [1, 1] },
+      { kind: "minotaurLegs", chance: 0.08, n: [1, 1] },
+      { kind: "minotaurBoots", chance: 0.08, n: [1, 1] },
+      { kind: "minotaurShield", chance: 0.08, n: [1, 1] },
+      { kind: "minotaurAxe", chance: 0.08, n: [1, 1] },
     ],
   },
   // lvl 36. The human mini-boss: the heaviest armour on a person, meant to
@@ -696,12 +696,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.humanFoe, hp: 540, dmg: [30, 80], speed: 60, atkRate: 2.0, exp: 555, gold: [28, 82], danger: 0.8, armor: 20,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
-      { kind: "steelHelm", chance: 0.2, n: [1, 1] },
-      { kind: "steelBody", chance: 0.2, n: [1, 1] },
-      { kind: "steelLegs", chance: 0.2, n: [1, 1] },
-      { kind: "steelBoots", chance: 0.2, n: [1, 1] },
-      { kind: "steelShield", chance: 0.2, n: [1, 1] },
-      { kind: "warlordBlade", chance: 0.1, n: [1, 1] },
+      { kind: "steelHelm", chance: 0.08, n: [1, 1] },
+      { kind: "steelBody", chance: 0.08, n: [1, 1] },
+      { kind: "steelLegs", chance: 0.08, n: [1, 1] },
+      { kind: "steelBoots", chance: 0.08, n: [1, 1] },
+      { kind: "steelShield", chance: 0.08, n: [1, 1] },
+      { kind: "warlordBlade", chance: 0.08, n: [1, 1] },
     ],
   },
   // lvl 37
@@ -724,16 +724,17 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.humanFoe, hp: 685, dmg: [33, 88], speed: 64, atkRate: 2.0, exp: 680, gold: [32, 91], danger: 0.9, armor: 21,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
-      { kind: "steelHelm", chance: 0.25, n: [1, 1] },
-      { kind: "steelBody", chance: 0.25, n: [1, 1] },
-      { kind: "steelLegs", chance: 0.25, n: [1, 1] },
-      { kind: "steelBoots", chance: 0.25, n: [1, 1] },
-      { kind: "steelShield", chance: 0.25, n: [1, 1] },
+      { kind: "steelHelm", chance: 0.08, n: [1, 1] },
+      { kind: "steelBody", chance: 0.08, n: [1, 1] },
+      { kind: "steelLegs", chance: 0.08, n: [1, 1] },
+      { kind: "steelBoots", chance: 0.08, n: [1, 1] },
+      { kind: "steelShield", chance: 0.08, n: [1, 1] },
       // He is drawn with a longsword, and the item that matches it is the
-      // Knight's Longsword — which he must not drop. The Knight set is the
-      // one tier in the game that is never loot: it is bought and dug up, and
-      // that is what makes it feel earned rather than rolled. The maul stays.
-      { kind: "steelMaul", chance: 0.12, n: [1, 1] },
+      // Knight's Longsword — which he still must not drop, even though the
+      // black knight now does at 5%. Knight gear belongs to the two level-50
+      // fights and the four chests; handing it out at 40 would collapse the
+      // last ten levels of the ladder into one. The maul stays.
+      { kind: "steelMaul", chance: 0.08, n: [1, 1] },
     ],
   },
   // lvl 40. Second-hardest thing in the game and shaped as the dragon's
@@ -746,12 +747,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     spr: SPR.skeleton, hp: 710, dmg: [33, 88], speed: 62, atkRate: 2.0, exp: 655, gold: [23, 68], danger: 0.97, armor: 24, resist: { fire: 0.5, shadow: 0.3, storm: 1.5 },
     loot: [
       { kind: "cursedRib", chance: 0.15, n: [1, 1] },
-      { kind: "marrowHelm", chance: 0.2, n: [1, 1] },
-      { kind: "marrowBody", chance: 0.2, n: [1, 1] },
-      { kind: "marrowLegs", chance: 0.2, n: [1, 1] },
-      { kind: "marrowBoots", chance: 0.2, n: [1, 1] },
-      { kind: "marrowShield", chance: 0.2, n: [1, 1] },
-      { kind: "demonCleaver", chance: 0.15, n: [1, 1] },
+      { kind: "marrowHelm", chance: 0.08, n: [1, 1] },
+      { kind: "marrowBody", chance: 0.08, n: [1, 1] },
+      { kind: "marrowLegs", chance: 0.08, n: [1, 1] },
+      { kind: "marrowBoots", chance: 0.08, n: [1, 1] },
+      { kind: "marrowShield", chance: 0.08, n: [1, 1] },
+      { kind: "demonCleaver", chance: 0.08, n: [1, 1] },
     ],
   },
   // lvl 50. A brute that charges in, mauls with its paw for heavy hits, AND
@@ -797,12 +798,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       // the ONLY source of the Essence: the strongest crystal of every
       // element is bought from the tower with something the dragon owns
       { kind: "magicEssence", chance: 0.2, n: [1, 1] },
-      { kind: "dragonHelm", chance: 0.15, n: [1, 1] },
-      { kind: "dragonBody", chance: 0.15, n: [1, 1] },
-      { kind: "dragonLegs", chance: 0.15, n: [1, 1] },
-      { kind: "dragonBoots", chance: 0.15, n: [1, 1] },
-      { kind: "dragonShield", chance: 0.15, n: [1, 1] },
-      { kind: "fireSword", chance: 0.08, n: [1, 1] },
+      { kind: "dragonHelm", chance: 0.05, n: [1, 1] },
+      { kind: "dragonBody", chance: 0.05, n: [1, 1] },
+      { kind: "dragonLegs", chance: 0.05, n: [1, 1] },
+      { kind: "dragonBoots", chance: 0.05, n: [1, 1] },
+      { kind: "dragonShield", chance: 0.05, n: [1, 1] },
+      { kind: "fireSword", chance: 0.05, n: [1, 1] },
     ],
   },
 
@@ -838,12 +839,18 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [
       { kind: "steel", chance: 0.5, n: [1, 3] },
       { kind: "coal", chance: 0.4, n: [1, 3] },
-      { kind: "bones", chance: 0.5, n: [2, 4] },
-      // The first REPEATABLE source of the Knight's Longsword, which until now
-      // could only be bought. His armour is deliberately not here: the knight
-      // SET is chest loot, findable exactly once apiece, and turning it into a
-      // farmable drop would undo that on the day this creature gets a lair.
-      { kind: "knightSword", chance: 0.12, n: [1, 1] },
+      // The knight SET, entire, at one flat 5% a piece — sword and shield with
+      // it. The chests on cave3/bastion2/orcdeep1/minodeep1 still hold one of
+      // each and are still the first way anyone sees the armour; this is the
+      // repeatable way, gated behind the hardest fight in the game rather than
+      // behind a floor you clear once. A whole suit off one corpse is a 1-in-3.2
+      // million run, which is the point: the set is farmable, not handed out.
+      { kind: "knightHelm", chance: 0.05, n: [1, 1] },
+      { kind: "knightBody", chance: 0.05, n: [1, 1] },
+      { kind: "knightLegs", chance: 0.05, n: [1, 1] },
+      { kind: "knightBoots", chance: 0.05, n: [1, 1] },
+      { kind: "knightShield", chance: 0.05, n: [1, 1] },
+      { kind: "knightSword", chance: 0.05, n: [1, 1] },
     ],
   },
 };
