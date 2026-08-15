@@ -135,8 +135,10 @@ available on those terms even if this repository is later made private.
 `mob-mercenary-dead.png`, `mob-corsair-dead.png`, `mob-amazon-dead.png`,
 `mob-wildWarrior-dead.png`, `mob-hunter-dead.png`, `mob-gladiator-dead.png`,
 `mob-barbarian-dead.png`, `mob-raider-dead.png`, `mob-warlord-dead.png`,
-`mob-chieftain-dead.png`. Every human in the bestiary is here; the dragon is the
-only monster still on a placeholder, and LPC has no dragon to give it.
+`mob-chieftain-dead.png`. Every human in the bestiary is here. The dragon was
+the last creature on a procedural placeholder — LPC has no dragon to give it —
+and it now has artwork of its own from a different source; see the dragon
+section below.
 
 All of them are composed from the same **Universal LPC Spritesheet Character
 Generator** as the player and the bandit, under the same licences as the layers
@@ -734,6 +736,63 @@ between them.
 These are drawn as scenery rather than baked into the terrain export: they
 stand taller than the square they occupy, and the player has to be able to walk
 behind them.
+
+## Dragon — `public/mob-dragon-walk.png`, `public/mob-dragon-dead.png`
+
+Source: **CraftPix.net**, standard (non-Enterprise) licence —
+https://craftpix.net/file-licenses/
+
+The same terms as the buildings below: commercial use granted outright, no
+royalty, no attribution owed on a paid product, and the same clause 1.1.3 /
+1.2.1 restriction on public source files. **The warning in the buildings
+section applies to these two files in full.**
+
+### What was changed
+
+The pack ships nineteen 256 x 256 frames as separate PNGs — Attack x4,
+Death x5, Hurt x2, Idle x3, Walk x5 — of a PURPLE dragon in side view. Three
+things were done to them:
+
+1. **Recoloured to green.** The art is a hard 31-colour palette with no
+   anti-aliasing, so this is a palette map and not a filter: every source
+   colour has exactly one destination colour, chosen by rotating hue and
+   raising saturation while leaving value untouched, so the shading ladder
+   survives intact. Only the purple family moved; the gold wing membrane, the
+   pale belly plates and the red mouth are the pack's own colours.
+2. **Halved to 80 x 38 per frame.** 2:1 by majority vote over each 2 x 2 block
+   rather than plain nearest, which drops every other column and eats the
+   one-pixel outline along the spine. Ties break toward the darker survivor,
+   which is the outline in every case here. At 1:1 the creature is 4.4 tiles
+   wide; halved it is 2.5, against an orc's 1.
+3. **Packed into the engine's sheet layout.** One 6 x 4 grid: column 0 is
+   `Idle1` (the standing pose), columns 1-5 are `Walk1`-`Walk5`. The crop
+   rectangle is shared by all six frames and kept symmetric about the source
+   cell's centre line, so the body cannot drift sideways as the cycle plays.
+   Rows are up / left / down / right; the pack has only a right-facing view,
+   so `left` is its mirror and the two vertical rows carry the side view — the
+   snake's arrangement, for the snake's reason.
+
+`Hurt1` and `Hurt2` are byte-for-byte duplicates of `Death1` and `Death2`, so
+the pack has no hurt animation despite the filenames. The four attack frames
+are unused: monsters have no attack animation in this engine yet. The corpse
+is `Death5`, the last frame of the death sequence, cropped and halved the same
+way.
+
+## Fire field — `public/fx-fire-1-field.png`
+
+Derived from `public/prop-campfire.png` — **Fire Animation** by **NYKNCK**. All
+of that section's terms and its open question about redistribution apply here
+unchanged; this is the same twelve frames, edited.
+
+### What was changed
+
+The campfire is the right animation with the wrong furniture. The three log
+browns were deleted outright, each frame was slid down so the flame sits on the
+tile's bottom edge instead of hovering where the logs used to be, and the three
+flame colours were remapped onto the palette `fx-fire-1-wave.png` already uses
+so that a field and a bolt read as the same element. A dark rim was added along
+the silhouette edge, matching how the wave is drawn. Frame count and frame
+order are untouched.
 
 ## Home Isle buildings — `public/build-*.png`
 
