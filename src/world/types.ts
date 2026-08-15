@@ -209,8 +209,9 @@ export interface GroundItem {
  * only ever existed as a baked pixel blob — spiders, bats, crabs, wasps,
  * rotworms, wolves, war wolves, bears, ghosts, mummies, trolls, cyclopes,
  * amazons, hunters and the bone lord — are gone, kind and sprite alike. The
- * dragon is the one exception kept without art: it is the boss and the whole
- * bottom of the difficulty curve hangs off it.
+ * dragon was the long-standing exception, carried on a baked blob because the
+ * bottom of the difficulty curve hangs off it; Etap 27 gave it real artwork
+ * and it now plays by the same rule as everything else.
  */
 export type MonsterKind =
   // The human ladder, low half: vermin of the road, levels 1-14. These are the
@@ -237,7 +238,9 @@ export type MonsterKind =
   // Etap 18 — the undead heavies. Both are skeletons and both leave the
   // skeleton's body; the demon is the last thing short of the dragon.
   | "skeletonWarrior" | "demonSkeleton"
-  // the boss: one lair at the bottom of the Bone Caverns, long respawn
+  // The first caster proper: it charges, breathes, and leaves the ground on
+  // fire. Not a boss — a strong monster that happens to sit at the top of the
+  // curve today, and will have company above it later.
   | "dragon";
 
 /** A live monster instance. */
@@ -254,6 +257,15 @@ export interface Monster {
   speed: number;
   atkRate: number;
   atkCd: number;
+  /**
+   * One cooldown per entry in the creature's `spells` list, in seconds.
+   *
+   * Lazily created on the first cast rather than at spawn: the overwhelming
+   * majority of the bestiary casts nothing, and an array of zeroes on every
+   * beggar is a per-creature allocation to describe an absence. Monsters are
+   * never serialised, so this needed no save migration.
+   */
+  spellCd?: number[];
   wanderT: number;
   bob: number;
   /** Facing, for creatures drawn from a directional walk sheet. */
