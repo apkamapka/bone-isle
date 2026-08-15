@@ -759,12 +759,22 @@ things were done to them:
    raising saturation while leaving value untouched, so the shading ladder
    survives intact. Only the purple family moved; the gold wing membrane, the
    pale belly plates and the red mouth are the pack's own colours.
-2. **Cropped, not rescaled.** The frames are used at their native 1:1
-   resolution: 160 x 75 each, five tiles wide and a little over two tall. A
-   half-scale cut was tried first and read as a lizard rather than a dragon —
-   the player's own sprite is 64 x 80, so a creature 38 px tall stood shorter
-   than the man fighting it. Going back to 1:1 also means no resampling of any
-   kind, which is the crispest this art can be.
+2. **Scaled to 0.567 and re-centred, giving a 110 x 43 frame.** The animal
+   inside it is 90 px wide — 2.8 tiles — and the surplus is transparent
+   padding, for a reason worth writing down. The pack draws the dragon with its
+   feet at x=147 while the source cell's centre is x=128, so a crop centred on
+   the cell centres the BOUNDING BOX, which is mostly tail, and the body drew
+   off to one side of the tile it stood on. Centring on the feet instead fixes
+   the anchor but forces the padding: the tail reaches 97 px left of the feet
+   and the snout only 61 px right, and the crop has to stay symmetric about the
+   anchor or the creature jumps sideways every time it turns around.
+
+   Downscaling is a majority vote over the source pixels behind each
+   destination pixel, ties broken toward the darkest survivor. Plain nearest
+   drops the one-pixel outline along the spine. Two earlier cuts were rejected
+   in play: half scale (80 x 38) stood shorter than the player, whose own
+   sprite is 64 x 80; full 1:1 (160 x 75) was five tiles wide on a one-tile
+   creature and swallowed whatever it stood next to.
 3. **Packed into the engine's sheet layout.** One 6 x 4 grid: column 0 is
    `Idle1` (the standing pose), columns 1-5 are `Walk1`-`Walk5`. The crop
    rectangle is shared by all six frames and kept symmetric about the source
@@ -777,7 +787,7 @@ things were done to them:
 the pack has no hurt animation despite the filenames. The four attack frames
 are unused: monsters have no attack animation in this engine yet. The corpse
 is `Death5`, the last frame of the death sequence, cropped to its own bounds
-and likewise left at 1:1.
+and scaled by the same factor so the body matches.
 
 ## Fire field — `public/fx-fire-1-field.png`
 

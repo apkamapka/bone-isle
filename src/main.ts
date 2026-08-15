@@ -2100,15 +2100,18 @@ function resolveTarget(): void {
 /**
  * How wide a creature's shadow is, when the default 16 is wrong.
  *
+ * This is a HALF-width: `drawShadow` takes it as an ellipse radius.
+ *
  * Hand-tuned per kind, the same arrangement the buildings use, and for the
  * same reason: the number that looks right is the width of what actually
- * TOUCHES the ground, which no sprite dimension reports. The dragon's frame
- * is 160 px across, but most of that is tail and wing — half of it is over
- * the animal's four planted feet, and deriving the shadow from frame width
- * would put it under the tail as well.
+ * TOUCHES the ground, which no sprite dimension reports. The dragon's frame is
+ * 110 px across and only 90 of that is animal — the rest is the transparent
+ * padding that keeps its anchor over its feet — while the stance itself, front
+ * paws to hind, spans barely half the body. Derived from the frame it would
+ * fall under the tail; derived from the sprite it would fall under thin air.
  */
 const MOB_SHADOW: Readonly<Record<string, number>> = {
-  dragon: 40,
+  dragon: 24,
 };
 
 function drawShadow(x: number, y: number, w = 16): void {
