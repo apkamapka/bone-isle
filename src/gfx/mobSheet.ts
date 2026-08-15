@@ -32,7 +32,35 @@ export type MobDir = "up" | "left" | "down" | "right";
 
 const DIR_ROW: Record<MobDir, number> = { up: 0, left: 1, down: 2, right: 3 };
 const COLS = 9;
-const WALK_FPS = 8;
+
+/**
+ * How long ONE FULL walk cycle takes, in seconds.
+ *
+ * The cadence is stated as a cycle length rather than a frame rate on purpose.
+ * It used to be a flat `WALK_FPS = 8`, which quietly coupled how fast a
+ * creature's legs move to how many frames its artist happened to draw: a
+ * nine-column LPC sheet has eight stride frames and cycled in a second, while
+ * the dragon's six-column sheet has five and cycled in 0.62 s. The frame count
+ * is a DRAWING decision — how finely the cycle was subdivided — and it has no
+ * business setting the animal's gait.
+ *
+ * One second per cycle reproduces the LPC humans exactly, since eight frames
+ * over one second is the eight fps they always ran at.
+ */
+const WALK_CYCLE_S = 1.0;
+
+/**
+ * Creatures whose stride is not the standard second.
+ *
+ * The number that reads right is roughly the time the animal takes to cover
+ * its own body length, because that is about how often a real leg plants. The
+ * dragon is 90 px long and moves at 60 px/s, so 1.5 s. At the old cadence it
+ * completed a whole gallop every 1.17 tiles — a stride and a half per body
+ * length — which is why it looked like it was running on the spot.
+ */
+const WALK_CYCLE_OVERRIDE: Readonly<Record<string, number>> = {
+  dragon: 1.5,
+};
 
 /**
  * Sheets that are not nine frames across. The LPC exports all are; artwork from
@@ -250,6 +278,19 @@ export function corpseSprite(name: string): HTMLCanvasElement | null {
   return url ? bodies[url] ?? null : null;
 }
 
+/**
+ * How long one full walk cycle takes for this creature, in seconds.
+ *
+ * Exported for the tests, which cannot reach this through `mobFrame`: headless
+ * there is no artwork, every sheet is missing and the frame lookup returns
+ * null before it ever gets to the timing. The cadence was wrong once and
+ * silently — nothing failed, the dragon just looked ridiculous — so it is
+ * worth a seam that can actually be asserted on.
+ */
+export function walkCycleSeconds(kind: string): number {
+  return WALK_CYCLE_OVERRIDE[kind] ?? WALK_CYCLE_S;
+}
+
 /** True once this creature can be drawn directionally. */
 export function hasWalkSheet(kind: MonsterKind): boolean {
   return sheets[kind] !== undefined;
@@ -259,6 +300,8 @@ export function hasWalkSheet(kind: MonsterKind): boolean {
  * The frame to draw, or null when there is no sheet for this creature.
  * `moving` picks stride over stance; `phase` is any freely running seconds
  * value — pass a per-creature offset so a pack does not march in lockstep.
+ * How much of the cycle a second of `phase` buys is set by WALK_CYCLE_S and
+ * its per-creature overrides, not by the sheet's width.
  */
 export function mobFrame(
   kind: MonsterKind, dir: MobDir, moving: boolean, phase: number,
@@ -283,7 +326,9 @@ function frameOf(
   if (!cut) return null;
   const row = cut[DIR_ROW[dir]];
   if (!moving) return row[0];
-  const step = 1 + (Math.floor(phase * WALK_FPS) % (row.length - 1));
+  const strides = row.length - 1;
+  const fps = strides / (WALK_CYCLE_OVERRIDE[id] ?? WALK_CYCLE_S);
+  const step = 1 + (Math.floor(phase * fps) % strides);
   return row[step];
 }
 

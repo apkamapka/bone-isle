@@ -5115,6 +5115,37 @@ async function main(): Promise<void> {
     X.clearSpellFx();
   }
 
+  console.log("walk cadence (a stride is a gait, not a frame count):");
+  {
+    const { walkCycleSeconds } = await import("../src/gfx/mobSheet.ts");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+
+    // The bug this replaced: `WALK_FPS` was a flat 8, so a cycle's LENGTH fell
+    // out of however many frames the artist drew. Nine-column LPC sheets have
+    // eight stride frames and cycled in a second; the dragon's six-column sheet
+    // has five and cycled in 0.62 s, so it completed a whole gallop every 1.17
+    // tiles and read as running on the spot.
+    ok(walkCycleSeconds("orc") === 1.0, "the default cycle is one second");
+    ok(walkCycleSeconds("bandit") === walkCycleSeconds("skeleton"),
+      "…and every creature without an override shares it");
+    // eight frames over one second is exactly the eight fps the humans always
+    // ran at, so nothing about them moved
+    ok(8 / walkCycleSeconds("orc") === 8, "an LPC human still strides at 8 fps");
+
+    const cyc = walkCycleSeconds("dragon");
+    ok(cyc > walkCycleSeconds("orc"), "the dragon strides slower than a man");
+    // The number that reads right is the time to cover its own body length,
+    // which is about how often a real leg plants. The sprite is 90 px long.
+    const covered = MONSTER_DEFS.dragon.speed * cyc;
+    ok(Math.abs(covered - 90) < 12,
+      `…one cycle carrying it roughly its own body length (${covered.toFixed(0)}px vs 90)`);
+    ok(covered / 32 > 2.5, "…which is well over two tiles, not one");
+    // five frames over 1.5 s is 3.3 fps — slow, but it is a gallop, and the
+    // failure mode being guarded against is the frame count driving the gait
+    ok(5 / cyc < 8 / walkCycleSeconds("orc"),
+      "…at fewer frames per second than a human, despite having fewer frames");
+  }
+
   console.log("monster spells (the dragon's kit, and the ground it leaves):");
   {
     const MS = await import("../src/systems/monsterSpells.ts");
