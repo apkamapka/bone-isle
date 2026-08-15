@@ -18,6 +18,7 @@ import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn, worldSpawn } from "./world/collision.ts";
 import { spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard, spawnAtPost } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
+import { clearMonsterSpells } from "./systems/monsterSpells.ts";
 import type { ItemKind } from "./items.ts";
 import { loadResearchState } from "./systems/tower.ts";
 import { resetTasks } from "./systems/tasks.ts";
@@ -426,6 +427,10 @@ export function travelTo(g: Game, dest: WorldKey): void {
     }
     extra = "  ·  " + best.name + " to the " + compass(best.x - p.x, best.y - p.y);
   }
+  // Every creature's committed cast belongs to the island it was cast on.
+  // Leaving mid-windup and coming back to a fireball resolving in your face is
+  // the same class of bug the FX module already guards against by world.
+  clearMonsterSpells();
   g.current = target;
   placeWalker(g.player, p.x, p.y);
   g.player.dest = null;

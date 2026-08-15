@@ -40,6 +40,7 @@ import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./
 import { addItem, removeItem, ITEMS, itemWeight, bagCount, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
+import { updateMonsterSpells, telegraphTiles } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
@@ -1856,6 +1857,9 @@ function update(dt: number): void {
     if (P.deadT <= 0) respawnAtHome(game);
     updateFloats(dt);
     updateSpellFx(dt);  // the spell that killed you still gets to finish
+    // …and so does the cast behind it: a creature rooted in its windup when
+    // you died would still be rooted when you walked back in.
+    updateMonsterSpells(game.current, dt, { tx: P.tx, ty: P.ty, dead: true }, () => {});
     return;
   }
 
@@ -2016,6 +2020,14 @@ function update(dt: number): void {
 
   // spell bolts and the blooms they leave (also cosmetic, same rule)
   updateSpellFx(dt);
+  // monster casts: windups landing, and the ground they left on fire. This is
+  // the one place spell damage reaches the player from a creature, so it is
+  // deliberately the same `hurtPlayer` the melee exchange uses — elemental
+  // damage ignores armor on its own, inside the damage roll.
+  updateMonsterSpells(world, dt, { tx: P.tx, ty: P.ty, dead: P.dead }, (dmg, el, name) => {
+    hurtPlayer(world, P, dmg);
+    addFloat(world, P.x, P.y - 26, name, ELEMENT_COLOR[el]);
+  });
 
   tickRegrowth(world, dt, P.x, P.y, true);
   tickNpcTalk(world);
@@ -2207,6 +2219,25 @@ function render(): void {
     if (sx < -TILE || sy < -TILE || sx > VW || sy > VH) continue;
     const a = 0.5 + 0.5 * Math.sin(waveT * 2 + cwv.ph);
     if (a > 0.6) vctx.fillRect(Math.round(sx + 4), Math.round(sy + 12), 12, 2);
+  }
+
+  // Spell telegraphs: the footprint a creature has committed to, painted flat
+  // on the ground before anything stands on it. `heat` runs 0->1 across the
+  // windup, and both the fill and the pulse tighten with it, so the last
+  // quarter-second reads as "now" without needing a sound or a number.
+  for (const tg of telegraphTiles(world)) {
+    const gx = tg.tx * TILE - cam.x;
+    const gy = tg.ty * TILE - cam.y;
+    if (gx < -TILE || gy < -TILE || gx > VW || gy > VH) continue;
+    const pulse = 0.5 + 0.5 * Math.sin(waveT * (8 + tg.heat * 22));
+    vctx.globalAlpha = 0.14 + tg.heat * 0.22 + pulse * 0.1;
+    vctx.fillStyle = tg.color;
+    vctx.fillRect(gx, gy, TILE, TILE);
+    vctx.globalAlpha = 0.45 + tg.heat * 0.45;
+    vctx.strokeStyle = tg.color;
+    vctx.lineWidth = 2;
+    vctx.strokeRect(gx + 1, gy + 1, TILE - 2, TILE - 2);
+    vctx.globalAlpha = 1;
   }
 
   // building ghost: while placing, preview the structure under the cursor
