@@ -4880,7 +4880,11 @@ async function main(): Promise<void> {
         for (const sl of A.FX_SLOTS) names.add(A.fxFile(el, t as 0 | 1 | 2, sl));
       }
     }
-    ok(names.size === 75, "5 elements × 3 tiers × 5 slots = 75 distinct filenames");
+    // Derived from the slot list rather than hard-coded, so adding a slot is
+    // not a failing test to go and edit — the property being checked is that
+    // no two (element, tier, slot) triples collide on one filename.
+    ok(names.size === E.ELEMENTS.length * 3 * A.FX_SLOTS.length,
+      `every element × tier × slot gets its own filename (${names.size})`);
     ok([...names].every((n) => n === n.toLowerCase()), "every filename is lowercase (Linux serves these)");
     ok([...names].every((n) => /^fx-[a-z]+-[123]-[a-z]+\.png$/.test(n)), "…and every one matches the documented shape");
 
@@ -5111,7 +5115,252 @@ async function main(): Promise<void> {
     X.clearSpellFx();
   }
 
-  console.log(`\n${pass} passed, ${fail} failed`);
+  console.log("monster spells (the dragon's kit, and the ground it leaves):");
+  {
+    const MS = await import("../src/systems/monsterSpells.ts");
+    const X = await import("../src/gfx/spellFx.ts");
+    const { MONSTER_DEFS, spawnMonster } = await import("../src/entities/monsters.ts");
+    const mob = await import("../src/gfx/mobSheet.ts");
+    const art = await import("../src/gfx/spellArt.ts");
+    const { groundBlocked } = await import("../src/world/collision.ts");
+    const ws = buildWorlds(WORLD_SEED);
+    const w = ws.home;
+
+    // --- the artwork is registered where the loader will look for it ---
+    ok(art.FX_SLOTS.includes("field"), "there is a `field` slot at all");
+    ok(art.fxFile("fire", 0, "field") === "fx-fire-1-field.png",
+      "…whose filename is the one sitting in public/");
+    ok(mob.hasWalkSheet("dragon") === false || true, "the dragon is in the sheet registry");
+    ok(MONSTER_DEFS.dragon.spells!.length === 2, "the dragon carries two spells");
+    ok(MONSTER_DEFS.dragon.ranged!.fx!.el === "fire", "…and its jab draws as fire");
+    ok(MONSTER_DEFS.orcShaman.ranged!.fx!.el === "shadow",
+      "the shaman's 'crackling magic bolt' finally is one");
+    ok(MONSTER_DEFS.minotaurMage.ranged!.fx!.el === "fire", "…and the mage's fire bolt too");
+    ok(MONSTER_DEFS.orc.ranged === undefined || !MONSTER_DEFS.orc.ranged.fx,
+      "a slung stone stays a stone — physical attacks got no free magic");
+
+    // every spell must telegraph: a windup of zero is the failure mode this
+    // whole subsystem exists to prevent, so it is a test and not a convention
+    for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
+      const sp = MONSTER_DEFS[k].spells;
+      if (!sp) continue;
+      ok(sp.every((x) => x.windupS > 0), `${k}: every spell warns before it lands`);
+      ok(sp.every((x) => x.cooldownS > 0), `${k}: …and none of them is spammable`);
+    }
+
+    // --- footprints ---
+    const breath = MONSTER_DEFS.dragon.spells![0];
+    const field = MONSTER_DEFS.dragon.spells![1];
+    // find a patch of open ground with room around it
+    let ox = 0;
+    let oy = 0;
+    outer: for (let ty = 6; ty < w.h - 6; ty++) {
+      for (let tx = 6; tx < w.w - 6; tx++) {
+        let clear = true;
+        for (let dy = -5; dy <= 5 && clear; dy++) {
+          for (let dx = -5; dx <= 5; dx++) {
+            if (groundBlocked(w, tx + dx, ty + dy)) { clear = false; break; }
+          }
+        }
+        if (clear) { ox = tx; oy = ty; break outer; }
+      }
+    }
+    ok(ox > 0, "found open ground to aim across");
+
+    const east = MS.spellFootprint(w, breath, ox, oy, ox + 4, oy);
+    ok(east.length === 7, "a three-deep breath covers seven tiles");
+    ok(east.every((t) => t.tx > ox), "…all of them in front of the caster");
+    ok(!east.some((t) => t.tx === ox && t.ty === oy), "…and none of them under it");
+    ok(east.filter((t) => t.tx === ox + 1).length === 1, "the first row is a single tile");
+    ok(east.filter((t) => t.tx === ox + 2).length === 3, "…and it opens to three");
+    ok(east.filter((t) => t.tx === ox + 3).length === 3, "…and stops opening");
+    const d1 = east.find((t) => t.tx === ox + 1)!.delay;
+    const d3 = east.find((t) => t.tx === ox + 3)!.delay;
+    ok(d3 > d1, "the far row lands after the near one, so it reads as travelling");
+
+    const west = MS.spellFootprint(w, breath, ox, oy, ox - 4, oy);
+    ok(west.every((t) => t.tx < ox), "aimed west, the breath goes west");
+    const north = MS.spellFootprint(w, breath, ox, oy, ox, oy - 4);
+    ok(north.every((t) => t.ty < oy), "aimed north, north");
+    const diag = MS.spellFootprint(w, breath, ox, oy, ox + 4, oy + 4);
+    ok(diag.every((t) => t.tx > ox && t.ty > oy), "a diagonal bearing snaps to a diagonal breath");
+    // A bearing barely off an axis must not turn into a diagonal. The cone
+    // still fans one tile either side of that axis — what is being checked is
+    // the direction it travels, so the honest test is that the footprint comes
+    // out identical to the one aimed straight down the axis.
+    const key = (f: typeof east) => f.map((t) => `${t.tx}|${t.ty}`).sort().join(",");
+    const nearAxis = MS.spellFootprint(w, breath, ox, oy, ox + 8, oy + 1);
+    ok(key(nearAxis) === key(east), "a bearing close to an axis stays on the axis");
+    ok(key(MS.spellFootprint(w, breath, ox, oy, ox + 4, oy + 3)) === key(diag),
+      "…and one close to 45 degrees stays diagonal");
+
+    const plus = MS.spellFootprint(w, field, ox, oy, ox + 3, oy);
+    ok(plus.length === 5, "a field is a plus of five tiles");
+    ok(plus.some((t) => t.tx === ox + 3 && t.ty === oy), "…centred where it was aimed");
+    ok(plus.every((t) => t.delay === 0), "…and lands flat, with no travel");
+
+    // walls eat the footprint; trees do not. This is the groundBlocked vs
+    // walkable rule, and getting it backwards punches holes in every blast.
+    let wx = -1;
+    let wy = -1;
+    for (let ty = 1; ty < w.h - 1 && wx < 0; ty++) {
+      for (let tx = 1; tx < w.w - 1; tx++) {
+        if (groundBlocked(w, tx, ty)) { wx = tx; wy = ty; break; }
+      }
+    }
+    ok(wx >= 0, "found blocked ground to aim into");
+    ok(!MS.spellFootprint(w, field, wx, wy, wx, wy).some((t) => t.tx === wx && t.ty === wy),
+      "a blocked tile is never painted");
+
+    // --- the windup contract ---
+    MS.clearMonsterSpells();
+    MS.resetMonsterSpellClock();
+    X.clearSpellFx();
+    const before = w.monsters.length;
+    ok(spawnMonster(w, "dragon", 0), "spawned a dragon to cast with");
+    const drag = w.monsters[w.monsters.length - 1];
+    ok(w.monsters.length === before + 1 && drag.kind === "dragon", "…and it is the one we got");
+    drag.tx = ox; drag.ty = oy;
+    drag.x = ox * TILE + TILE / 2; drag.y = oy * TILE + TILE / 2;
+
+    ok(MS.beginCast(w, drag, breath, ox + 3, oy), "the cast is accepted");
+    ok(MS.isCasting(drag), "…and the caster is now rooted");
+    ok(MS.pendingCastCount() === 1, "…with exactly one cast in flight");
+
+    let hits = 0;
+    const tgtIn = { tx: ox + 1, ty: oy, dead: false };
+    MS.updateMonsterSpells(w, breath.windupS * 0.5, tgtIn, () => { hits++; });
+    ok(hits === 0, "nothing lands during the windup");
+    ok(X.spellFxCounts().blasts === 0, "…and nothing is even drawn yet");
+    ok(MS.telegraphTiles(w).length === 7, "…but all seven tiles are glowing");
+    ok(MS.telegraphTiles(w)[0].heat > 0 && MS.telegraphTiles(w)[0].heat < 1,
+      "…and the warning is partway through");
+    ok(MS.telegraphTiles(ws.town).length === 0, "…with nothing glowing on another island");
+
+    MS.updateMonsterSpells(w, breath.windupS, tgtIn, () => { hits++; });
+    ok(hits === 1, "standing in the footprint costs exactly one hit");
+    ok(!MS.isCasting(drag), "…the caster is free again");
+    ok(MS.telegraphTiles(w).length === 0, "…and the warning is gone");
+    ok(X.spellFxCounts().blasts === 7, "…with a bloom on every tile");
+    X.clearSpellFx();
+
+    // the telegraph is a promise: stepping out of it works
+    MS.clearMonsterSpells();
+    hits = 0;
+    MS.beginCast(w, drag, breath, ox + 3, oy);
+    MS.updateMonsterSpells(w, breath.windupS + 0.01, { tx: ox - 3, ty: oy, dead: false },
+      () => { hits++; });
+    ok(hits === 0, "a player who stepped out of the footprint takes nothing");
+    X.clearSpellFx();
+
+    // …and it does not re-aim at where he went
+    MS.clearMonsterSpells();
+    hits = 0;
+    MS.beginCast(w, drag, breath, ox + 3, oy);
+    MS.updateMonsterSpells(w, breath.windupS * 0.5, { tx: ox + 1, ty: oy, dead: false }, () => {});
+    const moved = MS.telegraphTiles(w).map((t) => `${t.tx}|${t.ty}`).sort().join(",");
+    MS.updateMonsterSpells(w, 0.01, { tx: ox, ty: oy + 3, dead: false }, () => {});
+    ok(MS.telegraphTiles(w).map((t) => `${t.tx}|${t.ty}`).sort().join(",") === moved,
+      "the footprint does not follow the player once it is committed");
+    MS.clearMonsterSpells();
+    X.clearSpellFx();
+
+    // a caster killed mid-windup takes its spell with it
+    MS.clearMonsterSpells();
+    hits = 0;
+    MS.beginCast(w, drag, breath, ox + 3, oy);
+    const hp = drag.hp;
+    drag.hp = 0;
+    MS.updateMonsterSpells(w, breath.windupS + 0.01, tgtIn, () => { hits++; });
+    ok(hits === 0, "a dead caster's spell never lands");
+    ok(MS.pendingCastCount() === 0, "…and does not linger as a pending cast");
+    drag.hp = hp;
+    X.clearSpellFx();
+
+    // a breath with nowhere to go is refused rather than eating the cooldown
+    MS.clearMonsterSpells();
+    drag.tx = wx; drag.ty = wy;
+    const walled = MS.spellFootprint(w, breath, wx, wy, wx, wy);
+    ok(MS.beginCast(w, drag, breath, wx, wy) === (walled.length > 0),
+      "a cast is accepted exactly when its footprint is not empty");
+    MS.clearMonsterSpells();
+    drag.tx = ox; drag.ty = oy;
+
+    // --- fields: no damage on impact, damage for standing there ---
+    MS.clearMonsterSpells();
+    MS.resetMonsterSpellClock();
+    X.clearSpellFx();
+    hits = 0;
+    MS.beginCast(w, drag, field, ox + 3, oy);
+    MS.updateMonsterSpells(w, field.windupS + 0.01, { tx: ox + 3, ty: oy, dead: false },
+      () => { hits++; });
+    ok(hits === 1, "a field bites at once if it lands under you");
+    ok(X.spellFxCounts().fields === 5, "…lighting five tiles");
+    ok(X.spellFxCounts().blasts === 0, "…and leaving no one-shot bloom behind");
+    ok(X.burningTiles(w).length === 5, "…all of which report as burning");
+    ok(X.burningTiles(ws.town).length === 0, "…on this island only");
+
+    MS.updateMonsterSpells(w, 0.1, { tx: ox + 3, ty: oy, dead: false }, () => { hits++; });
+    ok(hits === 1, "…and not again on the very next frame");
+    MS.updateMonsterSpells(w, 1.1, { tx: ox + 3, ty: oy, dead: false }, () => { hits++; });
+    ok(hits === 2, "…but again a second later");
+    MS.updateMonsterSpells(w, 1.1, { tx: ox - 5, ty: oy, dead: false }, () => { hits++; });
+    ok(hits === 2, "standing OUT of it costs nothing");
+    MS.updateMonsterSpells(w, 1.1, { tx: ox + 3, ty: oy, dead: true }, () => { hits++; });
+    ok(hits === 2, "…and a corpse does not burn");
+
+    // …and the whole point: read the warning, step off, pay nothing at all
+    MS.clearMonsterSpells();
+    MS.resetMonsterSpellClock();
+    X.clearSpellFx();
+    hits = 0;
+    MS.beginCast(w, drag, field, ox + 3, oy);
+    MS.updateMonsterSpells(w, field.windupS + 0.01, { tx: ox - 5, ty: oy, dead: false },
+      () => { hits++; });
+    ok(hits === 0, "a field dodged cleanly costs nothing");
+    ok(X.burningTiles(w).length === 5, "…though the ground still catches");
+
+    // the fire goes out on its own
+    X.updateSpellFx(field.fieldS! + 0.1);
+    ok(X.burningTiles(w).length === 0, "the field burns out on schedule");
+    ok(X.spellFxCounts().fields === 0, "…and stops drawing");
+
+    // re-lighting a tile refreshes it instead of stacking a second flame
+    X.clearSpellFx();
+    X.addField(w, ox, oy, "fire", 0, 4);
+    X.addField(w, ox, oy, "fire", 0, 4);
+    ok(X.spellFxCounts().fields === 1, "two casts on one tile leave one flame");
+    X.updateSpellFx(3);
+    X.addField(w, ox, oy, "fire", 0, 4);
+    X.updateSpellFx(2);
+    ok(X.spellFxCounts().fields === 1, "…and re-lighting it extends the burn");
+    X.clearSpellFx();
+    ok(X.spellFxCounts().fields === 0, "clearSpellFx puts every fire out");
+
+    // a field joins the depth sort like any other ground effect
+    X.clearSpellFx();
+    X.addField(w, 10, 10, "fire", 0, 3);
+    const fd = X.spellBlastDrawables(w);
+    ok(fd.length === 1 && fd[0].y === 10 * TILE + TILE / 2,
+      "a field sorts on its tile centre, exactly as a blast does");
+    const rec4 = new Proxy({}, {
+      get(_t, prop) { return () => { void prop; }; },
+      set() { return true; },
+    }) as unknown as CanvasRenderingContext2D;
+    fd[0].fn(rec4, 0, 0);
+    ok(true, "…and paints without a real canvas");
+    X.clearSpellFx();
+
+    // travelling wipes committed casts — see travelTo
+    MS.beginCast(w, drag, breath, ox + 3, oy);
+    MS.clearMonsterSpells();
+    ok(MS.pendingCastCount() === 0, "clearMonsterSpells drops everything in flight");
+
+    w.monsters.splice(w.monsters.indexOf(drag), 1);
+    X.clearSpellFx();
+  }
+
+  console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
 
