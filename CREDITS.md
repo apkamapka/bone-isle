@@ -737,6 +737,43 @@ These are drawn as scenery rather than baked into the terrain export: they
 stand taller than the square they occupy, and the player has to be able to walk
 behind them.
 
+## Gallows Coast buildings — `prop-barn.png`, `prop-house-a.png`, `prop-house-b.png`, `prop-smithy.png`, `prop-windmill.png`
+
+Source: **CraftPix.net**, *Top-Down Simple Autumn Props* and *Top-Down Simple
+Summer Props*, under the CraftPix standard licence — commercial use in a
+released game is permitted; redistribution of the source files as source files
+is not. What ships here are not those files. Each is a derivative cut down by
+roughly a quarter in each dimension and re-quantised to a 28-colour palette,
+which is what the game's tile size can carry.
+
+| File | Source prop | Size | Footprint | Blocks |
+| --- | --- | --- | --- | --- |
+| `prop-barn.png` | Autumn — Barn | 128 x 160 | 4 x 5 | 4 x 2 |
+| `prop-house-a.png` | Autumn — House | 128 x 160 | 4 x 5 | 4 x 2 |
+| `prop-house-b.png` | Summer — House | 128 x 160 | 4 x 5 | 4 x 2 |
+| `prop-smithy.png` | Autumn — Blacksmith Workshop | 128 x 128 | 4 x 4 | 4 x 2 |
+| `prop-windmill.png` | Summer — Windmill | 160 x 160 | 5 x 5 | 5 x 2 |
+
+### Cutting method
+
+The originals are ~480 px cartoon illustrations with a flat drop shadow baked
+in at `rgba(4,7,7,51)`. That shadow is stripped first — the engine draws its
+own, and once prop art has loaded `artShadow` is a no-op, so the sprite has to
+carry one itself. The remainder is cropped to its own bounds, resized with
+Lanczos to fit the tile box, alpha-thresholded so the silhouette reads as
+pixels instead of a soft smear, unsharp-masked to bring the black outline back
+after the shrink, quantised to 28 colours, and given a soft elliptical ground
+shadow sized to whatever part of the building actually meets the floor.
+
+Sizes were chosen from each prop's own proportions rather than forced to one
+box: the barn and both houses come out at 1.27-1.48 tall for every tile wide,
+which lands on 4 x 5; the smithy is the squattest of the five and takes 4 x 4;
+the windmill is wider than it is tall because of its sails, and cropping those
+to four tiles left a shed with sticks on it, so it takes 5 x 5.
+
+Like the Bone Reach objects, these are scenery rather than terrain: they stand
+taller than the squares they occupy and the player walks behind the roof.
+
 ## Black Knight — `public/mob-black-knight-walk.png`, `public/mob-black-knight-dead.png`
 
 Source: **Universal LPC Spritesheet Character Generator**, CC-BY-SA 3.0 —

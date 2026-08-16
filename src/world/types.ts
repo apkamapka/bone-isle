@@ -125,7 +125,11 @@ export interface Fire {
 
 /** Scenery a map may plant. Artwork and fallbacks live in gfx/sceneryArt.ts. */
 export type SceneryKind = "skullPole" | "deadTree" | "felledTree"
-  | "well" | "tent" | "boulderA" | "boulderB";
+  | "well" | "tent" | "boulderA" | "boulderB"
+  // Buildings. Same contract as everything else here — the glyph names the
+  // top-left square of the footprint and the sprite is anchored bottom-centre
+  // over the block — they are simply four and five tiles instead of one.
+  | "barn" | "houseA" | "houseB" | "smithy" | "windmill";
 
 /**
  * A standing object taller than its tile — a skull totem, a dead tree.

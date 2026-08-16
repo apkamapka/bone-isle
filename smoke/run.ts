@@ -3684,9 +3684,14 @@ async function main(): Promise<void> {
       tent: "prop-tent.png",
       boulderA: "prop-boulder-a.png",
       boulderB: "prop-boulder-b.png",
+      barn: "prop-barn.png",
+      houseA: "prop-house-a.png",
+      houseB: "prop-house-b.png",
+      smithy: "prop-smithy.png",
+      windmill: "prop-windmill.png",
     };
 
-    ok(scn.SCENERY_KINDS.length === 7, "seven kinds of scenery are registered");
+    ok(scn.SCENERY_KINDS.length === 12, "twelve kinds of scenery are registered");
     for (const kind of scn.SCENERY_KINDS) {
       const file = FILES[kind];
       ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
@@ -3707,9 +3712,19 @@ async function main(): Promise<void> {
         `…a block inside the footprint, never wider than it (${bk.w}x${bk.h} of ${fp.w}x${fp.h})`);
     }
 
-    /* --- one row deep means one row solid; deeper means overhang to hide in --- */
-    ok(scn.SCENERY_KINDS.every((k) => scn.BLOCK[k].h === 1),
-      "nothing blocks more than the near row — every prop is a tree at heart");
+    /* --- one row deep means one row solid; deeper means overhang to hide in ---
+     * Every prop is a tree at heart: the near rows stop you, the rest is drawn
+     * over your head. A tent is two deep and seals one, so half of it is
+     * overhang. The buildings are four and five deep and seal two, which is the
+     * same idea and not a weaker one — with a single row a five-tile house
+     * would let you stand four tiles inside its own wall. What must hold either
+     * way is that the roof is never solid and never less than half the object. */
+    ok(scn.SCENERY_KINDS.every((k) => scn.BLOCK[k].h <= Math.max(1, Math.floor(scn.FOOTPRINT[k].h / 2))),
+      "no prop seals more than half its own depth");
+    ok(scn.SCENERY_KINDS.every((k) => scn.FOOTPRINT[k].h === 1 || scn.BLOCK[k].h < scn.FOOTPRINT[k].h),
+      "…and anything deeper than one row keeps overhang to hide behind");
+    ok(scn.SCENERY_KINDS.filter((k) => scn.FOOTPRINT[k].h <= 2).every((k) => scn.BLOCK[k].h === 1),
+      "…while the small props still seal exactly the near row, as they always did");
     ok(scn.BLOCK.well.h < scn.FOOTPRINT.well.h && scn.BLOCK.tent.h < scn.FOOTPRINT.tent.h,
       "…so the far row of a well and a tent is drawn but not walled");
     ok(scn.BLOCK.deadTree.h === scn.FOOTPRINT.deadTree.h,
@@ -4093,6 +4108,40 @@ async function main(): Promise<void> {
     ok(b.fires.length === 24, "all 24 campfires were placed");
     ok(b.scenery.filter((s) => s.kind === "tent").length === 24, "…and all 24 tents");
     ok(b.scenery.filter((s) => s.kind === "well").length === 8, "…one well per camp");
+
+    /* --- the camps that took a farm instead of pitching canvas --- */
+    const BUILT = ["barn", "houseA", "houseB", "smithy", "windmill"] as const;
+    const buildings = b.scenery.filter((s) => (BUILT as readonly string[]).includes(s.kind));
+    ok(buildings.length === 17, "seventeen buildings stand in the camps");
+    ok(BUILT.every((k) => b.scenery.some((s) => s.kind === k)),
+      "…drawn from all five kinds rather than one stamp repeated");
+    // A five-tile building wears its roof as overhang. Seal the wall, leave the
+    // roof walkable, and keep the whole footprint on dry land — a gable hanging
+    // over open water reads as a house built on the waves.
+    {
+      const { FOOTPRINT: FP, BLOCK: BK } = await import("../src/gfx/sceneryArt.ts");
+      let wallOpen = 0, roofWalled = 0, roofSquares = 0, afloat = 0;
+      for (const s of buildings) {
+        const fp = FP[s.kind], bk = BK[s.kind];
+        const y0 = s.ty + fp.h - bk.h;
+        for (let j = y0; j < y0 + bk.h; j++) {
+          for (let i = 0; i < bk.w; i++) if (!b.solid[j][s.tx + i]) wallOpen++;
+        }
+        for (let j = s.ty; j < y0; j++) {
+          for (let i = 0; i < fp.w; i++) {
+            roofSquares++;
+            if (b.solid[j][s.tx + i]) roofWalled++;
+          }
+        }
+        for (let j = s.ty; j < s.ty + fp.h; j++) {
+          for (let i = 0; i < fp.w; i++) if (b.tile[j][s.tx + i] === T4.Water) afloat++;
+        }
+      }
+      ok(wallOpen === 0, "…every wall row is solid, so you cannot walk through one");
+      ok(roofSquares === 194 && roofWalled === 0,
+        `…and all ${roofSquares} squares of roof are walk-behind, like a tent's`);
+      ok(afloat === 0, "…and not one of them has a gable out over the water");
+    }
 
     /* --- this island exists to field the ranks nothing else spawns --- */
     const LADDER = ["beggar", "vagrant", "thief", "poacher", "bandit",

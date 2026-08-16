@@ -31,6 +31,11 @@ const SRC: Record<SceneryKind, string> = {
   tent: "./prop-tent.png",
   boulderA: "./prop-boulder-a.png",
   boulderB: "./prop-boulder-b.png",
+  barn: "./prop-barn.png",
+  houseA: "./prop-house-a.png",
+  houseB: "./prop-house-b.png",
+  smithy: "./prop-smithy.png",
+  windmill: "./prop-windmill.png",
 };
 
 /**
@@ -47,6 +52,15 @@ export const FOOTPRINT: Record<SceneryKind, { w: number; h: number }> = {
   tent: { w: 2, h: 2 },
   boulderA: { w: 2, h: 1 },
   boulderB: { w: 2, h: 1 },
+  // The buildings. Four tiles across is the width the artwork was cut to, and
+  // the height is whatever the roof needed: a barn and a house are five deep,
+  // the smithy four, the windmill five square because its sails are wider than
+  // the mill under them and cropping them to four made it a shed with sticks.
+  barn: { w: 4, h: 5 },
+  houseA: { w: 4, h: 5 },
+  houseB: { w: 4, h: 5 },
+  smithy: { w: 4, h: 4 },
+  windmill: { w: 5, h: 5 },
 };
 
 /**
@@ -74,6 +88,17 @@ export const BLOCK: Record<SceneryKind, { w: number; h: number }> = {
   tent: { w: 2, h: 1 },
   boulderA: { w: 2, h: 1 },
   boulderB: { w: 2, h: 1 },
+  // Two rows of wall, and everything above it is roof the player walks behind.
+  // That is the tent's rule scaled up: walk down past a house and you pass
+  // behind the gable with your head over the ridge, and the wall takes your
+  // legs. The width always matches the footprint — a narrower block would hug
+  // the LEFT edge of the sprite instead of centring under it, which is why the
+  // windmill seals its full five and you cannot duck beneath its sails.
+  barn: { w: 4, h: 2 },
+  houseA: { w: 4, h: 2 },
+  houseB: { w: 4, h: 2 },
+  smithy: { w: 4, h: 2 },
+  windmill: { w: 5, h: 2 },
 };
 
 /**
@@ -90,6 +115,12 @@ const FALLBACK: Record<SceneryKind, SpriteName> = {
   tent: "tent",
   boulderA: "rock",
   boulderB: "rock",
+  // Wrong size by a mile, right idea, and never seen unless a PNG goes missing.
+  barn: "hut",
+  houseA: "hut",
+  houseB: "hut",
+  smithy: "hut",
+  windmill: "hut",
 };
 
 export const SCENERY_KINDS = Object.keys(SRC) as SceneryKind[];
