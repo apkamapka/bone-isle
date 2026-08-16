@@ -54,12 +54,17 @@ const WALK_CYCLE_S = 1.0;
  *
  * The number that reads right is roughly the time the animal takes to cover
  * its own body length, because that is about how often a real leg plants. The
- * dragon is 90 px long and moves at 60 px/s, so 1.5 s. At the old cadence it
+ * dragon is 90 px long; at 51 px/s that is 1.75 s. At the old flat cadence it
  * completed a whole gallop every 1.17 tiles — a stride and a half per body
  * length — which is why it looked like it was running on the spot.
+ *
+ * This number is DOWNSTREAM of the creature's speed and has to move with it:
+ * Etap 30 took 15% off every entry in MONSTER_DEFS, and the dragon's cycle
+ * went from 1.5 to 1.75 for exactly that reason. Change a speed, recheck the
+ * override — the smoke test does this arithmetic and will catch it.
  */
 const WALK_CYCLE_OVERRIDE: Readonly<Record<string, number>> = {
-  dragon: 1.5,
+  dragon: 1.75,
 };
 
 /**
