@@ -4060,6 +4060,137 @@ async function main(): Promise<void> {
       "…and no pad points at the Deep Wildlands any more");
   }
 
+
+  console.log("The Gallows Coast carries the human ladder:");
+  {
+    const fs = await import("node:fs");
+    const { BANDIT_SPEC } = await import("../src/world/banditSpec.ts");
+    const { CELLAR_SPEC } = await import("../src/world/handmade.ts");
+    const { Tile: T4 } = await import("../src/world/types.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds, WORLD_SEED);
+    const b = worlds.bandit;
+
+    /* --- the export lines up with the grid, or the loader drops it --- */
+    const terrain = new URL("../public/bandit-terrain.png", import.meta.url);
+    if (!fs.existsSync(terrain)) {
+      ok(false, "public/bandit-terrain.png is missing — the island falls back to the baked terrain");
+    } else {
+      const png = fs.readFileSync(terrain);
+      ok(png.readUInt32BE(16) === b.w * 32 && png.readUInt32BE(20) === b.h * 32,
+        `the terrain export is exactly ${b.w * 32}x${b.h * 32}`);
+    }
+    ok(BANDIT_SPEC.rows.length === 100 && BANDIT_SPEC.rows.every((r) => r.length === 105),
+      "the grid is 105x100, as drawn");
+    ok(BANDIT_SPEC.floor?.length === 100
+      && BANDIT_SPEC.floor.every((r) => r.length === 105),
+      "…and the terrain grid matches it row for row");
+
+    /* --- everything the author marked actually landed --- */
+    ok(b.mobPosts?.length === 87, "87 creature posts were written into the grid");
+    ok(b.monsters.length === 87, "…and every one of them spawned");
+    ok(b.fires.length === 24, "all 24 campfires were placed");
+    ok(b.scenery.filter((s) => s.kind === "tent").length === 24, "…and all 24 tents");
+    ok(b.scenery.filter((s) => s.kind === "well").length === 8, "…one well per camp");
+
+    /* --- this island exists to field the ranks nothing else spawns --- */
+    const LADDER = ["beggar", "vagrant", "thief", "poacher", "bandit",
+      "smuggler", "cutthroat", "deserter", "brigand", "highwayman"] as const;
+    ok(LADDER.every((k) => b.monsters.some((m) => m.kind === k)),
+      "every rank of the low human ladder stands somewhere on it");
+    const HEAVY = ["orc", "minotaur", "dragon", "blackKnight", "demonSkeleton",
+      "warlord", "chieftain", "gladiator"];
+    ok(!b.monsters.some((m) => HEAVY.includes(m.kind)),
+      "…and nothing above the highwayman's rank walks here");
+
+    /* --- the island is one landmass; nothing is marooned --- */
+    const back = b.portals.find((p) => p.dest === "cellar");
+    ok(back !== undefined && !back.inactive, "a live pad leads back to the cellar");
+    const sx = Math.floor(back!.x / 32), sy = Math.floor(back!.y / 32);
+    const seen = Array.from({ length: b.h }, () => new Array<boolean>(b.w).fill(false));
+    const q: [number, number][] = [[sx, sy]];
+    seen[sy][sx] = true;
+    let reached = 0;
+    while (q.length) {
+      const [x, y] = q.pop()!;
+      reached++;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = x + dx, c = y + dy;
+        if (a < 0 || c < 0 || a >= b.w || c >= b.h) continue;
+        if (seen[c][a] || b.solid[c][a] || b.tile[c][a] === T4.Water) continue;
+        seen[c][a] = true;
+        q.push([a, c]);
+      }
+    }
+    let walkable = 0;
+    for (let y = 0; y < b.h; y++) {
+      for (let x = 0; x < b.w; x++) if (!b.solid[y][x] && b.tile[y][x] !== T4.Water) walkable++;
+    }
+    ok(reached === walkable, `every walkable square is reachable from the pad (${reached})`);
+    ok(b.mobPosts!.every((p) => seen[p.ty][p.tx]), "…so no creature is marooned off it");
+
+    /* --- five bridges, none of them corked ---
+     * The island is four landmasses stitched by bridge decks. A boulder or a
+     * tent dropped on an approach would sever a third of the map, and the
+     * reachability count above would not necessarily catch which third. */
+    const DECKS: [number, number, number, number][] = [
+      [44, 20, 48, 21], [52, 49, 56, 50], [40, 55, 41, 59],
+      [62, 55, 63, 59], [17, 77, 18, 81],
+    ];
+    let corked = 0;
+    for (const [x0, y0, x1, y1] of DECKS) {
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          if (b.solid[y][x] || b.tile[y][x] !== T4.Dirt) corked++;
+        }
+      }
+    }
+    ok(corked === 0, "all five bridge decks are open plank and walkable end to end");
+
+    /* --- difficulty rises away from the pad, which is how it was laid --- */
+    const meanDist = (kind: string): number => {
+      const ps = b.mobPosts!.filter((p) => p.kind === kind);
+      return ps.reduce((s, p) => s + Math.hypot(p.tx - sx, p.ty - sy), 0) / ps.length;
+    };
+    ok(meanDist("beggar") < meanDist("highwayman"),
+      "beggars sit nearer the way home than highwaymen");
+    ok(meanDist("snake") < meanDist("brigand"), "…and snakes nearer than brigands");
+    ok(meanDist("thief") < meanDist("deserter"), "…the middle of the ladder holds too");
+
+    /* --- the apron: you can land and draw before anything reaches you --- */
+    const nearest = Math.min(...b.mobPosts!.map((p) => Math.hypot(p.tx - sx, p.ty - sy)));
+    ok(nearest >= 8, `the nearest creature to the pad stands ${Math.round(nearest)} tiles off`);
+
+    /* --- nothing tall wades in the surf --- */
+    const nearSea = (tx: number, ty: number): boolean => {
+      for (let j = -2; j <= 2; j++) {
+        for (let i = -2; i <= 2; i++) {
+          const x = tx + i, y = ty + j;
+          if (x < 0 || y < 0 || x >= b.w || y >= b.h) continue;
+          if (b.tile[y][x] === T4.Water) return true;
+        }
+      }
+      return false;
+    };
+    ok(!b.trees.some((t) => nearSea(t.tx, t.ty)), "no tree is planted in the surf");
+    ok(!b.scenery.some((s) => nearSea(s.tx, s.ty)), "…nor any totem, tent, well or boulder");
+
+    /* --- six holes, all of them cut and all of them still shut --- */
+    const down = b.portals.filter((p) => p.dest === "bandit");
+    ok(down.length === 6, "all six descents to -1 are cut into the island");
+    ok(down.every((p) => p.inactive), "…and every one is sealed until that floor is drawn");
+    ok(down.every((p) => b.tile[Math.floor(p.y / 32)][Math.floor(p.x / 32)] === T4.Dirt),
+      "…each standing on bare earth rather than grass");
+
+    /* --- the cellar's Wildlands pad now opens here instead --- */
+    ok(CELLAR_SPEC.portals.c.dest === "bandit",
+      "the pad that used to carry you to the Wildlands now opens on the Gallows Coast");
+    ok(!CELLAR_SPEC.portals.c.inactive, "…and it is live, not dormant");
+    ok(!Object.values(CELLAR_SPEC.portals).some((p) => p.dest === "wild"),
+      "…and no pad points at the Wildlands any more");
+  }
+
   console.log("The two floors under the Reach are traced faithfully from Tiled:");
   {
     const fs = await import("node:fs");

@@ -2,6 +2,7 @@
 import { makeWorld } from "./world/generate.ts";
 import { MINODEEP_SPEC } from "./world/minoDeepSpec.ts";
 import { ORCDEEP_SPEC } from "./world/orcDeepSpec.ts";
+import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC, CELLAR_SPEC } from "./world/handmade.ts";
@@ -238,6 +239,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   const sanctum = makeHandmadeWorld(SANCTUM_SPEC);
   const cellar = makeHandmadeWorld(CELLAR_SPEC);
   const reach = makeHandmadeWorld(REACH_SPEC);
+  const bandit = makeHandmadeWorld(BANDIT_SPEC);
   const orcdeep1 = makeHandmadeWorld(ORCDEEP_SPEC);
   const minodeep1 = makeHandmadeWorld(MINODEEP_SPEC);
   const wild = makeWorld({
@@ -269,7 +271,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   // …and every camp's lair floors, each from its own salted seed. The record
   // is completed by the loop below, hence the cast: TypeScript can't see that
   // LAIRS covers exactly the remaining WorldKey members.
-  const worlds = { home, town, sanctum, cellar, reach, orcdeep1, minodeep1, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
+  const worlds = { home, town, sanctum, cellar, reach, bandit, orcdeep1, minodeep1, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
   loadMobSheets();           // directional walk cycles for humanoid creatures

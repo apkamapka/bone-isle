@@ -596,7 +596,10 @@ export const CELLAR_SPEC: HandmadeSpec = {
     // built it carries you to the two islands that DO have monsters on them.
     // Neither island has a way back to the cellar, so you arrive beside its own
     // gate to Bonetown and return that way — see the note in `travelTo`.
-    c: { dest: "wild", label: "to the Wildlands", span: 2, floor: Tile.Cave },
+    // The Wildlands slot now carries you to the Gallows Coast instead. The old
+    // procedural island is left standing but unreachable — it is on its way
+    // out, and orphaning it here is the first step rather than an oversight.
+    c: { dest: "bandit", label: "to the Gallows Coast", span: 2, floor: Tile.Cave },
     d: { dest: "reach", label: "to the Bone Reach", span: 2, floor: Tile.Cave },
     // and ten more the sage has not named yet
     "1": sealed("Sealed Rift I"),
