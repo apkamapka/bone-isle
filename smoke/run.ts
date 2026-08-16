@@ -5651,6 +5651,91 @@ async function main(): Promise<void> {
     ok(mb.defBonus! > ks.defBonus!, "…and ahead of it only on the always-on guard");
   }
 
+  console.log("Etap 30 — pacing, respawn and the one cooldown:");
+  {
+    const { MONSTER_DEFS, MONSTER_KINDS } = await import("../src/entities/monsters.ts");
+    const C = await import("../src/config.ts");
+    const { walkCycleSeconds } = await import("../src/gfx/mobSheet.ts");
+    const CR = await import("../src/systems/crystals.ts");
+
+    /* --- speed: the whole clock came down, the RATIO did not --- */
+    // Tibia converts to roughly speed/100 tiles per second on normal ground:
+    // an orc 0.75, a minotaur 0.84, a dragon 0.86, against a level-1 player's
+    // 2.20. The reference number being defended here is the player's edge over
+    // the average creature — 2.7x in Tibia. Cutting the player 20% and the
+    // creatures 15% narrows the absolute pace without touching that ratio.
+    const speeds = MONSTER_KINDS.map((k) => MONSTER_DEFS[k].speed);
+    const avgMob = speeds.reduce((s, v) => s + v, 0) / speeds.length;
+    const edge = C.PLAYER_BASE_SPEED / avgMob;
+    ok(edge > 1.7 && edge < 2.3,
+      `a level-1 player still outpaces the average creature ~2x (${edge.toFixed(2)})`);
+    ok(Math.max(...speeds) < C.PLAYER_BASE_SPEED,
+      `nothing in the bestiary outruns a level-1 player (fastest ${Math.max(...speeds)})`);
+    ok(C.NPC_WALK_SPEED * 3 < C.PLAYER_BASE_SPEED,
+      "townsfolk stayed at a third of the player when he slowed");
+
+    // A stride has to carry the animal about its own body length or it skates.
+    // The dragon is the only creature with an override and the only one long
+    // enough for the error to read, so it is the canary for the whole pass.
+    const carried = MONSTER_DEFS.dragon.speed * walkCycleSeconds("dragon");
+    ok(Math.abs(carried - 90) < 12,
+      `the dragon's cycle still carries it its own length (${carried.toFixed(0)}px vs 90)`);
+
+    /* --- respawn --- */
+    ok(C.MONSTER_RESPAWN_S === 90, `a slain creature takes 90s to come back (${C.MONSTER_RESPAWN_S})`);
+    ok(C.MONSTER_RESPAWN_S > C.CORPSE_DECAY_S,
+      "…longer than its own corpse lasts, so a cleared spot reads as cleared");
+
+    /* --- aggro hysteresis: notice at six, shake off at eight --- */
+    ok(C.MONSTER_AGGRO_HOLD_RANGE > C.MONSTER_AGGRO_RANGE,
+      "a creature that has seen you follows further than it looks");
+    ok(C.MONSTER_AGGRO_HOLD_RANGE - C.MONSTER_AGGRO_RANGE === 2 * C.TILE,
+      "…by exactly two tiles");
+    // The leash is what caps this: a chased creature drifts ~6.4 tiles from
+    // its post at two tiles of hysteresis, and POST_LEASH_PX is ten. Widen the
+    // hysteresis past the leash and the two fight, which reads as yo-yoing.
+    ok(C.MONSTER_AGGRO_HOLD_RANGE < C.POST_LEASH_PX,
+      "…and never further than the leash that pulls it home");
+
+    /* --- one cooldown for every crystal, healing included --- */
+    ok(C.CRYSTAL_COOLDOWN_S === 3.0, `the shared crystal cooldown is 3s (${C.CRYSTAL_COOLDOWN_S})`);
+    const { createPlayer, refreshDerived } = await import("../src/entities/player.ts");
+    const w3 = buildWorlds(WORLD_SEED).home;
+    const P2 = createPlayer(w3.spawn);
+    P2.level = 30;
+    refreshDerived(P2);
+    P2.hp = 100;
+    CR.resetCrystalCooldown();
+    items.addItem(P2.bag, "healCrystal", 5);
+    ok(CR.useCrystal(w3, P2, "healCrystal"), "the first Life Crystal goes off");
+    ok(CR.crystalCooldownLeft() === C.CRYSTAL_COOLDOWN_S,
+      "…and starts the shared timer, which healing never used to touch");
+    const hpAfterFirst = P2.hp;
+    ok(!CR.useCrystal(w3, P2, "healCrystal"), "a second one straight away is refused");
+    ok(P2.hp === hpAfterFirst, "…and costs neither a charge's worth of HP…");
+    ok(items.bagCount(P2.bag, "healCrystal") === 4, "…nor the charge itself");
+    CR.tickCrystalCooldown(C.CRYSTAL_COOLDOWN_S);
+    ok(CR.crystalCooldownLeft() === 0, "the timer runs down");
+    ok(CR.useCrystal(w3, P2, "healCrystal"), "…and the next heal lands");
+
+    // The number this whole change exists for: healing throughput against one
+    // creature's damage. Below 3s a player out-heals a crowd; at 3s the
+    // ceiling sits on 2-3 attackers, which is what SHIELD_BLOCK_MAX already
+    // says about how many a shield can answer.
+    const healPerCast = C.HEAL_CRYSTAL_BASE + 30 * 3;
+    const hps = healPerCast / C.CRYSTAL_COOLDOWN_S;
+    const minoDps = (MONSTER_DEFS.minotaur.dmg[1] * 0.7) / MONSTER_DEFS.minotaur.atkRate;
+    // Raw, with no armour on: worn gear lifts the same figure to about 2.7.
+    const tanked = hps / minoDps;
+    ok(tanked > 1.5 && tanked < 3,
+      `unarmoured at 30 the crystal holds against ~2 minotaurs, not a floor (${tanked.toFixed(1)})`);
+    // The point of the change, stated as the thing that used to be true: with
+    // no cooldown the same crystal answered a dozen attackers at once.
+    ok(healPerCast / 0.25 / minoDps > 10,
+      "…where an uncapped click rate would have answered ten or more");
+    CR.resetCrystalCooldown();
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
