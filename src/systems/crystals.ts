@@ -34,12 +34,24 @@ export function isCrystal(kind: ItemKind): boolean {
 }
 
 /**
- * Shared cooldown for the offensive (elemental) crystals. Module state, not
- * a Player field, so saves need no migration; ticked from the main loop.
+ * The ONE crystal cooldown — elemental line and Life Crystal alike (Etap 30).
+ * Module state, not a Player field, so saves need no migration; ticked from
+ * the main loop. See CRYSTAL_COOLDOWN_S in config.ts for why healing joined
+ * it: with no mana in the game, the turn is the only price a heal can pay.
  */
 let offensiveCd = 0;
 export function tickCrystalCooldown(dt: number): void {
   offensiveCd = Math.max(0, offensiveCd - dt);
+}
+
+/** Seconds left on the shared crystal cooldown. Read by the smoke tests. */
+export function crystalCooldownLeft(): number {
+  return offensiveCd;
+}
+
+/** Clear the timer (new game / test isolation). */
+export function resetCrystalCooldown(): void {
+  offensiveCd = 0;
 }
 
 /**
@@ -270,7 +282,18 @@ export function useCrystal(
       addFloat(world, p.x, p.y - 44, "full hp", "#7dff9e");
       return false;
     }
+    // Healing shares ONE timer with the elemental line (Etap 30). Tibia pays
+    // for a heal in mana; with no mana here the only currency left is the
+    // turn, so a crystal spent on your own bar is a crystal not thrown at
+    // what is hitting you. The refusal is silent about which crystal blocked
+    // it — "not ready" is the same message either way, because to the player
+    // there is now only one cooldown to learn.
+    if (offensiveCd > 0) {
+      addFloat(world, p.x, p.y - 44, "not ready", "#8ab6ff");
+      return false;
+    }
     removeItem(p.bag, kind, 1);
+    offensiveCd = CRYSTAL_COOLDOWN_S;
     const amount = HEAL_CRYSTAL_BASE + p.level * 3;
     p.hp = Math.min(p.maxhp, p.hp + amount);
     addFloat(world, p.x, p.y - 40, `+${amount}`, "#7dff9e");
