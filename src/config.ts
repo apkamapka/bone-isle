@@ -96,14 +96,26 @@ export const VIEW_W = 30 * TILE;
 export const VIEW_H = 20 * TILE;
 
 /** Player balance. */
-export const PLAYER_BASE_SPEED = 116;
+export const PLAYER_BASE_SPEED = 93;
 /**
  * Movement speed gained per character level above 1 (px/s). Tibia 8.6 has no
  * Speed skill — haste comes from the character level itself (+2 speed/level on
- * a 220 base, ~0.9%). Scaled to our 116 px/s base that's ~1 px/s per level,
- * so a level-50 character moves ~42% faster, matching the 8.6 curve.
+ * a 220 base, ~0.9%). Scaled to our base that's ~0.8 px/s per level, so a
+ * level-50 character moves ~42% faster, matching the 8.6 curve.
+ *
+ * Both numbers came down 20% in Etap 30, together with a 15% cut across every
+ * creature in MONSTER_DEFS. The measurement behind it: converted to tiles per
+ * second, Tibia's own creatures move at roughly speed/100 on normal ground —
+ * an orc 0.75, a minotaur 0.84, a dragon 0.86 — against a level-1 player's
+ * 2.20. Bone Isle was running the whole clock about twice as fast as that,
+ * which is why a fight covered seven tiles per swing where Tibia covers four.
+ * The cuts are deliberately UNEQUAL and in this direction on purpose: the
+ * player's edge over the average creature was 1.9x here against Tibia's 2.7x,
+ * so shaving the player harder than the creatures would have widened a gap
+ * that was already on the wrong side of the reference. This narrows the
+ * absolute pace while leaving that ratio roughly where it was.
  */
-export const SPEED_PER_LEVEL = 1;
+export const SPEED_PER_LEVEL = 0.8;
 
 /**
  * Food & regeneration, Tibia 8.6 style: eating banks "fed" seconds and HP only
@@ -145,8 +157,21 @@ export const PLAYER_BASE_HP = HP_BASE + HP_PER_LEVEL; // level 1
 /** Backpack capacity (slots). */
 export const BAG_SIZE = 16;
 
-/** Monster respawn delay on the Wildlands (seconds). */
-export const MONSTER_RESPAWN_S = 12;
+/**
+ * Monster respawn delay (seconds).
+ *
+ * Twelve was a carousel. Tibia keys respawn off a per-home "regen" value and
+ * the number of players online: a typical home at regen 600 refills in five
+ * to ten minutes on an empty server and two to four on a full one. Bone Isle
+ * is single-player, so the empty-server branch is the honest comparison — and
+ * twelve seconds was twenty-five to fifty times faster than it.
+ *
+ * Ninety is a deliberate compromise rather than a copy: still four times
+ * quicker than Tibia, because this game has no second player to race for a
+ * spawn and a cleared floor that stays cleared for ten minutes would be dead
+ * air. Long enough that clearing a camp MEANS something for a while.
+ */
+export const MONSTER_RESPAWN_S = 90;
 
 /**
  * Crowd multiplier for the undergrounds (every dangerous floor except the
@@ -235,10 +260,14 @@ export const USE_RANGE_PX = 112;
  * Townsfolk pacing, Tibia-style. NPCs in the original shuffle: one square,
  * a long pause, another square. They are not going anywhere and must never
  * look like they are fleeing you, so the speed is roughly a third of a level-1
- * player (116 px/s) — about one tile per second — and the pause between steps
- * is long and randomised so no two of them fall into a rhythm.
+ * player — and the pause between steps is long and randomised so no two of
+ * them fall into a rhythm.
+ *
+ * Tracks PLAYER_BASE_SPEED: it fell with it in Etap 30 (34 -> 27), because
+ * "a third of the player" is the actual rule and leaving it alone would have
+ * quietly promoted the town blacksmith to a brisk walker.
  */
-export const NPC_WALK_SPEED = 34;
+export const NPC_WALK_SPEED = 27;
 export const NPC_REST_MIN_S = 1.4;
 export const NPC_REST_MAX_S = 4.2;
 
@@ -269,9 +298,26 @@ export const ROCK_REGROW_S = 120;
 
 /** Crystals (charge-based, replace spells). Values are per single charge. */
 export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level*3
-/** Shared cooldown for OFFENSIVE crystals (Fire, Spear) — they were spammable
- *  into a machine-gun burst; one bolt per this many seconds now. */
-export const CRYSTAL_COOLDOWN_S = 1.5;
+/**
+ * ONE cooldown across every crystal — the elemental line and the Life Crystal
+ * alike. Etap 30 merged what used to be an offence-only timer.
+ *
+ * Tibia brakes healing with mana: a spell you cannot pay for is a spell you
+ * do not cast, and the exhaust on top of it is about a second. Bone Isle has
+ * no mana, so before this the brake was nothing at all — a Life Crystal heals
+ * 30 + 3·level for eight gold with no timer, which at level 50 is 180 HP a
+ * click and a full bar for thirty-seven gold. A character could out-heal
+ * fourteen creatures at once and simply walk through a floor.
+ *
+ * Sharing the timer is what makes healing cost something the game has: a
+ * turn. At three seconds a single creature eats roughly 40% of the player's
+ * casts just to stand still, two creatures eat 75-90%, and three outpace the
+ * crystal entirely — which lands the ceiling on 2.3-2.7 attackers at every
+ * level from 20 to 50, with no per-level dial. That is the same number as
+ * SHIELD_BLOCK_MAX, and the two now say the same thing: a third body is the
+ * one you cannot afford.
+ */
+export const CRYSTAL_COOLDOWN_S = 3.0;
 
 /**
  * Ranged combat. A bow is a two-handed weapon (locks out the shield) that
@@ -468,6 +514,24 @@ export const ITEM_MOVE_REACH_PX = 48;
  * with it (the aggro-on-hit timer below is the safety net if it's forgotten).
  */
 export const MONSTER_AGGRO_RANGE = 6 * TILE;
+
+/**
+ * How much further a creature that has ALREADY noticed you will follow before
+ * losing interest. Six tiles to be seen, eight to shake off.
+ *
+ * Without the gap the two thresholds are the same line, and a player skirting
+ * it makes the whole floor flicker: creatures commit for half a step, snap
+ * back, commit again. The measured cost of the hysteresis is small — on the
+ * Bone Reach it changes hits taken not at all and only stretches the average
+ * chase from 4.2 to 4.6 seconds — so this is a fix for how pursuit READS, not
+ * a difficulty change.
+ *
+ * Two tiles and no more, deliberately: a chased creature drifts about 6.4
+ * tiles from its post at this setting, and POST_LEASH_PX is ten. Widen the
+ * hysteresis much past this and the leash starts fighting the chase, which
+ * looks like yo-yoing.
+ */
+export const MONSTER_AGGRO_HOLD_RANGE = 8 * TILE;
 
 /**
  * How far a creature posted by a hand-drawn map may drift from its post while
