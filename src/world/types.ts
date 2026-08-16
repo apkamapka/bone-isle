@@ -279,6 +279,11 @@ export interface Monster {
    *  chases even beyond its normal sight range (LoS still required), so
    *  shooting anything always provokes it regardless of bow reach. */
   aggroT: number;
+  /** True once this creature has actually noticed the player, and until it
+   *  loses them again. While set, the sight test uses the wider
+   *  MONSTER_AGGRO_HOLD_RANGE instead of MONSTER_AGGRO_RANGE — six tiles to
+   *  spot you, eight to shake off. Runtime only; never saved. */
+  engaged?: boolean;
   /** Preferred detour side (+1/-1) when the direct path to the target is
    *  body-blocked — half the pack circles left, half right, so they surround
    *  the player instead of queueing in a single line behind each other. */
