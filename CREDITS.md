@@ -749,18 +749,15 @@ Native tile resolution, object layers hidden: 3360 x 3200 for the two 105 x 100
 floors and 1280 x 1280 for the 40 x 40 cell. The -3 export arrived as a BMP and
 was re-encoded to PNG unchanged, pixel for pixel.
 
-The two large floors were also **resampled** before shipping. Their wall tileset
-stamps its band half a tile off the grid — a vertical band's rock measured
-x=16..47 across the two columns the TMX marks as wall, one tile's worth of stone
-centred on the seam between them — so sealing both columns put a whole phantom
-square of bare floor beyond reach. Every wall square's pixels are resampled 16px
-down-right, which slides each band onto the first square of its run and pulls
-plain floor in behind it, and only that first square is sealed. The outer border
-layer is untouched: it measures 0.87-0.92 ink per square against the maze walls'
-0.41, so it was already drawn on the grid.
-Collision does not come from this image: the glyph grid in `banditDeepSpec.ts`
-and `banditDeep2Spec.ts` is authoritative, and the loader drops any export that
-is not exactly the grid size in tiles times 32.
+All three ship **unmodified**. An earlier pass resampled the two large floors,
+because the wall tileset had been stamping its band half a tile off the grid —
+a vertical band's rock measured x=16..47 across the two columns the TMX marked
+as wall, one tile's worth of stone centred on the seam between them, so sealing
+both columns put a whole phantom square of bare floor beyond reach. The maps
+have since been redrawn with a second rock layer widening every band to fill
+both squares (`sciany cd` on -1, `skaly cd` on -2, `scian cd` on -3), which
+takes the maze walls from 0.41 ink per sealed square to 0.66 and makes the
+resampling both unnecessary and harmful. It is gone.
 
 ## Gallows Coast buildings — `prop-barn.png`, `prop-house-a.png`, `prop-house-b.png`, `prop-smithy.png`, `prop-windmill.png`
 

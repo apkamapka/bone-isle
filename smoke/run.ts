@@ -4685,28 +4685,95 @@ async function main(): Promise<void> {
 
   console.log("The cellar walls stand on the grid they seal:");
   {
+    const fs = await import("node:fs");
+    const zlib = await import("node:zlib");
     const worlds = buildWorlds(WORLD_SEED);
     const { Tile: TW } = await import("../src/world/types.ts");
-    /* The wall tileset stamps its band half a tile off the grid: measured on the
-     * raw export, a vertical band's rock ran x=16..47 across the two columns the
-     * TMX marks as wall — one tile's worth of stone centred on the seam between
-     * them. Both were sealed, so 64px of collision carried 32px of rock and a
-     * whole phantom square of bare floor was refused. The export was resampled
-     * to slide each band onto the first square of its run and only that square
-     * is sealed now. What this guards is the outcome: no maze wall is two
-     * squares thick any more. */
-    for (const [key, wide] of [["banditdeep1", 0], ["banditdeep2", 0]] as const) {
+
+    /* The complaint this guards: the wall tileset used to stamp its band half a
+     * tile off the grid — one tile's worth of rock centred on the seam between
+     * the two squares the TMX sealed — so half of every wall square was bare
+     * floor the player was refused. That is not a thing a comment can promise.
+     * So measure it: decode the terrain export and check that every square the
+     * world seals is actually covered by rock in the picture.
+     *
+     * The earlier version of this test looked for isolated two-wide wall blocks
+     * and passed vacuously, because a two-column band running down the map is
+     * not an isolated block. It never guarded anything. This does. */
+    const readPng = (name: string): { w: number; h: number; d: Buffer } => {
+      const buf = fs.readFileSync(new URL(`../public/${name}`, import.meta.url));
+      const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
+      const bd = buf[24], ct = buf[25];
+      const idat: Buffer[] = [];
+      let p = 8;
+      while (p < buf.length) {
+        const len = buf.readUInt32BE(p);
+        if (buf.toString("ascii", p + 4, p + 8) === "IDAT") idat.push(buf.subarray(p + 8, p + 8 + len));
+        p += 12 + len;
+      }
+      const raw = zlib.inflateSync(Buffer.concat(idat));
+      const ch = ct === 6 ? 4 : ct === 2 ? 3 : 1;
+      const bpp = ch * (bd / 8), stride = w * bpp;
+      const out = Buffer.alloc(w * h * 4);
+      let prev = Buffer.alloc(stride), cur = Buffer.alloc(stride), o = 0;
+      for (let y = 0; y < h; y++) {
+        const ft = raw[o++];
+        const line = raw.subarray(o, o + stride);
+        o += stride;
+        for (let i = 0; i < stride; i++) {
+          const a = i >= bpp ? cur[i - bpp] : 0, b = prev[i], c = i >= bpp ? prev[i - bpp] : 0;
+          let v = line[i];
+          if (ft === 1) v += a;
+          else if (ft === 2) v += b;
+          else if (ft === 3) v += (a + b) >> 1;
+          else if (ft === 4) {
+            const pp = a + b - c, pa = Math.abs(pp - a), pb = Math.abs(pp - b), pc = Math.abs(pp - c);
+            v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
+          }
+          cur[i] = v & 255;
+        }
+        for (let x = 0; x < w; x++) {
+          const si = x * bpp, di = (y * w + x) * 4;
+          out[di] = cur[si]; out[di + 1] = cur[si + 1]; out[di + 2] = cur[si + 2];
+          out[di + 3] = ch === 4 ? cur[si + 3] : 255;
+        }
+        prev = cur; cur = Buffer.alloc(stride);
+      }
+      return { w, h, d: out };
+    };
+
+    // The one place a sealed square legitimately shows floor: the western pocket
+    // of -2, which the drawing boxes in with no door. It is sealed on purpose so
+    // that nothing is stranded behind a wall that does not open.
+    const pocket = (key: string, tx: number, ty: number): boolean =>
+      key === "banditdeep2" && tx >= 4 && tx <= 13 && ty >= 44 && ty <= 85;
+
+    for (const [key, file] of [
+      ["banditdeep1", "banditdeep-terrain.png"],
+      ["banditdeep2", "banditdeep2-terrain.png"],
+      ["banditdeep3", "banditdeep3-terrain.png"],
+    ] as const) {
+      const png = readPng(file);
       const w = worlds[key];
-      let pairs = 0;
-      for (let y = 1; y < w.h - 1; y++) {
-        for (let x = 1; x < w.w - 2; x++) {
-          // an interior wall pair with open floor on both sides is the bug's shape
-          if (w.tile[y][x] === TW.Wall && w.tile[y][x + 1] === TW.Wall
-            && w.tile[y][x - 1] !== TW.Wall && w.tile[y][x + 2] !== TW.Wall
-            && w.tile[y - 1][x] !== TW.Wall && w.tile[y + 1][x] !== TW.Wall) pairs++;
+      let sealed = 0, bare = 0;
+      for (let ty = 0; ty < w.h; ty++) {
+        for (let tx = 0; tx < w.w; tx++) {
+          if (w.tile[ty][tx] !== TW.Wall || pocket(key, tx, ty)) continue;
+          let ink = 0, tot = 0;
+          for (let j = 0; j < 32; j += 4) {
+            for (let i = 0; i < 32; i += 4) {
+              const o = ((ty * 32 + j) * png.w + (tx * 32 + i)) * 4;
+              const d = Math.abs(png.d[o] - 78) + Math.abs(png.d[o + 1] - 58) + Math.abs(png.d[o + 2] - 46);
+              tot++;
+              if (d > 40) ink++;
+            }
+          }
+          sealed++;
+          if (ink / tot < 0.35) bare++;
         }
       }
-      ok(pairs === wide, `${key}: no maze wall is a two-square band any more (${pairs})`);
+      ok(sealed > 1000 && bare / sealed < 0.01,
+        `${key}: ${sealed} sealed squares and only ${bare} of them read as bare floor`);
     }
   }
 
