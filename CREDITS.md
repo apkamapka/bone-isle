@@ -527,8 +527,9 @@ those terms even if this repository is later made private.
 ## Terrain and props
 
 `public/home-terrain.png`, `public/town-terrain.png`, `public/cellar-terrain.png`,
-`public/reach-terrain.png`, `public/orcdeep-terrain.png` and
-`public/minodeep-terrain.png` are exported from Tiled maps painted with tile
+`public/reach-terrain.png`, `public/orcdeep-terrain.png`,
+`public/minodeep-terrain.png`, `public/deaddeep-terrain.png` and
+`public/deaddeep2-terrain.png` are exported from Tiled maps painted with tile
 packs by **Szadi art.** (szadiart), some bought and some taken from his free
 demo packs:
 
@@ -710,6 +711,26 @@ Both Tiled projects reference a single tileset, `MainLev2.0hhh` — a variant of
 the `MainLev2.0` pack already recorded under "Terrain and props" above, by
 **Szadi art.** (szadiart). The exact pack this variant was cut from still needs
 pinning, same as the other five listed for the Bone Reach.
+
+## The dead's descent — `public/deaddeep-terrain.png`, `public/deaddeep2-terrain.png`
+
+A 1920 x 1920 export of `-1_szkielety.tmx` and a 960 x 960 export of
+`-2_szkielety.tmx` — the project owner's own Tiled compositions of the maze
+under the Bone Reach's northern descent and the dragon's hollow below it. The
+layouts are his work; the tiles they are painted with are credited below.
+
+Both ship **unmodified**, exactly as exported, at native tile resolution with
+the object layers hidden. Nothing was resampled or recoloured. The dimensions
+are load-bearing: `terrainImage.ts` refuses any image that is not exactly the
+grid size in tiles times 32, rather than draw a map shifted against its own
+collision.
+
+### Tilesets
+
+Both reference a single tileset, `MainLev2.0hhh` — the same **Szadi art.**
+(szadiart) variant the other Tiled maps here are painted with, recorded under
+"Terrain and props" above and under the same licence, with the same question of
+which pack the variant was cut from still outstanding.
 
 ## Bone Reach objects — `prop-tent.png`, `prop-well.png`, `prop-boulder-a.png`, `prop-boulder-b.png`
 

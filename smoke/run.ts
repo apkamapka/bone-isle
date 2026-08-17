@@ -4059,11 +4059,12 @@ async function main(): Promise<void> {
     ok(r.monsters.filter((m) => m.kind === "goblinLegionary").length === 3,
       "three of that band wear the legionary's armour");
 
-    /* --- two descents are dug, the dead's is still cut and sealed --- */
-    ok(r.portals.filter((p) => p.inactive).length === 1,
-      "only the dead's descent stands sealed now, until that floor exists");
+    /* --- all three descents are dug now --- */
+    ok(r.portals.filter((p) => p.inactive).length === 0,
+      "nothing on the island stands sealed any more — the dead's hole was the last");
     for (const [dest, tx, ty, who] of [
       ["orcdeep1", 79, 90, "orcs"], ["minodeep1", 8, 85, "minotaurs"],
+      ["deaddeep1", 89, 13, "dead"],
     ] as const) {
       const down = r.portals.find((p) => p.dest === dest);
       ok(down !== undefined && !down.inactive, `the ${who}' descent is open and leads to ${dest}`);
@@ -4748,10 +4749,16 @@ async function main(): Promise<void> {
     const pocket = (key: string, tx: number, ty: number): boolean =>
       key === "banditdeep2" && tx >= 4 && tx <= 13 && ty >= 44 && ty <= 85;
 
-    for (const [key, file] of [
-      ["banditdeep1", "banditdeep-terrain.png"],
-      ["banditdeep2", "banditdeep2-terrain.png"],
-      ["banditdeep3", "banditdeep3-terrain.png"],
+    // Each map is measured against ITS OWN floor colour, not one hard-coded
+    // brown. The bandit cellars are packed earth; the charnel deep is grey
+    // stone and the hollow greyer still, and a single reference would have
+    // read every open square on both of them as covered rock.
+    for (const [key, file, fr, fg, fb] of [
+      ["banditdeep1", "banditdeep-terrain.png", 78, 58, 46],
+      ["banditdeep2", "banditdeep2-terrain.png", 78, 58, 46],
+      ["banditdeep3", "banditdeep3-terrain.png", 78, 58, 46],
+      ["deaddeep1", "deaddeep-terrain.png", 52, 57, 58],
+      ["deaddeep2", "deaddeep2-terrain.png", 51, 48, 47],
     ] as const) {
       const png = readPng(file);
       const w = worlds[key];
@@ -4763,7 +4770,7 @@ async function main(): Promise<void> {
           for (let j = 0; j < 32; j += 4) {
             for (let i = 0; i < 32; i += 4) {
               const o = ((ty * 32 + j) * png.w + (tx * 32 + i)) * 4;
-              const d = Math.abs(png.d[o] - 78) + Math.abs(png.d[o + 1] - 58) + Math.abs(png.d[o + 2] - 46);
+              const d = Math.abs(png.d[o] - fr) + Math.abs(png.d[o + 1] - fg) + Math.abs(png.d[o + 2] - fb);
               tot++;
               if (d > 40) ink++;
             }
@@ -4772,7 +4779,7 @@ async function main(): Promise<void> {
           if (ink / tot < 0.35) bare++;
         }
       }
-      ok(sealed > 1000 && bare / sealed < 0.01,
+      ok(sealed > 400 && bare / sealed < 0.01,
         `${key}: ${sealed} sealed squares and only ${bare} of them read as bare floor`);
     }
   }
@@ -6522,6 +6529,186 @@ async function main(): Promise<void> {
     ok(healPerCast / 0.25 / minoDps > 10,
       "…where an uncapped click rate would have answered ten or more");
     CR.resetCrystalCooldown();
+  }
+
+
+  console.log("Etap 31 — the dead's descent, and the room at the bottom of it:");
+  {
+    const fs = await import("node:fs");
+    const { DEADDEEP_SPEC } = await import("../src/world/deadDeepSpec.ts");
+    const { DEADDEEP2_SPEC } = await import("../src/world/deadDeep2Spec.ts");
+    const { populateAll, travelTo, createGame } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds, WORLD_SEED);
+    const d1 = worlds.deaddeep1;
+    const d2 = worlds.deaddeep2;
+
+    /* --- the exports ship, and at native size --- */
+    for (const [file, w] of [
+      ["deaddeep-terrain.png", d1], ["deaddeep2-terrain.png", d2],
+    ] as const) {
+      const url = new URL(`../public/${file}`, import.meta.url);
+      ok(fs.existsSync(url), `public/${file} ships with it`);
+      if (fs.existsSync(url)) {
+        const png = fs.readFileSync(url);
+        ok(png.readUInt32BE(16) === w.w * 32 && png.readUInt32BE(20) === w.h * 32,
+          `…exactly ${w.w * 32}x${w.h * 32}, so it lines up 1:1 with the grid`);
+      }
+    }
+    ok(DEADDEEP_SPEC.rows.length === 60 && DEADDEEP_SPEC.rows.every((r) => r.length === 60),
+      "the charnel deep is 60x60");
+    ok(DEADDEEP2_SPEC.rows.length === 30 && DEADDEEP2_SPEC.rows.every((r) => r.length === 30),
+      "the hollow is 30x30 — the smallest map in the game");
+
+    /* --- the markers in the drawing are honoured where they stand --- */
+    {
+      const up1 = d1.portals.find((p) => p.dest === "reach")!;
+      const down1 = d1.portals.find((p) => p.dest === "deaddeep2")!;
+      ok(Math.floor(up1.x / 32) === 49 && Math.floor(up1.y / 32) === 51,
+        "the ladder up stands on the tile Tiled marked at (49,51)");
+      ok(Math.floor(down1.x / 32) === 47 && Math.floor(down1.y / 32) === 6,
+        "…and the descent on (47,6), the far corner from it");
+      const up2 = d2.portals.find((p) => p.dest === "deaddeep1")!;
+      ok(Math.floor(up2.x / 32) === 14 && Math.floor(up2.y / 32) === 22,
+        "the hollow's ladder stands at the foot of its corridor (14,22)");
+      ok(d1.portals.every((p) => !p.inactive) && d2.portals.every((p) => !p.inactive),
+        "neither floor carries a dormant pad");
+    }
+
+    /* --- nothing is walled in --- */
+    // Rock and boulders were scattered over traced ground; the check that
+    // matters is not how many but whether any of them pinched a corridor shut.
+    for (const w of [d1, d2]) {
+      const seen: boolean[][] = Array.from({ length: w.h }, () => new Array(w.w).fill(false));
+      const start = w.portals[0];
+      const sx = Math.floor(start.x / 32), sy = Math.floor(start.y / 32);
+      const q: [number, number][] = [[sx, sy]];
+      seen[sy][sx] = true;
+      while (q.length) {
+        const [x, y] = q.pop()!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+          if (seen[ny][nx] || w.solid[ny][nx]) continue;
+          seen[ny][nx] = true; q.push([nx, ny]);
+        }
+      }
+      let open = 0, reach = 0;
+      for (let y = 0; y < w.h; y++) {
+        for (let x = 0; x < w.w; x++) {
+          if (w.solid[y][x]) continue;
+          open++; if (seen[y][x]) reach++;
+        }
+      }
+      ok(open === reach, `${w.key}: all ${open} open squares are reachable from the ladder (${reach})`);
+      ok(w.mobPosts!.every((m) => seen[m.ty][m.tx]),
+        "…and every creature on it stands somewhere you can walk to");
+    }
+
+    /* --- equal thirds --- */
+    {
+      const count = (k: string) => d1.mobPosts!.filter((m) => m.kind === k).length;
+      ok(count("ghoul") === 15 && count("skeletonWarrior") === 15 && count("demonSkeleton") === 15,
+        `the dead hold the floor in equal thirds (${count("ghoul")}/${count("skeletonWarrior")}/${count("demonSkeleton")})`);
+      ok(d1.mobPosts!.length === 45, `forty-five posts and nothing else (${d1.mobPosts!.length})`);
+      const spacing = d1.w * d1.h;
+      ok(spacing / d1.mobPosts!.length > 60,
+        "…sparser per square of map than the orc and minotaur floors beside it");
+    }
+
+    /* --- the gradient, measured by WALK distance and not by straight line --- */
+    {
+      const dist: number[][] = Array.from({ length: d1.h }, () => new Array(d1.w).fill(-1));
+      const up = d1.portals.find((p) => p.dest === "reach")!;
+      const sx = Math.floor(up.x / 32), sy = Math.floor(up.y / 32);
+      dist[sy][sx] = 0;
+      const q: [number, number][] = [[sx, sy]];
+      for (let i = 0; i < q.length; i++) {
+        const [x, y] = q[i];
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= d1.w || ny >= d1.h) continue;
+          if (dist[ny][nx] >= 0 || d1.solid[ny][nx]) continue;
+          dist[ny][nx] = dist[y][x] + 1; q.push([nx, ny]);
+        }
+      }
+      const band = (k: string) => {
+        const ds = d1.mobPosts!.filter((m) => m.kind === k).map((m) => dist[m.ty][m.tx]);
+        return { lo: Math.min(...ds), hi: Math.max(...ds) };
+      };
+      const g = band("ghoul"), K = band("skeletonWarrior"), d = band("demonSkeleton");
+      ok(g.hi <= K.lo && K.hi <= d.lo,
+        `the three ranks are three bands with no overlap (${g.lo}-${g.hi}, ${K.lo}-${K.hi}, ${d.lo}-${d.hi})`);
+      ok(g.lo >= 8, "…and the squares you land on are clear, so you can draw before you fight");
+      // The hole down was cut in the far corner, so the worst thing on the
+      // floor guards it without anything being posted to guard it.
+      //
+      // Measured BY FOOT and not in a straight line. On a maze the two say
+      // different things: a skeleton warrior sits twelve tiles from the
+      // descent as the crow flies and a hundred steps away through the walls,
+      // and it is the steps that decide what you have to get past.
+      const down = d1.portals.find((p) => p.dest === "deaddeep2")!;
+      const dd: number[][] = Array.from({ length: d1.h }, () => new Array(d1.w).fill(-1));
+      const dx0 = Math.floor(down.x / 32), dy0 = Math.floor(down.y / 32);
+      dd[dy0][dx0] = 0;
+      const dq: [number, number][] = [[dx0, dy0]];
+      for (let i = 0; i < dq.length; i++) {
+        const [x, y] = dq[i];
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + ax, ny = y + ay;
+          if (nx < 0 || ny < 0 || nx >= d1.w || ny >= d1.h) continue;
+          if (dd[ny][nx] >= 0 || d1.solid[ny][nx]) continue;
+          dd[ny][nx] = dd[y][x] + 1; dq.push([nx, ny]);
+        }
+      }
+      const close = d1.mobPosts!.filter((m) => dd[m.ty][m.tx] >= 0 && dd[m.ty][m.tx] <= 20);
+      ok(close.length >= 3 && close.every((m) => m.kind === "demonSkeleton"),
+        `nothing softer than a demon skeleton stands within twenty steps of the descent (${close.length} of them)`);
+    }
+
+    /* --- the hollow holds one thing --- */
+    {
+      ok(d2.mobPosts!.length === 1 && d2.mobPosts![0].kind === "dragon",
+        `one dragon in the hollow and nothing else (${d2.mobPosts!.length} posted)`);
+      const drg = d2.mobPosts![0];
+      ok(drg.tx === 14 && drg.ty === 7, "…standing in the hall the drawing put it in (14,7)");
+      ok(d2.monsters.length === 1 && d2.monsters[0].kind === "dragon",
+        "…and the populated floor spawns exactly that one");
+      // Fire and bone, and enough of both that the room reads as a furnace.
+      ok(d2.fires.length >= 40, `the hollow burns (${d2.fires.length} fires)`);
+      ok(d2.decos.length >= 70, `…over a floor of bones (${d2.decos.length} piles)`);
+      const up2 = d2.portals.find((p) => p.dest === "deaddeep1")!;
+      const utx = Math.floor(up2.x / 32), uty = Math.floor(up2.y / 32);
+      ok(d2.fires.every((f) => Math.abs(f.tx - utx) + Math.abs(f.ty - uty) > 3),
+        "…but you never arrive standing in one");
+      ok(!d2.solid[7][14] && !d2.solid[22][14],
+        "neither the dragon's square nor the ladder's is sealed");
+    }
+
+    /* --- and the whole way down walks end to end --- */
+    // Stood on each pad in turn, because travelTo picks the return portal
+    // NEAREST the player — the rule the six bandit ladders forced in — and a
+    // test that teleports without moving would not be exercising it.
+    {
+      const g = createGame(WORLD_SEED);
+      populateAll(g.worlds, WORLD_SEED);
+      const stand = (from: string, dest: string) => {
+        const w = g.worlds[from as keyof typeof g.worlds];
+        const pad = w.portals.find((p) => p.dest === dest)!;
+        g.current = w; g.player.x = pad.x; g.player.y = pad.y;
+        travelTo(g, dest as never);
+        const inWall = g.current.solid[Math.floor(g.player.y / 32)][Math.floor(g.player.x / 32)];
+        ok(g.current.key === dest && !inWall, `${from} -> ${dest}, and you land on open ground`);
+      };
+      stand("reach", "deaddeep1");
+      stand("deaddeep1", "deaddeep2");
+      stand("deaddeep2", "deaddeep1");
+      stand("deaddeep1", "reach");
+      // Back on the island you must come up the DEAD's hole and not one of the
+      // other two, which is the whole of what "nearest" buys.
+      const back = Math.hypot(g.player.x / 32 - 89, g.player.y / 32 - 13);
+      ok(back < 3, `…and you come up the hole you went down, not the orcs' (${back.toFixed(1)} tiles off)`);
+    }
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

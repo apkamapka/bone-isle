@@ -30,6 +30,8 @@ const TERRAIN_SRC: Partial<Record<WorldKey, string>> = {
   banditdeep3: "./banditdeep3-terrain.png",
   orcdeep1: "./orcdeep-terrain.png",
   minodeep1: "./minodeep-terrain.png",
+  deaddeep1: "./deaddeep-terrain.png",
+  deaddeep2: "./deaddeep2-terrain.png",
 };
 
 /**

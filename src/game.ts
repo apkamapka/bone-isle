@@ -1,5 +1,7 @@
 /** Global game state: the three islands, the active one, and the player. */
 import { makeWorld } from "./world/generate.ts";
+import { DEADDEEP2_SPEC } from "./world/deadDeep2Spec.ts";
+import { DEADDEEP_SPEC } from "./world/deadDeepSpec.ts";
 import { MINODEEP_SPEC } from "./world/minoDeepSpec.ts";
 import { ORCDEEP_SPEC } from "./world/orcDeepSpec.ts";
 import { BANDITDEEP2_SPEC } from "./world/banditDeep2Spec.ts";
@@ -248,6 +250,8 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   const banditdeep3 = makeHandmadeWorld(BANDITDEEP3_SPEC);
   const orcdeep1 = makeHandmadeWorld(ORCDEEP_SPEC);
   const minodeep1 = makeHandmadeWorld(MINODEEP_SPEC);
+  const deaddeep1 = makeHandmadeWorld(DEADDEEP_SPEC);
+  const deaddeep2 = makeHandmadeWorld(DEADDEEP2_SPEC);
   const wild = makeWorld({
     key: "wild", name: "Wildlands", safe: false, w: 104, h: 80,
     buildSpots: false, npcs: false,
@@ -277,7 +281,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   // …and every camp's lair floors, each from its own salted seed. The record
   // is completed by the loop below, hence the cast: TypeScript can't see that
   // LAIRS covers exactly the remaining WorldKey members.
-  const worlds = { home, town, sanctum, cellar, reach, bandit, banditdeep1, banditdeep2, banditdeep3, orcdeep1, minodeep1, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
+  const worlds = { home, town, sanctum, cellar, reach, bandit, banditdeep1, banditdeep2, banditdeep3, orcdeep1, minodeep1, deaddeep1, deaddeep2, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
   loadMobSheets();           // directional walk cycles for humanoid creatures

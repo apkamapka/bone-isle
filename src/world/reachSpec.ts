@@ -1,8 +1,10 @@
 /**
  * The Bone Reach — the hunting ground behind the Time Sage's fourth pad.
  *
- * Two descents are open: glyph `1` drops into Minotaur Deep -1 and `2` into
- * Orc Deep -1. The dead's is cut but still sealed.
+ * All three descents are open: glyph `1` drops into Minotaur Deep -1, `2` into
+ * Orc Deep -1 and `3` into Charnel Deep -1. The dead's was the last to be dug;
+ * the demon skeleton posted six tiles off it has been standing over a sealed
+ * hole since the island was traced, and now stands over a real one.
  *
  * Traced from `mapa_srednia.tmx` (100x100). The terrain, the coastline and the
  * collision come from that file; so does every campfire, totem, creature post
@@ -31,7 +33,7 @@
  * ground their region owns instead, and will move once those holes are cut.
  * Eight tiles around the pad home stay clear, so you can land and draw.
  *
- *   P pad back to the cellar   @ spawn   1 2 3 sealed descents to -1
+ *   P pad back to the cellar   @ spawn   1 2 3 descents to -1
  *   F campfire   Y skull totem   V dead tree   v felled tree
  *   N tent   W well   Q q black boulder (two variants)
  *   T tree   R rock   H herb
@@ -49,7 +51,7 @@ export const REACH_SPEC: HandmadeSpec = {
     P: { dest: "cellar", label: "back to the Time Sage's cellar" },
     1: { dest: "minodeep1", label: "down among the minotaurs", style: "caveMouth", floor: Tile.Dirt },
     2: { dest: "orcdeep1", label: "down among the orcs", style: "caveMouth", floor: Tile.Dirt },
-    3: { dest: "reach", label: "down among the dead (sealed)", style: "caveMouth", inactive: true, floor: Tile.Dirt },
+    3: { dest: "deaddeep1", label: "down among the dead", style: "caveMouth", floor: Tile.Dirt },
   },
   scenery: {
     Y: "skullPole", V: "deadTree", v: "felledTree",

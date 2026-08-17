@@ -31,6 +31,10 @@ export type WorldKey = "home" | "town" | "wild" | "deepwild" | "cave1" | "cave2"
   // Minotaur Deep -1 — the labyrinth under the Reach's western descent.
   // Forty-five minotaurs and the Marrow helm and boots.
   | "minodeep1"
+  // Charnel Deep -1 — the maze under the Reach's northern descent, and the
+  // hollow below it. The dead hold the maze in equal thirds; the hollow holds
+  // one dragon and nothing else.
+  | "deaddeep1" | "deaddeep2"
   // The Bone Sanctum — the crypt beneath the western temple; its level-gated
   // teleport chambers will link to quest realms in a future stage.
   | "sanctum"
