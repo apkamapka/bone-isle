@@ -3656,10 +3656,14 @@ async function main(): Promise<void> {
     ok(!deepwildSrc.includes("dress(SPR.campfire"),
       "the camps no longer dress themselves with a still campfire");
 
-    /* --- hand-authored maps can place one, and there it does block --- */
+    /* --- hand-authored maps place one the same way, and it blocks nothing ---
+     * It used to seal its square here and no longer does: the artwork is one
+     * tile exactly and its body only twenty-one rows of thirty-two, so a third
+     * of a solid square read as bare ground you were refused. Nothing to walk
+     * around means nothing to lie about. */
     ok(/case "F":/.test(handmadeSrc), "hand-authored maps place a fire with 'F'");
-    ok(/case "F":[\s\S]{0,400}?w\.fires\.push[\s\S]{0,200}?solid\[y\]\[x\] = true/.test(handmadeSrc),
-      "…and that one is solid, so the player walks around it");
+    ok(!/case "F":[\s\S]{0,900}?solid\[y\]\[x\] = true/.test(handmadeSrc),
+      "…and it seals nothing, on any map");
   }
 
   console.log("Standing scenery is walked behind, not over:");
@@ -4225,12 +4229,34 @@ async function main(): Promise<void> {
     ok(!b.trees.some((t) => nearSea(t.tx, t.ty)), "no tree is planted in the surf");
     ok(!b.scenery.some((s) => nearSea(s.tx, s.ty)), "…nor any totem, tent, well or boulder");
 
-    /* --- six holes, all of them cut and all of them still shut --- */
-    const down = b.portals.filter((p) => p.dest === "bandit");
-    ok(down.length === 6, "all six descents to -1 are cut into the island");
-    ok(down.every((p) => p.inactive), "…and every one is sealed until that floor is drawn");
+    /* --- six holes, one floor, and a ladder waiting under each ---
+     * Both maps are the same 105x100 grid, so a hole's tile coordinates ARE the
+     * coordinates of the ladder it opens onto. Five of the six line up exactly;
+     * the east-shore hole found rock on its square down there and its ladder
+     * moved one tile, which is the whole of the slack allowed here. */
+    const down = b.portals.filter((p) => p.dest === "banditdeep1");
+    ok(down.length === 6, "all six descents drop onto Bandit Deep -1");
+    ok(down.every((p) => !p.inactive), "…and every one of them is open");
     ok(down.every((p) => b.tile[Math.floor(p.y / 32)][Math.floor(p.x / 32)] === T4.Dirt),
       "…each standing on bare earth rather than grass");
+    {
+      const deep = worlds.banditdeep1;
+      const ladders = deep.portals.filter((p) => p.dest === "bandit");
+      ok(ladders.length === 6, "…and six ladders wait for them on the floor below");
+      let exact = 0, far = 0;
+      for (const h of down) {
+        const hx = Math.floor(h.x / 32), hy = Math.floor(h.y / 32);
+        let best = 99;
+        for (const l of ladders) {
+          best = Math.min(best, Math.abs(Math.floor(l.x / 32) - hx)
+            + Math.abs(Math.floor(l.y / 32) - hy));
+        }
+        if (best === 0) exact++;
+        if (best > 1) far++;
+      }
+      ok(exact === 5, "…five of them land on the very square they were cut on");
+      ok(far === 0, "…and the sixth is one tile off, no further, where rock stood in the way");
+    }
 
     /* --- the cellar's Wildlands pad now opens here instead --- */
     ok(CELLAR_SPEC.portals.c.dest === "bandit",
@@ -4238,6 +4264,390 @@ async function main(): Promise<void> {
     ok(!CELLAR_SPEC.portals.c.inactive, "…and it is live, not dormant");
     ok(!Object.values(CELLAR_SPEC.portals).some((p) => p.dest === "wild"),
       "…and no pad points at the Wildlands any more");
+  }
+
+
+
+  console.log("A campfire covers the square it seals:");
+  {
+    const fs = await import("node:fs");
+    const { FIRE_LIFT, FIRE_FRAMES } = await import("../src/gfx/fireSheet.ts");
+    const main = fs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+
+    /* --- how far off-centre the pack drew it --- */
+    // A hand-placed fire is the only solid prop in the game whose art is exactly
+    // one tile. The logs sit flush on the bottom edge of the cell and the flame
+    // licks up, so the top of a solid square is bare ground you are refused
+    // entry to. Measure the slack straight off the strip rather than trusting a
+    // number written down here: if the art is ever recut, this test moves with it.
+    const png = fs.readFileSync(new URL("../public/prop-campfire.png", import.meta.url));
+    ok(png.readUInt32BE(16) === FIRE_FRAMES * 32 && png.readUInt32BE(20) === 32,
+      `the strip is ${FIRE_FRAMES} frames of 32x32`);
+    ok(FIRE_LIFT > 0 && FIRE_LIFT < 16,
+      `the fire is drawn ${FIRE_LIFT}px above the bottom of its square, splitting that slack`);
+
+    /* --- lifted in the draw, NOT in the sort --- */
+    ok(/const by = fr\.ty \* TILE \+ TILE;/.test(main),
+      "the fire still sorts on the true bottom of its own tile");
+    ok(/drawSprite\(campfireFrame\([^)]*\) \?\? SPR\.campfire, bx, by - FIRE_LIFT\)/.test(main),
+      "…and only the sprite is raised, so it cannot slip behind what stands level with it");
+
+    /* --- and no fire anywhere seals the square under it ---
+     * The lift centres the flame; this is what actually settles the complaint.
+     * Checked on the maps that carry the most of them rather than on the source
+     * text, because it is the built world the player walks around in. */
+    const { buildWorlds: bw2, populateAll: pa2 } = await import("../src/game.ts");
+    const ws = bw2(WORLD_SEED);
+    pa2(ws, WORLD_SEED);
+    let sealed = 0, counted = 0;
+    for (const key of ["bandit", "banditdeep1", "banditdeep2", "reach", "deepwild"] as const) {
+      for (const f of ws[key].fires) {
+        counted++;
+        if (ws[key].solid[f.ty][f.tx]) sealed++;
+      }
+    }
+    ok(counted > 100 && sealed === 0,
+      `not one of ${counted} campfires seals the square it stands on`);
+  }
+
+  console.log("Where several ways back exist, travel takes the nearest:");
+  {
+    const { travelTo, populateAll, createGame } = await import("../src/game.ts");
+    const g = createGame(WORLD_SEED);
+    populateAll(g.worlds, WORLD_SEED);
+    const isle = g.worlds.bandit;
+    const holes = isle.portals.filter((p) => p.dest === "banditdeep1");
+    ok(holes.length === 6, "the island offers six ways down");
+    g.current = isle;
+    let landedRight = 0;
+    for (const h of holes) {
+      g.current = isle;
+      g.player.x = h.x;
+      g.player.y = h.y;
+      travelTo(g, "banditdeep1");
+      // the ladder nearest where we came out should be the one under that hole
+      const ladders = g.worlds.banditdeep1.portals.filter((p) => p.dest === "bandit");
+      let best = ladders[0];
+      for (const l of ladders) {
+        if (Math.hypot(l.x - g.player.x, l.y - g.player.y)
+          < Math.hypot(best.x - g.player.x, best.y - g.player.y)) best = l;
+      }
+      if (Math.hypot(best.x - h.x, best.y - h.y) <= 48) landedRight++;
+    }
+    ok(landedRight === 6,
+      "every one of the six drops you at the ladder under the hole you took");
+    // and the single-staircase case is untouched
+    g.current = g.worlds.reach;
+    g.player.x = 8 * 32;
+    g.player.y = 85 * 32;
+    travelTo(g, "minodeep1");
+    ok(g.current.key === "minodeep1", "a floor with one way back still works as it did");
+  }
+
+  console.log("Bandit Deep -1 is the floor under all six holes:");
+  {
+    const fs = await import("node:fs");
+    const { BANDITDEEP_SPEC } = await import("../src/world/banditDeepSpec.ts");
+    const { Tile: T5 } = await import("../src/world/types.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds, WORLD_SEED);
+    const k = worlds.banditdeep1;
+
+    const terrain = new URL("../public/banditdeep-terrain.png", import.meta.url);
+    if (!fs.existsSync(terrain)) {
+      ok(false, "public/banditdeep-terrain.png is missing — the floor falls back to the baked bake");
+    } else {
+      const png = fs.readFileSync(terrain);
+      ok(png.readUInt32BE(16) === k.w * 32 && png.readUInt32BE(20) === k.h * 32,
+        `the terrain export is exactly ${k.w * 32}x${k.h * 32}`);
+    }
+    ok(BANDITDEEP_SPEC.rows.length === 100
+      && BANDITDEEP_SPEC.rows.every((r) => r.length === 105),
+      "the grid is 105x100 — the same frame as the island above it");
+    ok(BANDITDEEP_SPEC.floor === undefined,
+      "…and needs no second terrain grid: every square is rock or cave floor");
+
+    /* --- it is a cellar, so nothing grows in it --- */
+    ok(k.trees.length === 0, "nothing grows down here — not one tree");
+    const BUILT = ["barn", "houseA", "houseB", "smithy", "windmill", "deadTree", "felledTree"];
+    ok(!k.scenery.some((s) => BUILT.includes(s.kind)),
+      "…and nobody built a farmhouse in a cave either");
+    ok(k.scenery.some((s) => s.kind === "tent") && k.fires.length > 0 && k.rocks.length > 0,
+      "canvas, fires and mineable rock instead");
+
+    /* --- the slice of the ladder this floor was given --- */
+    const HERE = ["mercenary", "corsair", "wildWarrior", "amazon", "hunter", "gladiator"] as const;
+    ok(k.mobPosts?.length === 110, "110 creature posts were written into the grid");
+    ok(k.monsters.length === 110, "…and every one of them spawned");
+    ok(HERE.every((m) => k.monsters.some((x) => x.kind === m)),
+      "every rank from mercenary to gladiator stands somewhere on it");
+    // -2 takes the top of the ladder and -3 the knight; neither is down here yet
+    const LATER = ["barbarian", "raider", "warlord", "chieftain", "blackKnight"];
+    ok(!k.monsters.some((m) => LATER.includes(m.kind)),
+      "…and nothing from the -2 or -3 slice has leaked onto it");
+    // …nor anything from the island above, which would flatten the whole climb
+    const ABOVE = ["beggar", "vagrant", "thief", "poacher", "bandit", "smuggler",
+      "cutthroat", "deserter", "brigand", "highwayman", "snake"];
+    ok(!k.monsters.some((m) => ABOVE.includes(m.kind)),
+      "…nor anything you already cleared on the surface");
+
+    /* --- ranked outward from the ladders, not scattered ---
+     * The design axis is distance from the nearest way OUT: every entrance is a
+     * soft landing and the floor hardens as you push inward. Ranking along the
+     * way DOWN instead put mercenaries under the island's hardest hole and
+     * amazons under its gentlest, which is the inversion this guards against. */
+    {
+      const ladders = k.portals.filter((p) => p.dest === "bandit")
+        .map((p) => ({ tx: Math.floor(p.x / 32), ty: Math.floor(p.y / 32) }));
+      const meanOut = (kind: string): number => {
+        const ps = k.mobPosts!.filter((p) => p.kind === kind);
+        return ps.reduce((s, p) => s + Math.min(
+          ...ladders.map((l) => Math.hypot(p.tx - l.tx, p.ty - l.ty))), 0) / ps.length;
+      };
+      ok(meanOut("mercenary") < meanOut("gladiator"),
+        "mercenaries keep the ladders; gladiators are found further in");
+      ok(meanOut("corsair") < meanOut("hunter"), "…and corsairs nearer the way out than hunters");
+      ok(meanOut("mercenary") < meanOut("corsair")
+        && meanOut("corsair") < meanOut("wildWarrior")
+        && meanOut("wildWarrior") < meanOut("amazon"),
+        "…the bottom four ranks climb in step with the walk from a ladder");
+    }
+
+    /* --- and the deep middle, where the way down was cut, is the hard part --- */
+    const hole = k.portals.find((p) => p.dest === "banditdeep2")!;
+    const hx = Math.floor(hole.x / 32), hy = Math.floor(hole.y / 32);
+    const meanTo = (kind: string): number => {
+      const ps = k.mobPosts!.filter((p) => p.kind === kind);
+      return ps.reduce((s, p) => s + Math.hypot(p.tx - hx, p.ty - hy), 0) / ps.length;
+    };
+    ok(meanTo("gladiator") < meanTo("mercenary"),
+      "gladiators stand nearer the hole to -2 than mercenaries do");
+    ok(meanTo("hunter") < meanTo("corsair"), "…and hunters nearer than corsairs");
+
+    /* --- every ladder and the hole below are reachable from every ladder --- */
+    const ladders = k.portals.filter((p) => p.dest === "bandit");
+    const start = ladders[0];
+    const sx = Math.floor(start.x / 32), sy = Math.floor(start.y / 32);
+    const seen = Array.from({ length: k.h }, () => new Array<boolean>(k.w).fill(false));
+    const q: [number, number][] = [[sx, sy]];
+    seen[sy][sx] = true;
+    let reached = 0;
+    while (q.length) {
+      const [x, y] = q.pop()!;
+      reached++;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = x + dx, c = y + dy;
+        if (a < 0 || c < 0 || a >= k.w || c >= k.h) continue;
+        if (seen[c][a] || k.solid[c][a]) continue;
+        seen[c][a] = true;
+        q.push([a, c]);
+      }
+    }
+    let open = 0;
+    for (let y = 0; y < k.h; y++) {
+      for (let x = 0; x < k.w; x++) if (!k.solid[y][x]) open++;
+    }
+    ok(reached === open, `every open square is reachable from a ladder (${reached})`);
+    ok(ladders.every((p) => seen[Math.floor(p.y / 32)][Math.floor(p.x / 32)]),
+      "…all six ladders among them");
+    ok(seen[hy][hx], "…and so is the hole down to -2");
+    ok(k.mobPosts!.every((p) => seen[p.ty][p.tx]), "…so no creature is walled into the rock");
+
+    /* --- and the way further down is open, onto a ladder on its own square --- */
+    ok(hole !== undefined && !hole.inactive, "the hole to -2 is open");
+    ok(k.portals.every((p) => !p.inactive), "…and nothing on this floor is sealed any more");
+    {
+      const deep2 = worlds.banditdeep2;
+      const backUp = deep2.portals.find((p) => p.dest === "banditdeep1")!;
+      ok(Math.floor(backUp.x / 32) === hx && Math.floor(backUp.y / 32) === hy,
+        "…the ladder on -2 standing on the very square the hole was cut into");
+    }
+
+    /* --- the whole human ladder now spawns somewhere ---
+     * Twenty ranks used to exist in the bestiary and never appear on any map.
+     * Between the island and this floor, sixteen of them do; the last four wait
+     * on -2. */
+    const surface = worlds.bandit.monsters.map((m) => m.kind);
+    const both = new Set([...surface, ...k.monsters.map((m) => m.kind)]);
+    const LADDER16 = ["beggar", "vagrant", "thief", "poacher", "bandit", "smuggler",
+      "cutthroat", "deserter", "brigand", "highwayman", "mercenary", "corsair",
+      "wildWarrior", "amazon", "hunter", "gladiator"];
+    ok(LADDER16.every((m) => both.has(m)),
+      "sixteen of the twenty human ranks now spawn somewhere in the game");
+  }
+
+
+
+  console.log("The whole road down and back walks end to end:");
+  {
+    const { travelTo, populateAll, createGame } = await import("../src/game.ts");
+    const { portalCovers } = await import("../src/world/collision.ts");
+    const g = createGame(WORLD_SEED);
+    populateAll(g.worlds, WORLD_SEED);
+
+    // cellar -> island
+    g.current = g.worlds.cellar;
+    const cPad = g.worlds.cellar.portals.find((p) => p.dest === "bandit")!;
+    ok(cPad !== undefined && !cPad.inactive, "the cellar's pad to the Gallows Coast is live");
+    g.player.x = cPad.x; g.player.y = cPad.y;
+    travelTo(g, "bandit");
+    ok(g.current.key === "bandit", "…and it carries you there");
+
+    // island -> -1, through every one of the six holes, standing on the tile
+    let opened = 0;
+    for (const h of g.worlds.bandit.portals.filter((p) => p.dest === "banditdeep1")) {
+      const tx = Math.floor(h.x / 32), ty = Math.floor(h.y / 32);
+      // the square must be stand-on-able, and standing on its centre must fire
+      const standable = !g.worlds.bandit.solid[ty][tx];
+      const fires = !h.inactive && portalCovers(h, tx * 32 + 16, ty * 32 + 16);
+      if (standable && fires) opened++;
+    }
+    ok(opened === 6, "all six holes on the island are open and can be stood on");
+
+    g.current = g.worlds.bandit;
+    const h3 = g.worlds.bandit.portals.filter((p) => p.dest === "banditdeep1")[0];
+    g.player.x = h3.x; g.player.y = h3.y;
+    travelTo(g, "banditdeep1");
+    ok(g.current.key === "banditdeep1", "going down lands you on -1");
+
+    // -1 -> -2
+    const d2 = g.worlds.banditdeep1.portals.find((p) => p.dest === "banditdeep2")!;
+    ok(d2 !== undefined && !d2.inactive, "the hole on -1 down to -2 is open");
+    g.player.x = d2.x; g.player.y = d2.y;
+    travelTo(g, "banditdeep2");
+    ok(g.current.key === "banditdeep2", "…and drops you onto -2");
+
+    // -2 -> -1 -> island, back out the way you came
+    const u1 = g.worlds.banditdeep2.portals.find((p) => p.dest === "banditdeep1")!;
+    g.player.x = u1.x; g.player.y = u1.y;
+    travelTo(g, "banditdeep1");
+    ok(g.current.key === "banditdeep1", "the ladder on -2 climbs back to -1");
+    const u2 = g.worlds.banditdeep1.portals.filter((p) => p.dest === "bandit")[0];
+    g.player.x = u2.x; g.player.y = u2.y;
+    travelTo(g, "bandit");
+    ok(g.current.key === "bandit", "…and a ladder on -1 climbs back to daylight");
+    const home = g.worlds.bandit.portals.find((p) => p.dest === "cellar")!;
+    g.player.x = home.x; g.player.y = home.y;
+    travelTo(g, "cellar");
+    ok(g.current.key === "cellar", "…and the pad on the island returns you to the cellar");
+
+    // nothing on the road is dormant except the one floor that is not drawn
+    const dormant: string[] = [];
+    for (const key of ["bandit", "banditdeep1", "banditdeep2"] as const) {
+      for (const p of g.worlds[key].portals) if (p.inactive) dormant.push(`${key}->${p.dest}`);
+    }
+    ok(dormant.length === 1 && dormant[0] === "banditdeep2->banditdeep2",
+      "exactly one pad on the whole road is sealed: -2's way down to -3");
+  }
+
+  console.log("Bandit Deep -2 ends the human ladder:");
+  {
+    const fs = await import("node:fs");
+    const { BANDITDEEP2_SPEC } = await import("../src/world/banditDeep2Spec.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds, WORLD_SEED);
+    const k2 = worlds.banditdeep2;
+
+    const terrain = new URL("../public/banditdeep2-terrain.png", import.meta.url);
+    if (!fs.existsSync(terrain)) {
+      ok(false, "public/banditdeep2-terrain.png is missing — the floor falls back to the baked bake");
+    } else {
+      const png = fs.readFileSync(terrain);
+      ok(png.readUInt32BE(16) === k2.w * 32 && png.readUInt32BE(20) === k2.h * 32,
+        `the terrain export is exactly ${k2.w * 32}x${k2.h * 32}`);
+    }
+    ok(BANDITDEEP2_SPEC.rows.length === 100
+      && BANDITDEEP2_SPEC.rows.every((r) => r.length === 105),
+      "the grid is 105x100 — the same frame as the two floors above it");
+
+    /* --- still a cellar --- */
+    ok(k2.trees.length === 0, "nothing grows this far down either");
+    ok(k2.scenery.some((s) => s.kind === "tent") && k2.fires.length > 0 && k2.rocks.length > 0,
+      "canvas, fires and mineable rock, as on -1");
+
+    /* --- the last four ranks, and only those --- */
+    const TOP = ["barbarian", "raider", "warlord", "chieftain"] as const;
+    ok(k2.mobPosts?.length === 93, "93 creature posts were written into the grid");
+    ok(k2.monsters.length === 93, "…and every one of them spawned");
+    ok(TOP.every((m) => k2.monsters.some((x) => x.kind === m)),
+      "barbarian, raider, warlord and chieftain all stand on it");
+    ok(k2.monsters.every((m) => (TOP as readonly string[]).includes(m.kind)),
+      "…and nothing else does: this floor is the top of the ladder and no more");
+    ok(!k2.monsters.some((m) => m.kind === "blackKnight"),
+      "…the Black Knight is not here; he waits on -3");
+
+    /* --- one way in, ranked outward from it --- */
+    const up = k2.portals.find((p) => p.dest === "banditdeep1")!;
+    const ux = Math.floor(up.x / 32), uy = Math.floor(up.y / 32);
+    ok(k2.portals.filter((p) => p.dest === "banditdeep1").length === 1,
+      "there is exactly one ladder back up — unlike -1, which has six");
+    const meanOut = (kind: string): number => {
+      const ps = k2.mobPosts!.filter((p) => p.kind === kind);
+      return ps.reduce((s, p) => s + Math.hypot(p.tx - ux, p.ty - uy), 0) / ps.length;
+    };
+    ok(meanOut("barbarian") < meanOut("raider")
+      && meanOut("raider") < meanOut("warlord")
+      && meanOut("warlord") < meanOut("chieftain"),
+      "…and all four ranks climb in step with the walk from it");
+    const nearest = Math.min(...k2.mobPosts!.map((p) => Math.hypot(p.tx - ux, p.ty - uy)));
+    ok(nearest >= 6, `the nearest creature to that ladder stands ${Math.round(nearest)} tiles off`);
+
+    /* --- the way to the Black Knight is cut, sealed, and guarded --- */
+    const down3 = k2.portals.find((p) => p.inactive)!;
+    ok(down3 !== undefined, "a sealed pad drops to -3, where the Black Knight waits");
+    const dx = Math.floor(down3.x / 32), dy = Math.floor(down3.y / 32);
+    const guards = k2.mobPosts!.filter((p) => Math.hypot(p.tx - dx, p.ty - dy) <= 16
+      && (p.kind === "chieftain" || p.kind === "warlord"));
+    ok(guards.length >= 5,
+      `…with ${guards.length} chieftains and warlords posted on it, not left in an empty corridor`);
+
+    /* --- everything the player can stand on connects to that ladder --- */
+    const seen = Array.from({ length: k2.h }, () => new Array<boolean>(k2.w).fill(false));
+    const q: [number, number][] = [[ux, uy]];
+    seen[uy][ux] = true;
+    let reached = 0;
+    while (q.length) {
+      const [x, y] = q.pop()!;
+      reached++;
+      for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = x + ax, c = y + ay;
+        if (a < 0 || c < 0 || a >= k2.w || c >= k2.h) continue;
+        if (seen[c][a] || k2.solid[c][a]) continue;
+        seen[c][a] = true;
+        q.push([a, c]);
+      }
+    }
+    let open = 0;
+    for (let y = 0; y < k2.h; y++) {
+      for (let x = 0; x < k2.w; x++) if (!k2.solid[y][x]) open++;
+    }
+    ok(reached === open, `every open square is reachable from the ladder (${reached})`);
+    ok(seen[dy][dx], "…the way down to -3 among them");
+    ok(k2.mobPosts!.every((p) => seen[p.ty][p.tx]), "…so no creature is walled into the rock");
+
+    /* --- the pocket the drawing seals off carries nothing ---
+     * The western corridor between the cave edge and the wall at x=14-15 has no
+     * door cut in it. It is marked as rock here rather than filled, so that
+     * nothing is stranded behind a wall that does not open. */
+    let inPocket = 0;
+    for (const p of [...k2.mobPosts!, ...k2.rocks, ...k2.fires, ...k2.scenery]) {
+      if (p.tx >= 4 && p.tx <= 13 && p.ty >= 44 && p.ty <= 85) inPocket++;
+    }
+    ok(inPocket === 0, "the sealed western pocket holds nothing at all");
+
+    /* --- and with this floor, every human rank in the bestiary spawns --- */
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const HUMAN = ["beggar", "vagrant", "thief", "poacher", "bandit", "smuggler",
+      "cutthroat", "deserter", "brigand", "highwayman", "mercenary", "corsair",
+      "wildWarrior", "amazon", "hunter", "gladiator", "barbarian", "raider",
+      "warlord", "chieftain"];
+    ok(HUMAN.every((h) => h in MONSTER_DEFS), "the bestiary still lists twenty human ranks");
+    const everywhere = new Set<string>();
+    for (const w of Object.values(worlds)) for (const m of w.monsters) everywhere.add(m.kind);
+    ok(HUMAN.every((h) => everywhere.has(h)),
+      "…and all twenty of them now spawn somewhere in the game");
   }
 
   console.log("The two floors under the Reach are traced faithfully from Tiled:");

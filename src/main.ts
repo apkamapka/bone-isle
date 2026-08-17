@@ -4,7 +4,7 @@ import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
-import { campfireFrame } from "./gfx/fireSheet.ts";
+import { campfireFrame, FIRE_LIFT } from "./gfx/fireSheet.ts";
 import { scenerySprite, FOOTPRINT } from "./gfx/sceneryArt.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
@@ -2440,8 +2440,12 @@ function render(): void {
     const bx = fr.tx * TILE + TILE / 2;
     const by = fr.ty * TILE + TILE;
     if (!inView(bx, by)) continue;
+    // Sorted on the true bottom of its square, drawn FIRE_LIFT pixels above it:
+    // the lift is there to make the flame cover the tile it seals, and letting
+    // it move the sort key too would slip the fire behind things standing level
+    // with it.
     drawList.push({ y: by, fn: () => {
-      drawSprite(campfireFrame(waveT, fr.phase) ?? SPR.campfire, bx, by);
+      drawSprite(campfireFrame(waveT, fr.phase) ?? SPR.campfire, bx, by - FIRE_LIFT);
     } });
   }
   // structures. Artwork splits a building by tier, so the tier has to be read

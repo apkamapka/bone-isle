@@ -198,11 +198,29 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           w.decos.push({ spr: SPR.mushroom, tx: x, ty: y });
           break;
         case "F":
-          // Solidity is the map's call, not the fire's: a hand-placed campfire
-          // is something to walk around, while the ones dressing a wilderness
-          // camp stay walkable so they cannot wall a monster into a corner.
+          // A campfire does NOT seal its square, on any map.
+          //
+          // It used to, on hand-authored ones. The trouble is that the fire is
+          // the only solid prop in the game whose artwork is exactly one tile
+          // and no more: a tree, a tent, a house all stand taller than the
+          // square they block, so the thing you see and the thing that stops
+          // you are obviously one object. The fire's logs sit flush on the
+          // bottom edge of its cell and the flame licks up from there, and
+          // across the twelve frames of the strip that leaves eight to twelve
+          // pixels of a solid square as plain bare ground. Walk south onto one
+          // and you are refused by a third of a tile that visibly is not there.
+          //
+          // The body is twenty-one rows of a thirty-two row cell, so no amount
+          // of nudging the sprite can make it cover what it seals — lift it far
+          // enough to close the gap above and an identical gap opens below.
+          // Since the artwork cannot be made to tell the truth about the
+          // collision, the collision goes: a fire is something you can step
+          // through, which is what the wilderness camps have always done with
+          // theirs so that a fire could never wall a monster into a corner.
+          // FIRE_LIFT still centres the flame on its own square, because a
+          // campfire hanging off the bottom edge of a tile looked wrong quite
+          // apart from the collision.
           w.fires.push({ tx: x, ty: y, phase: (x * 7 + y * 13) % 10 / 10 });
-          solid[y][x] = true;
           break;
         case "o":
           w.decos.push({ spr: SPR.bones, tx: x, ty: y });

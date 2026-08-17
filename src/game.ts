@@ -2,6 +2,8 @@
 import { makeWorld } from "./world/generate.ts";
 import { MINODEEP_SPEC } from "./world/minoDeepSpec.ts";
 import { ORCDEEP_SPEC } from "./world/orcDeepSpec.ts";
+import { BANDITDEEP2_SPEC } from "./world/banditDeep2Spec.ts";
+import { BANDITDEEP_SPEC } from "./world/banditDeepSpec.ts";
 import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
@@ -31,7 +33,7 @@ import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
 import { WORLD_SEED, MONSTERS_ENABLED, CAVE_CROWD_MULT, CAVE_TILES_PER_MONSTER, TILE } from "./config.ts";
-import type { World, WorldKey } from "./world/types.ts";
+import type { Portal, World, WorldKey } from "./world/types.ts";
 import type { Player } from "./entities/player.ts";
 import type { Bag } from "./items.ts";
 import type { MonsterKind } from "./world/types.ts";
@@ -240,6 +242,8 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   const cellar = makeHandmadeWorld(CELLAR_SPEC);
   const reach = makeHandmadeWorld(REACH_SPEC);
   const bandit = makeHandmadeWorld(BANDIT_SPEC);
+  const banditdeep1 = makeHandmadeWorld(BANDITDEEP_SPEC);
+  const banditdeep2 = makeHandmadeWorld(BANDITDEEP2_SPEC);
   const orcdeep1 = makeHandmadeWorld(ORCDEEP_SPEC);
   const minodeep1 = makeHandmadeWorld(MINODEEP_SPEC);
   const wild = makeWorld({
@@ -271,7 +275,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   // …and every camp's lair floors, each from its own salted seed. The record
   // is completed by the loop below, hence the cast: TypeScript can't see that
   // LAIRS covers exactly the remaining WorldKey members.
-  const worlds = { home, town, sanctum, cellar, reach, bandit, orcdeep1, minodeep1, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
+  const worlds = { home, town, sanctum, cellar, reach, bandit, banditdeep1, banditdeep2, orcdeep1, minodeep1, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
   loadMobSheets();           // directional walk cycles for humanoid creatures
@@ -467,8 +471,20 @@ export function applyGates(w: World, level: number): void {
 
 export function travelTo(g: Game, dest: WorldKey): void {
   const target = g.worlds[dest];
-  // spawn beside the return portal that points back to where we came from
-  const back = target.portals.find((pt) => pt.dest === g.current.key) ?? target.portals[0];
+  // Spawn beside the return portal that points back to where we came from — and
+  // where there is more than one of those, the NEAREST one. A floor reached by
+  // a single staircase has exactly one candidate and behaves as it always did.
+  // Bandit Deep -1 has six ladders, all back to the same island and all on the
+  // same tile coordinates as the six holes above them, so "nearest to where the
+  // player is standing" is precisely "the ladder under the hole he jumped down".
+  // Taking the first in the list would land every descent on the north-eastern
+  // ladder and make five of the six holes lie about where they lead.
+  const backs = target.portals.filter((pt) => pt.dest === g.current.key);
+  const back = backs.reduce<Portal | undefined>((best, pt) => (
+    best === undefined
+      || Math.hypot(pt.x - g.player.x, pt.y - g.player.y)
+       < Math.hypot(best.x - g.player.x, best.y - g.player.y) ? pt : best
+  ), undefined) ?? target.portals[0];
   const p = portalSpawn(target, back);
   // arriving on the surface: point the way to the cave mouth so it's findable
   let extra = "";

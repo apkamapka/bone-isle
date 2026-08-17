@@ -18,9 +18,10 @@ export type Tile = (typeof Tile)[keyof typeof Tile];
 
 /** The surface islands, the Deep Wildlands, and the Bone Caverns (-1..-3). */
 export type WorldKey = "home" | "town" | "wild" | "deepwild" | "cave1" | "cave2" | "cave3"
-  // The Gallows Coast — the human ladder's hunting ground, traced from Tiled.
-  // Six descents are cut into it; none is open until the -1 floor is drawn.
-  | "bandit"
+  // The Gallows Coast — the human ladder's hunting ground, traced from Tiled,
+  // and the cellars under it. Six holes are cut into the island and all six
+  // drop onto the same floor, each onto its own ladder.
+  | "bandit" | "banditdeep1" | "banditdeep2"
   // The Bone Reach — the island behind the Time Sage's fourth pad, traced from
   // Tiled. Three descents are cut into it; two of the three are dug.
   | "reach"

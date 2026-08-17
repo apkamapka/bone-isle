@@ -38,10 +38,11 @@
  * two rows of wall and the roof above it is walk-behind, exactly a tent's rule
  * scaled up — and clears whatever the scatter happened to wall off.
  *
- * The six descents are cut but sealed: the -1 floor is not drawn yet, and each
- * pad refuses travel with a flash message until it is.
+ * All six descents are open and all six drop onto Bandit Deep -1 — one floor,
+ * six ways in. That floor is the same 105x100 grid as this island, so each hole
+ * opens onto a ladder standing on its own tile coordinates.
  *
- *   P pad back to the cellar (2x2)   @ spawn   1..6 sealed descents to -1
+ *   P pad back to the cellar (2x2)   @ spawn   1..6 descents to -1
  *   F campfire   Y skull totem   V dead tree   v felled tree
  *   N tent   W well   Q q black boulder (two variants)
  *   A barn   C house (autumn)   D house (summer)   E smithy   X windmill
@@ -52,11 +53,13 @@
 import type { HandmadeSpec } from "./handmade.ts";
 import { Tile } from "./types.ts";
 
-/** A descent whose floor has not been drawn yet: rendered ashen, refuses
- *  travel. Every one of the six is dug and none of them opens — the -1 map
- *  arrives in its own stage, and each `dest` becomes `banditdeep1` then. */
-const sealed = (label: string) =>
-  ({ dest: "bandit", label, style: "caveMouth", inactive: true, floor: Tile.Dirt } as const);
+/** A hole down to the cellars. All six drop onto the SAME floor, and because
+ *  that floor is the same 105x100 grid as this island, each one opens onto a
+ *  ladder standing on its own tile coordinates — go down at (26,54) and you
+ *  come up at (26,54). Which ladder you land on is settled by `travelTo`,
+ *  which takes the nearest way back rather than the first in the list. */
+const down = (label: string) =>
+  ({ dest: "banditdeep1", label, style: "caveMouth", floor: Tile.Dirt } as const);
 
 export const BANDIT_SPEC: HandmadeSpec = {
   key: "bandit",
@@ -65,12 +68,12 @@ export const BANDIT_SPEC: HandmadeSpec = {
   spawn: "@",
   portals: {
     P: { dest: "cellar", label: "back to the Time Sage's cellar", span: 2, floor: Tile.Dirt },
-    1: sealed("down among the bandits — north-east (sealed)"),
-    2: sealed("down among the bandits — north-west (sealed)"),
-    3: sealed("down among the bandits — the fen (sealed)"),
-    4: sealed("down among the bandits — south-west (sealed)"),
-    5: sealed("down among the bandits — east shore (sealed)"),
-    6: sealed("down among the bandits — south-east (sealed)"),
+    1: down("down to the cellars — north-east"),
+    2: down("down to the cellars — north-west"),
+    3: down("down to the cellars — the fen"),
+    4: down("down to the cellars — south-west"),
+    5: down("down to the cellars — east shore"),
+    6: down("down to the cellars — south-east"),
   },
   scenery: {
     Y: "skullPole", V: "deadTree", v: "felledTree",

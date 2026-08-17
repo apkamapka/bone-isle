@@ -737,6 +737,18 @@ These are drawn as scenery rather than baked into the terrain export: they
 stand taller than the square they occupy, and the player has to be able to walk
 behind them.
 
+## Bandit Deep terrain — `public/banditdeep-terrain.png`, `public/banditdeep2-terrain.png`
+
+Exported from `piwnica_bandit.tmx` and `piwnica_bandit-2.tmx`, which reference `MainLev2.0hhh` and
+`32x32_DEMO` — both **Szadi art.** (szadiart) packs already recorded under
+"Terrain and props" above, under the same licence and with the same pinning
+still outstanding as the other Tiled exports here.
+
+Native tile resolution, 3360 x 3200 each for a 105 x 100 grid, object layers hidden.
+Collision does not come from this image: the glyph grid in `banditDeepSpec.ts`
+and `banditDeep2Spec.ts` is authoritative, and the loader drops any export that
+is not exactly the grid size in tiles times 32.
+
 ## Gallows Coast buildings — `prop-barn.png`, `prop-house-a.png`, `prop-house-b.png`, `prop-smithy.png`, `prop-windmill.png`
 
 Source: **CraftPix.net**, *Top-Down Simple Autumn Props* and *Top-Down Simple

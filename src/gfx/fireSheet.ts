@@ -32,6 +32,26 @@ export const FIRE_FRAMES = 12;
  *  it reads as a lamp, faster and it strobes. */
 export const FIRE_FPS = 12;
 
+/**
+ * How far above the bottom of its square the fire is drawn, in pixels.
+ *
+ * A hand-placed campfire seals the square it stands on, and it is the only
+ * solid prop in the game whose art is exactly one tile and no more. Everything
+ * else — tree, tent, house — is taller than the square it blocks, so the thing
+ * you see and the thing that stops you are obviously the same object. The fire
+ * is not: the logs sit flush on the bottom edge of the cell and the flame licks
+ * up from there, which across the twelve frames leaves the top eight to twelve
+ * pixels of a solid square as bare ground. Walking south onto a fire you are
+ * therefore refused by a third of a tile that plainly looks walkable.
+ *
+ * Lifting the sprite splits that slack between the top of the square and the
+ * bottom, so the flame is centred on the tile it owns and neither edge reads as
+ * free. Four pixels is half the median frame's headroom — enough to close the
+ * gap, small enough that the fire still reads as sitting on the ground rather
+ * than hovering over it.
+ */
+export const FIRE_LIFT = 4;
+
 let strip: HTMLCanvasElement[] | null = null;
 
 /** Cut the strip into its frames. */
