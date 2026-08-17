@@ -4,7 +4,7 @@ import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers } from "./world/collision.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
-import { campfireFrame, FIRE_LIFT } from "./gfx/fireSheet.ts";
+import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx/fireSheet.ts";
 import { scenerySprite, FOOTPRINT } from "./gfx/sceneryArt.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
@@ -1789,6 +1789,42 @@ function tickProximityPanels(dt: number): void {
   }
 }
 
+/**
+ * Standing in a campfire burns you.
+ *
+ * A camp fire seals nothing — its artwork is one tile exactly and only
+ * twenty-one rows of it are flame, so a third of a solid square used to read as
+ * bare ground the player was refused entry to. Making it walkable removed that
+ * lie; this puts the cost back, which is what "walk through it if you like"
+ * ought to mean.
+ *
+ * Deliberately the same shape as the burning ground a monster's fire field
+ * leaves: elemental, so it goes straight past shield and armour — you cannot
+ * raise a buckler against a fire you are standing in — one bite per tile per
+ * tick, and no floating label, because the flame under your feet is the label.
+ * The clock is keyed per TILE, so crossing three fires in a row costs three
+ * bites while standing in one costs one.
+ */
+const fireClock = new Map<string, number>();
+let fireT = 0;
+
+function tickCampfireBurn(world: World, dt: number): void {
+  fireT += dt;
+  if (P.dead) return;
+  for (const f of world.fires) {
+    if (f.tx !== P.tx || f.ty !== P.ty) continue;
+    const key = `${world.key}|${f.tx}|${f.ty}`;
+    const next = fireClock.get(key) ?? 0;
+    if (fireT < next) continue;
+    fireClock.set(key, fireT + FIRE_BURN_TICK_S);
+    hurtPlayer(world, P, rndi(FIRE_BURN_DMG[0], FIRE_BURN_DMG[1]), true);
+  }
+  // the map's fires never move, but travelling between worlds retires the keys
+  if (fireClock.size > 64) {
+    for (const k of fireClock.keys()) if (!k.startsWith(`${world.key}|`)) fireClock.delete(k);
+  }
+}
+
 function checkPortals(): void {
   if (P.tpCd > 0) return;
   for (const pt of cw().portals) {
@@ -2032,6 +2068,8 @@ function update(dt: number): void {
     // damage log while he was standing in a fire he can plainly see.
     if (name) addFloat(world, P.x, P.y - 26, name, ELEMENT_COLOR[el]);
   });
+
+  tickCampfireBurn(world, dt);
 
   tickRegrowth(world, dt, P.x, P.y, true);
   tickNpcTalk(world);

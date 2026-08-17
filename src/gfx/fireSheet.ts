@@ -52,6 +52,27 @@ export const FIRE_FPS = 12;
  */
 export const FIRE_LIFT = 4;
 
+/**
+ * What standing in a campfire costs, and how often.
+ *
+ * A campfire stopped sealing its square, because its artwork is one tile
+ * exactly and its body only twenty-one rows of thirty-two, so a third of a
+ * solid square read as bare ground the player was refused. Walking through one
+ * had to become possible. It should not become free.
+ *
+ * The numbers are deliberately below a monster's burning ground, which bites
+ * 14-30 a second: a bonfire someone lit to cook over is not a fire field a
+ * shaman dropped on your head. Flat, and unscaled by level, exactly like the
+ * spell fields — which means it is a real cost at fourteen and a nuisance at a
+ * hundred. That is the right shape for scenery. Crossing one costs a bite;
+ * standing in one drains you and says so.
+ *
+ * The clock is per TILE, like the burning ground's, so walking a line of three
+ * camp fires costs three bites rather than one.
+ */
+export const FIRE_BURN_TICK_S = 1.0;
+export const FIRE_BURN_DMG: readonly [number, number] = [6, 12];
+
 let strip: HTMLCanvasElement[] | null = null;
 
 /** Cut the strip into its frames. */

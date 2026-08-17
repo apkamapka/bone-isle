@@ -21,7 +21,7 @@ export type WorldKey = "home" | "town" | "wild" | "deepwild" | "cave1" | "cave2"
   // The Gallows Coast — the human ladder's hunting ground, traced from Tiled,
   // and the cellars under it. Six holes are cut into the island and all six
   // drop onto the same floor, each onto its own ladder.
-  | "bandit" | "banditdeep1" | "banditdeep2"
+  | "bandit" | "banditdeep1" | "banditdeep2" | "banditdeep3"
   // The Bone Reach — the island behind the Time Sage's fourth pad, traced from
   // Tiled. Three descents are cut into it; two of the three are dug.
   | "reach"

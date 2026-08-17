@@ -4268,6 +4268,27 @@ async function main(): Promise<void> {
 
 
 
+
+  console.log("A campfire burns what stands in it:");
+  {
+    const fs = await import("node:fs");
+    const { FIRE_BURN_TICK_S, FIRE_BURN_DMG, FIRE_LIFT } = await import("../src/gfx/fireSheet.ts");
+    const main = fs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const spells = fs.readFileSync(new URL("../src/systems/monsterSpells.ts", import.meta.url), "utf8");
+
+    ok(FIRE_BURN_TICK_S > 0 && FIRE_BURN_DMG[0] > 0 && FIRE_BURN_DMG[1] > FIRE_BURN_DMG[0],
+      `standing in one costs ${FIRE_BURN_DMG[0]}-${FIRE_BURN_DMG[1]} every ${FIRE_BURN_TICK_S}s`);
+    // a bonfire someone cooks over is not a fire field a shaman dropped on you
+    const field = /FIELD_TICK_DMG: readonly \[number, number\] = \[(\d+), (\d+)\]/.exec(spells)!;
+    ok(FIRE_BURN_DMG[1] < Number(field[2]),
+      `…less than the ${field[1]}-${field[2]} a monster's burning ground bites`);
+    ok(/hurtPlayer\(world, P, rndi\(FIRE_BURN_DMG\[0\], FIRE_BURN_DMG\[1\]\), true\)/.test(main),
+      "…and it lands elemental, so no shield or armour is raised against it");
+    ok(/const key = `\$\{world\.key\}\|\$\{f\.tx\}\|\$\{f\.ty\}`/.test(main),
+      "…on a clock kept per tile, so crossing three fires costs three bites");
+    ok(FIRE_LIFT > 0, "and the flame is still lifted onto the middle of its own square");
+  }
+
   console.log("A campfire covers the square it seals:");
   {
     const fs = await import("node:fs");
@@ -4532,13 +4553,23 @@ async function main(): Promise<void> {
     travelTo(g, "cellar");
     ok(g.current.key === "cellar", "…and the pad on the island returns you to the cellar");
 
-    // nothing on the road is dormant except the one floor that is not drawn
+    // -2 -> -3 -> -2, the last leg
+    const d3 = g.worlds.banditdeep2.portals.find((p) => p.dest === "banditdeep3")!;
+    g.current = g.worlds.banditdeep2;
+    g.player.x = d3.x; g.player.y = d3.y;
+    travelTo(g, "banditdeep3");
+    ok(g.current.key === "banditdeep3", "the last hole drops you into the black cell");
+    const u3 = g.worlds.banditdeep3.portals.find((p) => p.dest === "banditdeep2")!;
+    g.player.x = u3.x; g.player.y = u3.y;
+    travelTo(g, "banditdeep2");
+    ok(g.current.key === "banditdeep2", "…and its ladder climbs back out");
+
+    // the whole road is open end to end now
     const dormant: string[] = [];
-    for (const key of ["bandit", "banditdeep1", "banditdeep2"] as const) {
+    for (const key of ["bandit", "banditdeep1", "banditdeep2", "banditdeep3"] as const) {
       for (const p of g.worlds[key].portals) if (p.inactive) dormant.push(`${key}->${p.dest}`);
     }
-    ok(dormant.length === 1 && dormant[0] === "banditdeep2->banditdeep2",
-      "exactly one pad on the whole road is sealed: -2's way down to -3");
+    ok(dormant.length === 0, "not one pad on the whole road is sealed any more");
   }
 
   console.log("Bandit Deep -2 ends the human ladder:");
@@ -4594,9 +4625,9 @@ async function main(): Promise<void> {
     const nearest = Math.min(...k2.mobPosts!.map((p) => Math.hypot(p.tx - ux, p.ty - uy)));
     ok(nearest >= 6, `the nearest creature to that ladder stands ${Math.round(nearest)} tiles off`);
 
-    /* --- the way to the Black Knight is cut, sealed, and guarded --- */
-    const down3 = k2.portals.find((p) => p.inactive)!;
-    ok(down3 !== undefined, "a sealed pad drops to -3, where the Black Knight waits");
+    /* --- the way to the Black Knight is cut, open, and guarded --- */
+    const down3 = k2.portals.find((p) => p.dest === "banditdeep3")!;
+    ok(down3 !== undefined && !down3.inactive, "a pad drops to -3, where the Black Knight waits");
     const dx = Math.floor(down3.x / 32), dy = Math.floor(down3.y / 32);
     const guards = k2.mobPosts!.filter((p) => Math.hypot(p.tx - dx, p.ty - dy) <= 16
       && (p.kind === "chieftain" || p.kind === "warlord"));
@@ -4648,6 +4679,106 @@ async function main(): Promise<void> {
     for (const w of Object.values(worlds)) for (const m of w.monsters) everywhere.add(m.kind);
     ok(HUMAN.every((h) => everywhere.has(h)),
       "…and all twenty of them now spawn somewhere in the game");
+  }
+
+
+
+  console.log("The cellar walls stand on the grid they seal:");
+  {
+    const worlds = buildWorlds(WORLD_SEED);
+    const { Tile: TW } = await import("../src/world/types.ts");
+    /* The wall tileset stamps its band half a tile off the grid: measured on the
+     * raw export, a vertical band's rock ran x=16..47 across the two columns the
+     * TMX marks as wall — one tile's worth of stone centred on the seam between
+     * them. Both were sealed, so 64px of collision carried 32px of rock and a
+     * whole phantom square of bare floor was refused. The export was resampled
+     * to slide each band onto the first square of its run and only that square
+     * is sealed now. What this guards is the outcome: no maze wall is two
+     * squares thick any more. */
+    for (const [key, wide] of [["banditdeep1", 0], ["banditdeep2", 0]] as const) {
+      const w = worlds[key];
+      let pairs = 0;
+      for (let y = 1; y < w.h - 1; y++) {
+        for (let x = 1; x < w.w - 2; x++) {
+          // an interior wall pair with open floor on both sides is the bug's shape
+          if (w.tile[y][x] === TW.Wall && w.tile[y][x + 1] === TW.Wall
+            && w.tile[y][x - 1] !== TW.Wall && w.tile[y][x + 2] !== TW.Wall
+            && w.tile[y - 1][x] !== TW.Wall && w.tile[y + 1][x] !== TW.Wall) pairs++;
+        }
+      }
+      ok(pairs === wide, `${key}: no maze wall is a two-square band any more (${pairs})`);
+    }
+  }
+
+  console.log("The Black Cell is a room with one thing in it:");
+  {
+    const fs = await import("node:fs");
+    const { BANDITDEEP3_SPEC } = await import("../src/world/banditDeep3Spec.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds, WORLD_SEED);
+    const k3 = worlds.banditdeep3;
+
+    const terrain = new URL("../public/banditdeep3-terrain.png", import.meta.url);
+    ok(fs.existsSync(terrain), "public/banditdeep3-terrain.png ships with it");
+    if (fs.existsSync(terrain)) {
+      const png = fs.readFileSync(terrain);
+      ok(png.readUInt32BE(16) === k3.w * 32 && png.readUInt32BE(20) === k3.h * 32,
+        `the terrain export is exactly ${k3.w * 32}x${k3.h * 32}`);
+    }
+    ok(BANDITDEEP3_SPEC.rows.length === 40
+      && BANDITDEEP3_SPEC.rows.every((r) => r.length === 40),
+      "the grid is 40x40 — a chamber, not another floor");
+
+    /* --- one knight, three at the gate, and nothing else --- */
+    const knights = k3.monsters.filter((m) => m.kind === "blackKnight");
+    ok(knights.length === 1, "exactly one Black Knight stands in it");
+    ok(k3.monsters.length === 4,
+      "…and three of the heaviest human ranks bar the way to him, and no more");
+    ok(k3.monsters.every((m) => ["blackKnight", "chieftain", "warlord"].includes(m.kind)),
+      "…nothing lighter has been let in");
+
+    /* --- he is at the far end, and he has room --- */
+    const up = k3.portals[0];
+    const ux = Math.floor(up.x / 32), uy = Math.floor(up.y / 32);
+    const kn = k3.mobPosts!.find((p) => p.kind === "blackKnight")!;
+    const gate = k3.mobPosts!.filter((p) => p.kind !== "blackKnight");
+    const dKn = Math.hypot(kn.tx - ux, kn.ty - uy);
+    ok(gate.every((p) => Math.hypot(p.tx - ux, p.ty - uy) < dKn),
+      "the gate stands between the ladder and the knight, not behind him");
+    ok(gate.every((p) => Math.hypot(p.tx - kn.tx, p.ty - kn.ty) >= 4),
+      "…and none of them is crowding him: he is fought alone");
+    ok(!k3.scenery.some((s) => Math.hypot(s.tx - kn.tx, s.ty - kn.ty) < 3)
+      && !k3.rocks.some((r) => Math.hypot(r.tx - kn.tx, r.ty - kn.ty) < 3),
+      "…on clear ground, with nothing to hide behind within three squares");
+
+    /* --- nobody camps down here --- */
+    ok(!k3.scenery.some((s) => s.kind === "tent" || s.kind === "well"),
+      "no tents and no well: this is a cell, not a camp");
+    ok(k3.decos.length > 0, "bones, though — this is where they end up");
+
+    /* --- and it all connects --- */
+    const seen = Array.from({ length: k3.h }, () => new Array<boolean>(k3.w).fill(false));
+    const q: [number, number][] = [[ux, uy]];
+    seen[uy][ux] = true;
+    let reached = 0;
+    while (q.length) {
+      const [x, y] = q.pop()!;
+      reached++;
+      for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = x + ax, c = y + ay;
+        if (a < 0 || c < 0 || a >= k3.w || c >= k3.h) continue;
+        if (seen[c][a] || k3.solid[c][a]) continue;
+        seen[c][a] = true;
+        q.push([a, c]);
+      }
+    }
+    let open = 0;
+    for (let y = 0; y < k3.h; y++) {
+      for (let x = 0; x < k3.w; x++) if (!k3.solid[y][x]) open++;
+    }
+    ok(reached === open, `every square of the cell is reachable from the ladder (${reached})`);
+    ok(seen[kn.ty][kn.tx], "…the knight's own among them");
   }
 
   console.log("The two floors under the Reach are traced faithfully from Tiled:");
