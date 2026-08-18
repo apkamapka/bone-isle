@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const tasks = await import("../src/systems/tasks.ts");
   const { skills, resetSkills, addSkillXp } = await import("../src/systems/skills.ts");
   const { buildWorlds } = await import("../src/game.ts");
-  const { WORLD_SEED, TILE } = await import("../src/config.ts");
+  const { WORLD_SEED, TILE, BAG_SIZE: cfgBagSize, CORPSE_SLOTS: cfgCorpseSlots } = await import("../src/config.ts");
   const { lineOfSight } = await import("../src/world/collision.ts");
   const { Tile } = await import("../src/world/types.ts");
   const { STRUCTS, canPlaceAt } = await import("../src/systems/building.ts");
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   {
     resetQuests();
     const p = createPlayer({ x: 0, y: 0 });
-    p.bag = items.emptyBag();
+    p.pack = items.newContainer("backpack")!;
     const q2 = quests.find((q) => q.id === "q2")!; // reward: sword + 50 exp
     q2.progress = 6; q2.done = true;
     let expGiven = 0;
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   console.log("tasks (weight-aware rewards):");
   {
     const p = createPlayer({ x: 0, y: 0 });
-    p.bag = items.emptyBag();
+    p.pack = items.newContainer("backpack")!;
     const ghouls = tasks.TASKS.find((t) => t.id === "t_ghouls")!; // reward 20 boneArrow (20 oz)
     ok(tasks.rewardFits(p, ghouls), "light bag fits the arrow reward");
     // stuff the bag to the cap with stone (weight 14): cap 500 → 35 stones = 490 oz
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     ok(tasks.buyExchange(p, "x_arrows") === "poor", "no TP → poor");
     p.taskPoints = 20;
     ok(tasks.buyExchange(p, "x_arrows") === "heavy", "50 arrows over cap → heavy");
-    p.bag = items.emptyBag();
+    p.pack = items.newContainer("backpack")!;
     ok(tasks.buyExchange(p, "x_arrows") === "ok", "with room it buys");
     ok(items.bagCount(p.bag, "boneArrow") === 50 && p.taskPoints === 17, "arrows + TP deducted");
   }
@@ -156,8 +156,15 @@ async function main(): Promise<void> {
     applyDeathPenalty(worlds.home, p);
     ok(worlds.home.corpses.length === before + 1, "player body corpse spawned");
     const body = worlds.home.corpses[worlds.home.corpses.length - 1];
-    ok(body.name === "your body" && body.items.some((it) => it.kind === "wood" && it.n === 12), "backpack contents dropped into the body");
-    ok(p.bag.every((s) => s === null), "backpack emptied");
+    /* The backpack now drops AS ITSELF: one container in the body holding the
+     * wood, rather than the wood loose. That is the whole point of the tree —
+     * flattening it would destroy anything packed inside a sub-bag. */
+    const droppedPack = body.items.find((it) => it?.kind === "backpack");
+    ok(body.name === "your body" && !!droppedPack, "the backpack itself dropped into the body");
+    ok(!!droppedPack?.items?.some((it) => it?.kind === "wood" && it.n === 12),
+      "…with its contents still inside it");
+    ok(p.pack === null, "and the player is left wearing nothing");
+    ok(p.bag.length === 0, "…so their bag is not merely empty, it is absent");
     ok(p.level === 13, "10% of total exp at lv14/0 de-levels to 13");
     ok(p.exp >= 0 && p.exp < p.expNext, "partial exp within the new level");
     worlds.home.corpses.length = before;
@@ -1404,7 +1411,7 @@ async function main(): Promise<void> {
     const m = wild.monsters[wild.monsters.length - 1];
     ok(m.aggroT === 0, "freshly spawned monster starts calm");
     const p = createPlayer({ x: m.x - 100, y: m.y });
-    p.bag = items.emptyBag();
+    p.pack = items.newContainer("backpack")!;
     items.addItem(p.bag, "arrow", 10);
     p.eq.weapon = "bow";
     playerShoot(wild, p, m, "arrow");
@@ -2095,10 +2102,187 @@ async function main(): Promise<void> {
     ok(!!A.itemSprite("shortSword"), "…and itemSprite still returns the baked stand-in");
   }
 
+  console.log("Etap 26 — containers are a tree:");
+  {
+    const C = await import("../src/systems/containers.ts");
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+
+    // ---- the shape of the thing ----
+    const pack = items.newContainer("backpack")!;
+    ok(pack.items!.length === cfgBagSize, "a fresh pack has BAG_SIZE slots of its own");
+    ok(items.newContainer("wood") === null, "…and a log is not a container");
+
+    const inner = items.newContainer("backpack")!;
+    items.addItem(inner.items!, "steel", 30);
+    pack.items![0] = inner;
+    ok(items.bagCount(pack.items!, "steel") === 30,
+      "counting reaches INTO a nested pack — material hidden in a sub-bag must still be spendable");
+    ok(items.bagWeight(pack.items!) === items.ITEMS.backpack.weight + 30 * items.ITEMS.steel.weight,
+      "…and weight counts the pack plus everything in it");
+    ok(items.bagSlotsUsed(pack.items!) === 2, "the load counts the pack AND its contents");
+    ok(items.stackSlotCost(inner) === 2, "…which is what a chest is charged for it");
+
+    // ---- removal digs, and digs shallowest-first ----
+    const p = mkP({ x: 0, y: 0 });
+    items.addItem(p.bag, "steel", 5);
+    const sub = items.newContainer("backpack")!;
+    items.addItem(sub.items!, "steel", 5);
+    items.addStack(p.bag, sub);
+    ok(items.removeItem(p.bag, "steel", 7), "a cost larger than the top bag holds still resolves");
+    ok(items.bagCount(p.bag, "steel") === 3, "…taking exactly what was asked for");
+    ok(items.bagCount(sub.items!, "steel") === 3,
+      "…and emptying the visible bag before rummaging in the sub-pack");
+
+    // ---- compactBag must not liquidate containers ----
+    const tidy = items.emptyBag();
+    const keep = items.newContainer("backpack")!;
+    items.addItem(keep.items!, "essentialGem", 2);
+    tidy[3] = keep;
+    items.addItem(tidy, "wood", 5);
+    items.addItem(tidy, "wood", 5);
+    items.compactBag(tidy);
+    const survivor = tidy.find((q) => q?.kind === "backpack");
+    ok(!!survivor && items.bagCount(survivor.items!, "essentialGem") === 2,
+      "compacting a bag never rebuilds a pack 'by kind' and strands its contents");
+
+    // ---- a pack cannot be put inside itself ----
+    const root: C.ContainerRef = { c: "bag" };
+    const nested: C.ContainerRef = { c: "nested", via: root, i: 0 };
+    const deeper: C.ContainerRef = { c: "nested", via: nested, i: 2 };
+    ok(C.isInside(deeper, nested), "a ref knows when it sits inside another");
+    ok(!C.isInside(nested, deeper), "…and the relation is not symmetric");
+    ok(C.isInside(nested, nested), "…a container counts as inside itself");
+    ok(C.rootOf(deeper) === "player" && C.rootOf({ c: "corpse", body: null as never }) === "world",
+      "root tells the weight rule from the reach rule");
+    ok(C.depthOf(deeper) === 2 && C.depthOf(root) === 0, "depth counts the trail");
+
+    // ---- resolution, and the stale-trail repair ----
+    const p2 = mkP({ x: 0, y: 0 });
+    const bp = items.newContainer("backpack")!;
+    p2.bag[0] = bp;
+    items.addItem(bp.items!, "wood", 4);
+    ok(C.slotsOf({ c: "nested", via: root, i: 0 }, p2)?.length === cfgBagSize,
+      "a nested ref resolves to the pack's own slots");
+    ok(C.slotsOf({ c: "nested", via: root, i: 1 }, p2) === null,
+      "…and an empty slot resolves to nothing, not to an empty bag");
+    p2.bag[0] = null; // the pack is taken away while a window looks inside it
+    const walked = C.followTrail(root, [0, 1], p2);
+    ok(walked.used === 0 && C.sameRef(walked.ref, root),
+      "a window pointing at a vanished pack falls back to the nearest real one");
+
+    // ---- the bagless player ----
+    const bare = mkP({ x: 0, y: 0 });
+    bare.pack = null;
+    ok(bare.bag.length === 0, "with no pack there is no bag");
+    ok(items.addItem(bare.bag, "wood", 1) === 1, "…and nothing fits in it");
+
+    // ---- a loaded pack is not merchandise ----
+    const shopBag = items.emptyBag();
+    const loaded = items.newContainer("backpack")!;
+    items.addItem(loaded.items!, "wood", 1);
+    shopBag[0] = loaded;
+    ok(!items.removeItemUnpacked(shopBag, "backpack", 1),
+      "an NPC refuses a backpack with things in it — selling it would eat the contents");
+    items.removeItem(loaded.items!, "wood", 1);
+    ok(items.removeItemUnpacked(shopBag, "backpack", 1), "…and takes it once emptied");
+
+    /* ---- v6 -> v7: nobody's steel goes missing ------------------------
+     * The old save held ONE flat array of up to 16 + 8 + 8 cells, where a
+     * carried Backpack bolted eight more cells onto the end. The new shape is
+     * a worn pack of 16. Everything past the first 16 has to land somewhere
+     * real — inside the packs it notionally belonged to — and whatever still
+     * will not fit must reach the ground rather than the void.
+     * ------------------------------------------------------------------ */
+    {
+      const { loadGame } = await import("../src/save.ts");
+      const SK = "bone-isle-save-v2";
+      const g = buildWorlds(WORLD_SEED);
+      const legacy = {
+        v: 6,
+        player: {
+          x: 100, y: 100, gold: 5, level: 1, exp: 0, taskPoints: 0,
+          // 16 base cells + a Backpack + 8 bonus cells, exactly as v6 wrote it
+          bag: [
+            ...Array.from({ length: 15 }, () => ({ kind: "wood", n: 1 })),
+            { kind: "backpack", n: 1 },
+            ...Array.from({ length: 8 }, () => ({ kind: "steel", n: 9 })),
+          ],
+          eq: {},
+        },
+        world: "home", worlds: {}, structures: {}, ground: {}, corpses: {},
+      };
+      localStorage.setItem(SK, JSON.stringify(legacy));
+      const back = loadGame();
+      ok(!!back, "a v6 save still loads");
+      if (back) {
+        ok(!!back.player.pack, "…and the player comes out wearing a backpack");
+        const wood = items.bagCount(back.player.bag, "wood");
+        const steel = items.bagCount(back.player.bag, "steel");
+        const onFloor = back.worlds.home.ground
+          .reduce((n, gi) => n + (gi.kind === "steel" ? gi.n : 0), 0);
+        const inChest = back.worlds.home.structures
+          .filter((st) => st.key === "chest")
+          .reduce((n, st) => n + (st.inv ? items.bagCount(st.inv, "steel") : 0), 0);
+        ok(wood === 15, "…carrying every log it had");
+        ok(steel + onFloor + inChest === 72,
+          `…and not one bar of steel is lost (${steel} carried, ${inChest} chested, ${onFloor} spilled)`);
+        ok(steel > 0, "…most of it riding inside the pack that used to justify the extra slots");
+      }
+      localStorage.removeItem(SK);
+      void g;
+    }
+
+    /* ---- a loot bag on the floor survives a save ----------------------
+     * A dropped pack is the one container that lives in the world rather than
+     * on the player, and GroundItem was never meant to hold anything. If its
+     * contents did not round-trip, a player would log out beside a full loot
+     * bag and log back in beside an empty one.
+     * ------------------------------------------------------------------ */
+    {
+      const { saveGame, loadGame } = await import("../src/save.ts");
+      const SK = "bone-isle-save-v2";
+      const g = buildWorlds(WORLD_SEED);
+      const gp = mkP({ x: 200, y: 200 });
+      const sack = items.newContainer("backpack")!;
+      items.addItem(sack.items!, "dragonScale", 7);
+      g.home.ground.push({ kind: "backpack", n: 1, x: 220, y: 220, t: 999, items: sack.items });
+      const corpse = { name: "orc", x: 240, y: 240, items: items.corpseBag([{ kind: "orcEar", n: 2 }]), gold: 9, t: 60 };
+      g.home.corpses.push(corpse);
+      saveGame({ seed: WORLD_SEED, worlds: g, current: g.home, player: gp } as never);
+      const back = loadGame();
+      ok(!!back, "a world with a loot bag in it saves and loads");
+      if (back) {
+        const bag = back.worlds.home.ground.find((gi) => gi.kind === "backpack");
+        ok(!!bag?.items, "the pack on the floor keeps its slots");
+        ok(items.bagCount(bag!.items!, "dragonScale") === 7,
+          "…and every scale inside it is still there after a reload");
+        const c = back.worlds.home.corpses[0];
+        ok(!!c && c.items.length === cfgCorpseSlots,
+          "a corpse reloads as a fixed grid, not a compact list");
+        ok(items.bagCount(c.items, "orcEar") === 2 && c.gold === 9, "…with its loot and gold intact");
+      }
+      localStorage.removeItem(SK);
+    }
+
+    /* ---- a chest budgets its whole tree ------------------------------- */
+    {
+      const B = await import("../src/systems/building.ts");
+      ok(B.CHEST_SLOTS.length === 3, "the chest still has three tiers");
+      const inv = items.emptyStash(B.CHEST_SLOTS[0]); // tier I: 10
+      const packed = items.newContainer("backpack")!;
+      items.addItem(packed.items!, "iron", 5 * items.ITEMS.iron.stack);
+      items.addStack(inv, packed);
+      ok(items.bagSlotsUsed(inv) === 6,
+        "a pack holding five stacks costs a tier-I chest six of its ten slots");
+      ok(items.bagSlotsUsed(inv) < B.CHEST_SLOTS[0],
+        "…leaving room, but nowhere near the 160 that nesting would grant unbudgeted");
+    }
+  }
+
   console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");
   {
-    ok(items.ITEMS.backpack.pack?.slots === 8 && items.ITEMS.backpack.stack === 1,
-      "a carried Backpack is worth +8 bag slots");
+    ok(items.ITEMS.backpack.pack?.slots === cfgBagSize && items.ITEMS.backpack.stack === 1,
+      "a Backpack is a container of its own, BAG_SIZE slots wide");
     ok(items.ITEMS.booster.boost === true, "the Dopalacz carries the boost flag");
     const br = items.RECIPES.find((r) => r.out === "booster")!;
     ok(!!br && br.gold === 1 && Object.keys(br.cost).length === 0,
@@ -2478,7 +2662,7 @@ async function main(): Promise<void> {
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 6, "saving writes the current v6 format");
+    ok(stored.v === 7, "saving writes the current v7 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
@@ -5842,7 +6026,7 @@ async function main(): Promise<void> {
       ok(groundBlocked(hw, -1, 0) && groundBlocked(hw, 0, -1), "…and neither does off-map");
 
       const p2 = createPlayer({ x: 0, y: 0 });
-      p2.bag = items.emptyBag();
+      p2.pack = items.newContainer("backpack")!;
       // stand next to water and fire a Nova: the ring of eight straddles the
       // shoreline, so exactly the dry tiles should light up
       let shore: [number, number] | null = null;
@@ -5925,7 +6109,7 @@ async function main(): Promise<void> {
       ok(spot !== null, "the home map has open ground wide enough for a Burst");
       const [bx, by2] = spot!;
       const p3 = createPlayer({ x: 0, y: 0 });
-      p3.bag = items.emptyBag();
+      p3.pack = items.newContainer("backpack")!;
       p3.x = bx * TILE + TILE / 2;
       p3.y = by2 * TILE + TILE / 2;
       p3.bag[0] = { kind: "fireEmberBurst", n: 5 };

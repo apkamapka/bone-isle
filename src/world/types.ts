@@ -1,6 +1,6 @@
 /** Shared data shapes for the world: terrain, nodes, monsters, NPCs. */
 import type { MobDir } from "../gfx/mobSheet.ts";
-import type { ItemStack } from "../items.ts";
+import type { Bag, ItemStack } from "../items.ts";
 
 /** Terrain tile codes. (Plain const object so the syntax is fully erasable.) */
 export const Tile = {
@@ -171,7 +171,7 @@ export interface Structure {
   hurtT?: number;
   /** Storage Chests only: this chest's own inventory (Etap 11). Rides inside
    *  the structure dump in the save, so persistence needs no extra field. */
-  inv?: (ItemStack | null)[];
+  inv?: Bag;
 }
 
 /** Reserved circular area kept clear during procedural placement. */
@@ -211,6 +211,12 @@ export interface GroundItem {
   x: number;
   y: number;
   t: number;
+  /**
+   * Container kinds only: what is inside the pack lying here. A dropped
+   * backpack keeps its contents on the floor — that is the whole "loot bag"
+   * idea, a container you leave by the corpses and fill as you go.
+   */
+  items?: Bag;
 }
 
 /**
@@ -319,7 +325,13 @@ export interface Corpse {
   name: string;
   x: number;
   y: number;
-  items: ItemStack[];
+  /**
+   * A real container's slots, not a compact list. Fixed length with holes, so
+   * the loot window is a grid you can drag INTO as well as out of — which is
+   * what makes a corpse usable as somewhere to stash things mid-hunt, and what
+   * lets a dead player's backpack sit in their body with its contents intact.
+   */
+  items: Bag;
   gold: number;
   t: number; // seconds until decay
 }

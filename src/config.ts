@@ -154,8 +154,14 @@ export const HP_BASE = 80;
 export const HP_PER_LEVEL = 15;
 export const PLAYER_BASE_HP = HP_BASE + HP_PER_LEVEL; // level 1
 
-/** Backpack capacity (slots). */
+/** Backpack capacity (slots) — and, since a backpack is now a container item
+ *  like any other, the size of every backpack in the game. Tibia's is 20; 16
+ *  is the deliberate difference, and a 4x4 grid reads better on a phone. */
 export const BAG_SIZE = 16;
+
+/** How many slots a corpse holds. A body is a container too: monster loot
+ *  lands in it, and a dead player's whole backpack sits in it as one object. */
+export const CORPSE_SLOTS = 16;
 
 /**
  * Monster respawn delay (seconds).
@@ -573,15 +579,6 @@ export const MONSTER_AGGRO_HIT_S = 6;
  *  Home Isle carries its own independent inventory (Etap 11); building more
  *  chests means more total storage, not a second window onto the same one. */
 export const STASH_SIZE = 50;
-
-/**
- * Carried backpacks (Etap 11): each Backpack item in your bag adds this many
- * extra bag slots, up to PACK_MAX packs. Dropping/selling/stashing a pack
- * shrinks the bag again — anything sitting in the lost slots spills to the
- * ground at your feet (Tibia would drop the container with its contents).
- */
-export const PACK_BONUS_SLOTS = 8;
-export const PACK_MAX = 2;
 
 /** Carry capacity (weight in oz). Grows with level, gates the backpack. */
 export const CAP_BASE = 500;

@@ -1,6 +1,6 @@
 /** localStorage persistence: full game snapshot keyed by a single slot. */
 import { buildWorlds, populateAll, type Game } from "./game.ts";
-import { WORLD_SEED, GROUND_DESPAWN_S, PACK_BONUS_SLOTS, PACK_MAX, SPRITE_SCALE } from "./config.ts";
+import { WORLD_SEED, GROUND_DESPAWN_S, BAG_SIZE, SPRITE_SCALE } from "./config.ts";
 import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn, feetBlocked, worldSpawn } from "./world/collision.ts";
@@ -15,8 +15,8 @@ import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { stance, setStance, STANCES, type Stance } from "./systems/stance.ts";
 import { quests } from "./systems/quests.ts";
-import { emptyBag, emptyStash, emptyEquipment, addItem, ITEMS, AMMO_KINDS } from "./items.ts";
-import type { Bag, Equipment, ItemKind } from "./items.ts";
+import { emptyStash, emptyCorpseBag, emptyEquipment, addItem, addStack, newContainer, ITEMS, AMMO_KINDS } from "./items.ts";
+import type { Bag, Equipment, ItemKind, ItemStack } from "./items.ts";
 import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
 
 const KEY = "bone-isle-save-v2";
@@ -36,11 +36,16 @@ const KEY = "bone-isle-save-v2";
  * — a loaded v3 save would just quietly turn a starting stack of fifteen fire
  * charges into fifteen lane keys and hand the player the whole fire tree.
  * That is why this bump exists even though no field changed shape.
+ *
+ * v7: containers became a TREE (Etap 26). The player wears a backpack instead
+ * of owning a flat, growing array; a stack can carry `items` of its own; and
+ * a corpse holds fixed slots with holes rather than a compact list. Older
+ * saves are migrated rather than dropped — see `migrateFlatBag`.
  */
-const SAVE_V = 6;
+const SAVE_V = 7;
 
 interface SaveData {
-  v: 2 | 3 | 4 | 5 | 6;
+  v: 2 | 3 | 4 | 5 | 6 | 7;
   seed: number;
   current: WorldKey;
   player: {
@@ -50,7 +55,7 @@ interface SaveData {
     fedS?: number;
     /** Ammo slot pick. Absent in pre-Etap-26 saves — those load as "auto". */
     ammo?: string;
-    bag: Bag; eq: Equipment;
+    pack: ItemStack | null; bag?: Bag; eq: Equipment;
   };
   skills: Record<SkillKey, { lv: number; pts: number }>;
   /** Attack stance. Absent in pre-Etap 19 saves — those load as balanced. */
@@ -109,7 +114,7 @@ export function saveGame(g: Game): void {
       gold: p.gold, taskPoints: p.taskPoints, level: p.level, exp: p.exp, expNext: p.expNext,
       fedS: p.fedS,
       ammo: p.ammo ?? undefined,
-      bag: p.bag, eq: p.eq,
+      pack: p.pack, eq: p.eq,
     },
     skills: skillDump,
     stance: stance(),
@@ -144,7 +149,7 @@ export function loadGame(): Game | null {
   let data: SaveData;
   try {
     data = JSON.parse(raw) as SaveData;
-    if (data.v !== 2 && data.v !== 3 && data.v !== 4 && data.v !== 5 && data.v !== SAVE_V) return null;
+    if (data.v !== 2 && data.v !== 3 && data.v !== 4 && data.v !== 5 && data.v !== 6 && data.v !== SAVE_V) return null;
     if (data.v < 4) data = renameItems(data, { fireCrystal: "flameCrystal" });
     if (data.v < 5) data = renameItems(data, ARROW_TIER_I);
     if (data.v < 6) data = dropResearch(data, RETIRED_RESEARCH);
@@ -180,7 +185,12 @@ export function loadGame(): Game | null {
     if (Array.isArray(gr)) {
       worlds[k].ground = gr
         .filter((gi) => validItem(gi) && typeof gi.x === "number" && typeof gi.y === "number")
-        .map((gi) => ({ kind: gi.kind, n: gi.n, x: gi.x * pos, y: gi.y * pos, t: typeof gi.t === "number" ? gi.t : GROUND_DESPAWN_S }));
+        .map((gi) => {
+          const st = validItem(gi)!;
+          return { kind: st.kind, n: st.n, x: gi.x * pos, y: gi.y * pos,
+            t: typeof gi.t === "number" ? gi.t : GROUND_DESPAWN_S,
+            ...(st.items ? { items: st.items } : {}) };
+        });
     }
     const cs = data.corpses?.[k];
     if (Array.isArray(cs)) {
@@ -189,7 +199,8 @@ export function loadGame(): Game | null {
         .map((c) => ({
           name: typeof c.name === "string" ? c.name : "corpse",
           x: c.x * pos, y: c.y * pos,
-          items: c.items.map(validItem).filter((it): it is NonNullable<ReturnType<typeof validItem>> => it !== null),
+          // pre-v7 corpses were a compact list; pour it into real slots
+          items: normalizeCorpse(c.items),
           gold: typeof c.gold === "number" ? Math.max(0, c.gold) : 0,
           t: typeof c.t === "number" ? c.t : 60,
         }));
@@ -240,8 +251,17 @@ export function loadGame(): Game | null {
   player.fedS = sp.fedS ?? 0; // older saves start hungry
   // Recompute expNext from level so older saves adopt the current XP curve.
   player.exp = sp.exp; player.expNext = expNeeded(player.level);
-  // rebuild bag/eq defensively (older/partial saves)
-  player.bag = normalizeBag(sp.bag);
+  // rebuild pack/eq defensively (older/partial saves)
+  const spill: ItemStack[] = [];
+  if (data.v < 7) {
+    const m = migrateFlatBag(sp.bag);
+    player.pack = m.pack;
+    spill.push(...m.spill);
+  } else {
+    const worn = validItem(sp.pack);
+    player.pack = worn && ITEMS[worn.kind].pack ? worn : null;
+    if (player.pack) player.pack.items = normalizeBag(player.pack.items, ITEMS[player.pack.kind].pack!.slots);
+  }
   player.eq = normalizeEquipment(sp.eq);
   // A pick naming an arrow that no longer exists falls back to "auto" rather
   // than sticking the bow with a kind it can never fire.
@@ -292,6 +312,21 @@ export function loadGame(): Game | null {
     if (left > 0) {
       const at = portalSpawn(worlds.home);
       worlds.home.ground.push({ kind: st.kind, n: left, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16, t: GROUND_DESPAWN_S });
+    }
+  }
+
+  /* Whatever the v6→v7 bag migration could not fit takes the same road: into
+   * the first chest, then onto the ground by the portal. It should almost
+   * never fire — a pre-v7 bag held at most 32 cells and the new pack plus its
+   * own sub-packs hold more — but "almost never" is not "never", and losing a
+   * player's inventory to a version bump is the one outcome worth this code. */
+  for (const st of spill) {
+    let placed = false;
+    if (firstChest) placed = addStack((firstChest.inv ??= emptyStash(CHEST_SLOTS[1])), st);
+    if (!placed) {
+      const at = portalSpawn(worlds.home);
+      worlds.home.ground.push({ kind: st.kind, n: st.n, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16,
+        t: GROUND_DESPAWN_S, ...(st.items ? { items: st.items } : {}) });
     }
   }
 
@@ -368,25 +403,71 @@ function renameItems(data: SaveData, map: Readonly<Record<string, string>>): Sav
   return walk(data) as SaveData;
 }
 
-function validItem(s: unknown): { kind: ItemKind; n: number } | null {
-  if (s && typeof s === "object" && "kind" in s && "n" in s) {
-    const kind = (s as { kind: string }).kind;
-    if (kind in ITEMS) return { kind: kind as ItemKind, n: (s as { n: number }).n };
+function validItem(s: unknown): ItemStack | null {
+  if (!(s && typeof s === "object" && "kind" in s && "n" in s)) return null;
+  const kind = (s as { kind: string }).kind;
+  if (!(kind in ITEMS)) return null;
+  const st: ItemStack = { kind: kind as ItemKind, n: (s as { n: number }).n };
+  // a container carries its own slots through the save, contents and all
+  const slots = ITEMS[st.kind].pack?.slots;
+  if (slots) {
+    const raw = (s as { items?: unknown }).items;
+    const inner = new Array<ItemStack | null>(slots).fill(null);
+    if (Array.isArray(raw)) {
+      for (let i = 0; i < slots && i < raw.length; i++) inner[i] = validItem(raw[i]);
+    }
+    st.items = inner;
   }
-  return null;
+  return st;
 }
 
-function normalizeBag(bag: unknown): Bag {
-  const out = emptyBag();
+function normalizeBag(bag: unknown, size = BAG_SIZE): Bag {
+  const out = new Array<ItemStack | null>(size).fill(null);
   if (Array.isArray(bag)) {
-    // carried Backpacks enlarge the bag (Etap 11): keep the saved length, up
-    // to the hard ceiling — the per-frame size sync re-validates it in play
-    const maxLen = out.length + PACK_BONUS_SLOTS * PACK_MAX;
-    while (out.length < Math.min(maxLen, bag.length)) out.push(null);
-    for (let i = 0; i < out.length && i < bag.length; i++) {
-      out[i] = validItem(bag[i]);
-    }
+    for (let i = 0; i < size && i < bag.length; i++) out[i] = validItem(bag[i]);
   }
+  return out;
+}
+
+/**
+ * Turn a pre-v7 flat bag into a worn backpack.
+ *
+ * Old saves stored one array of up to 16 + 8 + 8 cells, where a carried
+ * Backpack was an ITEM that bolted eight more cells onto the end. The first
+ * BAG_SIZE cells become the pack you are wearing; the overflow — which only
+ * ever existed because of those Backpack items — is poured into the packs
+ * themselves, which is where its owner always thought it was. Anything still
+ * homeless is handed back for the caller to spill on the ground, because
+ * silently deleting a player's steel is not a migration.
+ */
+function migrateFlatBag(raw: unknown): { pack: ItemStack; spill: ItemStack[] } {
+  const pack = newContainer("backpack")!;
+  const slots = pack.items!;
+  const flat: ItemStack[] = Array.isArray(raw)
+    ? raw.map(validItem).filter((s): s is ItemStack => s !== null)
+    : [];
+  const spill: ItemStack[] = [];
+  // containers first, so the overflow has somewhere to land
+  flat.sort((a, b) => (b.items ? 1 : 0) - (a.items ? 1 : 0));
+  for (const st of flat) if (!addStack(slots, st)) spill.push(st);
+  return { pack, spill };
+}
+
+/**
+ * A corpse's slots. Handles both shapes: the pre-v7 compact list (no holes,
+ * any length) and a v7 fixed grid. Anything past CORPSE_SLOTS is dropped —
+ * only a save hand-edited to hold more could ever hit that.
+ */
+function normalizeCorpse(raw: unknown): Bag {
+  const out = emptyCorpseBag();
+  if (!Array.isArray(raw)) return out;
+  const stacks = raw.map(validItem);
+  const dense = stacks.every((s, i) => s !== null || i >= stacks.length);
+  if (dense && stacks.length <= out.length && !raw.includes(null)) {
+    for (const st of stacks) if (st) addStack(out, st);
+    return out;
+  }
+  for (let i = 0; i < out.length && i < stacks.length; i++) out[i] = stacks[i];
   return out;
 }
 

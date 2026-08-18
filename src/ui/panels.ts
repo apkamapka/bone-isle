@@ -10,7 +10,7 @@ import { RESEARCH, isResearched, towerTierOk,
 import { ELEMENT_LABEL, ELEMENTS, type Element } from "../systems/elements.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
 import type { TaskReward } from "../systems/tasks.ts";
-import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross } from "../items.ts";
+import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed } from "../items.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
@@ -22,14 +22,21 @@ import type { StructKey } from "../systems/building.ts";
 import { bestTier } from "../systems/building.ts";
 import { smeltYield, canSmelt, COAL_PER_SMELT, GEM_TROPHIES, GEM_TROPHY_KINDS, GEM_COAL } from "../systems/smelt.ts";
 import type { EqSlot, ItemKind, Recipe, Bag } from "../items.ts";
-import type { Corpse, Npc, Structure } from "../world/types.ts";
+import type { Corpse, GroundItem, Npc, Structure } from "../world/types.ts";
+import type { ContainerRef } from "../systems/containers.ts";
+import { slotsOf, stackAt, followTrail, depthOf, rootOf } from "../systems/containers.ts";
 import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed } from "../systems/panelPrefs.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
-  | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks" | "wardrobe";
+  | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks" | "wardrobe"
+  /** A container lying on the ground — the loot bag you left by the corpses. */
+  | "floor";
+
+/** The four windows that show a container's slots and can be navigated into. */
+export const CONTAINER_PANELS: readonly PanelKind[] = ["bag", "stash", "loot", "floor"];
 
 export interface Hotspot {
   x: number;
@@ -39,23 +46,31 @@ export interface Hotspot {
   fn: () => void;
 }
 
-/** A draggable inventory cell (backpack or chest) recorded during draw. */
+/** A draggable inventory cell recorded during draw. */
 export interface ItemSlot {
   x: number;
   y: number;
   w: number;
   h: number;
-  src: "bag" | "stash" | "eq";
   index: number;
   kind: ItemKind;
   n: number;
-  /** Which paperdoll slot this cell is, when src === "eq". */
-  eqSlot?: EqSlot;
+  /** A cell inside some container. Mutually exclusive with `eqSlot`. */
+  ref?: ContainerRef;
+  /** A paperdoll cell: a worn gear slot, or "pack" for the worn backpack. */
+  eqSlot?: EqSlot | "pack";
 }
 
 /** One open, draggable window. Multiple can be open at once (z-order = array order). */
 export interface PanelWindow {
   kind: PanelKind;
+  /**
+   * Container windows: the slot indices walked down from the window's own
+   * container into a pack inside it. Tibia's behaviour — opening a backpack
+   * inside a backpack REPLACES what this window shows and offers a way back
+   * up, rather than piling a second window on the screen.
+   */
+  trail?: number[];
   /** User drag offset from the panel's default anchor. */
   offset: { x: number; y: number };
   /** Panel body rect this frame (screen px); set during draw. */
@@ -75,6 +90,8 @@ export interface UiState {
   npc: Npc | null;
   /** The Storage Chest whose window is open (chests are independent now). */
   stash: Structure | null;
+  /** The container on the ground whose window is open, if any. */
+  floor: GroundItem | null;
   shopTab: "buy" | "sell";
   /** Which tab of the Forge window is showing (Etap 24). */
   forgeTab: "craft" | "smelt" | "gems" | "test";
@@ -90,7 +107,7 @@ export interface UiState {
   /** Item currently shown in the inspect popup, if any. */
   inspect: ItemKind | null;
   /** Quantity chooser for moving/dropping part of a stack. */
-  split: { kind: ItemKind; index: number; src: "bag" | "stash"; max: number; n: number; canStore: boolean; at?: { x: number; y: number } } | null;
+  split: { kind: ItemKind; index: number; ref: ContainerRef; max: number; n: number; canStore: boolean; at?: { x: number; y: number } } | null;
 }
 
 export interface PanelActions {
@@ -109,7 +126,8 @@ export interface PanelActions {
   buyCrystal: (id: string) => void;
   takeLoot: (c: Corpse, index: number) => void;
   takeGold: (c: Corpse) => void;
-  takeAllLoot: (c: Corpse) => void;
+  /** Empty a world container into the bag. Null means "whatever this window shows". */
+  takeAllLoot: (c: Corpse | null) => void;
   buy: (kind: ItemKind) => void;
   sell: (kind: ItemKind) => void;
   claim: (id: string) => void;
@@ -117,7 +135,13 @@ export interface PanelActions {
   abandonTask: () => void;
   handInTask: () => void;
   buyExchange: (id: string) => void;
-  moveStack: (src: "bag" | "stash", index: number) => void;
+  moveStack: (ref: ContainerRef, index: number) => void;
+  /** Walk this window down into the container sitting in slot `index`. */
+  openNested: (index: number) => void;
+  /** Back up one level; at the top this closes nothing. */
+  navUp: () => void;
+  /** Take the worn backpack off — it has to go somewhere, so this drops it. */
+  removePack: () => void;
   setOutfitColor: (zone: OutfitZone, idx: number) => void;
   resetOutfitColors: () => void;
   look: (kind: ItemKind) => void;
@@ -370,7 +394,9 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
 
   const acts: [string, "store" | "take" | "drop" | "throw"][] = [];
   if (sp.at) acts.push(["Throw", "throw"]); // target already aimed by the drag
-  else if (sp.src === "stash") acts.push(["Take", "take"]);
+  // anything OUT in the world offers only "take": you cannot drop from a chest
+  // onto the floor in one gesture, and a corpse has nothing to store into
+  else if (rootOf(sp.ref) === "world") acts.push(["Take", "take"]);
   else {
     if (sp.canStore) acts.push(["Store", "store"]);
     acts.push(["Drop", "drop"]);
@@ -415,6 +441,7 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
       case "forge": drawForge(p); break;
       case "tower": drawTower(p); break;
       case "loot": drawLoot(p); break;
+      case "floor": drawFloor(p); break;
       case "shop": drawShop(p); break;
       case "quest": drawQuests(p); break;
       case "tasks": drawTasks(p); break;
@@ -650,17 +677,30 @@ function drawEquip(p: PanelInput): void {
     const cy = gy + Math.floor(i / cols) * (slot + gap);
 
     if (cell === "backpack") {
+      /* A REAL slot now, not a button that opens a window. The backpack is a
+       * thing you wear: drag one in to put it on, drag it out to take it off,
+       * and with the slot empty you are carrying nothing to carry things in.
+       * That is Tibia, and it is what makes a backpack worth 40 gold. */
+      const worn = player.pack;
       ctx.fillStyle = "rgba(40,32,20,.9)";
       ctx.fillRect(cx, cy, slot, slot);
-      ctx.strokeStyle = "#caa23a";
+      ctx.strokeStyle = worn ? "#ffe9a8" : "#6e571f";
       ctx.lineWidth = S;
       ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
-      // The item sprite, not SPR.pack: the slot that opens your backpack should
-      // show the same backpack the backpack itself does.
       const spr = itemSprite("backpack");
+      ctx.globalAlpha = worn ? 1 : 0.35;
       icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
-      hudText(hud, "Bag", cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.85)", "center");
-      p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => p.act.openBag() });
+      ctx.globalAlpha = 1;
+      if (worn) {
+        if (hovering(p, cx, cy, slot, slot)) tooltipKind = worn.kind;
+        const used = (worn.items ?? []).filter((q) => q !== null).length;
+        hudText(hud, `${used}/${worn.items?.length ?? 0}`, cx + slot - 3 * S, cy + 9 * S, 6 * S, "#ffe9a8", "right");
+        p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, index: 0, kind: worn.kind, n: 1, eqSlot: "pack" });
+        p.hotspots.push({ x: cx, y: cy, w: slot, h: slot,
+          fn: () => (p.ui.lookMode ? p.act.look(worn.kind) : p.act.openBag()) });
+      }
+      hudText(hud, "Bag", cx + slot / 2, cy + slot - 5 * S, 6 * S,
+        worn ? "rgba(220,214,190,.85)" : "rgba(220,214,190,.45)", "center");
       return;
     }
 
@@ -707,7 +747,7 @@ function drawEquip(p: PanelInput): void {
       const eqk = equipped;
       // register as a draggable item cell so worn gear can be dragged straight
       // to the ground / bag / storage chest, exactly like a backpack item
-      p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, src: "eq", index: 0, kind: eqk, n: 1, eqSlot: key });
+      p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, index: 0, kind: eqk, n: 1, eqSlot: key });
       p.hotspots.push({ x: cx, y: cy, w: slot, h: slot, fn: () => (p.ui.lookMode ? p.act.look(eqk) : p.act.unequip(key)) });
     } else {
       const spr = SLOT_ICONS[key];
@@ -740,8 +780,26 @@ function drawEquip(p: PanelInput): void {
 function drawBag(p: PanelInput): void {
   const { hud, player } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
+
+  // No backpack, no window worth drawing — say so plainly instead of showing
+  // an empty grid the player will try to click things into.
+  if (!player.pack) {
+    const w = 190 * S;
+    const h = 62 * S;
+    const x = (screenW - w) / 2 + p.win.offset.x;
+    const y = (screenH - h) / 2 + p.win.offset.y;
+    if (!goldPanel(p, x, y, w, h, "NO BACKPACK")) return;
+    hudText(hud, "You are not wearing a backpack.", x + w / 2, y + 26 * S, 8 * S, "#e0a06a", "center");
+    hudText(hud, "Drag one onto the Bag slot to carry things.", x + w / 2, y + 40 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+    return;
+  }
+
+  const ref = windowRef(p, { c: "bag" });
+  const slots = slotsOf(ref, player);
+  if (!slots) return;
+
   const cols = 4;
-  const rows = Math.ceil(player.bag.length / cols); // grows with carried Backpacks
+  const rows = Math.ceil(slots.length / cols);
   const cell = 32 * S;
   const gap = 4 * S;
   const goldRow = 16 * S;
@@ -750,7 +808,8 @@ function drawBag(p: PanelInput): void {
   const h = 20 * S + goldRow + rows * cell + (rows - 1) * gap + 20 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  if (!goldPanel(p, x, y, w, h, "BACKPACK")) return;
+  if (!goldPanel(p, x, y, w, h, containerTitle(p, ref, "BACKPACK"))) return;
+  navBar(p, x, y, w, ref);
   lookToggle(p, x, y, w);
   // gold, shown here like any other carried item
   const gx = x + (w - gridW) / 2;
@@ -758,13 +817,14 @@ function drawBag(p: PanelInput): void {
   icon(p, coin, gx, y + 18 * S, 2 * S);
   hudText(hud, `${player.gold} gold`, gx + iconW(coin, 2 * S) + 6 * S, y + 18 * S + iconH(coin, S), 8 * S, "#ffe9a8", "left", true);
   const gy = y + 20 * S + goldRow;
-  player.bag.forEach((stackSlot, i) => {
+
+  slots.forEach((stackSlot, i) => {
     const cx = gx + (i % cols) * (cell + gap);
     const cy = gy + Math.floor(i / cols) * (cell + gap);
     const hov = hovering(p, cx, cy, cell, cell);
     ctx.fillStyle = hov ? "rgba(202,162,58,.18)" : "rgba(40,32,20,.9)";
     ctx.fillRect(cx, cy, cell, cell);
-    ctx.strokeStyle = "#6e571f";
+    ctx.strokeStyle = stackSlot?.items ? "#caa23a" : "#6e571f";
     ctx.lineWidth = S;
     ctx.strokeRect(cx + S / 2, cy + S / 2, cell - S, cell - S);
     if (stackSlot) {
@@ -773,23 +833,33 @@ function drawBag(p: PanelInput): void {
       const dh = iconH(spr, 2 * S);
       icon(p, spr, cx + (cell - dw) / 2, cy + (cell - dh) / 2 - 2 * S, 2 * S);
       if (stackSlot.n > 1) hudText(hud, `${stackSlot.n}`, cx + cell - 3 * S, cy + cell - 4 * S, 7 * S, "#ffe9a8", "right");
+      if (stackSlot.items) {
+        const used = stackSlot.items.filter((q) => q !== null).length;
+        hudText(hud, `${used}/${stackSlot.items.length}`, cx + cell / 2, cy + cell - 4 * S, 6 * S,
+          used >= stackSlot.items.length ? "#d96a5a" : "rgba(220,214,190,.75)", "center");
+      }
       if (hov) tooltipKind = stackSlot.kind;
       const def = ITEMS[stackSlot.kind];
       const idx = i;
       const k = stackSlot.kind;
-      p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, src: "bag", index: idx, kind: k, n: stackSlot.n });
+      p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, ref, index: idx, kind: k, n: stackSlot.n });
       if (p.ui.lookMode) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.look(k) });
+      } else if (isContainer(k)) {
+        // a pack opens; it is never "used" and never worn from here
+        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.openNested(idx) });
       } else if (def.slot) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.equipItem(k, idx) });
       } else if (def.heal || def.food || def.crystal || def.boost) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.useItem(k, idx) });
       } else {
-        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.moveStack("bag", idx) });
+        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.moveStack(ref, idx) });
       }
     }
   });
-  const hint = p.ui.lookMode ? "Look mode — click any item to inspect it" : "Click gear to equip · potion/food to use · Look for stats";
+  const hint = p.ui.lookMode ? "Look mode — click any item to inspect it"
+    : depthOf(ref) > 0 ? "\u25B2 goes back to the bag holding this one"
+    : "Click gear to equip · potion/food to use · a pack to open it";
   hudText(hud, hint, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 
@@ -1185,49 +1255,58 @@ function drawTower(p: PanelInput): void {
   hudText(hud, foot, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
 
-/* ---------------- Corpse loot ---------------- */
+/* ---------------- Corpse loot & floor containers ---------------- */
 
-function drawLoot(p: PanelInput): void {
-  const { hud, ui } = p;
-  const c = ui.loot;
-  if (!c) return;
+/**
+ * A corpse, or a container lying on the ground. One renderer, because from
+ * the player's side they are the same object: a grid of slots out in the
+ * world that you can take from, drop into, and walk away from.
+ *
+ * The old corpse window was a list of rows with a "take" hotspot each, which
+ * is why loot could only ever travel one direction. A grid of real cells is
+ * what makes the loot bag work at all — dragging from a body into a backpack
+ * on the floor is just a move between two containers now.
+ */
+function drawWorldContainer(
+  p: PanelInput, base: ContainerRef, topTitle: string, gold: number,
+  onTakeGold: (() => void) | null, onTakeAll: () => void,
+): void {
+  const { hud } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
-  const w = 220 * S;
-  const rowH = 22 * S;
-  const nRows = c.items.length + (c.gold > 0 ? 1 : 0);
-  const h = 20 * S + Math.max(1, nRows) * rowH + 26 * S;
+  const ref = windowRef(p, base);
+  const slots = slotsOf(ref, p.player);
+  if (!slots) return;
+
+  const cols = 4;
+  const rows = Math.ceil(slots.length / cols);
+  const cell = 30 * S;
+  const gap = 4 * S;
+  const gridW = cols * cell + (cols - 1) * gap;
+  const goldRow = gold > 0 ? 18 * S : 0;
+  const w = gridW + 24 * S;
+  const h = 20 * S + goldRow + rows * cell + (rows - 1) * gap + 30 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  if (!goldPanel(p, x, y, w, h, "CORPSE — loot")) return;
-  let ry = y + 18 * S;
-  if (nRows === 0) {
-    hudText(hud, "(empty)", x + w / 2, ry + 8 * S, 8 * S, "rgba(220,214,190,.5)", "center");
-    ry += rowH;
-  }
-  if (c.gold > 0) {
-    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S)) {
+  if (!goldPanel(p, x, y, w, h, containerTitle(p, ref, topTitle))) return;
+  navBar(p, x, y, w, ref);
+
+  const gx = x + (w - gridW) / 2;
+  let gy = y + 18 * S;
+  if (gold > 0 && onTakeGold) {
+    const hov = hovering(p, x + 8 * S, gy, w - 16 * S, 14 * S);
+    if (hov) {
       ctx.fillStyle = "rgba(202,162,58,.15)";
-      ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
+      ctx.fillRect(x + 8 * S, gy, w - 16 * S, 14 * S);
     }
-    icon(p, SPR.coin, x + 10 * S, ry + 2 * S, 2 * S);
-    hudText(hud, `${c.gold} gold`, x + 34 * S, ry + 8 * S, 9 * S, "#ffe9a8", "left", true);
-    const gyy = ry;
-    p.hotspots.push({ x: x + 4 * S, y: gyy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.takeGold(c) });
-    ry += rowH;
+    icon(p, SPR.coin, x + 12 * S, gy + S, 2 * S);
+    hudText(hud, `${gold} gold`, x + 34 * S, gy + 7 * S, 8 * S, "#ffe9a8", "left", true);
+    p.hotspots.push({ x: x + 8 * S, y: gy, w: w - 16 * S, h: 14 * S, fn: onTakeGold });
+    gy += goldRow;
   }
-  c.items.forEach((it, i) => {
-    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S)) {
-      ctx.fillStyle = "rgba(202,162,58,.15)";
-      ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
-    }
-    const spr = itemSprite(it.kind);
-    icon(p, spr, x + 10 * S, ry + 2 * S, 2 * S);
-    hudText(hud, `${ITEMS[it.kind].name} x${it.n}`, x + 34 * S, ry + 8 * S, 8 * S, "#f3eedd", "left");
-    const idx = i;
-    const ryy = ry;
-    p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.takeLoot(c, idx) });
-    ry += rowH;
-  });
+
+  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref);
+  gy += rows * (cell + gap) + 4 * S;
+
   const bw = w - 24 * S;
   const by = y + h - 20 * S;
   ctx.fillStyle = "rgba(202,162,58,.25)";
@@ -1236,7 +1315,21 @@ function drawLoot(p: PanelInput): void {
   ctx.lineWidth = S;
   ctx.strokeRect(x + 12 * S + S / 2, by + S / 2, bw - S, 14 * S - S);
   hudText(hud, "Take all", x + w / 2, by + 7 * S, 8 * S, "#ffe9a8", "center", true);
-  p.hotspots.push({ x: x + 12 * S, y: by, w: bw, h: 14 * S, fn: () => p.act.takeAllLoot(c) });
+  p.hotspots.push({ x: x + 12 * S, y: by, w: bw, h: 14 * S, fn: onTakeAll });
+}
+
+function drawLoot(p: PanelInput): void {
+  const c = p.ui.loot;
+  if (!c) return;
+  drawWorldContainer(p, { c: "corpse", body: c }, "CORPSE — loot", c.gold,
+    () => p.act.takeGold(c), () => p.act.takeAllLoot(c));
+}
+
+function drawFloor(p: PanelInput): void {
+  const gi = p.ui.floor;
+  if (!gi) return;
+  drawWorldContainer(p, { c: "ground", gi }, ITEMS[gi.kind].name.toUpperCase(), 0,
+    null, () => p.act.takeAllLoot(null));
 }
 
 /* ---------------- NPC shop ---------------- */
@@ -1466,16 +1559,25 @@ function drawTasks(p: PanelInput): void {
 
 /* ---------------- Storage chest (stash) ---------------- */
 
+/**
+ * One grid of container cells — the single renderer behind the backpack, the
+ * chest, a corpse and a loot bag on the floor.
+ *
+ * Clicking a CONTAINER cell always navigates into it instead of running
+ * `onClick`. That is Tibia's rule and it is also the only sane one: "use" on
+ * a backpack can hardly mean anything but "open it", and without it a pack in
+ * a chest would be a box you can see and never look inside.
+ */
 function drawGrid(
   p: PanelInput,
-  slots: ReadonlyArray<{ kind: ItemKind; n: number } | null>,
+  slots: Bag,
   gx: number,
   gy: number,
   cols: number,
   cell: number,
   gap: number,
   onClick: (index: number) => void,
-  src?: "bag" | "stash",
+  ref?: ContainerRef,
 ): void {
   const { hud } = p;
   const { ctx, scale: S } = hud;
@@ -1494,13 +1596,68 @@ function drawGrid(
       const dh = iconH(spr, 2 * S);
       icon(p, spr, cx + (cell - dw) / 2, cy + (cell - dh) / 2 - 2 * S, 2 * S);
       if (slot.n > 1) hudText(hud, `${slot.n}`, cx + cell - 3 * S, cy + cell - 4 * S, 7 * S, "#ffe9a8", "right");
+      // a pack shows how full it is, so you can tell your loot bag from your
+      // spare without opening either
+      if (slot.items) {
+        const used = slot.items.filter((q) => q !== null).length;
+        hudText(hud, `${used}/${slot.items.length}`, cx + cell / 2, cy + cell - 4 * S, 6 * S,
+          used >= slot.items.length ? "#d96a5a" : "rgba(220,214,190,.75)", "center");
+        ctx.strokeStyle = "#caa23a";
+        ctx.strokeRect(cx + S / 2, cy + S / 2, cell - S, cell - S);
+      }
       if (hov) tooltipKind = slot.kind;
       const idx = i;
       const kind = slot.kind;
-      if (src) p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, src, index: idx, kind, n: slot.n });
-      p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => (p.ui.lookMode ? p.act.look(kind) : onClick(idx)) });
+      const nested = isContainer(kind);
+      if (ref) p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, ref, index: idx, kind, n: slot.n });
+      p.hotspots.push({
+        x: cx, y: cy, w: cell, h: cell,
+        fn: () => (p.ui.lookMode ? p.act.look(kind)
+          : nested && ref ? p.act.openNested(idx)
+          : onClick(idx)),
+      });
     }
   });
+}
+
+/**
+ * The container this window is showing right now, after walking its trail.
+ *
+ * Also REPAIRS the trail: a pack you were looking inside can be taken away by
+ * anything — a monster looting you is not a thing, but dropping the pack, a
+ * corpse rotting or a chest being demolished all are — and a window pointing
+ * at a container that no longer exists must fall back to the nearest one that
+ * does rather than draw nothing.
+ */
+function windowRef(p: PanelInput, base: ContainerRef): ContainerRef {
+  const trail = p.win.trail ?? [];
+  const { ref, used } = followTrail(base, trail, p.player);
+  if (used < trail.length) p.win.trail = trail.slice(0, used);
+  return ref;
+}
+
+/** The title bar's "up one level" arrow. Only drawn when there is a way up. */
+function navBar(p: PanelInput, x: number, y: number, w: number, ref: ContainerRef): void {
+  const { ctx, scale: S } = p.hud;
+  if (depthOf(ref) === 0) return;
+  const bs = 12 * S;
+  const bx = x + 6 * S;
+  const by = y + 3 * S;
+  const hot = hovering(p, bx, by, bs, bs);
+  ctx.fillStyle = hot ? "rgba(202,162,58,.35)" : "rgba(40,32,20,.9)";
+  ctx.fillRect(bx, by, bs, bs);
+  ctx.strokeStyle = "#caa23a";
+  ctx.lineWidth = S;
+  ctx.strokeRect(bx + S / 2, by + S / 2, bs - S, bs - S);
+  hudText(p.hud, "\u25B2", bx + bs / 2, by + bs / 2, 7 * S, "#ffe9a8", "center", true);
+  p.hotspots.push({ x: bx, y: by, w: bs, h: bs, fn: () => p.act.navUp() });
+  void w;
+}
+
+/** What to write on a container window's title bar. */
+function containerTitle(p: PanelInput, ref: ContainerRef, top: string): string {
+  const st = stackAt(ref, p.player);
+  return st ? ITEMS[st.kind].name.toUpperCase() : top;
 }
 
 function drawStash(p: PanelInput): void {
@@ -1530,10 +1687,19 @@ function drawStash(p: PanelInput): void {
   const gx = x + (w - gridW) / 2;
   let gy = y + 18 * S;
 
-  const used = inv.filter((s) => s !== null).length;
-  hudText(hud, `Chest — click to take  (${used}/${inv.length})`, x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
+  /* The load counts EVERY slot in the chest's tree, not just the top row.
+   * A backpack in here costs its own cell plus one per thing inside it —
+   * otherwise nesting would turn a 50-slot chest into 800 and the whole
+   * 10 / 50 / 100 upgrade ladder would stop being worth building. */
+  const used = bagSlotsUsed(inv);
+  const full = used >= inv.length;
+  hudText(hud, `Chest — click to take  (${used}/${inv.length})`, x + 12 * S, gy + 5 * S, 8 * S,
+    full ? "#d96a5a" : "#cfe8d2", "left", true);
   gy += headH;
-  drawGrid(p, inv, gx, gy, cols, cell, gap, (i) => p.act.moveStack("stash", i), "stash");
+  const stashRef = windowRef(p, { c: "stash", s: chest });
+  navBar(p, x, y, w, stashRef);
+  const shown = slotsOf(stashRef, player) ?? inv;
+  drawGrid(p, shown, gx, gy, cols, cell, gap, (i) => p.act.moveStack(stashRef, i), stashRef);
   gy += stashRows * (cell + gap) + 8 * S;
 
   ctx.fillStyle = "#6e571f";
@@ -1542,7 +1708,7 @@ function drawStash(p: PanelInput): void {
 
   hudText(hud, "Backpack — click to store", x + 12 * S, gy + 5 * S, 8 * S, "#cfe8d2", "left", true);
   gy += headH;
-  drawGrid(p, player.bag, gx, gy, cols, cell, gap, (i) => p.act.moveStack("bag", i), "bag");
+  drawGrid(p, player.bag, gx, gy, cols, cell, gap, (i) => p.act.moveStack({ c: "bag" }, i), { c: "bag" });
   gy += bagRows * (cell + gap) + 4 * S;
 
   const roman = "I".repeat(chestTier);

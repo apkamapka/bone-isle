@@ -9,7 +9,7 @@ import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
-import { ITEMS, removeItem, emptyBag } from "../items.ts";
+import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
 import { structCenter, tierOf, DUMMY_TIER_RATE, DUMMY_TIER_SHIELD } from "./building.ts";
 import {
@@ -175,7 +175,7 @@ export function killMonster(world: World, p: Player, m: Monster): void {
     name: m.kind,
     x: m.x,
     y: m.y,
-    items,
+    items: corpseBag(items),
     gold,
     t: CORPSE_DECAY_S,
   });
@@ -212,18 +212,27 @@ export function applyDeathPenalty(world: World, p: Player): void {
     p.eq.amulet = null; // consumed
     addFloat(world, p.x, p.y - 60, "Amulet of Loss shattered!", "#c9a6ff");
   } else {
-    const dropped: { kind: ItemKind; n: number }[] = [];
-    for (const s of p.bag) if (s) dropped.push({ kind: s.kind, n: s.n });
-    p.bag = emptyBag();
+    const body = emptyCorpseBag();
+    /* The backpack drops AS ITSELF, whole, contents and all — one object in
+     * your body, exactly as Tibia leaves it. The old code flattened the bag
+     * into a list of kinds, which was harmless when a bag was a flat array
+     * and would now quietly destroy every pack nested inside it.
+     *
+     * It is also never subject to DEATH_EQ_DROP_CHANCE. A worn piece surviving
+     * on a lucky roll is the intended mercy; your entire inventory surviving
+     * on one would gut the penalty outright. */
+    let lost = false;
+    if (p.pack) { addStack(body, p.pack); p.pack = null; lost = true; }
     for (const slot of Object.keys(p.eq) as (keyof typeof p.eq)[]) {
       const it = p.eq[slot];
       if (it && Math.random() < DEATH_EQ_DROP_CHANCE) {
-        dropped.push({ kind: it, n: 1 });
+        addStack(body, { kind: it, n: 1 });
         p.eq[slot] = null;
+        lost = true;
       }
     }
-    if (dropped.length) {
-      world.corpses.push({ name: "your body", x: p.x, y: p.y, items: dropped, gold: 0, t: PLAYER_CORPSE_DECAY_S });
+    if (lost) {
+      world.corpses.push({ name: "your body", x: p.x, y: p.y, items: body, gold: 0, t: PLAYER_CORPSE_DECAY_S });
       addFloat(world, p.x, p.y - 60, "you dropped your backpack!", "#ff9e6a");
     }
   }

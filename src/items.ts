@@ -2,7 +2,7 @@
  * Items: the full catalog, backpack stacking, equipment stats and
  * Forge crafting recipes. Pure data + logic — no world imports.
  */
-import { BAG_SIZE, STASH_SIZE, TILE } from "./config.ts";
+import { BAG_SIZE, CORPSE_SLOTS, STASH_SIZE, TILE } from "./config.ts";
 import type { Element } from "./systems/elements.ts";
 
 export type ItemKind =
@@ -172,7 +172,9 @@ export interface ItemDef {
   /** Amulet of Loss: worn in the amulet slot, consumed on death, protects
    *  your backpack + equipment from dropping (never exp or skills). */
   deathProtect?: true;
-  /** Backpack: while carried, adds this many bag slots (see PACK_MAX). */
+  /** Container: this item HAS slots of its own, and opens as a window.
+   *  Tibia's rule, not the old additive one — a backpack inside a backpack is
+   *  a second container you open, never extra cells bolted onto the first. */
   pack?: { slots: number };
   /** TEST item: eating grants +5 levels and +20 to every skill. */
   boost?: true;
@@ -387,9 +389,11 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
-  // Backpack: buy it at the smith, keep it IN your bag — each one carried adds
-  // 8 slots (up to 2 packs). Gear never stacks, so two packs take two slots.
-  backpack:  { name: "Backpack",     stack: 1, value: 20, weight: 18, pack: { slots: 8 } },
+  // Backpack: buy it at the smith. A CONTAINER, not a capacity upgrade — it
+  // holds BAG_SIZE slots of its own and opens as its own window, so a pack in
+  // a pack is a second bag to open rather than cells bolted onto the first.
+  // One is worn; every spare rides inside another and earns its 18 oz.
+  backpack:  { name: "Backpack",     stack: 1, value: 20, weight: 18, pack: { slots: BAG_SIZE } },
   // TEST ONLY (Radek): a 1-gold forge brew that force-feeds levels & skills so
   // late-game content can be reached instantly. Slated for removal.
   booster:   { name: "Dopalacz",     stack: 999, value: 0, weight: 1, boost: true },
@@ -400,20 +404,46 @@ export function itemWeight(kind: ItemKind, n = 1): number {
   return ITEMS[kind].weight * n;
 }
 
-/** Total weight of everything in a bag, in oz. */
+/** Total weight of everything in a bag, in oz — nested packs included. */
 export function bagWeight(bag: Bag): number {
   let w = 0;
-  for (const s of bag) if (s) w += ITEMS[s.kind].weight * s.n;
+  for (const s of bag) {
+    if (!s) continue;
+    w += ITEMS[s.kind].weight * s.n;
+    if (s.items) w += bagWeight(s.items);
+  }
   return w;
 }
 
-/** One bag slot: an item kind and how many are stacked there. */
+/** Weight of one stack, counting whatever it is carrying inside. */
+export function stackWeight(st: ItemStack): number {
+  return ITEMS[st.kind].weight * st.n + (st.items ? bagWeight(st.items) : 0);
+}
+
+/**
+ * One bag slot: an item kind and how many are stacked there.
+ *
+ * Container kinds (anything with `pack`) carry their own slots in `items`.
+ * That single optional field is what makes the whole inventory a TREE rather
+ * than a list: a backpack in your backpack is a node, not eight extra cells,
+ * and it travels with its contents wherever it goes — into a chest, onto the
+ * floor, into your corpse.
+ */
 export interface ItemStack {
   kind: ItemKind;
   n: number;
+  /** Container items only: the slots inside. Created on demand. */
+  items?: Bag;
 }
 
 export type Bag = (ItemStack | null)[];
+
+/**
+ * The bag of someone wearing no backpack. Frozen, so every `addItem` against
+ * it reports that nothing fitted instead of silently growing a phantom
+ * inventory — being bagless has to actually cost you something.
+ */
+export const NO_BAG: Bag = Object.freeze([] as (ItemStack | null)[]) as Bag;
 export type Equipment = Record<EqSlot, ItemKind | null>;
 
 export const EQ_SLOT_KEYS: readonly EqSlot[] = [
@@ -423,8 +453,68 @@ export const EQ_SLOT_KEYS: readonly EqSlot[] = [
 export function emptyBag(): Bag {
   return new Array<ItemStack | null>(BAG_SIZE).fill(null);
 }
+
+/**
+ * A container of its own, empty, or null if this kind isn't one.
+ * Sizing lives with the item, so a smaller sack is one catalog entry away.
+ */
+export function newContainer(kind: ItemKind): ItemStack | null {
+  const slots = ITEMS[kind].pack?.slots;
+  if (!slots) return null;
+  return { kind, n: 1, items: new Array<ItemStack | null>(slots).fill(null) };
+}
+
+/** True when this kind opens as a window rather than just sitting in a slot. */
+export function isContainer(kind: ItemKind): boolean {
+  return !!ITEMS[kind].pack;
+}
+
+/** A container stack's slots, created at the right size on first touch. */
+export function contentsOf(st: ItemStack): Bag | null {
+  const slots = ITEMS[st.kind].pack?.slots;
+  if (!slots) return null;
+  if (!st.items) st.items = new Array<ItemStack | null>(slots).fill(null);
+  // an older save (or a hand-built stack) may carry the wrong length
+  while (st.items.length < slots) st.items.push(null);
+  return st.items;
+}
+
+/**
+ * Every occupied slot in a bag and everything nested inside it.
+ *
+ * This is the number a Storage Chest budgets against. Without it, nesting
+ * packs would turn a 50-slot chest into 800 and the whole upgrade ladder
+ * (10 / 50 / 100) would stop meaning anything — you would never build a
+ * Chest III when a Chest I plus five backpacks beats it.
+ */
+export function bagSlotsUsed(bag: Bag): number {
+  let n = 0;
+  for (const s of bag) {
+    if (!s) continue;
+    n++;
+    if (s.items) n += bagSlotsUsed(s.items);
+  }
+  return n;
+}
+
+/** What one stack costs a container budget: itself plus anything inside it. */
+export function stackSlotCost(st: ItemStack): number {
+  return 1 + (st.items ? bagSlotsUsed(st.items) : 0);
+}
 export function emptyStash(size: number = STASH_SIZE): Bag {
   return new Array<ItemStack | null>(size).fill(null);
+}
+
+/** A corpse's slots. Same size as a backpack — a body IS a container now. */
+export function emptyCorpseBag(): Bag {
+  return new Array<ItemStack | null>(CORPSE_SLOTS).fill(null);
+}
+
+/** A corpse pre-filled with a roll of loot; overflow is simply not generated. */
+export function corpseBag(loot: readonly { kind: ItemKind; n: number }[]): Bag {
+  const bag = emptyCorpseBag();
+  for (const it of loot) addItem(bag, it.kind, it.n);
+  return bag;
 }
 export function emptyEquipment(): Equipment {
   return { head: null, body: null, legs: null, boots: null, weapon: null, shield: null, ring: null, amulet: null };
@@ -441,15 +531,22 @@ export function bagRoomFor(bag: Bag, kind: ItemKind, n: number): boolean {
   for (const s of bag) {
     if (s === null) room += def.stack;
     else if (s.kind === kind && def.stack > 1) room += def.stack - s.n;
+    // a pack inside this one is real room too — that is what makes carrying a
+    // spare backpack worth the 18 oz
+    else if (s.items && bagRoomFor(s.items, kind, n - room)) return true;
     if (room >= n) return true;
   }
   return room >= n;
 }
 
-/** Total count of `kind` across the bag. */
+/** Total count of `kind` in the bag AND every pack nested inside it. */
 export function bagCount(bag: Bag, kind: ItemKind): number {
   let n = 0;
-  for (const s of bag) if (s && s.kind === kind) n += s.n;
+  for (const s of bag) {
+    if (!s) continue;
+    if (s.kind === kind) n += s.n;
+    if (s.items) n += bagCount(s.items, kind);
+  }
   return n;
 }
 
@@ -460,6 +557,7 @@ export function bagCount(bag: Bag, kind: ItemKind): number {
 export function addItem(bag: Bag, kind: ItemKind, n: number): number {
   const def = ITEMS[kind];
   let left = n;
+  // 1. top up partial stacks here…
   if (def.stack > 1) {
     for (const s of bag) {
       if (left <= 0) break;
@@ -470,17 +568,72 @@ export function addItem(bag: Bag, kind: ItemKind, n: number): number {
       }
     }
   }
+  // 2. …then free cells here…
   for (let i = 0; i < bag.length && left > 0; i++) {
     if (bag[i] === null) {
       const take = Math.min(def.stack, left);
-      bag[i] = { kind, n: take };
+      // a container arriving as loose loot still needs slots of its own
+      bag[i] = newContainer(kind) ?? { kind, n: take };
       left -= take;
     }
+  }
+  // 3. …and only then cascade into nested packs. Depth-last is what makes
+  // pickup predictable: things land in the bag you are looking at, and only
+  // overflow disappears into a sub-pack.
+  for (const s of bag) {
+    if (left <= 0) break;
+    if (s?.items) left = addItem(s.items, kind, left);
   }
   return left;
 }
 
-/** Remove `n` of `kind` from the bag. Returns true if it had enough. */
+/**
+ * Put an existing stack — contents and all — into the first cell that fits.
+ * Returns false and changes nothing when there is no room.
+ *
+ * Distinct from `addItem` because a container must move as one object: adding
+ * it "by kind" would mint a fresh empty pack and strand everything inside it.
+ */
+export function addStack(bag: Bag, st: ItemStack): boolean {
+  const def = ITEMS[st.kind];
+  // a plain stackable merges the usual way
+  if (def.stack > 1 && !st.items) return addItem(bag, st.kind, st.n) === 0;
+  for (let i = 0; i < bag.length; i++) {
+    if (bag[i] === null) { bag[i] = st; return true; }
+  }
+  for (const s of bag) {
+    if (s?.items && s !== st && addStack(s.items, st)) return true;
+  }
+  return false;
+}
+
+/**
+ * Remove `n` of `kind`, but never a container that still has something in it.
+ *
+ * Selling, smelting and crafting all run through the plain `removeItem`, and
+ * every one of them would happily consume a full backpack and silently take
+ * its contents with it. Tibia's NPCs refuse a loaded pack for exactly this
+ * reason. Returns false without touching anything when the only copies you
+ * own are packed.
+ */
+export function removeItemUnpacked(bag: Bag, kind: ItemKind, n: number): boolean {
+  if (!ITEMS[kind].pack) return removeItem(bag, kind, n);
+  const empties: { arr: Bag; i: number }[] = [];
+  const walk = (b: Bag): void => {
+    for (let i = 0; i < b.length; i++) {
+      const s = b[i];
+      if (!s) continue;
+      if (s.kind === kind && !(s.items ?? []).some((q) => q !== null)) empties.push({ arr: b, i });
+      if (s.items) walk(s.items);
+    }
+  };
+  walk(bag);
+  if (empties.length < n) return false;
+  for (let k = 0; k < n; k++) empties[k].arr[empties[k].i] = null;
+  return true;
+}
+
+/** Remove `n` of `kind` from the bag or any pack inside it. */
 export function removeItem(bag: Bag, kind: ItemKind, n: number): boolean {
   if (bagCount(bag, kind) < n) return false;
   let left = n;
@@ -493,7 +646,17 @@ export function removeItem(bag: Bag, kind: ItemKind, n: number): boolean {
       if (s.n <= 0) bag[i] = null;
     }
   }
-  return true;
+  // shallow first, then dig — a crafting cost should empty the bag you can
+  // see before it starts rummaging through the pack inside it
+  for (const s of bag) {
+    if (left <= 0) break;
+    if (s?.items) {
+      const have = bagCount(s.items, kind);
+      const take = Math.min(have, left);
+      if (take > 0 && removeItem(s.items, kind, take)) left -= take;
+    }
+  }
+  return left === 0;
 }
 
 /** Total count of `kind` across several bags (e.g. backpack + storage chest). */
@@ -675,15 +838,26 @@ export function craftAcross(bags: readonly Bag[], r: Recipe): boolean {
  * backpack tidy and repairs older saves that fragmented before stack limits grew.
  */
 export function compactBag(bag: Bag): void {
+  // Containers are NOT poured into the tally: they are objects with contents,
+  // and rebuilding one "by kind" would mint an empty replacement and drop
+  // everything inside it on the floor of nowhere. They keep their identity and
+  // are simply pushed up into the freed cells afterwards.
   const total = new Map<ItemKind, number>();
   const order: ItemKind[] = [];
+  const kept: ItemStack[] = [];
   for (const s of bag) {
     if (!s) continue;
+    if (s.items || ITEMS[s.kind].stack === 1) { kept.push(s); continue; }
     if (!total.has(s.kind)) order.push(s.kind);
     total.set(s.kind, (total.get(s.kind) ?? 0) + s.n);
   }
   bag.fill(null);
   for (const kind of order) addItem(bag, kind, total.get(kind) ?? 0);
+  for (const st of kept) {
+    const i = bag.indexOf(null);
+    if (i >= 0) bag[i] = st;
+  }
+  for (const s of bag) if (s?.items) compactBag(s.items);
 }
 
 /** Human-readable stat lines for the Look / inspect popup. */
@@ -709,7 +883,7 @@ export function itemInfoLines(kind: ItemKind): string[] {
   if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
   if (d.crystal) lines.push(`Charge item (1 use per unit)`);
   if (d.deathProtect) lines.push(`Protects your items on death`, `(one use — the amulet shatters)`);
-  if (d.pack) lines.push(`Carried in the bag: +${d.pack.slots} bag slots`, `(up to 2 backpacks count)`);
+  if (d.pack) lines.push(`Container — ${d.pack.slots} slots`, `Open it to see inside`);
   if (d.boost) lines.push(`TEST: +5 levels, +20 every skill`);
   if (d.heal) lines.push(`Restores ${d.heal} HP`);
   lines.push(`Weight ${d.weight} oz · Value ${d.value} gp`);

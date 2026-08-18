@@ -4,8 +4,8 @@ import { bakeOutfitSprites } from "../systems/outfit.ts";
 import type { Facing, DirSprites } from "../systems/outfit.ts";
 import { toTile, tileCenter } from "../world/grid.ts";
 import { activeBonus } from "../systems/derived.ts";
-import { emptyBag, emptyEquipment, gearStat, itemWeight, bagWeight, addItem } from "../items.ts";
-import type { Bag, Equipment, ItemKind } from "../items.ts";
+import { ITEMS, emptyEquipment, gearStat, itemWeight, bagWeight, addItem, newContainer, NO_BAG } from "../items.ts";
+import type { Bag, Equipment, ItemKind, ItemStack } from "../items.ts";
 import type { Vec, Monster, Tree, RockNode, Structure, Corpse, Npc, GroundItem } from "../world/types.ts";
 
 /**
@@ -66,13 +66,31 @@ export interface Player {
   dir: Facing;
   /** The current outfit baked in all three facings. */
   sprDir: DirSprites;
-  bag: Bag;
+  /**
+   * The worn backpack, or null when you are carrying nothing to carry things
+   * in. Tibia's rule: the bag is an OBJECT you wear, not a property of being
+   * alive — take it off and you have nowhere to put a single coin.
+   */
+  pack: ItemStack | null;
+  /**
+   * The worn backpack's slots. A read-only view of `pack.items`, so the eighty
+   * existing `p.bag` readers keep working unchanged; assigning a whole new bag
+   * is deliberately a compile error, because the only honest way to change
+   * what you are carrying is to change the pack.
+   *
+   * With no pack this is a frozen empty array: every `addItem` reports that
+   * nothing fits, which is exactly right.
+   */
+  readonly bag: Bag;
   eq: Equipment;
 }
 
 /** Create a fresh player positioned at `spawn`. */
 export function createPlayer(spawn: Vec): Player {
-  const bag = emptyBag();
+  // You start wearing one. A bagless level-1 character would be unable to
+  // pick up the first stick of wood, which is a tutorial nobody wants.
+  const pack = newContainer("backpack")!;
+  const bag = pack.items!;
   const startSet = bakeOutfitSprites();
   // No crystals at all. Every one of them — even the healing kind — is now
   // something the Alchemy Tower sells you, and the action slots start bound
@@ -109,7 +127,8 @@ export function createPlayer(spawn: Vec): Player {
     face: 1,
     dir: "down",
     sprDir: startSet,
-    bag,
+    pack,
+    get bag(): Bag { return this.pack?.items ?? NO_BAG; },
     eq: emptyEquipment(),
   };
 }
@@ -142,9 +161,13 @@ export function carryCap(p: Player): number {
   return CAP_BASE + (p.level - 1) * CAP_PER_LEVEL;
 }
 
-/** Current weight (oz) sitting in the backpack. Worn gear does not count. */
+/**
+ * Current weight (oz) the player is hauling. Worn gear does not count — but
+ * the backpack does, both its own 18 oz and everything nested inside it,
+ * which is the only brake on stuffing packs inside packs forever.
+ */
 export function carriedWeight(p: Player): number {
-  return bagWeight(p.bag);
+  return p.pack ? ITEMS[p.pack.kind].weight + bagWeight(p.bag) : 0;
 }
 
 /** Spare carry capacity in oz (never negative for display purposes). */
