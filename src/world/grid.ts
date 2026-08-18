@@ -99,6 +99,15 @@ export function chebTiles(ax: number, ay: number, bx: number, by: number): numbe
   return Math.max(Math.abs(ax - bx), Math.abs(ay - by));
 }
 
+/**
+ * The same distance, but to a loose world POINT — a corpse, a dropped stack.
+ * Squares are the unit interaction reach is written in: pixels lie about the
+ * diagonal (45.3 against 32) and lie worse about anything wider than a tile.
+ */
+export function chebToPoint(tx: number, ty: number, px: number, py: number): number {
+  return chebTiles(tx, ty, toTile(px), toTile(py));
+}
+
 /** Quantise an analog direction (joystick / WASD sum) to one of 8 steps. */
 export function stepDir(dx: number, dy: number): { sx: number; sy: number } {
   if (!dx && !dy) return { sx: 0, sy: 0 };

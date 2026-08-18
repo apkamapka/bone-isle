@@ -2381,6 +2381,47 @@ async function main(): Promise<void> {
     // ---- world geometry moved with the tile, so ranges are the same distance ----
     ok(cfg.MELEE_REACH_PX === 48 && cfg.USE_RANGE_PX === 112 && cfg.THROW_RANGE_PX === 240,
       "reach constants doubled");
+
+    /* ---- panel reach: squares, not pixels -------------------------------
+     * The old rule measured 112 px to a structure's CENTRE, which is three
+     * and a half tiles — a chest usable from across the room, and on a 2x2
+     * building a radius that had to be that generous because the centre sits
+     * a tile in from every wall. Both halves are fixed here: one square, and
+     * measured to the footprint. USE_RANGE_PX survives for NPCs alone, who
+     * pace and must not slam their own shop shut by taking a step.
+     * ------------------------------------------------------------------ */
+    {
+      const G = await import("../src/world/grid.ts");
+      const B = await import("../src/systems/building.ts");
+      ok(cfg.PANEL_REACH_TILES === 1, "panels reach exactly one square");
+      ok(G.chebTiles(5, 5, 6, 6) === 1, "a diagonal neighbour is ONE square, not 1.41");
+      ok(G.chebTiles(5, 5, 7, 5) === 2, "…and a tile two along is two");
+      // a point anywhere inside a tile reads that tile, so a corpse frozen
+      // mid-glide never counts as further away than the square it lies on
+      ok(G.chebToPoint(5, 5, 6 * cfg.TILE + 1, 5 * cfg.TILE + 31) === 1,
+        "a corpse in the next square is one away wherever in it it fell");
+
+      type Struct = Parameters<typeof B.structGap>[0];
+      const mk = (key: string, tx: number, ty: number): Struct =>
+        ({ key, tx, ty, tier: 1, anim: 0, hurtT: 0 } as unknown as Struct);
+      const forge = mk("forge", 10, 10);            // 2x2, occupies 10..11
+      ok(B.footprint("forge") === 2, "the forge really is 2x2");
+      ok(B.structGap(forge, 10, 10) === 0, "standing on the forge reads zero");
+      ok(B.structGap(forge, 12, 12) === 1, "…the tile off its far corner reads one");
+      ok(B.structGap(forge, 9, 11) === 1, "…and so does one off its left wall");
+      ok(B.structGap(forge, 13, 10) === 2, "two squares out is two");
+      // the bug the footprint measure exists to kill: standing against the
+      // wall of a 2x2 is >2 tiles from its CENTRE, so a centre-based one-square
+      // rule would have refused the player their own forge
+      const c = B.structCenter(forge);
+      const wall = { x: 9 * cfg.TILE + 16, y: 11 * cfg.TILE + 16 };
+      ok(Math.hypot(c.x - wall.x, c.y - wall.y) > 1.5 * cfg.TILE,
+        "…measured to the centre that same tile would have read out of reach");
+
+      const range = mk("range", 4, 4);               // single-tile structure
+      ok(B.footprint("range") === 1 && B.structGap(range, 5, 5) === 1,
+        "a single-tile structure is reachable from its diagonal too");
+    }
     ok(cfg.MELEE_REACH_PX > Math.SQRT2 * cfg.TILE && cfg.MELEE_REACH_PX < 2 * cfg.TILE,
       "melee still covers a diagonal neighbour and never a square two out");
     ok(items.ITEMS.longbow.bow!.range / cfg.TILE === 5, "Hunter's Bow reaches 5 tiles");

@@ -1,8 +1,8 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, PANEL_REACH_TILES, RESPAWN_RETRY_S, THROW_RANGE_PX, ITEM_MOVE_REACH_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
 import { PACK_BONUS_SLOTS, PACK_MAX, BAG_SIZE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers } from "./world/collision.ts";
-import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
+import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, chebToPoint, type Occupied } from "./world/grid.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx/fireSheet.ts";
 import { scenerySprite, FOOTPRINT } from "./gfx/sceneryArt.ts";
@@ -15,7 +15,7 @@ import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/playe
 import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnAtPost } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
+import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
 import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow } from "./gfx/buildingArt.ts";
 import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
@@ -1464,7 +1464,7 @@ function worldClick(w: Vec): void {
   for (const c of world.corpses) {
     if (Math.abs(w.x - c.x) < 20 && Math.abs(w.y - c.y) < 16) {
       if (P.target?.kind === "mob") {
-        if (dist(P.x, P.y, c.x, c.y) < USE_RANGE_PX) {
+        if (withinReach(c.x, c.y)) {
           ui.loot = c; openWindow("loot");
         } else {
           pendingLoot = c;
@@ -1721,13 +1721,26 @@ function walkGrid(world: World, gx: number, gy: number, budget: number): boolean
 
 /* ---------------- proximity panels (Tibia-style auto-close) ---------------- */
 
+/**
+ * Within arm's reach of a loose thing in the world — a corpse, a container on
+ * the floor. One square, counted on the grid, so a diagonal neighbour counts
+ * and a tile two along never does.
+ */
+function withinReach(x: number, y: number): boolean {
+  return chebToPoint(P.tx, P.ty, x, y) <= PANEL_REACH_TILES;
+}
+
+/** The same reach, against a placed structure's footprint. */
+function structInReach(s: Structure): boolean {
+  return structGap(s, P.tx, P.ty) <= PANEL_REACH_TILES;
+}
+
 /** Is the player near any owned Home-Isle structure of the given kinds? */
 function nearStructure(...keys: string[]): boolean {
   if (cw() !== game.worlds.home) return false;
   for (const s of game.worlds.home.structures) {
     if (!keys.includes(s.key)) continue;
-    const c = structCenter(s);
-    if (dist(P.x, P.y, c.x, c.y) < USE_RANGE_PX) return true;
+    if (structInReach(s)) return true;
   }
   return false;
 }
@@ -1772,14 +1785,13 @@ function tickProximityPanels(dt: number): void {
     ["stash", () => {
       const st = ui.stash;
       if (!st || cw() !== game.worlds.home || !game.worlds.home.structures.includes(st)) return false;
-      const c = structCenter(st);
-      return dist(P.x, P.y, c.x, c.y) < USE_RANGE_PX;
+      return structInReach(st);
     }],
     ["shop", () => !!ui.npc && cw().npcs.includes(ui.npc) && nearNpc((n) => n === ui.npc)],
     ["tasks", () => nearNpc((n) => n.key === "taskmaster")],
     ["wardrobe", () => nearNpc((n) => n.key === "tailor")],
     ["loot", () => !!ui.loot && cw().corpses.includes(ui.loot)
-      && dist(P.x, P.y, ui.loot.x, ui.loot.y) < USE_RANGE_PX],
+      && withinReach(ui.loot.x, ui.loot.y)],
   ];
   for (const [kind, inRange] of checks) {
     if (hasWindow(kind) && !inRange()) {
@@ -1873,7 +1885,7 @@ function update(dt: number): void {
   // moment we're in range (or is forgotten if it despawned / got looted away)
   if (pendingLoot) {
     if (!world.corpses.includes(pendingLoot)) pendingLoot = null;
-    else if (dist(P.x, P.y, pendingLoot.x, pendingLoot.y) < USE_RANGE_PX) {
+    else if (withinReach(pendingLoot.x, pendingLoot.y)) {
       ui.loot = pendingLoot;
       openWindow("loot");
       pendingLoot = null;
@@ -1954,11 +1966,25 @@ function update(dt: number): void {
     // melee / walk-up targets: approach along the grid, then act
     const tp = targetPoint();
     if (tp) {
-      const d = dist(P.x, P.y, tp.x, tp.y);
-      let reach = MELEE_REACH_PX;
-      if (P.target.kind === "dummy" || P.target.kind === "mob") reach = mode.reach;
-      if (d > reach) walkGrid(world, toTile(tp.x), toTile(tp.y), budget);
-      else resolveTarget();
+      // Anything that OPENS A PANEL is measured with the very rule the panel
+      // closes on. Mixing the two — walk up to 48 px, then judge the open
+      // window by squares — is how you get a chest that pops and shuts in the
+      // same breath, because 48 px reaches a tile the square rule calls two
+      // away. Fighting keeps its pixel reach: a blade is not a window.
+      const t = P.target;
+      const inReach = t.kind === "corpse" ? withinReach(tp.x, tp.y)
+        : t.kind === "structure" ? structInReach(t.s)
+        : dist(P.x, P.y, tp.x, tp.y) <= (t.kind === "dummy" || t.kind === "mob" ? mode.reach : MELEE_REACH_PX);
+      if (inReach) resolveTarget();
+      else {
+        const moved = walkGrid(world, toTile(tp.x), toTile(tp.y), budget);
+        // the route ran out without arriving (walled-in chest, corpse across
+        // water): let go rather than shuffle against the obstacle forever
+        if (!moved && atCenter(P) && (t.kind === "corpse" || t.kind === "structure")) {
+          P.target = null;
+          flash("too far away", "#e0a06a");
+        }
+      }
     }
   } else if (kiting) {
     // idle bowman: close the gap when the target drifted out of range OR a

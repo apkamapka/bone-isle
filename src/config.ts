@@ -248,13 +248,29 @@ export const WILD_ENTRANCE_SAFE_PX = 192;
 export const CORPSE_DECAY_S = 75;
 
 /**
- * How close (px) the player must stay to keep using an opened interaction
- * panel (Forge, Alchemy Tower, Storage Chest, NPC shop, task board, corpse
- * loot). Walking further away auto-closes the panel, Tibia-style — otherwise
- * an open chest window would allow remote deposits from anywhere, which would
- * defeat the whole carry-capacity / multi-trip design.
+ * How close (px) the player must stay to keep TALKING to a townsperson — the
+ * shop, the task board and the wardrobe. Walking further away auto-closes the
+ * panel, Tibia-style.
+ *
+ * NPCs keep a pixel radius, and a loose one, for a reason the static panels
+ * don't share: townsfolk pace. The smith walks a 3x3 beat around his anvil, so
+ * a one-square rule would slam his shop shut because HE took a step — a bug
+ * from the player's side, and not one they could do anything about. Tibia
+ * likewise gives the trade window a wider leash than it gives containers.
  */
 export const USE_RANGE_PX = 112;
+
+/**
+ * How many squares the player may stand from a thing and still keep its panel
+ * open: the Forge, the Alchemy Tower, a Storage Chest, a corpse, a container
+ * on the floor. One, Tibia's reach — the eight tiles around you plus your own.
+ *
+ * Measured in SQUARES rather than pixels (see `tileGap`), because that is the
+ * unit the rule is actually about. The old 112 px radius was three and a half
+ * tiles, so a chest stayed usable from most of the way across a room and the
+ * carry-cap / multi-trip design leaked accordingly.
+ */
+export const PANEL_REACH_TILES = 1;
 
 /**
  * Townsfolk pacing, Tibia-style. NPCs in the original shuffle: one square,

@@ -242,6 +242,22 @@ export function structCenter(s: Structure): { x: number; y: number; baseY: numbe
 }
 
 /**
+ * How many squares tile (tx,ty) is from the NEAREST tile this structure
+ * occupies. Standing on the structure itself reads 0, an adjacent tile 1.
+ *
+ * Measuring to the footprint rather than to `structCenter` is the whole point:
+ * a 2x2 building's centre sits a tile in from every edge, so a rule written
+ * against the centre would demand the player stand a square deeper than the
+ * wall lets them — the reason the old pixel radius had to be so generous.
+ */
+export function structGap(s: Structure, tx: number, ty: number): number {
+  const n = footprint(s.key);
+  const dx = Math.max(s.tx - tx, 0, tx - (s.tx + n - 1));
+  const dy = Math.max(s.ty - ty, 0, ty - (s.ty + n - 1));
+  return Math.max(dx, dy);
+}
+
+/**
  * Free-form placement check: can `key` stand with its top-left tile at
  * (tx,ty)? Every footprint tile must be clear grass, the spot must keep
  * clear of portals' stone rings, and it can't overlap any existing
