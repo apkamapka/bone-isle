@@ -1,7 +1,7 @@
 /** A small quest chain. Quests advance on game events and reward the player. */
 import type { MonsterKind } from "../world/types.ts";
 import type { Player } from "../entities/player.ts";
-import { addItem, bagCount, bagRoomFor, giveGold } from "../items.ts";
+import { addItem, bagCount, bagRoomFor, giveGold, walletRoomFor } from "../items.ts";
 import type { ItemKind } from "../items.ts";
 
 export type QuestGoal =
@@ -118,6 +118,10 @@ export function claimQuest(p: Player, q: Quest, giveExp?: (n: number) => void, f
   if (!q.done || q.claimed) return "no";
   const r = q.reward;
   if (r.item && !bagRoomFor(p.bag, r.item, r.itemN ?? 1)) return "full";
+  // Coin needs a slot like anything else now. Without this the purse simply
+  // evaporates against a full pack — and unlike a dropped item there is no
+  // pile on the floor to go back for, because it was never minted.
+  if (r.gold && !walletRoomFor(p.bag, r.gold)) return "full";
   if (r.gold) giveGold(p.bag, r.gold);
   if (r.item) addItem(p.bag, r.item, r.itemN ?? 1);
   q.claimed = true;

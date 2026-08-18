@@ -149,3 +149,15 @@ export function followTrail(
   }
   return { ref, used };
 }
+
+/**
+ * Does this loose stack tidy itself away after its hour on the floor?
+ *
+ * Everything does — except a container. A loot bag is somewhere the player
+ * DELIBERATELY put things; if it rotted on the same timer as a stray log, the
+ * feature would be a trap rather than a convenience, and the loss would be
+ * silent and total. Tibia's ground never eats a backpack either.
+ */
+export function groundDecays(gi: GroundItem): boolean {
+  return !isContainer(gi.kind);
+}

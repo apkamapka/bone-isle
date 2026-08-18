@@ -2279,6 +2279,63 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("Etap 27b — nothing quietly eats a container's contents:");
+  {
+    /* Every one of these is a path that took an item by KIND or by position
+     * and would have thrown away whatever was nested inside it. They are
+     * grouped because they share a single failure mode, and it is the worst
+     * one this refactor can have: the player loses things and is never told. */
+
+    // ---- a full pack is not spendable, at any level of the stack ----
+    const bag = items.emptyBag();
+    const full = items.newContainer("backpack")!;
+    items.addItem(full.items!, "steel", 40);
+    items.addStack(bag, full);
+    ok(!items.removeItem(bag, "backpack", 1),
+      "removeItem refuses a loaded pack — a recipe cost must never eat one");
+    ok(items.bagCount(bag, "steel") === 40, "…and the steel inside is untouched");
+    ok(!items.removeAcross([bag], "backpack", 1), "removeAcross tells the same truth");
+    items.removeItem(full.items!, "steel", 40);
+    ok(items.removeItem(bag, "backpack", 1), "…and an EMPTY pack is spendable like anything else");
+
+    // ---- a loot bag does not rot ----
+    {
+      const C = await import("../src/systems/containers.ts");
+      const log = { kind: "wood" as const, n: 5, x: 0, y: 0, t: 1 };
+      const sack = items.newContainer("backpack")!;
+      const loot = { kind: "backpack" as const, n: 1, x: 0, y: 0, t: 1, items: sack.items };
+      ok(C.groundDecays(log), "a stray log still fades from the ground after its hour");
+      ok(!C.groundDecays(loot),
+        "…but a container never does: a loot bag that rots is a trap, not a feature");
+      ok(!C.groundDecays({ kind: "backpack" as const, n: 1, x: 0, y: 0, t: -999 }),
+        "…even one whose timer already ran out, so an old save cannot lose one on load");
+    }
+
+    // ---- rewards need a slot for the coin, and say so ----
+    {
+      const { quests: qs, claimQuest: claim, resetQuests: reset } = await import("../src/systems/quests.ts");
+      const { createPlayer: mkP } = await import("../src/entities/player.ts");
+      reset();
+      const q = qs.find((x) => x.reward.gold && !x.reward.item);
+      if (q) {
+        const p = mkP({ x: 0, y: 0 });
+        q.done = true; q.claimed = false;
+        for (let i = 0; i < p.bag.length; i++) p.bag[i] = { kind: "ironSword", n: 1 };
+        ok(claim(p, q) === "full",
+          "a purse with nowhere to go is refused, not minted into thin air");
+        ok(!q.claimed, "…and the quest stays claimable");
+        p.bag[0] = null;
+        ok(claim(p, q) === "ok" && p.gold === (q.reward.gold ?? 0),
+          "…one free cell later it pays out in full");
+      } else {
+        ok(true, "no gold-only quest to test (skipped)");
+        ok(true, "…");
+        ok(true, "…");
+      }
+      reset();
+    }
+  }
+
   console.log("Etap 27 — money is an item:");
   {
     const { createPlayer: mkP } = await import("../src/entities/player.ts");

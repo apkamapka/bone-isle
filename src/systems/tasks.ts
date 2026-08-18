@@ -9,7 +9,7 @@
  * active). Collect tasks are deliveries: the items are consumed on hand-in.
  * Only one task is active at a time — a deliberate, easily-expanded choice.
  */
-import { addItem, removeItem, bagCount, bagRoomFor, giveGold } from "../items.ts";
+import { addItem, removeItem, bagCount, bagRoomFor, giveGold, walletRoomFor } from "../items.ts";
 import { canCarry } from "../entities/player.ts";
 import type { ItemKind, Bag } from "../items.ts";
 import type { MonsterKind } from "../world/types.ts";
@@ -168,6 +168,9 @@ export function onTaskKill(monster: MonsterKind): void {
  */
 export function rewardFits(p: Player, def: TaskDef): boolean {
   const r = def.reward;
+  // the purse needs a cell too, and a collect task frees several handing in,
+  // so only a kill task can genuinely be short of room for its own coin
+  if (r.gold && def.goal.kind !== "collect" && !walletRoomFor(p.bag, r.gold)) return false;
   if (!r.item) return true;
   if (def.goal.kind === "collect") return true;
   const n = r.itemN ?? 1;

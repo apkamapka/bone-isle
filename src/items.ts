@@ -652,8 +652,19 @@ export function removeItemUnpacked(bag: Bag, kind: ItemKind, n: number): boolean
   return true;
 }
 
-/** Remove `n` of `kind` from the bag or any pack inside it. */
+/**
+ * Remove `n` of `kind` from the bag or any pack inside it.
+ *
+ * A CONTAINER kind is handed to `removeItemUnpacked`, which only ever takes
+ * empty ones. This is the single most dangerous operation in the tree: every
+ * generic "spend one of these" — a recipe cost, a smelt, a task hand-in —
+ * goes through here, and deleting a slot that happens to be a full backpack
+ * would take everything inside it with no warning and no way back. Making the
+ * safe rule the DEFAULT means a future caller cannot get it wrong by
+ * forgetting which function to reach for.
+ */
 export function removeItem(bag: Bag, kind: ItemKind, n: number): boolean {
+  if (ITEMS[kind].pack) return removeItemUnpacked(bag, kind, n);
   if (bagCount(bag, kind) < n) return false;
   let left = n;
   for (let i = 0; i < bag.length && left > 0; i++) {
@@ -817,9 +828,11 @@ export function removeAcross(bags: readonly Bag[], kind: ItemKind, n: number): b
     if (left <= 0) break;
     const have = bagCount(b, kind);
     const take = Math.min(have, left);
-    if (take > 0) { removeItem(b, kind, take); left -= take; }
+    if (take > 0 && removeItem(b, kind, take)) left -= take;
   }
-  return true;
+  // a container kind can be counted but refused (a full pack is not spendable),
+  // so report what actually happened rather than what the count promised
+  return left === 0;
 }
 
 /** The bow stats of the equipped weapon, or null if it isn't a bow. */

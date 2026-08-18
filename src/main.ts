@@ -50,7 +50,7 @@ import { drawPanels, CONTAINER_PANELS, type UiState, type Hotspot, type ItemSlot
 import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
-import { slotsOf, baseOf, rootOf, sameRef, isInside, followTrail } from "./systems/containers.ts";
+import { slotsOf, baseOf, rootOf, sameRef, isInside, followTrail, groundDecays } from "./systems/containers.ts";
 import type { ContainerRef } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -688,15 +688,19 @@ function sink(kind: ItemKind, n: number, x: number, y: number): void {
  * classic loot-bag trick: pitch your haul into the teleport and it drops out
  * beside the matching portal on the far side, exactly where you'd arrive.
  */
-function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }): void {
+function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }, contents?: Bag): void {
   const from = cw();
   const dest = game.worlds[pt.dest];
   const back = dest.portals.find((p2) => p2.dest === from.key) ?? dest.portals[0];
   const gx = (back?.x ?? dest.w * TILE / 2) + (Math.random() - 0.5) * 16;
   const gy = (back?.y ?? dest.h * TILE / 2) + 28;
-  const near = dest.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 14);
+  /* A pack shoved through arrives WITH what is in it, and never merges: it is
+   * one object, and folding two backpacks into a stack of two would fuse two
+   * sets of contents and silently delete the loser's. */
+  const near = contents ? undefined
+    : dest.ground.find((g) => g.kind === kind && !g.items && Math.hypot(g.x - gx, g.y - gy) < 14);
   if (near) near.n += n;
-  else dest.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
+  else dest.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S, ...(contents ? { items: contents } : {}) });
   flash(`whoosh — ${n} ${ITEMS[kind].name} through the portal!`, "#8ab6ff");
   beep(600, 0.12, "sine", 0.05, -220);
 }
@@ -733,7 +737,9 @@ function dropToGround(kind: ItemKind, n: number, tx?: number, ty?: number): void
     gy = P.y + 4 + jitter();
   }
   // merge into a very close stack of the same kind to avoid clutter
-  const near = world.ground.find((g) => g.kind === kind && Math.hypot(g.x - gx, g.y - gy) < 14);
+  // merge into a very close stack of the same kind to avoid clutter — never
+  // into a container, whose `n` is an object count and not a quantity
+  const near = world.ground.find((g) => g.kind === kind && !g.items && Math.hypot(g.x - gx, g.y - gy) < 14);
   if (near) near.n += n;
   else world.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
   flash(`dropped ${n} ${ITEMS[kind].name}`, "#cfa86a");
@@ -751,7 +757,7 @@ function throwGroundItem(gi: GroundItem, tx: number, ty: number): void {
   if (pt) {
     const idx = world.ground.indexOf(gi);
     if (idx >= 0) world.ground.splice(idx, 1);
-    sendThroughPortal(gi.kind, gi.n, pt);
+    sendThroughPortal(gi.kind, gi.n, pt, gi.items);
     return;
   }
   // ...and shoving one into the sea loses it, exactly like a bag throw
@@ -951,7 +957,11 @@ function dropContainerToGround(st: ItemStack, tx?: number, ty?: number): void {
   let gy: number;
   if (tx !== undefined && ty !== undefined) {
     const t = resolveThrowTarget(tx, ty);
-    // a pack thrown into the sea is a pack (and everything in it) gone
+    // a pack aimed at a portal takes the trip, contents and all — the same
+    // deal a loose stack gets, and the one a player will assume
+    const pt = portalAt(t.x, t.y);
+    if (pt) { sendThroughPortal(st.kind, 1, pt, st.items); return; }
+    // …and a pack thrown into the sea is a pack, and everything in it, gone
     if (t.sank) { sink(st.kind, 1, t.x, t.y); return; }
     gx = t.x; gy = t.y;
   } else {
@@ -2334,8 +2344,16 @@ function update(dt: number): void {
     }
   }
 
-  // dropped items fade from the ground after their lifetime (1h)
+  /* Dropped items fade from the ground after their lifetime (1h) — except
+   * CONTAINERS, which never do.
+   *
+   * A loot bag is a place you deliberately leave things. If it rotted on the
+   * same hour timer as a stray log, the feature would be a trap: you set your
+   * bag down by the corpses, clear a floor, come back and both the bag and
+   * everything in it are gone. Tibia's ground never eats a backpack either.
+   * The bag persists; the wood you dropped by accident still tidies itself. */
   for (let i = world.ground.length - 1; i >= 0; i--) {
+    if (!groundDecays(world.ground[i])) continue;
     world.ground[i].t -= dt;
     if (world.ground[i].t > 0) continue;
     // a loot bag rotting out from under an open window has to take the window
