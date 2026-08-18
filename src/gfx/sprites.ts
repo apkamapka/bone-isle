@@ -302,6 +302,15 @@ export const SPR = {
     "cccccCc",
     ".cCccc.",
   ]),
+  /** Platinum: the same die struck in white metal, so a purse reads at a
+   *  glance — one pale coin is a hundred yellow ones. */
+  platinumCoin: bake([
+    ".mmmmm.",
+    "mmmmMmm",
+    "mmMmmmm",
+    "mmmmmMm",
+    ".mMmmm.",
+  ]),
   pack: bake([
     ".hhhh.",
     "hccchh",
@@ -1289,6 +1298,7 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   bow: SPR.bow, longbow: SPR.longbow, arrow: SPR.arrow, boneArrow: SPR.boneArrow,
   trainingArrow: SPR.trainingArrow,
   backpack: SPR.pack, booster: SPR.boosterPotion,
+  goldCoin: SPR.coin, platinumCoin: SPR.platinumCoin,
 };
 
 /**

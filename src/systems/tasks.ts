@@ -9,7 +9,7 @@
  * active). Collect tasks are deliveries: the items are consumed on hand-in.
  * Only one task is active at a time — a deliberate, easily-expanded choice.
  */
-import { addItem, removeItem, bagCount, bagRoomFor } from "../items.ts";
+import { addItem, removeItem, bagCount, bagRoomFor, giveGold } from "../items.ts";
 import { canCarry } from "../entities/player.ts";
 import type { ItemKind, Bag } from "../items.ts";
 import type { MonsterKind } from "../world/types.ts";
@@ -191,7 +191,7 @@ export function handInTask(p: Player, giveExp: (n: number) => void): HandInResul
   const r = def.reward;
   p.taskPoints += r.points;
   rt.earned += r.points;
-  if (r.gold) p.gold += r.gold;
+  if (r.gold) giveGold(p.bag, r.gold);
   if (r.item) addItem(p.bag, r.item, r.itemN ?? 1);
   if (r.exp) giveExp(r.exp);
   rt.activeId = null;

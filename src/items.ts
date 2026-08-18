@@ -94,7 +94,9 @@ export type ItemKind =
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet"
   // containers & test gear (Etap 11)
-  | "backpack" | "booster";
+  | "backpack" | "booster"
+  // currency (Etap 27): money is carried, weighed and dropped like anything else
+  | "goldCoin" | "platinumCoin";
 
 export type EqSlot = "head" | "body" | "legs" | "boots" | "weapon" | "shield" | "ring" | "amulet";
 
@@ -176,6 +178,8 @@ export interface ItemDef {
    *  Tibia's rule, not the old additive one — a backpack inside a backpack is
    *  a second container you open, never extra cells bolted onto the first. */
   pack?: { slots: number };
+  /** Currency: what one of these is worth in gold pieces. Only coins have it. */
+  coin?: number;
   /** TEST item: eating grants +5 levels and +20 to every skill. */
   boost?: true;
 }
@@ -394,6 +398,13 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   // a pack is a second bag to open rather than cells bolted onto the first.
   // One is worn; every spare rides inside another and earns its 18 oz.
   backpack:  { name: "Backpack",     stack: 1, value: 20, weight: 18, pack: { slots: BAG_SIZE } },
+  /* Money, Tibia's way: a thing in your bag with a weight, not a number on
+   * the HUD. Platinum exists because gold alone would price wealth out of a
+   * level-1 carry cap — 5 000 gp at 0.1 oz is 500 oz, the entire allowance —
+   * and a purse that heavy is a chore, not a decision. A crystal coin can be
+   * added the day totals justify it; today's richest kill drops ~210. */
+  goldCoin:     { name: "Gold Coin",     stack: 100, value: 1, weight: 0.1, coin: 1 },
+  platinumCoin: { name: "Platinum Coin", stack: 100, value: 100, weight: 0.1, coin: 100 },
   // TEST ONLY (Radek): a 1-gold forge brew that force-feeds levels & skills so
   // late-game content can be reached instantly. Slated for removal.
   booster:   { name: "Dopalacz",     stack: 999, value: 0, weight: 1, boost: true },
@@ -510,9 +521,17 @@ export function emptyCorpseBag(): Bag {
   return new Array<ItemStack | null>(CORPSE_SLOTS).fill(null);
 }
 
-/** A corpse pre-filled with a roll of loot; overflow is simply not generated. */
-export function corpseBag(loot: readonly { kind: ItemKind; n: number }[]): Bag {
+/**
+ * A corpse pre-filled with a roll of loot and its purse.
+ *
+ * The coins go in as ITEMS, in the same slots as everything else. A corpse no
+ * longer has a `gold` field at all — money that behaves differently from loot
+ * is money you cannot drop, chest, or leave in a loot bag, and all three are
+ * things the player will now expect to do with it.
+ */
+export function corpseBag(loot: readonly { kind: ItemKind; n: number }[], gold = 0): Bag {
   const bag = emptyCorpseBag();
+  if (gold > 0) giveGold(bag, gold);
   for (const it of loot) addItem(bag, it.kind, it.n);
   return bag;
 }
@@ -655,6 +674,127 @@ export function removeItem(bag: Bag, kind: ItemKind, n: number): boolean {
       const take = Math.min(have, left);
       if (take > 0 && removeItem(s.items, kind, take)) left -= take;
     }
+  }
+  return left === 0;
+}
+
+/* ---------------- money ---------------- */
+
+/**
+ * The coin kinds, biggest denomination first. Derived from the catalog so a
+ * crystal coin is one entry away from working everywhere.
+ */
+export const COIN_KINDS: readonly ItemKind[] = (Object.keys(ITEMS) as ItemKind[])
+  .filter((k) => ITEMS[k].coin)
+  .sort((a, b) => (ITEMS[b].coin ?? 0) - (ITEMS[a].coin ?? 0));
+
+/** What everything in this bag (and every pack inside it) is worth in gp. */
+export function walletValue(bag: Bag): number {
+  let gp = 0;
+  for (const k of COIN_KINDS) gp += bagCount(bag, k) * (ITEMS[k].coin ?? 0);
+  return gp;
+}
+
+/**
+ * Fold small coins into large ones wherever they will go.
+ *
+ * Called after every payment and pickup, and it is what keeps money from
+ * eating the carry cap: a hundred gold pieces weigh 10 oz, the platinum coin
+ * they become weighs a tenth of one. Tibia made you walk to a banker for
+ * this; doing it silently costs the player nothing they would have chosen
+ * differently, and saves a trip that was never a decision.
+ */
+export function consolidateCoins(bag: Bag): void {
+  for (let i = COIN_KINDS.length - 1; i > 0; i--) {
+    const small = COIN_KINDS[i];
+    const big = COIN_KINDS[i - 1];
+    const per = (ITEMS[big].coin ?? 0) / (ITEMS[small].coin ?? 1);
+    if (per < 2) continue;
+    const have = bagCount(bag, small);
+    const up = Math.floor(have / per);
+    if (up <= 0) continue;
+    // only fold what there is room to fold INTO — a full bag keeps its change
+    removeItem(bag, small, up * per);
+    const left = addItem(bag, big, up);
+    if (left > 0) addItem(bag, small, left * per);
+  }
+  for (const s of bag) if (s?.items) consolidateCoins(s.items);
+}
+
+/** Room enough to receive `gp` worth of coin, once it is folded up? */
+export function walletRoomFor(bag: Bag, gp: number): boolean {
+  // measured on a copy, because "can I afford to be paid" must not pay anyone
+  const probe = cloneBag(bag);
+  return giveGold(probe, gp) === 0;
+}
+
+/**
+ * Pay coins into a bag, largest denomination first. Returns what would not
+ * fit, in gp — normally zero.
+ */
+export function giveGold(bag: Bag, gp: number): number {
+  let left = Math.max(0, Math.floor(gp));
+  for (const k of COIN_KINDS) {
+    if (left <= 0) break;
+    const worth = ITEMS[k].coin ?? 1;
+    const want = Math.floor(left / worth);
+    if (want <= 0) continue;
+    const unplaced = addItem(bag, k, want);
+    left -= (want - unplaced) * worth;
+  }
+  consolidateCoins(bag);
+  return left;
+}
+
+/**
+ * Take `gp` out of a bag, making change: a platinum coin is broken back into
+ * a hundred gold pieces when the exact coins are not there. Returns false and
+ * touches nothing when the bag is not worth that much.
+ */
+export function takeGold(bag: Bag, gp: number): boolean {
+  const want = Math.max(0, Math.floor(gp));
+  if (want === 0) return true;
+  if (walletValue(bag) < want) return false;
+  let left = want;
+  // spend the small coins first, so change is only made when it must be
+  for (let i = COIN_KINDS.length - 1; i >= 0 && left > 0; i--) {
+    const k = COIN_KINDS[i];
+    const worth = ITEMS[k].coin ?? 1;
+    const spend = Math.min(bagCount(bag, k), Math.floor(left / worth));
+    if (spend > 0) { removeItem(bag, k, spend); left -= spend * worth; }
+  }
+  // whatever is left needs a big coin broken open
+  for (let i = 0; i < COIN_KINDS.length && left > 0; i++) {
+    const k = COIN_KINDS[i];
+    const worth = ITEMS[k].coin ?? 1;
+    if (worth <= left || bagCount(bag, k) === 0) continue;
+    removeItem(bag, k, 1);
+    left = giveGold(bag, worth - left) === 0 ? 0 : left;
+  }
+  consolidateCoins(bag);
+  return left === 0;
+}
+
+/** A deep copy — used to ask "would this fit?" without moving anything. */
+export function cloneBag(bag: Bag): Bag {
+  return bag.map((s) => (s ? { kind: s.kind, n: s.n, ...(s.items ? { items: cloneBag(s.items) } : {}) } : null));
+}
+
+/** Total gp across several bags (backpack + every storage chest). */
+export function walletAcross(bags: readonly Bag[]): number {
+  let gp = 0;
+  for (const b of bags) gp += walletValue(b);
+  return gp;
+}
+
+/** Spend `gp` across several bags in order. All-or-nothing. */
+export function takeGoldAcross(bags: readonly Bag[], gp: number): boolean {
+  if (walletAcross(bags) < gp) return false;
+  let left = gp;
+  for (const b of bags) {
+    if (left <= 0) break;
+    const have = Math.min(walletValue(b), left);
+    if (have > 0 && takeGold(b, have)) left -= have;
   }
   return left === 0;
 }

@@ -10,7 +10,7 @@ import { RESEARCH, isResearched, towerTierOk,
 import { ELEMENT_LABEL, ELEMENTS, type Element } from "../systems/elements.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
 import type { TaskReward } from "../systems/tasks.ts";
-import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed } from "../items.ts";
+import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed, walletAcross } from "../items.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
@@ -125,7 +125,6 @@ export interface PanelActions {
   buyOffer: (id: string) => void;
   buyCrystal: (id: string) => void;
   takeLoot: (c: Corpse, index: number) => void;
-  takeGold: (c: Corpse) => void;
   /** Empty a world container into the bag. Null means "whatever this window shows". */
   takeAllLoot: (c: Corpse | null) => void;
   buy: (kind: ItemKind) => void;
@@ -934,7 +933,7 @@ function forgeCraft(p: PanelInput, x: number, ry: number, w: number, rowH: numbe
   hudText(hud, "Iron, steel and gems are not crafted -> see SMELT", x + w / 2, ry, 7 * S, "rgba(220,214,190,.55)", "center");
   ry += 11 * S;
   for (const r of RECIPES) {
-    const ok = canCraftAcross(bags, r) && player.gold >= (r.gold ?? 0);
+    const ok = canCraftAcross(bags, r) && walletAcross(bags) >= (r.gold ?? 0);
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && ok) {
       hud.ctx.fillStyle = "rgba(202,162,58,.15)";
       hud.ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
@@ -1203,7 +1202,8 @@ function drawTower(p: PanelInput): void {
 
   // --- the elemental shelf: five crystals, bought outright ---
   for (const o of offers) {
-    const affordable = canAfford(player.bag, o.cost, homeChests(game)) && player.gold >= o.gold;
+    const affordable = canAfford(player.bag, o.cost, homeChests(game))
+      && walletAcross([player.bag, ...homeChests(game)]) >= o.gold;
     row(hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && affordable);
     const spr = itemSprite(o.crystal);
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
@@ -1224,7 +1224,8 @@ function drawTower(p: PanelInput): void {
     const researched = isResearched(r.id);
     const cost = researched ? r.buyCost : r.researchCost;
     const gold = researched ? r.buyGold : r.researchGold;
-    const affordable = canAfford(player.bag, cost, homeChests(game)) && player.gold >= (gold ?? 0);
+    const affordable = canAfford(player.bag, cost, homeChests(game))
+      && walletAcross([player.bag, ...homeChests(game)]) >= (gold ?? 0);
     const clickable = affordable && (researched || towerTierOk(r, tt));
     row(hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable);
     const spr = itemSprite(r.crystal);
@@ -1268,8 +1269,7 @@ function drawTower(p: PanelInput): void {
  * on the floor is just a move between two containers now.
  */
 function drawWorldContainer(
-  p: PanelInput, base: ContainerRef, topTitle: string, gold: number,
-  onTakeGold: (() => void) | null, onTakeAll: () => void,
+  p: PanelInput, base: ContainerRef, topTitle: string, onTakeAll: () => void,
 ): void {
   const { hud } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
@@ -1282,9 +1282,8 @@ function drawWorldContainer(
   const cell = 30 * S;
   const gap = 4 * S;
   const gridW = cols * cell + (cols - 1) * gap;
-  const goldRow = gold > 0 ? 18 * S : 0;
   const w = gridW + 24 * S;
-  const h = 20 * S + goldRow + rows * cell + (rows - 1) * gap + 30 * S;
+  const h = 20 * S + rows * cell + (rows - 1) * gap + 30 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   if (!goldPanel(p, x, y, w, h, containerTitle(p, ref, topTitle))) return;
@@ -1292,18 +1291,6 @@ function drawWorldContainer(
 
   const gx = x + (w - gridW) / 2;
   let gy = y + 18 * S;
-  if (gold > 0 && onTakeGold) {
-    const hov = hovering(p, x + 8 * S, gy, w - 16 * S, 14 * S);
-    if (hov) {
-      ctx.fillStyle = "rgba(202,162,58,.15)";
-      ctx.fillRect(x + 8 * S, gy, w - 16 * S, 14 * S);
-    }
-    icon(p, SPR.coin, x + 12 * S, gy + S, 2 * S);
-    hudText(hud, `${gold} gold`, x + 34 * S, gy + 7 * S, 8 * S, "#ffe9a8", "left", true);
-    p.hotspots.push({ x: x + 8 * S, y: gy, w: w - 16 * S, h: 14 * S, fn: onTakeGold });
-    gy += goldRow;
-  }
-
   drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref);
   gy += rows * (cell + gap) + 4 * S;
 
@@ -1321,15 +1308,15 @@ function drawWorldContainer(
 function drawLoot(p: PanelInput): void {
   const c = p.ui.loot;
   if (!c) return;
-  drawWorldContainer(p, { c: "corpse", body: c }, "CORPSE — loot", c.gold,
-    () => p.act.takeGold(c), () => p.act.takeAllLoot(c));
+  drawWorldContainer(p, { c: "corpse", body: c }, "CORPSE — loot",
+    () => p.act.takeAllLoot(c));
 }
 
 function drawFloor(p: PanelInput): void {
   const gi = p.ui.floor;
   if (!gi) return;
-  drawWorldContainer(p, { c: "ground", gi }, ITEMS[gi.kind].name.toUpperCase(), 0,
-    null, () => p.act.takeAllLoot(null));
+  drawWorldContainer(p, { c: "ground", gi }, ITEMS[gi.kind].name.toUpperCase(),
+    () => p.act.takeAllLoot(null));
 }
 
 /* ---------------- NPC shop ---------------- */

@@ -15,7 +15,7 @@ import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { stance, setStance, STANCES, type Stance } from "./systems/stance.ts";
 import { quests } from "./systems/quests.ts";
-import { emptyStash, emptyCorpseBag, emptyEquipment, addItem, addStack, newContainer, ITEMS, AMMO_KINDS } from "./items.ts";
+import { emptyStash, emptyCorpseBag, emptyEquipment, addItem, addStack, newContainer, giveGold, COIN_KINDS, ITEMS, AMMO_KINDS } from "./items.ts";
 import type { Bag, Equipment, ItemKind, ItemStack } from "./items.ts";
 import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
 
@@ -41,17 +41,23 @@ const KEY = "bone-isle-save-v2";
  * of owning a flat, growing array; a stack can carry `items` of its own; and
  * a corpse holds fixed slots with holes rather than a compact list. Older
  * saves are migrated rather than dropped — see `migrateFlatBag`.
+ *
+ * v8: money became an ITEM (Etap 27). `player.gold` and `corpse.gold` are
+ * gone; a pre-v8 balance is minted into coins in the backpack on load, and a
+ * corpse's purse is minted into its slots by the same rule.
  */
-const SAVE_V = 7;
+const SAVE_V = 8;
 
 interface SaveData {
-  v: 2 | 3 | 4 | 5 | 6 | 7;
+  v: 2 | 3 | 4 | 5 | 6 | 7 | 8;
   seed: number;
   current: WorldKey;
   player: {
     x: number; y: number;
     hp: number; maxhp: number;
-    gold: number; taskPoints?: number; level: number; exp: number; expNext: number;
+    /** Pre-v8 only: money was a number before it became coins in the bag. */
+    gold?: number;
+    taskPoints?: number; level: number; exp: number; expNext: number;
     fedS?: number;
     /** Ammo slot pick. Absent in pre-Etap-26 saves — those load as "auto". */
     ammo?: string;
@@ -111,7 +117,7 @@ export function saveGame(g: Game): void {
     player: {
       x: p.x, y: p.y,
       hp: p.hp, maxhp: p.maxhp,
-      gold: p.gold, taskPoints: p.taskPoints, level: p.level, exp: p.exp, expNext: p.expNext,
+      taskPoints: p.taskPoints, level: p.level, exp: p.exp, expNext: p.expNext,
       fedS: p.fedS,
       ammo: p.ammo ?? undefined,
       pack: p.pack, eq: p.eq,
@@ -149,7 +155,7 @@ export function loadGame(): Game | null {
   let data: SaveData;
   try {
     data = JSON.parse(raw) as SaveData;
-    if (data.v !== 2 && data.v !== 3 && data.v !== 4 && data.v !== 5 && data.v !== 6 && data.v !== SAVE_V) return null;
+    if (data.v < 2 || data.v > SAVE_V) return null;
     if (data.v < 4) data = renameItems(data, { fireCrystal: "flameCrystal" });
     if (data.v < 5) data = renameItems(data, ARROW_TIER_I);
     if (data.v < 6) data = dropResearch(data, RETIRED_RESEARCH);
@@ -200,8 +206,8 @@ export function loadGame(): Game | null {
           name: typeof c.name === "string" ? c.name : "corpse",
           x: c.x * pos, y: c.y * pos,
           // pre-v7 corpses were a compact list; pour it into real slots
-          items: normalizeCorpse(c.items),
-          gold: typeof c.gold === "number" ? Math.max(0, c.gold) : 0,
+          // a pre-v8 corpse kept its purse in a `gold` field; mint it into slots
+          items: normalizeCorpse(c.items, typeof (c as unknown as { gold?: unknown }).gold === "number" ? (c as unknown as { gold: number }).gold : 0),
           t: typeof c.t === "number" ? c.t : 60,
         }));
     }
@@ -247,7 +253,7 @@ export function loadGame(): Game | null {
   const player = createPlayer(worldSpawn(worlds.home));
   const sp = data.player;
   placeWalker(player, sp.x * pos, sp.y * pos); // scale a v2 position, then snap to its tile centre
-  player.gold = sp.gold; player.taskPoints = sp.taskPoints ?? 0; player.level = sp.level;
+  player.taskPoints = sp.taskPoints ?? 0; player.level = sp.level;
   player.fedS = sp.fedS ?? 0; // older saves start hungry
   // Recompute expNext from level so older saves adopt the current XP curve.
   player.exp = sp.exp; player.expNext = expNeeded(player.level);
@@ -261,6 +267,21 @@ export function loadGame(): Game | null {
     const worn = validItem(sp.pack);
     player.pack = worn && ITEMS[worn.kind].pack ? worn : null;
     if (player.pack) player.pack.items = normalizeBag(player.pack.items, ITEMS[player.pack.kind].pack!.slots);
+  }
+  /* Pre-v8 saves stored gold as a NUMBER. It becomes coins in the backpack —
+   * minted after the pack exists, since there is nowhere to put them before
+   * that. A bagless or overfull load hands the remainder to `spill`, which
+   * already knows how to reach a chest or the ground. */
+  if (data.v < 8 && (sp.gold ?? 0) > 0) {
+    const owed = Math.max(0, Math.floor(sp.gold ?? 0));
+    const unpaid = player.pack ? giveGold(player.bag, owed) : owed;
+    if (unpaid > 0) {
+      for (const k of COIN_KINDS) {
+        const worth = ITEMS[k].coin ?? 1;
+        const n = Math.floor(unpaid / worth);
+        if (n > 0) spill.push({ kind: k, n });
+      }
+    }
   }
   player.eq = normalizeEquipment(sp.eq);
   // A pick naming an arrow that no longer exists falls back to "auto" rather
@@ -458,16 +479,20 @@ function migrateFlatBag(raw: unknown): { pack: ItemStack; spill: ItemStack[] } {
  * any length) and a v7 fixed grid. Anything past CORPSE_SLOTS is dropped —
  * only a save hand-edited to hold more could ever hit that.
  */
-function normalizeCorpse(raw: unknown): Bag {
+function normalizeCorpse(raw: unknown, legacyGold = 0): Bag {
   const out = emptyCorpseBag();
+  if (legacyGold > 0) giveGold(out, legacyGold);
   if (!Array.isArray(raw)) return out;
   const stacks = raw.map(validItem);
   const dense = stacks.every((s, i) => s !== null || i >= stacks.length);
-  if (dense && stacks.length <= out.length && !raw.includes(null)) {
+  if (dense && stacks.length + out.filter((q) => q).length <= out.length && !raw.includes(null)) {
     for (const st of stacks) if (st) addStack(out, st);
     return out;
   }
-  for (let i = 0; i < out.length && i < stacks.length; i++) out[i] = stacks[i];
+  for (let i = 0, j = 0; i < out.length && j < stacks.length; i++) {
+    if (out[i]) continue; // minted coins keep their cell
+    out[i] = stacks[j++];
+  }
   return out;
 }
 

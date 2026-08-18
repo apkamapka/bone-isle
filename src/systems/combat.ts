@@ -175,8 +175,7 @@ export function killMonster(world: World, p: Player, m: Monster): void {
     name: m.kind,
     x: m.x,
     y: m.y,
-    items: corpseBag(items),
-    gold,
+    items: corpseBag(items, gold),
     t: CORPSE_DECAY_S,
   });
 
@@ -232,7 +231,7 @@ export function applyDeathPenalty(world: World, p: Player): void {
       }
     }
     if (lost) {
-      world.corpses.push({ name: "your body", x: p.x, y: p.y, items: body, gold: 0, t: PLAYER_CORPSE_DECAY_S });
+      world.corpses.push({ name: "your body", x: p.x, y: p.y, items: body, t: PLAYER_CORPSE_DECAY_S });
       addFloat(world, p.x, p.y - 60, "you dropped your backpack!", "#ff9e6a");
     }
   }

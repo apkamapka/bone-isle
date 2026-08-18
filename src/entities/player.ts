@@ -4,7 +4,7 @@ import { bakeOutfitSprites } from "../systems/outfit.ts";
 import type { Facing, DirSprites } from "../systems/outfit.ts";
 import { toTile, tileCenter } from "../world/grid.ts";
 import { activeBonus } from "../systems/derived.ts";
-import { ITEMS, emptyEquipment, gearStat, itemWeight, bagWeight, addItem, newContainer, NO_BAG } from "../items.ts";
+import { ITEMS, walletValue, emptyEquipment, gearStat, itemWeight, bagWeight, addItem, newContainer, NO_BAG } from "../items.ts";
 import type { Bag, Equipment, ItemKind, ItemStack } from "../items.ts";
 import type { Vec, Monster, Tree, RockNode, Structure, Corpse, Npc, GroundItem } from "../world/types.ts";
 
@@ -35,7 +35,13 @@ export interface Player {
   spr: HTMLCanvasElement;
   hp: number;
   maxhp: number;
-  gold: number;
+  /**
+   * What the coins in your backpack are worth. A READ-ONLY view, because gold
+   * is no longer a number the game may adjust — it is items, with weight, that
+   * live in slots and can be dropped, chested and looted off your corpse.
+   * Paying is `takeGold(p.bag, n)`; being paid is `giveGold(p.bag, n)`.
+   */
+  readonly gold: number;
   /** Task points — a separate currency earned from repeatable board tasks. */
   taskPoints: number;
   level: number;
@@ -107,7 +113,6 @@ export function createPlayer(spawn: Vec): Player {
     spr: startSet.down,
     hp: PLAYER_BASE_HP,
     maxhp: PLAYER_BASE_HP,
-    gold: 0,
     taskPoints: 0,
     level: 1,
     exp: 0,
@@ -129,6 +134,7 @@ export function createPlayer(spawn: Vec): Player {
     sprDir: startSet,
     pack,
     get bag(): Bag { return this.pack?.items ?? NO_BAG; },
+    get gold(): number { return walletValue(this.bag); },
     eq: emptyEquipment(),
   };
 }

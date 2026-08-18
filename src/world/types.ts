@@ -332,7 +332,6 @@ export interface Corpse {
    * lets a dead player's backpack sit in their body with its contents intact.
    */
   items: Bag;
-  gold: number;
   t: number; // seconds until decay
 }
 

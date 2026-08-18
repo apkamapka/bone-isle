@@ -36,7 +36,7 @@ import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
 import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
-import { addItem, addStack, removeItem, removeItemUnpacked, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
+import { addItem, addStack, removeItem, removeItemUnpacked, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
@@ -403,14 +403,6 @@ const act: PanelActions = {
   research: (id: string) => { doResearch(id); },
   buyCrystal: (id: string) => { doBuyCrystal(id); },
   takeLoot: (c: Corpse, index: number) => { takeOne(c, index); },
-  takeGold: (c: Corpse) => {
-    if (c.gold > 0) {
-      P.gold += c.gold;
-      c.gold = 0;
-      beep(520, 0.08, "sine", 0.05, 80);
-    }
-    closeIfEmpty({ c: "corpse", body: c });
-  },
   takeAllLoot: (c: Corpse | null) => {
     // null = "whatever the front container window is showing" (a floor bag)
     const ref = c ? ({ c: "corpse", body: c } as ContainerRef)
@@ -636,7 +628,7 @@ function closeIfEmpty(ref: ContainerRef): void {
   const base = baseOf(ref);
   if (base.c !== "corpse") return;
   const c = base.body;
-  if (c.items.some((s) => s !== null) || c.gold > 0) return;
+  if (c.items.some((s) => s !== null)) return;
   const w = cw();
   const idx = w.corpses.indexOf(c);
   if (idx >= 0) w.corpses.splice(idx, 1);
@@ -983,7 +975,7 @@ function liftFloorStack(gi: GroundItem, to: ContainerRef, ti: number | null): vo
   // route it through a throwaway one-slot container so the ONE move with all
   // the rules in it is the only code that ever puts something somewhere
   const shim: Bag = [{ kind: gi.kind, n: gi.n, items: gi.items }];
-  const via: ContainerRef = { c: "corpse", body: { name: "", x: gi.x, y: gi.y, items: shim, gold: 0, t: 0 } };
+  const via: ContainerRef = { c: "corpse", body: { name: "", x: gi.x, y: gi.y, items: shim, t: 0 } };
   if (!moveItems(via, 0, to, ti, gi.n)) return;
   const leftover = shim[0];
   if (leftover) { gi.n = leftover.n; gi.items = leftover.items; }
@@ -1123,9 +1115,12 @@ function splitConfirm(mode: "store" | "take" | "drop" | "throw"): void {
 import { craftAcross } from "./items.ts";
 function craftAt(r: Recipe): boolean {
   const goldCost = r.gold ?? 0;
-  if (P.gold < goldCost) { flash("not enough gold", "#d96a5a"); return false; }
+  // the Forge already spends materials out of your chests; its fee follows the
+  // same purse, or you would be told you cannot afford what is ten feet away
+  const purse = [P.bag, ...homeChests(game)];
+  if (walletAcross(purse) < goldCost) { flash("not enough gold", "#d96a5a"); return false; }
   if (craftAcross([P.bag, ...homeChests(game)], r)) {
-    P.gold -= goldCost;
+    takeGoldAcross(purse, goldCost);
     flash(`crafted ${ITEMS[r.out].name}`, "#b9e07f");
     return true;
   }
@@ -1155,7 +1150,7 @@ function doTestGrant(kind: ItemKind): void {
   const want = Math.min(100, ITEMS[kind].stack);
   const left = addItem(P.bag, kind, want);
   if (left === want) { flash("bag full", "#d96a5a"); return; }
-  P.gold -= 1;
+  takeGold(P.bag, 1);
   flash(`TEST +${want - left} ${ITEMS[kind].name}`, "#e08a7a");
 }
 
@@ -1250,12 +1245,12 @@ function doBuyOffer(id: string): void {
   const o = offerById(id);
   if (!o || !isAttuned(o.element)) return;
   if (!canAfford(P.bag, o.cost, homeChests(game))) { flash("need materials"); return; }
-  if (P.gold < o.gold) { flash("need gold", "#d96a5a"); return; }
+  if (walletAcross([P.bag, ...homeChests(game)]) < o.gold) { flash("need gold", "#d96a5a"); return; }
   if (!canCarry(P, o.crystal, o.buyN)) { flash("too heavy"); return; }
   const moved = o.buyN - addItem(P.bag, o.crystal, o.buyN);
   if (moved < o.buyN) { if (moved > 0) removeItem(P.bag, o.crystal, moved); flash("bag full"); return; }
   payCost(P.bag, o.cost, homeChests(game));
-  P.gold -= o.gold;
+  takeGoldAcross([P.bag, ...homeChests(game)], o.gold);
   flash(`+${o.buyN} ${ITEMS[o.crystal].name}`, "#b9e07f");
   beep(520, 0.18, "square", 0.05, 90);
 }
@@ -1266,9 +1261,9 @@ function doResearch(id: string): void {
   if (!towerTierOk(r, towerTier())) { flash(`needs an Alchemy Tower ${"I".repeat(towerTierFor(r))}`, "#d96a5a"); return; }
   if (!attunementOk(r)) { flash("attune this element first", "#d96a5a"); return; }
   if (!canAfford(P.bag, r.researchCost, homeChests(game))) { flash("need materials"); return; }
-  if (P.gold < (r.researchGold ?? 0)) { flash("need gold", "#d96a5a"); return; }
+  if (walletAcross([P.bag, ...homeChests(game)]) < (r.researchGold ?? 0)) { flash("need gold", "#d96a5a"); return; }
   payCost(P.bag, r.researchCost, homeChests(game));
-  P.gold -= r.researchGold ?? 0;
+  takeGoldAcross([P.bag, ...homeChests(game)], r.researchGold ?? 0);
   markResearched(r.id);
   flash(`researched ${r.name}`, "#c9a6ff");
   beep(520, 0.18, "square", 0.06, 120);
@@ -1278,12 +1273,12 @@ function doBuyCrystal(id: string): void {
   const r = researchById(id);
   if (!r || !isResearched(r.id)) return;
   if (!canAfford(P.bag, r.buyCost, homeChests(game))) { flash("need materials"); return; }
-  if (P.gold < (r.buyGold ?? 0)) { flash("need gold", "#d96a5a"); return; }
+  if (walletAcross([P.bag, ...homeChests(game)]) < (r.buyGold ?? 0)) { flash("need gold", "#d96a5a"); return; }
   if (!canCarry(P, r.crystal, r.buyN)) { flash("too heavy"); return; }
   const moved = r.buyN - addItem(P.bag, r.crystal, r.buyN);
   if (moved < r.buyN) { if (moved > 0) removeItem(P.bag, r.crystal, moved); flash("bag full"); return; }
   payCost(P.bag, r.buyCost, homeChests(game));
-  P.gold -= r.buyGold ?? 0;
+  takeGoldAcross([P.bag, ...homeChests(game)], r.buyGold ?? 0);
   flash(`+${r.buyN} ${ITEMS[r.crystal].name}`, "#b9e07f");
   beep(440, 0.12, "sine", 0.05, 120);
 }
@@ -1408,8 +1403,10 @@ function doBuy(kind: ItemKind): void {
   const entry = shop.entries.find((e) => e.kind === kind);
   if (!entry || entry.buy <= 0 || P.gold < entry.buy) return;
   if (!canCarry(P, kind)) { flash("too heavy"); return; }
-  if (addItem(P.bag, kind, 1) > 0) { flash("bag full"); return; }
-  P.gold -= entry.buy;
+  // pay FIRST: coins leaving the bag can be the very slot the goods need,
+  // and a purse of loose change is exactly when that happens
+  if (!takeGold(P.bag, entry.buy)) { flash("not enough gold", "#d96a5a"); return; }
+  if (addItem(P.bag, kind, 1) > 0) { giveGold(P.bag, entry.buy); flash("bag full"); return; }
   beep(440, 0.1, "sine", 0.05);
 }
 function doSell(kind: ItemKind): void {
@@ -1418,12 +1415,17 @@ function doSell(kind: ItemKind): void {
   if (!shop) return;
   const entry = shop.entries.find((e) => e.kind === kind);
   if (!entry || entry.sell <= 0) return;
+  // coins are goods too, and selling them to buy them back would be a bug
+  if (ITEMS[kind].coin) return;
+  // check the change will fit BEFORE handing the goods over, or a full bag
+  // turns a sale into a donation
+  if (!walletRoomFor(P.bag, entry.sell)) { flash("no room for the coins", "#e0a06a"); return; }
   // a pack with things in it is not merchandise — see removeItemUnpacked
   if (!removeItemUnpacked(P.bag, kind, 1)) {
     flash(isContainer(kind) ? "empty it first" : "you have none", "#e0a06a");
     return;
   }
-  P.gold += entry.sell;
+  giveGold(P.bag, entry.sell);
   beep(360, 0.1, "sine", 0.05);
 }
 

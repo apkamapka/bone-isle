@@ -1307,7 +1307,7 @@ async function main(): Promise<void> {
     // and it actually hands over goods for a gold
     {
       const g = createGame();
-      g.player.gold = 5;
+      items.giveGold(g.player.bag, 5);
       const before = items.bagCount(g.player.bag, "steel");
       items.addItem(g.player.bag, "steel", 100);
       ok(items.bagCount(g.player.bag, "steel") === before + 100, "100 of an item fits one stack");
@@ -1910,7 +1910,6 @@ async function main(): Promise<void> {
     const { tryPlace, canAfford } = await import("../src/systems/building.ts");
     const { createGame, homeChests } = await import("../src/game.ts");
     const g = createGame();
-    g.player.gold = 0;
     items.addItem(g.player.bag, "wood", 200);
     items.addItem(g.player.bag, "stone", 100);
     // find two clear spots and raise two chests
@@ -2259,7 +2258,8 @@ async function main(): Promise<void> {
         const c = back.worlds.home.corpses[0];
         ok(!!c && c.items.length === cfgCorpseSlots,
           "a corpse reloads as a fixed grid, not a compact list");
-        ok(items.bagCount(c.items, "orcEar") === 2 && c.gold === 9, "…with its loot and gold intact");
+        ok(items.bagCount(c.items, "orcEar") === 2 && items.walletValue(c.items) === 9,
+          "…with its loot and its purse intact, the purse now being coins in slots");
       }
       localStorage.removeItem(SK);
     }
@@ -2277,6 +2277,64 @@ async function main(): Promise<void> {
       ok(items.bagSlotsUsed(inv) < B.CHEST_SLOTS[0],
         "…leaving room, but nowhere near the 160 that nesting would grant unbudgeted");
     }
+  }
+
+  console.log("Etap 27 — money is an item:");
+  {
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+
+    // ---- denominations ----
+    ok(items.COIN_KINDS[0] === "platinumCoin" && items.COIN_KINDS[1] === "goldCoin",
+      "coins are ordered biggest first, derived from the catalog");
+    ok(items.ITEMS.platinumCoin.coin === 100 && items.ITEMS.goldCoin.coin === 1,
+      "a platinum coin is worth a hundred gold");
+
+    // ---- being paid folds the change up ----
+    const bag = items.emptyBag();
+    ok(items.giveGold(bag, 250) === 0, "250 gp fits an empty pack");
+    ok(items.walletValue(bag) === 250, "…and is worth exactly that");
+    ok(items.bagCount(bag, "platinumCoin") === 2 && items.bagCount(bag, "goldCoin") === 50,
+      "…held as 2 platinum + 50 gold, not 250 loose coins");
+    /* The reason the folding exists at all: at 0.1 oz a coin, 250 loose gold
+     * is 25 oz of a level-1 allowance of 500. Folded it is a fifth of that. */
+    ok(items.bagWeight(bag) < 6, `a folded purse of 250 weighs under 6 oz (${items.bagWeight(bag).toFixed(1)})`);
+
+    // ---- paying makes change ----
+    const purse = items.emptyBag();
+    items.giveGold(purse, 100);
+    ok(items.bagCount(purse, "platinumCoin") === 1, "100 gp is one platinum coin");
+    ok(items.takeGold(purse, 7), "…and you can still pay 7 with it");
+    ok(items.walletValue(purse) === 93, "…leaving 93");
+    ok(items.bagCount(purse, "goldCoin") === 93, "…as loose change, the platinum broken open");
+
+    ok(!items.takeGold(purse, 94), "you cannot pay more than you hold");
+    ok(items.walletValue(purse) === 93, "…and a refused payment takes nothing");
+
+    // ---- the wallet is the bag, so it is carried, dropped and looted ----
+    const p = mkP({ x: 0, y: 0 });
+    items.giveGold(p.bag, 500);
+    ok(p.gold === 500, "the player's gold IS the coins in their pack");
+    const sub = items.newContainer("backpack")!;
+    items.giveGold(sub.items!, 300);
+    items.addStack(p.bag, sub);
+    ok(p.gold === 800, "…counted through a pack inside the pack, like any other item");
+    p.pack = null;
+    ok(p.gold === 0, "…and a player with no backpack is carrying no money at all");
+
+    // ---- room is checked before a sale, not after ----
+    const stuffed = items.emptyBag();
+    for (let i = 0; i < stuffed.length; i++) stuffed[i] = { kind: "ironSword", n: 1 };
+    ok(!items.walletRoomFor(stuffed, 5),
+      "a full pack has no room for change — the shop must refuse BEFORE taking the goods");
+    ok(items.walletValue(stuffed) === 0, "…and asking the question moved no money");
+    stuffed[0] = null;
+    ok(items.walletRoomFor(stuffed, 5), "one free cell is enough");
+
+    // ---- a corpse carries its purse in its slots ----
+    const body = items.corpseBag([{ kind: "orcEar", n: 1 }], 150);
+    ok(items.walletValue(body) === 150, "a slain thing's gold sits in the body as coins");
+    ok(body.some((q) => q?.kind === "platinumCoin"),
+      "…folded, so looting a dragon does not cost you 21 oz of pockets");
   }
 
   console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");
@@ -2655,14 +2713,18 @@ async function main(): Promise<void> {
     ok(!!g2, "a v2 save still loads");
     ok(g2.player.tx === ttx && g2.player.ty === tty,
       `the player lands on the SAME tile, not half way (${g2.player.tx},${g2.player.ty} vs ${ttx},${tty})`);
-    ok(g2.player.gold === 42, "the rest of the save is untouched");
+    ok(g2.player.gold === 42, "a pre-v8 balance is minted into coins worth exactly as much");
+    ok(items.bagCount(g2.player.bag, "platinumCoin") === 0 && items.bagCount(g2.player.bag, "goldCoin") === 42,
+      "…42 gp is 42 gold coins, since it takes 100 to be worth folding up");
+    ok(items.walletValue(g2.worlds.home.corpses[0].items) === 5,
+      "…and the corpse's old purse became coins in the body");
     ok(g2.worlds.home.ground[0]?.x === ttx * 32 + 16, "loose ground stacks scale too");
     ok(g2.worlds.home.corpses[0]?.x === ttx * 32 + 16, "and so do corpses");
 
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 7, "saving writes the current v7 format");
+    ok(stored.v === 8, "saving writes the current v8 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
