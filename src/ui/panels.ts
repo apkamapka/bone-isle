@@ -690,11 +690,15 @@ function drawEquip(p: PanelInput): void {
       ctx.globalAlpha = worn ? 1 : 0.35;
       icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
       ctx.globalAlpha = 1;
+      /* Registered as a drop target EVEN WHEN EMPTY. An empty slot that is not
+       * a target is the one state you can never get out of: with no pack worn
+       * there is nowhere to drag a pack to, so taking your backpack off would
+       * be permanent. */
+      p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, index: 0, kind: "backpack", n: worn ? 1 : 0, eqSlot: "pack" });
       if (worn) {
         if (hovering(p, cx, cy, slot, slot)) tooltipKind = worn.kind;
         const used = (worn.items ?? []).filter((q) => q !== null).length;
         hudText(hud, `${used}/${worn.items?.length ?? 0}`, cx + slot - 3 * S, cy + 9 * S, 6 * S, "#ffe9a8", "right");
-        p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, index: 0, kind: worn.kind, n: 1, eqSlot: "pack" });
         p.hotspots.push({ x: cx, y: cy, w: slot, h: slot,
           fn: () => (p.ui.lookMode ? p.act.look(worn.kind) : p.act.openBag()) });
       }
@@ -753,6 +757,9 @@ function drawEquip(p: PanelInput): void {
       ctx.globalAlpha = 0.4;
       icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
       ctx.globalAlpha = 1;
+      // an EMPTY gear cell takes a drop too — dragging a helmet onto the bare
+      // head slot is the obvious gesture, and it used to do nothing at all
+      p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, index: 0, kind: "backpack", n: 0, eqSlot: key });
     }
     hudText(hud, SLOT_LABEL[key], cx + slot / 2, cy + slot - 5 * S, 6 * S, "rgba(220,214,190,.7)", "center");
   });
@@ -801,21 +808,20 @@ function drawBag(p: PanelInput): void {
   const rows = Math.ceil(slots.length / cols);
   const cell = 32 * S;
   const gap = 4 * S;
-  const goldRow = 16 * S;
   const gridW = cols * cell + (cols - 1) * gap;
   const w = gridW + 24 * S;
-  const h = 20 * S + goldRow + rows * cell + (rows - 1) * gap + 20 * S;
+  const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
   if (!goldPanel(p, x, y, w, h, containerTitle(p, ref, "BACKPACK"))) return;
   navBar(p, x, y, w, ref);
   lookToggle(p, x, y, w);
-  // gold, shown here like any other carried item
+  /* No gold line here any more. Money is coins in these very cells now, so a
+   * separate total would be printing the same thing twice — and worse, in a
+   * different unit: the row said "3157 gold" while the slot beside it said 31,
+   * because that slot holds 31 PLATINUM. The running total lives on the HUD. */
   const gx = x + (w - gridW) / 2;
-  const coin = SPR.coin;
-  icon(p, coin, gx, y + 18 * S, 2 * S);
-  hudText(hud, `${player.gold} gold`, gx + iconW(coin, 2 * S) + 6 * S, y + 18 * S + iconH(coin, S), 8 * S, "#ffe9a8", "left", true);
-  const gy = y + 20 * S + goldRow;
+  const gy = y + 20 * S;
 
   slots.forEach((stackSlot, i) => {
     const cx = gx + (i % cols) * (cell + gap);
@@ -1638,6 +1644,17 @@ function navBar(p: PanelInput, x: number, y: number, w: number, ref: ContainerRe
   ctx.strokeRect(bx + S / 2, by + S / 2, bs - S, bs - S);
   hudText(p.hud, "\u25B2", bx + bs / 2, by + bs / 2, 7 * S, "#ffe9a8", "center", true);
   p.hotspots.push({ x: bx, y: by, w: bs, h: bs, fn: () => p.act.navUp() });
+  /* Carve this button OUT of the title bar's drag region.
+   *
+   * Pressing the title bar starts moving the window, and that happens on
+   * pointerdown, before hotspots are ever consulted — so a button drawn on the
+   * bar looks perfectly clickable and does nothing but drag the panel. The bar
+   * is set by `goldPanel`, which runs first, so trimming it here is enough. */
+  const tb = p.win.titleBar;
+  if (tb) {
+    const cut = bx + bs + 4 * S - tb.x;
+    if (cut > 0) { tb.x += cut; tb.w = Math.max(0, tb.w - cut); }
+  }
   void w;
 }
 

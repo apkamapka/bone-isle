@@ -2279,6 +2279,90 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("Etap 27c — the five playtest bugs:");
+  {
+    const C = await import("../src/systems/containers.ts");
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+
+    /* --- #3: dropping ONTO a pack must put the thing inside, not swap ------
+     * The engine's own rule, tested at the level it lives at: a destination
+     * cell holding a container redirects into that container. Before the fix
+     * this traded the two cells' positions and nothing went in. */
+    {
+      const p = mkP({ x: 0, y: 0 });
+      const spare = items.newContainer("backpack")!;
+      p.bag[0] = { kind: "wood", n: 10 };
+      p.bag[1] = spare;
+      const bagRef: C.ContainerRef = { c: "bag" };
+      const intoSpare: C.ContainerRef = { c: "nested", via: bagRef, i: 1 };
+      ok(C.slotsOf(intoSpare, p) === spare.items,
+        "slot 1 resolves to the spare pack's own slots");
+      // what the redirect amounts to: the wood ends up addressed inside
+      const inner = C.slotsOf(intoSpare, p)!;
+      items.addStack(inner, p.bag[0]!);
+      p.bag[0] = null;
+      ok(items.bagCount(inner, "wood") === 10, "…so wood dropped on it lands INSIDE it");
+      ok(p.bag[1] === spare, "…and the pack has not moved cell");
+    }
+
+    /* --- #2: the up-arrow must not sit in the window's drag region ---------
+     * It looked clickable and only dragged the panel, because pressing the
+     * title bar starts a window move on pointerdown, before any hotspot is
+     * consulted. The button now carves itself out of that region. */
+    {
+      const { drawPanels } = await import("../src/ui/panels.ts");
+      void drawPanels;
+      const src = await import("node:fs").then((fs) => fs.readFileSync("src/ui/panels.ts", "utf8"));
+      const nav = src.slice(src.indexOf("function navBar"), src.indexOf("function containerTitle"));
+      ok(nav.includes("p.win.titleBar"),
+        "navBar trims the title bar, so the arrow is not swallowed by the window drag");
+      ok(nav.indexOf("hotspots.push") < nav.indexOf("p.win.titleBar"),
+        "…after registering its own hotspot, not instead of it");
+    }
+
+    /* --- #5: an EMPTY equipment cell is still a drop target ---------------
+     * With no pack worn there was nowhere to drag a pack TO, which made
+     * taking your backpack off a one-way door. */
+    {
+      const src = await import("node:fs").then((fs) => fs.readFileSync("src/ui/panels.ts", "utf8"));
+      const eq = src.slice(src.indexOf("function drawEquip"), src.indexOf("/* ---------------- Bag"));
+      const pushes = eq.split("itemSlots.push").length - 1;
+      ok(pushes >= 3,
+        `every paperdoll cell registers as a target, worn or bare (${pushes} registrations)`);
+      ok(eq.includes('n: worn ? 1 : 0'),
+        "…the bare pack cell reports n=0 so it can be dropped into but not picked from");
+    }
+
+    /* --- #1: a pack lifted off the floor is not judged by its own holder ---
+     * `liftFloorStack` wraps the loose stack in a throwaway container to reuse
+     * the one move function. That holder is not in the world, so asking
+     * whether the player can REACH it always answered no — the drag died with
+     * "too far away" while standing on top of the bag. */
+    {
+      const src = await import("node:fs").then((fs) => fs.readFileSync("src/main.ts", "utf8"));
+      const lift = src.slice(src.indexOf("function liftFloorStack"), src.indexOf("/* ---------------- the worn backpack"));
+      ok(lift.includes("sourceChecked: true"),
+        "the throwaway holder is exempted from the reach test it can never pass");
+      ok(lift.includes("withinReach(gi.x, gi.y)"),
+        "…and the REAL reach test, against the stack on the ground, still runs");
+      ok(lift.includes("will not fit inside itself"),
+        "…and a bag cannot be lifted into itself");
+    }
+
+    /* --- #4: the bag window no longer prints a gold total ------------------ */
+    {
+      const src = await import("node:fs").then((fs) => fs.readFileSync("src/ui/panels.ts", "utf8"));
+      const bag = src.slice(src.indexOf("function drawBag"), src.indexOf("/* ---------------- Forge"));
+      ok(!bag.includes("gold`"),
+        "the bag prints no gold total — the coins are visible in its cells");
+      const p = mkP({ x: 0, y: 0 });
+      items.giveGold(p.bag, 3157);
+      ok(items.bagCount(p.bag, "platinumCoin") === 31 && items.bagCount(p.bag, "goldCoin") === 57,
+        "…which is why the old row misled: 3157 gp is 31 platinum + 57 gold");
+      ok(p.gold === 3157, "…and the HUD total, which is what it always meant, still reads 3157");
+    }
+  }
+
   console.log("Etap 27b — nothing quietly eats a container's contents:");
   {
     /* Every one of these is a path that took an item by KIND or by position

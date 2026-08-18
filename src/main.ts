@@ -221,6 +221,9 @@ function probeSlotDrag(sx: number, sy: number, isTouch: boolean): boolean {
   for (let i = itemSlots.length - 1; i >= 0; i--) {
     const it = itemSlots[i];
     if (sx >= it.x && sx < it.x + it.w && sy >= it.y && sy < it.y + it.h) {
+      // empty cells are registered so things can be dropped INTO them; there
+      // is nothing in one to pick up
+      if (it.n <= 0) return false;
       itemDrag = { index: it.index, kind: it.kind, n: it.n, sx, sy, active: false, touch: isTouch, ref: it.ref, eqSlot: it.eqSlot };
       return true;
     }
@@ -539,13 +542,35 @@ function swapOrMerge(arr: Bag, from: number, to: number): void {
  * container always travels whole, contents included, because splitting one
  * is meaningless and merging two would silently destroy the contents of one.
  */
-function moveItems(from: ContainerRef, fi: number, to: ContainerRef, ti: number | null, n: number): boolean {
+function moveItems(
+  from: ContainerRef, fi: number, to: ContainerRef, ti: number | null, n: number,
+  opts?: { sourceChecked?: boolean },
+): boolean {
   const src = refSlots(from);
   const dst = refSlots(to);
   if (!src || !dst) return false;
-  if (!refUsable(from) || !refUsable(to)) { flash("too far away", "#d96a5a"); return false; }
+  // `sourceChecked` is for a source that is NOT a live container in the world
+  // — a loose stack on the floor, wrapped in a throwaway holder by
+  // `liftFloorStack`. Asking `refUsable` about that holder always says no,
+  // because it is not in `world.corpses` and never will be.
+  if ((!opts?.sourceChecked && !refUsable(from)) || !refUsable(to)) {
+    flash("too far away", "#d96a5a");
+    return false;
+  }
   const st = src[fi];
   if (!st) return false;
+
+  /* Dropping ONTO a container puts the thing INSIDE it rather than swapping
+   * cells with it. Tibia's rule, and the one a player assumes: an open box is
+   * a destination, not an obstacle. Without it, dragging wood onto the spare
+   * backpack in your bag merely traded their positions — the two of them
+   * looked identical afterwards and nothing had gone in. */
+  if (ti !== null && !(sameRef(from, to) && ti === fi)) {
+    const cell = dst[ti];
+    if (cell?.items && cell !== st) {
+      return moveItems(from, fi, { c: "nested", via: to, i: ti }, null, n, opts);
+    }
+  }
 
   // same container: pure rearrangement, no rules to check
   if (sameRef(from, to)) {
@@ -982,11 +1007,18 @@ function liftFloorStack(gi: GroundItem, to: ContainerRef, ti: number | null): vo
   if (!refUsable(to)) { flash("too far away", "#d96a5a"); return; }
   const dst = refSlots(to);
   if (!dst) return;
-  // route it through a throwaway one-slot container so the ONE move with all
-  // the rules in it is the only code that ever puts something somewhere
+  // a pack cannot be lifted into itself
+  if (baseOf(to).c === "ground" && (baseOf(to) as { gi: GroundItem }).gi === gi) {
+    flash("it will not fit inside itself", "#d96a5a");
+    return;
+  }
+  /* Route it through a throwaway one-slot holder so the ONE move with all the
+   * rules in it stays the only code that puts something somewhere. The holder
+   * is not in the world, so its reach was checked above instead — hence
+   * `sourceChecked`. */
   const shim: Bag = [{ kind: gi.kind, n: gi.n, items: gi.items }];
   const via: ContainerRef = { c: "corpse", body: { name: "", x: gi.x, y: gi.y, items: shim, t: 0 } };
-  if (!moveItems(via, 0, to, ti, gi.n)) return;
+  if (!moveItems(via, 0, to, ti, gi.n, { sourceChecked: true })) return;
   const leftover = shim[0];
   if (leftover) { gi.n = leftover.n; gi.items = leftover.items; }
   else {
@@ -1023,7 +1055,8 @@ function wearPackFrom(d: NonNullable<typeof itemDrag>): void {
 /** …the same, but the pack was lying on the floor. */
 function wearPackFromFloor(gi: GroundItem): void {
   const world = cw();
-  if (!isContainer(gi.kind) || !world.ground.includes(gi)) return;
+  if (!isContainer(gi.kind)) { flash("that is not a backpack", "#d96a5a"); return; }
+  if (!world.ground.includes(gi)) return;
   if (!withinReach(gi.x, gi.y)) { flash("too far away", "#d96a5a"); return; }
   const st: ItemStack = { kind: gi.kind, n: 1, items: gi.items };
   const old = P.pack;
