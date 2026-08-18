@@ -2279,6 +2279,88 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("Etap 27d — second playtest round:");
+  {
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+    const fs = await import("node:fs");
+
+    /* --- #1: a container's weight is not a property of its KIND ----------- */
+    {
+      const pack = items.newContainer("backpack")!;
+      const bare = items.itemInfoLines("backpack", pack).join(" | ");
+      ok(bare.includes("18 oz"), "an empty pack still reads its own 18 oz");
+      ok(bare.includes("0/16") && bare.includes("Empty"), "…and says it is empty");
+      items.addItem(pack.items!, "steel", 60);
+      const laden = items.itemInfoLines("backpack", pack).join(" | ");
+      const inside = 60 * items.ITEMS.steel.weight;
+      ok(laden.includes(`${18 + inside} oz`),
+        `a laden pack reads its REAL weight, ${18 + inside} oz, not the catalog's 18`);
+      ok(laden.includes("18 empty") && laden.includes(`${inside} inside`),
+        "…broken down, so the number is explainable rather than just larger");
+      ok(items.itemInfoLines("backpack").join(" ").includes("18 oz"),
+        "…and asking about the KIND alone still answers about the kind");
+      // the bug as the player met it: 18 oz on the label, unliftable in the hand
+      const p = mkP({ x: 0, y: 0 });
+      ok(items.stackWeight(pack) > items.ITEMS.backpack.weight,
+        "carrying maths uses the same total the tooltip now shows");
+      void p;
+    }
+
+    /* --- #2: empty cells must be drop targets ----------------------------- */
+    {
+      const src = fs.readFileSync("src/ui/panels.ts", "utf8");
+      const grid = src.slice(src.indexOf("function drawGrid"), src.indexOf("function windowRef"));
+      ok(grid.includes("} else if (ref) {"),
+        "an empty container cell registers as a drop target");
+      ok(grid.includes("n: 0"),
+        "…reporting n=0, so it can be dropped into but never picked from");
+      const bagWin = src.slice(src.indexOf("function drawBag"), src.indexOf("/* ---------------- Forge"));
+      ok(bagWin.includes("index: i, kind: \"wood\", n: 0"),
+        "…and the backpack window's own grid does the same");
+    }
+
+    /* --- #2b: dragging a stack asks how many, exactly as clicking does ----- */
+    {
+      const src = fs.readFileSync("src/main.ts", "utf8");
+      const ask = src.slice(src.indexOf("function askThenMove"), src.indexOf("/** The container window under"));
+      ok(ask.includes("ui.split"), "a dragged stack opens the amount chooser");
+      ok(ask.includes("st.items || st.n <= 1"),
+        "…but a single item or a container goes straight over — one possible answer is not a question");
+      ok(ask.includes("rearrange"),
+        "…and shuffling cells inside one container stays positional, never a quantity");
+      ok(src.includes('acts.push(["Move", "move"])') === false, "the Move button lives in the panel layer");
+    }
+
+    /* --- #3: the HUD counts chests, the shop counts the purse -------------- */
+    {
+      const hud = fs.readFileSync("src/ui/hud.ts", "utf8");
+      ok(hud.includes("function totalGold"), "the HUD has a net-worth figure");
+      ok(hud.includes("totalGold(game, p)"), "…and the top-right box uses it");
+      const pn = fs.readFileSync("src/ui/panels.ts", "utf8");
+      ok(pn.includes("Your gold (carried)"),
+        "…while the shop labels its own total, so the two disagreeing is not a bug report");
+      // the arithmetic itself
+      const p = mkP({ x: 0, y: 0 });
+      items.giveGold(p.bag, 57);
+      const chest = items.emptyStash(50);
+      items.giveGold(chest, 3100);
+      ok(items.walletAcross([p.bag, chest]) === 3157 && p.gold === 57,
+        "net worth counts both; the carried purse counts one");
+    }
+
+    /* --- #4: one coin die, struck twice ----------------------------------- */
+    {
+      const art = fs.readFileSync("src/gfx/itemArt.ts", "utf8");
+      ok(art.includes("art.goldCoin = adoptSprite"),
+        "the drawn coin reaches the ITEM table, not just the HUD");
+      ok(art.includes("strikeInPlatinum"),
+        "…and platinum is struck from that same drawn coin");
+      const strike = art.slice(art.indexOf("function strikeInPlatinum"));
+      ok(strike.includes("0.299") && strike.includes("d[i + 3] === 0"),
+        "…recoloured by luminance, leaving transparent pixels alone, so the shading survives");
+    }
+  }
+
   console.log("Etap 27c — the five playtest bugs:");
   {
     const C = await import("../src/systems/containers.ts");

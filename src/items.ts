@@ -1013,8 +1013,17 @@ export function compactBag(bag: Bag): void {
   for (const s of bag) if (s?.items) compactBag(s.items);
 }
 
-/** Human-readable stat lines for the Look / inspect popup. */
-export function itemInfoLines(kind: ItemKind): string[] {
+/**
+ * Human-readable stat lines for the Look / inspect popup.
+ *
+ * `st` is the actual stack being looked at, when there is one. It only matters
+ * for containers: the catalog can say a backpack weighs 18 oz, but the thing
+ * in your hand weighs 18 plus everything inside it, and that is the number
+ * that decides whether you can lift it. Showing the catalog figure for a pack
+ * holding 11 stacks is not merely unhelpful, it is wrong in the one direction
+ * that matters — you read "18 oz" and are then told it is too heavy.
+ */
+export function itemInfoLines(kind: ItemKind, st?: ItemStack | null): string[] {
   const d = ITEMS[kind];
   const lines: string[] = [];
   if (d.slot) lines.push(`Slot: ${d.slot}`);
@@ -1036,10 +1045,21 @@ export function itemInfoLines(kind: ItemKind): string[] {
   if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
   if (d.crystal) lines.push(`Charge item (1 use per unit)`);
   if (d.deathProtect) lines.push(`Protects your items on death`, `(one use — the amulet shatters)`);
-  if (d.pack) lines.push(`Container — ${d.pack.slots} slots`, `Open it to see inside`);
+  if (d.pack) {
+    const held = st?.items ?? null;
+    const used = held ? held.filter((q) => q !== null).length : null;
+    lines.push(`Container — ${used !== null ? `${used}/` : ""}${d.pack.slots} slots`);
+    lines.push(held && used ? `Open it to see inside` : `Empty — open it to fill it`);
+  }
   if (d.boost) lines.push(`TEST: +5 levels, +20 every skill`);
   if (d.heal) lines.push(`Restores ${d.heal} HP`);
-  lines.push(`Weight ${d.weight} oz · Value ${d.value} gp`);
+  const inside = st?.items ? bagWeight(st.items) : 0;
+  if (inside > 0) {
+    lines.push(`Weight ${Math.round(d.weight + inside)} oz (${d.weight} empty + ${Math.round(inside)} inside)`);
+    lines.push(`Value ${d.value} gp`);
+  } else {
+    lines.push(`Weight ${d.weight} oz · Value ${d.value} gp`);
+  }
   return lines;
 }
 export function recipeCostText(r: Recipe): string {

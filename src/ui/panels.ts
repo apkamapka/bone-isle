@@ -21,7 +21,7 @@ import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
 import { bestTier } from "../systems/building.ts";
 import { smeltYield, canSmelt, COAL_PER_SMELT, GEM_TROPHIES, GEM_TROPHY_KINDS, GEM_COAL } from "../systems/smelt.ts";
-import type { EqSlot, ItemKind, Recipe, Bag } from "../items.ts";
+import type { EqSlot, ItemKind, ItemStack, Recipe, Bag } from "../items.ts";
 import type { Corpse, GroundItem, Npc, Structure } from "../world/types.ts";
 import type { ContainerRef } from "../systems/containers.ts";
 import { slotsOf, stackAt, followTrail, depthOf, rootOf } from "../systems/containers.ts";
@@ -107,7 +107,14 @@ export interface UiState {
   /** Item currently shown in the inspect popup, if any. */
   inspect: ItemKind | null;
   /** Quantity chooser for moving/dropping part of a stack. */
-  split: { kind: ItemKind; index: number; ref: ContainerRef; max: number; n: number; canStore: boolean; at?: { x: number; y: number } } | null;
+  split: {
+    kind: ItemKind; index: number; ref: ContainerRef; max: number; n: number; canStore: boolean;
+    /** A throw already aimed by the drag. */
+    at?: { x: number; y: number };
+    /** A destination already chosen by the drag — the drop that is waiting on
+     *  an amount. Tibia asks the same question for the same gesture. */
+    to?: { ref: ContainerRef; index: number | null };
+  } | null;
 }
 
 export interface PanelActions {
@@ -147,7 +154,7 @@ export interface PanelActions {
   toggleLook: () => void;
   openBag: () => void;
   cycleAmmo: () => void;
-  splitConfirm: (mode: "store" | "take" | "drop" | "throw") => void;
+  splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => void;
   close: (kind: PanelKind) => void;
 }
 
@@ -262,6 +269,9 @@ function icon(p: PanelInput, spr: HTMLCanvasElement, x: number, y: number, sc: n
 
 /** Set each frame by whichever slot the mouse is over; drawn as a hover tooltip. */
 let tooltipKind: ItemKind | null = null;
+/** The actual stack the tooltip is describing, when the hover was over one.
+ *  Containers need it: their weight is not a property of their KIND. */
+let tooltipStack: ItemStack | null = null;
 
 /** A small "Look" toggle in the panel body; taps describe items when it's on. */
 function lookToggle(p: PanelInput, x: number, y: number, w: number): void {
@@ -284,9 +294,11 @@ function lookToggle(p: PanelInput, x: number, y: number, w: number): void {
 function drawItemTooltip(base: Omit<PanelInput, "win">): void {
   if (!tooltipKind) return;
   const kind = tooltipKind;
+  const stack = tooltipStack;
   tooltipKind = null;
+  tooltipStack = null;
   const { ctx, scale: S, screenW, screenH } = base.hud;
-  const lines = itemInfoLines(kind);
+  const lines = itemInfoLines(kind, stack);
   const title = ITEMS[kind].name;
   const fs = 7 * S;
   ctx.font = `${fs}px monospace`;
@@ -391,8 +403,9 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   stepBtn(hx, hy, hw, "Half", () => { sp.n = clampN(Math.floor(sp.max / 2) || 1); }); hx += hw + 8 * S;
   stepBtn(hx, hy, hw, "All", () => { sp.n = sp.max; });
 
-  const acts: [string, "store" | "take" | "drop" | "throw"][] = [];
+  const acts: [string, "store" | "take" | "drop" | "throw" | "move"][] = [];
   if (sp.at) acts.push(["Throw", "throw"]); // target already aimed by the drag
+  else if (sp.to) acts.push(["Move", "move"]); // destination already aimed by the drag
   // anything OUT in the world offers only "take": you cannot drop from a chest
   // onto the floor in one gesture, and a corpse has nothing to store into
   else if (rootOf(sp.ref) === "world") acts.push(["Take", "take"]);
@@ -696,7 +709,7 @@ function drawEquip(p: PanelInput): void {
        * be permanent. */
       p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, index: 0, kind: "backpack", n: worn ? 1 : 0, eqSlot: "pack" });
       if (worn) {
-        if (hovering(p, cx, cy, slot, slot)) tooltipKind = worn.kind;
+        if (hovering(p, cx, cy, slot, slot)) { tooltipKind = worn.kind; tooltipStack = worn; }
         const used = (worn.items ?? []).filter((q) => q !== null).length;
         hudText(hud, `${used}/${worn.items?.length ?? 0}`, cx + slot - 3 * S, cy + 9 * S, 6 * S, "#ffe9a8", "right");
         p.hotspots.push({ x: cx, y: cy, w: slot, h: slot,
@@ -843,7 +856,7 @@ function drawBag(p: PanelInput): void {
         hudText(hud, `${used}/${stackSlot.items.length}`, cx + cell / 2, cy + cell - 4 * S, 6 * S,
           used >= stackSlot.items.length ? "#d96a5a" : "rgba(220,214,190,.75)", "center");
       }
-      if (hov) tooltipKind = stackSlot.kind;
+      if (hov) { tooltipKind = stackSlot.kind; tooltipStack = stackSlot; }
       const def = ITEMS[stackSlot.kind];
       const idx = i;
       const k = stackSlot.kind;
@@ -860,6 +873,9 @@ function drawBag(p: PanelInput): void {
       } else {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.moveStack(ref, idx) });
       }
+    } else {
+      // empty cells take a drop here too — see the note in drawGrid
+      p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, ref, index: i, kind: "wood", n: 0 });
     }
   });
   const hint = p.ui.lookMode ? "Look mode — click any item to inspect it"
@@ -1354,7 +1370,9 @@ function drawShop(p: PanelInput): void {
     hudText(hud, tab === "buy" ? "Buy" : "Sell", tx + tabW / 2, ty + 6 * S, 8 * S, on ? "#ffe9a8" : "#cfa86a", "center", true);
     p.hotspots.push({ x: tx, y: ty, w: tabW, h: 12 * S, fn: () => { ui.shopTab = tab; } });
   });
-  hudText(hud, `Your gold: ${player.gold}`, x + w - 12 * S, y + 22 * S, 8 * S, "#ffe9a8", "right");
+  /* Labelled "carried" on purpose: the HUD counts your chests too, and a shop
+   * does not. Without the word, the two numbers disagreeing looks like a bug. */
+  hudText(hud, `Your gold (carried): ${player.gold}`, x + w - 12 * S, y + 22 * S, 8 * S, "#ffe9a8", "right");
   let ry = y + 32 * S;
   if (rows.length === 0) {
     hudText(hud, ui.shopTab === "buy" ? "Nothing for sale." : "You have nothing to sell here.", x + w / 2, ry + 8 * S, 8 * S, "rgba(220,214,190,.5)", "center");
@@ -1598,7 +1616,7 @@ function drawGrid(
         ctx.strokeStyle = "#caa23a";
         ctx.strokeRect(cx + S / 2, cy + S / 2, cell - S, cell - S);
       }
-      if (hov) tooltipKind = slot.kind;
+      if (hov) { tooltipKind = slot.kind; tooltipStack = slot; }
       const idx = i;
       const kind = slot.kind;
       const nested = isContainer(kind);
@@ -1609,6 +1627,16 @@ function drawGrid(
           : nested && ref ? p.act.openNested(idx)
           : onClick(idx)),
       });
+    } else if (ref) {
+      /* An EMPTY cell is a drop target too.
+       *
+       * Without this a drag can only ever land on something already there, so
+       * the release falls through to "somewhere on this window" — and inside
+       * the chest window the backpack grid IS part of the chest window, so
+       * dragging chest → bag resolved as chest → chest and quietly did
+       * nothing. Storing worked only because the chest happened to be the
+       * window under the cursor either way. */
+      p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, ref, index: i, kind: "wood", n: 0 });
     }
   });
 }

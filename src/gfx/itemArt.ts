@@ -71,9 +71,17 @@ export function hasItemArt(kind: ItemKind): boolean {
 }
 
 /**
- * Gold is drawn from the same folder but is not an item — it never sits in a
- * bag slot, so it has no ItemKind and no entry in the table above. It loads
- * over SPR.coin instead, which every gold readout reads fresh each frame.
+ * The gold coin.
+ *
+ * It used to be pure HUD decoration — gold was a number, never a bag slot —
+ * and so it loaded over `SPR.coin` and had no ItemKind at all. Money is an
+ * item now, so the SAME drawn coin has to reach the inventory: the item table
+ * is built once at module load and captured the BAKED stand-in, which is why
+ * a purse rendered as a yellow blob while the HUD showed a proper coin.
+ *
+ * Platinum is struck from the gold coin rather than drawn separately: same
+ * die, cool white metal. Deriving it means the two can never drift apart, and
+ * a hundred-fold denomination reads at a glance without a second asset.
  */
 function loadCoinArt(): void {
   const img = new Image();
@@ -84,11 +92,46 @@ function loadCoinArt(): void {
     const x = cv.getContext("2d")!;
     x.imageSmoothingEnabled = false;
     x.drawImage(img, 0, 0);
-    (SPR as unknown as Record<string, HTMLCanvasElement>).coin =
-      adoptSprite(cv, cv.width / ITEM_ICON_PX);
+    const zoom = cv.width / ITEM_ICON_PX;
+    (SPR as unknown as Record<string, HTMLCanvasElement>).coin = adoptSprite(cv, zoom);
+    art.goldCoin = adoptSprite(cv, zoom);
+    const pt = strikeInPlatinum(cv);
+    if (pt) art.platinumCoin = adoptSprite(pt, pt.width / ITEM_ICON_PX);
   };
   img.onerror = () => { /* no artwork yet — the baked coin stands in */ };
   img.src = "./ui-gold.png";
+}
+
+/**
+ * Recolour the gold coin into platinum: keep every pixel's LIGHTNESS, throw
+ * away its hue, then lean the result very slightly cold.
+ *
+ * Working from luminance rather than swapping fixed colours is what preserves
+ * the original's shading — the rim highlight and the struck face survive, so
+ * the platinum piece reads as the same coin in another metal instead of a
+ * flat grey disc. Transparent pixels are left strictly alone.
+ */
+function strikeInPlatinum(src: HTMLCanvasElement): HTMLCanvasElement | null {
+  const cv = document.createElement("canvas");
+  cv.width = src.width;
+  cv.height = src.height;
+  const x = cv.getContext("2d");
+  if (!x) return null;
+  x.imageSmoothingEnabled = false;
+  x.drawImage(src, 0, 0);
+  const img = x.getImageData(0, 0, cv.width, cv.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    // gold is dark for its brightness, so lift a little or platinum reads grey
+    const v = Math.min(255, lum * 1.18 + 26);
+    d[i] = Math.min(255, v * 0.96);
+    d[i + 1] = Math.min(255, v * 0.98);
+    d[i + 2] = Math.min(255, v * 1.06); // a touch of blue = white metal
+  }
+  x.putImageData(img, 0, 0);
+  return cv;
 }
 
 /** The sprite to draw: artwork if it has loaded, else the baked stand-in. */

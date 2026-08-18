@@ -449,7 +449,7 @@ const act: PanelActions = {
   openNested: (index: number) => { navInto(index); },
   navUp: () => { navUp(); },
   removePack: () => { dropWornPack(); },
-  splitConfirm: (mode: "store" | "take" | "drop" | "throw") => { splitConfirm(mode); },
+  splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => { splitConfirm(mode); },
   look: (kind: ItemKind) => { ui.inspect = kind; },
   toggleLook: () => { ui.lookMode = !ui.lookMode; if (!ui.lookMode) ui.inspect = null; },
   openBag: () => { openWindow("bag"); },
@@ -890,7 +890,7 @@ function resolveItemDrop(rx: number, ry: number): void {
     // from the floor
     if (d.floor) { liftFloorStack(d.floor, it.ref, it.index); return; }
     // container → container
-    if (d.ref) moveItems(d.ref, d.index, it.ref, it.index, currentN(d.ref, d.index));
+    if (d.ref) askThenMove(d.ref, d.index, it.ref, it.index);
     return;
   }
 
@@ -900,7 +900,7 @@ function resolveItemDrop(rx: number, ry: number): void {
     if (d.eqSlot === "pack") { movePackTo(overRef); return; }
     if (d.eqSlot) { unequipInto(d.eqSlot, overRef); return; }
     if (d.floor) { liftFloorStack(d.floor, overRef, null); return; }
-    if (d.ref) moveItems(d.ref, d.index, overRef, null, currentN(d.ref, d.index));
+    if (d.ref) askThenMove(d.ref, d.index, overRef, null);
     return;
   }
   if (pointInOpenPanel(rx, ry)) return; // some other panel — cancel quietly
@@ -934,6 +934,29 @@ function resolveItemDrop(rx: number, ry: number): void {
   } else if (n >= 1) {
     dropFromContainer(d.ref, d.index, n, wx, wy);
   }
+}
+
+/**
+ * Complete a drag between containers, asking HOW MANY first when the stack is
+ * worth asking about.
+ *
+ * Clicking a stack has always opened the amount chooser; dragging one silently
+ * moved the lot, so the same stack answered two different questions depending
+ * on which gesture you used. Tibia asks on the drag too. A single item, or a
+ * container (which is one object and cannot be split), goes straight over —
+ * a dialog with only one possible answer is just a second click.
+ */
+function askThenMove(from: ContainerRef, fi: number, to: ContainerRef, ti: number | null): void {
+  const slots = refSlots(from);
+  const st = slots ? slots[fi] : null;
+  if (!st) return;
+  // rearranging INSIDE one container is positional, never a quantity question
+  const rearrange = sameRef(from, to) && !(ti !== null && slots![ti]?.items);
+  if (st.items || st.n <= 1 || rearrange) {
+    if (moveItems(from, fi, to, ti, st.n)) closeIfEmpty(from);
+    return;
+  }
+  ui.split = { kind: st.kind, index: fi, ref: from, max: st.n, n: st.n, canStore: false, to: { ref: to, index: ti } };
 }
 
 /** The container window under this screen point, if the point missed its cells. */
@@ -1130,13 +1153,15 @@ function openMoveChooser(ref: ContainerRef, index: number): void {
   ui.split = { kind: slot.kind, index, ref, max: slot.n, n: slot.n, canStore };
 }
 
-function splitConfirm(mode: "store" | "take" | "drop" | "throw"): void {
+function splitConfirm(mode: "store" | "take" | "drop" | "throw" | "move"): void {
   const sp = ui.split;
   if (!sp) return;
   const n = Math.max(1, Math.min(sp.max, sp.n));
   // the source may have walked out of reach or rotted while the chooser sat
   // open, so every path re-validates rather than trusting the captured ref
-  if (mode === "store") {
+  if (mode === "move") {
+    if (sp.to) { moveItems(sp.ref, sp.index, sp.to.ref, sp.to.index, n); closeIfEmpty(sp.ref); }
+  } else if (mode === "store") {
     if (!ui.stash || !hasWindow("stash")) { ui.split = null; return; }
     moveItems(sp.ref, sp.index, { c: "stash", s: ui.stash }, null, n);
   } else if (mode === "take") {

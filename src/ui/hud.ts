@@ -3,7 +3,7 @@ import { isSafeTile } from "../world/collision.ts";
 import { TILE } from "../config.ts";
 import { SPR, iconW, iconH } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
-import { ITEMS } from "../items.ts";
+import { ITEMS, walletAcross } from "../items.ts";
 import { activeTask, progressOf } from "../systems/tasks.ts";
 import { placeHud, hudUserScale } from "../systems/hudLayout.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
@@ -169,8 +169,25 @@ export function drawVitals(h: HudCtx, p: Player, px: number, py: number, S: numb
   hudText(h, "[X]", chipX + chipW + 4 * S, chipY + 6 * S, 6 * S, "rgba(220,214,190,.4)");
 }
 
+/**
+ * Every gold piece the player owns: carried AND banked in their chests.
+ *
+ * Deliberately WIDER than `p.gold`, which counts only the coins in the worn
+ * backpack. The HUD figure is a net-worth readout — the question it answers is
+ * "how rich am I", and a number that dropped by three thousand because you
+ * tidied your purse into a chest would answer it badly. Spending still comes
+ * out of the right purse for each shop; see the shop panel, which labels its
+ * own total as carried so the two can never be mistaken for each other.
+ */
+function totalGold(game: Game, p: Player): number {
+  const chests = game.worlds.home.structures
+    .filter((s) => s.key === "chest" && s.inv)
+    .map((s) => s.inv!);
+  return walletAcross([p.bag, ...chests]);
+}
+
 /** Compact gold + TP row (used by the desktop sidebar). */
-export function drawGoldTP(h: HudCtx, p: Player, x: number, y: number, w: number, rowH: number): void {
+export function drawGoldTP(h: HudCtx, p: Player, x: number, y: number, w: number, rowH: number, gold = p.gold): void {
   const { ctx, scale: S } = h;
   panel(h, x, y, w, rowH);
   const cd = SPR.coin;
@@ -178,7 +195,7 @@ export function drawGoldTP(h: HudCtx, p: Player, x: number, y: number, w: number
   const cdh = iconH(cd, 1.5 * S);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(cd, x + 5 * S, y + (rowH - cdh) / 2, cdw, cdh);
-  hudText(h, `${p.gold}`, x + 5 * S + cdw + 4 * S, y + rowH / 2, 8 * S, "#f3eedd", "left", true);
+  hudText(h, `${gold}`, x + 5 * S + cdw + 4 * S, y + rowH / 2, 8 * S, "#f3eedd", "left", true);
   hudText(h, "TP", x + w - 8 * S - 24 * S, y + rowH / 2, 7 * S, "#9ad0ff", "left", true);
   hudText(h, `${p.taskPoints}`, x + w - 6 * S, y + rowH / 2, 8 * S, "#f3eedd", "right", true);
 }
@@ -210,7 +227,7 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
     const cd = SPR.coin;
     const cdw = iconW(cd, 2 * S);
     const cdh = iconH(cd, 2 * S);
-    const goldStr = `${p.gold}`;
+    const goldStr = `${totalGold(game, p)}`;
     ctx.font = `bold ${9 * S}px monospace`;
     const goldW = ctx.measureText(goldStr).width;
     ctx.font = `${8 * S}px monospace`;
