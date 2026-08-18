@@ -770,6 +770,11 @@ Native tile resolution, object layers hidden: 3360 x 3200 for the two 105 x 100
 floors and 1280 x 1280 for the 40 x 40 cell. The -3 export arrived as a BMP and
 was re-encoded to PNG unchanged, pixel for pixel.
 
+`banditdeep2-terrain.png` is a second export of the same map: the first drawing
+sealed a 297-square corridor in the west with no door in it, and the map was
+redrawn with doorways at y=53-54 and y=80-82. The re-export changed exactly
+those 297 squares and nothing else on the floor.
+
 All three ship **unmodified**. An earlier pass resampled the two large floors,
 because the wall tileset had been stamping its band half a tile off the grid —
 a vertical band's rock measured x=16..47 across the two columns the TMX marked

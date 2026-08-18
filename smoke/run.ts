@@ -4601,8 +4601,8 @@ async function main(): Promise<void> {
 
     /* --- the last four ranks, and only those --- */
     const TOP = ["barbarian", "raider", "warlord", "chieftain"] as const;
-    ok(k2.mobPosts?.length === 93, "93 creature posts were written into the grid");
-    ok(k2.monsters.length === 93, "…and every one of them spawned");
+    ok(k2.mobPosts?.length === 99, "99 creature posts were written into the grid");
+    ok(k2.monsters.length === 99, "…and every one of them spawned");
     ok(TOP.every((m) => k2.monsters.some((x) => x.kind === m)),
       "barbarian, raider, warlord and chieftain all stand on it");
     ok(k2.monsters.every((m) => (TOP as readonly string[]).includes(m.kind)),
@@ -4659,15 +4659,34 @@ async function main(): Promise<void> {
     ok(seen[dy][dx], "…the way down to -3 among them");
     ok(k2.mobPosts!.every((p) => seen[p.ty][p.tx]), "…so no creature is walled into the rock");
 
-    /* --- the pocket the drawing seals off carries nothing ---
-     * The western corridor between the cave edge and the wall at x=14-15 has no
-     * door cut in it. It is marked as rock here rather than filled, so that
-     * nothing is stranded behind a wall that does not open. */
-    let inPocket = 0;
-    for (const p of [...k2.mobPosts!, ...k2.rocks, ...k2.fires, ...k2.scenery]) {
-      if (p.tx >= 4 && p.tx <= 13 && p.ty >= 44 && p.ty <= 85) inPocket++;
+    /* --- the western wing, which used to be sealed ---
+     * The corridor between the cave edge and the wall at x=14-15 was drawn with
+     * no door in it: 297 squares of painted floor with no way in. It was marked
+     * as rock here rather than filled, because punching a hole in the collision
+     * grid without touching the drawing would have walked the player through two
+     * squares of painted stone. The map has since been redrawn with doorways at
+     * y=53-54 and y=80-82, so the wing is real ground now and this test says the
+     * opposite of what it used to. */
+    const inWing = (tx: number, ty: number) => tx >= 4 && tx <= 13 && ty >= 44 && ty <= 85;
+    let wingOpen = 0;
+    for (let y = 44; y <= 85; y++) {
+      for (let x = 4; x <= 13; x++) if (!k2.solid[y][x]) wingOpen++;
     }
-    ok(inPocket === 0, "the sealed western pocket holds nothing at all");
+    ok(wingOpen > 200, `the western wing is open ground now (${wingOpen} squares you can stand on)`);
+    ok(seen[53][10] && seen[81][10],
+      "…reached through both doorways, not just the one");
+    const wingPosts = k2.mobPosts!.filter((p) => inWing(p.tx, p.ty));
+    ok(wingPosts.length === 6, `six creatures hold it (${wingPosts.length})`);
+    ok(wingPosts.every((p) => p.kind === "raider" || p.kind === "warlord" || p.kind === "chieftain"),
+      "…drawn from the same bands the rest of the floor uses at that distance");
+    const wingCamp = k2.scenery.filter((sc) => inWing(sc.tx, sc.ty));
+    ok(wingCamp.filter((sc) => sc.kind === "tent").length === 3
+      && wingCamp.some((sc) => sc.kind === "well")
+      && wingCamp.filter((sc) => sc.kind === "skullPole").length === 2,
+      "…around an eighth camp cut to the same pattern as the other seven");
+    ok(k2.fires.filter((f) => inWing(f.tx, f.ty)).length === 3
+      && k2.rocks.filter((r) => inWing(r.tx, r.ty)).length === 5,
+      "…with the floor's own rate of fires and mineable rock");
 
     /* --- and with this floor, every human rank in the bestiary spawns --- */
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
@@ -4743,12 +4762,6 @@ async function main(): Promise<void> {
       return { w, h, d: out };
     };
 
-    // The one place a sealed square legitimately shows floor: the western pocket
-    // of -2, which the drawing boxes in with no door. It is sealed on purpose so
-    // that nothing is stranded behind a wall that does not open.
-    const pocket = (key: string, tx: number, ty: number): boolean =>
-      key === "banditdeep2" && tx >= 4 && tx <= 13 && ty >= 44 && ty <= 85;
-
     // Each map is measured against ITS OWN floor colour, not one hard-coded
     // brown. The bandit cellars are packed earth; the charnel deep is grey
     // stone and the hollow greyer still, and a single reference would have
@@ -4765,7 +4778,7 @@ async function main(): Promise<void> {
       let sealed = 0, bare = 0;
       for (let ty = 0; ty < w.h; ty++) {
         for (let tx = 0; tx < w.w; tx++) {
-          if (w.tile[ty][tx] !== TW.Wall || pocket(key, tx, ty)) continue;
+          if (w.tile[ty][tx] !== TW.Wall) continue;
           let ink = 0, tot = 0;
           for (let j = 0; j < 32; j += 4) {
             for (let i = 0; i < 32; i += 4) {
