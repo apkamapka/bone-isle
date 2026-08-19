@@ -30,6 +30,7 @@ import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed, panelRows } from "../systems/panelPrefs.ts";
 import { CHROME, panelFrame, popupFrame, raisedBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
 import { NO_DOCK, type DockLayout } from "./dock.ts";
+import { drawResizeArrows } from "./icons.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
@@ -92,12 +93,17 @@ export function visibleRows(kind: PanelKind, totalRows: number): number {
  */
 function resizeGrip(p: PanelInput, x: number, y: number, w: number, h: number): void {
   const { ctx, scale: S } = p.hud;
-  const bar = RESIZE_BAR * S;
+  /* One rect for both the highlight and the hit test. A strip that lights up
+   * somewhere you cannot actually grab is worse than no highlight at all. */
+  const bar = RESIZE_BAR * 1.6 * S;
   const by = y + h - bar;
-  ctx.fillStyle = "rgba(255,233,168,.45)";
-  for (let i = -2; i <= 2; i++) {
-    ctx.fillRect(Math.round(x + w / 2 + i * 3 * S), Math.round(by + bar / 2 - S / 2), Math.max(1, Math.round(S)), Math.max(1, Math.round(S)));
+  const hot = hovering(p, x, by, w, bar);
+  if (hot) {
+    ctx.fillStyle = "rgba(202,162,58,.22)";
+    ctx.fillRect(Math.round(x), Math.round(by), Math.round(w), Math.round(bar));
   }
+  drawResizeArrows(ctx, x + w / 2, by + bar / 2, bar,
+    hot ? "#ffe9a8" : "rgba(255,233,168,.45)");
   p.win.resizeBar = { x, y: by, w, h: bar };
 }
 

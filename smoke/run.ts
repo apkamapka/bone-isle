@@ -8181,6 +8181,91 @@ async function main(): Promise<void> {
     ok(src.includes("win.resizeBar = null"), "…and the foot is cleared each frame, like every other hitbox");
   }
 
+  console.log("Etap 37 — the foot says what it does:");
+  {
+    const I = await import("../src/ui/icons.ts");
+    interface R { x: number; y: number; w: number; h: number; c: string }
+    const rec = (): { ctx: CanvasRenderingContext2D; out: R[] } => {
+      const out: R[] = [];
+      let cur = "#000";
+      const ctx = {
+        set fillStyle(v: string) { cur = v; },
+        get fillStyle() { return cur; },
+        fillRect(x: number, y: number, w: number, h: number) { out.push({ x, y, w, h, c: cur }); },
+      } as unknown as CanvasRenderingContext2D;
+      return { ctx, out };
+    };
+
+    /* Stacked arrows are the natural drawing and they do not survive the size
+     * the strip actually gets in the sidebar — twelve pixels tall means four
+     * per arrowhead, which merges into one blob. Laid out ACROSS, each arrow
+     * keeps the full height of the strip. */
+    {
+      const f = rec();
+      I.drawResizeArrows(f.ctx, 100, 50, 12, "#fff");
+      const wide = Math.max(...f.out.map((r) => r.x + r.w)) - Math.min(...f.out.map((r) => r.x));
+      const tall = Math.max(...f.out.map((r) => r.y + r.h)) - Math.min(...f.out.map((r) => r.y));
+      ok(wide > tall, `the pair is laid out across, not stacked (${wide} wide by ${tall} tall)`);
+      ok(tall <= 12, "…and fits inside the strip it was given");
+
+      // Two distinct arrows, not one shape: there must be a clear gap between.
+      const xs = f.out.map((r) => r.x + r.w / 2).sort((a, b) => a - b);
+      const gaps = xs.slice(1).map((v, i) => v - xs[i]);
+      ok(Math.max(...gaps) > 2, "…as two separate marks with air between them");
+    }
+
+    {
+      // The widest row of each arrow is its head; a stem row is narrow. Both
+      // must be present or it reads as a triangle rather than an arrow.
+      const f = rec();
+      I.drawResizeArrows(f.ctx, 0, 0, 20, "#fff");
+      const widths = new Set(f.out.map((r) => r.w));
+      ok(widths.size >= 4, `an arrow has a head that widens and a stem that does not (${widths.size} row widths)`);
+    }
+
+    {
+      // The strip is thin, and at a small size every row must survive rounding
+      // or the arrow loses its point.
+      const f = rec();
+      I.drawResizeArrows(f.ctx, 10.5, 7.3, 6, "#fff");
+      ok(f.out.every((r) => r.w >= 1 && r.h >= 1), "no row collapses to nothing on a thin strip");
+      ok(f.out.every((r) => Number.isInteger(r.x) && Number.isInteger(r.y)),
+        "…and they land on whole pixels, like the rest of the chrome");
+    }
+
+    {
+      // Sized from the STRIP, not from the panel scale: that was the bug that
+      // made the first version a 5x7 speck inside a 12-pixel bar.
+      const small = rec(); I.drawResizeArrows(small.ctx, 0, 0, 10, "#fff");
+      const big = rec(); I.drawResizeArrows(big.ctx, 0, 0, 40, "#fff");
+      const span = (o: R[]): number =>
+        Math.max(...o.map((r) => r.y + r.h)) - Math.min(...o.map((r) => r.y));
+      ok(span(big.out) > span(small.out),
+        `a taller strip gets taller arrows — they scale off the strip, not the panel (${span(small.out)} -> ${span(big.out)})`);
+    }
+  }
+
+  console.log("Etap 37 — and the cursor says it before you look:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    ok(src.includes('want = "ns-resize"'),
+      "hovering a window's foot turns the cursor into a resize cursor");
+    ok(src.includes("if (want !== cursorNow)"),
+      "…assigned only when it changes, not restyled every frame");
+    const fn = src.slice(src.indexOf("function updateCursor"), src.indexOf("function updateCursor") + 900);
+    ok(fn.includes("if (sizing)"), "…and it stays a resize cursor for the whole drag, not just the hover");
+
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    ok(!panels.includes("for (let i = -2; i <= 2; i++)"),
+      "the row of dots is gone — it promised nothing and read as decoration");
+    /* The lit strip and the grabbable strip have to be the same rectangle. A
+     * highlight over somewhere you cannot grab is worse than no highlight. */
+    const grip = panels.slice(panels.indexOf("function resizeGrip"), panels.indexOf("function resizeGrip") + 1100);
+    ok(grip.includes("hovering(p, x, by, w, bar)") && grip.includes("p.win.resizeBar = { x, y: by, w, h: bar }"),
+      "the strip that lights up is exactly the strip you can grab");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

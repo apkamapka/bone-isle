@@ -367,6 +367,34 @@ function openContainer(ref: ContainerRef): void {
 }
 
 /**
+ * Point the mouse cursor at what it is over.
+ *
+ * The arrows on a window's foot say which way it moves; the cursor says that
+ * it moves at all, before the pointer has even settled. It is the one resize
+ * affordance people read without thinking about it.
+ */
+let cursorNow = "";
+function updateCursor(): void {
+  let want = "";
+  if (sizing) want = "ns-resize";
+  else {
+    for (let i = ui.windows.length - 1; i >= 0; i--) {
+      const rb = ui.windows[i].resizeBar;
+      if (!rb) continue;
+      if (mouse.sx >= rb.x && mouse.sx < rb.x + rb.w && mouse.sy >= rb.y && mouse.sy < rb.y + rb.h) {
+        want = "ns-resize";
+        break;
+      }
+    }
+  }
+  // Only on change: assigning a style every frame is a needless style recalc.
+  if (want !== cursorNow) {
+    cursorNow = want;
+    screen.style.cursor = want;
+  }
+}
+
+/**
  * How many rows the container behind this window has in total.
  *
  * Zero for anything that is not a resizable container, which is how the foot
@@ -3350,6 +3378,7 @@ function render(): void {
   if (dock.w > 0) drawSidebar(hud, dock);
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; win.resizeBar = null; }
   drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock });
+  updateCursor();
   // ghost of the item being dragged, following the cursor
   if (itemDrag && itemDrag.active) {
     const spr = itemSprite(itemDrag.kind);

@@ -86,3 +86,39 @@ export function drawControlIcon(
     ctx.fillRect(px(x + gx * u), px(y + gy * u), Math.max(1, px(gw * u)), Math.max(1, px(gh * u)));
   }
 }
+
+/**
+ * The up/down arrows on a resizable window's foot.
+ *
+ * Five dots sat there before and promised nothing — a row of dots is a grip in
+ * some interfaces and pure decoration in others, so it read as decoration.
+ *
+ * SIDE BY SIDE, not stacked. Stacking is the natural way to draw an up/down
+ * pair and it does not survive here: the strip is about twelve pixels tall in
+ * the sidebar, so two stacked arrowheads come out four pixels each and merge
+ * into one hexagonal blob. Vertical room is the scarce thing and horizontal
+ * room is not, so the pair is laid out across instead — full-height arrows,
+ * each with a stem, which read as arrows at the size they actually get.
+ *
+ * Drawn as rows rather than as a font glyph: the arrow characters are missing
+ * from plenty of monospace faces, and a missing glyph is a hollow box.
+ */
+export function drawResizeArrows(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, barH: number, color: string,
+): void {
+  const u = Math.max(1, Math.floor(barH / 10));
+  ctx.fillStyle = color;
+  /** One row of an arrow: `w` units wide, `i` rows down from the top. */
+  const row = (ox: number, w: number, i: number): void => {
+    ctx.fillRect(Math.round(cx + ox * u - (w * u) / 2), Math.round(cy - 4 * u + i * u), w * u, u);
+  };
+  // Up: head widening downward, then a stem.
+  const upX = -7;
+  row(upX, 1, 0); row(upX, 3, 1); row(upX, 5, 2); row(upX, 7, 3); row(upX, 9, 4);
+  row(upX, 3, 5); row(upX, 3, 6); row(upX, 3, 7);
+  // Down: stem first, then the head narrowing to a point.
+  const dnX = 7;
+  row(dnX, 3, 0); row(dnX, 3, 1); row(dnX, 3, 2);
+  row(dnX, 9, 3); row(dnX, 7, 4); row(dnX, 5, 5); row(dnX, 3, 6); row(dnX, 1, 7);
+}
