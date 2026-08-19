@@ -3,8 +3,8 @@ from PIL import Image
 
 rects = json.load(open("/tmp/rects.json"))
 
-SCALE = 3
-W, H = 350, 170
+SCALE = 1
+W, H = 1600, 900
 # grass, so the frame is judged against what it actually sits on in game
 img = Image.new("RGBA", (W, H), (86, 128, 62, 255))
 

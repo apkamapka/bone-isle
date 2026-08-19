@@ -178,7 +178,7 @@ export function drawVitals(h: HudCtx, p: Player, px: number, py: number, S: numb
  * out of the right purse for each shop; see the shop panel, which labels its
  * own total as carried so the two can never be mistaken for each other.
  */
-function totalGold(game: Game, p: Player): number {
+export function totalGold(game: Game, p: Player): number {
   const chests = game.worlds.home.structures
     .filter((s) => s.key === "chest" && s.inv)
     .map((s) => s.inv!);
@@ -269,10 +269,12 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
     hudText(h, `Task: ${prog}/${task.goal.need} ${label}`, pad + 2, pad + 29 * S, 8 * S, done ? "#9fe8a8" : "rgba(154,208,255,.85)");
   }
 
-  // floating minimap top-right — the sidebar hosts its own copy on desktop
-  if (!sidebar) {
+  /* Floating minimap, top-right of the MAP. It stays floating even with a
+   * sidebar: square at the column's width it would eat a third of the screen
+   * height, and that space is worth more to a stack of containers. */
+  {
     const size = 70 * S;
-    drawMinimapAt(h, game, p, screenW - size - 8 * S, 40 * S, size);
+    drawMinimapAt(h, game, p, screenW - (h.sidebarW ?? 0) - size - 8 * S, 40 * S, size);
   }
 
   // zone flash (centered on the visible, non-sidebar area)

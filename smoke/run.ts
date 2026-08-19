@@ -7502,6 +7502,161 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("Etap 33 — the docked sidebar:");
+  {
+    const D = await import("../src/ui/dock.ts");
+
+    ok(!D.dockEnabled(D.DOCK_MIN_SCREEN - 1) && D.dockEnabled(D.DOCK_MIN_SCREEN),
+      `no column below ${D.DOCK_MIN_SCREEN}px, so phones keep today's floating windows`);
+    ok(D.dockLayout(1600, 900, 3, false).w === 0, "…and a disabled dock measures zero wide");
+
+    /* The column's width is DERIVED from a container window's natural width,
+     * not chosen. If the two ever drift apart, a docked bag is either squeezed
+     * or swimming, and no test of behaviour would notice. */
+    /* The column is NARROWER than a container window and shrinks what it
+     * holds. That is deliberate: at full container width a single bag filled
+     * the column, which defeats the point of stacking them. */
+    ok(D.DOCK_INNER < 4 * 32 + 3 * 4 + 24, "the column is narrower than a container window's natural width");
+    ok(D.DOCK_FIT < 1 && D.DOCK_FIT > 0.4, `…so docked windows are scaled to suit (x${D.DOCK_FIT.toFixed(2)})`);
+    ok(D.DOCK_W === D.DOCK_INNER + 2 * D.DOCK_PAD, "…plus its padding, and nothing else");
+    ok(D.DOCK_W / 480 < 0.25, `the column costs under a quarter of the design width (${(D.DOCK_W / 480 * 100).toFixed(0)}%)`);
+    ok(Math.abs(D.VITALS_FIT * 190 - D.DOCK_INNER) < 0.001,
+      "vitals are rescaled to land on that same ruler rather than be clipped by it");
+
+    {
+      const d = D.dockLayout(1600, 900, 3, true);
+      ok(d.x + d.w === 1600, "the column is flush with the right edge");
+      ok(d.innerX >= d.x && d.innerX + d.innerW <= d.x + d.w, "…and its contents sit inside it");
+      ok(d.stackTop > 0 && d.stackTop < d.stackBottom,
+        `windows stack in the space under the furniture (${Math.round(d.stackTop)}..${Math.round(d.stackBottom)})`);
+      ok(D.overDock(d, d.x + 5, 100) && !D.overDock(d, d.x - 5, 100),
+        "a point one side of the column edge docks and the other does not");
+      ok(!D.overDock(D.NO_DOCK, 0, 0), "…and nothing is ever over a dock that is not there");
+    }
+  }
+
+  console.log("Etap 33 — what docks, and what pointedly does not:");
+  {
+    const PN = await import("../src/ui/panels.ts");
+    const D = await import("../src/ui/dock.ts");
+    const d = D.dockLayout(1600, 900, 3, true);
+
+    ok(PN.DOCKABLE_PANELS.includes("bag") && PN.DOCKABLE_PANELS.includes("loot")
+      && PN.DOCKABLE_PANELS.includes("floor") && PN.DOCKABLE_PANELS.includes("container"),
+      "the four carried containers dock");
+    /* The chest is ten columns wide against the column's four and carries a
+     * second grid plus an upgrade button. Docking it would mean shrinking it
+     * to a third of its width, so it stays a central window. */
+    ok(!PN.DOCKABLE_PANELS.includes("stash"), "…the Storage Chest does not, being far too wide for the column");
+    for (const k of PN.DOCKABLE_PANELS) {
+      ok(PN.CONTAINER_PANELS.includes(k), `${k} is a container window, so docking it means something`);
+    }
+
+    // Undefined means "dock if you can": a bag opens in the column without
+    // anyone having asked, which is the entire point of the feature.
+    ok(PN.isDocked({ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null }, d),
+      "a freshly opened container docks itself");
+    ok(!PN.isDocked({ kind: "bag", docked: false, offset: { x: 0, y: 0 }, rect: null, titleBar: null }, d),
+      "…one torn out stays out, because the flag is remembered per window");
+    ok(!PN.isDocked({ kind: "build", offset: { x: 0, y: 0 }, rect: null, titleBar: null }, d),
+      "…and a build list never docks however much room there is");
+    ok(!PN.isDocked({ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null }, D.NO_DOCK),
+      "…nor does anything when there is no column to dock into");
+  }
+
+  console.log("Etap 33 — windows actually land in the column:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const D = await import("../src/ui/dock.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+
+    /* 2.81 is what resize() computes for a 1600x900 display — the tightest
+     * machine the column is meant to work on. A rounder number would be
+     * testing a screen nobody owns. */
+    const S = Math.min(1600 / 480, 900 / 320);
+    const hud = {
+      ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+        .document.createElement("canvas").getContext("2d"),
+      scale: S, screenW: 1600, screenH: 900, touchInput: false,
+    } as never;
+    const dock = D.dockLayout(1600, 900, S, true);
+
+    const run = (windows: unknown[], withDock: boolean): void => {
+      const ui = {
+        windows, placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+        shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      } as never;
+      drawPanels({
+        hud, ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: {} as never, hotspots: [], itemSlots: [], ...(withDock ? { dock } : {}),
+      } as never);
+    };
+
+    {
+      const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      run([bag], true);
+      const r = bag.rect as unknown as { x: number; y: number; w: number; h: number } | null;
+      ok(!!r && r.x === dock.innerX, "a docked backpack sits at the column's left edge");
+      ok(!!r && r.w === dock.innerW,
+        `…and fills its width exactly, with no rescaling (${r?.w} vs ${dock.innerW})`);
+      ok(!!r && Math.abs(r.y - dock.stackTop) < 1, "…starting at the top of the free space");
+    }
+
+    // Two containers must not land on top of each other — the whole complaint
+    // that started this was windows covering windows.
+    {
+      const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      const pack = { kind: "container", ref: { c: "bag" }, offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      g.player.pack.items![0] = items.newContainer("backpack")!;
+      run([bag, pack], true);
+      const a = bag.rect as unknown as { y: number; h: number } | null;
+      const b = pack.rect as unknown as { x: number; y: number } | null;
+      ok(!!a && !!b && b.y >= a.y + a.h,
+        `the second window stacks below the first (${Math.round(a?.y ?? 0)}+${Math.round(a?.h ?? 0)} -> ${Math.round(b?.y ?? 0)})`);
+      ok(!!b && b.x === dock.innerX, "…in the same column, not beside it");
+      const bh = (pack.rect as unknown as { h: number } | null)?.h ?? 0;
+      ok(!!b && b.y + bh <= dock.stackBottom + 1,
+        "…and two full containers do fit on a 1600x900 laptop, which is what the width was tuned for");
+    }
+
+    // With no sidebar every window must behave exactly as it did before.
+    {
+      const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      run([bag], false);
+      const r = bag.rect as unknown as { x: number; w: number } | null;
+      ok(!!r && Math.abs(r.x - (1600 - r.w) / 2) < 1,
+        "with no column a backpack is centred exactly as it always was");
+    }
+
+    // A torn-out window centres on the MAP, not on the whole canvas — dead
+    // centre of the canvas is off-centre to everything the player is watching.
+    {
+      const bag = { kind: "bag", docked: false, offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      run([bag], true);
+      const r = bag.rect as unknown as { x: number; w: number } | null;
+      ok(!!r && Math.abs(r.x - (1600 - dock.w - r.w) / 2) < 1,
+        "a torn-out window centres on the visible map, not behind the column");
+    }
+
+    // The column is finite. Rather than hide a window or grow a scrollbar, the
+    // overflow floats — visible and grabbable, and back in the stack the
+    // moment something above it closes.
+    {
+      const many = [0, 1, 2, 3, 4, 5, 6, 7].map(() =>
+        ({ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null }));
+      run(many, true);
+      const rects = many.map((m) => m.rect as unknown as { x: number; y: number; h: number } | null);
+      ok(rects.every((r) => !!r), "every window still draws when the column overflows");
+      const stacked = rects.filter((r) => r && r.x === dock.innerX);
+      ok(stacked.length < many.length, `the column takes what fits (${stacked.length} of ${many.length})`);
+      ok(stacked.every((r) => !!r && r.y + r.h <= dock.stackBottom + 1),
+        "…and nothing docked ever runs off the bottom of it");
+    }
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

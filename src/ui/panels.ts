@@ -29,6 +29,7 @@ import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed } from "../systems/panelPrefs.ts";
 import { CHROME, panelFrame, popupFrame, raisedBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
+import { NO_DOCK, DOCK_FIT, type DockLayout } from "./dock.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
@@ -48,6 +49,66 @@ export type PanelKind =
 
 /** Windows that show a container's slots. */
 export const CONTAINER_PANELS: readonly PanelKind[] = ["bag", "stash", "loot", "floor", "container"];
+
+/**
+ * Windows that may sit in the sidebar.
+ *
+ * The Storage Chest is a container and still does NOT dock: it is ten columns
+ * wide against the column's four, it carries a second grid and an upgrade
+ * button, and it is furniture you walk up to rather than something you carry.
+ * Tibia's depot is a big central window for exactly the same reasons.
+ */
+export const DOCKABLE_PANELS: readonly PanelKind[] = ["bag", "loot", "floor", "container"];
+
+/** Gap between two stacked windows, in design units. */
+const DOCK_GAP = 4;
+
+/** Is this window in the column right now? */
+export function isDocked(win: PanelWindow, dock: DockLayout): boolean {
+  return dock.w > 0 && win.docked !== false && DOCKABLE_PANELS.includes(win.kind);
+}
+
+/**
+ * The width a docked window must be. Every dockable window is naturally
+ * `DOCK_INNER` units wide (that is where the constant came from), so at the
+ * base HUD scale this is an exact fit and no rescaling is needed — the
+ * narrower corpse grid simply centres itself in the column, which is what
+ * keeps a stack of windows flush down one edge.
+ */
+function dockedW(p: PanelInput, natural: number): number {
+  return isDocked(p.win, p.dock) ? p.dock.innerW : natural;
+}
+
+/**
+ * Where this window's top-left corner goes.
+ *
+ * Fourteen windows used to carry their own copy of the centring expression,
+ * which is why there was nowhere to put docking. Docked windows stack from
+ * the top of the free area, measured against the windows already drawn THIS
+ * frame — the array is drawn in order, so their rects are fresh and the stack
+ * never lags a frame behind.
+ */
+function anchor(p: PanelInput, w: number, h: number): { x: number; y: number } {
+  const { screenW, screenH, scale: S } = p.hud;
+  const d = p.dock;
+  if (isDocked(p.win, d)) {
+    let y = d.stackTop;
+    for (const q of p.ui.windows) {
+      if (q === p.win) break;
+      if (q.rect && isDocked(q, d)) y += q.rect.h + DOCK_GAP * S;
+    }
+    // The column is full. Rather than hide the window or invent a scrollbar,
+    // it floats — visible, grabbable, and back in the stack the moment
+    // something above it is closed or rolled up.
+    if (y + h <= d.stackBottom) return { x: d.innerX, y };
+  }
+  // Centre on the MAP, not the whole canvas: with a sidebar open, dead centre
+  // of the canvas is off-centre to everything the player is looking at.
+  return {
+    x: (screenW - d.w - w) / 2 + p.win.offset.x,
+    y: (screenH - h) / 2 + p.win.offset.y,
+  };
+}
 
 export interface Hotspot {
   x: number;
@@ -90,6 +151,15 @@ export interface PanelWindow {
   titleBar: { x: number; y: number; w: number; h: number } | null;
   /** Auto-fit factor (≤1) applied to this window so it never spills off-screen. */
   fit?: number;
+  /**
+   * Sitting in the right-hand column rather than floating over the map.
+   *
+   * UNDEFINED means "yes, if you can" — a container opens docked without
+   * anyone having to ask for it, which is the whole point. Only dragging one
+   * out ever writes `false`, so the preference is remembered per window and
+   * a torn-out backpack stays torn out.
+   */
+  docked?: boolean;
 }
 
 export interface UiState {
@@ -182,6 +252,8 @@ export interface PanelInput {
   itemSlots: ItemSlot[];
   /** The window currently being drawn (position, drag offset, hitboxes). */
   win: PanelWindow;
+  /** Geometry of the docked sidebar; zero-width when there is no sidebar. */
+  dock: DockLayout;
 }
 
 /** A small square title-bar button; returns nothing, pushes its hotspot. */
@@ -249,8 +321,9 @@ function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, ti
   bx -= bs + gap;
   titleBtn(p, bx, by, bs, collapsed ? "▸" : "▾", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a",
     () => togglePanelCollapsed(kind));
-  if (!collapsed) {
-    // zoom + / −  (per-window, persisted)
+  if (!collapsed && !isDocked(p.win, p.dock)) {
+    // zoom + / −  (per-window, persisted). Hidden while docked: the column has
+    // ONE width, so a button that promises to change this window's is lying.
     bx -= bs + gap;
     titleBtn(p, bx, by, bs, "+", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a", () => stepPanelZoom(kind, 1));
     bx -= bs + gap;
@@ -429,15 +502,26 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   }
 }
 
-export function drawPanels(base: Omit<PanelInput, "win">): void {
+export function drawPanels(base: Omit<PanelInput, "win" | "dock"> & { dock?: DockLayout }): void {
+  /* An absent dock is a legal state, not an oversight — every headless caller
+   * and every narrow screen is in it. Normalising here means no drawing code
+   * below has to ask whether the sidebar exists. */
+  const dock = base.dock ?? NO_DOCK;
+  const full: Omit<PanelInput, "win"> = { ...base, dock };
   const hud = base.hud;
   const origScale = hud.scale;
   const baseScale = hud.panelScale ?? hud.scale;
   for (const win of base.ui.windows) {
-    // draw each window at the panel scale, times the user's per-window zoom,
-    // shrunk by its auto-fit factor so it can never spill off-screen
-    hud.scale = baseScale * panelZoom(win.kind) * (win.fit ?? 1);
-    const p: PanelInput = { ...base, win };
+    /* Draw each window at the panel scale, times the user's per-window zoom,
+     * shrunk by its auto-fit factor so it can never spill off-screen.
+     *
+     * A DOCKED window skips both: it is drawn at the plain base scale, which
+     * is the one scale at which its natural width equals the column's. Zoom
+     * and auto-fit would each break that fit, and a column of windows that
+     * do not line up is worse than no column. */
+    const docked = isDocked(win, dock);
+    hud.scale = docked ? baseScale * DOCK_FIT : baseScale * panelZoom(win.kind) * (win.fit ?? 1);
+    const p: PanelInput = { ...base, win, dock };
     switch (win.kind) {
       case "build": drawBuild(p); break;
       case "skills": drawSkills(p); break;
@@ -458,7 +542,7 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
     // Auto-fit: if the window (at fit=1) wouldn't fit on screen, compute the
     // exact factor that makes it fit. Corrects on the next frame (invisible
     // at 60fps) and adapts both ways when the window's contents change.
-    if (win.rect) {
+    if (win.rect && !docked) {
       const cur = win.fit ?? 1;
       const natW = win.rect.w / cur;
       const natH = win.rect.h / cur;
@@ -467,24 +551,23 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
     }
   }
   hud.scale = origScale;
-  if (base.ui.placing) drawPlacingHint(base);
-  drawItemTooltip(base);
-  drawInspect(base);
-  drawSplit(base);
+  if (base.ui.placing) drawPlacingHint(full);
+  drawItemTooltip(full);
+  drawInspect(full);
+  drawSplit(full);
 }
 
 /* ---------------- Build ---------------- */
 
 function drawBuild(p: PanelInput): void {
   const { hud, player } = p;
-  const { scale: S, screenW, screenH } = hud;
+  const { scale: S } = hud;
   const w = 268 * S;
   const rowH = 44 * S;
   const home = p.game.worlds.home;
   const chests = homeChests(p.game);
   const h = 20 * S + STRUCT_KEYS.length * rowH + 30 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "BUILD — structures & upgrades")) return;
   let ry = y + 18 * S;
   for (const key of STRUCT_KEYS) {
@@ -570,12 +653,11 @@ function drawPlacingHint(p: { hud: HudCtx; ui: UiState }): void {
 
 function drawSkills(p: PanelInput): void {
   const { hud } = p;
-  const { scale: S, screenW, screenH } = hud;
+  const { scale: S } = hud;
   const w = 216 * S;
   const rows = Object.keys(skills) as (keyof typeof skills)[];
   const h = 20 * S + rows.length * 26 * S + 62 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "SKILLS")) return;
   let ry = y + 20 * S;
   for (const key of rows) {
@@ -663,7 +745,7 @@ const EQ_LAYOUT: readonly EqCell[] = [
 
 function drawEquip(p: PanelInput): void {
   const { hud, player } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
+  const { ctx, scale: S } = hud;
   const slot = 30 * S;
   const gap = 6 * S;
   const cols = 3;
@@ -671,8 +753,7 @@ function drawEquip(p: PanelInput): void {
   const gridW = slot * cols + gap * (cols - 1);
   const w = gridW + 28 * S;
   const h = 20 * S + slot * rows + gap * (rows - 1) + 60 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "EQUIPMENT")) return;
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
@@ -789,15 +870,14 @@ function drawEquip(p: PanelInput): void {
 
 function drawBag(p: PanelInput): void {
   const { hud, player } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
+  const { ctx, scale: S } = hud;
 
   // No backpack, no window worth drawing — say so plainly instead of showing
   // an empty grid the player will try to click things into.
   if (!player.pack) {
-    const w = 190 * S;
+    const w = dockedW(p, 190 * S);
     const h = 62 * S;
-    const x = (screenW - w) / 2 + p.win.offset.x;
-    const y = (screenH - h) / 2 + p.win.offset.y;
+    const { x, y } = anchor(p, w, h);
     if (!goldPanel(p, x, y, w, h, "NO BACKPACK")) return;
     hudText(hud, "You are not wearing a backpack.", x + w / 2, y + 26 * S, 8 * S, "#e0a06a", "center");
     hudText(hud, "Drag one onto the Bag slot to carry things.", x + w / 2, y + 40 * S, 7 * S, "rgba(220,214,190,.6)", "center");
@@ -813,10 +893,9 @@ function drawBag(p: PanelInput): void {
   const cell = 32 * S;
   const gap = 4 * S;
   const gridW = cols * cell + (cols - 1) * gap;
-  const w = gridW + 24 * S;
+  const w = dockedW(p, gridW + 24 * S);
   const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "BACKPACK")) return;
   lookToggle(p, x, y, w);
   /* No gold line here any more. Money is coins in these very cells now, so a
@@ -896,7 +975,7 @@ function tabRow(
 
 function drawForge(p: PanelInput): void {
   const { hud, player, ui, game } = p;
-  const { scale: S, screenW, screenH } = hud;
+  const { scale: S } = hud;
   const tier = Math.max(1, bestTier(game.worlds.home, "forge"));
   // Tabs the forge cannot serve stay visible but dead: a player who has not
   // built a Forge III should be able to SEE that gem-cutting is what the
@@ -911,8 +990,7 @@ function drawForge(p: PanelInput): void {
     : Math.max(1, GEM_TROPHIES.length);
   const w = 292 * S;
   const h = 20 * S + 19 * S + Math.min(bodyRows, 12) * rowH + 22 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, `FORGE ${"I".repeat(tier)}`)) return;
 
   let ry = tabRow(p, x, y + 16 * S, w, [
@@ -1157,7 +1235,7 @@ function priceText(cost: Parameters<typeof costText>[0], gold: number | undefine
 
 function drawTower(p: PanelInput): void {
   const { hud, player, game, ui } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
+  const { ctx, scale: S } = hud;
   const tt = Math.max(1, bestTier(game.worlds.home, "tower"));
   const el = ui.towerTab === "other" ? null : (ui.towerTab as Element);
   const rows = towerRows(ui.towerTab, tt);
@@ -1170,8 +1248,7 @@ function drawTower(p: PanelInput): void {
   const rowH = 34 * S;
   const bodyRows = Math.max(1, rows.length + offers.length);
   const h = 20 * S + 19 * S + (showAttune ? rowH : 0) + bodyRows * rowH + 22 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, `ALCHEMY TOWER ${"I".repeat(tt)}`)) return;
 
   let ry = tabRow(p, x, y + 16 * S, w,
@@ -1281,7 +1358,7 @@ function drawWorldContainer(
   p: PanelInput, ref: ContainerRef, topTitle: string, onTakeAll: () => void,
 ): void {
   const { hud } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
+  const { ctx, scale: S } = hud;
   const slots = slotsOf(ref, p.player);
   if (!slots) return;
 
@@ -1290,10 +1367,9 @@ function drawWorldContainer(
   const cell = 30 * S;
   const gap = 4 * S;
   const gridW = cols * cell + (cols - 1) * gap;
-  const w = gridW + 24 * S;
+  const w = dockedW(p, gridW + 24 * S);
   const h = 20 * S + rows * cell + (rows - 1) * gap + 30 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, topTitle)) return;
 
   const gx = x + (w - gridW) / 2;
@@ -1321,7 +1397,7 @@ function drawWorldContainer(
  */
 function drawContainerWin(p: PanelInput): void {
   const { hud, player } = p;
-  const { scale: S, screenW, screenH } = hud;
+  const { scale: S } = hud;
   const ref = p.win.ref;
   if (!ref) return;
   const slots = slotsOf(ref, player);
@@ -1332,10 +1408,9 @@ function drawContainerWin(p: PanelInput): void {
   const cell = 32 * S;
   const gap = 4 * S;
   const gridW = cols * cell + (cols - 1) * gap;
-  const w = gridW + 24 * S;
+  const w = dockedW(p, gridW + 24 * S);
   const h = 20 * S + rows * cell + (rows - 1) * gap + 16 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, containerTitle(p, ref, "CONTAINER"))) return;
   navBar(p, x, y, ref);
 
@@ -1369,13 +1444,12 @@ function drawShop(p: PanelInput): void {
   if (!npc) return;
   const shop = SHOPS[npc.key];
   if (!shop) return;
-  const { ctx, scale: S, screenW, screenH } = hud;
+  const { ctx, scale: S } = hud;
   const w = 300 * S;
   const rowH = 24 * S;
   const rows = shop.entries.filter((e) => (ui.shopTab === "buy" ? e.buy > 0 : e.sell > 0));
   const h = 34 * S + Math.max(1, rows.length) * rowH + 24 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, npc.name)) return;
   const tabW = 60 * S;
   (["buy", "sell"] as const).forEach((tab, i) => {
@@ -1426,12 +1500,11 @@ function drawShop(p: PanelInput): void {
 
 function drawQuests(p: PanelInput): void {
   const { hud } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
+  const { ctx, scale: S } = hud;
   const w = 320 * S;
   const rowH = 40 * S;
   const h = 20 * S + quests.length * rowH + 16 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "QUEST LOG")) return;
   let ry = y + 18 * S;
   for (const q of quests) {
@@ -1473,7 +1546,7 @@ function rewardText(r: TaskReward): string {
 
 function drawTasks(p: PanelInput): void {
   const { hud, player } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
+  const { ctx, scale: S } = hud;
   const active = activeTask();
   const unlocked = TASKS.filter(isTaskUnlocked);
   const lockedCount = TASKS.length - unlocked.length;
@@ -1489,8 +1562,7 @@ function drawTasks(p: PanelInput): void {
   const exH = EXCHANGES.length * exRowH;
   const h = 18 * S + headerH + activeH + listLabelH + listH + exLabelH + exH + 14 * S;
 
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "TASK BOARD — Grizelda")) return;
 
   let ry = y + 18 * S;
@@ -1696,7 +1768,7 @@ function containerHome(ref: ContainerRef): string {
 
 function drawStash(p: PanelInput): void {
   const { hud, player } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
+  const { ctx, scale: S } = hud;
   const chest = p.ui.stash;
   const inv = chest?.inv;
   if (!chest || !inv) return;
@@ -1715,8 +1787,7 @@ function drawStash(p: PanelInput): void {
   const upCost = upgradeCost(chest.key, chestTier);
   const upH = 22 * S;
   const h = 20 * S + headH + stashRows * (cell + gap) + 14 * S + headH + bagRows * (cell + gap) + 10 * S + upH;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "STORAGE CHEST")) return;
   const gx = x + (w - gridW) / 2;
   let gy = y + 18 * S;
@@ -1778,7 +1849,7 @@ let dyeZone: OutfitZone = "primary";
 
 function drawWardrobe(p: PanelInput): void {
   const { hud, player } = p;
-  const { ctx, scale: S, screenW, screenH } = hud;
+  const { ctx, scale: S } = hud;
   const st = outfitState();
   const zones: readonly OutfitZone[] = ["hair", "primary", "secondary", "shoes"];
 
@@ -1798,8 +1869,7 @@ function drawWardrobe(p: PanelInput): void {
   const w = leftW + gridW + pad * 3;
   const bodyH = Math.max(previewH + 4 * S + zones.length * (btnH + 3 * S), gridH);
   const h = 20 * S + bodyH + 30 * S;
-  const x = (screenW - w) / 2 + p.win.offset.x;
-  const y = (screenH - h) / 2 + p.win.offset.y;
+  const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "WARDROBE — Vesper")) return;
 
   const top = y + 18 * S;

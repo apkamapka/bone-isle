@@ -45,9 +45,10 @@ import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
-import { drawHud, type HudCtx } from "./ui/hud.ts";
+import { drawHud, drawVitals, drawGoldTP, totalGold, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, CHROME } from "./ui/chrome.ts";
-import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
+import { dockEnabled, dockLayout, overDock, NO_DOCK, VITALS_FIT, type DockLayout } from "./ui/dock.ts";
+import { drawPanels, isDocked, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
@@ -83,6 +84,10 @@ let VH = VIEW_H;
 let vScale = 2;
 let scale = 2;
 let touchUI = false;
+/** Width of the docked sidebar in device px; 0 when there is no sidebar. */
+let sidebarW = 0;
+/** The column as last measured, for pointer handlers that run between frames. */
+let lastDock: DockLayout = NO_DOCK;
 
 const DESIGN_W = 480; // reference width the HUD is authored against
 const DESIGN_H = 320; // reference height — on wide desktops this caps HUD/panel size so tall panels fit
@@ -97,23 +102,38 @@ function resize(): void {
   // visible (a classic top-down feel) — HUD sizing is unaffected.
   const mobile = isTouchDevice() || Math.min(cw, ch) < 620;
 
-  const f = worldZoom(cw, ch, mobile);
-  VW = Math.max(MIN_VIEW_W, Math.ceil(cw / f));
-  VH = Math.max(MIN_VIEW_H, Math.ceil(ch / f));
-  view.width = VW;
-  view.height = VH;
-
   screen.width = Math.round(cw * dpr);
   screen.height = Math.round(ch * dpr);
   screen.style.width = cw + "px";
   screen.style.height = ch + "px";
   sctx.imageSmoothingEnabled = false;
 
-  vScale = screen.width / VW;          // device px per world px
   // HUD design unit. On a wide desktop the height is the tight constraint (tall
   // panels must fit), so we take the smaller of the width/height ratios. On a
   // portrait phone width still wins, so mobile sizing is unchanged.
   scale = Math.min(screen.width / DESIGN_W, screen.height / DESIGN_H);
+
+  /* The sidebar takes its width OUT OF THE MAP rather than sitting on top of
+   * it: a column that covers the world is a bigger version of the overlapping
+   * -windows problem it exists to solve.
+   *
+   * It is measured ONCE, here, in device px, from the same dockLayout the
+   * renderer calls. Measuring it a second time in CSS px and converting was
+   * the obvious way to write this and left a one-pixel seam between the map
+   * and the column, because the two roundings disagree. */
+  sidebarW = dockEnabled(cw) && !mobile
+    ? dockLayout(screen.width, screen.height, scale, true).w
+    : 0;
+
+  const f = worldZoom(cw, ch, mobile);
+  VW = Math.max(MIN_VIEW_W, Math.ceil(((screen.width - sidebarW) / dpr) / f));
+  VH = Math.max(MIN_VIEW_H, Math.ceil(ch / f));
+  view.width = VW;
+  view.height = VH;
+
+  // World pixels map onto the VISIBLE strip, not the whole canvas, so every
+  // screen->world conversion in the file keeps working untouched.
+  vScale = (screen.width - sidebarW) / VW;
   // The customizable HUD (on-screen buttons, draggable groups, EDIT HUD, rebind
   // picker, quick-swap) is available everywhere — it works with mouse on desktop
   // just as with touch on mobile. Only the world zoom above differs by device.
@@ -1730,6 +1750,20 @@ screen.addEventListener("pointerdown", (e) => {
     if (!tb || !pr) continue;
     if (s.x >= tb.x && s.x < tb.x + tb.w && s.y >= tb.y && s.y < tb.y + tb.h) {
       bringToFront(win.kind);
+      /* Tear a docked window out of the column.
+       *
+       * Its floating anchor is the centre of the MAP, which is nowhere near
+       * where the window is sitting right now, so the offset is back-computed
+       * from its current rect. Without that the window teleports to centre
+       * screen the moment the pointer goes down — which reads as a bug even
+       * though the drag afterwards works perfectly. */
+      if (isDocked(win, lastDock)) {
+        win.docked = false;
+        const fx = (screen.width - lastDock.w - pr.w) / 2;
+        const fy = (screen.height - pr.h) / 2;
+        win.offset.x = pr.x - fx;
+        win.offset.y = pr.y - fy;
+      }
       drag = { win, gx: s.x, gy: s.y, ox: win.offset.x, oy: win.offset.y, baseX: pr.x - win.offset.x, baseY: pr.y - win.offset.y, w: pr.w, h: pr.h };
       ui.dragging = true;
       try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
@@ -1796,7 +1830,21 @@ screen.addEventListener("pointermove", (e) => {
   drag.win.offset.y = ny;
   e.preventDefault();
 });
-const endDrag = (): void => { drag = null; ui.dragging = false; };
+const endDrag = (): void => {
+  /* Dropped on the column: dock it. Only the title bar's own corner counts,
+   * not the pointer — dragging by the right-hand end of a wide bar would
+   * otherwise refuse to dock a window that is visibly over the column. */
+  if (drag && DOCKABLE_PANELS.includes(drag.win.kind) && lastDock.w > 0) {
+    const r = drag.win.rect;
+    if (r && overDock(lastDock, r.x + r.w, r.y)) {
+      drag.win.docked = true;
+      drag.win.offset.x = 0;
+      drag.win.offset.y = 0;
+    }
+  }
+  drag = null;
+  ui.dragging = false;
+};
 addEventListener("pointerup", (e) => {
   if (hudDrag) {
     // tidy up: snap to a pixel grid, magnetize to nearby screen edges
@@ -3163,7 +3211,7 @@ function render(): void {
   }
 
   // scale up to screen
-  sctx.drawImage(view, 0, 0, VW, VH, 0, 0, screen.width, screen.height);
+  sctx.drawImage(view, 0, 0, VW, VH, 0, 0, screen.width - sidebarW, screen.height);
 
   // HUD + panels (screen space). One UI everywhere (Etap 13): desktop uses the
   // same customizable HUD and panel sizing as mobile; each panel still
@@ -3172,12 +3220,16 @@ function render(): void {
     ctx: sctx, scale,
     screenW: screen.width, screenH: screen.height, touch: touchUI,
     touchInput: isTouchDevice(),
+    sidebarW,
   };
+  const dock = dockLayout(screen.width, screen.height, scale, sidebarW > 0);
+  lastDock = dock;
   drawHud(hud, game, P);
+  if (dock.w > 0) drawSidebar(hud, dock);
   hotspots = [];
   itemSlots = [];
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; }
-  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots });
+  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock });
   // ghost of the item being dragged, following the cursor
   if (itemDrag && itemDrag.active) {
     const spr = itemSprite(itemDrag.kind);
@@ -3280,6 +3332,30 @@ function drawActionSlot(i: number, x: number, y: number, w: number, h: number): 
   hotspots.push({ x, y, w, h, fn: () => slotTap(idx) });
   touchButtons.push({ x, y, w, h });
   actionSlotRects.push({ i: idx, x, y, w, h });
+}
+
+/**
+ * The docked column: minimap, purse, vitals. Container windows stack below
+ * these and are drawn by drawPanels, which reads the same DockLayout.
+ *
+ * `drawHud` already skips its floating copies of all three when `sidebarW` is
+ * set, so nothing is drawn twice.
+ */
+function drawSidebar(h: HudCtx, d: DockLayout): void {
+  const ctx = sctx;
+  const S = h.scale;
+  // The column's own back plate, so windows in it sit ON something.
+  ctx.fillStyle = "rgba(10,8,5,.92)";
+  ctx.fillRect(d.x, 0, d.w, h.screenH);
+  ctx.fillStyle = CHROME.panelEdge;
+  ctx.fillRect(d.x, 0, Math.max(1, Math.round(S)), h.screenH);
+
+  // Purse and vitals are pinned to the FOOT of the column so that containers,
+  // which are the reason the column exists, get the whole top of it.
+  drawGoldTP(h, P, d.innerX, d.goldY, d.innerW, d.goldH, totalGold(game, P));
+  // Vitals are authored 190 units wide; VITALS_FIT rescales them onto the
+  // column's ruler rather than letting the edge clip them.
+  drawVitals(h, P, d.innerX, d.vitalsY, S * VITALS_FIT);
 }
 
 /** Edit-mode outline + a drag handle (grip) for a movable HUD group. */
