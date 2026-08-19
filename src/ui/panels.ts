@@ -28,7 +28,7 @@ import { slotsOf, stackAt, baseOf, rootOf } from "../systems/containers.ts";
 import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed, panelRows } from "../systems/panelPrefs.ts";
-import { CHROME, panelFrame, popupFrame, raisedBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
+import { CHROME, panelFrame, popupFrame, raisedBox, sunkenBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
 import { NO_DOCK, type DockLayout } from "./dock.ts";
 import { drawResizeArrows } from "./icons.ts";
 
@@ -83,6 +83,69 @@ export function visibleRows(kind: PanelKind, totalRows: number): number {
   const want = panelRows(kind);
   if (want <= 0) return totalRows;
   return Math.max(1, Math.min(totalRows, want));
+}
+
+/** Width of a container window's scrollbar, in design units. */
+export const SCROLLBAR_W = 9;
+
+/**
+ * The first visible row, clamped to what there is to show.
+ *
+ * Called every frame rather than trusted, because the container behind the
+ * window can shrink under it — loot gets taken, a pack gets emptied — and a
+ * stale offset would leave the window staring at rows that no longer exist.
+ */
+export function scrollRow(win: PanelWindow, totalRows: number, shownRows: number): number {
+  const max = Math.max(0, totalRows - shownRows);
+  const at = Math.min(Math.max(0, Math.floor(win.scroll ?? 0)), max);
+  if (at !== win.scroll) win.scroll = at;
+  return at;
+}
+
+/**
+ * The scrollbar down the right of a shortened container.
+ *
+ * Two arrow buttons and a thumb. The thumb is not draggable: on a four-row bag
+ * showing two there are exactly two positions, so a drag would be a fussier
+ * way to do what one click already does. Clicking the track above or below the
+ * thumb pages by a screenful, which is the part people reach for.
+ */
+function scrollBar(
+  p: PanelInput, x: number, y: number, h: number,
+  totalRows: number, shownRows: number, at: number,
+): void {
+  const { ctx, scale: S } = p.hud;
+  const w = SCROLLBAR_W * S;
+  const btn = w;
+  sunkenBox(ctx, x, y + btn, w, h - 2 * btn, CHROME.slotFace, CHROME.slotDark, CHROME.slotLight, S);
+
+  const step = (dir: -1 | 1, by: number): void => {
+    const hot = hovering(p, x, by, w, btn);
+    const can = dir < 0 ? at > 0 : at < totalRows - shownRows;
+    buttonBox(ctx, x, by, w, btn, S, { hover: hot && can, accent: can ? CHROME.gold : undefined });
+    hudText(p.hud, dir < 0 ? "\u25B2" : "\u25BC", x + w / 2, by + btn / 2, 5.5 * S,
+      can ? "#ffe9a8" : "rgba(255,233,168,.25)", "center", true);
+    if (can) p.hotspots.push({ x, y: by, w, h: btn, fn: () => { p.win.scroll = at + dir; } });
+  };
+  step(-1, y);
+  step(1, y + h - btn);
+
+  // Thumb: as tall a fraction of the track as the window is of the container.
+  const track = h - 2 * btn;
+  const thumbH = Math.max(6 * S, (track * shownRows) / totalRows);
+  const span = track - thumbH;
+  const thumbY = y + btn + (totalRows > shownRows ? (span * at) / (totalRows - shownRows) : 0);
+  raisedBox(ctx, x + S, thumbY, w - 2 * S, thumbH, "rgba(202,162,58,.55)", CHROME.gold, "#3a2c0e", S);
+
+  // Paging: the track above the thumb goes up a screenful, below goes down.
+  const page = Math.max(1, shownRows);
+  if (at > 0) {
+    p.hotspots.push({ x, y: y + btn, w, h: thumbY - (y + btn), fn: () => { p.win.scroll = at - page; } });
+  }
+  if (at < totalRows - shownRows) {
+    const below = y + h - btn;
+    p.hotspots.push({ x, y: thumbY + thumbH, w, h: below - (thumbY + thumbH), fn: () => { p.win.scroll = at + page; } });
+  }
 }
 
 /**
@@ -195,6 +258,13 @@ export interface PanelWindow {
   titleBar: { x: number; y: number; w: number; h: number } | null;
   /** Auto-fit factor (≤1) applied to this window so it never spills off-screen. */
   fit?: number;
+  /**
+   * First visible row when the window is too short to show them all.
+   *
+   * Rows, not cells. Reset whenever the window navigates somewhere else, so a
+   * pack you walk into never opens already scrolled.
+   */
+  scroll?: number;
   /**
    * The strip along the bottom edge you can grab to resize the window.
    *
@@ -1020,14 +1090,18 @@ function drawBag(p: PanelInput): void {
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
 
-  const cap = rows * cols;
+  const at = scrollRow(p.win, allRows, rows);
+  const from = at * cols;
+  const cap = from + rows * cols;
   slots.forEach((stackSlot, i) => {
-    // Rows the window is too short to show are skipped completely — not drawn,
-    // not clickable, and not a drop target. A cell nobody can see must never
-    // be able to swallow an item.
-    if (i >= cap) return;
-    const cx = gx + (i % cols) * (cell + gap);
-    const cy = gy + Math.floor(i / cols) * (cell + gap);
+    /* Cells outside the visible window are skipped completely — not drawn, not
+     * clickable, not a drop target. And the index a cell CARRIES stays `i`
+     * while only its POSITION shifts by the scroll; swapping those two is how
+     * a scrolled grid silently moves items into the wrong slots. */
+    if (i < from || i >= cap) return;
+    const v = i - from;
+    const cx = gx + (v % cols) * (cell + gap);
+    const cy = gy + Math.floor(v / cols) * (cell + gap);
     const hov = hovering(p, cx, cy, cell, cell);
     // A pack inside the bag keeps its gold keyline: it is the one cell whose
     // click OPENS something rather than using it, and that is worth marking.
@@ -1068,8 +1142,11 @@ function drawBag(p: PanelInput): void {
   /* Say so when rows are hidden. Until scrolling exists they are genuinely
    * out of reach, and a window that quietly stops showing half your bag is
    * far worse than one that admits it. */
+  if (rows < allRows) {
+    scrollBar(p, x + w - (SCROLLBAR_W + 2) * S, gy, rows * (cell + gap) - gap, allRows, rows, at);
+  }
   const hint = rows < allRows
-    ? `${rows * cols}/${slots.length} shown · drag foot`
+    ? `${from + 1}\u2013${Math.min(cap, slots.length)} of ${slots.length}`
     : p.ui.lookMode ? "Look mode — click any item to inspect it"
       : "Click gear to equip · potion/food to use · a pack to open it";
   hudText(hud, hint, x + w / 2, y + h - 13 * S, 7 * S,
@@ -1502,7 +1579,11 @@ function drawWorldContainer(
 
   const gx = x + (w - gridW) / 2;
   let gy = y + 18 * S;
-  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref, rows);
+  const at = scrollRow(p.win, allRows, rows);
+  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref, rows, at);
+  if (rows < allRows) {
+    scrollBar(p, x + w - (SCROLLBAR_W + 2) * S, gy, rows * (cell + gap) - gap, allRows, rows, at);
+  }
   gy += rows * (cell + gap) + 4 * S;
 
   const bw = w - 24 * S;
@@ -1549,10 +1630,14 @@ function drawContainerWin(p: PanelInput): void {
 
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
-  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref, rows);
+  const at = scrollRow(p.win, allRows, rows);
+  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref, rows, at);
+  if (rows < allRows) {
+    scrollBar(p, x + w - (SCROLLBAR_W + 2) * S, gy, rows * (cell + gap) - gap, allRows, rows, at);
+  }
   const used = slots.filter((q) => q !== null).length;
   const foot = rows < allRows
-    ? `${used}/${slots.length} · ${rows * cols} shown`
+    ? `${used}/${slots.length} · ${at * cols + 1}\u2013${Math.min((at + rows) * cols, slots.length)}`
     : `${used}/${slots.length} · ${containerHome(ref)}`;
   hudText(hud, foot, x + w / 2, y + h - 11 * S, 6.5 * S,
     rows < allRows ? "#e8c06a" : "rgba(220,214,190,.6)", "center", false, w - 12 * S);
@@ -1820,19 +1905,26 @@ function drawGrid(
   /**
    * Draw only this many rows.
    *
-   * Hidden cells are skipped ENTIRELY — no hotspot, no drop target. A cell you
-   * cannot see must not be able to swallow an item, which is the one way a
-   * shortened window could quietly lose something.
+   * Cells outside the window are skipped ENTIRELY — no hotspot, no drop
+   * target. A cell you cannot see must not be able to swallow an item.
    */
   maxRows?: number,
+  /** First visible row. Everything above it is scrolled out of sight. */
+  firstRow = 0,
 ): void {
   const { hud } = p;
   const { ctx, scale: S } = hud;
-  const cap = maxRows === undefined ? slots.length : Math.min(slots.length, maxRows * cols);
+  /* The index a cell CARRIES and the place it is DRAWN come apart the moment
+   * the grid scrolls. Everything registered — hotspot, drop target, tooltip —
+   * uses the true index `i`; only the position uses the visible one. Getting
+   * that backwards silently moves items into the wrong slots. */
+  const from = firstRow * cols;
+  const cap = maxRows === undefined ? slots.length : Math.min(slots.length, from + maxRows * cols);
   slots.forEach((slot, i) => {
-    if (i >= cap) return;
-    const cx = gx + (i % cols) * (cell + gap);
-    const cy = gy + Math.floor(i / cols) * (cell + gap);
+    if (i < from || i >= cap) return;
+    const v = i - from;
+    const cx = gx + (v % cols) * (cell + gap);
+    const cy = gy + Math.floor(v / cols) * (cell + gap);
     const hov = hovering(p, cx, cy, cell, cell);
     slotCell(ctx, cx, cy, cell, cell, S, { hover: hov, accent: slot?.items ? CHROME.gold : undefined });
     if (slot) {

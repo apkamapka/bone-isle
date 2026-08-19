@@ -1608,6 +1608,9 @@ function navInto(ref: ContainerRef, index: number, win?: PanelWindow): void {
   const view = win ? viewRefOf(win) : null;
   if (win && view && sameRef(view, ref)) {
     win.ref = target;
+    // A pack you walk into opens at the top, never half-way down the one you
+    // just left.
+    win.scroll = 0;
     beep(380, 0.05, "sine", 0.04, 40);
     return;
   }
@@ -1627,6 +1630,7 @@ function navUp(ref: ContainerRef, win?: PanelWindow): void {
   if (win && view && sameRef(view, ref)) {
     const home = baseRefOf(win.kind);
     win.ref = home && sameRef(home, ref.via) ? undefined : ref.via;
+    win.scroll = 0;
     beep(300, 0.05, "sine", 0.04, -40);
     return;
   }
@@ -1841,7 +1845,8 @@ let drag: { win: PanelWindow; gx: number; gy: number; ox: number; oy: number; ba
  * about cell sizes, padding or which scale the window was drawn at.
  */
 let sizing: { win: PanelWindow; kind: PanelKind; gy: number; rows: number; rowPx: number; total: number } | null = null;
-const toScreen = (e: PointerEvent): { x: number; y: number } => {
+/** Canvas-space coordinates of any pointer-ish event (pointer, mouse, wheel). */
+const toScreen = (e: { clientX: number; clientY: number }): { x: number; y: number } => {
   const r = screen.getBoundingClientRect();
   const kx = r.width ? screen.width / r.width : 1;
   const ky = r.height ? screen.height / r.height : 1;
@@ -1935,6 +1940,29 @@ screen.addEventListener("pointerdown", (e) => {
     }
   }
 });
+/* The wheel scrolls the container window under the pointer.
+ *
+ * Topmost first, so the front window wins, and only windows that actually have
+ * rows hidden take the event — otherwise the page under the canvas would stop
+ * scrolling for no visible reason. */
+screen.addEventListener("wheel", (e) => {
+  const s = toScreen(e);
+  for (let i = ui.windows.length - 1; i >= 0; i--) {
+    const win = ui.windows[i];
+    const r = win.rect;
+    if (!r) continue;
+    if (!(s.x >= r.x && s.x < r.x + r.w && s.y >= r.y && s.y < r.y + r.h)) continue;
+    const total = rowsInWindow(win);
+    if (total <= 1) return;
+    const shown = visibleRows(win.kind, total);
+    if (shown >= total) return; // nothing hidden: let the page have the event
+    const dir = e.deltaY > 0 ? 1 : -1;
+    win.scroll = clamp((win.scroll ?? 0) + dir, 0, total - shown);
+    e.preventDefault();
+    return;
+  }
+}, { passive: false });
+
 screen.addEventListener("pointermove", (e) => {
   if (sizing) {
     const s = toScreen(e);

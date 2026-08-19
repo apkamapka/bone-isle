@@ -8067,10 +8067,10 @@ async function main(): Promise<void> {
      * longer drawn but is still registered as somewhere a drag can land. */
     ok(short.slots.every((q) => q.index < 8),
       "…and no cell beyond the visible rows is a drop target");
-    /* Hotspot counts only differ when a hidden cell actually held something,
-     * so the guarantee that matters is carried by the drop-target check above;
-     * this one just proves the shorter window never grows new clickables. */
-    ok(short.hits <= full.hits, "…nor does hiding rows add anything clickable");
+    /* The shortened window grows MORE clickables, not fewer — the scrollbar's
+     * arrows and track. That is the point: hiding rows is only acceptable
+     * because there is now a way to reach them. */
+    ok(short.hits > full.hits, "…and hiding rows adds the controls that reach them again");
 
     // Indices must not shift. This is the whole reason resizing ships before
     // scrolling: with the visible rows always being the FIRST rows, every slot
@@ -8131,13 +8131,15 @@ async function main(): Promise<void> {
     /* Until scrolling exists the hidden rows are genuinely out of reach, so a
      * window that quietly stops showing half your bag would be a trap. */
     const total = g.player.bag.length;
-    ok(drawnText.some((t) => t.includes(`8/${total} shown`)),
-      `…and a shortened one admits exactly how much it is hiding (8/${total})`);
-    ok(drawnText.some((t) => t.includes("drag foot")),
-      "…and says how to get the rest back");
+    /* Now that it scrolls, the useful thing to report is WHERE you are, not
+     * how to make the window bigger. */
+    ok(drawnText.some((t) => t.includes(`1\u20138 of ${total}`)),
+      `…and a shortened one says which slots it is showing (1-8 of ${total})`);
+    ok(!drawnText.some((t) => t.includes("drag foot")),
+      "…and no longer tells you to resize, because scrolling reaches them");
     /* The hint must survive its own width budget: an explanation of a
      * limitation is the last line that should be ellipsised into nothing. */
-    ok(!drawnText.some((t) => t.includes("shown") && t.includes("\u2026")),
+    ok(!drawnText.some((t) => t.includes(" of ") && t.includes("\u2026")),
       "…in wording short enough that it is never truncated");
     PR.setPanelRows("bag", 0);
   }
@@ -8264,6 +8266,169 @@ async function main(): Promise<void> {
     const grip = panels.slice(panels.indexOf("function resizeGrip"), panels.indexOf("function resizeGrip") + 1100);
     ok(grip.includes("hovering(p, x, by, w, bar)") && grip.includes("p.win.resizeBar = { x, y: by, w, h: bar }"),
       "the strip that lights up is exactly the strip you can grab");
+  }
+
+  console.log("Etap 38 — scrolling, and the indices that must survive it:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+
+    const win = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null, scroll: 0 };
+    const run = (): { slots: { index: number; x: number; y: number }[]; hits: { fn: () => void }[] } => {
+      const itemSlots: { index: number; x: number; y: number }[] = [];
+      const hotspots: { fn: () => void }[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: -1, sy: -1 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots,
+      } as never);
+      return { slots: itemSlots, hits: hotspots };
+    };
+
+    PR.setPanelRows("bag", 2);   // two rows of four, of four rows total
+    win.scroll = 0;
+    const top = run();
+    ok(top.slots.map((q) => q.index).join(",") === "0,1,2,3,4,5,6,7",
+      "unscrolled, the window shows the first eight slots");
+
+    win.scroll = 2;
+    const bottom = run();
+    /* THE assertion this whole feature turns on. A scrolled cell is drawn in a
+     * new place but still carries its real slot number; if the two are ever
+     * swapped, a dropped item silently lands in the wrong slot and nothing
+     * about the screen looks wrong. */
+    ok(bottom.slots.map((q) => q.index).join(",") === "8,9,10,11,12,13,14,15",
+      "scrolled to the foot, the cells carry slots 8-15 — their REAL indices");
+    ok(bottom.slots.length === 8, "…still exactly two rows of them");
+
+    const topYs = top.slots.map((q) => q.y);
+    const botYs = bottom.slots.map((q) => q.y);
+    ok(topYs.join(",") === botYs.join(","),
+      "…drawn in exactly the same eight places, because only the contents moved");
+
+    // Slot 9 — Radek's case: shorten the window, and it must still be reachable.
+    win.scroll = 0;
+    ok(!run().slots.some((q) => q.index === 8), "slot 9 is out of sight at the top");
+    win.scroll = 1;
+    ok(run().slots.some((q) => q.index === 8), "…and one notch of scroll brings it back without resizing the window");
+
+    // An offset past the end is clamped rather than showing empty air.
+    win.scroll = 99;
+    const over = run();
+    ok(over.slots.length === 8 && over.slots[0].index === 8,
+      "an over-scrolled window is clamped to the last full screenful");
+    ok(win.scroll === 2, "…and the stored offset is corrected, not left stale");
+
+    win.scroll = -5;
+    run();
+    ok(win.scroll === 0, "a negative offset is clamped too");
+
+    // Showing everything means nothing to scroll.
+    PR.setPanelRows("bag", 0);
+    win.scroll = 3;
+    const full = run();
+    ok(full.slots.length === 16 && win.scroll === 0,
+      "a full-height window scrolls back to zero — there is nowhere to go");
+
+    PR.setPanelRows("bag", 0);
+    win.scroll = 0;
+  }
+
+  console.log("Etap 38 — the controls that do the scrolling:");
+  {
+    const { drawPanels, SCROLLBAR_W } = await import("../src/ui/panels.ts");
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+    PR.setPanelRows("bag", 2);
+
+    const win = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null, scroll: 0 };
+    const draw = (): { fn: () => void; x: number; y: number; w: number; h: number }[] => {
+      const hotspots: { fn: () => void; x: number; y: number; w: number; h: number }[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: -1, sy: -1 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots: [],
+      } as never);
+      return hotspots;
+    };
+
+    const r = (): { x: number; y: number; w: number; h: number } => win.rect as never;
+
+    win.scroll = 0;
+    let hs = draw();
+    const barX = r().x + r().w - (SCROLLBAR_W + 2) * 3;
+    const onBar = hs.filter((q) => q.x >= barX - 1);
+    ok(onBar.length >= 2, `the scrollbar offers controls (${onBar.length})`);
+    // At the top there is no "up" to go: that control must not be there at all,
+    // rather than sitting inert and swallowing the click.
+    ok(!onBar.some((q) => { const was = win.scroll; q.fn(); const moved = (win.scroll ?? 0) < was; win.scroll = was; return moved; }),
+      "at the top, nothing offers to scroll up");
+
+    win.scroll = 0;
+    hs = draw();
+    const down = hs.filter((q) => q.x >= barX - 1).find((q) => { const was = win.scroll ?? 0; q.fn(); const moved = (win.scroll ?? 0) > was; win.scroll = was; return moved; });
+    ok(!!down, "…and something offers to scroll down");
+    if (down) { down.fn(); }
+    ok((win.scroll ?? 0) > 0, "…which actually moves the window");
+
+    win.scroll = 2;
+    hs = draw();
+    const up = hs.filter((q) => q.x >= barX - 1).find((q) => { const was = win.scroll ?? 0; q.fn(); const moved = (win.scroll ?? 0) < was; win.scroll = was; return moved; });
+    ok(!!up, "at the foot, something offers to scroll back up");
+
+    PR.setPanelRows("bag", 0);
+    win.scroll = 0;
+    const none = draw();
+    ok(!none.some((q) => q.x >= r().x + r().w - (SCROLLBAR_W + 2) * 3 - 1),
+      "a window showing everything draws no scrollbar at all");
+    PR.setPanelRows("bag", 0);
+  }
+
+  console.log("Etap 38 — the wheel, and not stealing it:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    const wheel = src.slice(src.indexOf('addEventListener("wheel"'), src.indexOf('addEventListener("wheel"') + 1100);
+    ok(wheel.includes("if (shown >= total) return;"),
+      "the wheel is left alone over a window with nothing hidden");
+    ok(wheel.includes("e.preventDefault()"), "…and taken only when it is actually used");
+    ok(wheel.includes("{ passive: false }"),
+      "…registered non-passively, or preventDefault would be ignored");
+    ok(wheel.indexOf("ui.windows.length - 1") < wheel.indexOf("win.scroll ="),
+      "…and it goes to the front-most window under the pointer");
+
+    /* A pack you walk into must open at the top. Carrying the old window's
+     * offset across would show a half-scrolled view of a container you have
+     * never seen. */
+    const nav = src.slice(src.indexOf("function navInto"), src.indexOf("function navUp"));
+    ok(nav.includes("win.scroll = 0"), "walking into a pack opens it at the top");
+    const up = src.slice(src.indexOf("function navUp"), src.indexOf("function navUp") + 800);
+    ok(up.includes("win.scroll = 0"), "…and walking back out does the same");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
