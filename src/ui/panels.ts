@@ -53,12 +53,16 @@ export const CONTAINER_PANELS: readonly PanelKind[] = ["bag", "stash", "loot", "
 /**
  * Windows that may sit in the sidebar.
  *
+ * Equipment docks too: in Tibia the inventory paperdoll is one of the fixed
+ * sidebar blocks, and it is narrower than a container window, so it simply
+ * centres itself in the column.
+ *
  * The Storage Chest is a container and still does NOT dock: it is ten columns
  * wide against the column's four, it carries a second grid and an upgrade
  * button, and it is furniture you walk up to rather than something you carry.
  * Tibia's depot is a big central window for exactly the same reasons.
  */
-export const DOCKABLE_PANELS: readonly PanelKind[] = ["bag", "loot", "floor", "container"];
+export const DOCKABLE_PANELS: readonly PanelKind[] = ["equip", "bag", "loot", "floor", "container"];
 
 /** Gap between two stacked windows, in design units. */
 const DOCK_GAP = 4;
@@ -225,9 +229,17 @@ export interface PanelActions {
   moveStack: (ref: ContainerRef, index: number) => void;
   /** Walk this window down into the container sitting in slot `index`. */
   /** Open the container in slot `index` of `ref` — in its own window. */
-  openNested: (ref: ContainerRef, index: number) => void;
+  /**
+   * Walk into the pack in `index` of `ref`.
+   *
+   * `win` is the window the click came from, and it decides everything: if
+   * that window is the one already showing `ref`, it navigates IN PLACE the
+   * way Tibia does. Only a click from somewhere else — the chest window draws
+   * your backpack in its lower half — opens a window of its own.
+   */
+  openNested: (ref: ContainerRef, index: number, win: PanelWindow) => void;
   /** Back up to the container holding this one. */
-  navUp: (ref: ContainerRef) => void;
+  navUp: (ref: ContainerRef, win: PanelWindow) => void;
   /** Take the worn backpack off — it has to go somewhere, so this drops it. */
   removePack: () => void;
   setOutfitColor: (zone: OutfitZone, idx: number) => void;
@@ -356,19 +368,34 @@ let tooltipKind: ItemKind | null = null;
 let tooltipStack: ItemStack | null = null;
 
 /** A small "Look" toggle in the panel body; taps describe items when it's on. */
+/**
+ * The Look toggle, on the title bar.
+ *
+ * It used to sit at y+15S — one row under the bar and directly over the first
+ * row of slots, which is what made it look like it had escaped the frame. On
+ * the bar it overlaps nothing, costs no height (which matters in a column),
+ * and sits with the other mode buttons where a toggle belongs.
+ */
 function lookToggle(p: PanelInput, x: number, y: number, w: number): void {
   const { ctx, scale: S } = p.hud;
-  const bw = 40 * S;
-  const bh = 11 * S;
-  const bx = x + w - bw - 6 * S;
-  const by = y + 15 * S;
+  const bw = 26 * S;
+  const bh = 10 * S;
+  const bx = x + w - bw - 60 * S; // clear of the −/+/▾/× cluster on the right
+  const by = y + 2 * S;
   const on = p.ui.lookMode;
   buttonBox(ctx, bx, by, bw, bh, S, {
     on, face: on ? "rgba(90,161,232,.85)" : undefined,
     hover: hovering(p, bx, by, bw, bh), accent: on ? "#cfe8ff" : undefined,
   });
-  hudText(p.hud, on ? "Look ON" : "Look", bx + bw / 2, by + bh / 2, 7 * S, on ? "#0b2036" : "#cfa86a", "center", true);
-  p.hotspots.push({ x: bx - 2 * S, y: by - 2 * S, w: bw + 4 * S, h: bh + 4 * S, fn: () => p.act.toggleLook() });
+  hudText(p.hud, "Look", bx + bw / 2, by + bh / 2, 6.5 * S, on ? "#0b2036" : "#cfa86a", "center", true, bw - 2 * S);
+  p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.toggleLook() });
+  /* Carve it out of the drag region, or pressing it just moves the window:
+   * the title bar is grabbed on pointerdown, long before hotspots are read. */
+  const tb = p.win.titleBar;
+  if (tb) {
+    const cut = tb.x + tb.w - bx;
+    if (cut > 0) tb.w = Math.max(0, tb.w - cut);
+  }
 }
 
 /** Draw the queued hover tooltip (if any) near the cursor, then clear it. */
@@ -622,13 +649,16 @@ function drawBuild(p: PanelInput): void {
       hudText(hud, right, x + w - 12 * S, ry + 9 * S, 7 * S, "#e8dcc0", "right");
     }
     if (maxed) {
-      hudText(hud, "top tier reached", x + 48 * S, ry + 21 * S, 8 * S, "#9fe8a8");
-      hudText(hud, def.tiers[tier - 1].desc, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)");
+      const textW = w - 60 * S;
+      hudText(hud, "top tier reached", x + 48 * S, ry + 21 * S, 8 * S, "#9fe8a8", "left", false, textW);
+      hudText(hud, def.tiers[tier - 1].desc, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)", "left", false, textW);
     } else if (nextCost) {
       const verb = many ? (count > 0 ? "Build another:" : "Build:") : owned ? `Upgrade to ${"I".repeat(tier + 1)}:` : "Build:";
-      hudText(hud, `${verb} ${costText(nextCost)}`, x + 48 * S, ry + 21 * S, 8 * S, afford ? "#b9e07f" : "#d96a5a");
+      const textW = w - 60 * S;
+      hudText(hud, `${verb} ${costText(nextCost)}`, x + 48 * S, ry + 21 * S, 8 * S,
+        afford ? "#b9e07f" : "#d96a5a", "left", false, textW);
       const note = many ? "Starts at tier I — raise it from the chest itself" : def.tiers[tier].desc;
-      hudText(hud, note, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)");
+      hudText(hud, note, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)", "left", false, textW);
     }
     if (clickable) {
       const ryy = ry;
@@ -640,7 +670,8 @@ function drawBuild(p: PanelInput): void {
     }
     ry += rowH;
   }
-  hudText(hud, "Upgrades apply to the structure you already own · [Esc] cancel", x + w / 2, y + h - 10 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+  hudText(hud, "Upgrades apply to the structure you already own · [Esc] cancel",
+    x + w / 2, y + h - 10 * S, 7 * S, "rgba(220,214,190,.6)", "center", false, w - 12 * S);
 }
 
 function drawPlacingHint(p: { hud: HudCtx; ui: UiState }): void {
@@ -755,7 +786,7 @@ function drawEquip(p: PanelInput): void {
   const cols = 3;
   const rows = 4;
   const gridW = slot * cols + gap * (cols - 1);
-  const w = gridW + 28 * S;
+  const w = dockedW(p, gridW + 28 * S);
   const h = 20 * S + slot * rows + gap * (rows - 1) + 60 * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "EQUIPMENT")) return;
@@ -876,6 +907,11 @@ function drawBag(p: PanelInput): void {
   const { hud, player } = p;
   const { ctx, scale: S } = hud;
 
+  /* Navigated into a pack inside the bag: this window IS a container view now.
+   * Tibia never opens a second window for a bag-in-a-bag — it walks the one
+   * you clicked in, and the back arrow walks it out again. */
+  if (p.win.ref && p.win.ref.c !== "bag") { drawContainerWin(p); return; }
+
   // No backpack, no window worth drawing — say so plainly instead of showing
   // an empty grid the player will try to click things into.
   if (!player.pack) {
@@ -936,7 +972,7 @@ function drawBag(p: PanelInput): void {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.look(k) });
       } else if (isContainer(k)) {
         // a pack opens; it is never "used" and never worn from here
-        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.openNested(ref, idx) });
+        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.openNested(ref, idx, p.win) });
       } else if (def.slot) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.equipItem(k, idx) });
       } else if (def.heal || def.food || def.crystal || def.boost) {
@@ -951,7 +987,7 @@ function drawBag(p: PanelInput): void {
   });
   const hint = p.ui.lookMode ? "Look mode — click any item to inspect it"
     : "Click gear to equip · potion/food to use · a pack to open it";
-  hudText(hud, hint, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
+  hudText(hud, hint, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center", false, w - 12 * S);
 }
 
 /* ---------------- Forge (craft · smelt · gems) ---------------- */
@@ -1713,7 +1749,7 @@ function drawGrid(
       p.hotspots.push({
         x: cx, y: cy, w: cell, h: cell,
         fn: () => (p.ui.lookMode ? p.act.look(kind)
-          : nested && ref ? p.act.openNested(ref, idx)
+          : nested && ref ? p.act.openNested(ref, idx, p.win)
           : onClick(idx)),
       });
     } else if (ref) {
@@ -1740,7 +1776,7 @@ function navBar(p: PanelInput, x: number, y: number, ref: ContainerRef): void {
   const hot = hovering(p, bx, by, bs, bs);
   buttonBox(ctx, bx, by, bs, bs, S, { hover: hot, accent: CHROME.gold });
   hudText(p.hud, "\u25B2", bx + bs / 2, by + bs / 2, 7 * S, "#ffe9a8", "center", true);
-  p.hotspots.push({ x: bx, y: by, w: bs, h: bs, fn: () => p.act.navUp(ref) });
+  p.hotspots.push({ x: bx, y: by, w: bs, h: bs, fn: () => p.act.navUp(ref, p.win) });
   /* Carve this button OUT of the title bar's drag region.
    *
    * Pressing the title bar starts moving the window, and that happens on
@@ -1836,7 +1872,7 @@ function drawStash(p: PanelInput): void {
     accent: canPay ? "#b9e07f" : undefined,
   });
   hudText(hud, `Upgrade to ${"I".repeat(chestTier + 1)}: ${costText(upCost)}`, bx + bw / 2, by + 9 * S, 7 * S,
-    canPay ? "#b9e07f" : "#d96a5a", "center");
+    canPay ? "#b9e07f" : "#d96a5a", "center", false, bw - 8 * S);
   if (canPay) p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.upgrade(chest) });
 }
 

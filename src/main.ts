@@ -332,6 +332,10 @@ function raise(win: PanelWindow): void {
 function windowShowing(ref: ContainerRef): PanelWindow | undefined {
   return ui.windows.find((w) => w.ref && sameRef(w.ref, ref))
     ?? ui.windows.find((w) => {
+      // Only an UNNAVIGATED window answers for its home container. One that
+      // has walked into a sub-pack is showing something else, and treating it
+      // as the backpack is what makes a second backpack window impossible.
+      if (w.ref) return false;
       const base = baseRefOf(w.kind);
       return !!base && sameRef(base, ref);
     });
@@ -532,7 +536,7 @@ const act: PanelActions = {
     else if (r === "heavy") flash("too heavy", "#e0a06a");
   },
   moveStack: (ref: ContainerRef, index: number) => { openMoveChooser(ref, index); },
-  openNested: (ref: ContainerRef, index: number) => { navInto(ref, index); },
+  openNested: (ref: ContainerRef, index: number, win: PanelWindow) => { navInto(ref, index, win); },
   navUp: (ref: ContainerRef) => { navUp(ref); },
   removePack: () => { dropWornPack(); },
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => { splitConfirm(mode); },
@@ -1045,13 +1049,24 @@ function askThenMove(from: ContainerRef, fi: number, to: ContainerRef, ti: numbe
   ui.split = { kind: st.kind, index: fi, ref: from, max: st.n, n: st.n, canStore: false, to: { ref: to, index: ti } };
 }
 
+/**
+ * What a window is currently looking at.
+ *
+ * A window's kind gives its HOME container; `ref` overrides it once the window
+ * has been navigated somewhere. Both callers below need the same answer, and
+ * getting it inconsistent is how a back arrow ends up closing the wrong panel.
+ */
+function viewRefOf(w: PanelWindow): ContainerRef | null {
+  return w.ref ?? baseRefOf(w.kind);
+}
+
 /** The container window under this screen point, if the point missed its cells. */
 function containerWindowAt(rx: number, ry: number): ContainerRef | null {
   for (let i = ui.windows.length - 1; i >= 0; i--) {
     const w = ui.windows[i];
     if (!w.rect) continue;
     if (!(rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h)) continue;
-    return w.ref ?? baseRefOf(w.kind);
+    return viewRefOf(w);
   }
   return null;
 }
@@ -1521,8 +1536,21 @@ function takeOne(c: Corpse, index: number): void {
  * walk into a slot index that meant something entirely different inside the
  * chest, and usually nothing at all.
  */
-function navInto(ref: ContainerRef, index: number): void {
-  openContainer({ c: "nested", via: ref, i: index });
+function navInto(ref: ContainerRef, index: number, win?: PanelWindow): void {
+  const target: ContainerRef = { c: "nested", via: ref, i: index };
+  if (!slotsOf(target, P)) return;
+  /* In place, if the click came from the window already showing `ref`. That is
+   * the Tibia behaviour and the one Radek asked for: a bag inside a bag
+   * replaces the view you clicked in, rather than throwing a fresh window into
+   * the middle of the screen. Want two open at once? Walk one in, then open
+   * the backpack again from the equipment slot — that gets its own window. */
+  const view = win ? viewRefOf(win) : null;
+  if (win && view && sameRef(view, ref)) {
+    win.ref = target;
+    beep(380, 0.05, "sine", 0.04, 40);
+    return;
+  }
+  openContainer(target);
 }
 
 /**
@@ -1531,8 +1559,16 @@ function navInto(ref: ContainerRef, index: number): void {
  * If the parent already has a window, this one is redundant and closes —
  * otherwise pressing up would leave two windows showing the same pack.
  */
-function navUp(ref: ContainerRef): void {
+function navUp(ref: ContainerRef, win?: PanelWindow): void {
   if (ref.c !== "nested") return;
+  // In place, mirroring navInto: the arrow walks THIS window back out.
+  const view = win ? viewRefOf(win) : null;
+  if (win && view && sameRef(view, ref)) {
+    const home = baseRefOf(win.kind);
+    win.ref = home && sameRef(home, ref.via) ? undefined : ref.via;
+    beep(300, 0.05, "sine", 0.04, -40);
+    return;
+  }
   const here = ui.windows.find((w) => w.ref && sameRef(w.ref, ref));
   const parent = ref.via;
   const parentOpen = windowShowing(parent);
@@ -3554,14 +3590,19 @@ function drawTouchControls(): void {
     ? { x: m, y: sh - vh - m }   // no floating vitals with a column; anchor LOCK HUD bottom-left
     : placeHud("vitals", vw, vh, sw, sh);
   if (editing && !docked) drawGroupGrip("vitals", vp.x, vp.y, vw, vh);
-  const lockW = bs * 1.6, lockH = bs * 0.5;
-  const gripClear = bs * 0.34 + 6 * scale; // leave room for the vitals drag grip in edit mode
-  const lockX = clamp(vp.x, m, sw - lockW - m);
-  const lockY = clamp(vp.y - lockH - gripClear, m, sh - lockH - m);
-  hudBtn(lockX, lockY, lockW, lockH, editing ? "LOCK HUD" : "EDIT HUD", editing, () => {
-    toggleHudLock();
-    flash(hudLocked() ? "HUD locked" : "HUD unlocked — drag handles, tap slots", "#8ab6ff");
-  });
+  /* EDIT HUD only exists to rearrange movable groups. With a column open there
+   * are none left — the buttons, slots, swap and vitals all live in it as fixed
+   * widgets — so the button would open an editor with nothing to edit. */
+  if (!docked) {
+    const lockW = bs * 1.6, lockH = bs * 0.5;
+    const gripClear = bs * 0.34 + 6 * scale; // leave room for the vitals drag grip in edit mode
+    const lockX = clamp(vp.x, m, sw - lockW - m);
+    const lockY = clamp(vp.y - lockH - gripClear, m, sh - lockH - m);
+    hudBtn(lockX, lockY, lockW, lockH, editing ? "LOCK HUD" : "EDIT HUD", editing, () => {
+      toggleHudLock();
+      flash(hudLocked() ? "HUD locked" : "HUD unlocked — drag handles, tap slots", "#8ab6ff");
+    });
+  }
 
   // --- edit strip: scale, presets, reset — pinned top-center while editing ---
   if (editing) {

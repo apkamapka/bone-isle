@@ -2323,7 +2323,7 @@ async function main(): Promise<void> {
       ok(!nav.includes("frontContainerWindow"),
         "…and no longer consults window order at all");
       const panels = fs.readFileSync("src/ui/panels.ts", "utf8");
-      ok(panels.includes("p.act.openNested(ref, idx)"),
+      ok(panels.includes("p.act.openNested(ref, idx, p.win)"),
         "…because every grid cell passes its own container along");
     }
 
@@ -7585,7 +7585,12 @@ async function main(): Promise<void> {
       "the four carried containers dock");
     ok(!PN.DOCKABLE_PANELS.includes("stash"),
       "…the Storage Chest does not, being ten columns wide against the column's four");
+    /* Equipment docks as well, though it is not a CONTAINER window — in Tibia
+     * the paperdoll is one of the fixed sidebar blocks. Everything else that
+     * docks does have to be a container, or docking it means nothing. */
+    ok(PN.DOCKABLE_PANELS.includes("equip"), "…and so does Equipment, as Tibia's inventory block does");
     for (const k of PN.DOCKABLE_PANELS) {
+      if (k === "equip") continue;
       ok(PN.CONTAINER_PANELS.includes(k), `${k} is a container window, so docking it means something`);
     }
     ok(PN.isDocked({ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null }, d),
@@ -7705,6 +7710,123 @@ async function main(): Promise<void> {
       "the panel buttons and action slots move into the column when there is one");
     ok(src.includes('if (editing && !docked) drawGroupGrip("vitals"'),
       "…and carry no drag grip there, so the HUD editor cannot strand them under it");
+  }
+
+  console.log("Etap 34 — a pack inside a pack opens IN PLACE:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const nav = src.slice(src.indexOf("function navInto"), src.indexOf("function navUp"));
+
+    /* Tibia never throws a second window into the middle of the screen for a
+     * bag inside a bag: it walks the window you clicked in, and the back arrow
+     * walks it out. Two open at once is done deliberately — walk one in, then
+     * open the backpack again from the equipment slot. */
+    ok(nav.includes("win.ref = target"), "navigating into a sub-pack rewrites the clicked window's view");
+    ok(nav.includes("openContainer(target)"),
+      "…and only a click from somewhere else, like the chest's bag grid, opens a window of its own");
+    ok(panels.includes("p.act.openNested(ref, idx, p.win)"),
+      "…because every grid cell passes along the window it was clicked in");
+    ok(panels.includes("p.act.navUp(ref, p.win)"), "…and the back arrow does the same");
+
+    const up = src.slice(src.indexOf("function navUp"), src.indexOf("function navUp") + 900);
+    ok(up.includes("win.ref = home && sameRef(home, ref.via) ? undefined : ref.via"),
+      "walking all the way back out restores the window to its own home container");
+
+    // A navigated window must stop answering for its home, or opening the
+    // backpack again just raises the window that walked away.
+    const showing = src.slice(src.indexOf("function windowShowing"), src.indexOf("function windowShowing") + 700);
+    ok(showing.includes("if (w.ref) return false;"),
+      "a window that has walked into a sub-pack no longer answers as the backpack");
+  }
+
+  console.log("Etap 34 — text stays inside its frame:");
+  {
+    const { hudText } = await import("../src/ui/hud.ts");
+    /* Monospace, so width is proportional to length: a faithful enough stand-in
+     * for measureText to prove the fitting logic, and it needs no canvas. */
+    let font = "";
+    let drawn: string[] = [];
+    const ctx = {
+      set font(v: string) { font = v; },
+      get font() { return font; },
+      set fillStyle(_v: string) { /* ignored */ },
+      set textAlign(_v: CanvasTextAlign) { /* ignored */ },
+      measureText(t: string) {
+        const px = Number(/(\d+)px/.exec(font)?.[1] ?? 10);
+        return { width: t.length * px * 0.6 };
+      },
+      fillText(t: string) { drawn.push(t); },
+    } as unknown as CanvasRenderingContext2D;
+    const h = { ctx, scale: 2, screenW: 800, screenH: 600 } as never;
+    const widthOf = (t: string, px: number): number => t.length * px * 0.6;
+
+    const long = "Upgrade to III: 1000 wood + 1000 stone + 500 iron + 100 essentialGem + 500 steel";
+
+    drawn = [];
+    hudText(h, long, 0, 0, 14, "#fff");
+    ok(drawn[0] === long, "with no budget a long line is drawn whole, exactly as before");
+
+    drawn = [];
+    hudText(h, long, 0, 0, 14, "#fff", "left", false, 200);
+    const out = drawn[0];
+    const px = Number(/(\d+)px/.exec(font)?.[1] ?? 14);
+    ok(widthOf(out, px) <= 200 + 0.001, `a budgeted line fits it (${Math.round(widthOf(out, px))} <= 200)`);
+    ok(out.length < long.length && out.endsWith("\u2026"),
+      "…shrinking first and then cutting with an ellipsis, so the tail is visibly missing rather than silently gone");
+
+    drawn = [];
+    hudText(h, "short", 0, 0, 14, "#fff", "left", false, 400);
+    ok(drawn[0] === "short", "a line that already fits is left completely alone");
+
+    drawn = [];
+    hudText(h, long, 0, 0, 14, "#fff", "left", false, 4);
+    ok(drawn[0].length >= 1, "an absurdly small budget still draws something rather than looping forever");
+  }
+
+  console.log("Etap 34 — the Look toggle is on the bar, not over the slots:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+    const hud = {
+      ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+        .document.createElement("canvas").getContext("2d"),
+      scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+    } as never;
+    let toggled = false;
+    const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+    const hotspots: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
+    drawPanels({
+      hud,
+      ui: {
+        windows: [bag], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+        shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      } as never,
+      game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+      /* Every hotspot gets fired to find the Look one, so every action has to
+       * be safe to call — a bare object throws on the close button first. */
+      act: new Proxy({}, {
+        get: (_t, k) => (k === "toggleLook" ? () => { toggled = true; } : () => { /* no-op */ }),
+      }) as never,
+      hotspots, itemSlots: [],
+    } as never);
+
+    const r = bag.rect as unknown as { x: number; y: number; w: number; h: number } | null;
+    const look = hotspots.find((hs) => { hs.fn(); const t = toggled; toggled = false; return t; });
+    ok(!!look, "the backpack window still offers a Look toggle");
+    /* It used to be drawn one row under the bar, straight on top of the first
+     * row of slots — which is what made it look like it had escaped the frame. */
+    ok(!!look && !!r && look.y >= r.y && look.y + look.h <= r.y + 14 * 3,
+      "…and it sits within the title bar, clear of the slot grid below");
+    ok(!!look && !!r && look.x >= r.x && look.x + look.w <= r.x + r.w,
+      "…and inside the window's own width");
+    const tb = bag.titleBar as unknown as { x: number; w: number } | null;
+    ok(!!tb && !!look && tb.x + tb.w <= look.x,
+      "…carved out of the drag region, or pressing it would just move the window");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

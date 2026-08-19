@@ -61,14 +61,41 @@ export function hudText(
   color: string,
   align: CanvasTextAlign = "left",
   bold = false,
+  /**
+   * Hard width budget in device px. Text longer than this is stepped down a
+   * size at a time and then, if it still will not fit, cut with an ellipsis.
+   *
+   * Without a budget a long line simply runs out of the panel and off the
+   * screen: "Upgrade to III: 1000 wood + 1000 stone + ..." was doing exactly
+   * that, and so was the backpack's hint. A panel that leaks its own text is
+   * worse than one that abbreviates it, because the escaped part is drawn on
+   * top of the world and reads as a rendering fault.
+   */
+  maxW?: number,
 ): void {
   const { ctx, scale: S } = h;
-  ctx.font = `${bold ? "bold " : ""}${Math.round(size)}px 'Courier New',monospace`;
+  const font = (px: number): string => `${bold ? "bold " : ""}${Math.round(px)}px 'Courier New',monospace`;
+  let shown = str;
+  let px = size;
+  ctx.font = font(px);
+  if (maxW !== undefined && maxW > 0) {
+    const floor = Math.max(5 * S, size * 0.7);
+    while (px > floor && ctx.measureText(shown).width > maxW) {
+      px -= Math.max(1, size * 0.06);
+      ctx.font = font(px);
+    }
+    if (ctx.measureText(shown).width > maxW) {
+      while (shown.length > 1 && ctx.measureText(shown + "\u2026").width > maxW) {
+        shown = shown.slice(0, -1);
+      }
+      shown += "\u2026";
+    }
+  }
   ctx.textAlign = align;
   ctx.fillStyle = "rgba(0,0,0,.7)";
-  ctx.fillText(str, x + S, y + S);
+  ctx.fillText(shown, x + S, y + S);
   ctx.fillStyle = color;
-  ctx.fillText(str, x, y);
+  ctx.fillText(shown, x, y);
 }
 
 /** Small minimap of the current island in the top-right corner. */
