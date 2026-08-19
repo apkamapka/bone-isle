@@ -28,6 +28,7 @@ import { slotsOf, stackAt, baseOf, rootOf } from "../systems/containers.ts";
 import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed } from "../systems/panelPrefs.ts";
+import { CHROME, panelFrame, popupFrame, raisedBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
@@ -189,11 +190,13 @@ function titleBtn(
   glyph: string, fill: string, border: string, fg: string, fn: () => void,
 ): void {
   const { ctx, scale: S } = p.hud;
-  ctx.fillStyle = fill;
-  ctx.fillRect(bx, by, bs, bs);
-  ctx.strokeStyle = border;
-  ctx.lineWidth = S;
-  ctx.strokeRect(bx + S / 2, by + S / 2, bs - S, bs - S);
+  // `border` still selects the accent so the close button stays visibly red,
+  // but the box itself is a raised plate now, not an outline.
+  buttonBox(ctx, bx, by, bs, bs, S, {
+    face: fill,
+    hover: hovering(p, bx, by, bs, bs),
+    accent: border === "#6e571f" ? undefined : border,
+  });
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = fg;
@@ -213,18 +216,13 @@ function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, ti
   const collapsed = panelCollapsed(kind);
   const barH = 14 * S;
   const ph = collapsed ? barH + 2 * S : h; // rolled up: just the bar + border
-  ctx.fillStyle = "rgba(16,12,8,.94)";
-  ctx.fillRect(x, y, w, ph);
-  ctx.strokeStyle = "#caa23a";
-  ctx.lineWidth = S;
-  ctx.strokeRect(x + S / 2, y + S / 2, w - S, ph - S);
-  if (!collapsed) {
-    ctx.strokeStyle = "#6e571f";
-    ctx.strokeRect(x + 2.5 * S, y + 2.5 * S, w - 5 * S, ph - 5 * S);
-  }
-  ctx.fillStyle = "#caa23a";
-  ctx.fillRect(x, y + 13 * S, w, S);
-  hudText(p.hud, title, x + w / 2, y + 7 * S, 9 * S, "#ffe9a8", "center", true);
+  const inset = frameInset(S);
+  panelFrame(ctx, x, y, w, ph, S);
+  // The bar is its own raised plate INSIDE the frame, so the seam under it
+  // does the job the old flat gold line was doing — but with a direction.
+  raisedBox(ctx, x + inset, y + inset, w - 2 * inset, barH - inset,
+    CHROME.barFace, CHROME.barLight, CHROME.barDark, S);
+  hudText(p.hud, title, x + w / 2, y + 7 * S, 9 * S, CHROME.goldText, "center", true);
   // grip dots hinting the title bar is draggable
   ctx.fillStyle = "rgba(255,233,168,.5)";
   for (let i = 0; i < 3; i++) {
@@ -292,11 +290,10 @@ function lookToggle(p: PanelInput, x: number, y: number, w: number): void {
   const bx = x + w - bw - 6 * S;
   const by = y + 15 * S;
   const on = p.ui.lookMode;
-  ctx.fillStyle = on ? "rgba(90,161,232,.85)" : "rgba(40,32,20,.9)";
-  ctx.fillRect(bx, by, bw, bh);
-  ctx.strokeStyle = on ? "#cfe8ff" : "#6e571f";
-  ctx.lineWidth = S;
-  ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, bh - S);
+  buttonBox(ctx, bx, by, bw, bh, S, {
+    on, face: on ? "rgba(90,161,232,.85)" : undefined,
+    hover: hovering(p, bx, by, bw, bh), accent: on ? "#cfe8ff" : undefined,
+  });
   hudText(p.hud, on ? "Look ON" : "Look", bx + bw / 2, by + bh / 2, 7 * S, on ? "#0b2036" : "#cfa86a", "center", true);
   p.hotspots.push({ x: bx - 2 * S, y: by - 2 * S, w: bw + 4 * S, h: bh + 4 * S, fn: () => p.act.toggleLook() });
 }
@@ -322,11 +319,7 @@ function drawItemTooltip(base: Omit<PanelInput, "win">): void {
   let y = base.mouse.sy + 12 * S;
   if (x + w > screenW) x = screenW - w - 4 * S;
   if (y + h > screenH) y = screenH - h - 4 * S;
-  ctx.fillStyle = "rgba(16,12,8,.96)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#caa23a";
-  ctx.lineWidth = S;
-  ctx.strokeRect(x + S / 2, y + S / 2, w - S, h - S);
+  popupFrame(ctx, x, y, w, h, S, "rgba(22,17,10,.96)");
   let ly = y + pad + fs / 2;
   hudText(base.hud, title, x + pad, ly, fs, "#ffe9a8", "left", true);
   ly += fs + 2 * S;
@@ -354,11 +347,7 @@ function drawInspect(base: Omit<PanelInput, "win">): void {
   const h = pad * 2 + 16 * S + (lines.length) * (fs + 3 * S) + 14 * S;
   const x = (screenW - w) / 2;
   const y = (screenH - h) / 2;
-  ctx.fillStyle = "rgba(16,12,8,.97)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#caa23a";
-  ctx.lineWidth = S;
-  ctx.strokeRect(x + S / 2, y + S / 2, w - S, h - S);
+  popupFrame(ctx, x, y, w, h, S, "rgba(22,17,10,.97)");
   const spr = itemSprite(kind);
   icon(base as PanelInput, spr, x + pad, y + pad, 2 * S);
   hudText(base.hud, title, x + pad + iconW(spr, 2 * S) + 8 * S, y + pad + 8 * S, fs, "#ffe9a8", "left", true);
@@ -382,11 +371,7 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   const h = 118 * S;
   const x = (screenW - w) / 2;
   const y = (screenH - h) / 2;
-  ctx.fillStyle = "rgba(16,12,8,.98)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#caa23a";
-  ctx.lineWidth = S;
-  ctx.strokeRect(x + S / 2, y + S / 2, w - S, h - S);
+  popupFrame(ctx, x, y, w, h, S, "rgba(22,17,10,.98)");
   const spr = itemSprite(sp.kind);
   icon(base as PanelInput, spr, x + 10 * S, y + 8 * S, 2 * S);
   hudText(base.hud, ITEMS[sp.kind].name, x + 10 * S + iconW(spr, 2 * S) + 8 * S, y + 14 * S, 9 * S, "#ffe9a8", "left", true);
@@ -395,11 +380,10 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
 
   const clampN = (v: number): number => Math.max(1, Math.min(sp.max, v));
   const stepBtn = (bx: number, by: number, bw: number, label: string, fn: () => void): void => {
-    ctx.fillStyle = "rgba(40,32,20,.95)";
-    ctx.fillRect(bx, by, bw, 14 * S);
-    ctx.strokeStyle = "#6e571f";
-    ctx.lineWidth = S;
-    ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, 14 * S - S);
+    buttonBox(ctx, bx, by, bw, 14 * S, S, {
+      hover: base.mouse.sx >= bx && base.mouse.sx < bx + bw
+        && base.mouse.sy >= by && base.mouse.sy < by + 14 * S,
+    });
     hudText(base.hud, label, bx + bw / 2, by + 7 * S, 7 * S, "#e8dcc0", "center", true);
     base.hotspots.push({ x: bx, y: by, w: bw, h: 14 * S, fn });
   };
@@ -432,11 +416,9 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   for (const [lbl, mode] of acts) {
     const isCancel = lbl === "Cancel";
     const col = isCancel ? "#d08a7a" : lbl === "Drop" ? "#d0a24a" : lbl === "Throw" ? "#8ab6ff" : "#8fd08a";
-    ctx.fillStyle = isCancel ? "rgba(60,30,26,.95)" : "rgba(30,44,30,.95)";
-    ctx.fillRect(ax, ay, aw, 15 * S);
-    ctx.strokeStyle = col;
-    ctx.lineWidth = S;
-    ctx.strokeRect(ax + S / 2, ay + S / 2, aw - S, 15 * S - S);
+    buttonBox(ctx, ax, ay, aw, 15 * S, S, {
+      face: isCancel ? "rgba(60,30,26,.95)" : "rgba(30,44,30,.95)", accent: col,
+    });
     hudText(base.hud, lbl, ax + aw / 2, ay + 7 * S, 8 * S, col, "center", true);
     const capturedMode = mode;
     base.hotspots.push({ x: ax, y: ay, w: aw, h: 15 * S, fn: () => {
@@ -616,11 +598,11 @@ function drawSkills(p: PanelInput): void {
   STANCES.forEach((st, i) => {
     const bx = x + 10 * S + i * bw;
     const on = st === cur;
-    hud.ctx.fillStyle = on ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.2)";
-    hud.ctx.fillRect(bx + 1 * S, by, bw - 2 * S, 14 * S);
-    hud.ctx.strokeStyle = on ? STANCE_COLOR[st] : "rgba(220,214,190,.18)";
-    hud.ctx.lineWidth = S;
-    hud.ctx.strokeRect(bx + 1.5 * S, by + 0.5 * S, bw - 3 * S, 13 * S);
+    buttonBox(hud.ctx, bx + 1 * S, by, bw - 2 * S, 14 * S, S, {
+      on, face: on ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.2)",
+      hover: hovering(p, bx + 1 * S, by, bw - 2 * S, 14 * S),
+      accent: on ? STANCE_COLOR[st] : undefined,
+    });
     hudText(hud, STANCE_LABEL[st], bx + bw / 2, by + 7 * S, 7 * S, on ? STANCE_COLOR[st] : "rgba(220,214,190,.55)", "center", on);
     p.hotspots.push({ x: bx + 1 * S, y: by, w: bw - 2 * S, h: 14 * S, fn: () => setStance(st) });
   });
@@ -706,11 +688,10 @@ function drawEquip(p: PanelInput): void {
        * and with the slot empty you are carrying nothing to carry things in.
        * That is Tibia, and it is what makes a backpack worth 40 gold. */
       const worn = player.pack;
-      ctx.fillStyle = "rgba(40,32,20,.9)";
-      ctx.fillRect(cx, cy, slot, slot);
-      ctx.strokeStyle = worn ? "#ffe9a8" : "#6e571f";
-      ctx.lineWidth = S;
-      ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
+      slotCell(ctx, cx, cy, slot, slot, S, {
+        hover: hovering(p, cx, cy, slot, slot),
+        accent: worn ? CHROME.gold : undefined,
+      });
       const spr = itemSprite("backpack");
       ctx.globalAlpha = worn ? 1 : 0.35;
       icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
@@ -733,11 +714,10 @@ function drawEquip(p: PanelInput): void {
     }
 
     if (cell === "ammo") {
-      ctx.fillStyle = "rgba(40,32,20,.9)";
-      ctx.fillRect(cx, cy, slot, slot);
-      ctx.strokeStyle = ammoKind ? "#ffe9a8" : "#6e571f";
-      ctx.lineWidth = S;
-      ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
+      slotCell(ctx, cx, cy, slot, slot, S, {
+        hover: hovering(p, cx, cy, slot, slot),
+        accent: ammoKind ? CHROME.slotFilled : undefined,
+      });
       const spr = ammoKind ? itemSprite(ammoKind) : SPR.arrow;
       ctx.globalAlpha = ammoKind ? 1 : 0.4;
       icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
@@ -763,11 +743,10 @@ function drawEquip(p: PanelInput): void {
 
     const key = cell;
     const equipped = player.eq[key];
-    ctx.fillStyle = "rgba(40,32,20,.9)";
-    ctx.fillRect(cx, cy, slot, slot);
-    ctx.strokeStyle = equipped ? "#ffe9a8" : "#6e571f";
-    ctx.lineWidth = S;
-    ctx.strokeRect(cx + S / 2, cy + S / 2, slot - S, slot - S);
+    slotCell(ctx, cx, cy, slot, slot, S, {
+      hover: hovering(p, cx, cy, slot, slot),
+      accent: equipped ? CHROME.slotFilled : undefined,
+    });
     if (equipped) {
       const spr = itemSprite(equipped);
       icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
@@ -851,11 +830,9 @@ function drawBag(p: PanelInput): void {
     const cx = gx + (i % cols) * (cell + gap);
     const cy = gy + Math.floor(i / cols) * (cell + gap);
     const hov = hovering(p, cx, cy, cell, cell);
-    ctx.fillStyle = hov ? "rgba(202,162,58,.18)" : "rgba(40,32,20,.9)";
-    ctx.fillRect(cx, cy, cell, cell);
-    ctx.strokeStyle = stackSlot?.items ? "#caa23a" : "#6e571f";
-    ctx.lineWidth = S;
-    ctx.strokeRect(cx + S / 2, cy + S / 2, cell - S, cell - S);
+    // A pack inside the bag keeps its gold keyline: it is the one cell whose
+    // click OPENS something rather than using it, and that is worth marking.
+    slotCell(ctx, cx, cy, cell, cell, S, { hover: hov, accent: stackSlot?.items ? CHROME.gold : undefined });
     if (stackSlot) {
       const spr = itemSprite(stackSlot.kind);
       const dw = iconW(spr, 2 * S);
@@ -1326,11 +1303,10 @@ function drawWorldContainer(
 
   const bw = w - 24 * S;
   const by = y + h - 20 * S;
-  ctx.fillStyle = "rgba(202,162,58,.25)";
-  ctx.fillRect(x + 12 * S, by, bw, 14 * S);
-  ctx.strokeStyle = "#caa23a";
-  ctx.lineWidth = S;
-  ctx.strokeRect(x + 12 * S + S / 2, by + S / 2, bw - S, 14 * S - S);
+  buttonBox(ctx, x + 12 * S, by, bw, 14 * S, S, {
+    face: "rgba(202,162,58,.25)", accent: CHROME.gold,
+    hover: hovering(p, x + 12 * S, by, bw, 14 * S),
+  });
   hudText(hud, "Take all", x + w / 2, by + 7 * S, 8 * S, "#ffe9a8", "center", true);
   p.hotspots.push({ x: x + 12 * S, y: by, w: bw, h: 14 * S, fn: onTakeAll });
 }
@@ -1406,11 +1382,10 @@ function drawShop(p: PanelInput): void {
     const tx = x + 12 * S + i * (tabW + 6 * S);
     const ty = y + 16 * S;
     const on = ui.shopTab === tab;
-    ctx.fillStyle = on ? "rgba(202,162,58,.3)" : "rgba(40,32,20,.8)";
-    ctx.fillRect(tx, ty, tabW, 12 * S);
-    ctx.strokeStyle = on ? "#ffe9a8" : "#6e571f";
-    ctx.lineWidth = S;
-    ctx.strokeRect(tx + S / 2, ty + S / 2, tabW - S, 12 * S - S);
+    buttonBox(ctx, tx, ty, tabW, 12 * S, S, {
+      on, face: on ? "rgba(202,162,58,.3)" : undefined,
+      hover: hovering(p, tx, ty, tabW, 12 * S), accent: on ? CHROME.gold : undefined,
+    });
     hudText(hud, tab === "buy" ? "Buy" : "Sell", tx + tabW / 2, ty + 6 * S, 8 * S, on ? "#ffe9a8" : "#cfa86a", "center", true);
     p.hotspots.push({ x: tx, y: ty, w: tabW, h: 12 * S, fn: () => { ui.shopTab = tab; } });
   });
@@ -1542,11 +1517,11 @@ function drawTasks(p: PanelInput): void {
     // hand-in button
     const bw = 78 * S, bh = 24 * S, bx = x + w - bw - 10 * S, by = ry + 7 * S;
     const canHand = complete && fits;
-    ctx.fillStyle = canHand ? "rgba(52,110,52,.92)" : "rgba(48,48,48,.7)";
-    ctx.fillRect(bx, by, bw, bh);
-    ctx.strokeStyle = canHand ? "#9fe8a8" : "#556";
-    ctx.lineWidth = S;
-    ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, bh - S);
+    buttonBox(ctx, bx, by, bw, bh, S, {
+      face: canHand ? "rgba(52,110,52,.92)" : "rgba(48,48,48,.7)",
+      accent: canHand ? "#9fe8a8" : undefined,
+      hover: canHand && hovering(p, bx, by, bw, bh),
+    });
     const label = canHand ? "HAND IN" : complete ? "bag full" : "in progress";
     hudText(hud, label, bx + bw / 2, by + bh / 2, 8 * S, canHand ? "#eaffea" : "#9a9a9a", "center", true);
     if (canHand) p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.handInTask() });
@@ -1640,11 +1615,7 @@ function drawGrid(
     const cx = gx + (i % cols) * (cell + gap);
     const cy = gy + Math.floor(i / cols) * (cell + gap);
     const hov = hovering(p, cx, cy, cell, cell);
-    ctx.fillStyle = hov ? "rgba(202,162,58,.18)" : "rgba(40,32,20,.9)";
-    ctx.fillRect(cx, cy, cell, cell);
-    ctx.strokeStyle = "#6e571f";
-    ctx.lineWidth = S;
-    ctx.strokeRect(cx + S / 2, cy + S / 2, cell - S, cell - S);
+    slotCell(ctx, cx, cy, cell, cell, S, { hover: hov, accent: slot?.items ? CHROME.gold : undefined });
     if (slot) {
       const spr = itemSprite(slot.kind);
       const dw = iconW(spr, 2 * S);
@@ -1657,8 +1628,6 @@ function drawGrid(
         const used = slot.items.filter((q) => q !== null).length;
         hudText(hud, `${used}/${slot.items.length}`, cx + cell / 2, cy + cell - 4 * S, 6 * S,
           used >= slot.items.length ? "#d96a5a" : "rgba(220,214,190,.75)", "center");
-        ctx.strokeStyle = "#caa23a";
-        ctx.strokeRect(cx + S / 2, cy + S / 2, cell - S, cell - S);
       }
       if (hov) { tooltipKind = slot.kind; tooltipStack = slot; }
       const idx = i;
@@ -1693,11 +1662,7 @@ function navBar(p: PanelInput, x: number, y: number, ref: ContainerRef): void {
   const bx = x + 6 * S;
   const by = y + 3 * S;
   const hot = hovering(p, bx, by, bs, bs);
-  ctx.fillStyle = hot ? "rgba(202,162,58,.35)" : "rgba(40,32,20,.9)";
-  ctx.fillRect(bx, by, bs, bs);
-  ctx.strokeStyle = "#caa23a";
-  ctx.lineWidth = S;
-  ctx.strokeRect(bx + S / 2, by + S / 2, bs - S, bs - S);
+  buttonBox(ctx, bx, by, bs, bs, S, { hover: hot, accent: CHROME.gold });
   hudText(p.hud, "\u25B2", bx + bs / 2, by + bs / 2, 7 * S, "#ffe9a8", "center", true);
   p.hotspots.push({ x: bx, y: by, w: bs, h: bs, fn: () => p.act.navUp(ref) });
   /* Carve this button OUT of the title bar's drag region.
@@ -1791,11 +1756,10 @@ function drawStash(p: PanelInput): void {
   const bh = 14 * S;
   const hot = hovering(p, bx, by, bw, bh);
   hudText(hud, `Tier ${roman} — ${inv.length} slots`, x + 12 * S, gy + 9 * S, 8 * S, "#cfe8d2", "left");
-  ctx.fillStyle = canPay ? (hot ? "rgba(140,200,110,.34)" : "rgba(90,140,70,.24)") : "rgba(60,50,40,.5)";
-  ctx.fillRect(bx, by, bw, bh);
-  ctx.strokeStyle = canPay ? "#b9e07f" : "#6e571f";
-  ctx.lineWidth = S;
-  ctx.strokeRect(bx + S / 2, by + S / 2, bw - S, bh - S);
+  buttonBox(ctx, bx, by, bw, bh, S, {
+    face: canPay ? (hot ? "rgba(140,200,110,.34)" : "rgba(90,140,70,.24)") : "rgba(60,50,40,.5)",
+    accent: canPay ? "#b9e07f" : undefined,
+  });
   hudText(hud, `Upgrade to ${"I".repeat(chestTier + 1)}: ${costText(upCost)}`, bx + bw / 2, by + 9 * S, 7 * S,
     canPay ? "#b9e07f" : "#d96a5a", "center");
   if (canPay) p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.upgrade(chest) });
@@ -1844,11 +1808,7 @@ function drawWardrobe(p: PanelInput): void {
   // live preview: the LPC hero that actually walks around, so the dyes you pick
   // are exactly what you'll wear. Falls back to the baked outfit headless / if
   // the layer sheets fail to load.
-  ctx.fillStyle = "rgba(40,32,20,.9)";
-  ctx.fillRect(lx, top, previewW, previewH);
-  ctx.strokeStyle = "#6e571f";
-  ctx.lineWidth = S;
-  ctx.strokeRect(lx + S / 2, top + S / 2, previewW - S, previewH - S);
+  slotCell(ctx, lx, top, previewW, previewH, S);
   const lpc = heroPreviewFrame();
   if (lpc) {
     const psc = Math.max(1, Math.floor((previewH - 6 * S) / 64));
@@ -1865,11 +1825,10 @@ function drawWardrobe(p: PanelInput): void {
   let by = top + previewH + 4 * S;
   for (const zone of zones) {
     const on = dyeZone === zone;
-    ctx.fillStyle = on ? "rgba(110,87,31,.9)" : "rgba(40,32,20,.95)";
-    ctx.fillRect(lx, by, btnW, btnH);
-    ctx.strokeStyle = on ? "#ffe9a8" : "#6e571f";
-    ctx.lineWidth = on ? Math.max(1, 1.5 * S) : S;
-    ctx.strokeRect(lx + S / 2, by + S / 2, btnW - S, btnH - S);
+    buttonBox(ctx, lx, by, btnW, btnH, S, {
+      on, face: on ? "rgba(110,87,31,.9)" : undefined,
+      hover: hovering(p, lx, by, btnW, btnH), accent: on ? CHROME.gold : undefined,
+    });
     hudText(hud, zoneLabels()[zone], lx + btnW / 2, by + btnH / 2, 6.5 * S,
       on ? "#fff4d0" : "#cfe8d2", "center", true);
     const z = zone;
@@ -1887,9 +1846,8 @@ function drawWardrobe(p: PanelInput): void {
     ctx.fillStyle = OUTFIT_COLORS[i];
     ctx.fillRect(gx, gy, sw, sw);
     if (cur === i) {
-      ctx.strokeStyle = "#ffe9a8";
-      ctx.lineWidth = Math.max(1, 1.5 * S);
-      ctx.strokeRect(gx - S / 2, gy - S / 2, sw + S, sw + S);
+      const b = bevelPx(S);
+      keyline(ctx, gx - 2 * b, gy - 2 * b, sw + 4 * b, sw + 4 * b, CHROME.goldText, S);
     }
     const ii = i;
     p.hotspots.push({ x: gx, y: gy, w: sw, h: sw, fn: () => p.act.setOutfitColor(dyeZone, ii) });
@@ -1900,11 +1858,7 @@ function drawWardrobe(p: PanelInput): void {
   const bh = 13 * S;
   const bx = x + (w - bw) / 2;
   const ry = y + h - 22 * S;
-  ctx.fillStyle = "rgba(40,32,20,.95)";
-  ctx.fillRect(bx, ry, bw, bh);
-  ctx.strokeStyle = "#6e571f";
-  ctx.lineWidth = S;
-  ctx.strokeRect(bx + S / 2, ry + S / 2, bw - S, bh - S);
+  buttonBox(ctx, bx, ry, bw, bh, S, { hover: hovering(p, bx, ry, bw, bh) });
   hudText(hud, "Classic look", bx + bw / 2, ry + bh / 2, 7 * S, "#e8dcc0", "center", true);
   p.hotspots.push({ x: bx, y: ry, w: bw, h: bh, fn: () => p.act.resetOutfitColors() });
   hudText(hud, "Pick a zone, then a dye — free, any time", x + w / 2, y + h - 6 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");

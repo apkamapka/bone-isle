@@ -46,6 +46,7 @@ import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
+import { buttonBox, slotCell, popupFrame, CHROME } from "./ui/chrome.ts";
 import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
@@ -3206,11 +3207,11 @@ let touchButtons: { x: number; y: number; w: number; h: number }[] = [];
 
 function tButton(x: number, y: number, s: number, label: string, glyph: string, on: boolean, fn: () => void): void {
   const ctx = sctx;
-  ctx.fillStyle = on ? "rgba(202,162,58,.92)" : "rgba(16,26,24,.82)";
-  ctx.fillRect(x, y, s, s);
-  ctx.strokeStyle = on ? "#ffe9a8" : "#3d5a50";
-  ctx.lineWidth = Math.max(1, scale);
-  ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+  buttonBox(ctx, x, y, s, s, scale, {
+    on,
+    face: on ? "rgba(202,162,58,.92)" : "rgba(16,26,24,.82)",
+    accent: on ? CHROME.goldText : undefined,
+  });
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = on ? "#201a10" : "#e9e2c8";
@@ -3231,11 +3232,11 @@ function slotTap(i: number): void {
 /** A flat rectangular HUD button with a single label. Registers a hotspot. */
 function hudBtn(x: number, y: number, w: number, h: number, label: string, on: boolean, fn: () => void): void {
   const ctx = sctx;
-  ctx.fillStyle = on ? "rgba(202,162,58,.92)" : "rgba(16,26,24,.85)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = on ? "#ffe9a8" : "#3d5a50";
-  ctx.lineWidth = Math.max(1, scale);
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  buttonBox(ctx, x, y, w, h, scale, {
+    on,
+    face: on ? "rgba(202,162,58,.92)" : "rgba(16,26,24,.85)",
+    accent: on ? CHROME.goldText : undefined,
+  });
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = on ? "#201a10" : "#e9e2c8";
@@ -3263,11 +3264,10 @@ function drawActionSlot(i: number, x: number, y: number, w: number, h: number): 
     label = hudEditing() ? "+" : "";
     sub = hudEditing() ? "bind" : `${i + 1}`;
   }
-  ctx.fillStyle = usable ? "rgba(46,58,54,.92)" : "rgba(24,26,30,.8)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = hudEditing() ? "#8ab6ff" : usable ? "#caa15a" : "#3a4048";
-  ctx.lineWidth = Math.max(1, scale);
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  slotCell(ctx, x, y, w, h, scale, {
+    face: usable ? "rgba(46,58,54,.92)" : "rgba(24,26,30,.8)",
+    accent: hudEditing() ? "#8ab6ff" : usable ? "#caa15a" : undefined,
+  });
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = usable ? "#e9e2c8" : hudEditing() ? "#8ab6ff" : "#7a808a";
@@ -3378,11 +3378,7 @@ function drawTouchControls(): void {
     const ey = m + 2 * scale;
     hudBtn(ex, ey, sq, btnH, "−", false, () => { stepHudUserScale(-1); saveHudLayout(); });
     ex += sq + gap;
-    sctx.fillStyle = "rgba(16,26,24,.85)";
-    sctx.fillRect(ex, ey, pctW, btnH);
-    sctx.strokeStyle = "#3d5a50";
-    sctx.lineWidth = Math.max(1, scale);
-    sctx.strokeRect(ex + 0.5, ey + 0.5, pctW - 1, btnH - 1);
+    slotCell(sctx, ex, ey, pctW, btnH, scale, { face: "rgba(16,26,24,.85)" });
     sctx.textAlign = "center";
     sctx.textBaseline = "middle";
     sctx.fillStyle = "#e9e2c8";
@@ -3442,11 +3438,7 @@ function drawAssignPicker(): void {
   const rowH = 30 * S;
   const h = 26 * S + rows.length * rowH + 10 * S;
   const x = (sw - w) / 2, y = (sh - h) / 2;
-  ctx.fillStyle = "rgba(16,20,24,.97)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#caa23a";
-  ctx.lineWidth = Math.max(1, S);
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  popupFrame(ctx, x, y, w, h, S, "rgba(16,20,24,.97)");
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#ffe9a8";
@@ -3454,10 +3446,8 @@ function drawAssignPicker(): void {
   ctx.fillText(`Bind slot ${slotIdx + 1}`, x + w / 2, y + 14 * S);
   let ry = y + 26 * S;
   for (const r of rows) {
-    ctx.fillStyle = "rgba(40,52,60,.92)";
-    ctx.fillRect(x + 6 * S, ry + 2 * S, w - 12 * S, rowH - 4 * S);
-    ctx.strokeStyle = "#3d5a50";
-    ctx.strokeRect(x + 6 * S + 0.5, ry + 2 * S + 0.5, w - 12 * S - 1, rowH - 4 * S - 1);
+    buttonBox(ctx, x + 6 * S, ry + 2 * S, w - 12 * S, rowH - 4 * S, S,
+      { face: "rgba(40,52,60,.92)" });
     ctx.textAlign = "left";
     ctx.fillStyle = "#f3eedd";
     ctx.font = `bold ${Math.round(9 * S)}px 'Courier New',monospace`;

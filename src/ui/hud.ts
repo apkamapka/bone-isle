@@ -10,6 +10,7 @@ import { carryCap, carriedWeight } from "../entities/player.ts";
 import { stance, stanceAtk, stanceDef, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import type { Player } from "../entities/player.ts";
 import type { Game } from "../game.ts";
+import { ring, raisedBox, sunkenBox, bevelPx } from "./chrome.ts";
 
 export interface HudCtx {
   ctx: CanvasRenderingContext2D;
@@ -29,19 +30,20 @@ export interface HudCtx {
   sidebarW?: number;
 }
 
+/* The HUD keeps its own teal palette — it is a different layer from the amber
+ * windows and reading as one would be worse, not better. What it borrows is
+ * the DEPTH: frames raised, bars and the minimap sunk into them. */
 function panel(h: HudCtx, x: number, y: number, w: number, ph: number): void {
   const { ctx, scale: S } = h;
-  ctx.fillStyle = "rgba(12,24,22,.78)";
-  ctx.fillRect(x, y, w, ph);
-  ctx.strokeStyle = "#3d5a50";
-  ctx.lineWidth = S;
-  ctx.strokeRect(x + S / 2, y + S / 2, w - S, ph - S);
+  ring(ctx, x, y, w, ph, bevelPx(S), "#050807");
+  const b = bevelPx(S);
+  raisedBox(ctx, x + b, y + b, w - 2 * b, ph - 2 * b,
+    "rgba(12,24,22,.82)", "#4e7268", "#08110f", S);
 }
 
 function bar(h: HudCtx, x: number, y: number, w: number, ph: number, frac: number, fg: string, bg: string): void {
   const { ctx, scale: S } = h;
-  ctx.fillStyle = "#000";
-  ctx.fillRect(x - S, y - S, w + 2 * S, ph + 2 * S);
+  sunkenBox(ctx, x - S, y - S, w + 2 * S, ph + 2 * S, bg, "#05100e", "#40605a", S);
   ctx.fillStyle = bg;
   ctx.fillRect(x, y, w, ph);
   ctx.fillStyle = fg;
@@ -113,11 +115,8 @@ export function drawMinimapAt(h: HudCtx, game: Game, p: Player, x: number, y: nu
   const w = game.current;
   const sx = size / (w.w * TILE);
   const sy = size / (w.h * TILE);
-  ctx.fillStyle = "rgba(6,14,13,.85)";
-  ctx.fillRect(x - 2 * S, y - 2 * S, size + 4 * S, size + 4 * S);
-  ctx.strokeStyle = "#3d5a50";
-  ctx.lineWidth = S;
-  ctx.strokeRect(x - 2 * S + S / 2, y - 2 * S + S / 2, size + 4 * S - S, size + 4 * S - S);
+  sunkenBox(ctx, x - 2 * S, y - 2 * S, size + 4 * S, size + 4 * S,
+    "rgba(6,14,13,.85)", "#05100e", "#4e7268", S);
   // terrain: one blit of the per-world cache (pixelated, like the game art)
   const wasSmooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;

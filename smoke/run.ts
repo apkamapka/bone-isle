@@ -7292,6 +7292,216 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("Etap 32 — window chrome (bevels replace the flat 1-px outlines):");
+  {
+    const C = await import("../src/ui/chrome.ts");
+
+    /* Every chrome primitive draws with fillRect and nothing else, which is
+     * what makes it testable without a browser: record the rects and read the
+     * picture back out of them. */
+    interface R { x: number; y: number; w: number; h: number; c: string }
+    const rec = (): { ctx: CanvasRenderingContext2D; out: R[] } => {
+      const out: R[] = [];
+      let cur = "#000";
+      const ctx = {
+        set fillStyle(v: string) { cur = v; },
+        get fillStyle() { return cur; },
+        fillRect(x: number, y: number, w: number, h: number) { out.push({ x, y, w, h, c: cur }); },
+      } as unknown as CanvasRenderingContext2D;
+      return { ctx, out };
+    };
+    /** Colour of the topmost rect covering a point, or "" for nothing drawn. */
+    const at = (out: R[], px: number, py: number): string => {
+      let c = "";
+      for (const r of out) {
+        if (px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h) c = r.c;
+      }
+      return c;
+    };
+
+    ok(C.bevelPx(2) === 2 && C.bevelPx(1) === 1, "a bevel is one UI pixel thick");
+    ok(C.bevelPx(0.2) === 1 && C.bevelPx(0) === 1,
+      "…and never thinner than one real pixel, however far the panel is zoomed out");
+    ok(C.frameInset(2) === 4, "a window frame is the hard edge plus the bevel inside it");
+
+    // The whole point of the restyle: a frame is lit from the top-left and a
+    // slot is lit from the bottom-right. If these ever agree, the UI is flat
+    // again and nothing tells you which rectangles take a dropped item.
+    {
+      const a = rec();
+      C.raisedBox(a.ctx, 0, 0, 40, 40, "#222", "#fff", "#000", 2);
+      ok(at(a.out, 20, 0) === "#fff" && at(a.out, 20, 39) === "#000",
+        "a raised plate is lit top-left, shadowed bottom-right");
+
+      const b = rec();
+      C.sunkenBox(b.ctx, 0, 0, 40, 40, "#222", "#000", "#fff", 2);
+      ok(at(b.out, 20, 0) === "#000" && at(b.out, 20, 39) === "#fff",
+        "…and a sunken well is exactly its mirror — that contrast IS the depth");
+      ok(at(a.out, 20, 0) !== at(b.out, 20, 0),
+        "…so a slot can never be mistaken for the panel it sits in");
+    }
+
+    // Crispness: a bevel drawn on a half pixel is a grey smear, and at two
+    // pixels wide the smear is most of the effect. Fractional scales come from
+    // the per-window zoom, so this is a real input, not a hypothetical.
+    {
+      const f = rec();
+      C.panelFrame(f.ctx, 10.4, 20.6, 100.5, 80.5, 1.7);
+      C.slotCell(f.ctx, 12.3, 33.7, 20.5, 20.5, 1.7, { accent: "#caa23a" });
+      C.buttonBox(f.ctx, 12.9, 60.2, 30.4, 12.6, 1.7, { on: true });
+      const whole = f.out.every((r) =>
+        Number.isInteger(r.x) && Number.isInteger(r.y) && Number.isInteger(r.w) && Number.isInteger(r.h));
+      ok(whole, `every chrome rect lands on a whole device pixel (${f.out.length} rects, fractional scale)`);
+    }
+
+    // A window's footprint is also its hit box and its "are you close enough"
+    // box, so the frame has to stay inside the rect the caller reserved.
+    {
+      const f = rec();
+      C.panelFrame(f.ctx, 50, 60, 120, 90, 2);
+      const inside = f.out.every((r) => r.x >= 50 && r.y >= 60 && r.x + r.w <= 170 && r.y + r.h <= 150);
+      ok(inside, "a panel frame draws entirely inside the rect it was given");
+      ok(at(f.out, 50, 60) === C.CHROME.stud && at(f.out, 169, 149) === C.CHROME.stud,
+        "…with a rivet in each corner");
+    }
+
+    // Degenerate sizes turn up whenever a window is rolled up or squeezed by
+    // the auto-fit; they must draw nothing rather than inside-out garbage.
+    {
+      const f = rec();
+      C.ring(f.ctx, 0, 0, 0, 10, 2, "#fff");
+      C.raisedBox(f.ctx, 0, 0, -5, 10, "#1", "#2", "#3", 2);
+      C.sunkenBox(f.ctx, 0, 0, 10, 0, "#1", "#2", "#3", 2);
+      ok(f.out.length === 0, "a zero-or-negative box draws nothing at all");
+    }
+
+    // The accent keyline is the "this cell is live" mark. No accent, no ring.
+    {
+      const plain = rec();
+      C.slotCell(plain.ctx, 0, 0, 30, 30, 2);
+      const lit = rec();
+      C.slotCell(lit.ctx, 0, 0, 30, 30, 2, { accent: C.CHROME.gold });
+      ok(!plain.out.some((r) => r.c === C.CHROME.gold), "an empty slot carries no keyline");
+      ok(at(lit.out, 15, 2) === C.CHROME.gold, "…and an accented one is ringed just inside its bevel");
+      ok(C.CHROME.slotFilled !== C.CHROME.goldText,
+        "a merely-occupied slot is marked dimmer than a hot one, or the equipment window is a wall of light");
+    }
+
+    // A button that is ON is physically pressed: same box, bevels flipped.
+    {
+      const off = rec();
+      C.buttonBox(off.ctx, 0, 0, 40, 20, 2, {});
+      const on = rec();
+      C.buttonBox(on.ctx, 0, 0, 40, 20, 2, { on: true });
+      ok(at(off.out, 20, 0) !== at(on.out, 20, 0), "pressing a button flips its bevel, so it reads as held");
+    }
+
+    ok(C.CHROME.slotFace !== C.CHROME.panelFace,
+      "a slot is a different value from the panel — two bevel pixels cannot carry the depth alone");
+  }
+
+  console.log("Etap 32 — no flat outlined boxes survive anywhere in the UI:");
+  {
+    const nfs = await import("node:fs");
+    /* The old chrome was fillRect + strokeRect, everywhere, by hand. If one
+     * creeps back it will look subtly wrong beside everything else and no
+     * behavioural test will ever catch it. */
+    for (const f of ["src/ui/panels.ts", "src/ui/hud.ts"]) {
+      const src = nfs.readFileSync(f, "utf8");
+      ok(!src.includes("strokeRect"), `${f} draws no hand-rolled outlined boxes`);
+    }
+    const mainSrc = nfs.readFileSync("src/main.ts", "utf8");
+    // main.ts keeps ONE strokeRect: the dashed edit-mode outline, which is a
+    // marquee rather than a box and has no business being bevelled.
+    const strokes = mainSrc.split("strokeRect").length - 1;
+    /* Five survive on purpose: the build-placement ghost, two tile
+     * highlights, the ground-item outline and the edit-mode marquee. Those
+     * are outlines drawn ON THE MAP, not window chrome — a bevel would be
+     * wrong on them. A sixth means a flat box crept back into the UI. */
+    ok(strokes === 5, `main.ts keeps only its five world-space markers (${strokes} strokeRect)`);
+    ok(mainSrc.includes("setLineDash"), "…one of which is the dashed edit-mode marquee");
+
+    const chromeSrc = nfs.readFileSync("src/ui/chrome.ts", "utf8");
+    ok(!chromeSrc.includes("drawImage") && !chromeSrc.includes("http"),
+      "the chrome needs no art file, so no asset licence rides on the UI");
+  }
+
+  console.log("Etap 32 — every window still draws through the new chrome:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    items.addItem(g.player.bag, "wood", 50);
+    const mk = (scale: number): unknown => ({
+      ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+        .document.createElement("canvas").getContext("2d"),
+      scale, screenW: 800, screenH: 600, touchInput: false,
+    });
+
+    /* Fractional scales are what the per-window zoom actually produces, and
+     * they are where a rounding bug in the bevels would surface. */
+    for (const scale of [1, 2, 1.7]) {
+      for (const kind of ["build", "skills", "equip", "bag", "quest", "forge", "tower", "tasks", "wardrobe"]) {
+        const ui = {
+          windows: [{ kind, offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
+          npc: null, stash: null, floor: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
+          towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        } as never;
+        let threw = "";
+        try {
+          drawPanels({
+            hud: mk(scale), ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+            act: {} as never, hotspots: [], itemSlots: [],
+          } as never);
+        } catch (e) { threw = String(e); }
+        ok(threw === "", `${kind} draws at scale ${scale}${threw ? " — " + threw : ""}`);
+      }
+    }
+
+    // Look mode, the inspect card and the split chooser are separate popups
+    // that were re-framed too, and none is reachable from the loop above
+    // because they hang off ui state rather than off a window kind.
+    {
+      const ui = {
+        windows: [{ kind: "bag", offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
+        npc: null, stash: null, floor: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
+        towerTab: "fire", upgrading: null, dragging: false, lookMode: true,
+        inspect: "wood",
+        split: { kind: "wood", n: 3, max: 9, index: 0, ref: { c: "bag" }, canStore: true },
+      } as never;
+      let threw = "";
+      try {
+        drawPanels({
+          hud: mk(2), ui, game: g, player: g.player, mouse: { sx: 400, sy: 300 },
+          act: {} as never, hotspots: [], itemSlots: [],
+        } as never);
+      } catch (e) { threw = String(e); }
+      ok(threw === "", `the inspect card and split chooser draw${threw ? " — " + threw : ""}`);
+    }
+
+    // A rolled-up window is the degenerate case the frame has to survive: the
+    // body collapses to nothing and only the title bar is left.
+    {
+      const prefs = await import("../src/systems/panelPrefs.ts");
+      prefs.togglePanelCollapsed("bag");
+      const ui = {
+        windows: [{ kind: "bag", offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
+        npc: null, stash: null, floor: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
+        towerTab: "fire", upgrading: null, dragging: false, lookMode: false, inspect: null, split: null,
+      } as never;
+      let threw = "";
+      try {
+        drawPanels({
+          hud: mk(2), ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+          act: {} as never, hotspots: [], itemSlots: [],
+        } as never);
+      } catch (e) { threw = String(e); }
+      ok(threw === "", `a rolled-up window draws its bar alone${threw ? " — " + threw : ""}`);
+      prefs.togglePanelCollapsed("bag");
+    }
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
