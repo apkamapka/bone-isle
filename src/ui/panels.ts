@@ -24,7 +24,7 @@ import { smeltYield, canSmelt, COAL_PER_SMELT, GEM_TROPHIES, GEM_TROPHY_KINDS, G
 import type { EqSlot, ItemKind, ItemStack, Recipe, Bag } from "../items.ts";
 import type { Corpse, GroundItem, Npc, Structure } from "../world/types.ts";
 import type { ContainerRef } from "../systems/containers.ts";
-import { slotsOf, stackAt, followTrail, depthOf, rootOf } from "../systems/containers.ts";
+import { slotsOf, stackAt, baseOf, rootOf } from "../systems/containers.ts";
 import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed } from "../systems/panelPrefs.ts";
@@ -33,10 +33,20 @@ export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
   | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks" | "wardrobe"
   /** A container lying on the ground — the loot bag you left by the corpses. */
-  | "floor";
+  | "floor"
+  /**
+   * A pack opened from inside another container. UNLIKE every other kind,
+   * several of these may be open at once — each addressed by its own `ref`.
+   *
+   * They exist because a single window per kind made two packs in the same
+   * backpack mutually exclusive: you could look in either, never both, so
+   * moving something from one to the other was impossible without a detour
+   * through the bag itself.
+   */
+  | "container";
 
-/** The four windows that show a container's slots and can be navigated into. */
-export const CONTAINER_PANELS: readonly PanelKind[] = ["bag", "stash", "loot", "floor"];
+/** Windows that show a container's slots. */
+export const CONTAINER_PANELS: readonly PanelKind[] = ["bag", "stash", "loot", "floor", "container"];
 
 export interface Hotspot {
   x: number;
@@ -65,12 +75,12 @@ export interface ItemSlot {
 export interface PanelWindow {
   kind: PanelKind;
   /**
-   * Container windows: the slot indices walked down from the window's own
-   * container into a pack inside it. Tibia's behaviour — opening a backpack
-   * inside a backpack REPLACES what this window shows and offers a way back
-   * up, rather than piling a second window on the screen.
+   * Container windows: the container this window shows, as an ABSOLUTE
+   * address. Replaced the old "root kind plus a trail of slot indices"
+   * because a trail can only ever describe ONE path per window kind, and the
+   * player needs two packs from the same bag side by side.
    */
-  trail?: number[];
+  ref?: ContainerRef;
   /** User drag offset from the panel's default anchor. */
   offset: { x: number; y: number };
   /** Panel body rect this frame (screen px); set during draw. */
@@ -143,9 +153,10 @@ export interface PanelActions {
   buyExchange: (id: string) => void;
   moveStack: (ref: ContainerRef, index: number) => void;
   /** Walk this window down into the container sitting in slot `index`. */
-  openNested: (index: number) => void;
-  /** Back up one level; at the top this closes nothing. */
-  navUp: () => void;
+  /** Open the container in slot `index` of `ref` — in its own window. */
+  openNested: (ref: ContainerRef, index: number) => void;
+  /** Back up to the container holding this one. */
+  navUp: (ref: ContainerRef) => void;
   /** Take the worn backpack off — it has to go somewhere, so this drops it. */
   removePack: () => void;
   setOutfitColor: (zone: OutfitZone, idx: number) => void;
@@ -454,6 +465,7 @@ export function drawPanels(base: Omit<PanelInput, "win">): void {
       case "tower": drawTower(p); break;
       case "loot": drawLoot(p); break;
       case "floor": drawFloor(p); break;
+      case "container": drawContainerWin(p); break;
       case "shop": drawShop(p); break;
       case "quest": drawQuests(p); break;
       case "tasks": drawTasks(p); break;
@@ -813,7 +825,7 @@ function drawBag(p: PanelInput): void {
     return;
   }
 
-  const ref = windowRef(p, { c: "bag" });
+  const ref: ContainerRef = { c: "bag" };
   const slots = slotsOf(ref, player);
   if (!slots) return;
 
@@ -826,8 +838,7 @@ function drawBag(p: PanelInput): void {
   const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  if (!goldPanel(p, x, y, w, h, containerTitle(p, ref, "BACKPACK"))) return;
-  navBar(p, x, y, w, ref);
+  if (!goldPanel(p, x, y, w, h, "BACKPACK")) return;
   lookToggle(p, x, y, w);
   /* No gold line here any more. Money is coins in these very cells now, so a
    * separate total would be printing the same thing twice — and worse, in a
@@ -865,7 +876,7 @@ function drawBag(p: PanelInput): void {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.look(k) });
       } else if (isContainer(k)) {
         // a pack opens; it is never "used" and never worn from here
-        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.openNested(idx) });
+        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.openNested(ref, idx) });
       } else if (def.slot) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.equipItem(k, idx) });
       } else if (def.heal || def.food || def.crystal || def.boost) {
@@ -879,7 +890,6 @@ function drawBag(p: PanelInput): void {
     }
   });
   const hint = p.ui.lookMode ? "Look mode — click any item to inspect it"
-    : depthOf(ref) > 0 ? "\u25B2 goes back to the bag holding this one"
     : "Click gear to equip · potion/food to use · a pack to open it";
   hudText(hud, hint, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
@@ -1291,11 +1301,10 @@ function drawTower(p: PanelInput): void {
  * on the floor is just a move between two containers now.
  */
 function drawWorldContainer(
-  p: PanelInput, base: ContainerRef, topTitle: string, onTakeAll: () => void,
+  p: PanelInput, ref: ContainerRef, topTitle: string, onTakeAll: () => void,
 ): void {
   const { hud } = p;
   const { ctx, scale: S, screenW, screenH } = hud;
-  const ref = windowRef(p, base);
   const slots = slotsOf(ref, p.player);
   if (!slots) return;
 
@@ -1308,8 +1317,7 @@ function drawWorldContainer(
   const h = 20 * S + rows * cell + (rows - 1) * gap + 30 * S;
   const x = (screenW - w) / 2 + p.win.offset.x;
   const y = (screenH - h) / 2 + p.win.offset.y;
-  if (!goldPanel(p, x, y, w, h, containerTitle(p, ref, topTitle))) return;
-  navBar(p, x, y, w, ref);
+  if (!goldPanel(p, x, y, w, h, topTitle)) return;
 
   const gx = x + (w - gridW) / 2;
   let gy = y + 18 * S;
@@ -1325,6 +1333,42 @@ function drawWorldContainer(
   ctx.strokeRect(x + 12 * S + S / 2, by + S / 2, bw - S, 14 * S - S);
   hudText(hud, "Take all", x + w / 2, by + 7 * S, 8 * S, "#ffe9a8", "center", true);
   p.hotspots.push({ x: x + 12 * S, y: by, w: bw, h: 14 * S, fn: onTakeAll });
+}
+
+/**
+ * A pack opened from inside another container, in a window of its very own.
+ *
+ * Several of these can be on screen at once, each pointing at a different
+ * container — which is the whole reason they exist. The address is absolute,
+ * so a window keeps showing the same pack no matter what happens to the cells
+ * around it, and goes away the moment that pack does.
+ */
+function drawContainerWin(p: PanelInput): void {
+  const { hud, player } = p;
+  const { scale: S, screenW, screenH } = hud;
+  const ref = p.win.ref;
+  if (!ref) return;
+  const slots = slotsOf(ref, player);
+  if (!slots) return;
+
+  const cols = 4;
+  const rows = Math.ceil(slots.length / cols);
+  const cell = 32 * S;
+  const gap = 4 * S;
+  const gridW = cols * cell + (cols - 1) * gap;
+  const w = gridW + 24 * S;
+  const h = 20 * S + rows * cell + (rows - 1) * gap + 16 * S;
+  const x = (screenW - w) / 2 + p.win.offset.x;
+  const y = (screenH - h) / 2 + p.win.offset.y;
+  if (!goldPanel(p, x, y, w, h, containerTitle(p, ref, "CONTAINER"))) return;
+  navBar(p, x, y, ref);
+
+  const gx = x + (w - gridW) / 2;
+  const gy = y + 20 * S;
+  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref);
+  const used = slots.filter((q) => q !== null).length;
+  hudText(hud, `${used}/${slots.length} · ${containerHome(ref)}`,
+    x + w / 2, y + h - 7 * S, 6.5 * S, "rgba(220,214,190,.6)", "center");
 }
 
 function drawLoot(p: PanelInput): void {
@@ -1624,7 +1668,7 @@ function drawGrid(
       p.hotspots.push({
         x: cx, y: cy, w: cell, h: cell,
         fn: () => (p.ui.lookMode ? p.act.look(kind)
-          : nested && ref ? p.act.openNested(idx)
+          : nested && ref ? p.act.openNested(ref, idx)
           : onClick(idx)),
       });
     } else if (ref) {
@@ -1641,26 +1685,10 @@ function drawGrid(
   });
 }
 
-/**
- * The container this window is showing right now, after walking its trail.
- *
- * Also REPAIRS the trail: a pack you were looking inside can be taken away by
- * anything — a monster looting you is not a thing, but dropping the pack, a
- * corpse rotting or a chest being demolished all are — and a window pointing
- * at a container that no longer exists must fall back to the nearest one that
- * does rather than draw nothing.
- */
-function windowRef(p: PanelInput, base: ContainerRef): ContainerRef {
-  const trail = p.win.trail ?? [];
-  const { ref, used } = followTrail(base, trail, p.player);
-  if (used < trail.length) p.win.trail = trail.slice(0, used);
-  return ref;
-}
-
 /** The title bar's "up one level" arrow. Only drawn when there is a way up. */
-function navBar(p: PanelInput, x: number, y: number, w: number, ref: ContainerRef): void {
+function navBar(p: PanelInput, x: number, y: number, ref: ContainerRef): void {
   const { ctx, scale: S } = p.hud;
-  if (depthOf(ref) === 0) return;
+  if (ref.c !== "nested") return;
   const bs = 12 * S;
   const bx = x + 6 * S;
   const by = y + 3 * S;
@@ -1671,7 +1699,7 @@ function navBar(p: PanelInput, x: number, y: number, w: number, ref: ContainerRe
   ctx.lineWidth = S;
   ctx.strokeRect(bx + S / 2, by + S / 2, bs - S, bs - S);
   hudText(p.hud, "\u25B2", bx + bs / 2, by + bs / 2, 7 * S, "#ffe9a8", "center", true);
-  p.hotspots.push({ x: bx, y: by, w: bs, h: bs, fn: () => p.act.navUp() });
+  p.hotspots.push({ x: bx, y: by, w: bs, h: bs, fn: () => p.act.navUp(ref) });
   /* Carve this button OUT of the title bar's drag region.
    *
    * Pressing the title bar starts moving the window, and that happens on
@@ -1683,13 +1711,22 @@ function navBar(p: PanelInput, x: number, y: number, w: number, ref: ContainerRe
     const cut = bx + bs + 4 * S - tb.x;
     if (cut > 0) { tb.x += cut; tb.w = Math.max(0, tb.w - cut); }
   }
-  void w;
 }
 
 /** What to write on a container window's title bar. */
 function containerTitle(p: PanelInput, ref: ContainerRef, top: string): string {
   const st = stackAt(ref, p.player);
   return st ? ITEMS[st.kind].name.toUpperCase() : top;
+}
+
+/** Where a nested container window says it lives, for the footer hint. */
+function containerHome(ref: ContainerRef): string {
+  switch (baseOf(ref).c) {
+    case "bag": return "in your backpack";
+    case "stash": return "in the storage chest";
+    case "corpse": return "in the corpse";
+    case "ground": return "on the ground";
+  }
 }
 
 function drawStash(p: PanelInput): void {
@@ -1728,8 +1765,7 @@ function drawStash(p: PanelInput): void {
   hudText(hud, `Chest — click to take  (${used}/${inv.length})`, x + 12 * S, gy + 5 * S, 8 * S,
     full ? "#d96a5a" : "#cfe8d2", "left", true);
   gy += headH;
-  const stashRef = windowRef(p, { c: "stash", s: chest });
-  navBar(p, x, y, w, stashRef);
+  const stashRef: ContainerRef = { c: "stash", s: chest };
   const shown = slotsOf(stashRef, player) ?? inv;
   drawGrid(p, shown, gx, gy, cols, cell, gap, (i) => p.act.moveStack(stashRef, i), stashRef);
   gy += stashRows * (cell + gap) + 8 * S;

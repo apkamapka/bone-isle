@@ -2165,9 +2165,8 @@ async function main(): Promise<void> {
     ok(C.slotsOf({ c: "nested", via: root, i: 1 }, p2) === null,
       "…and an empty slot resolves to nothing, not to an empty bag");
     p2.bag[0] = null; // the pack is taken away while a window looks inside it
-    const walked = C.followTrail(root, [0, 1], p2);
-    ok(walked.used === 0 && C.sameRef(walked.ref, root),
-      "a window pointing at a vanished pack falls back to the nearest real one");
+    ok(C.slotsOf({ c: "nested", via: root, i: 0 }, p2) === null,
+      "a window pointing at a vanished pack resolves to nothing, so the sweep can close it");
 
     // ---- the bagless player ----
     const bare = mkP({ x: 0, y: 0 });
@@ -2276,6 +2275,65 @@ async function main(): Promise<void> {
         "a pack holding five stacks costs a tier-I chest six of its ten slots");
       ok(items.bagSlotsUsed(inv) < B.CHEST_SLOTS[0],
         "…leaving room, but nowhere near the 160 that nesting would grant unbudgeted");
+    }
+  }
+
+  console.log("Etap 27e — one window per container:");
+  {
+    const C = await import("../src/systems/containers.ts");
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+    const fs = await import("node:fs");
+
+    /* --- two packs in one bag are two DIFFERENT addresses ------------------
+     * The old model gave each window KIND a single path walked into it, so
+     * two packs sitting in the same backpack were mutually exclusive: you
+     * could look inside either, never both, and so could not move anything
+     * from one to the other without a detour through the bag between them. */
+    {
+      const p = mkP({ x: 0, y: 0 });
+      const a = items.newContainer("backpack")!;
+      const b = items.newContainer("backpack")!;
+      items.addItem(a.items!, "steel", 5);
+      p.bag[0] = a;
+      p.bag[1] = b;
+      const root: C.ContainerRef = { c: "bag" };
+      const refA: C.ContainerRef = { c: "nested", via: root, i: 0 };
+      const refB: C.ContainerRef = { c: "nested", via: root, i: 1 };
+      ok(!C.sameRef(refA, refB), "the two packs address differently");
+      ok(C.slotsOf(refA, p) === a.items && C.slotsOf(refB, p) === b.items,
+        "…and each resolves to its own slots, so both can be on screen at once");
+      ok(!C.isInside(refB, refA) && !C.isInside(refA, refB),
+        "…neither is inside the other, so a move between them is legal");
+      // and the move itself is the ordinary one
+      items.addStack(C.slotsOf(refB, p)!, C.slotsOf(refA, p)![0]!);
+      a.items![0] = null;
+      ok(items.bagCount(b.items!, "steel") === 5 && items.bagCount(a.items!, "steel") === 0,
+        "…steel crosses from one to the other");
+    }
+
+    /* --- a pack in the bag, opened from the CHEST window -------------------
+     * The chest draws your backpack in its lower half. Navigation used to ask
+     * "which window is in front?" and got the chest, then walked a slot index
+     * that meant something else entirely inside it. */
+    {
+      const src = fs.readFileSync("src/main.ts", "utf8");
+      const nav = src.slice(src.indexOf("function navInto"), src.indexOf("function navUp"));
+      ok(nav.includes("ref: ContainerRef, index: number"),
+        "navInto is TOLD which container was clicked rather than guessing the front window");
+      ok(!nav.includes("frontContainerWindow"),
+        "…and no longer consults window order at all");
+      const panels = fs.readFileSync("src/ui/panels.ts", "utf8");
+      ok(panels.includes("p.act.openNested(ref, idx)"),
+        "…because every grid cell passes its own container along");
+    }
+
+    /* --- a window whose pack is gone must go too --------------------------- */
+    {
+      const src = fs.readFileSync("src/main.ts", "utf8");
+      const sweep = src.slice(src.indexOf("function sweepContainerWindows"), src.indexOf("function openWindow"));
+      ok(sweep.includes("slotsOf(w.ref, P)") && sweep.includes("refUsable(w.ref)"),
+        "a window pointing at a pack that has moved, dropped or rotted closes itself");
+      ok(src.includes("sweepContainerWindows();"), "…and the sweep actually runs");
     }
   }
 

@@ -46,11 +46,11 @@ import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, type HudCtx } from "./ui/hud.ts";
-import { drawPanels, CONTAINER_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
+import { drawPanels, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
-import { slotsOf, baseOf, rootOf, sameRef, isInside, followTrail, groundDecays } from "./systems/containers.ts";
+import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays } from "./systems/containers.ts";
 import type { ContainerRef } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -286,6 +286,59 @@ function bringToFront(kind: PanelKind): void {
   }
 }
 
+/** Raise one specific window object (container windows are not unique). */
+function raise(win: PanelWindow): void {
+  const i = ui.windows.indexOf(win);
+  if (i >= 0 && i < ui.windows.length - 1) {
+    ui.windows.splice(i, 1);
+    ui.windows.push(win);
+  }
+}
+
+/** The open window showing exactly this container, if there is one. */
+function windowShowing(ref: ContainerRef): PanelWindow | undefined {
+  return ui.windows.find((w) => w.ref && sameRef(w.ref, ref))
+    ?? ui.windows.find((w) => {
+      const base = baseRefOf(w.kind);
+      return !!base && sameRef(base, ref);
+    });
+}
+
+/**
+ * Open a pack in a window of its own — or raise the one already showing it.
+ *
+ * A window per container, rather than one window per KIND with a path walked
+ * into it. The old shape could describe only one path at a time, so two packs
+ * sitting in the same backpack were mutually exclusive: you could look in
+ * either and never both, which made moving anything from one to the other
+ * impossible without a detour through the bag between them.
+ */
+function openContainer(ref: ContainerRef): void {
+  if (!slotsOf(ref, P)) return;
+  const open = windowShowing(ref);
+  if (open) { raise(open); return; }
+  const n = ui.windows.length;
+  ui.windows.push({
+    kind: "container",
+    ref,
+    offset: { x: -40 * scale + n * 8 * scale, y: -20 * scale + n * 8 * scale },
+    rect: null,
+    titleBar: null,
+  });
+  beep(380, 0.05, "sine", 0.04, 40);
+}
+
+/** Close every container window whose pack has gone (moved, dropped, looted). */
+function sweepContainerWindows(): void {
+  for (let i = ui.windows.length - 1; i >= 0; i--) {
+    const w = ui.windows[i];
+    if (w.kind !== "container" || !w.ref) continue;
+    // a window pointing at a pack that no longer exists has nothing to show
+    // and, worse, is a live drop target aimed at nowhere
+    if (!slotsOf(w.ref, P) || !refUsable(w.ref)) ui.windows.splice(i, 1);
+  }
+}
+
 function openWindow(kind: PanelKind): void {
   const existing = findWindow(kind);
   if (existing) { bringToFront(kind); return; }
@@ -446,8 +499,8 @@ const act: PanelActions = {
     else if (r === "heavy") flash("too heavy", "#e0a06a");
   },
   moveStack: (ref: ContainerRef, index: number) => { openMoveChooser(ref, index); },
-  openNested: (index: number) => { navInto(index); },
-  navUp: () => { navUp(); },
+  openNested: (ref: ContainerRef, index: number) => { navInto(ref, index); },
+  navUp: (ref: ContainerRef) => { navUp(ref); },
   removePack: () => { dropWornPack(); },
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => { splitConfirm(mode); },
   look: (kind: ItemKind) => { ui.inspect = kind; },
@@ -965,14 +1018,12 @@ function containerWindowAt(rx: number, ry: number): ContainerRef | null {
     const w = ui.windows[i];
     if (!w.rect) continue;
     if (!(rx >= w.rect.x && rx < w.rect.x + w.rect.w && ry >= w.rect.y && ry < w.rect.y + w.rect.h)) continue;
-    const base = baseRefOf(w.kind);
-    if (!base) return null;
-    return followTrail(base, w.trail ?? [], P).ref;
+    return w.ref ?? baseRefOf(w.kind);
   }
   return null;
 }
 
-/** The container a window shows, before its trail is walked. */
+/** The container a root window shows. Nested windows carry their own `ref`. */
 function baseRefOf(kind: PanelKind): ContainerRef | null {
   if (kind === "bag") return P.pack ? { c: "bag" } : null;
   if (kind === "stash") return ui.stash ? { c: "stash", s: ui.stash } : null;
@@ -1428,38 +1479,37 @@ function takeOne(c: Corpse, index: number): void {
 
 /* ---------------- container window navigation ---------------- */
 
-/** Which window is currently frontmost among the container windows. */
-function frontContainerWindow(): PanelWindow | null {
-  for (let i = ui.windows.length - 1; i >= 0; i--) {
-    if (CONTAINER_PANELS.includes(ui.windows[i].kind)) return ui.windows[i];
-  }
-  return null;
+/**
+ * Open the pack in slot `index` of `ref`.
+ *
+ * `ref` is passed in rather than guessed from whichever window is frontmost —
+ * guessing was a real bug. The Storage Chest window draws YOUR backpack in its
+ * lower half, so clicking a pack there asked the front window (the chest) to
+ * walk into a slot index that meant something entirely different inside the
+ * chest, and usually nothing at all.
+ */
+function navInto(ref: ContainerRef, index: number): void {
+  openContainer({ c: "nested", via: ref, i: index });
 }
 
 /**
- * Walk the front container window down into the pack in slot `index`.
+ * Go up to the container holding this one.
  *
- * Tibia 8.6's behaviour, and the one Radek asked for: the window you already
- * have REPLACES its contents and grows a way back up, rather than spawning a
- * second window per bag until the screen is a pile of them.
+ * If the parent already has a window, this one is redundant and closes —
+ * otherwise pressing up would leave two windows showing the same pack.
  */
-function navInto(index: number): void {
-  const w = frontContainerWindow();
-  if (!w) return;
-  const base = baseRefOf(w.kind);
-  if (!base) return;
-  const here = followTrail(base, w.trail ?? [], P).ref;
-  const next: ContainerRef = { c: "nested", via: here, i: index };
-  if (!slotsOf(next, P)) return;
-  w.trail = [...(w.trail ?? []), index];
-  beep(380, 0.05, "sine", 0.04, 40);
-}
-
-/** Back up one level in the front container window. */
-function navUp(): void {
-  const w = frontContainerWindow();
-  if (!w?.trail?.length) return;
-  w.trail = w.trail.slice(0, -1);
+function navUp(ref: ContainerRef): void {
+  if (ref.c !== "nested") return;
+  const here = ui.windows.find((w) => w.ref && sameRef(w.ref, ref));
+  const parent = ref.via;
+  const parentOpen = windowShowing(parent);
+  if (here) ui.windows.splice(ui.windows.indexOf(here), 1);
+  if (parentOpen) raise(parentOpen);
+  else if (parent.c === "nested") openContainer(parent);
+  else if (parent.c === "bag") openWindow("bag");
+  else if (parent.c === "stash") { ui.stash = parent.s; openWindow("stash"); }
+  else if (parent.c === "corpse") { ui.loot = parent.body; openWindow("loot"); }
+  else if (parent.c === "ground") { ui.floor = parent.gi; openWindow("floor"); }
   beep(300, 0.05, "sine", 0.04, -40);
 }
 
@@ -2165,6 +2215,7 @@ function tickProximityPanels(dt: number): void {
       flash("too far away", "#e0a06a");
     }
   }
+  sweepContainerWindows();
 }
 
 /**
