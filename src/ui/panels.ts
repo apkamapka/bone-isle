@@ -29,7 +29,7 @@ import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed } from "../systems/panelPrefs.ts";
 import { CHROME, panelFrame, popupFrame, raisedBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
-import { NO_DOCK, DOCK_FIT, type DockLayout } from "./dock.ts";
+import { NO_DOCK, type DockLayout } from "./dock.ts";
 
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
@@ -71,9 +71,9 @@ export function isDocked(win: PanelWindow, dock: DockLayout): boolean {
 /**
  * The width a docked window must be. Every dockable window is naturally
  * `DOCK_INNER` units wide (that is where the constant came from), so at the
- * base HUD scale this is an exact fit and no rescaling is needed — the
- * narrower corpse grid simply centres itself in the column, which is what
- * keeps a stack of windows flush down one edge.
+ * column's own unit this is an exact fit and nothing is rescaled — the
+ * narrower corpse grid simply centres itself, which keeps a stack of windows
+ * flush down one edge.
  */
 function dockedW(p: PanelInput, natural: number): number {
   return isDocked(p.win, p.dock) ? p.dock.innerW : natural;
@@ -519,8 +519,12 @@ export function drawPanels(base: Omit<PanelInput, "win" | "dock"> & { dock?: Doc
      * is the one scale at which its natural width equals the column's. Zoom
      * and auto-fit would each break that fit, and a column of windows that
      * do not line up is worse than no column. */
+    /* A docked window is drawn at the COLUMN's unit, at full size. The column
+     * has its own fixed-pixel ruler precisely so that windows in it need not
+     * be shrunk; per-window zoom and auto-fit are skipped because the column
+     * has one width and a stack that does not line up is worse than none. */
     const docked = isDocked(win, dock);
-    hud.scale = docked ? baseScale * DOCK_FIT : baseScale * panelZoom(win.kind) * (win.fit ?? 1);
+    hud.scale = docked ? dock.s : baseScale * panelZoom(win.kind) * (win.fit ?? 1);
     const p: PanelInput = { ...base, win, dock };
     switch (win.kind) {
       case "build": drawBuild(p); break;

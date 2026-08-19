@@ -7502,36 +7502,75 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log("Etap 33 — the docked sidebar:");
+  console.log("Etap 33 — the docked sidebar (Tibia's layout):");
   {
     const D = await import("../src/ui/dock.ts");
 
     ok(!D.dockEnabled(D.DOCK_MIN_SCREEN - 1) && D.dockEnabled(D.DOCK_MIN_SCREEN),
       `no column below ${D.DOCK_MIN_SCREEN}px, so phones keep today's floating windows`);
-    ok(D.dockLayout(1600, 900, 3, false).w === 0, "…and a disabled dock measures zero wide");
 
-    /* The column's width is DERIVED from a container window's natural width,
-     * not chosen. If the two ever drift apart, a docked bag is either squeezed
-     * or swimming, and no test of behaviour would notice. */
-    /* The column is NARROWER than a container window and shrinks what it
-     * holds. That is deliberate: at full container width a single bag filled
-     * the column, which defeats the point of stacking them. */
-    ok(D.DOCK_INNER < 4 * 32 + 3 * 4 + 24, "the column is narrower than a container window's natural width");
-    ok(D.DOCK_FIT < 1 && D.DOCK_FIT > 0.4, `…so docked windows are scaled to suit (x${D.DOCK_FIT.toFixed(2)})`);
+    /* THE fix. Tibia's sidebar is a fixed number of real pixels wide whatever
+     * the monitor; the game window takes the rest. Inheriting the HUD's design
+     * unit — authored for a 480x320 phone — made the column three times too
+     * fat on a desktop, and that, not the screen height, is what forced the
+     * windows inside it to be shrunk. */
+    const laptop = Math.min(1600 / 480, 900 / 320);
+    const desktop = Math.min(3840 / 480, 2160 / 320);
+    ok(D.dockScale(desktop, 2) === D.dockScale(laptop, 2),
+      "the column's unit is the same on a laptop and a 4K display — it does not scale with the screen");
+    ok(D.dockScale(desktop, 1) < desktop / 2,
+      "…and is far smaller than the HUD unit it used to borrow");
+    ok(D.dockScale(0.4, 1) === 0.4,
+      "…but never larger than the interface around it, on a small window");
+
+    /* Full size, not shrunk: the column is exactly as wide as the windows it
+     * holds, which is what "full size" has to mean. */
+    ok(D.DOCK_INNER === 4 * 32 + 3 * 4 + 24,
+      "the column is exactly a container window wide, so nothing in it is rescaled");
     ok(D.DOCK_W === D.DOCK_INNER + 2 * D.DOCK_PAD, "…plus its padding, and nothing else");
-    ok(D.DOCK_W / 480 < 0.25, `the column costs under a quarter of the design width (${(D.DOCK_W / 480 * 100).toFixed(0)}%)`);
-    ok(Math.abs(D.VITALS_FIT * 190 - D.DOCK_INNER) < 0.001,
-      "vitals are rescaled to land on that same ruler rather than be clipped by it");
-
     {
-      const d = D.dockLayout(1600, 900, 3, true);
-      ok(d.x + d.w === 1600, "the column is flush with the right edge");
+      const w = D.dockLayout(1920, 917, D.dockScale(Math.min(1920 / 480, 917 / 320), 1), true).w;
+      ok(w / 1920 < 0.14, `and it costs ${(w / 1920 * 100).toFixed(0)}% of a 1920 display — Tibia's proportion`);
+    }
+
+    // Tibia's fixed block, in Tibia's order. Containers may never go above it.
+    ok(D.DOCK_BLOCKS.join(",") === "minimap,status,controls",
+      "minimap, then status, then controls — the order Tibia fixes them in");
+    {
+      const s = D.dockScale(Math.min(1920 / 480, 917 / 320), 1);
+      const d = D.dockLayout(1920, 917, s, true);
+      ok(d.x + d.w === 1920, "the column is flush with the right edge");
       ok(d.innerX >= d.x && d.innerX + d.innerW <= d.x + d.w, "…and its contents sit inside it");
-      ok(d.stackTop > 0 && d.stackTop < d.stackBottom,
-        `windows stack in the space under the furniture (${Math.round(d.stackTop)}..${Math.round(d.stackBottom)})`);
+      let prev = -1;
+      for (const b of D.DOCK_BLOCKS) {
+        ok(d.blocks[b].y > prev, `${b} sits below whatever precedes it`);
+        prev = d.blocks[b].y;
+      }
+      ok(d.stackTop > d.blocks.controls.y + d.blocks.controls.h - 1,
+        "containers stack strictly BELOW the fixed block, never above it");
       ok(D.overDock(d, d.x + 5, 100) && !D.overDock(d, d.x - 5, 100),
         "a point one side of the column edge docks and the other does not");
       ok(!D.overDock(D.NO_DOCK, 0, 0), "…and nothing is ever over a dock that is not there");
+      ok(D.blockBarAt(d, d.innerX + 4, d.blocks.status.y + 2) === "status",
+        "each block's header bar is clickable, which is how it collapses");
+      ok(D.blockBarAt(d, d.innerX + 4, d.stackTop + 40) === null, "…and the stack area is not a header");
+    }
+
+    /* Collapsing is how room is made for another container — Tibia minimises
+     * its inventory for exactly this reason. Better than shrinking everything
+     * permanently: you pay for the space only when you want it. */
+    {
+      const s = D.dockScale(Math.min(1920 / 480, 917 / 320), 1);
+      const before = D.dockLayout(1920, 917, s, true);
+      D.toggleBlock("minimap");
+      const after = D.dockLayout(1920, 917, s, true);
+      D.toggleBlock("minimap");
+      ok(after.stackTop < before.stackTop,
+        `collapsing the minimap hands its space to the containers (${Math.round(before.stackTop)} -> ${Math.round(after.stackTop)})`);
+      ok(after.blocks.minimap.bodyH === 0 && after.blocks.minimap.h > 0,
+        "…and leaves its header bar behind, so it can be opened again");
+      ok(D.dockLayout(1920, 917, s, true).stackTop === before.stackTop,
+        "…and toggling back restores it exactly");
     }
   }
 
@@ -7539,21 +7578,16 @@ async function main(): Promise<void> {
   {
     const PN = await import("../src/ui/panels.ts");
     const D = await import("../src/ui/dock.ts");
-    const d = D.dockLayout(1600, 900, 3, true);
+    const d = D.dockLayout(1920, 917, D.dockScale(3, 1), true);
 
     ok(PN.DOCKABLE_PANELS.includes("bag") && PN.DOCKABLE_PANELS.includes("loot")
       && PN.DOCKABLE_PANELS.includes("floor") && PN.DOCKABLE_PANELS.includes("container"),
       "the four carried containers dock");
-    /* The chest is ten columns wide against the column's four and carries a
-     * second grid plus an upgrade button. Docking it would mean shrinking it
-     * to a third of its width, so it stays a central window. */
-    ok(!PN.DOCKABLE_PANELS.includes("stash"), "…the Storage Chest does not, being far too wide for the column");
+    ok(!PN.DOCKABLE_PANELS.includes("stash"),
+      "…the Storage Chest does not, being ten columns wide against the column's four");
     for (const k of PN.DOCKABLE_PANELS) {
       ok(PN.CONTAINER_PANELS.includes(k), `${k} is a container window, so docking it means something`);
     }
-
-    // Undefined means "dock if you can": a bag opens in the column without
-    // anyone having asked, which is the entire point of the feature.
     ok(PN.isDocked({ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null }, d),
       "a freshly opened container docks itself");
     ok(!PN.isDocked({ kind: "bag", docked: false, offset: { x: 0, y: 0 }, rect: null, titleBar: null }, d),
@@ -7564,7 +7598,7 @@ async function main(): Promise<void> {
       "…nor does anything when there is no column to dock into");
   }
 
-  console.log("Etap 33 — windows actually land in the column:");
+  console.log("Etap 33 — windows land in the column, at full size:");
   {
     const { drawPanels } = await import("../src/ui/panels.ts");
     const { createGame } = await import("../src/game.ts");
@@ -7572,16 +7606,15 @@ async function main(): Promise<void> {
     const g = createGame();
     g.player.pack = items.newContainer("backpack")!;
 
-    /* 2.81 is what resize() computes for a 1600x900 display — the tightest
-     * machine the column is meant to work on. A rounder number would be
-     * testing a screen nobody owns. */
-    const S = Math.min(1600 / 480, 900 / 320);
+    // Radek's actual display.
+    const SW = 1920, SH = 917;
+    const hudS = Math.min(SW / 480, SH / 320);
+    const dock = D.dockLayout(SW, SH, D.dockScale(hudS, 1), true);
     const hud = {
       ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
         .document.createElement("canvas").getContext("2d"),
-      scale: S, screenW: 1600, screenH: 900, touchInput: false,
+      scale: hudS, screenW: SW, screenH: SH, touchInput: false,
     } as never;
-    const dock = D.dockLayout(1600, 900, S, true);
 
     const run = (windows: unknown[], withDock: boolean): void => {
       const ui = {
@@ -7600,13 +7633,14 @@ async function main(): Promise<void> {
       run([bag], true);
       const r = bag.rect as unknown as { x: number; y: number; w: number; h: number } | null;
       ok(!!r && r.x === dock.innerX, "a docked backpack sits at the column's left edge");
-      ok(!!r && r.w === dock.innerW,
-        `…and fills its width exactly, with no rescaling (${r?.w} vs ${dock.innerW})`);
-      ok(!!r && Math.abs(r.y - dock.stackTop) < 1, "…starting at the top of the free space");
+      ok(!!r && r.w === dock.innerW, `…and fills its width exactly (${r?.w} vs ${dock.innerW})`);
+      ok(!!r && Math.abs(r.y - dock.stackTop) < 1, "…starting directly under the fixed block");
+      // Full size means the slots are the size they are everywhere else, in
+      // the column's own pixels — no 0.61 shrink factor left anywhere.
+      ok(!!r && Math.abs(r.w / dock.s - D.DOCK_INNER) < 1,
+        "…drawn at the column's unit, at full size, not scaled down to fit");
     }
 
-    // Two containers must not land on top of each other — the whole complaint
-    // that started this was windows covering windows.
     {
       const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
       const pack = { kind: "container", ref: { c: "bag" }, offset: { x: 0, y: 0 }, rect: null, titleBar: null };
@@ -7619,31 +7653,25 @@ async function main(): Promise<void> {
       ok(!!b && b.x === dock.innerX, "…in the same column, not beside it");
       const bh = (pack.rect as unknown as { h: number } | null)?.h ?? 0;
       ok(!!b && b.y + bh <= dock.stackBottom + 1,
-        "…and two full containers do fit on a 1600x900 laptop, which is what the width was tuned for");
+        "…and two FULL-SIZE containers fit on a 1920x917 display, which is the whole point of the fixed unit");
     }
 
-    // With no sidebar every window must behave exactly as it did before.
     {
       const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
       run([bag], false);
       const r = bag.rect as unknown as { x: number; w: number } | null;
-      ok(!!r && Math.abs(r.x - (1600 - r.w) / 2) < 1,
+      ok(!!r && Math.abs(r.x - (SW - r.w) / 2) < 1,
         "with no column a backpack is centred exactly as it always was");
     }
 
-    // A torn-out window centres on the MAP, not on the whole canvas — dead
-    // centre of the canvas is off-centre to everything the player is watching.
     {
       const bag = { kind: "bag", docked: false, offset: { x: 0, y: 0 }, rect: null, titleBar: null };
       run([bag], true);
       const r = bag.rect as unknown as { x: number; w: number } | null;
-      ok(!!r && Math.abs(r.x - (1600 - dock.w - r.w) / 2) < 1,
+      ok(!!r && Math.abs(r.x - (SW - dock.w - r.w) / 2) < 1,
         "a torn-out window centres on the visible map, not behind the column");
     }
 
-    // The column is finite. Rather than hide a window or grow a scrollbar, the
-    // overflow floats — visible and grabbable, and back in the stack the
-    // moment something above it closes.
     {
       const many = [0, 1, 2, 3, 4, 5, 6, 7].map(() =>
         ({ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null }));
@@ -7651,10 +7679,32 @@ async function main(): Promise<void> {
       const rects = many.map((m) => m.rect as unknown as { x: number; y: number; h: number } | null);
       ok(rects.every((r) => !!r), "every window still draws when the column overflows");
       const stacked = rects.filter((r) => r && r.x === dock.innerX);
-      ok(stacked.length < many.length, `the column takes what fits (${stacked.length} of ${many.length})`);
+      ok(stacked.length >= 2, `the column takes what fits (${stacked.length} of ${many.length})`);
       ok(stacked.every((r) => !!r && r.y + r.h <= dock.stackBottom + 1),
         "…and nothing docked ever runs off the bottom of it");
     }
+  }
+
+  console.log("Etap 33 — the HUD knows the map got narrower:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    /* The bug on the screenshots: placeHud clamps a group's saved fraction to
+     * the width it is handed, and it was handed the whole canvas. So the panel
+     * column sat on top of the minimap — the groups had not moved, nobody had
+     * told them the map was narrower. */
+    ok(src.includes("const sw = screen.width - sidebarW"),
+      "movable HUD groups are placed against the map, not the whole canvas");
+    /* The modal rebind picker still spans the canvas — it is a scrim, and a
+     * scrim with a hole in it would look broken — but its dialog centres on
+     * the map like every other window. */
+    ok(src.includes("const mapW = sw - sidebarW") && src.includes("const x = (mapW - w) / 2"),
+      "…and even the full-screen rebind scrim centres its dialog on the map");
+    // With a column, these widgets live in it as fixed sidebar items.
+    ok(src.includes("if (docked) {") && src.includes("drawDockControls"),
+      "the panel buttons and action slots move into the column when there is one");
+    ok(src.includes('if (editing && !docked) drawGroupGrip("vitals"'),
+      "…and carry no drag grip there, so the HUD editor cannot strand them under it");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

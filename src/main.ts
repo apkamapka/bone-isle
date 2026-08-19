@@ -45,9 +45,13 @@ import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
-import { drawHud, drawVitals, drawGoldTP, totalGold, type HudCtx } from "./ui/hud.ts";
-import { buttonBox, slotCell, popupFrame, CHROME } from "./ui/chrome.ts";
-import { dockEnabled, dockLayout, overDock, NO_DOCK, VITALS_FIT, type DockLayout } from "./ui/dock.ts";
+import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
+import { buttonBox, slotCell, popupFrame, raisedBox, CHROME } from "./ui/chrome.ts";
+import {
+  dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
+  VITALS_FIT, GOLD_ROW_H, BTN_ROW_H, SLOT_ROW_H, SWAP_H, BLOCK_BAR,
+  type DockLayout, type DockBlock,
+} from "./ui/dock.ts";
 import { drawPanels, isDocked, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
@@ -88,6 +92,9 @@ let touchUI = false;
 let sidebarW = 0;
 /** The column as last measured, for pointer handlers that run between frames. */
 let lastDock: DockLayout = NO_DOCK;
+/** Device px per design unit INSIDE the column (see dock.ts). */
+let dockUnit = 1;
+
 
 const DESIGN_W = 480; // reference width the HUD is authored against
 const DESIGN_H = 320; // reference height — on wide desktops this caps HUD/panel size so tall panels fit
@@ -121,8 +128,13 @@ function resize(): void {
    * renderer calls. Measuring it a second time in CSS px and converting was
    * the obvious way to write this and left a one-pixel seam between the map
    * and the column, because the two roundings disagree. */
+  /* The column has its OWN unit, fixed in CSS pixels — it does not scale with
+   * the display, exactly as Tibia's does not. Inheriting the HUD unit (which
+   * is authored for a 480x320 phone) made the column three times too wide on
+   * a desktop, which is what forced the windows inside it to be shrunk. */
+  dockUnit = dockScale(scale, dpr);
   sidebarW = dockEnabled(cw) && !mobile
-    ? dockLayout(screen.width, screen.height, scale, true).w
+    ? dockLayout(screen.width, screen.height, dockUnit, true).w
     : 0;
 
   const f = worldZoom(cw, ch, mobile);
@@ -3222,12 +3234,12 @@ function render(): void {
     touchInput: isTouchDevice(),
     sidebarW,
   };
-  const dock = dockLayout(screen.width, screen.height, scale, sidebarW > 0);
+  const dock = dockLayout(screen.width, screen.height, dockUnit, sidebarW > 0);
   lastDock = dock;
   drawHud(hud, game, P);
-  if (dock.w > 0) drawSidebar(hud, dock);
   hotspots = [];
   itemSlots = [];
+  if (dock.w > 0) drawSidebar(hud, dock);
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; }
   drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock });
   // ghost of the item being dragged, following the cursor
@@ -3335,27 +3347,113 @@ function drawActionSlot(i: number, x: number, y: number, w: number, h: number): 
 }
 
 /**
- * The docked column: minimap, purse, vitals. Container windows stack below
- * these and are drawn by drawPanels, which reads the same DockLayout.
+ * The docked column.
  *
- * `drawHud` already skips its floating copies of all three when `sidebarW` is
- * set, so nothing is drawn twice.
+ * Tibia's fixed order, top to bottom: minimap, status bar, controls — then
+ * open containers stack below, drawn by drawPanels off the same DockLayout.
+ * Each fixed block has a header bar that collapses it, which is how room is
+ * made for another container; that is Tibia's answer too (its inventory
+ * minimises) and it beats shrinking everything permanently.
  */
 function drawSidebar(h: HudCtx, d: DockLayout): void {
   const ctx = sctx;
-  const S = h.scale;
+  const S = d.s;
+  const bar = Math.round(BLOCK_BAR * S);
+
   // The column's own back plate, so windows in it sit ON something.
-  ctx.fillStyle = "rgba(10,8,5,.92)";
+  ctx.fillStyle = "rgba(10,8,5,.94)";
   ctx.fillRect(d.x, 0, d.w, h.screenH);
   ctx.fillStyle = CHROME.panelEdge;
   ctx.fillRect(d.x, 0, Math.max(1, Math.round(S)), h.screenH);
 
-  // Purse and vitals are pinned to the FOOT of the column so that containers,
-  // which are the reason the column exists, get the whole top of it.
-  drawGoldTP(h, P, d.innerX, d.goldY, d.innerW, d.goldH, totalGold(game, P));
-  // Vitals are authored 190 units wide; VITALS_FIT rescales them onto the
-  // column's ruler rather than letting the edge clip them.
-  drawVitals(h, P, d.innerX, d.vitalsY, S * VITALS_FIT);
+  const header = (b: DockBlock, label: string): void => {
+    const r = d.blocks[b];
+    raisedBox(ctx, d.innerX, r.y, d.innerW, bar,
+      CHROME.barFace, CHROME.barLight, CHROME.barDark, S);
+    hudText(h, label, d.innerX + 5 * S, r.y + bar / 2, 7 * S, CHROME.goldText, "left", true);
+    hudText(h, r.collapsed ? "\u25B8" : "\u25BE", d.innerX + d.innerW - 5 * S, r.y + bar / 2,
+      7 * S, CHROME.gold, "right", true);
+    hotspots.push({ x: d.innerX, y: r.y, w: d.innerW, h: bar, fn: () => toggleBlock(b) });
+    touchButtons.push({ x: d.innerX, y: r.y, w: d.innerW, h: bar });
+  };
+
+  header("minimap", "MAP");
+  {
+    const r = d.blocks.minimap;
+    if (!r.collapsed) drawMinimapAt(h, game, P, d.innerX, r.bodyY, Math.min(d.innerW, r.bodyH));
+  }
+
+  header("status", "STATUS");
+  {
+    const r = d.blocks.status;
+    if (!r.collapsed) {
+      const goldH = Math.round(GOLD_ROW_H * S);
+      drawGoldTP(h, P, d.innerX, r.bodyY, d.innerW, goldH, totalGold(game, P));
+      drawVitals(h, P, d.innerX, r.bodyY + goldH + Math.round(4 * S), S * VITALS_FIT);
+    }
+  }
+
+  header("controls", "CONTROLS");
+  // The block's CONTENTS are drawn later, from drawTouchControls: the action
+  // slots register into lists that it clears, so drawing them here would have
+  // them wiped in the same frame.
+}
+
+/**
+ * The panel buttons, action slots and weapon swap, living in the column.
+ *
+ * These used to float over the map on the customisable HUD, which is why they
+ * ended up sitting on top of the minimap the moment the map got narrower. In
+ * Tibia their equivalents are sidebar widgets, so here they are too — and
+ * being fixed, they carry no drag grip and are skipped by the HUD editor.
+ */
+function drawDockControls(d: DockLayout, top: number): void {
+  const S = d.s;
+  const gap = Math.round(4 * S);
+
+  // Row 1: the five panel buttons, glyph only — a label under a 40px button
+  // is unreadable, and the keyboard letter is the label.
+  const pbtns: [string, PanelKind][] = [
+    ["B", "build"], ["K", "skills"], ["E", "equip"], ["I", "bag"], ["Q", "quest"],
+  ];
+  const bw = (d.innerW - gap * (pbtns.length - 1)) / pbtns.length;
+  const bh = Math.round(BTN_ROW_H * S);
+  pbtns.forEach(([glyph, panel], i) => {
+    const bx = d.innerX + i * (bw + gap);
+    const on = hasWindow(panel);
+    buttonBox(sctx, bx, top, bw, bh, S, {
+      on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
+    });
+    sctx.textAlign = "center";
+    sctx.textBaseline = "middle";
+    sctx.fillStyle = on ? "#1a1408" : "#e9e2c8";
+    sctx.font = `bold ${Math.round(bh * 0.5)}px 'Courier New',monospace`;
+    sctx.fillText(glyph, bx + bw / 2, top + bh / 2);
+    hotspots.push({ x: bx, y: top, w: bw, h: bh, fn: () => togglePanel(panel) });
+    touchButtons.push({ x: bx, y: top, w: bw, h: bh });
+  });
+
+  // Row 2: the six action slots.
+  const sy = top + bh + gap;
+  const sh = Math.round(SLOT_ROW_H * S);
+  const sw = (d.innerW - gap * 5) / 6;
+  for (let i = 0; i < 6; i++) {
+    const sx = d.innerX + i * (sw + gap);
+    drawActionSlot(i, sx, sy, sw, sh);
+  }
+
+  // Row 3: quick weapon swap — a combat control, which is where Tibia keeps it.
+  const wy = sy + sh + gap;
+  const wh = Math.round(SWAP_H * S);
+  const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
+  buttonBox(sctx, d.innerX, wy, d.innerW, wh, S, {});
+  sctx.textAlign = "center";
+  sctx.textBaseline = "middle";
+  sctx.fillStyle = "#e9e2c8";
+  sctx.font = `bold ${Math.round(wh * 0.45)}px 'Courier New',monospace`;
+  sctx.fillText(bowOn ? "\u2192MELEE" : "\u2192BOW", d.innerX + d.innerW / 2, wy + wh / 2);
+  hotspots.push({ x: d.innerX, y: wy, w: d.innerW, h: wh, fn: () => swapWeapon() });
+  touchButtons.push({ x: d.innerX, y: wy, w: d.innerW, h: wh });
 }
 
 /** Edit-mode outline + a drag handle (grip) for a movable HUD group. */
@@ -3391,50 +3489,71 @@ function drawTouchControls(): void {
   const bs = clamp(Math.min(screen.width, screen.height) * 0.115, 54, 132) * u;
   const m = bs * 0.16;
   const gap = bs * 0.16;
-  const sw = screen.width, sh = screen.height;
+  /* Movable HUD groups are placed against the MAP, not the canvas. Handing
+   * placeHud the full width is what let the panel column drift under the
+   * sidebar and sit on top of the minimap — the groups were never moved,
+   * nobody had told them the map got narrower. */
+  const sw = screen.width - sidebarW, sh = screen.height;
+
+  /* With a column open, the panel buttons, action slots and weapon swap live
+   * in it as fixed widgets (Tibia keeps their equivalents there). They are not
+   * draggable in that mode, so they get no grip and the HUD editor skips them. */
+  const docked = lastDock.w > 0;
+  if (docked) {
+    const r = lastDock.blocks.controls;
+    if (!r.collapsed) drawDockControls(lastDock, r.bodyY);
+  }
 
   // --- panel-button column (group "panels"), collapsible behind a ≡ button ---
   const pbtns: [string, string, PanelKind][] = [
     ["Build", "B", "build"], ["Skills", "K", "skills"], ["Equip", "E", "equip"], ["Bag", "I", "bag"], ["Quest", "Q", "quest"],
   ];
-  const menuOpen = hudMenuOpen() || editing; // edit mode always shows the column
+  const menuOpen = !docked && (hudMenuOpen() || editing);
   const togH = bs * 0.5;
   const colH = togH + (menuOpen ? gap + pbtns.length * bs + (pbtns.length - 1) * gap : 0);
-  const panelPos = placeHud("panels", bs, colH, sw, sh);
-  const anyOpen = pbtns.some(([, , k]) => hasWindow(k));
-  hudBtn(panelPos.x, panelPos.y, bs, togH, menuOpen ? "≡ ×" : "≡", !menuOpen && anyOpen, () => {
-    if (!editing) toggleHudMenu();
-  });
-  if (menuOpen) {
-    let by = panelPos.y + togH + gap;
-    for (const [label, glyph, panel] of pbtns) {
-      tButton(panelPos.x, by, bs, label, glyph, hasWindow(panel), () => togglePanel(panel));
-      by += bs + gap;
+  if (!docked) {
+    const panelPos = placeHud("panels", bs, colH, sw, sh);
+    const anyOpen = pbtns.some(([, , k]) => hasWindow(k));
+    hudBtn(panelPos.x, panelPos.y, bs, togH, menuOpen ? "≡ ×" : "≡", !menuOpen && anyOpen, () => {
+      if (!editing) toggleHudMenu();
+    });
+    if (menuOpen) {
+      let by = panelPos.y + togH + gap;
+      for (const [label, glyph, panel] of pbtns) {
+        tButton(panelPos.x, by, bs, label, glyph, hasWindow(panel), () => togglePanel(panel));
+        by += bs + gap;
+      }
     }
+    if (editing) drawGroupGrip("panels", panelPos.x, panelPos.y, bs, colH);
   }
-  if (editing) drawGroupGrip("panels", panelPos.x, panelPos.y, bs, colH);
 
   // --- action slots: six independently-placeable squares (group "slot0..5") ---
   const sw6 = bs * 0.92;
-  for (let i = 0; i < 6; i++) {
-    if (!editing && !actionSlots[i]) continue; // keep the play HUD tidy — empty slots only show in edit mode
-    const gid = `slot${i}` as HudGroup;
-    const pos = placeHud(gid, sw6, bs, sw, sh);
-    drawActionSlot(i, pos.x, pos.y, sw6, bs);
-    if (editing) drawGroupGrip(gid, pos.x, pos.y, sw6, bs);
+  if (!docked) {
+    for (let i = 0; i < 6; i++) {
+      if (!editing && !actionSlots[i]) continue; // keep the play HUD tidy — empty slots only show in edit mode
+      const gid = `slot${i}` as HudGroup;
+      const pos = placeHud(gid, sw6, bs, sw, sh);
+      drawActionSlot(i, pos.x, pos.y, sw6, bs);
+      if (editing) drawGroupGrip(gid, pos.x, pos.y, sw6, bs);
+    }
   }
 
   // --- quick weapon-swap button (group "swap") ---
-  const swW = bs * 1.15, swH = bs * 0.62;
-  const swapPos = placeHud("swap", swW, swH, sw, sh);
-  const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
-  hudBtn(swapPos.x, swapPos.y, swW, swH, bowOn ? "→MELEE" : "→BOW", false, () => { if (!editing) swapWeapon(); });
-  if (editing) drawGroupGrip("swap", swapPos.x, swapPos.y, swW, swH);
+  if (!docked) {
+    const swW = bs * 1.15, swH = bs * 0.62;
+    const swapPos = placeHud("swap", swW, swH, sw, sh);
+    const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
+    hudBtn(swapPos.x, swapPos.y, swW, swH, bowOn ? "→MELEE" : "→BOW", false, () => { if (!editing) swapWeapon(); });
+    if (editing) drawGroupGrip("swap", swapPos.x, swapPos.y, swW, swH);
+  }
 
   // --- lock / edit toggle: sits just above the vitals (HP) frame ---
   const vw = 190 * scale * u, vh = 54 * scale * u;
-  const vp = placeHud("vitals", vw, vh, sw, sh);
-  if (editing) drawGroupGrip("vitals", vp.x, vp.y, vw, vh);
+  const vp = docked
+    ? { x: m, y: sh - vh - m }   // no floating vitals with a column; anchor LOCK HUD bottom-left
+    : placeHud("vitals", vw, vh, sw, sh);
+  if (editing && !docked) drawGroupGrip("vitals", vp.x, vp.y, vw, vh);
   const lockW = bs * 1.6, lockH = bs * 0.5;
   const gripClear = bs * 0.34 + 6 * scale; // leave room for the vitals drag grip in edit mode
   const lockX = clamp(vp.x, m, sw - lockW - m);
@@ -3495,6 +3614,10 @@ function drawAssignPicker(): void {
   const ctx = sctx;
   const S = scale;
   const sw = screen.width, sh = screen.height;
+  /* The scrim covers the whole canvas, column included — it is a modal. The
+   * DIALOG, though, centres on the map, because dead centre of the canvas is
+   * off-centre to everything the player is looking at. */
+  const mapW = sw - sidebarW;
   ctx.fillStyle = "rgba(0,0,0,.55)";
   ctx.fillRect(0, 0, sw, sh);
   // full-screen scrim closes the picker (pushed first, so rows below take priority)
@@ -3510,10 +3633,10 @@ function drawAssignPicker(): void {
   rows.push({ label: "Swap Weapon", sub: "toggle bow / melee", fn: () => { setSlot(slotIdx, { type: "swap" }); assignSlot = null; saveGame(game); } });
   rows.push({ label: "Clear slot", sub: "leave empty", fn: () => { setSlot(slotIdx, null); assignSlot = null; saveGame(game); } });
 
-  const w = clamp(sw * 0.66, 220 * S, 420 * S);
+  const w = clamp(mapW * 0.66, 220 * S, 420 * S);
   const rowH = 30 * S;
   const h = 26 * S + rows.length * rowH + 10 * S;
-  const x = (sw - w) / 2, y = (sh - h) / 2;
+  const x = (mapW - w) / 2, y = (sh - h) / 2;
   popupFrame(ctx, x, y, w, h, S, "rgba(16,20,24,.97)");
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";

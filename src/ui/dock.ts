@@ -1,61 +1,65 @@
 /**
- * The docked sidebar.
+ * The docked sidebar, laid out the way Tibia's is.
  *
- * Free-floating windows are fine until you have three open: on a real session
- * the equipment window covers the backpack, the backpack covers the build
- * list, and all of them cover the map you are trying to fight on. Tibia never
- * had that problem because containers do not float there — they stack in a
- * column down the right edge, and the map is simply narrower.
+ * Two things were wrong with the first attempt, and the second is the
+ * interesting one.
  *
- * This file owns only the GEOMETRY of that column. Who draws into it lives in
- * main.ts (the vitals, gold row and minimap) and panels.ts (the windows).
+ * ORDER. Tibia's main right sidebar carries a fixed block in a fixed order —
+ * minimap, status bar, inventory (minimisable), combat controls — and open
+ * containers stack BELOW it; no widget may sit above that block. The first
+ * version had it upside down: containers on top, vitals pinned to the floor.
  *
- * `HudCtx.sidebarW` already existed and `drawHud` already respected it — the
- * hook was written and never filled in. This fills it in.
+ * SCALE. Tibia's sidebar does not scale with the display. It is a couple of
+ * hundred real pixels wide on a laptop and on a 4K monitor alike, and the game
+ * window takes whatever is left. The first version inherited the HUD's design
+ * unit, which on a desktop is enormous — the HUD is authored against a 480x320
+ * phone — so the column came out three times too fat and a single backpack
+ * filled it. Shrinking the windows to compensate was treating the symptom.
+ *
+ * So the column has its OWN unit, fixed in CSS pixels, and windows inside it
+ * are drawn at full size against that unit. Everything below is in design
+ * units; `dockScale` converts.
  */
+import { panelCollapsed, togglePanelCollapsed } from "../systems/panelPrefs.ts";
 
 /**
- * A container window's natural width: 4 columns of 32, three 4-unit gaps, and
- * 24 units of margin.
+ * CSS pixels per design unit inside the column.
+ *
+ * This one number sets the column's real-world size. At 1.25 a slot is 40 CSS
+ * px and the whole column is 220 — about 11% of a 1920 display, which is the
+ * proportion Tibia's own sidebar occupies.
  */
-const CONTAINER_W = 4 * 32 + 3 * 4 + 24;
+export const DOCK_UNIT_CSS = 1.25;
 
-/**
- * Design units across the column's contents.
- *
- * NOT the container's natural width, which was the first guess and was wrong.
- * The HUD is authored against a 480-unit-wide screen, so a full-size bag is
- * already a third of the display; a column that wide is not a sidebar, it is
- * a second screen. 100 units plus padding is 23% of the design width — about
- * what Tibia spends — and docked windows are drawn smaller to suit, which is
- * the trade a column is FOR: several containers at once beats one big one.
- *
- * The number is a measurement, not a taste. At 164 (a container's own width)
- * a single window filled the whole column on a 1600x900 laptop; at 112 it
- * still did, missing by five pixels. 100 is the first width at which two full
- * containers stack on that machine and three on a 1080p desktop.
- */
-export const DOCK_INNER = 100;
+/** A container window's natural width: 4 columns of 32, 3 gaps of 4, 24 margin. */
+export const DOCK_INNER = 4 * 32 + 3 * 4 + 24;
 /** Breathing room either side of the contents. */
 export const DOCK_PAD = 6;
 /** Total column width in design units. */
 export const DOCK_W = DOCK_INNER + 2 * DOCK_PAD;
 
-/** Scale factor applied to a window while it is docked. */
-export const DOCK_FIT = DOCK_INNER / CONTAINER_W;
-
-/** Vitals are authored 190 wide; shrink them to share the column's ruler. */
+/** Vitals are authored 190 wide; rescale them onto the column's ruler. */
 export const VITALS_FIT = DOCK_INNER / 190;
 
-/** Height of the compact gold + task-points row, in design units. */
+/** Height of a collapsed block: its header bar and nothing else. */
+export const BLOCK_BAR = 12;
+/** Gap between blocks. */
+const GAP = 4;
+
+/** Fixed-block heights, expanded, in design units. */
+export const MINIMAP_H = 120;
 export const GOLD_ROW_H = 14;
-/** Vitals are 68 units tall before the column's rescale. */
-const VITALS_H_UNITS = 68;
+export const STATUS_H = GOLD_ROW_H + GAP + Math.round(68 * VITALS_FIT);
+/** Panel-button row, action-slot row, weapon swap. */
+export const BTN_ROW_H = 30;
+export const SLOT_ROW_H = 28;
+export const SWAP_H = 20;
+export const CONTROLS_H = BTN_ROW_H + GAP + SLOT_ROW_H + GAP + SWAP_H;
 
 /**
- * Narrower than this (CSS px) and the column would cost more map than it
- * saves, so there is no sidebar at all and every window floats exactly as it
- * did before. Phones therefore keep today's behaviour untouched.
+ * Narrower than this (CSS px) and the column costs more map than it saves, so
+ * there is no sidebar at all and every window floats as it did before. Phones
+ * therefore keep today's behaviour untouched.
  */
 export const DOCK_MIN_SCREEN = 900;
 
@@ -64,66 +68,118 @@ export function dockEnabled(cssW: number): boolean {
   return cssW >= DOCK_MIN_SCREEN;
 }
 
+/**
+ * Device px per design unit inside the column.
+ *
+ * Capped by the HUD's own scale so that on a small window the column can never
+ * be drawn LARGER than the interface around it.
+ */
+export function dockScale(hudScale: number, dpr: number): number {
+  return Math.min(hudScale, DOCK_UNIT_CSS * Math.max(1, dpr));
+}
+
+/** The three fixed blocks, in Tibia's order. Containers stack under them. */
+export type DockBlock = "minimap" | "status" | "controls";
+export const DOCK_BLOCKS: readonly DockBlock[] = ["minimap", "status", "controls"];
+
+/** Expanded height of a block, in design units. */
+export function blockHeight(b: DockBlock): number {
+  if (b === "minimap") return MINIMAP_H;
+  if (b === "status") return STATUS_H;
+  return CONTROLS_H;
+}
+
+/** Persisted per-block collapse, sharing the panel-preference store. */
+export function blockCollapsed(b: DockBlock): boolean {
+  return panelCollapsed(`dock:${b}`);
+}
+export function toggleBlock(b: DockBlock): void {
+  togglePanelCollapsed(`dock:${b}`);
+}
+
+export interface BlockRect {
+  /** Top of the block, header bar included. */
+  y: number;
+  /** Total height, bar included. */
+  h: number;
+  /** Top of the block's CONTENT, below the bar. */
+  bodyY: number;
+  /** Content height; zero when collapsed. */
+  bodyH: number;
+  collapsed: boolean;
+}
+
 export interface DockLayout {
   /** Column width in device px (0 when there is no sidebar). */
   w: number;
   /** Left edge of the column in device px. */
   x: number;
-  /** Left edge of the column's CONTENTS. */
+  /** Left edge of the column's contents. */
   innerX: number;
   /** Content width in device px. */
   innerW: number;
+  /** Device px per design unit inside the column. */
+  s: number;
+  /** The fixed blocks, already positioned. */
+  blocks: Record<DockBlock, BlockRect>;
   /** Top of the area container windows stack into. */
   stackTop: number;
   /** First y a stacked window may NOT occupy. */
   stackBottom: number;
-  /** Top of the pinned gold + task-points row. */
-  goldY: number;
-  /** Top of the pinned vitals block. */
-  vitalsY: number;
-  /** Height of the gold row in device px. */
-  goldH: number;
 }
 
-/**
- * Measure the column. `S` is the HUD design unit; the fixed furniture is laid
- * out here so the drawing code and the window stacker agree on the free space.
- *
- * Containers take the TOP and the furniture is pinned to the BOTTOM. Putting
- * the furniture first cost 146 of 320 design units before a single window was
- * placed, which left room for one container — and one container in a column
- * is worse than no column. The minimap stays floating over the map for the
- * same reason: square, at the column's width, it is a third of the screen.
- */
-export function dockLayout(
-  screenW: number, screenH: number, S: number, enabled: boolean,
-): DockLayout {
-  if (!enabled) {
-    return { ...NO_DOCK, x: screenW, innerX: screenW };
-  }
-  const w = Math.round(DOCK_W * S);
-  const x = screenW - w;
-  const innerX = x + Math.round(DOCK_PAD * S);
-  const innerW = Math.round(DOCK_INNER * S);
-  const pad = Math.round(DOCK_PAD * S);
-  const goldH = Math.round(GOLD_ROW_H * S);
-  const vitalsH = Math.round(VITALS_H_UNITS * VITALS_FIT * S);
-  const furniture = goldH + pad + vitalsH + pad;
-  return {
-    w, x, innerX, innerW,
-    stackTop: pad,
-    stackBottom: screenH - pad - furniture,
-    goldY: screenH - pad - furniture + pad,
-    vitalsY: screenH - pad - vitalsH,
-    goldH,
-  };
-}
+const EMPTY_BLOCK: BlockRect = { y: 0, h: 0, bodyY: 0, bodyH: 0, collapsed: true };
 
 /** No sidebar. The safe default for any caller that has not measured one. */
-export const NO_DOCK: DockLayout =
-  { w: 0, x: 0, innerX: 0, innerW: 0, stackTop: 0, stackBottom: 0, goldY: 0, vitalsY: 0, goldH: 0 };
+export const NO_DOCK: DockLayout = {
+  w: 0, x: 0, innerX: 0, innerW: 0, s: 1,
+  blocks: { minimap: EMPTY_BLOCK, status: EMPTY_BLOCK, controls: EMPTY_BLOCK },
+  stackTop: 0, stackBottom: 0,
+};
+
+/**
+ * Measure the column. `s` is the DOCK's unit (see `dockScale`), not the HUD's.
+ *
+ * Collapsing a fixed block is how room is recovered — Tibia lets you minimise
+ * the inventory for exactly this reason. It is a better trade than shrinking
+ * everything permanently: you pay for the space only when you want it.
+ */
+export function dockLayout(screenW: number, screenH: number, s: number, enabled: boolean): DockLayout {
+  if (!enabled) return { ...NO_DOCK, x: screenW, innerX: screenW };
+
+  const w = Math.round(DOCK_W * s);
+  const x = screenW - w;
+  const pad = Math.round(DOCK_PAD * s);
+  const innerX = x + pad;
+  const innerW = Math.round(DOCK_INNER * s);
+  const bar = Math.round(BLOCK_BAR * s);
+  const gap = Math.round(GAP * s);
+
+  let y = pad;
+  const blocks = {} as Record<DockBlock, BlockRect>;
+  for (const b of DOCK_BLOCKS) {
+    const collapsed = blockCollapsed(b);
+    const bodyH = collapsed ? 0 : Math.round(blockHeight(b) * s);
+    const h = bar + bodyH;
+    blocks[b] = { y, h, bodyY: y + bar, bodyH, collapsed };
+    y += h + gap;
+  }
+
+  return { w, x, innerX, innerW, s, blocks, stackTop: y, stackBottom: screenH - pad };
+}
 
 /** Is this point inside the column? Used to decide a drag's destination. */
 export function overDock(d: DockLayout, sx: number, sy: number): boolean {
   return d.w > 0 && sx >= d.x && sy >= 0 && sy < d.stackBottom;
+}
+
+/** Which fixed block's header bar is at this point, if any. */
+export function blockBarAt(d: DockLayout, sx: number, sy: number): DockBlock | null {
+  if (d.w === 0 || sx < d.x) return null;
+  const bar = Math.round(BLOCK_BAR * d.s);
+  for (const b of DOCK_BLOCKS) {
+    const r = d.blocks[b];
+    if (sy >= r.y && sy < r.y + bar) return b;
+  }
+  return null;
 }

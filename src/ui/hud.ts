@@ -269,12 +269,11 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
     hudText(h, `Task: ${prog}/${task.goal.need} ${label}`, pad + 2, pad + 29 * S, 8 * S, done ? "#9fe8a8" : "rgba(154,208,255,.85)");
   }
 
-  /* Floating minimap, top-right of the MAP. It stays floating even with a
-   * sidebar: square at the column's width it would eat a third of the screen
-   * height, and that space is worth more to a stack of containers. */
-  {
+  // Floating minimap top-right — the column hosts its own on desktop, as the
+  // first of Tibia's fixed blocks.
+  if (!sidebar) {
     const size = 70 * S;
-    drawMinimapAt(h, game, p, screenW - (h.sidebarW ?? 0) - size - 8 * S, 40 * S, size);
+    drawMinimapAt(h, game, p, screenW - size - 8 * S, 40 * S, size);
   }
 
   // zone flash (centered on the visible, non-sidebar area)
