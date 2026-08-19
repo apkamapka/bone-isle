@@ -30,7 +30,7 @@ import {
 import { researchById, isResearched, markResearched, towerTierOk, towerTierFor,
   ATTUNEMENT, isAttuned, markAttuned, attunementOk, offerById } from "./systems/tower.ts";
 import { ELEMENT_LABEL, ELEMENT_COLOR, type Element } from "./systems/elements.ts";
-import { loadPanelPrefs } from "./systems/panelPrefs.ts";
+import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
@@ -53,7 +53,7 @@ import {
   VITALS_FIT, GOLD_ROW_H, BTN_ROW_H, SLOT_ROW_H, SWAP_H, BLOCK_BAR,
   type DockLayout, type DockBlock,
 } from "./ui/dock.ts";
-import { drawPanels, isDocked, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
+import { drawPanels, isDocked, visibleRows, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
@@ -364,6 +364,33 @@ function openContainer(ref: ContainerRef): void {
     titleBar: null,
   });
   beep(380, 0.05, "sine", 0.04, 40);
+}
+
+/**
+ * How many rows the container behind this window has in total.
+ *
+ * Zero for anything that is not a resizable container, which is how the foot
+ * test skips windows with no rows to hide.
+ */
+function rowsInWindow(win: PanelWindow): number {
+  const ref = viewRefOf(win);
+  if (!ref) return 0;
+  const slots = slotsOf(ref, P);
+  if (!slots) return 0;
+  return Math.ceil(slots.length / 4);
+}
+
+/**
+ * Height of one row of this window, in device px.
+ *
+ * Taken from the scale the panel was actually drawn at: a docked window uses
+ * the column's fixed unit and a floating one the HUD's, so assuming either
+ * would be wrong half the time and the drag would slip.
+ */
+function rowPixels(win: PanelWindow): number {
+  const base = isDocked(win, lastDock) ? lastDock.s : scale * panelZoom(win.kind) * (win.fit ?? 1);
+  const cell = win.kind === "loot" || win.kind === "floor" ? 30 : 32;
+  return (cell + 4) * base;
 }
 
 /** Close every container window whose pack has gone (moved, dropped, looted). */
@@ -1778,6 +1805,14 @@ screen.addEventListener("contextmenu", (e) => e.preventDefault());
 
 // Drag any open panel by grabbing its title bar (works with mouse, pen, touch).
 let drag: { win: PanelWindow; gx: number; gy: number; ox: number; oy: number; baseX: number; baseY: number; w: number; h: number } | null = null;
+/**
+ * Dragging a container window's FOOT, which changes how many rows it shows.
+ *
+ * `rowPx` is the height of one row as this window is currently drawn, so the
+ * pointer maps onto a row count without the handler needing to know anything
+ * about cell sizes, padding or which scale the window was drawn at.
+ */
+let sizing: { win: PanelWindow; kind: PanelKind; gy: number; rows: number; rowPx: number; total: number } | null = null;
 const toScreen = (e: PointerEvent): { x: number; y: number } => {
   const r = screen.getBoundingClientRect();
   const kx = r.width ? screen.width / r.width : 1;
@@ -1795,6 +1830,23 @@ screen.addEventListener("pointerdown", (e) => {
         return;
       }
     }
+  }
+  /* The foot is tested BEFORE the title bar and before item drags: it is a
+   * thin strip at the very bottom of a window, and whatever sits under it
+   * would otherwise win the press. */
+  for (let i = ui.windows.length - 1; i >= 0; i--) {
+    const win = ui.windows[i];
+    const rb = win.resizeBar;
+    if (!rb || !win.rect) continue;
+    if (!(s.x >= rb.x && s.x < rb.x + rb.w && s.y >= rb.y && s.y < rb.y + rb.h)) continue;
+    const total = rowsInWindow(win);
+    if (total <= 1) continue; // a one-row container has nothing to give up
+    bringToFront(win.kind);
+    sizing = { win, kind: win.kind, gy: s.y, rows: visibleRows(win.kind, total), rowPx: rowPixels(win), total };
+    ui.dragging = true;
+    try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+    e.preventDefault();
+    return;
   }
   // search top-most first so the visually-front window wins the grab
   for (let i = ui.windows.length - 1; i >= 0; i--) {
@@ -1856,6 +1908,19 @@ screen.addEventListener("pointerdown", (e) => {
   }
 });
 screen.addEventListener("pointermove", (e) => {
+  if (sizing) {
+    const s = toScreen(e);
+    /* Rounded, not truncated, so the edge feels stuck to the cursor rather
+     * than lagging half a row behind it. */
+    const delta = Math.round((s.y - sizing.gy) / sizing.rowPx);
+    const want = clamp(sizing.rows + delta, 1, sizing.total);
+    /* Dragged all the way open, the preference is cleared rather than pinned
+     * at today's row count — so the window keeps following the container if
+     * the pack is later swapped for a bigger one. */
+    setPanelRows(sizing.kind, want >= sizing.total ? 0 : want);
+    e.preventDefault();
+    return;
+  }
   if (itemDrag && !itemDrag.touch) {
     const s = toScreen(e);
     mouse.sx = s.x; mouse.sy = s.y;
@@ -1885,6 +1950,7 @@ screen.addEventListener("pointermove", (e) => {
   e.preventDefault();
 });
 const endDrag = (): void => {
+  if (sizing) { sizing = null; ui.dragging = false; return; }
   /* Dropped on the column: dock it. Only the title bar's own corner counts,
    * not the pointer — dragging by the right-hand end of a wide bar would
    * otherwise refuse to dock a window that is visibly over the column. */
@@ -3282,7 +3348,7 @@ function render(): void {
   hotspots = [];
   itemSlots = [];
   if (dock.w > 0) drawSidebar(hud, dock);
-  for (const win of ui.windows) { win.rect = null; win.titleBar = null; }
+  for (const win of ui.windows) { win.rect = null; win.titleBar = null; win.resizeBar = null; }
   drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock });
   // ghost of the item being dragged, following the cursor
   if (itemDrag && itemDrag.active) {

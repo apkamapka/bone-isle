@@ -15,6 +15,14 @@ export const PANEL_ZOOM_STEP = 0.1;
 interface PanelPref {
   zoom: number;
   collapsed: boolean;
+  /**
+   * Visible rows in a container window, or 0 for "all of them".
+   *
+   * Tibia lets you drag a container's foot up so it shows fewer rows and
+   * stacks more packs in the column. Remembered per panel kind, so the size
+   * you chose for your backpack survives closing and reopening it.
+   */
+  rows: number;
 }
 
 const KEY = "bone-isle-panels-v1";
@@ -47,6 +55,7 @@ export function loadPanelPrefs(): void {
       prefs.set(k, {
         zoom: typeof v.zoom === "number" ? clamp(v.zoom, PANEL_ZOOM_MIN, PANEL_ZOOM_MAX) : 1,
         collapsed: v.collapsed === true,
+        rows: typeof v.rows === "number" && v.rows > 0 ? Math.floor(v.rows) : 0,
       });
     }
   } catch {
@@ -57,7 +66,7 @@ export function loadPanelPrefs(): void {
 function pref(kind: string): PanelPref {
   let p = prefs.get(kind);
   if (!p) {
-    p = { zoom: 1, collapsed: false };
+    p = { zoom: 1, collapsed: false, rows: 0 };
     prefs.set(kind, p);
   }
   return p;
@@ -82,6 +91,20 @@ export function panelCollapsed(kind: string): boolean {
 export function togglePanelCollapsed(kind: string): void {
   const p = pref(kind);
   p.collapsed = !p.collapsed;
+  persist();
+}
+
+/** Visible rows chosen for a container window; 0 means "show them all". */
+export function panelRows(kind: string): number {
+  return pref(kind).rows;
+}
+
+/** Set the visible-row count. Pass 0 to go back to showing every row. */
+export function setPanelRows(kind: string, rows: number): void {
+  const p = pref(kind);
+  const next = Math.max(0, Math.floor(rows));
+  if (next === p.rows) return;
+  p.rows = next;
   persist();
 }
 

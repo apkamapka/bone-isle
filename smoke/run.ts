@@ -7817,6 +7817,10 @@ async function main(): Promise<void> {
 
     const r = bag.rect as unknown as { x: number; y: number; w: number; h: number } | null;
     const look = hotspots.find((hs) => { hs.fn(); const t = toggled; toggled = false; return t; });
+    /* Firing every hotspot to find one also presses the roll-up and zoom
+     * buttons, which write straight to the persisted panel preferences. Put
+     * them back, or every later test inherits a collapsed backpack. */
+    (await import("../src/systems/panelPrefs.ts")).resetPanelPrefs();
     ok(!!look, "the backpack window still offers a Look toggle");
     /* It used to be drawn one row under the bar, straight on top of the first
      * row of slots — which is what made it look like it had escaped the frame. */
@@ -7997,6 +8001,184 @@ async function main(): Promise<void> {
       "the equipment pack slot asks for a VIEW of the backpack, not for the bag window");
     const bag = src.slice(src.indexOf("openBag:"), src.indexOf("openBag:") + 200);
     ok(!bag.includes('openWindow("bag")'), "…so it no longer toggles a window that may have walked elsewhere");
+  }
+
+  console.log("Etap 36 — a container window can be dragged shorter:");
+  {
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const PN = await import("../src/ui/panels.ts");
+
+    PR.setPanelRows("bag", 0);
+    ok(PN.visibleRows("bag", 4) === 4, "by default a window shows every row it has");
+    PR.setPanelRows("bag", 2);
+    ok(PN.visibleRows("bag", 4) === 2, "…and the chosen count when one has been set");
+    ok(PN.visibleRows("bag", 1) === 1, "…clamped to what the container actually holds");
+    PR.setPanelRows("bag", 99);
+    ok(PN.visibleRows("bag", 4) === 4, "…so an oversized preference cannot invent rows");
+    PR.setPanelRows("bag", -3);
+    ok(PN.visibleRows("bag", 4) === 4, "…and a nonsense one falls back to showing everything");
+    PR.setPanelRows("bag", 0);
+  }
+
+  console.log("Etap 36 — hidden cells are gone, not merely invisible:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+    items.addItem(g.player.bag, "wood", 5);
+
+    const run = (): { slots: { index: number }[]; hits: number; win: Record<string, unknown> } => {
+      const win = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null };
+      const itemSlots: { index: number }[] = [];
+      const hotspots: unknown[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots,
+      } as never);
+      return { slots: itemSlots, hits: hotspots.length, win: win as never };
+    };
+
+    PR.setPanelRows("bag", 0);
+    const full = run();
+    const fullRect = full.win.rect as { h: number };
+    ok(full.slots.length === g.player.pack.items!.length,
+      `at full height every cell is a live drop target (${full.slots.length})`);
+
+    PR.setPanelRows("bag", 2);
+    const short = run();
+    const shortRect = short.win.rect as { h: number };
+
+    ok(shortRect.h < fullRect.h, `a shortened window really is shorter (${Math.round(shortRect.h)} < ${Math.round(fullRect.h)})`);
+    ok(short.slots.length === 8, `…showing exactly two rows of four (${short.slots.length} cells)`);
+    /* The one way a shortened window could lose an item: a cell that is no
+     * longer drawn but is still registered as somewhere a drag can land. */
+    ok(short.slots.every((q) => q.index < 8),
+      "…and no cell beyond the visible rows is a drop target");
+    /* Hotspot counts only differ when a hidden cell actually held something,
+     * so the guarantee that matters is carried by the drop-target check above;
+     * this one just proves the shorter window never grows new clickables. */
+    ok(short.hits <= full.hits, "…nor does hiding rows add anything clickable");
+
+    // Indices must not shift. This is the whole reason resizing ships before
+    // scrolling: with the visible rows always being the FIRST rows, every slot
+    // keeps the index it had, so drag-and-drop and looting are untouched.
+    const first8 = full.slots.slice(0, 8).map((q) => q.index).join(",");
+    ok(short.slots.map((q) => q.index).join(",") === first8,
+      "…and the cells that remain keep exactly the indices they always had");
+
+    PR.setPanelRows("bag", 0);
+  }
+
+  console.log("Etap 36 — the window says what it is hiding:");
+  {
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+
+    const drawnText: string[] = [];
+    /* A proxy, not an overwritten method: assigning ctx.fillText on the stub
+     * context silently does nothing, which made the first version of this test
+     * pass by recording no text at all. */
+    const raw = (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => object } } })
+      .document.createElement("canvas").getContext("2d");
+    const ctx = new Proxy(raw, {
+      get(t, k, r) {
+        if (k === "fillText") return (str: string) => { drawnText.push(str); };
+        const v = Reflect.get(t, k, r) as unknown;
+        return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+      },
+      set(t, k, v) { return Reflect.set(t, k, v); },
+    }) as never;
+
+    const run = (): void => {
+      drawPanels({
+        hud: { ctx, scale: 3, screenW: 1600, screenH: 900, touchInput: false },
+        ui: {
+          windows: [{ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null }],
+          placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots: [], itemSlots: [],
+      } as never);
+    };
+
+    PR.setPanelRows("bag", 0);
+    drawnText.length = 0;
+    run();
+    ok(!drawnText.some((t) => t.includes("shown")), "a full-height window says nothing about hidden rows");
+
+    PR.setPanelRows("bag", 2);
+    drawnText.length = 0;
+    run();
+    /* Until scrolling exists the hidden rows are genuinely out of reach, so a
+     * window that quietly stops showing half your bag would be a trap. */
+    const total = g.player.bag.length;
+    ok(drawnText.some((t) => t.includes(`8/${total} shown`)),
+      `…and a shortened one admits exactly how much it is hiding (8/${total})`);
+    ok(drawnText.some((t) => t.includes("drag foot")),
+      "…and says how to get the rest back");
+    /* The hint must survive its own width budget: an explanation of a
+     * limitation is the last line that should be ellipsised into nothing. */
+    ok(!drawnText.some((t) => t.includes("shown") && t.includes("\u2026")),
+      "…in wording short enough that it is never truncated");
+    PR.setPanelRows("bag", 0);
+  }
+
+  console.log("Etap 36 — the foot is grabbable:");
+  {
+    const { drawPanels, RESIZE_BAR } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+    const win = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null };
+    drawPanels({
+      hud: {
+        ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+          .document.createElement("canvas").getContext("2d"),
+        scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+      },
+      ui: {
+        windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+        shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      },
+      game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+      act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+      hotspots: [], itemSlots: [],
+    } as never);
+
+    const rb = win.resizeBar as unknown as { x: number; y: number; w: number; h: number } | null;
+    const r = win.rect as unknown as { x: number; y: number; w: number; h: number } | null;
+    ok(!!rb, "a container window registers a foot to grab");
+    ok(!!rb && !!r && Math.abs(rb.y + rb.h - (r.y + r.h)) < 1, "…flush with the bottom edge");
+    ok(!!rb && !!r && rb.x === r.x && rb.w === r.w, "…spanning the full width, so it is easy to find");
+    ok(!!rb && rb.h >= RESIZE_BAR, "…and thick enough to hit");
+
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    /* The foot is a thin strip at the very bottom of a window; anything drawn
+     * under it wins the press unless the foot is tested first. */
+    ok(src.indexOf("const rb = win.resizeBar") < src.indexOf("const tb = win.titleBar"),
+      "the foot is hit-tested before the title bar, or the window would move instead of resize");
+    ok(src.includes("win.resizeBar = null"), "…and the foot is cleared each frame, like every other hitbox");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

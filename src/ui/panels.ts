@@ -27,7 +27,7 @@ import type { ContainerRef } from "../systems/containers.ts";
 import { slotsOf, stackAt, baseOf, rootOf } from "../systems/containers.ts";
 import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
-import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed } from "../systems/panelPrefs.ts";
+import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed, panelRows } from "../systems/panelPrefs.ts";
 import { CHROME, panelFrame, popupFrame, raisedBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
 import { NO_DOCK, type DockLayout } from "./dock.ts";
 
@@ -66,6 +66,40 @@ export const DOCKABLE_PANELS: readonly PanelKind[] = ["equip", "bag", "loot", "f
 
 /** Gap between two stacked windows, in design units. */
 const DOCK_GAP = 4;
+
+/** Height of the grabbable strip along a container window's bottom edge. */
+export const RESIZE_BAR = 6;
+
+/**
+ * How many rows of this container to actually show.
+ *
+ * A container window can be dragged shorter so it takes less of the column,
+ * the way Tibia's can. The visible rows are always the FIRST ones, which is
+ * what makes this safe to ship before scrolling exists: no slot index ever
+ * moves, so item drag-and-drop, drop-on-empty and looting are untouched.
+ */
+export function visibleRows(kind: PanelKind, totalRows: number): number {
+  const want = panelRows(kind);
+  if (want <= 0) return totalRows;
+  return Math.max(1, Math.min(totalRows, want));
+}
+
+/**
+ * Draw the resize grip and register the window's foot.
+ *
+ * Windows that are showing everything they have still get the grip: it is the
+ * only way to discover that a window can be resized at all.
+ */
+function resizeGrip(p: PanelInput, x: number, y: number, w: number, h: number): void {
+  const { ctx, scale: S } = p.hud;
+  const bar = RESIZE_BAR * S;
+  const by = y + h - bar;
+  ctx.fillStyle = "rgba(255,233,168,.45)";
+  for (let i = -2; i <= 2; i++) {
+    ctx.fillRect(Math.round(x + w / 2 + i * 3 * S), Math.round(by + bar / 2 - S / 2), Math.max(1, Math.round(S)), Math.max(1, Math.round(S)));
+  }
+  p.win.resizeBar = { x, y: by, w, h: bar };
+}
 
 /** Is this window in the column right now? */
 export function isDocked(win: PanelWindow, dock: DockLayout): boolean {
@@ -155,6 +189,13 @@ export interface PanelWindow {
   titleBar: { x: number; y: number; w: number; h: number } | null;
   /** Auto-fit factor (≤1) applied to this window so it never spills off-screen. */
   fit?: number;
+  /**
+   * The strip along the bottom edge you can grab to resize the window.
+   *
+   * Set while drawing, like `titleBar`, so the pointer handler in main.ts can
+   * hit-test it without knowing anything about how the window is laid out.
+   */
+  resizeBar?: { x: number; y: number; w: number; h: number } | null;
   /**
    * Sitting in the right-hand column rather than floating over the map.
    *
@@ -956,12 +997,13 @@ function drawBag(p: PanelInput): void {
   if (!slots) return;
 
   const cols = 4;
-  const rows = Math.ceil(slots.length / cols);
+  const allRows = Math.ceil(slots.length / cols);
+  const rows = visibleRows(p.win.kind, allRows);
   const cell = 32 * S;
   const gap = 4 * S;
   const gridW = cols * cell + (cols - 1) * gap;
   const w = dockedW(p, gridW + 24 * S);
-  const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S;
+  const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S + RESIZE_BAR * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "BACKPACK")) return;
   lookToggle(p, x, y, w);
@@ -972,7 +1014,12 @@ function drawBag(p: PanelInput): void {
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
 
+  const cap = rows * cols;
   slots.forEach((stackSlot, i) => {
+    // Rows the window is too short to show are skipped completely — not drawn,
+    // not clickable, and not a drop target. A cell nobody can see must never
+    // be able to swallow an item.
+    if (i >= cap) return;
     const cx = gx + (i % cols) * (cell + gap);
     const cy = gy + Math.floor(i / cols) * (cell + gap);
     const hov = hovering(p, cx, cy, cell, cell);
@@ -1012,9 +1059,16 @@ function drawBag(p: PanelInput): void {
       p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, ref, index: i, kind: "wood", n: 0 });
     }
   });
-  const hint = p.ui.lookMode ? "Look mode — click any item to inspect it"
-    : "Click gear to equip · potion/food to use · a pack to open it";
-  hudText(hud, hint, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center", false, w - 12 * S);
+  /* Say so when rows are hidden. Until scrolling exists they are genuinely
+   * out of reach, and a window that quietly stops showing half your bag is
+   * far worse than one that admits it. */
+  const hint = rows < allRows
+    ? `${rows * cols}/${slots.length} shown · drag foot`
+    : p.ui.lookMode ? "Look mode — click any item to inspect it"
+      : "Click gear to equip · potion/food to use · a pack to open it";
+  hudText(hud, hint, x + w / 2, y + h - 13 * S, 7 * S,
+    rows < allRows ? "#e8c06a" : "rgba(220,214,190,.6)", "center", false, w - 12 * S);
+  resizeGrip(p, x, y, w, h);
 }
 
 /* ---------------- Forge (craft · smelt · gems) ---------------- */
@@ -1430,28 +1484,33 @@ function drawWorldContainer(
   if (!slots) return;
 
   const cols = 4;
-  const rows = Math.ceil(slots.length / cols);
+  const allRows = Math.ceil(slots.length / cols);
+  const rows = visibleRows(p.win.kind, allRows);
   const cell = 30 * S;
   const gap = 4 * S;
   const gridW = cols * cell + (cols - 1) * gap;
   const w = dockedW(p, gridW + 24 * S);
-  const h = 20 * S + rows * cell + (rows - 1) * gap + 30 * S;
+  const h = 20 * S + rows * cell + (rows - 1) * gap + 30 * S + RESIZE_BAR * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, topTitle)) return;
 
   const gx = x + (w - gridW) / 2;
   let gy = y + 18 * S;
-  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref);
+  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref, rows);
   gy += rows * (cell + gap) + 4 * S;
 
   const bw = w - 24 * S;
-  const by = y + h - 20 * S;
+  const by = y + h - 24 * S;
   buttonBox(ctx, x + 12 * S, by, bw, 14 * S, S, {
     face: "rgba(202,162,58,.25)", accent: CHROME.gold,
     hover: hovering(p, x + 12 * S, by, bw, 14 * S),
   });
-  hudText(hud, "Take all", x + w / 2, by + 7 * S, 8 * S, "#ffe9a8", "center", true);
+  /* "Take all" still empties the WHOLE container, not just the visible rows —
+   * it works on the loot, not on what happens to be on screen. */
+  hudText(hud, rows < allRows ? `Take all (${slots.length})` : "Take all",
+    x + w / 2, by + 7 * S, 8 * S, "#ffe9a8", "center", true, bw - 6 * S);
   p.hotspots.push({ x: x + 12 * S, y: by, w: bw, h: 14 * S, fn: onTakeAll });
+  resizeGrip(p, x, y, w, h);
 }
 
 /**
@@ -1471,22 +1530,27 @@ function drawContainerWin(p: PanelInput): void {
   if (!slots) return;
 
   const cols = 4;
-  const rows = Math.ceil(slots.length / cols);
+  const allRows = Math.ceil(slots.length / cols);
+  const rows = visibleRows(p.win.kind, allRows);
   const cell = 32 * S;
   const gap = 4 * S;
   const gridW = cols * cell + (cols - 1) * gap;
   const w = dockedW(p, gridW + 24 * S);
-  const h = 20 * S + rows * cell + (rows - 1) * gap + 16 * S;
+  const h = 20 * S + rows * cell + (rows - 1) * gap + 16 * S + RESIZE_BAR * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, containerTitle(p, ref, "CONTAINER"))) return;
   navBar(p, x, y, ref);
 
   const gx = x + (w - gridW) / 2;
   const gy = y + 20 * S;
-  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref);
+  drawGrid(p, slots, gx, gy, cols, cell, gap, (i) => p.act.moveStack(ref, i), ref, rows);
   const used = slots.filter((q) => q !== null).length;
-  hudText(hud, `${used}/${slots.length} · ${containerHome(ref)}`,
-    x + w / 2, y + h - 7 * S, 6.5 * S, "rgba(220,214,190,.6)", "center");
+  const foot = rows < allRows
+    ? `${used}/${slots.length} · ${rows * cols} shown`
+    : `${used}/${slots.length} · ${containerHome(ref)}`;
+  hudText(hud, foot, x + w / 2, y + h - 11 * S, 6.5 * S,
+    rows < allRows ? "#e8c06a" : "rgba(220,214,190,.6)", "center", false, w - 12 * S);
+  resizeGrip(p, x, y, w, h);
 }
 
 function drawLoot(p: PanelInput): void {
@@ -1747,10 +1811,20 @@ function drawGrid(
   gap: number,
   onClick: (index: number) => void,
   ref?: ContainerRef,
+  /**
+   * Draw only this many rows.
+   *
+   * Hidden cells are skipped ENTIRELY — no hotspot, no drop target. A cell you
+   * cannot see must not be able to swallow an item, which is the one way a
+   * shortened window could quietly lose something.
+   */
+  maxRows?: number,
 ): void {
   const { hud } = p;
   const { ctx, scale: S } = hud;
+  const cap = maxRows === undefined ? slots.length : Math.min(slots.length, maxRows * cols);
   slots.forEach((slot, i) => {
+    if (i >= cap) return;
     const cx = gx + (i % cols) * (cell + gap);
     const cy = gy + Math.floor(i / cols) * (cell + gap);
     const hov = hovering(p, cx, cy, cell, cell);
