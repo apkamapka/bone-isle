@@ -47,6 +47,7 @@ import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZ
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, CHROME } from "./ui/chrome.ts";
+import { drawControlIcon, type ControlIcon } from "./ui/icons.ts";
 import {
   dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
   VITALS_FIT, GOLD_ROW_H, BTN_ROW_H, SLOT_ROW_H, SWAP_H, BLOCK_BAR,
@@ -542,7 +543,12 @@ const act: PanelActions = {
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => { splitConfirm(mode); },
   look: (kind: ItemKind) => { ui.inspect = kind; },
   toggleLook: () => { ui.lookMode = !ui.lookMode; if (!ui.lookMode) ui.inspect = null; },
-  openBag: () => { openWindow("bag"); },
+  /* Opening the pack from the equipment slot asks for a VIEW of the backpack,
+   * not for "the bag window" — which, once it has walked into a sub-pack, is
+   * showing something else entirely. Routing through openContainer means an
+   * already-open root view is raised and otherwise a second window appears,
+   * which is how you get two packs side by side, as in Tibia. */
+  openBag: () => { openContainer({ c: "bag" }); },
   cycleAmmo: () => {
     const next = cycleArrow(P.bag, P.ammo);
     if (!next) { flash("no ammo to load", "#cfa86a"); return; }
@@ -3416,7 +3422,7 @@ function drawSidebar(h: HudCtx, d: DockLayout): void {
   header("minimap", "MAP");
   {
     const r = d.blocks.minimap;
-    if (!r.collapsed) drawMinimapAt(h, game, P, d.innerX, r.bodyY, Math.min(d.innerW, r.bodyH));
+    if (!r.collapsed) drawMinimapAt(h, game, P, d.innerX, r.bodyY, d.innerW, r.bodyH);
   }
 
   header("status", "STATUS");
@@ -3447,10 +3453,14 @@ function drawDockControls(d: DockLayout, top: number): void {
   const S = d.s;
   const gap = Math.round(4 * S);
 
-  // Row 1: the five panel buttons, glyph only — a label under a 40px button
-  // is unreadable, and the keyboard letter is the label.
-  const pbtns: [string, PanelKind][] = [
-    ["B", "build"], ["K", "skills"], ["E", "equip"], ["I", "bag"], ["Q", "quest"],
+  /* Row 1: the five panel buttons, as PICTURES.
+   *
+   * They carried their keyboard letter, which reads fine for B and Q and not
+   * at all for K — and S, the letter Skills wants, is taken by walking. Tibia
+   * uses pictures here for exactly that reason: a picture owes nothing to the
+   * keybind. The letter stays on the key; the button shows what it opens. */
+  const pbtns: [ControlIcon, PanelKind][] = [
+    ["build", "build"], ["skills", "skills"], ["equip", "equip"], ["bag", "bag"], ["quest", "quest"],
   ];
   const bw = (d.innerW - gap * (pbtns.length - 1)) / pbtns.length;
   const bh = Math.round(BTN_ROW_H * S);
@@ -3460,11 +3470,8 @@ function drawDockControls(d: DockLayout, top: number): void {
     buttonBox(sctx, bx, top, bw, bh, S, {
       on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
     });
-    sctx.textAlign = "center";
-    sctx.textBaseline = "middle";
-    sctx.fillStyle = on ? "#1a1408" : "#e9e2c8";
-    sctx.font = `bold ${Math.round(bh * 0.5)}px 'Courier New',monospace`;
-    sctx.fillText(glyph, bx + bw / 2, top + bh / 2);
+    const gs = Math.min(bw, bh) * 0.66;
+    drawControlIcon(sctx, glyph, bx + (bw - gs) / 2, top + (bh - gs) / 2, gs, on);
     hotspots.push({ x: bx, y: top, w: bw, h: bh, fn: () => togglePanel(panel) });
     touchButtons.push({ x: bx, y: top, w: bw, h: bh });
   });

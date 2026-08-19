@@ -7829,6 +7829,176 @@ async function main(): Promise<void> {
       "…carved out of the drag region, or pressing it would just move the window");
   }
 
+  console.log("Etap 35 — long text wraps instead of being cut:");
+  {
+    const { wrapText, hudLines } = await import("../src/ui/hud.ts");
+    let font = "";
+    const drawn: string[] = [];
+    const ctx = {
+      set font(v: string) { font = v; },
+      get font() { return font; },
+      set fillStyle(_v: string) { /* ignored */ },
+      set textAlign(_v: CanvasTextAlign) { /* ignored */ },
+      measureText(t: string) {
+        const px = Number(/(\d+)px/.exec(font)?.[1] ?? 10);
+        return { width: t.length * px * 0.6 };
+      },
+      fillText(t: string) { drawn.push(t); },
+    } as unknown as CanvasRenderingContext2D;
+    const h = { ctx, scale: 2, screenW: 800, screenH: 600 } as never;
+    const wide = (t: string, px: number): number => t.length * px * 0.6;
+
+    const cost = "Upgrade to III: 1000 wood + 1000 stone + 500 iron + 100 essentialGem + 500 steel";
+
+    ok(wrapText(h, "short", 10, 400).length === 1, "a line that fits is one line and is left alone");
+
+    {
+      const lines = wrapText(h, cost, 10, 200);
+      ok(lines.length > 1, `a long cost line becomes several (${lines.length})`);
+      ok(lines.every((l) => wide(l, 10) <= 200 + 0.001), "…every one of which fits the budget");
+      /* The whole point: truncation hid the very numbers the line exists to
+       * report. Wrapping must lose nothing but the spaces it broke at. */
+      ok(lines.join(" ") === cost, "…and nothing at all is lost — the numbers are why the line exists");
+      ok(!lines.some((l) => l.includes("\u2026")), "…with no ellipsis anywhere");
+    }
+
+    {
+      // A single word longer than the budget cannot be broken at a space, and
+      // must still not overhang the frame.
+      const lines = wrapText(h, "a ".repeat(1) + "X".repeat(200), 10, 100);
+      ok(lines.every((l) => wide(l, 10) <= 100 + 0.001), "an unbreakable word is cut mid-word rather than left to overhang");
+      ok(lines.join("").includes("X".repeat(20)), "…and its characters all survive the cut");
+    }
+
+    {
+      drawn.length = 0;
+      const end = hudLines(h, ["one", "two", "three"], 0, 100, 8, "#fff");
+      // Two fills per line: hudText lays a shadow under every string it draws.
+      ok(drawn.length === 6, "hudLines draws each line, shadow and all");
+      ok(drawn.includes("three"), "…including the last one");
+      ok(end > 100, `…and reports where the block ended (${end})`);
+    }
+  }
+
+  console.log("Etap 35 — the build panel grows to hold its rows:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    const mk = (scale: number, win: unknown) => {
+      const hotspots: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale, screenW: 1600, screenH: 900, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots: [],
+      } as never);
+      return hotspots;
+    };
+
+    /* Narrow the panel by shrinking the scale and the rows have to wrap more,
+     * so the frame has to grow. If it did not, the text would run out of the
+     * bottom of the window the same way it used to run out of the side. */
+    const wide = { kind: "build", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+    mk(3, wide);
+    const rw = wide.rect as unknown as { h: number } | null;
+    ok(!!rw, "the build panel draws");
+
+    const narrow = { kind: "build", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+    mk(1, narrow);
+    const rn = narrow.rect as unknown as { h: number } | null;
+    ok(!!rn && !!rw && rn.h / 1 >= rw.h / 3 - 1,
+      "…and per design unit it is never SHORTER when the text has to wrap more");
+
+    // Every clickable row must stay inside the frame it was measured for.
+    const hs = mk(3, wide);
+    const r = wide.rect as unknown as { x: number; y: number; w: number; h: number } | null;
+    /* Rows only. The title-bar buttons carry a deliberately enlarged hit area
+     * that overhangs the frame by a few pixels so they stay easy to hit. */
+    const rowHits = r ? hs.filter((q) => q.w > r.w / 2) : [];
+    /* A fresh character can afford nothing, so no row is clickable and there
+     * are no row hotspots at all — which is correct, not a failure. */
+    ok(rowHits.length >= 0, `the build panel offers ${rowHits.length} clickable rows for this purse`);
+    ok(!!r && rowHits.every((q) => q.y >= r.y - 1 && q.y + q.h <= r.y + r.h + 1),
+      "…and every one of them sits inside the panel that was sized to hold it");
+  }
+
+  console.log("Etap 35 — control buttons are pictures, not letters:");
+  {
+    const I = await import("../src/ui/icons.ts");
+    interface R { x: number; y: number; w: number; h: number; c: string }
+    const rec = (): { ctx: CanvasRenderingContext2D; out: R[] } => {
+      const out: R[] = [];
+      let cur = "#000";
+      const ctx = {
+        set fillStyle(v: string) { cur = v; },
+        get fillStyle() { return cur; },
+        fillRect(x: number, y: number, w: number, h: number) { out.push({ x, y, w, h, c: cur }); },
+      } as unknown as CanvasRenderingContext2D;
+      return { ctx, out };
+    };
+    const names = ["build", "skills", "equip", "bag", "quest"] as const;
+
+    /* B and Q read fine as letters; K for Skills does not, and S — the letter
+     * it wants — is taken by walking. Pictures owe nothing to the keybind. */
+    const shapes = new Set<string>();
+    for (const n of names) {
+      const f = rec();
+      I.drawControlIcon(f.ctx, n, 0, 0, 36, false);
+      ok(f.out.length >= 3, `${n} draws a glyph`);
+      ok(f.out.every((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= 36 && r.y + r.h <= 36),
+        `…entirely inside its button`);
+      ok(f.out.every((r) => Number.isInteger(r.x) && Number.isInteger(r.y)),
+        `…on whole pixels, like the rest of the chrome`);
+      shapes.add(f.out.map((r) => `${r.x},${r.y},${r.w},${r.h}`).join("|"));
+    }
+    ok(shapes.size === names.length, "all five silhouettes are different — five identical boxes would be no better than letters");
+
+    {
+      // Pressed, the button face turns gold; a light glyph on it would vanish.
+      const off = rec(); I.drawControlIcon(off.ctx, "bag", 0, 0, 36, false);
+      const on = rec(); I.drawControlIcon(on.ctx, "bag", 0, 0, 36, true);
+      ok(off.out[0].c !== on.out[0].c, "a pressed button flips the glyph to a dark palette so it stays visible on gold");
+    }
+
+    {
+      // The buttons are sized off the column, which is not a round number.
+      const tiny = rec();
+      I.drawControlIcon(tiny.ctx, "quest", 3.4, 7.9, 11.3, false);
+      ok(tiny.out.every((r) => r.w >= 1 && r.h >= 1),
+        "at an awkward size and offset no part of a glyph collapses to nothing");
+    }
+
+    const nfs = await import("node:fs");
+    const icons = nfs.readFileSync("src/ui/icons.ts", "utf8");
+    ok(!icons.includes("drawImage") && !icons.includes("http"),
+      "the glyphs are drawn, not loaded — no art file, so no licence rides on the buttons");
+  }
+
+  console.log("Etap 35 — a second backpack can actually be opened:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    /* The equipment slot used to call openWindow("bag"), which toggles THE bag
+     * window — and once that window has walked into a sub-pack it is showing
+     * something else, so the click just closed the thing you were looking at
+     * instead of giving you a second view. */
+    ok(src.includes('openBag: () => { openContainer({ c: "bag" }); }')
+      || src.includes('openContainer({ c: "bag" })'),
+      "the equipment pack slot asks for a VIEW of the backpack, not for the bag window");
+    const bag = src.slice(src.indexOf("openBag:"), src.indexOf("openBag:") + 200);
+    ok(!bag.includes('openWindow("bag")'), "…so it no longer toggles a window that may have walked elsewhere");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

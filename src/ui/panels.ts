@@ -16,7 +16,7 @@ import { quests } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
 import { OUTFIT_COLORS, HUE_STEPS, SAT_ROWS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
 import { heroPreviewFrame } from "../gfx/heroSheet.ts";
-import { hudText, type HudCtx } from "./hud.ts";
+import { hudText, wrapText, hudLines, type HudCtx } from "./hud.ts";
 import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
 import { bestTier } from "../systems/building.ts";
@@ -594,14 +594,26 @@ function drawBuild(p: PanelInput): void {
   const { hud, player } = p;
   const { scale: S } = hud;
   const w = 268 * S;
-  const rowH = 44 * S;
+  const baseRowH = 44 * S;
   const home = p.game.worlds.home;
   const chests = homeChests(p.game);
-  const h = 20 * S + STRUCT_KEYS.length * rowH + 30 * S;
-  const { x, y } = anchor(p, w, h);
-  if (!goldPanel(p, x, y, w, h, "BUILD — structures & upgrades")) return;
-  let ry = y + 18 * S;
-  for (const key of STRUCT_KEYS) {
+  /** Width the two wrapped lines of a row have to live in. */
+  const textW = w - 60 * S;
+
+  /* Rows are MEASURED before the panel is sized, because a cost line that
+   * wraps makes its row taller and the frame has to be tall enough to hold it.
+   * Cutting the line with an ellipsis was the previous answer and it was the
+   * wrong one: the numbers are the entire reason the line exists. */
+  interface Row {
+    key: typeof STRUCT_KEYS[number];
+    def: typeof STRUCTS[keyof typeof STRUCTS];
+    owned: Structure | null;
+    many: boolean; count: number; tier: number; top: number;
+    nextCost: ReturnType<typeof buildCost> | null;
+    maxed: boolean; afford: boolean; clickable: boolean;
+    head: string[]; note: string[]; rowH: number;
+  }
+  const rows: Row[] = STRUCT_KEYS.map((key) => {
     const def = STRUCTS[key];
     // The best one standing decides what this row offers: nothing built yet
     // means "build tier I", otherwise it means "raise the one you have".
@@ -622,7 +634,30 @@ function drawBuild(p: PanelInput): void {
     const nextCost = many ? buildCost(key, count) : owned ? upgradeCost(key, tier) : buildCost(key);
     const maxed = !many && owned !== null && nextCost === null;
     const afford = nextCost !== null && canAfford(player.bag, nextCost, chests);
-    const clickable = afford && !maxed;
+
+    let head: string[] = [];
+    let note: string[] = [];
+    if (maxed) {
+      head = ["top tier reached"];
+      note = wrapText(hud, def.tiers[tier - 1].desc, 7 * S, textW);
+    } else if (nextCost) {
+      const verb = many ? (count > 0 ? "Build another:" : "Build:")
+        : owned ? `Upgrade to ${"I".repeat(tier + 1)}:` : "Build:";
+      head = wrapText(hud, `${verb} ${costText(nextCost)}`, 8 * S, textW);
+      note = wrapText(hud, many ? "Starts at tier I — raise it from the chest itself" : def.tiers[tier].desc, 7 * S, textW);
+    }
+    const extra = Math.max(0, head.length - 1) * 10 * S + Math.max(0, note.length - 1) * 9 * S;
+    return {
+      key, def, owned, many, count, tier, top, nextCost, maxed, afford,
+      clickable: afford && !maxed, head, note, rowH: baseRowH + extra,
+    };
+  });
+  const h = 20 * S + rows.reduce((a, r) => a + r.rowH, 0) + 30 * S;
+  const { x, y } = anchor(p, w, h);
+  if (!goldPanel(p, x, y, w, h, "BUILD — structures & upgrades")) return;
+  let ry = y + 18 * S;
+  for (const r of rows) {
+    const { key, def, owned, many, count, tier, top, maxed, clickable, rowH } = r;
 
     if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable) {
       hud.ctx.fillStyle = "rgba(202,162,58,.15)";
@@ -648,18 +683,10 @@ function drawBuild(p: PanelInput): void {
       const right = many ? `${count} built` : tier > 0 ? `tier ${tier} / ${top}` : `tier 0 / ${top}`;
       hudText(hud, right, x + w - 12 * S, ry + 9 * S, 7 * S, "#e8dcc0", "right");
     }
-    if (maxed) {
-      const textW = w - 60 * S;
-      hudText(hud, "top tier reached", x + 48 * S, ry + 21 * S, 8 * S, "#9fe8a8", "left", false, textW);
-      hudText(hud, def.tiers[tier - 1].desc, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)", "left", false, textW);
-    } else if (nextCost) {
-      const verb = many ? (count > 0 ? "Build another:" : "Build:") : owned ? `Upgrade to ${"I".repeat(tier + 1)}:` : "Build:";
-      const textW = w - 60 * S;
-      hudText(hud, `${verb} ${costText(nextCost)}`, x + 48 * S, ry + 21 * S, 8 * S,
-        afford ? "#b9e07f" : "#d96a5a", "left", false, textW);
-      const note = many ? "Starts at tier I — raise it from the chest itself" : def.tiers[tier].desc;
-      hudText(hud, note, x + 48 * S, ry + 31 * S, 7 * S, "rgba(220,214,190,.6)", "left", false, textW);
-    }
+    // Both blocks are already wrapped; each line simply follows the last.
+    const headColor = maxed ? "#9fe8a8" : r.afford ? "#b9e07f" : "#d96a5a";
+    const afterHead = hudLines(hud, r.head, x + 48 * S, ry + 21 * S, 8 * S, headColor);
+    hudLines(hud, r.note, x + 48 * S, Math.max(afterHead, ry + 31 * S), 7 * S, "rgba(220,214,190,.6)");
     if (clickable) {
       const ryy = ry;
       const target = many ? null : owned;

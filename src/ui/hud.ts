@@ -137,17 +137,28 @@ function minimapTerrain(w: Game["current"]): HTMLCanvasElement {
 }
 
 /** Minimap blitted at an arbitrary (x,y) with a given pixel size. */
-export function drawMinimapAt(h: HudCtx, game: Game, p: Player, x: number, y: number, size: number): void {
+/**
+ * The minimap, filling the rect it is given.
+ *
+ * `mh` defaults to `size`, which is how every square caller already used it.
+ * The sidebar passes both, because a square map in a 100-unit-tall block left
+ * a third of the block empty — and the blit already stretches a non-square
+ * world into whatever box it is handed, so honouring two dimensions changes
+ * nothing about how faithful it is.
+ */
+export function drawMinimapAt(
+  h: HudCtx, game: Game, p: Player, x: number, y: number, size: number, mh = size,
+): void {
   const { ctx, scale: S } = h;
   const w = game.current;
   const sx = size / (w.w * TILE);
-  const sy = size / (w.h * TILE);
-  sunkenBox(ctx, x - 2 * S, y - 2 * S, size + 4 * S, size + 4 * S,
+  const sy = mh / (w.h * TILE);
+  sunkenBox(ctx, x - 2 * S, y - 2 * S, size + 4 * S, mh + 4 * S,
     "rgba(6,14,13,.85)", "#05100e", "#4e7268", S);
   // terrain: one blit of the per-world cache (pixelated, like the game art)
   const wasSmooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(minimapTerrain(w), x, y, size, size);
+  ctx.drawImage(minimapTerrain(w), x, y, size, mh);
   ctx.imageSmoothingEnabled = wasSmooth;
   // portals
   for (const pt of w.portals) {
@@ -212,13 +223,63 @@ export function totalGold(game: Game, p: Player): number {
   return walletAcross([p.bag, ...chests]);
 }
 
+/**
+ * Break `str` into lines that each fit `maxW`, at spaces where possible.
+ *
+ * Truncating with an ellipsis was the first answer and it was the wrong one:
+ * "Upgrade to III: 1000 wood + 1000 stone + 500 iron + 100 essentia…" hides
+ * the very numbers the line exists to tell you. Wrapping keeps all of it.
+ *
+ * A word longer than the whole budget is cut mid-word rather than allowed to
+ * overhang — otherwise one absurd item name would leak out of the frame again.
+ */
+export function wrapText(h: HudCtx, str: string, size: number, maxW: number, bold = false): string[] {
+  const { ctx } = h;
+  ctx.font = `${bold ? "bold " : ""}${Math.round(size)}px 'Courier New',monospace`;
+  if (maxW <= 0 || ctx.measureText(str).width <= maxW) return [str];
+  const lines: string[] = [];
+  let line = "";
+  for (const word of str.split(" ")) {
+    const probe = line ? `${line} ${word}` : word;
+    if (ctx.measureText(probe).width <= maxW) { line = probe; continue; }
+    if (line) { lines.push(line); line = ""; }
+    let rest = word;
+    while (ctx.measureText(rest).width > maxW && rest.length > 1) {
+      let cut = rest.length;
+      while (cut > 1 && ctx.measureText(rest.slice(0, cut)).width > maxW) cut--;
+      lines.push(rest.slice(0, cut));
+      rest = rest.slice(cut);
+    }
+    line = rest;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/** Draw `lines` down the page, returning the y just past the last one. */
+export function hudLines(
+  h: HudCtx, lines: string[], x: number, y: number, size: number, color: string,
+  align: CanvasTextAlign = "left", bold = false,
+): number {
+  let ly = y;
+  for (const ln of lines) {
+    hudText(h, ln, x, ly, size, color, align, bold);
+    ly += size * 1.25;
+  }
+  return ly;
+}
+
 /** Compact gold + TP row (used by the desktop sidebar). */
 export function drawGoldTP(h: HudCtx, p: Player, x: number, y: number, w: number, rowH: number, gold = p.gold): void {
   const { ctx, scale: S } = h;
   panel(h, x, y, w, rowH);
+  /* Scale the coin to the ROW, not to a fixed multiple of the HUD unit. In
+   * the sidebar the row is set by the column's own ruler, so a 1.5x coin
+   * stood taller than the frame around it and clipped top and bottom. */
   const cd = SPR.coin;
-  const cdw = iconW(cd, 1.5 * S);
-  const cdh = iconH(cd, 1.5 * S);
+  const csc = Math.min(1.5 * S, (rowH - 4 * S) / iconH(cd, 1));
+  const cdw = iconW(cd, csc);
+  const cdh = iconH(cd, csc);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(cd, x + 5 * S, y + (rowH - cdh) / 2, cdw, cdh);
   hudText(h, `${gold}`, x + 5 * S + cdw + 4 * S, y + rowH / 2, 8 * S, "#f3eedd", "left", true);
