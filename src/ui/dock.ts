@@ -43,18 +43,27 @@ export const VITALS_FIT = DOCK_INNER / 190;
 
 /** Height of a collapsed block: its header bar and nothing else. */
 export const BLOCK_BAR = 12;
-/** Gap between blocks. */
+/** Gap between blocks, and between the buttons inside them. */
 const GAP = 4;
 
 /** Fixed-block heights, expanded, in design units. */
 export const MINIMAP_H = 120;
 export const GOLD_ROW_H = 14;
 export const STATUS_H = GOLD_ROW_H + GAP + Math.round(68 * VITALS_FIT);
-/** Panel-button row, action-slot row, weapon swap. */
-export const BTN_ROW_H = 30;
-export const SLOT_ROW_H = 28;
+/**
+ * Panel-button row and weapon swap.
+ *
+ * The action slots were a third row here and have moved to a bar across the
+ * foot of the map: six of them across a hundred-unit column came out sixteen
+ * units each, which no font makes "Recall 3·12" fit into. Losing the row also
+ * buys the column another container.
+ */
+/* Square, and derived rather than picked: five buttons across the column's
+ * hundred units leaves about seventeen each, and a 17x34 button is a stretched
+ * slot with a small picture floating in the middle of it. */
+export const BTN_ROW_H = Math.floor((DOCK_INNER - 4 * GAP) / 5);
 export const SWAP_H = 20;
-export const CONTROLS_H = BTN_ROW_H + GAP + SLOT_ROW_H + GAP + SWAP_H;
+export const CONTROLS_H = BTN_ROW_H + GAP + SWAP_H;
 
 /**
  * Narrower than this (CSS px) and the column costs more map than it saves, so

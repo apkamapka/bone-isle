@@ -47,10 +47,10 @@ import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZ
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, CHROME } from "./ui/chrome.ts";
-import { drawControlIcon, type ControlIcon } from "./ui/icons.ts";
+import { drawControlIcon, ICON_SRC, type ControlIcon } from "./ui/icons.ts";
 import {
   dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
-  VITALS_FIT, GOLD_ROW_H, BTN_ROW_H, SLOT_ROW_H, SWAP_H, BLOCK_BAR,
+  VITALS_FIT, GOLD_ROW_H, BTN_ROW_H, SWAP_H, BLOCK_BAR,
   type DockLayout, type DockBlock,
 } from "./ui/dock.ts";
 import { drawPanels, isDocked, visibleRows, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
@@ -1859,6 +1859,7 @@ screen.addEventListener("pointerdown", (e) => {
     for (const r of actionSlotRects) {
       if (s.x >= r.x && s.x < r.x + r.w && s.y >= r.y && s.y < r.y + r.h) {
         assignSlot = r.i;
+        assignScroll = 0;
         e.preventDefault();
         return;
       }
@@ -1946,18 +1947,25 @@ screen.addEventListener("pointerdown", (e) => {
  * rows hidden take the event — otherwise the page under the canvas would stop
  * scrolling for no visible reason. */
 screen.addEventListener("wheel", (e) => {
+  if (assignSlot !== null) {
+    // Modal: while the picker is up it takes the wheel, whatever is behind it.
+    assignScroll = Math.max(0, assignScroll + (e.deltaY > 0 ? 1 : -1));
+    e.preventDefault();
+    return;
+  }
   const s = toScreen(e);
   for (let i = ui.windows.length - 1; i >= 0; i--) {
     const win = ui.windows[i];
     const r = win.rect;
     if (!r) continue;
     if (!(s.x >= r.x && s.x < r.x + r.w && s.y >= r.y && s.y < r.y + r.h)) continue;
-    const total = rowsInWindow(win);
-    if (total <= 1) return;
-    const shown = visibleRows(win.kind, total);
-    if (shown >= total) return; // nothing hidden: let the page have the event
+    /* One path for every kind of scrollable window. The panel that drew it
+     * recorded how far it can go, so the wheel does not have to know whether
+     * it is looking at a container grid or a sixty-line shop list. */
+    const max = win.scrollMax ?? 0;
+    if (max <= 0) return; // nothing hidden: let the page have the event
     const dir = e.deltaY > 0 ? 1 : -1;
-    win.scroll = clamp((win.scroll ?? 0) + dir, 0, total - shown);
+    win.scroll = clamp((win.scroll ?? 0) + dir, 0, max);
     e.preventDefault();
     return;
   }
@@ -3454,7 +3462,7 @@ function tButton(x: number, y: number, s: number, label: string, glyph: string, 
 
 /** Tap an action slot: bind it in edit mode, otherwise trigger it. */
 function slotTap(i: number): void {
-  if (hudEditing()) { assignSlot = i; beep(360, 0.05, "sine", 0.04); }
+  if (hudEditing()) { assignSlot = i; assignScroll = 0; beep(360, 0.05, "sine", 0.04); }
   else useAction(i);
 }
 
@@ -3593,23 +3601,22 @@ function drawDockControls(d: DockLayout, top: number): void {
     buttonBox(sctx, bx, top, bw, bh, S, {
       on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
     });
-    const gs = Math.min(bw, bh) * 0.66;
-    drawControlIcon(sctx, glyph, bx + (bw - gs) / 2, top + (bh - gs) / 2, gs, on);
+    /* Snapped to a whole multiple of the 16px source grid. Hand-drawn pixel
+     * art scaled by 1.37x is mush; at exactly 1x, 2x or 3x it is crisp, and
+     * these glyphs are authored on the same grid so they match. */
+    const gs = Math.max(ICON_SRC, Math.floor((Math.min(bw, bh) * 0.86) / ICON_SRC) * ICON_SRC);
+    drawControlIcon(sctx, glyph, Math.round(bx + (bw - gs) / 2), Math.round(top + (bh - gs) / 2), gs, on);
     hotspots.push({ x: bx, y: top, w: bw, h: bh, fn: () => togglePanel(panel) });
     touchButtons.push({ x: bx, y: top, w: bw, h: bh });
   });
 
-  // Row 2: the six action slots.
-  const sy = top + bh + gap;
-  const sh = Math.round(SLOT_ROW_H * S);
-  const sw = (d.innerW - gap * 5) / 6;
-  for (let i = 0; i < 6; i++) {
-    const sx = d.innerX + i * (sw + gap);
-    drawActionSlot(i, sx, sy, sw, sh);
-  }
+  /* The action slots used to be row 2 here and were unreadably small: six of
+   * them across a 100-unit column is sixteen units each, and "Recall 3·12" does
+   * not fit in sixteen units at any font. They live on a bar across the foot of
+   * the map now, where there is room for them to be the size of an item. */
 
-  // Row 3: quick weapon swap — a combat control, which is where Tibia keeps it.
-  const wy = sy + sh + gap;
+  // Row 2: quick weapon swap — a combat control, which is where Tibia keeps it.
+  const wy = top + bh + gap;
   const wh = Math.round(SWAP_H * S);
   const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
   buttonBox(sctx, d.innerX, wy, d.innerW, wh, S, {});
@@ -3620,6 +3627,35 @@ function drawDockControls(d: DockLayout, top: number): void {
   sctx.fillText(bowOn ? "\u2192MELEE" : "\u2192BOW", d.innerX + d.innerW / 2, wy + wh / 2);
   hotspots.push({ x: d.innerX, y: wy, w: d.innerW, h: wh, fn: () => swapWeapon() });
   touchButtons.push({ x: d.innerX, y: wy, w: d.innerW, h: wh });
+}
+
+/**
+ * Height of a hotbar slot, in HUD design units.
+ *
+ * One number sets the whole bar. Thirty is about an inch of screen on a laptop
+ * and leaves the bound item's name and cooldown legible, which was the entire
+ * complaint about the sixteen-unit version in the column.
+ */
+const HOTBAR_SLOT = 30;
+
+/**
+ * The action bar, across the foot of the MAP.
+ *
+ * Not across the whole canvas: it centres on the visible map so the sidebar
+ * does not push it off-centre from everything the player is actually watching.
+ */
+function drawHotbar(): void {
+  const S = scale;
+  const slot = HOTBAR_SLOT * S;
+  const gap = 4 * S;
+  const n = 6;
+  const total = n * slot + (n - 1) * gap;
+  const mapW = screen.width - sidebarW;
+  const x0 = Math.round((mapW - total) / 2);
+  const y = Math.round(screen.height - slot - 8 * S);
+  for (let i = 0; i < n; i++) {
+    drawActionSlot(i, x0 + i * (slot + gap), y, slot, slot);
+  }
 }
 
 /** Edit-mode outline + a drag handle (grip) for a movable HUD group. */
@@ -3668,6 +3704,7 @@ function drawTouchControls(): void {
   if (docked) {
     const r = lastDock.blocks.controls;
     if (!r.collapsed) drawDockControls(lastDock, r.bodyY);
+    drawHotbar();
   }
 
   // --- panel-button column (group "panels"), collapsible behind a ≡ button ---
@@ -3778,6 +3815,9 @@ function drawTouchControls(): void {
   }
 }
 
+/** How far the rebind picker's list is scrolled, in rows. */
+let assignScroll = 0;
+
 /** The rebind picker overlay: choose what an action slot triggers. */
 function drawAssignPicker(): void {
   if (assignSlot === null) return;
@@ -3806,7 +3846,12 @@ function drawAssignPicker(): void {
 
   const w = clamp(mapW * 0.66, 220 * S, 420 * S);
   const rowH = 30 * S;
-  const h = 26 * S + rows.length * rowH + 10 * S;
+  /* Every bindable crystal is a row here, and there are dozens. Sized to the
+   * list, the dialog ran off the top and bottom of the display; capped and
+   * scrolled, the rows stay the size they were designed at. */
+  const shown = Math.max(3, Math.min(rows.length, Math.floor((sh * 0.8 - 36 * S) / rowH)));
+  assignScroll = clamp(assignScroll, 0, Math.max(0, rows.length - shown));
+  const h = 26 * S + shown * rowH + 10 * S;
   const x = (mapW - w) / 2, y = (sh - h) / 2;
   popupFrame(ctx, x, y, w, h, S, "rgba(16,20,24,.97)");
   ctx.textAlign = "center";
@@ -3815,7 +3860,27 @@ function drawAssignPicker(): void {
   ctx.font = `bold ${Math.round(11 * S)}px 'Courier New',monospace`;
   ctx.fillText(`Bind slot ${slotIdx + 1}`, x + w / 2, y + 14 * S);
   let ry = y + 26 * S;
-  for (const r of rows) {
+  if (rows.length > shown) {
+    const sbw = 9 * S;
+    const sx = x + w - sbw - 4 * S;
+    const arrow = (dir: -1 | 1, ay: number, can: boolean): void => {
+      buttonBox(ctx, sx, ay, sbw, sbw, S, { accent: can ? CHROME.gold : undefined });
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = can ? "#ffe9a8" : "rgba(255,233,168,.25)";
+      ctx.font = `bold ${Math.round(6 * S)}px 'Courier New',monospace`;
+      ctx.fillText(dir < 0 ? "\u25B2" : "\u25BC", sx + sbw / 2, ay + sbw / 2);
+      if (can) hotspots.push({ x: sx, y: ay, w: sbw, h: sbw, fn: () => { assignScroll += dir; } });
+    };
+    const trackH = shown * rowH;
+    arrow(-1, ry, assignScroll > 0);
+    arrow(1, ry + trackH - sbw, assignScroll < rows.length - shown);
+    const track = trackH - 2 * sbw;
+    const th = Math.max(6 * S, (track * shown) / rows.length);
+    const ty = ry + sbw + ((track - th) * assignScroll) / Math.max(1, rows.length - shown);
+    raisedBox(ctx, sx + S, ty, sbw - 2 * S, th, "rgba(202,162,58,.55)", CHROME.gold, "#3a2c0e", S);
+  }
+  for (const r of rows.slice(assignScroll, assignScroll + shown)) {
     buttonBox(ctx, x + 6 * S, ry + 2 * S, w - 12 * S, rowH - 4 * S, S,
       { face: "rgba(40,52,60,.92)" });
     ctx.textAlign = "left";

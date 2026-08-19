@@ -99,7 +99,25 @@ export function scrollRow(win: PanelWindow, totalRows: number, shownRows: number
   const max = Math.max(0, totalRows - shownRows);
   const at = Math.min(Math.max(0, Math.floor(win.scroll ?? 0)), max);
   if (at !== win.scroll) win.scroll = at;
+  win.scrollMax = max;
   return at;
+}
+
+/**
+ * How many rows of a LIST panel fit on screen, and where the view starts.
+ *
+ * Long lists used to size the panel to their contents and rely on the auto-fit
+ * to squeeze it in. That has a floor of 0.35, so a sixty-item shop still ran
+ * off the top and bottom of the display — and everything that did fit was too
+ * small to read. Capping the rows and scrolling is the only answer that keeps
+ * the text the size it was designed at.
+ */
+export function listView(
+  p: PanelInput, total: number, rowH: number, chrome: number,
+): { first: number; count: number } {
+  const room = p.hud.screenH * 0.88 - chrome;
+  const count = Math.max(3, Math.min(total, Math.floor(room / rowH)));
+  return { first: scrollRow(p.win, total, count), count };
 }
 
 /**
@@ -258,6 +276,13 @@ export interface PanelWindow {
   titleBar: { x: number; y: number; w: number; h: number } | null;
   /** Auto-fit factor (≤1) applied to this window so it never spills off-screen. */
   fit?: number;
+  /**
+   * How far this window can be scrolled, in rows. Zero means it cannot.
+   *
+   * Written while drawing, so the wheel handler can serve container grids and
+   * list panels through one path instead of re-deriving each kind's extent.
+   */
+  scrollMax?: number;
   /**
    * First visible row when the window is too short to show them all.
    *
@@ -1670,7 +1695,9 @@ function drawShop(p: PanelInput): void {
   const w = 300 * S;
   const rowH = 24 * S;
   const rows = shop.entries.filter((e) => (ui.shopTab === "buy" ? e.buy > 0 : e.sell > 0));
-  const h = 34 * S + Math.max(1, rows.length) * rowH + 24 * S;
+  const chrome = 58 * S;
+  const { first, count } = listView(p, Math.max(1, rows.length), rowH, chrome);
+  const h = 34 * S + count * rowH + 24 * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, npc.name)) return;
   const tabW = 60 * S;
@@ -1683,16 +1710,22 @@ function drawShop(p: PanelInput): void {
       hover: hovering(p, tx, ty, tabW, 12 * S), accent: on ? CHROME.gold : undefined,
     });
     hudText(hud, tab === "buy" ? "Buy" : "Sell", tx + tabW / 2, ty + 6 * S, 8 * S, on ? "#ffe9a8" : "#cfa86a", "center", true);
-    p.hotspots.push({ x: tx, y: ty, w: tabW, h: 12 * S, fn: () => { ui.shopTab = tab; } });
+    // Switching tab shows a different list; keeping the old offset would open
+    // it part-way down, or past its end.
+    p.hotspots.push({ x: tx, y: ty, w: tabW, h: 12 * S, fn: () => { ui.shopTab = tab; p.win.scroll = 0; } });
   });
   /* Labelled "carried" on purpose: the HUD counts your chests too, and a shop
    * does not. Without the word, the two numbers disagreeing looks like a bug. */
   hudText(hud, `Your gold (carried): ${player.gold}`, x + w - 12 * S, y + 22 * S, 8 * S, "#ffe9a8", "right");
-  let ry = y + 32 * S;
+  const listY = y + 32 * S;
+  let ry = listY;
   if (rows.length === 0) {
     hudText(hud, ui.shopTab === "buy" ? "Nothing for sale." : "You have nothing to sell here.", x + w / 2, ry + 8 * S, 8 * S, "rgba(220,214,190,.5)", "center");
   }
-  for (const e of rows) {
+  if (rows.length > count) {
+    scrollBar(p, x + w - (SCROLLBAR_W + 4) * S, listY, count * rowH, rows.length, count, first);
+  }
+  for (const e of rows.slice(first, first + count)) {
     const price = ui.shopTab === "buy" ? e.buy : e.sell;
     const have = bagCount(player.bag, e.kind);
     const canDo = ui.shopTab === "buy" ? player.gold >= price : have > 0;

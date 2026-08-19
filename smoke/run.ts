@@ -8414,7 +8414,9 @@ async function main(): Promise<void> {
     const nfs = await import("node:fs");
     const src = nfs.readFileSync("src/main.ts", "utf8");
     const wheel = src.slice(src.indexOf('addEventListener("wheel"'), src.indexOf('addEventListener("wheel"') + 1100);
-    ok(wheel.includes("if (shown >= total) return;"),
+    /* One path for every scrollable window: the panel that drew it records how
+     * far it can go, so the wheel need not know a container grid from a shop. */
+    ok(wheel.includes("const max = win.scrollMax ?? 0;") && wheel.includes("if (max <= 0) return;"),
       "the wheel is left alone over a window with nothing hidden");
     ok(wheel.includes("e.preventDefault()"), "…and taken only when it is actually used");
     ok(wheel.includes("{ passive: false }"),
@@ -8429,6 +8431,138 @@ async function main(): Promise<void> {
     ok(nav.includes("win.scroll = 0"), "walking into a pack opens it at the top");
     const up = src.slice(src.indexOf("function navUp"), src.indexOf("function navUp") + 800);
     ok(up.includes("win.scroll = 0"), "…and walking back out does the same");
+  }
+
+  console.log("Etap 39 — long lists scroll instead of running off the screen:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { SHOPS } = await import("../src/entities/npcs.ts");
+    const g = createGame();
+
+    // The biggest shop in the game is the one that broke: sixty-odd rows.
+    const biggest = Object.entries(SHOPS)
+      .map(([k, v]) => ({ k, n: (v?.entries ?? []).filter((e) => e.buy > 0).length }))
+      .sort((a, b) => b.n - a.n)[0];
+    ok(biggest.n >= 8, `the busiest shop stocks a real list (${biggest.n} rows)`);
+
+    const win = { kind: "shop", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null, scroll: 0 };
+    const run = (): { hits: { x: number; y: number; w: number; h: number; fn: () => void }[] } => {
+      const hotspots: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale: 3, screenW: 1600, screenH: 460, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null,
+          npc: { key: biggest.k, name: "Smith", x: 0, y: 0 }, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: -1, sy: -1 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots: [],
+      } as never);
+      return { hits: hotspots };
+    };
+
+    win.scroll = 0;
+    run();
+    const r = win.rect as unknown as { y: number; h: number } | null;
+    /* The old panel sized itself to its contents and trusted the auto-fit to
+     * squeeze it in. The fit floors at 0.35, so a sixty-row shop still ran off
+     * both ends of the display — and what did fit was too small to read. */
+    ok(!!r && r.y >= 0 && r.y + r.h <= 460,
+      `the shop fits on the display (${Math.round(r?.y ?? 0)}..${Math.round((r?.y ?? 0) + (r?.h ?? 0))} of 460)`);
+    ok((win.scrollMax ?? 0) > 0, `…and reports how far it can be scrolled (${win.scrollMax})`);
+
+    // Scrolling must move the list, and the last row must be reachable.
+    win.scroll = win.scrollMax ?? 0;
+    run();
+    ok(win.scroll === (win.scrollMax ?? 0), "the foot of the list is reachable");
+    win.scroll = 9999;
+    run();
+    ok(win.scroll === (win.scrollMax ?? 0), "…and over-scrolling is clamped, not left stale");
+
+    const r2 = win.rect as unknown as { y: number; h: number } | null;
+    ok(!!r2 && !!r && Math.abs(r2.h - r.h) < 1, "…the panel keeps one height however far it is scrolled");
+  }
+
+  console.log("Etap 39 — the hotbar sits under the map:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    const bar = src.slice(src.indexOf("function drawHotbar"), src.indexOf("function drawHotbar") + 900);
+
+    /* Six slots across a hundred-unit column came out sixteen units each, which
+     * no font makes "Recall 3·12" fit into. */
+    ok(bar.includes("HOTBAR_SLOT * S"), "the hotbar has one constant that sets its size");
+    ok(bar.includes("screen.width - sidebarW"),
+      "…and centres on the MAP, so the column does not push it off-centre");
+    ok(bar.includes("screen.height - slot"), "…sitting at the foot of the screen");
+
+    const dock = nfs.readFileSync("src/ui/dock.ts", "utf8");
+    ok(!dock.includes("SLOT_ROW_H"),
+      "the column no longer reserves a row for slots that moved out of it");
+    ok(dock.includes("export const CONTROLS_H = BTN_ROW_H + GAP + SWAP_H;"),
+      "…so the controls block is two rows, not three");
+
+    const controls = src.slice(src.indexOf("function drawDockControls"), src.indexOf("function drawDockControls") + 1600);
+    ok(!controls.includes("drawActionSlot"), "…and draws no action slots itself");
+  }
+
+  console.log("Etap 39 — the rebind picker scrolls too:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    const pick = src.slice(src.indexOf("function drawAssignPicker"), src.indexOf("function drawAssignPicker") + 2200);
+    ok(pick.includes("Math.min(rows.length, Math.floor((sh * 0.8"),
+      "the picker caps its rows to the display rather than sizing to the list");
+    ok(pick.includes("assignScroll = clamp(assignScroll"), "…clamping the offset every time it draws");
+    const pickAll = src.slice(src.indexOf("function drawAssignPicker"));
+    ok(pickAll.includes("rows.slice(assignScroll, assignScroll + shown)"), "…and drawing the window it computed");
+    ok(src.includes("assignSlot = r.i;\n        assignScroll = 0;")
+      || src.includes("assignScroll = 0;"), "…opening at the top, not wherever it was last left");
+    const wheel = src.slice(src.indexOf('addEventListener("wheel"'), src.indexOf('addEventListener("wheel"') + 500);
+    ok(wheel.includes("if (assignSlot !== null)"),
+      "…and while it is up, being modal, it takes the wheel from everything behind it");
+  }
+
+  console.log("Etap 40 — control buttons are square, and icons land on whole multiples:");
+  {
+    const D = await import("../src/ui/dock.ts");
+    const I = await import("../src/ui/icons.ts");
+
+    /* Five buttons across a hundred-unit column is about seventeen each. The
+     * row height was a picked 34, so every button came out 21x42 on a laptop —
+     * a stretched slot with a small picture floating in the middle. */
+    const across = (D.DOCK_INNER - 4 * 4) / 5;
+    ok(Math.abs(D.BTN_ROW_H - across) <= 1,
+      `a control button is as tall as it is wide (${D.BTN_ROW_H} vs ${across.toFixed(1)})`);
+
+    ok(I.ICON_SRC === 16, "glyphs are authored on a 16px grid");
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    /* Hand-drawn pixel art scaled by 1.37x is mush; at exactly 1x, 2x or 3x it
+     * is crisp. Snapping the draw size is what lets these shapes be swapped
+     * for real art without touching any of this code. */
+    ok(src.includes("Math.floor((Math.min(bw, bh) * 0.86) / ICON_SRC) * ICON_SRC"),
+      "…and drawn at a whole multiple of it, never a fractional scale");
+    ok(src.includes("Math.max(ICON_SRC,"), "…never smaller than one source pixel per pixel");
+
+    interface R { x: number; y: number; w: number; h: number }
+    for (const size of [16, 32, 48]) {
+      const out: R[] = [];
+      const ctx = {
+        set fillStyle(_v: string) { /* ignored */ },
+        fillRect(x: number, y: number, w: number, h: number) { out.push({ x, y, w, h }); },
+      } as unknown as CanvasRenderingContext2D;
+      I.drawControlIcon(ctx, "bag", 0, 0, size, false);
+      ok(out.every((r) => r.x + r.w <= size && r.y + r.h <= size),
+        `a glyph drawn at ${size}px stays inside ${size}px`);
+    }
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

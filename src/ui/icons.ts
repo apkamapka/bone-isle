@@ -13,6 +13,15 @@
  * Every glyph is authored on a 12x12 grid and scaled to the box it is given.
  */
 
+/**
+ * Source grid the glyphs are authored on, in pixels.
+ *
+ * Everything is drawn at a whole multiple of this, so replacing these shapes
+ * with hand-drawn 16x16 pixel art needs no rescaling: it lands on exact 1x,
+ * 2x or 3x and stays crisp. Scaled by anything in between, pixel art is mush.
+ */
+export const ICON_SRC = 16;
+
 export type ControlIcon = "build" | "skills" | "equip" | "bag" | "quest";
 
 /** [x, y, w, h] on a 12x12 grid, plus a colour index into the palette below. */
@@ -77,7 +86,7 @@ export function drawControlIcon(
   icon: ControlIcon,
   x: number, y: number, size: number, on: boolean,
 ): void {
-  const u = size / 12;
+  const u = size / 12; // 12 authored units mapped onto the requested box
   const pal = on ? PALETTE_ON : PALETTE_OFF;
   // Snap to whole pixels: a 12-unit glyph at a fractional unit is mush.
   const px = (v: number): number => Math.round(v);
