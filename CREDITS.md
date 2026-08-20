@@ -1071,6 +1071,28 @@ The coloured halo behind every effect is code, not artwork
 colour and spread outwards, baked once at load. It is what keeps Fire's
 near-black tier III and Wind's black tier II legible against grass.
 
+## Sidebar button icons — `public/icon-*.png`
+
+The five buttons at the top of the docked sidebar — Build, Skills, Equipment,
+Backpack and Quest — are 16x16 pixel icons: `icon-build.png`, `icon-skill.png`,
+`icon-eq.png`, `icon-backpack.png`, `icon-quest.png`.
+
+**Source: supplied by the project author. Provenance to be confirmed before the
+repository is made private / the game is released commercially.** If these came
+from a pack with redistribution limits (CraftPix's standard subscription
+forbids redistributing source PNGs from a public repository), they must not
+remain in a public repo — see the note at the top of this file about which
+regimes apply to which assets.
+
+They are drawn at whole multiples of their 16px source only — 1x, 2x or 3x
+depending on display and device pixel ratio — with image smoothing switched
+off, so the pixels stay square. `ICON_SRC` in `src/ui/icons.ts` is the one
+number that says what grid they are authored on.
+
+If a file fails to load, the button falls back to a procedural glyph drawn with
+plain rectangles (`GLYPHS` in the same file). An empty button would be worse
+than a plain one, so those shapes are kept rather than deleted.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in
