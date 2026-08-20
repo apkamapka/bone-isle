@@ -1,6 +1,7 @@
 import "./style.css";
 import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, PANEL_REACH_TILES, RESPAWN_RETRY_S, THROW_RANGE_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
-import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers } from "./world/collision.ts";
+import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers, isSafeTile } from "./world/collision.ts";
+import { carryCap, carriedWeight } from "./entities/player.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, chebToPoint, type Occupied } from "./world/grid.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx/fireSheet.ts";
@@ -46,7 +47,8 @@ import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
-import { buttonBox, slotCell, popupFrame, raisedBox, CHROME } from "./ui/chrome.ts";
+import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
+import { deckEnabled, mobileLayout, noDeck, overDeck, mapFocusFrac, DECK_TABS, type MobileLayout } from "./ui/mobile.ts";
 import { drawControlIcon, ICON_SRC, type ControlIcon } from "./ui/icons.ts";
 import {
   dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
@@ -95,6 +97,33 @@ let sidebarW = 0;
 let lastDock: DockLayout = NO_DOCK;
 /** Device px per design unit INSIDE the column (see dock.ts). */
 let dockUnit = 1;
+/**
+ * The portrait-phone layout. `on` is false on desktop and on a phone held
+ * sideways, and every consumer below checks it — there is exactly one mobile
+ * code path and it is switched here, so nothing about the desktop view can
+ * drift by accident.
+ */
+let deck: MobileLayout = noDeck();
+
+/**
+ * Notch and gesture-bar insets, in CSS px.
+ *
+ * `env(safe-area-inset-*)` is a CSS value and the canvas cannot read it, so a
+ * zero-sized hidden probe carries it into script. Without this the bottom row
+ * of action slots sits underneath Android's gesture bar, where a press is a
+ * system swipe and never reaches the game at all.
+ */
+let safeProbe: HTMLElement | null = null;
+function safeInsets(): { top: number; bottom: number } {
+  if (typeof document === "undefined" || !document.body) return { top: 0, bottom: 0 };
+  if (!safeProbe) {
+    safeProbe = document.createElement("div");
+    safeProbe.id = "safe-probe";
+    document.body.appendChild(safeProbe);
+  }
+  const cs = getComputedStyle(safeProbe);
+  return { top: parseFloat(cs.paddingTop) || 0, bottom: parseFloat(cs.paddingBottom) || 0 };
+}
 
 
 const DESIGN_W = 480; // reference width the HUD is authored against
@@ -137,6 +166,16 @@ function resize(): void {
   sidebarW = dockEnabled(cw) && !mobile
     ? dockLayout(screen.width, screen.height, dockUnit, true).w
     : 0;
+
+  /* The phone's two bands are measured here, from the same numbers the
+   * renderer uses, for the same reason the column is: one measurement, no
+   * chance of the plate and the hit areas disagreeing by a rounding. */
+  if (deckEnabled(cw, ch, isTouchDevice())) {
+    const safe = safeInsets();
+    deck = mobileLayout(screen.width, screen.height, dpr, safe.top * dpr, safe.bottom * dpr);
+  } else {
+    deck = noDeck(screen.height);
+  }
 
   const f = worldZoom(cw, ch, mobile);
   VW = Math.max(MIN_VIEW_W, Math.ceil(((screen.width - sidebarW) / dpr) / f));
@@ -435,6 +474,12 @@ function sweepContainerWindows(): void {
 function openWindow(kind: PanelKind): void {
   const existing = findWindow(kind);
   if (existing) { bringToFront(kind); return; }
+  /* One panel at a time on a phone. There is a single sheet band and every
+   * window is fitted to it, so a second one would sit exactly on top of the
+   * first: the stack would be invisible rather than merely cramped. Closing the
+   * others costs nothing that a phone could have shown anyway, and it makes the
+   * tab row honest — the highlighted tab IS what is open. */
+  if (deck.on) ui.windows.length = 0;
   // cascade slightly if several windows are already stacked
   const base = defaultOffset(kind);
   const n = ui.windows.length;
@@ -2886,7 +2931,13 @@ function render(): void {
   const world = cw();
   // camera follows player, clamped to island
   cam.x = clamp(P.x - VW / 2, 0, Math.max(0, world.w * TILE - VW));
-  cam.y = clamp(P.y - VH / 2, 0, Math.max(0, world.h * TILE - VH));
+  /* The world is still rendered across the whole canvas and the two plates are
+   * drawn over its ends, so every screen->world conversion in this file keeps
+   * working untouched. What DOES change is where the player is parked: the
+   * middle of the visible BAND, not the middle of the canvas. The strip and the
+   * deck are not the same height, so centring on the canvas would leave the
+   * character sitting low, half-buried behind the hotbar. */
+  cam.y = clamp(P.y - VH * mapFocusFrac(deck, screen.height), 0, Math.max(0, world.h * TILE - VH));
 
   vctx.fillStyle = "#1c6060";
   vctx.fillRect(0, 0, VW, VH);
@@ -3405,6 +3456,9 @@ function render(): void {
     screenW: screen.width, screenH: screen.height, touch: touchUI,
     touchInput: isTouchDevice(),
     sidebarW,
+    // the phone's top strip draws vitals, purse, location and minimap itself
+    fixedChrome: deck.on,
+    contentTop: deck.mapTop,
   };
   const dock = dockLayout(screen.width, screen.height, dockUnit, sidebarW > 0);
   lastDock = dock;
@@ -3413,7 +3467,7 @@ function render(): void {
   itemSlots = [];
   if (dock.w > 0) drawSidebar(hud, dock);
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; win.resizeBar = null; }
-  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock });
+  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock, sheet: deck.on ? deck.sheet : null });
   updateCursor();
   // ghost of the item being dragged, following the cursor
   if (itemDrag && itemDrag.active) {
@@ -3703,10 +3757,127 @@ function drawGroupGrip(id: HudGroup, gx: number, gy: number, gw: number, gh: num
 /** Action-slot rects this frame (mouse right-click = open the rebind picker). */
 let actionSlotRects: { i: number; x: number; y: number; w: number; h: number }[] = [];
 
+/** A thin bar for the phone's status strip: sunk frame, fill, gloss. */
+function deckBar(x: number, y: number, w: number, h: number, frac: number, fg: string, bg: string): void {
+  const ctx = sctx;
+  sunkenBox(ctx, x, y, w, h, bg, "#05100e", "#40605a", scale);
+  const fill = Math.round((w - 2) * clamp(frac, 0, 1));
+  ctx.fillStyle = fg;
+  ctx.fillRect(Math.round(x + 1), Math.round(y + 1), fill, Math.round(h - 2));
+  ctx.fillStyle = "rgba(255,255,255,.18)";
+  ctx.fillRect(Math.round(x + 1), Math.round(y + 1), fill, Math.ceil((h - 2) / 3));
+}
+
+/**
+ * The portrait-phone deck. See ui/mobile.ts for why it is shaped like this.
+ *
+ * Text here is sized from the DECK's touch unit, not from the HUD's design
+ * unit. On a 360-wide phone the design unit lands near 0.75 CSS px, so the
+ * HUD's usual `8 * scale` label is six CSS pixels tall — legible in a
+ * screenshot, not on a phone at arm's length.
+ */
+function drawDeck(): void {
+  const ctx = sctx;
+  const d = deck;
+  const u = d.u;
+  const world = cw();
+  const h: HudCtx = {
+    ctx, scale, screenW: screen.width, screenH: screen.height,
+    touch: true, touchInput: isTouchDevice(),
+  };
+  const hair = Math.max(1, Math.round(u * 0.025));
+
+  // --- plates. Opaque, because a translucent one still reads as world -------
+  ctx.fillStyle = "rgba(10,8,5,.96)";
+  ctx.fillRect(0, 0, screen.width, d.topH);
+  ctx.fillRect(0, d.deckY, screen.width, screen.height - d.deckY);
+  ctx.fillStyle = "rgba(202,162,58,.32)";
+  ctx.fillRect(0, d.topH - hair, screen.width, hair);
+  ctx.fillRect(0, d.deckY, screen.width, hair);
+  ctx.textBaseline = "middle";
+
+  // --- info row: where you are, and how rich -------------------------------
+  const zone = world.name + (isSafeTile(world, P.tx, P.ty) ? " \u00b7 safe" : " \u00b7 danger");
+  hudText(h, zone, d.info.x, d.info.y + d.info.h / 2, u * 0.27, "#cfe8d2", "left", true,
+    d.info.w - d.purse.w - u * 0.25);
+  const tp = `TP ${P.taskPoints}`;
+  hudText(h, tp, d.purse.x + d.purse.w, d.purse.y + d.purse.h / 2, u * 0.25, "#9ad0ff", "right", true);
+  ctx.font = `bold ${Math.round(u * 0.25)}px 'Courier New',monospace`;
+  const tpW = ctx.measureText(tp).width + u * 0.4;
+  const coin = SPR.coin;
+  const cs = Math.max(1, Math.round(u * 0.3));
+  const cw2 = iconW(coin, cs / coin.height);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(coin, Math.round(d.purse.x), Math.round(d.purse.y + (d.purse.h - cs) / 2), cw2, cs);
+  hudText(h, `${totalGold(game, P)}`, d.purse.x + cw2 + u * 0.12, d.purse.y + d.purse.h / 2,
+    u * 0.27, "#f3eedd", "left", true, d.purse.w - cw2 - tpW - u * 0.2);
+
+  // --- vitals: the two numbers you actually watch, HP and how full you are --
+  const barH = Math.round((d.vitals.h - Math.max(2, Math.round(u * 0.05))) / 2);
+  const labW = Math.round(u * 1.5);
+  const bw = d.vitals.w - labW;
+  const cap = carryCap(P);
+  const used = Math.round(carriedWeight(P));
+  deckBar(d.vitals.x, d.vitals.y, bw, barH, P.hp / P.maxhp, "#e1483b", "#5d1a14");
+  hudText(h, `${Math.ceil(P.hp)}/${P.maxhp}`, d.vitals.x + d.vitals.w, d.vitals.y + barH / 2,
+    u * 0.24, "#ffd9d4", "right", true, labW - u * 0.1);
+  const capY = d.vitals.y + d.vitals.h - barH;
+  deckBar(d.vitals.x, capY, bw, barH, used / cap, used >= cap ? "#e06a4a" : "#caa15a", "#3a3222");
+  hudText(h, `${used}/${cap}`, d.vitals.x + d.vitals.w, capY + barH / 2,
+    u * 0.24, used >= cap ? "#ffb59a" : "#e8dcc0", "right", false, labW - u * 0.1);
+  /* Level rides on the experience bar's own colour inside the HP row's slack
+   * rather than taking a third line: a phone strip that grows a row per number
+   * ends up taller than the map it is describing. */
+  hudText(h, `Lv ${P.level}`, d.vitals.x + u * 0.15, d.vitals.y + barH / 2, u * 0.2,
+    "rgba(230,212,255,.9)", "left", true);
+
+  // --- tabs. Pictures, not letters, exactly as the desktop column uses ------
+  d.tabs.forEach((r, i) => {
+    const kind = DECK_TABS[i] as PanelKind;
+    const on = hasWindow(kind);
+    buttonBox(ctx, r.x, r.y, r.w, r.h, scale, {
+      on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
+    });
+    // whole multiples of the 16px source grid only — a fractional scale is mush
+    const gs = Math.max(ICON_SRC, Math.floor((Math.min(r.w, r.h) * 0.72) / ICON_SRC) * ICON_SRC);
+    drawControlIcon(ctx, DECK_TABS[i] as ControlIcon,
+      Math.round(r.x + (r.w - gs) / 2), Math.round(r.y + (r.h - gs) / 2 - u * 0.08), gs, on);
+    hudText(h, DECK_TABS[i], r.x + r.w / 2, r.y + r.h - u * 0.14, u * 0.18,
+      on ? "#201a10" : "rgba(233,226,200,.75)", "center", false, r.w - u * 0.1);
+    hotspots.push({ x: r.x, y: r.y, w: r.w, h: r.h, fn: () => togglePanel(kind) });
+    touchButtons.push({ ...r });
+  });
+  drawMinimapAt(h, game, P, d.minimap.x, d.minimap.y, d.minimap.w);
+  touchButtons.push({ ...d.minimap });
+
+  // --- deck: utility row, then the six slots -------------------------------
+  const editing = hudEditing();
+  hudBtn(d.edit.x, d.edit.y, d.edit.w, d.edit.h, editing ? "DONE" : "EDIT", editing, () => {
+    toggleHudLock();
+    flash(hudLocked() ? "slots locked" : "tap a slot to bind it", "#8ab6ff");
+  });
+  const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
+  hudBtn(d.swap.x, d.swap.y, d.swap.w, d.swap.h, bowOn ? "\u2192MELEE" : "\u2192BOW", false, () => {
+    if (!editing) swapWeapon();
+  });
+  /* Empty slots are drawn on the deck even out of edit mode, unlike the old
+   * floating HUD which hid them. A row with holes in it is a row you have to
+   * look at to count; a full row of six is one your thumb learns the shape of. */
+  d.slots.forEach((r, i) => drawActionSlot(i, r.x, r.y, r.w, r.h));
+
+  if (editing) {
+    hudText(h, "tap a slot to bind \u00b7 EDIT again when done",
+      screen.width / 2, d.mapTop + u * 0.35, u * 0.21, "rgba(207,232,210,.92)", "center", false,
+      screen.width - u * 0.5);
+  }
+}
+
 function drawTouchControls(): void {
   touchButtons = [];
   hudGrips = [];
   actionSlotRects = [];
+
+  if (deck.on) { drawDeck(); return; }
 
   const editing = hudEditing();
   const u = hudUserScale();
@@ -3924,6 +4095,8 @@ function overTouchButton(sx: number, sy: number): boolean {
   if (hudEditing()) return true;        // edit mode — no walking while arranging
   if (throwPending) return true;        // aiming a throw — the tap must land, not steer
   if (aimPending) return true;          // aiming a Burst — likewise
+  // the two plates are not the world: a press on them must never walk or steer
+  if (overDeck(deck, sy)) return true;
   for (const b of touchButtons) {
     if (sx >= b.x && sx < b.x + b.w && sy >= b.y && sy < b.y + b.h) return true;
   }

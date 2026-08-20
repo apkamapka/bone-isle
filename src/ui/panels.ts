@@ -30,6 +30,7 @@ import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed, panelRows } from "../systems/panelPrefs.ts";
 import { CHROME, panelFrame, popupFrame, raisedBox, sunkenBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
 import { NO_DOCK, type DockLayout } from "./dock.ts";
+import type { Rect } from "./mobile.ts";
 import { drawResizeArrows } from "./icons.ts";
 
 export type PanelKind =
@@ -216,6 +217,17 @@ function dockedW(p: PanelInput, natural: number): number {
 function anchor(p: PanelInput, w: number, h: number): { x: number; y: number } {
   const { screenW, screenH, scale: S } = p.hud;
   const d = p.dock;
+  /* A phone has exactly one place a panel can go, so there is nothing to
+   * decide: the sheet band, bottom-aligned. Bottom rather than top because the
+   * panel's own footer — close button, scroll arrows, slot counter — then sits
+   * next to the deck within the thumb's reach, while the part that scrolls off
+   * the top is the part you only read. */
+  if (p.sheet) {
+    return {
+      x: Math.round(p.sheet.x + (p.sheet.w - w) / 2),
+      y: Math.round(p.sheet.y + p.sheet.h - h),
+    };
+  }
   if (isDocked(p.win, d)) {
     let y = d.stackTop;
     for (const q of p.ui.windows) {
@@ -408,6 +420,16 @@ export interface PanelInput {
   win: PanelWindow;
   /** Geometry of the docked sidebar; zero-width when there is no sidebar. */
   dock: DockLayout;
+  /**
+   * On a portrait phone, the band a panel is allowed to occupy: full width,
+   * pinned against the thumb deck. Absent everywhere else.
+   *
+   * A sheet is not a floating window that happens to sit near the bottom. It
+   * has no free position — dragging it could only make it worse — and it is
+   * sized to the band rather than to its own contents, which is the opposite of
+   * every other window here and the reason it needs a field of its own.
+   */
+  sheet?: Rect | null;
 }
 
 /** A small square title-bar button; returns nothing, pushes its hotspot. */
@@ -676,7 +698,8 @@ export function drawPanels(base: Omit<PanelInput, "win" | "dock"> & { dock?: Doc
    * and every narrow screen is in it. Normalising here means no drawing code
    * below has to ask whether the sidebar exists. */
   const dock = base.dock ?? NO_DOCK;
-  const full: Omit<PanelInput, "win"> = { ...base, dock };
+  const sheet = base.sheet ?? null;
+  const full: Omit<PanelInput, "win"> = { ...base, dock, sheet };
   const hud = base.hud;
   const origScale = hud.scale;
   const baseScale = hud.panelScale ?? hud.scale;
@@ -692,9 +715,9 @@ export function drawPanels(base: Omit<PanelInput, "win" | "dock"> & { dock?: Doc
      * has its own fixed-pixel ruler precisely so that windows in it need not
      * be shrunk; per-window zoom and auto-fit are skipped because the column
      * has one width and a stack that does not line up is worse than none. */
-    const docked = isDocked(win, dock);
+    const docked = isDocked(win, dock) && !sheet;
     hud.scale = docked ? dock.s : baseScale * panelZoom(win.kind) * (win.fit ?? 1);
-    const p: PanelInput = { ...base, win, dock };
+    const p: PanelInput = { ...base, win, dock, sheet };
     switch (win.kind) {
       case "build": drawBuild(p); break;
       case "skills": drawSkills(p); break;
@@ -719,8 +742,18 @@ export function drawPanels(base: Omit<PanelInput, "win" | "dock"> & { dock?: Doc
       const cur = win.fit ?? 1;
       const natW = win.rect.w / cur;
       const natH = win.rect.h / cur;
-      const f = Math.min(1, (hud.screenW * 0.96) / natW, (hud.screenH * 0.96) / natH);
-      win.fit = Math.max(0.35, f);
+      if (sheet) {
+        /* A sheet is fitted to the BAND, and — alone among the windows here —
+         * it is allowed to GROW. A four-column backpack at the phone's own HUD
+         * unit comes out about 120 CSS px wide; letting it fill the width is
+         * what turns its cells from specks into things a finger can hit. The
+         * ceiling stops a two-row panel being blown up to comic size. */
+        const f = Math.min(sheet.w / natW, sheet.h / natH);
+        win.fit = Math.max(0.35, Math.min(3, f));
+      } else {
+        const f = Math.min(1, (hud.screenW * 0.96) / natW, (hud.screenH * 0.96) / natH);
+        win.fit = Math.max(0.35, f);
+      }
     }
   }
   hud.scale = origScale;
@@ -850,7 +883,7 @@ function drawPlacingHint(p: { hud: HudCtx; ui: UiState }): void {
   const msg = hud.touchInput
     ? `Placing: ${STRUCTS[key].name} — tap a tile to aim, tap it again to build`
     : `Placing: ${STRUCTS[key].name} — click any clear grass on Home Isle ([Esc] cancel)`;
-  hudText(hud, msg, hud.screenW / 2, 18 * hud.scale, 9 * hud.scale, "#9fe8a8", "center", true);
+  hudText(hud, msg, hud.screenW / 2, (hud.contentTop ?? 0) + 18 * hud.scale, 9 * hud.scale, "#9fe8a8", "center", true);
 }
 
 /* ---------------- Skills ---------------- */

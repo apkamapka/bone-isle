@@ -24,6 +24,19 @@ export interface HudCtx {
   touch?: boolean;
   /** True only on a REAL touch device (touchUI above is on everywhere). */
   touchInput?: boolean;
+  /**
+   * The fixed chrome — vitals, purse, minimap, location — is being drawn by
+   * something else this frame (the phone's top strip). Same suppression the
+   * sidebar performs, under a name that does not lie about which one it is.
+   */
+  fixedChrome?: boolean;
+  /**
+   * First y (device px) that is world rather than chrome. Zero everywhere but
+   * a phone, where the top strip would otherwise swallow the zone banner and
+   * the flash line whole — both are drawn a few dozen pixels from the top,
+   * which used to be sky and is now an opaque plate.
+   */
+  contentTop?: number;
   /** Width (device px) of the docked desktop sidebar; 0/undefined = none.
    *  When set, the floating vitals/gold/TP/minimap are skipped (the sidebar
    *  draws its own) and centered overlays center on the visible area. */
@@ -290,7 +303,7 @@ export function drawGoldTP(h: HudCtx, p: Player, x: number, y: number, w: number
 export function drawHud(h: HudCtx, game: Game, p: Player): void {
   const { ctx, scale: S, screenW, screenH } = h;
   const pad = 8 * S;
-  const sidebar = (h.sidebarW ?? 0) > 0;
+  const sidebar = (h.sidebarW ?? 0) > 0 || !!h.fixedChrome;
   /** Horizontal center of the VISIBLE (non-sidebar) area for overlays. */
   const cx = (screenW - (h.sidebarW ?? 0)) / 2;
   ctx.textBaseline = "middle";
@@ -342,13 +355,16 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
     hudText(h, tpStr, tpx + tpw - 8 * S, iy + ih / 2, 9 * S, "#f3eedd", "right", true);
   }
 
-  // top-left: title + zone
+  // top-left: title + zone. The phone puts the zone in its own strip and has
+  // no room for a wordmark laid over the world, so both are skipped there.
+  if (!h.fixedChrome) {
   hudText(h, "BONE ISLE", pad + 2, pad + 7 * S, 11 * S, "#cfe8d2", "left", true);
   hudText(h, game.current.name + (isSafeTile(game.current, game.player.tx, game.player.ty) ? " · safe" : " · danger"), pad + 2, pad + 18 * S, 8 * S, "rgba(207,232,210,.7)");
+  }
 
   // active board-task tracker
   const task = activeTask();
-  if (task) {
+  if (task && !h.fixedChrome) {
     const prog = progressOf(task, p.bag);
     const label = task.goal.kind === "kill"
       ? `${task.goal.monster}`
@@ -367,7 +383,7 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   // zone flash (centered on the visible, non-sidebar area)
   if (game.zoneFlash.t > 0) {
     ctx.globalAlpha = clamp(game.zoneFlash.t, 0, 1);
-    hudText(h, game.zoneFlash.text, cx, 40 * S, 16 * S, "#ffe9a8", "center", true);
+    hudText(h, game.zoneFlash.text, cx, (h.contentTop ?? 0) + 40 * S, 16 * S, "#ffe9a8", "center", true);
     ctx.globalAlpha = 1;
   }
 

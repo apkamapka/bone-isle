@@ -30,3 +30,17 @@ canvas {
   height: 100vh;
   height: 100dvh;
 }
+
+/* Zero-sized carrier for the notch / gesture-bar insets: `env()` is a CSS
+   value and the canvas cannot read one, so main.ts measures this instead. */
+#safe-probe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

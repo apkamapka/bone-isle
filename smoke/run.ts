@@ -8602,6 +8602,178 @@ async function main(): Promise<void> {
     ok(game.includes("loadControlIcons()"), "…and something actually calls it");
   }
 
+  console.log("Etap 35 — the portrait phone gets a deck, and only the portrait phone:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    ok(MB.deckEnabled(412, 915, true), "a phone held upright gets the deck");
+    ok(!MB.deckEnabled(915, 412, true), "…the same phone turned sideways does not — it has no height to give away");
+    ok(!MB.deckEnabled(1920, 1080, false), "…and a desktop never does, so the column work is untouched");
+    ok(!MB.deckEnabled(1080, 1920, false),
+      "…nor does a tall desktop window, which is wide enough for the column it already has");
+    ok(MB.deckEnabled(400, 800, false),
+      "…but a narrow upright window does, matching the existing `mobile` size test");
+
+    const off = MB.noDeck(1830);
+    ok(!off.on && off.mapTop === 0 && off.mapBottom === 1830,
+      "the off state still answers every question — the world is the whole canvas");
+    ok(MB.mapFocusFrac(off, 1830) === 0.5, "…and parks the player dead centre, as before");
+  }
+
+  console.log("Etap 35 — nothing on the deck is too small to press:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    /* The smallest screen worth supporting. If a finger fits here it fits
+     * everywhere; the old floating HUD's buttons were sized off the 480x320
+     * design unit and came out under 30 CSS px on exactly this phone. */
+    for (const [w, h, dpr] of [[320, 568, 2], [360, 640, 2], [412, 915, 2.5], [390, 844, 3]] as const) {
+      const d = MB.mobileLayout(w * dpr, h * dpr, dpr, 0, 0);
+      const css = (v: number): number => v / dpr;
+      const targets: [string, { w: number; h: number }][] = [
+        ["tab", d.tabs[0]], ["minimap", d.minimap], ["slot", d.slots[0]],
+        ["edit", d.edit], ["swap", d.swap],
+      ];
+      for (const [name, r] of targets) {
+        /* Every control on the deck, not merely the ones pressed in a fight.
+         * The first draft gave the utility row half a unit and produced a 22
+         * CSS px weapon-swap button on the smallest phone — which is why this
+         * loop covers edit and swap rather than stopping at the slots. */
+        ok(Math.min(css(r.w), css(r.h)) >= MB.TOUCH_MIN_CSS - 1,
+          `${w}x${h}@${dpr}: the ${name} clears a fingertip (${Math.round(Math.min(css(r.w), css(r.h)))} CSS px)`);
+      }
+      ok(css(d.slots[0].h) >= MB.TOUCH_MIN_CSS * 0.9,
+        `${w}x${h}@${dpr}: an action slot is a full touch target tall — it is the control pressed under pressure`);
+    }
+  }
+
+  console.log("Etap 35 — the bands tile the screen exactly, with no seam and no overlap:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const W = 412 * 2, H = 915 * 2;
+    const d = MB.mobileLayout(W, H, 2, 0, 0);
+
+    ok(d.mapTop === d.topH && d.mapBottom === d.deckY,
+      "the world band is exactly what the two plates do not claim");
+    ok(d.deckY + d.deckH >= H - 1 && d.deckY + d.deckH <= H + 1,
+      "…the deck reaches the bottom edge, leaving no strip of world under it");
+
+    // every widget inside its own plate, nothing straddling into the world
+    for (const r of [d.info, d.purse, d.vitals, ...d.tabs, d.minimap]) {
+      ok(r.y >= 0 && r.y + r.h <= d.topH, "a top-strip widget stays inside the top strip");
+    }
+    for (const r of [d.edit, d.swap, ...d.slots]) {
+      ok(r.y >= d.deckY && r.y + r.h <= H, "a deck widget stays inside the deck");
+    }
+    for (const r of [d.info, ...d.tabs, ...d.slots, d.swap, d.minimap]) {
+      ok(r.x >= 0 && r.x + r.w <= W, "…and inside the screen's own width");
+    }
+
+    // the six slots run left to right without overlapping
+    for (let i = 1; i < d.slots.length; i++) {
+      ok(d.slots[i].x >= d.slots[i - 1].x + d.slots[i - 1].w,
+        `slot ${i + 1} starts after slot ${i} ends`);
+    }
+    ok(d.slots.length === 6, "there are six action slots, matching the desktop hotbar");
+    ok(d.tabs.length === MB.DECK_TABS.length, "one tab per panel, and no more");
+    ok(d.tabs[d.tabs.length - 1].x + d.tabs[d.tabs.length - 1].w <= d.minimap.x,
+      "the last tab clears the minimap rather than sliding under it");
+    ok(d.purse.x >= d.info.x, "the purse shares the info row from the right");
+  }
+
+  console.log("Etap 35 — a panel never swallows the whole world:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const d = MB.mobileLayout(412 * 2, 915 * 2, 2, 0, 0);
+    ok(d.sheet.y >= d.mapTop, "the sheet starts inside the world band, not under the top strip");
+    ok(d.sheet.y + d.sheet.h <= d.mapBottom + 1, "…and ends against the deck, not beneath it");
+    /* The third of the band it leaves is not decoration: it is how you notice
+     * something walked up while you were sorting loot, and how you walk away
+     * without closing the panel first. */
+    const openWorld = (d.sheet.y - d.mapTop) / 32 / 2; // tiles, at the phone's 1:1 zoom
+    ok(openWorld >= 6, `with a panel open you can still see ${openWorld.toFixed(1)} tiles of world`);
+    ok(d.sheet.w > (412 * 2) * 0.9, "…and the panel is full width, so its cells are worth pressing");
+  }
+
+  console.log("Etap 35 — the notch and the gesture bar move the CHROME, not the map:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const flat = MB.mobileLayout(412 * 2, 915 * 2, 2, 0, 0);
+    const inset = MB.mobileLayout(412 * 2, 915 * 2, 2, 40, 60);
+    ok(inset.topH > flat.topH && inset.deckH > flat.deckH,
+      "insets grow the plates");
+    ok(inset.slots[0].y + inset.slots[0].h <= 915 * 2 - 60 + 1,
+      "…so the bottom row of slots clears the gesture bar, where a press is a system swipe");
+    ok(inset.info.y >= 40, "…and the top row clears the notch");
+  }
+
+  console.log("Etap 35 — the phone's overlays clear its own top strip:");
+  {
+    const nfs = await import("node:fs");
+    const hud = nfs.readFileSync("src/ui/hud.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    /* Both of these are drawn a few dozen pixels down from the top of the
+     * canvas, which was sky and is now an opaque plate. Without the offset the
+     * zone banner and every flash message are painted underneath it. */
+    ok(hud.includes('(h.contentTop ?? 0) + 40 * S'),
+      "the zone banner starts below the strip, not behind it");
+    ok(panels.includes('(hud.contentTop ?? 0) + 18 * hud.scale'),
+      "…and so does the flash line");
+    ok(main.includes("contentTop: deck.mapTop"),
+      "…both fed from the one measurement of where the world begins");
+    ok(hud.includes("contentTop?: number"), "…which defaults to zero, so the desktop is unmoved");
+  }
+
+  console.log("Etap 35 — the player sits in the middle of the WINDOW, not the canvas:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const H = 915 * 2;
+    const d = MB.mobileLayout(412 * 2, H, 2, 0, 0);
+    const frac = MB.mapFocusFrac(d, H);
+    const onScreen = frac * H;
+    ok(Math.abs(onScreen - (d.mapTop + d.mapBottom) / 2) < 1,
+      "the focus lands on the centre of the visible band");
+    /* The strip and the deck are not the same height, so canvas-centre would
+     * leave the character low, half-hidden behind the hotbar. */
+    ok(Math.abs(frac - 0.5) > 0.0005, "…which is NOT the centre of the canvas");
+    ok(MB.overDeck(d, 4) && MB.overDeck(d, H - 4), "both plates refuse world taps");
+    ok(!MB.overDeck(d, (d.mapTop + d.mapBottom) / 2), "…and the band between them accepts them");
+  }
+
+  console.log("Etap 35 — the phone's wiring, where it crosses the rest of the game:");
+  {
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const hud = nfs.readFileSync("src/ui/hud.ts", "utf8");
+
+    ok(main.includes("if (deck.on) { drawDeck(); return; }"),
+      "on a phone the deck replaces the floating groups outright — they are not drawn underneath it");
+    ok(main.includes("if (deck.on) ui.windows.length = 0;"),
+      "…only one panel is open at a time, because every sheet is fitted to the same band");
+    ok(main.includes("if (overDeck(deck, sy)) return true;"),
+      "…a press on either plate never walks the player");
+    ok(main.includes("cam.y = clamp(P.y - VH * mapFocusFrac(deck, screen.height)"),
+      "…and the camera parks the player in the visible band");
+    ok(main.includes("fixedChrome: deck.on"),
+      "…while the top strip takes over the vitals, purse, minimap and location");
+    ok(hud.includes('const sidebar = (h.sidebarW ?? 0) > 0 || !!h.fixedChrome;'),
+      "…using the same suppression the sidebar already performs, so they cannot both draw");
+
+    /* The desktop view is the thing that must NOT have moved. */
+    ok(main.includes("sidebarW = dockEnabled(cw) && !mobile"),
+      "the desktop column's own gate is untouched");
+    ok(panels.includes("const docked = isDocked(win, dock) && !sheet;"),
+      "…and a sheet, which only ever exists on a phone, is what turns docking off");
+
+    const anchor = panels.slice(panels.indexOf("function anchor("), panels.indexOf("function anchor(") + 1400);
+    ok(anchor.indexOf("if (p.sheet)") < anchor.indexOf("if (isDocked("),
+      "the sheet is decided before the column, since a phone has no column to consult");
+    ok(anchor.includes("p.sheet.y + p.sheet.h - h"),
+      "…and the panel is bottom-aligned, putting its close button and footer in the thumb's reach");
+    ok(panels.includes("Math.max(0.35, Math.min(3, f))"),
+      "…and is allowed to GROW to the band, unlike every other window, which may only shrink");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
