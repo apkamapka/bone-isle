@@ -175,6 +175,14 @@ function scrollBar(
  */
 function resizeGrip(p: PanelInput, x: number, y: number, w: number, h: number): void {
   const { ctx, scale: S } = p.hud;
+  /* No foot on a sheet, and this is not a nicety.
+   *
+   * A sheet is pinned to the bottom of its band and auto-fitted to it, so
+   * dragging the foot changes a height that the anchor immediately converts
+   * into a move — the foot slides out from under the finger, the next pointer
+   * event reads a different row count, and the window shakes for as long as you
+   * hold it. Nothing is lost: the title bar's own -/+ still change the rows. */
+  if (p.sheet) { p.win.resizeBar = null; return; }
   /* One rect for both the highlight and the hit test. A strip that lights up
    * somewhere you cannot actually grab is worse than no highlight at all. */
   const bar = RESIZE_BAR * 1.6 * S;
@@ -223,10 +231,21 @@ function anchor(p: PanelInput, w: number, h: number): { x: number; y: number } {
    * next to the deck within the thumb's reach, while the part that scrolls off
    * the top is the part you only read. */
   if (p.sheet) {
-    return {
-      x: Math.round(p.sheet.x + (p.sheet.w - w) / 2),
-      y: Math.round(p.sheet.y + p.sheet.h - h),
-    };
+    const s = p.sheet;
+    const band = p.sheetBand ?? { top: s.y, bottom: s.y + s.h };
+    /* Vertical only. A full-width sheet has nowhere useful to go sideways, and
+     * letting it drift left or right would only ever uncover plate. Up and down
+     * is the axis that means something: it is how you push a panel down out of
+     * the way to see what walked up on you. */
+    const want = s.y + s.h - h + p.win.offset.y;
+    const lo = band.top;
+    const hi = Math.max(lo, band.bottom - h);
+    const y = Math.round(Math.max(lo, Math.min(hi, want)));
+    /* Hold still through a pixel or two of self-inflicted movement. */
+    const held = p.win.sheetY;
+    const settled = held !== undefined && Math.abs(held - y) <= 2 ? held : y;
+    p.win.sheetY = settled;
+    return { x: Math.round(s.x + (s.w - w) / 2), y: settled };
   }
   if (isDocked(p.win, d)) {
     let y = d.stackTop;
@@ -288,6 +307,16 @@ export interface PanelWindow {
   titleBar: { x: number; y: number; w: number; h: number } | null;
   /** Auto-fit factor (≤1) applied to this window so it never spills off-screen. */
   fit?: number;
+  /**
+   * Last settled top edge as a sheet, in screen px.
+   *
+   * A sheet is pinned to the BOTTOM of its band, so its top is derived from its
+   * own height — and any content that measures a pixel taller on one frame than
+   * the next drags the whole window, and everything the finger is aiming at,
+   * up and down with it. Remembering where it settled and ignoring changes of a
+   * pixel or two turns that shiver into stillness.
+   */
+  sheetY?: number;
   /**
    * How far this window can be scrolled, in rows. Zero means it cannot.
    *
@@ -430,6 +459,8 @@ export interface PanelInput {
    * every other window here and the reason it needs a field of its own.
    */
   sheet?: Rect | null;
+  /** How far up and down a sheet may be dragged; the world band's edges. */
+  sheetBand?: { top: number; bottom: number } | null;
 }
 
 /** A small square title-bar button; returns nothing, pushes its hotspot. */
@@ -693,17 +724,21 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   }
 }
 
-export function drawPanels(base: Omit<PanelInput, "win" | "dock"> & { dock?: DockLayout }): void {
+export function drawPanels(
+  base: Omit<PanelInput, "win" | "dock" | "sheet"> & { dock?: DockLayout; sheets?: Rect[] | null },
+): void {
   /* An absent dock is a legal state, not an oversight — every headless caller
    * and every narrow screen is in it. Normalising here means no drawing code
    * below has to ask whether the sidebar exists. */
   const dock = base.dock ?? NO_DOCK;
-  const sheet = base.sheet ?? null;
-  const full: Omit<PanelInput, "win"> = { ...base, dock, sheet };
+  const sheets = base.sheets ?? null;
+  const band = base.sheetBand ?? null;
+  const full: Omit<PanelInput, "win"> = { ...base, dock, sheet: sheets?.[0] ?? null, sheetBand: band };
   const hud = base.hud;
   const origScale = hud.scale;
   const baseScale = hud.panelScale ?? hud.scale;
-  for (const win of base.ui.windows) {
+  base.ui.windows.forEach((win, winIndex) => {
+    const sheet = sheets ? sheets[Math.min(winIndex, sheets.length - 1)] : null;
     /* Draw each window at the panel scale, times the user's per-window zoom,
      * shrunk by its auto-fit factor so it can never spill off-screen.
      *
@@ -717,7 +752,7 @@ export function drawPanels(base: Omit<PanelInput, "win" | "dock"> & { dock?: Doc
      * has one width and a stack that does not line up is worse than none. */
     const docked = isDocked(win, dock) && !sheet;
     hud.scale = docked ? dock.s : baseScale * panelZoom(win.kind) * (win.fit ?? 1);
-    const p: PanelInput = { ...base, win, dock, sheet };
+    const p: PanelInput = { ...base, win, dock, sheet, sheetBand: band };
     switch (win.kind) {
       case "build": drawBuild(p); break;
       case "skills": drawSkills(p); break;
@@ -755,7 +790,8 @@ export function drawPanels(base: Omit<PanelInput, "win" | "dock"> & { dock?: Doc
         win.fit = Math.max(0.35, f);
       }
     }
-  }
+    if (!sheet) win.sheetY = undefined; // off a phone the memory is meaningless
+  });
   hud.scale = origScale;
   if (base.ui.placing) drawPlacingHint(full);
   drawItemTooltip(full);

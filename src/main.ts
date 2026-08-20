@@ -48,7 +48,7 @@ import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZ
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
-import { deckEnabled, mobileLayout, noDeck, overDeck, mapFocusFrac, DECK_TABS, type MobileLayout } from "./ui/mobile.ts";
+import { deckEnabled, mobileLayout, noDeck, overDeck, mapFocusFrac, sheetSlots, sheetBand, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
 import { drawControlIcon, ICON_SRC, type ControlIcon } from "./ui/icons.ts";
 import {
   dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
@@ -104,6 +104,15 @@ let dockUnit = 1;
  * drift by accident.
  */
 let deck: MobileLayout = noDeck();
+/**
+ * Is the phone's panel drop-down showing?
+ *
+ * Deliberately NOT persisted, unlike the old HUD's collapsible column. This is
+ * a transient reveal — it is dismissed by the tap that uses it — and a menu
+ * that came back open next session would be a menu you have to close before you
+ * can see where you are standing.
+ */
+let deckMenu = false;
 
 /**
  * Notch and gesture-bar insets, in CSS px.
@@ -474,12 +483,14 @@ function sweepContainerWindows(): void {
 function openWindow(kind: PanelKind): void {
   const existing = findWindow(kind);
   if (existing) { bringToFront(kind); return; }
-  /* One panel at a time on a phone. There is a single sheet band and every
-   * window is fitted to it, so a second one would sit exactly on top of the
-   * first: the stack would be invisible rather than merely cramped. Closing the
-   * others costs nothing that a phone could have shown anyway, and it makes the
-   * tab row honest — the highlighted tab IS what is open. */
-  if (deck.on) ui.windows.length = 0;
+  /* A phone holds TWO panels, and the oldest gives way.
+   *
+   * One was the first answer and it was wrong: every real inventory job is a
+   * move between two places. Loot out of a corpse, a sword onto the paperdoll,
+   * a stack into a chest — each needs both ends on screen, and with a single
+   * sheet there was no second end. Two fit; a third would be one row of items
+   * apiece with no world left over. */
+  if (deck.on) while (ui.windows.length >= MAX_SHEETS) ui.windows.shift();
   // cascade slightly if several windows are already stacked
   const base = defaultOffset(kind);
   const n = ui.windows.length;
@@ -1747,6 +1758,10 @@ function handleWorldTap(sx: number, sy: number): void {
       return;
     }
   }
+  /* The drop-down is dismissed by the tap that misses it, like every menu.
+   * Reached only after the hotspot sweep above, so a tap that DID land on a tab
+   * has already opened its panel and closed the menu itself. */
+  if (deckMenu) { deckMenu = false; return; }
   // in HUD edit mode only hotspots (slots / lock / reset / picker) act — no walking
   if (hudEditing()) return;
   // an open inspect popup is dismissed by tapping empty space
@@ -2046,7 +2061,10 @@ screen.addEventListener("pointermove", (e) => {
   }
   if (!drag) return;
   const s = toScreen(e);
-  let nx = drag.ox + (s.x - drag.gx);
+  /* A sheet is full width and pinned to its band, so sideways is a direction
+   * that can only uncover plate. The vertical drag is real, and it is how you
+   * shove a panel down out of the way without closing it. */
+  let nx = deck.on ? drag.ox : drag.ox + (s.x - drag.gx);
   let ny = drag.oy + (s.y - drag.gy);
   // keep at least a strip of the panel on screen so it stays grabbable
   const keep = 60 * scale;
@@ -3467,7 +3485,11 @@ function render(): void {
   itemSlots = [];
   if (dock.w > 0) drawSidebar(hud, dock);
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; win.resizeBar = null; }
-  drawPanels({ hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock, sheet: deck.on ? deck.sheet : null });
+  drawPanels({
+    hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock,
+    sheets: deck.on ? sheetSlots(deck, ui.windows.length) : null,
+    sheetBand: deck.on ? sheetBand(deck) : null,
+  });
   updateCursor();
   // ghost of the item being dragged, following the cursor
   if (itemDrag && itemDrag.active) {
@@ -3831,27 +3853,27 @@ function drawDeck(): void {
   hudText(h, `Lv ${P.level}`, d.vitals.x + u * 0.15, d.vitals.y + barH / 2, u * 0.2,
     "rgba(230,212,255,.9)", "left", true);
 
-  // --- tabs. Pictures, not letters, exactly as the desktop column uses ------
-  d.tabs.forEach((r, i) => {
-    const kind = DECK_TABS[i] as PanelKind;
-    const on = hasWindow(kind);
-    buttonBox(ctx, r.x, r.y, r.w, r.h, scale, {
-      on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
-    });
-    // whole multiples of the 16px source grid only — a fractional scale is mush
-    const gs = Math.max(ICON_SRC, Math.floor((Math.min(r.w, r.h) * 0.72) / ICON_SRC) * ICON_SRC);
-    drawControlIcon(ctx, DECK_TABS[i] as ControlIcon,
-      Math.round(r.x + (r.w - gs) / 2), Math.round(r.y + (r.h - gs) / 2 - u * 0.08), gs, on);
-    hudText(h, DECK_TABS[i], r.x + r.w / 2, r.y + r.h - u * 0.14, u * 0.18,
-      on ? "#201a10" : "rgba(233,226,200,.75)", "center", false, r.w - u * 0.1);
-    hotspots.push({ x: r.x, y: r.y, w: r.w, h: r.h, fn: () => togglePanel(kind) });
-    touchButtons.push({ ...r });
-  });
-  drawMinimapAt(h, game, P, d.minimap.x, d.minimap.y, d.minimap.w);
-  touchButtons.push({ ...d.minimap });
-
-  // --- deck: utility row, then the six slots -------------------------------
+  /* --- utility row: reveal, edit, swap, minimap ---------------------------
+   *
+   * The five panel buttons used to sit here on permanent display and cost a
+   * whole touch row of the strip. You open a panel about once a minute; you
+   * look at the map and your health constantly. Folding them behind one button
+   * bought this row for the controls that had nowhere else to go, and let the
+   * deck below shrink to the six slots alone. */
   const editing = hudEditing();
+  const anyOpen = DECK_TABS.some((k) => hasWindow(k as PanelKind));
+  const mOn = deckMenu || anyOpen;
+  buttonBox(ctx, d.menu.x, d.menu.y, d.menu.w, d.menu.h, scale, {
+    on: mOn, face: mOn ? "rgba(202,162,58,.92)" : undefined, accent: mOn ? CHROME.goldText : undefined,
+  });
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = mOn ? "#201a10" : "#e9e2c8";
+  ctx.font = `bold ${Math.round(d.menu.h * 0.5)}px 'Courier New',monospace`;
+  ctx.fillText(deckMenu ? "\u00d7" : "\u2261", d.menu.x + d.menu.w / 2, d.menu.y + d.menu.h / 2);
+  hotspots.push({ ...d.menu, fn: () => { deckMenu = !deckMenu; } });
+  touchButtons.push({ x: d.menu.x, y: d.menu.y, w: d.menu.w, h: d.menu.h });
+
   hudBtn(d.edit.x, d.edit.y, d.edit.w, d.edit.h, editing ? "DONE" : "EDIT", editing, () => {
     toggleHudLock();
     flash(hudLocked() ? "slots locked" : "tap a slot to bind it", "#8ab6ff");
@@ -3860,6 +3882,30 @@ function drawDeck(): void {
   hudBtn(d.swap.x, d.swap.y, d.swap.w, d.swap.h, bowOn ? "\u2192MELEE" : "\u2192BOW", false, () => {
     if (!editing) swapWeapon();
   });
+  drawMinimapAt(h, game, P, d.minimap.x, d.minimap.y, d.minimap.w);
+  touchButtons.push({ ...d.minimap });
+
+  /* --- the drop-down, over the world, only while it is open ---------------- */
+  if (deckMenu) {
+    const r0 = d.tabs[0];
+    ctx.fillStyle = "rgba(10,8,5,.92)";
+    ctx.fillRect(0, d.topH, screen.width, r0.h + 2 * d.gap);
+    d.tabs.forEach((r, i) => {
+      const kind = DECK_TABS[i] as PanelKind;
+      const on = hasWindow(kind);
+      buttonBox(ctx, r.x, r.y, r.w, r.h, scale, {
+        on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
+      });
+      // whole multiples of the 16px source grid only — a fractional scale is mush
+      const gs = Math.max(ICON_SRC, Math.floor((Math.min(r.w, r.h) * 0.7) / ICON_SRC) * ICON_SRC);
+      drawControlIcon(ctx, DECK_TABS[i] as ControlIcon,
+        Math.round(r.x + (r.w - gs) / 2), Math.round(r.y + (r.h - gs) / 2 - u * 0.09), gs, on);
+      hudText(h, DECK_TABS[i], r.x + r.w / 2, r.y + r.h - u * 0.13, u * 0.17,
+        on ? "#201a10" : "rgba(233,226,200,.75)", "center", false, r.w - u * 0.08);
+      hotspots.push({ x: r.x, y: r.y, w: r.w, h: r.h, fn: () => { togglePanel(kind); deckMenu = false; } });
+      touchButtons.push({ ...r });
+    });
+  }
   /* Empty slots are drawn on the deck even out of edit mode, unlike the old
    * floating HUD which hid them. A row with holes in it is a row you have to
    * look at to count; a full row of six is one your thumb learns the shape of. */

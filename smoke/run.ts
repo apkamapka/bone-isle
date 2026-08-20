@@ -8273,7 +8273,7 @@ async function main(): Promise<void> {
       "the row of dots is gone — it promised nothing and read as decoration");
     /* The lit strip and the grabbable strip have to be the same rectangle. A
      * highlight over somewhere you cannot grab is worse than no highlight. */
-    const grip = panels.slice(panels.indexOf("function resizeGrip"), panels.indexOf("function resizeGrip") + 1100);
+    const grip = panels.slice(panels.indexOf("function resizeGrip"), panels.indexOf("function resizeGrip") + 2200);
     ok(grip.includes("hovering(p, x, by, w, bar)") && grip.includes("p.win.resizeBar = { x, y: by, w, h: bar }"),
       "the strip that lights up is exactly the strip you can grab");
   }
@@ -8630,7 +8630,7 @@ async function main(): Promise<void> {
       const css = (v: number): number => v / dpr;
       const targets: [string, { w: number; h: number }][] = [
         ["tab", d.tabs[0]], ["minimap", d.minimap], ["slot", d.slots[0]],
-        ["edit", d.edit], ["swap", d.swap],
+        ["menu", d.menu], ["edit", d.edit], ["swap", d.swap],
       ];
       for (const [name, r] of targets) {
         /* Every control on the deck, not merely the ones pressed in a fight.
@@ -8657,15 +8657,24 @@ async function main(): Promise<void> {
       "…the deck reaches the bottom edge, leaving no strip of world under it");
 
     // every widget inside its own plate, nothing straddling into the world
-    for (const r of [d.info, d.purse, d.vitals, ...d.tabs, d.minimap]) {
+    for (const r of [d.info, d.purse, d.vitals, d.menu, d.edit, d.swap, d.minimap]) {
       ok(r.y >= 0 && r.y + r.h <= d.topH, "a top-strip widget stays inside the top strip");
     }
-    for (const r of [d.edit, d.swap, ...d.slots]) {
+    for (const r of d.slots) {
       ok(r.y >= d.deckY && r.y + r.h <= H, "a deck widget stays inside the deck");
     }
     for (const r of [d.info, ...d.tabs, ...d.slots, d.swap, d.minimap]) {
       ok(r.x >= 0 && r.x + r.w <= W, "…and inside the screen's own width");
     }
+    /* The drop-down is drawn OVER the world, so it costs no permanent height —
+     * that saving is the whole reason the tabs went behind a button. */
+    for (const r of d.tabs) {
+      ok(r.y >= d.topH, "a drop-down tab hangs below the strip rather than inside it");
+    }
+    ok(d.tabs[d.tabs.length - 1].x + d.tabs[d.tabs.length - 1].w <= W,
+      "…and the last one still fits the screen");
+    ok(d.menu.x < d.edit.x && d.edit.x < d.swap.x && d.swap.x < d.minimap.x,
+      "the utility row reads left to right: reveal, edit, swap, map");
 
     // the six slots run left to right without overlapping
     for (let i = 1; i < d.slots.length; i++) {
@@ -8674,8 +8683,6 @@ async function main(): Promise<void> {
     }
     ok(d.slots.length === 6, "there are six action slots, matching the desktop hotbar");
     ok(d.tabs.length === MB.DECK_TABS.length, "one tab per panel, and no more");
-    ok(d.tabs[d.tabs.length - 1].x + d.tabs[d.tabs.length - 1].w <= d.minimap.x,
-      "the last tab clears the minimap rather than sliding under it");
     ok(d.purse.x >= d.info.x, "the purse shares the info row from the right");
   }
 
@@ -8703,6 +8710,71 @@ async function main(): Promise<void> {
     ok(inset.slots[0].y + inset.slots[0].h <= 915 * 2 - 60 + 1,
       "…so the bottom row of slots clears the gesture bar, where a press is a system swipe");
     ok(inset.info.y >= 40, "…and the top row clears the notch");
+  }
+
+  console.log("Etap 35 — a phone holds two panels, because every move needs two ends:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const d = MB.mobileLayout(412 * 2, 915 * 2, 2, 0, 0);
+
+    ok(MB.MAX_SHEETS === 2, "two, and the oldest gives way to a third");
+    ok(MB.sheetSlots(d, 0).length === 0, "no panels, no slots");
+    const one = MB.sheetSlots(d, 1);
+    ok(one.length === 1 && one[0].h === d.sheet.h, "one panel gets the whole band");
+
+    const two = MB.sheetSlots(d, 2);
+    ok(two.length === 2, "two panels get one slot each");
+    ok(two[0].y + two[0].h <= two[1].y, "…stacked, not overlapping");
+    ok(two[1].y + two[1].h <= d.mapBottom + 1, "…and the lower one stops at the deck");
+    ok(two[0].y >= d.mapTop, "…while the upper one starts below the strip");
+    /* The band GROWS for two, because halving the one-panel band would leave
+     * each with a title bar and about one row of items. */
+    ok(two[0].h + two[1].h > d.sheet.h, "the band grows rather than being halved");
+    const rowsish = two[0].h / 2 / 32;
+    ok(rowsish >= 3, `each panel is ${rowsish.toFixed(1)} tiles tall — enough for a row of items and its chrome`);
+    ok(two[0].w === d.sheet.w && two[1].w === d.sheet.w, "both stay full width");
+
+    /* A third would be a title bar and nothing else, so it never happens. */
+    ok(MB.sheetSlots(d, 3).length === 2, "a third panel is refused a slot of its own");
+
+    const band = MB.sheetBand(d);
+    ok(band.top === d.mapTop && band.bottom === d.mapBottom,
+      "a sheet may be dragged anywhere in the world band and no further");
+  }
+
+  console.log("Etap 35 — a sheet cannot shake itself:");
+  {
+    const nfs = await import("node:fs");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    /* Pinned to the bottom, a window's top is derived from its own height. Two
+     * things then feed back into it, and both had to go: a draggable foot that
+     * slides out from under the finger as the height it is setting moves the
+     * window, and content that measures a pixel taller on alternate frames. */
+    ok(panels.includes("if (p.sheet) { p.win.resizeBar = null; return; }"),
+      "a sheet has no resize foot to fight its own anchor");
+    ok(panels.includes("Math.abs(held - y) <= 2 ? held : y"),
+      "…and it holds still through a pixel or two of self-inflicted movement");
+    ok(panels.includes("if (!sheet) win.sheetY = undefined;"),
+      "…with the memory cleared off a phone, so the desktop is unaffected");
+    ok(main.includes("let nx = deck.on ? drag.ox : drag.ox + (s.x - drag.gx);"),
+      "dragging a sheet moves it up and down only — sideways could only uncover plate");
+    ok(panels.includes("const want = s.y + s.h - h + p.win.offset.y;"),
+      "…and that drag is real: the offset reaches the anchor");
+  }
+
+  console.log("Etap 35 — the tabs fold away behind one button:");
+  {
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok(main.includes("let deckMenu = false;"),
+      "the drop-down starts closed and is never persisted — it is a reveal, not a setting");
+    ok(main.includes("if (deckMenu) { deckMenu = false; return; }"),
+      "…a tap that misses it puts it away, and walks nowhere");
+    ok(main.includes("togglePanel(kind); deckMenu = false;"),
+      "…and a tap that hits a tab opens the panel and closes the menu with it");
+    ok(!main.includes("hudMenuOpen()") || main.includes("const menuOpen = !docked"),
+      "the old floating HUD's own collapsible column is left alone");
   }
 
   console.log("Etap 35 — the phone's overlays clear its own top strip:");
@@ -8748,8 +8820,8 @@ async function main(): Promise<void> {
 
     ok(main.includes("if (deck.on) { drawDeck(); return; }"),
       "on a phone the deck replaces the floating groups outright — they are not drawn underneath it");
-    ok(main.includes("if (deck.on) ui.windows.length = 0;"),
-      "…only one panel is open at a time, because every sheet is fitted to the same band");
+    ok(main.includes("if (deck.on) while (ui.windows.length >= MAX_SHEETS) ui.windows.shift();"),
+      "…two panels are open at most, and the oldest gives way — a move needs both its ends");
     ok(main.includes("if (overDeck(deck, sy)) return true;"),
       "…a press on either plate never walks the player");
     ok(main.includes("cam.y = clamp(P.y - VH * mapFocusFrac(deck, screen.height)"),
@@ -8768,7 +8840,7 @@ async function main(): Promise<void> {
     const anchor = panels.slice(panels.indexOf("function anchor("), panels.indexOf("function anchor(") + 1400);
     ok(anchor.indexOf("if (p.sheet)") < anchor.indexOf("if (isDocked("),
       "the sheet is decided before the column, since a phone has no column to consult");
-    ok(anchor.includes("p.sheet.y + p.sheet.h - h"),
+    ok(anchor.includes("s.y + s.h - h"),
       "…and the panel is bottom-aligned, putting its close button and footer in the thumb's reach");
     ok(panels.includes("Math.max(0.35, Math.min(3, f))"),
       "…and is allowed to GROW to the band, unlike every other window, which may only shrink");

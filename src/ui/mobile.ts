@@ -40,6 +40,9 @@ export type DeckTab = (typeof DECK_TABS)[number];
 /** Action slots on the deck — the same six the desktop hotbar carries. */
 export const DECK_SLOTS = 6;
 
+/** Panels a phone may hold open at once. See `sheetSlots` for why it is two. */
+export const MAX_SHEETS = 2;
+
 export interface Rect {
   x: number;
   y: number;
@@ -63,18 +66,30 @@ export interface MobileLayout {
   vitals: Rect;
   /** Gold and task points, right-aligned on the info row. */
   purse: Rect;
-  /** Panel tabs, one per DECK_TABS entry. */
-  tabs: Rect[];
-  /** Minimap, square, at the right end of the tab row. */
+  /**
+   * The button that reveals the tabs. Collapsed by default: five tabs on
+   * permanent display cost a whole touch row of the strip, and you open a panel
+   * about once a minute. Trading that row away buys the utility controls a home
+   * up here and lets the deck shrink to the six slots alone.
+   */
+  menu: Rect;
+  /** HUD-edit toggle. Rare, so it lives up top rather than in the thumb zone. */
+  edit: Rect;
+  /** Weapon swap — bindable to a slot as well, which is why it may sit here. */
+  swap: Rect;
+  /** Minimap, square, at the right end of the utility row. */
   minimap: Rect;
+  /**
+   * The panel tabs, positioned BELOW the strip as a drop-down. They are drawn
+   * over the world and only while the menu is open, so they cost no permanent
+   * height at all — a tap dismisses them along with whatever it landed on.
+   */
+  tabs: Rect[];
 
-  /** Thumb deck at the foot, plate included. */
+  /** Thumb deck at the foot, plate included. It is now the six slots and
+   *  nothing else — every other control moved up into the strip. */
   deckY: number;
   deckH: number;
-  /** HUD-edit toggle, left end of the deck's thin row. */
-  edit: Rect;
-  /** Weapon swap, right end of the same row. */
-  swap: Rect;
   /** The six action slots. */
   slots: Rect[];
 
@@ -105,8 +120,9 @@ export function noDeck(screenH = 0): MobileLayout {
   const z: Rect = { x: 0, y: 0, w: 0, h: 0 };
   return {
     on: false, u: 0, gap: 0, margin: 0,
-    topH: 0, info: z, vitals: z, purse: z, tabs: [], minimap: z,
-    deckY: screenH, deckH: 0, edit: z, swap: z, slots: [],
+    topH: 0, info: z, vitals: z, purse: z,
+    menu: z, edit: z, swap: z, minimap: z, tabs: [],
+    deckY: screenH, deckH: 0, slots: [],
     mapTop: 0, mapBottom: screenH, sheet: z,
   };
 }
@@ -151,36 +167,31 @@ export function mobileLayout(
   const vitals: Rect = { x: innerX, y, w: innerW, h: vitalsH };
   y += vitalsH + gap;
 
-  const tabsW = Math.max(1, innerW - tabH - gap);
-  const tabW = Math.floor((tabsW - (DECK_TABS.length - 1) * gap) / DECK_TABS.length);
-  const tabs: Rect[] = DECK_TABS.map((_, i) => ({
-    x: innerX + i * (tabW + gap), y, w: tabW, h: tabH,
-  }));
+  /* Utility row: reveal, edit, swap, minimap. Swap takes whatever the other
+   * three leave, which is most of it — you aim at it in a hurry, and the desktop
+   * column draws it as one wide bar under its buttons for the same reason. */
+  const menu: Rect = { x: innerX, y, w: tabH, h: tabH };
+  const editW = Math.round(u * 1.5);
+  const edit: Rect = { x: menu.x + menu.w + gap, y, w: editW, h: tabH };
   const minimap: Rect = { x: innerX + innerW - tabH, y, w: tabH, h: tabH };
+  const swapX = edit.x + edit.w + gap;
+  const swap: Rect = { x: swapX, y, w: Math.max(1, minimap.x - gap - swapX), h: tabH };
   y += tabH + m;
   const topH = y;
 
-  /* --- thumb deck: the utility row, then the six slots -------------------- */
-  /* A FULL touch row, not a thin one. The weapon swap lives here and it is a
-   * combat control — you press it while something is hitting you — so it gets
-   * the same target as a hotbar slot. The first draft made this row half height
-   * and put a 22 CSS px button on a 320-wide phone, which is a button you miss.
-   * The eighteen pixels it costs are the cheapest correctness in the file. */
-  const barH = u;
+  /* The drop-down. Below the strip, over the world, drawn only when open. */
+  const tabW = Math.floor((innerW - (DECK_TABS.length - 1) * gap) / DECK_TABS.length);
+  const tabY = topH + gap;
+  const tabs: Rect[] = DECK_TABS.map((_, i) => ({
+    x: innerX + i * (tabW + gap), y: tabY, w: tabW, h: tabH,
+  }));
+
+  /* --- thumb deck: the six slots, and nothing else ------------------------ */
   const slotH = Math.round(u * 1.02);
-  const deckH = m + barH + gap + slotH + m + safeBottom;
+  const deckH = m + slotH + m + safeBottom;
   const deckY = Math.max(topH, screenH - deckH);
 
-  const barY = deckY + m;
-  /* Swap takes everything the edit toggle does not, which is how the desktop
-   * column draws it too: one wide bar under the buttons. Wide because you aim
-   * at it in a hurry, and because the row would otherwise be mostly plate. */
-  const editW = Math.round(u * 1.5);
-  const swapX = innerX + editW + gap;
-  const edit: Rect = { x: innerX, y: barY, w: editW, h: barH };
-  const swap: Rect = { x: swapX, y: barY, w: Math.max(1, innerX + innerW - swapX), h: barH };
-
-  const slotY = barY + barH + gap;
+  const slotY = deckY + m;
   const slotW = Math.floor((innerW - (DECK_SLOTS - 1) * gap) / DECK_SLOTS);
   const slots: Rect[] = [];
   for (let i = 0; i < DECK_SLOTS; i++) {
@@ -201,10 +212,46 @@ export function mobileLayout(
 
   return {
     on: true, u, gap, margin: m,
-    topH, info, vitals, purse, tabs, minimap,
-    deckY, deckH, edit, swap, slots,
+    topH, info, vitals, purse,
+    menu, edit, swap, minimap, tabs,
+    deckY, deckH, slots,
     mapTop, mapBottom, sheet,
   };
+}
+
+/**
+ * Where the open panels go — one rect per panel, top to bottom.
+ *
+ * A phone can hold TWO. One was the first answer and it was wrong: every real
+ * inventory job is a move between two places, and with a single sheet there is
+ * no second place. Taking loot out of a corpse, putting a sword on the
+ * paperdoll, moving a stack into a chest — all of them need both ends visible
+ * at once, and none of them are optional.
+ *
+ * Two is also the ceiling. A third would give each about a hundred and thirty
+ * pixels, which is one row of items and a title bar, and would leave no world
+ * on screen at all.
+ */
+export function sheetSlots(d: MobileLayout, count: number): Rect[] {
+  if (!d.on || count <= 0) return [];
+  if (count === 1) return [d.sheet];
+  const mapH = Math.max(1, d.mapBottom - d.mapTop);
+  /* The band grows when a second panel arrives. Splitting the one-panel band
+   * would leave each half too short for a row of items plus its chrome, which
+   * would make two panels useless exactly when you need them most. */
+  const bandH = Math.min(mapH, Math.round(mapH * 0.76));
+  const top = d.mapBottom - bandH;
+  const gap = d.gap * 2;
+  const each = Math.floor((bandH - gap) / 2);
+  return [
+    { x: d.sheet.x, y: top, w: d.sheet.w, h: each },
+    { x: d.sheet.x, y: top + each + gap, w: d.sheet.w, h: each },
+  ];
+}
+
+/** How far a sheet may be dragged: it must stay wholly inside the world band. */
+export function sheetBand(d: MobileLayout): { top: number; bottom: number } {
+  return { top: d.mapTop, bottom: d.mapBottom };
 }
 
 /** Is this point on either plate (and therefore not on the world)? */
