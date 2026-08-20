@@ -24,6 +24,35 @@ export const ICON_SRC = 16;
 
 export type ControlIcon = "build" | "skills" | "equip" | "bag" | "quest";
 
+/** The hand-drawn 16x16 art, one file per button. */
+const ICON_SRC_FILE: Record<ControlIcon, string> = {
+  build: "/icon-build.png",
+  skills: "/icon-skill.png",
+  equip: "/icon-eq.png",
+  bag: "/icon-backpack.png",
+  quest: "/icon-quest.png",
+};
+
+const loaded: Partial<Record<ControlIcon, CanvasImageSource>> = {};
+
+/**
+ * Start loading the drawn icons. No-op headless, safe to call repeatedly.
+ *
+ * The procedural glyphs below stay in the file rather than being deleted: they
+ * are what the buttons show during the first few frames and if a file ever
+ * fails to load. A button with nothing in it is worse than a plain one.
+ */
+export function loadControlIcons(): void {
+  if (typeof Image === "undefined" || typeof document === "undefined") return;
+  for (const key of Object.keys(ICON_SRC_FILE) as ControlIcon[]) {
+    if (loaded[key]) continue;
+    const img = new Image();
+    img.onload = () => { loaded[key] = img; };
+    img.onerror = () => { console.warn(`control icon '${key}' failed to load, the drawn stand-in stays`); };
+    img.src = ICON_SRC_FILE[key];
+  }
+}
+
 /** [x, y, w, h] on a 12x12 grid, plus a colour index into the palette below. */
 type Cell = readonly [number, number, number, number, number];
 
@@ -86,6 +115,17 @@ export function drawControlIcon(
   icon: ControlIcon,
   x: number, y: number, size: number, on: boolean,
 ): void {
+  const art = loaded[icon];
+  if (art) {
+    /* Nearest-neighbour, always. The caller snaps `size` to a whole multiple
+     * of ICON_SRC, so this is an exact 1x/2x/3x blit and smoothing would only
+     * blur art that is already the right size. */
+    const was = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(art, Math.round(x), Math.round(y), Math.round(size), Math.round(size));
+    ctx.imageSmoothingEnabled = was;
+    return;
+  }
   const u = size / 12; // 12 authored units mapped onto the requested box
   const pal = on ? PALETTE_ON : PALETTE_OFF;
   // Snap to whole pixels: a 12-unit glyph at a fractional unit is mush.
