@@ -1077,12 +1077,8 @@ The five buttons at the top of the docked sidebar — Build, Skills, Equipment,
 Backpack and Quest — are 16x16 pixel icons: `icon-build.png`, `icon-skill.png`,
 `icon-eq.png`, `icon-backpack.png`, `icon-quest.png`.
 
-**Source: supplied by the project author. Provenance to be confirmed before the
-repository is made private / the game is released commercially.** If these came
-from a pack with redistribution limits (CraftPix's standard subscription
-forbids redistributing source PNGs from a public repository), they must not
-remain in a public repo — see the note at the top of this file about which
-regimes apply to which assets.
+**Drawn by the project author.** Original work, no third-party licence attaches
+to them, so they carry no attribution or redistribution conditions.
 
 They are drawn at whole multiples of their 16px source only — 1x, 2x or 3x
 depending on display and device pixel ratio — with image smoothing switched
