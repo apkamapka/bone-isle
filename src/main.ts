@@ -3505,14 +3505,36 @@ function drawActionSlot(i: number, x: number, y: number, w: number, h: number): 
     face: usable ? "rgba(46,58,54,.92)" : "rgba(24,26,30,.8)",
     accent: hudEditing() ? "#8ab6ff" : usable ? "#caa15a" : undefined,
   });
+  /* The bound rune's own picture, above its name.
+   *
+   * A name plus a number tells you what a slot holds only if you stop and read
+   * it. In a fight you glance. The icon is the thing you actually recognise,
+   * and the crystals all share a name shape ("Frost Shard", "Frost Nova") that
+   * makes reading them slower still — so the picture goes on top and the words
+   * stay underneath for when there is time. */
+  if (slot?.type === "crystal") {
+    const spr = itemSprite(slot.item);
+    if (spr) {
+      const box = h * 0.40;
+      const sc = Math.min(box / spr.width, box / spr.height);
+      const iw = Math.round(spr.width * sc);
+      const ih = Math.round(spr.height * sc);
+      const was = ctx.globalAlpha;
+      if (!usable) ctx.globalAlpha = 0.35; // out of charges: dimmed, not hidden
+      ctx.drawImage(spr, Math.round(x + (w - iw) / 2), Math.round(y + h * 0.07), iw, ih);
+      ctx.globalAlpha = was;
+    }
+  }
+  const iconY = slot?.type === "crystal" ? h * 0.63 : h * 0.38;
+  const subY = slot?.type === "crystal" ? h * 0.86 : h * 0.74;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = usable ? "#e9e2c8" : hudEditing() ? "#8ab6ff" : "#7a808a";
-  ctx.font = `bold ${Math.round(h * 0.26)}px 'Courier New',monospace`;
-  ctx.fillText(label, x + w / 2, y + h * 0.38);
-  ctx.font = `${Math.round(h * 0.2)}px 'Courier New',monospace`;
+  ctx.font = `bold ${Math.round(h * (slot?.type === "crystal" ? 0.2 : 0.26))}px 'Courier New',monospace`;
+  ctx.fillText(label, x + w / 2, y + iconY);
+  ctx.font = `${Math.round(h * 0.17)}px 'Courier New',monospace`;
   ctx.fillStyle = usable ? "#ffe9a8" : "#7a808a";
-  ctx.fillText(sub, x + w / 2, y + h * 0.74);
+  ctx.fillText(sub, x + w / 2, y + subY);
   const idx = i;
   hotspots.push({ x, y, w, h, fn: () => slotTap(idx) });
   touchButtons.push({ x, y, w, h });

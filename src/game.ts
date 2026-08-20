@@ -17,6 +17,7 @@ import { loadMobSheets } from "./gfx/mobSheet.ts";
 import { loadFireSheet } from "./gfx/fireSheet.ts";
 import { loadSceneryArt } from "./gfx/sceneryArt.ts";
 import { loadBuildingArt } from "./gfx/buildingArt.ts";
+import { loadControlIcons } from "./ui/icons.ts";
 import { loadSpellArt } from "./gfx/spellArt.ts";
 import { loadItemArt } from "./gfx/itemArt.ts";
 import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
@@ -288,6 +289,7 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   loadFireSheet();           // the campfire flicker
   loadSceneryArt();          // totems and dead trees the player walks behind
   loadBuildingArt();         // the forge, the tower and the posts, one image per tier
+  loadControlIcons();        // the five sidebar buttons, 16x16 each
   loadItemArt();             // drawn icons over the baked stand-ins
   loadSpellArt();            // bolts and blooms, one strip per element and tier
   for (const l of LAIRS) {
