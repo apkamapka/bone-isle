@@ -8757,10 +8757,12 @@ async function main(): Promise<void> {
       "…and it holds still through a pixel or two of self-inflicted movement");
     ok(panels.includes("if (!sheet) win.sheetY = undefined;"),
       "…with the memory cleared off a phone, so the desktop is unaffected");
-    ok(main.includes("let nx = deck.on ? drag.ox : drag.ox + (s.x - drag.gx);"),
-      "dragging a sheet moves it up and down only — sideways could only uncover plate");
+    ok(panels.includes("s.x + (s.w - w) / 2 + p.win.offset.x"),
+      "a sheet follows the finger in BOTH axes — taking one away made it fight the drag");
     ok(panels.includes("const want = s.y + s.h - h + p.win.offset.y;"),
       "…and that drag is real: the offset reaches the anchor");
+    ok(panels.includes("Math.min(Math.max(0, screenW - w), cx)"),
+      "…clamped to the screen, so a window can never be shoved off the edge");
   }
 
   console.log("Etap 35 — the tabs fold away behind one button:");
@@ -8775,6 +8777,72 @@ async function main(): Promise<void> {
       "…and a tap that hits a tab opens the panel and closes the menu with it");
     ok(!main.includes("hudMenuOpen()") || main.includes("const menuOpen = !docked"),
       "the old floating HUD's own collapsible column is left alone");
+  }
+
+  console.log("Etap 35 — a long shop list scrolls instead of shrinking to a ribbon:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { mobileLayout, sheetSlots, sheetBand } = await import("../src/ui/mobile.ts");
+    const g = createGame();
+    const ctx = (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+      .document.createElement("canvas").getContext("2d");
+
+    const d = mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
+    const sheets = sheetSlots(d, 1);
+    /* Borin the Smith, on the sell tab: eighty-odd wares, and the exact window
+     * that came out as an unreadable ribbon on a phone. */
+    const smith = (g.worlds.town.npcs as { name?: string }[]).find((n) => (n.name ?? "").includes("Borin"));
+    ok(!!smith, "the smith is in town, with a catalogue long enough to overflow any phone");
+    const win = { kind: "shop", offset: { x: 0, y: 0 }, rect: null, titleBar: null } as never as
+      { rect: { x: number; y: number; w: number; h: number } | null; fit?: number; sheetScroll?: number };
+
+    const frame = (): { hs: { x: number; y: number; w: number; h: number; fn: () => void }[] } => {
+      const hs: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
+      drawPanels({
+        hud: { ctx, scale: 1.72, screenW: 412 * 2, screenH: 915 * 2, touchInput: true, contentTop: d.mapTop },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: smith ?? null,
+          stash: null, floor: null, shopTab: "sell", forgeTab: "craft", testPage: 0, towerTab: "fire",
+          upgrading: null, dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots: hs, itemSlots: [], sheets, sheetBand: sheetBand(d),
+      } as never);
+      return { hs };
+    };
+
+    frame(); frame(); // fit settles on the second frame, as it always has
+    const r = win.rect!;
+    ok(!!r, "the shop draws on a sheet");
+    /* The ribbon: a panel three screens tall got a factor of about a third, and
+     * every glyph in it shrank with the frame. Width is now the only input. */
+    ok(r.w >= sheets[0].w * 0.9,
+      `…at very nearly the full width of the band (${Math.round(r.w)} of ${sheets[0].w})`);
+    ok((win.fit ?? 1) >= 1, `…and never shrunk below its natural size (fit ${(win.fit ?? 1).toFixed(2)})`);
+
+    const over = r.h - sheets[0].h;
+    if (over > 0) {
+      ok(true, `the list overflows the band by ${Math.round(over)}px, so it scrolls`);
+      const before = win.sheetScroll ?? 0;
+      // the last two hotspots of the frame are the viewport's own arrows
+      const arrows = frame().hs.slice(-2);
+      ok(arrows.length === 2, "…and the viewport puts a pair of arrows on it");
+      arrows[arrows.length - 1].fn();
+      ok((win.sheetScroll ?? 0) > before, "…the down arrow moves the viewport");
+      frame();
+      ok((win.sheetScroll ?? 0) <= over, "…and it can never scroll past the end of the list");
+      arrows[0].fn();
+      ok((win.sheetScroll ?? 0) >= 0, "…nor above the start of it");
+    } else {
+      ok(true, "this shop happens to fit the band outright");
+    }
+
+    /* A row scrolled out of the hole must not still be pressable. */
+    const hs = frame().hs;
+    const stray = hs.filter((x) => x.y + x.h <= sheets[0].y || x.y >= sheets[0].y + sheets[0].h);
+    ok(stray.length === 0, "no hitbox survives outside the viewport it was clipped to");
   }
 
   console.log("Etap 35 — the phone's overlays clear its own top strip:");
@@ -8838,12 +8906,15 @@ async function main(): Promise<void> {
       "…and a sheet, which only ever exists on a phone, is what turns docking off");
 
     const anchor = panels.slice(panels.indexOf("function anchor("), panels.indexOf("function anchor(") + 1400);
-    ok(anchor.indexOf("if (p.sheet)") < anchor.indexOf("if (isDocked("),
+    const anchor2 = panels.slice(panels.indexOf("function anchor("), panels.indexOf("function anchor(") + 2600);
+    ok(anchor2.indexOf("if (p.sheet)") < anchor2.indexOf("if (isDocked("),
       "the sheet is decided before the column, since a phone has no column to consult");
-    ok(anchor.includes("s.y + s.h - h"),
-      "…and the panel is bottom-aligned, putting its close button and footer in the thumb's reach");
-    ok(panels.includes("Math.max(0.35, Math.min(3, f))"),
-      "…and is allowed to GROW to the band, unlike every other window, which may only shrink");
+    ok(anchor2.includes("s.y + s.h - h + p.win.offset.y"),
+      "…a panel that fits is bottom-aligned, putting its footer in the thumb's reach");
+    ok(anchor2.includes("y: Math.round(s.y - sc)"),
+      "…and one that does not fit sits still while the viewport moves over it");
+    ok(panels.includes("Math.min(SHEET_MAX_GROW, sheet.w / natW)"),
+      "…sized by WIDTH alone, so a long list is scrolled rather than shrunk to a ribbon");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

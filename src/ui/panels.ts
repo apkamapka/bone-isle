@@ -197,6 +197,54 @@ function resizeGrip(p: PanelInput, x: number, y: number, w: number, h: number): 
   p.win.resizeBar = { x, y: by, w, h: bar };
 }
 
+/**
+ * A sheet may grow this much over its natural size and no further.
+ *
+ * Growth is what makes a four-column grid finger-sized on a phone; the ceiling
+ * is what stops a two-row panel being blown up until scrolling it is a chore.
+ */
+export const SHEET_MAX_GROW = 2.2;
+
+/**
+ * Scroll buttons for a sheet that is taller than its band.
+ *
+ * Drawn AFTER the window is unclipped, so they ride above it rather than
+ * scrolling away with the content they control. A page at a time, less an
+ * overlap, because losing your place is the one thing a long list must not do.
+ */
+function sheetScrollBar(p: PanelInput, s: Rect, over: number): void {
+  const { ctx } = p.hud;
+  const win = p.win;
+  const sc = Math.max(0, Math.min(over, win.sheetScroll ?? 0));
+  const bs = Math.round(Math.min(s.w * 0.16, s.h * 0.22));
+  const bx = Math.round(s.x + s.w - bs);
+  const step = Math.round(s.h * 0.8);
+
+  const btn = (by: number, glyph: string, on: boolean, to: number): void => {
+    buttonBox(ctx, bx, by, bs, bs, p.hud.scale, { face: on ? undefined : "rgba(16,26,24,.5)" });
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = on ? "#ffe9a8" : "rgba(255,233,168,.25)";
+    ctx.font = `bold ${Math.round(bs * 0.5)}px 'Courier New',monospace`;
+    ctx.fillText(glyph, bx + bs / 2, by + bs / 2);
+    if (!on) return;
+    p.hotspots.push({ x: bx, y: by, w: bs, h: bs, fn: () => { win.sheetScroll = to; } });
+  };
+
+  btn(Math.round(s.y), "\u25b2", sc > 0, Math.max(0, sc - step));
+  btn(Math.round(s.y + s.h - bs), "\u25bc", sc < over, Math.min(over, sc + step));
+
+  // how far down the list you are, as a track down the right-hand edge
+  const trackY = Math.round(s.y + bs);
+  const trackH = Math.max(1, Math.round(s.h - 2 * bs));
+  ctx.fillStyle = "rgba(0,0,0,.45)";
+  ctx.fillRect(bx + Math.round(bs * 0.32), trackY, Math.round(bs * 0.36), trackH);
+  const thumbH = Math.max(Math.round(bs * 0.4), Math.round((trackH * s.h) / (s.h + over)));
+  const thumbY = trackY + Math.round(((trackH - thumbH) * sc) / over);
+  ctx.fillStyle = "rgba(202,162,58,.85)";
+  ctx.fillRect(bx + Math.round(bs * 0.32), thumbY, Math.round(bs * 0.36), thumbH);
+}
+
 /** Is this window in the column right now? */
 export function isDocked(win: PanelWindow, dock: DockLayout): boolean {
   return dock.w > 0 && win.docked !== false && DOCKABLE_PANELS.includes(win.kind);
@@ -233,19 +281,31 @@ function anchor(p: PanelInput, w: number, h: number): { x: number; y: number } {
   if (p.sheet) {
     const s = p.sheet;
     const band = p.sheetBand ?? { top: s.y, bottom: s.y + s.h };
-    /* Vertical only. A full-width sheet has nowhere useful to go sideways, and
-     * letting it drift left or right would only ever uncover plate. Up and down
-     * is the axis that means something: it is how you push a panel down out of
-     * the way to see what walked up on you. */
+    /* Free in both axes, clamped to the screen. Vertical-only was the first
+     * answer and it was too clever: a full-width sheet has little to gain from
+     * moving sideways, but "little" is not "nothing", and taking the axis away
+     * meant the window fought the finger instead of following it. */
+    const cx = Math.round(s.x + (s.w - w) / 2 + p.win.offset.x);
+    const x = Math.round(Math.max(0, Math.min(Math.max(0, screenW - w), cx)));
+
+    const over = Math.max(0, h - s.h);
+    if (over > 0) {
+      /* Taller than the band: the window sits still and the VIEWPORT moves over
+       * it. Bottom-pinning a scrolling panel would mean its top drifted every
+       * time a row appeared. */
+      const sc = Math.max(0, Math.min(over, p.win.sheetScroll ?? 0));
+      p.win.sheetScroll = sc;
+      p.win.sheetY = undefined;
+      return { x, y: Math.round(s.y - sc) };
+    }
+    p.win.sheetScroll = 0;
     const want = s.y + s.h - h + p.win.offset.y;
-    const lo = band.top;
-    const hi = Math.max(lo, band.bottom - h);
-    const y = Math.round(Math.max(lo, Math.min(hi, want)));
+    const y = Math.round(Math.max(band.top, Math.min(Math.max(band.top, band.bottom - h), want)));
     /* Hold still through a pixel or two of self-inflicted movement. */
     const held = p.win.sheetY;
     const settled = held !== undefined && Math.abs(held - y) <= 2 ? held : y;
     p.win.sheetY = settled;
-    return { x: Math.round(s.x + (s.w - w) / 2), y: settled };
+    return { x, y: settled };
   }
   if (isDocked(p.win, d)) {
     let y = d.stackTop;
@@ -317,6 +377,18 @@ export interface PanelWindow {
    * pixel or two turns that shiver into stillness.
    */
   sheetY?: number;
+  /**
+   * How far the sheet VIEWPORT is scrolled, in screen px.
+   *
+   * Distinct from `scroll`, which walks a container's rows. This one moves the
+   * whole window behind a window-shaped hole, and it exists because the first
+   * version had no such hole: a panel taller than the band was SHRUNK to fit,
+   * so a shopkeeper with forty wares came out as a finger-wide ribbon of
+   * unreadable text. Long lists are not a container problem — the shop, the
+   * forge, the tower and the task board all have them — so the fix belongs
+   * here, where every panel passes through, rather than in each of them.
+   */
+  sheetScroll?: number;
   /**
    * How far this window can be scrolled, in rows. Zero means it cannot.
    *
@@ -753,6 +825,18 @@ export function drawPanels(
     const docked = isDocked(win, dock) && !sheet;
     hud.scale = docked ? dock.s : baseScale * panelZoom(win.kind) * (win.fit ?? 1);
     const p: PanelInput = { ...base, win, dock, sheet, sheetBand: band };
+    /* Clip a scrolling sheet to its band, and remember where this window's
+     * hitboxes start so the ones that end up outside the hole can be dropped.
+     * A button you cannot see but can still press is worse than no button. */
+    const overflowing = !!sheet && !!win.rect && win.rect.h > sheet.h;
+    const hsFrom = base.hotspots.length;
+    const isFrom = base.itemSlots.length;
+    if (overflowing && sheet) {
+      hud.ctx.save();
+      hud.ctx.beginPath();
+      hud.ctx.rect(sheet.x, sheet.y, sheet.w, sheet.h);
+      hud.ctx.clip();
+    }
     switch (win.kind) {
       case "build": drawBuild(p); break;
       case "skills": drawSkills(p); break;
@@ -770,6 +854,16 @@ export function drawPanels(
       case "wardrobe": drawWardrobe(p); break;
       default: break;
     }
+    if (overflowing && sheet) {
+      hud.ctx.restore();
+      const inside = (r: { y: number; h: number }): boolean =>
+        r.y + r.h > sheet.y && r.y < sheet.y + sheet.h;
+      base.hotspots.splice(hsFrom, base.hotspots.length - hsFrom,
+        ...base.hotspots.slice(hsFrom).filter(inside));
+      base.itemSlots.splice(isFrom, base.itemSlots.length - isFrom,
+        ...base.itemSlots.slice(isFrom).filter(inside));
+      sheetScrollBar(p, sheet, win.rect!.h - sheet.h);
+    }
     // Auto-fit: if the window (at fit=1) wouldn't fit on screen, compute the
     // exact factor that makes it fit. Corrects on the next frame (invisible
     // at 60fps) and adapts both ways when the window's contents change.
@@ -778,13 +872,20 @@ export function drawPanels(
       const natW = win.rect.w / cur;
       const natH = win.rect.h / cur;
       if (sheet) {
-        /* A sheet is fitted to the BAND, and — alone among the windows here —
-         * it is allowed to GROW. A four-column backpack at the phone's own HUD
-         * unit comes out about 120 CSS px wide; letting it fill the width is
-         * what turns its cells from specks into things a finger can hit. The
-         * ceiling stops a two-row panel being blown up to comic size. */
-        const f = Math.min(sheet.w / natW, sheet.h / natH);
-        win.fit = Math.max(0.35, Math.min(3, f));
+        /* WIDTH decides, and height is not consulted at all.
+         *
+         * Taking the smaller of the two was the bug behind the ribbon-shaped
+         * shop: a panel whose natural height ran to three screens got a factor
+         * of about a third, and everything in it — text, icons, prices — shrank
+         * with it. Height overflow is not a sizing problem, it is a scrolling
+         * problem, and it is handled by the viewport below.
+         *
+         * Width alone is also what makes this stable: a panel's width in design
+         * units does not depend on the scale it is drawn at, so the factor
+         * settles on the first frame and stays there. Wrapped text changes a
+         * panel's HEIGHT as it grows, which is exactly the loop that could set
+         * a bottom-pinned window shivering. */
+        win.fit = Math.max(0.35, Math.min(SHEET_MAX_GROW, sheet.w / natW));
       } else {
         const f = Math.min(1, (hud.screenW * 0.96) / natW, (hud.screenH * 0.96) / natH);
         win.fit = Math.max(0.35, f);

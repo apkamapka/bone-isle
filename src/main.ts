@@ -403,6 +403,11 @@ function openContainer(ref: ContainerRef): void {
   if (!slotsOf(ref, P)) return;
   const open = windowShowing(ref);
   if (open) { raise(open); return; }
+  /* Containers push straight onto the stack rather than going through
+   * openWindow, so the phone's two-sheet ceiling has to be applied here too —
+   * without it a bag opened from a corpse opened from a chest quietly made a
+   * third sheet that nothing had room to draw. */
+  if (deck.on) while (ui.windows.length >= MAX_SHEETS) ui.windows.shift();
   const n = ui.windows.length;
   ui.windows.push({
     kind: "container",
@@ -1662,7 +1667,15 @@ function navInto(ref: ContainerRef, index: number, win?: PanelWindow): void {
    * the middle of the screen. Want two open at once? Walk one in, then open
    * the backpack again from the equipment slot — that gets its own window. */
   const view = win ? viewRefOf(win) : null;
-  if (win && view && sameRef(view, ref)) {
+  /* On a phone, a spare sheet beats navigating in place.
+   *
+   * Walking a bag into its sub-pack replaces the only view you had, which is
+   * fine with a mouse and a screenful of windows and useless on a phone: two
+   * packs side by side is the whole reason you opened the first one. So when
+   * a second sheet is free the sub-pack takes it, and once both are full the
+   * Tibia in-place behaviour returns. */
+  const spareSheet = deck.on && ui.windows.length < MAX_SHEETS;
+  if (win && view && sameRef(view, ref) && !spareSheet) {
     win.ref = target;
     // A pack you walk into opens at the top, never half-way down the one you
     // just left.
@@ -2061,10 +2074,7 @@ screen.addEventListener("pointermove", (e) => {
   }
   if (!drag) return;
   const s = toScreen(e);
-  /* A sheet is full width and pinned to its band, so sideways is a direction
-   * that can only uncover plate. The vertical drag is real, and it is how you
-   * shove a panel down out of the way without closing it. */
-  let nx = deck.on ? drag.ox : drag.ox + (s.x - drag.gx);
+  let nx = drag.ox + (s.x - drag.gx);
   let ny = drag.oy + (s.y - drag.gy);
   // keep at least a strip of the panel on screen so it stays grabbable
   const keep = 60 * scale;
