@@ -7983,9 +7983,19 @@ async function main(): Promise<void> {
     }
 
     const nfs = await import("node:fs");
+    /* The buttons carry real art now, so the rule flips: every icon file that
+     * ships must be named in CREDITS.md. The repo is public, and an asset with
+     * redistribution limits sitting in it uncredited is the failure mode that
+     * matters most here — far more than anything cosmetic. */
+    const credits = nfs.readFileSync("CREDITS.md", "utf8");
+    const files = nfs.readdirSync("public").filter((f: string) => f.startsWith("icon-"));
+    ok(files.length > 0, `the sidebar ships real icons (${files.length})`);
+    for (const f of files) {
+      ok(credits.includes(f), `${f} is named in CREDITS.md`);
+    }
     const icons = nfs.readFileSync("src/ui/icons.ts", "utf8");
-    ok(!icons.includes("drawImage") && !icons.includes("http"),
-      "the glyphs are drawn, not loaded — no art file, so no licence rides on the buttons");
+    ok(icons.includes("GLYPHS"),
+      "…and a drawn fallback survives, so a button is never empty if a file fails to load");
   }
 
   console.log("Etap 35 — a second backpack can actually be opened:");
@@ -8563,6 +8573,33 @@ async function main(): Promise<void> {
       ok(out.every((r) => r.x + r.w <= size && r.y + r.h <= size),
         `a glyph drawn at ${size}px stays inside ${size}px`);
     }
+  }
+
+  console.log("Etap 41 — the hotbar shows the rune, not just its name:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    const fn = src.slice(src.indexOf("function drawActionSlot"), src.indexOf("function drawActionSlot") + 2600);
+
+    /* A name and a number tell you what a slot holds only if you stop and read
+     * them, and the crystals all share a name shape ("Frost Shard", "Frost
+     * Nova") that makes reading slower still. In a fight you glance. */
+    ok(fn.includes("itemSprite(slot.item)"), "a bound crystal draws its own sprite");
+    ok(fn.includes("ctx.drawImage(spr"), "…blitted into the slot");
+    ok(fn.includes("if (!usable) ctx.globalAlpha = 0.35"),
+      "…dimmed rather than hidden when you are out of charges, so the binding is still readable");
+    ok(fn.includes("Math.min(box / spr.width, box / spr.height)"),
+      "…fitted to the slot without stretching, whatever shape the sprite is");
+    // The picture must not sit on top of the words it was added to supplement.
+    ok(fn.includes('slot?.type === "crystal" ? h * 0.63'),
+      "…and the name moves down to make room, instead of being overlapped");
+
+    const icons = nfs.readFileSync("src/ui/icons.ts", "utf8");
+    ok(icons.includes("imageSmoothingEnabled = false"),
+      "the drawn icons are blitted nearest-neighbour, so 16px art stays square");
+    ok(icons.includes("loadControlIcons"), "…loaded once at startup with the rest of the art");
+    const game = nfs.readFileSync("src/game.ts", "utf8");
+    ok(game.includes("loadControlIcons()"), "…and something actually calls it");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
