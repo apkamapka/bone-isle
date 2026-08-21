@@ -8779,6 +8779,49 @@ async function main(): Promise<void> {
       "the old floating HUD's own collapsible column is left alone");
   }
 
+  console.log("Etap 35 — the first container docks to a strip beside the map:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h] of [[412, 915], [360, 800], [320, 568]] as const) {
+      const d = MB.mobileLayout(w * 2, h * 2, 2, 0, 48);
+      const st = MB.stripRect(d);
+
+      ok(st.y === d.mapTop && st.y + st.h === d.mapBottom,
+        `${w}x${h}: the strip runs the full height of the world band`);
+      ok(st.x + st.w <= w * 2 && st.x > w * 2 * 0.6,
+        "…hard against the right edge, where the thumb is not");
+      ok(st.w / 2 >= MB.TOUCH_MIN_CSS,
+        `…and a column of it is ${Math.round(st.w / 2)} CSS px wide — a cell you can hit`);
+
+      /* The whole argument for this shape, stated as a number. A sheet spends
+       * about twelve tiles of HEIGHT; the strip spends about two of WIDTH. */
+      const bandW = (w * 2 - st.w) / 2, bandH = (d.mapBottom - d.mapTop) / 2;
+      const withStrip = (bandW / 32) * (bandH / 32);
+      const sheetH = MB.sheetSlots(d, 1)[0].h / 2;
+      const withSheet = (w / 32) * ((bandH - sheetH) / 32);
+      ok(withStrip > withSheet * 1.5,
+        `${w}x${h}: ${Math.round(withStrip)} tiles of world stay visible, against ${Math.round(withSheet)} behind a sheet`);
+      ok(st.w / (w * 2) < 0.23, "…and the strip costs under a quarter of the width");
+    }
+
+    const d = MB.mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
+    const st = MB.stripRect(d);
+    /* A sheet must never run under the strip: two panels over the same pixels
+     * is how you stop being able to tell which one you are dragging into. */
+    for (const n of [1, 2]) {
+      for (const r of MB.sheetSlots(d, n, st.w)) {
+        ok(r.x + r.w <= st.x + 1, `a sheet (of ${n}) stops where the strip begins`);
+      }
+    }
+    ok(MB.sheetSlots(d, 1, 0)[0].w > MB.sheetSlots(d, 1, st.w)[0].w,
+      "…and takes the width back when nothing is docked");
+
+    ok(Math.abs(MB.mapFocusFracX(824, 0) - 0.5) < 1e-9,
+      "no strip, no shift — the player stands in the middle of the glass");
+    ok(MB.mapFocusFracX(824, st.w) < 0.5,
+      "…with one, the focus moves left, onto the middle of what you can actually see");
+  }
+
   console.log("Etap 35 — a long shop list scrolls instead of shrinking to a ribbon:");
   {
     const { drawPanels } = await import("../src/ui/panels.ts");
@@ -8843,6 +8886,25 @@ async function main(): Promise<void> {
     const hs = frame().hs;
     const stray = hs.filter((x) => x.y + x.h <= sheets[0].y || x.y >= sheets[0].y + sheets[0].h);
     ok(stray.length === 0, "no hitbox survives outside the viewport it was clipped to");
+  }
+
+  console.log("Etap 35 — a strip container is one column, filled to the strip's height:");
+  {
+    const nfs = await import("node:fs");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok((panels.match(/const cols = p\.strip \? 1 : 4;/g) ?? []).length === 3,
+      "every container drawer narrows to one column in the strip — four would be four columns of specks");
+    ok(panels.includes("if (!p.strip) return visibleRows(p.win.kind, allRows);"),
+      "…and off the strip the saved row preference is untouched");
+    ok(panels.includes("const room = Math.floor((p.strip.h - chrome + gap) / (cell + gap));"),
+      "…while in it the rows are however many the strip is tall enough to hold");
+    ok(panels.includes('w.kind === "container" && !w.stripOut'),
+      "the strip takes the first container opened, and only a container");
+    ok(main.includes("win.stripOut = true;"),
+      "…and dragging it tears it out into an ordinary sheet, so nothing on the phone refuses the finger");
+    ok(main.includes("const has = ui.windows.some((w) => w.kind === \"container\" && !w.stripOut);"),
+      "…with the camera and the renderer reading the same answer, not two copies of it");
   }
 
   console.log("Etap 35 — the phone's overlays clear its own top strip:");
