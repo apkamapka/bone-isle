@@ -55,7 +55,7 @@ import {
   VITALS_FIT, GOLD_ROW_H, BTN_ROW_H, SWAP_H, BLOCK_BAR,
   type DockLayout, type DockBlock,
 } from "./ui/dock.ts";
-import { drawPanels, isDocked, visibleRows, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
+import { drawPanels, isDocked, visibleRows, stripCandidate, STRIP_KINDS, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
@@ -124,9 +124,17 @@ let deckMenu = false;
  */
 function activeStrip(): { x: number; y: number; w: number; h: number } | null {
   if (!deck.on) return null;
-  const has = ui.windows.some((w) => w.kind === "container" && !w.stripOut);
-  return has ? stripRect(deck) : null;
+  return stripCandidate(ui.windows) ? stripRect(deck) : null;
 }
+
+/**
+ * Stamped onto every window as it opens.
+ *
+ * The window array is z-order and gets reshuffled whenever one is raised, so
+ * "the first pack you opened" cannot be read off position 0 — tapping the
+ * second pack would hand it the strip.
+ */
+let winSeq = 0;
 
 /**
  * Notch and gesture-bar insets, in CSS px.
@@ -426,6 +434,7 @@ function openContainer(ref: ContainerRef): void {
   ui.windows.push({
     kind: "container",
     ref,
+    seq: winSeq++,
     offset: { x: -40 * scale + n * 8 * scale, y: -20 * scale + n * 8 * scale },
     rect: null,
     titleBar: null,
@@ -515,6 +524,7 @@ function openWindow(kind: PanelKind): void {
   const n = ui.windows.length;
   ui.windows.push({
     kind,
+    seq: winSeq++,
     offset: { x: base.x + n * 6 * scale, y: base.y + n * 6 * scale },
     rect: null,
     titleBar: null,
@@ -1987,7 +1997,7 @@ screen.addEventListener("pointerdown", (e) => {
       /* Tear a container out of the phone's side strip. Same idea as the
        * desktop column below: a window that will not follow the finger reads as
        * broken, so the grab converts it into an ordinary sheet. */
-      if (deck.on && win.kind === "container" && !win.stripOut) {
+      if (deck.on && STRIP_KINDS.has(win.kind) && !win.stripOut) {
         const st = activeStrip();
         if (st && pr.x >= st.x - 1) {
           win.stripOut = true;
