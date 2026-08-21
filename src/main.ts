@@ -450,7 +450,7 @@ function openContainer(ref: ContainerRef): void {
     kind: "container",
     ref,
     seq: winSeq++,
-    offset: { x: -40 * scale + n * 8 * scale, y: -20 * scale + n * 8 * scale },
+    offset: deck.on ? { x: 0, y: 0 } : { x: -40 * scale + n * 8 * scale, y: -20 * scale + n * 8 * scale },
     rect: null,
     titleBar: null,
   });
@@ -540,7 +540,10 @@ function openWindow(kind: PanelKind): void {
   ui.windows.push({
     kind,
     seq: winSeq++,
-    offset: { x: base.x + n * 6 * scale, y: base.y + n * 6 * scale },
+    /* The phone places windows itself — into a lane, centred — so the desktop
+     * starting offsets are not a tidy stagger here, they are a panel shoved a
+     * thumb's width off to one side for no reason the player can see. */
+    offset: deck.on ? { x: 0, y: 0 } : { x: base.x + n * 6 * scale, y: base.y + n * 6 * scale },
     rect: null,
     titleBar: null,
   });
@@ -1948,7 +1951,7 @@ if (isTouchDevice()) initTouch(screen, handleWorldTap, overTouchButton, {
 screen.addEventListener("contextmenu", (e) => e.preventDefault());
 
 // Drag any open panel by grabbing its title bar (works with mouse, pen, touch).
-let drag: { win: PanelWindow; gx: number; gy: number; ox: number; oy: number; baseX: number; baseY: number; w: number; h: number } | null = null;
+let drag: { win: PanelWindow; gx: number; gy: number; ox: number; oy: number; baseX: number; baseY: number; w: number; h: number; oscroll: number } | null = null;
 /**
  * Dragging a container window's FOOT, which changes how many rows it shows.
  *
@@ -2027,7 +2030,7 @@ screen.addEventListener("pointerdown", (e) => {
         win.offset.x = pr.x - fx;
         win.offset.y = pr.y - fy;
       }
-      drag = { win, gx: s.x, gy: s.y, ox: win.offset.x, oy: win.offset.y, baseX: pr.x - win.offset.x, baseY: pr.y - win.offset.y, w: pr.w, h: pr.h };
+      drag = { win, gx: s.x, gy: s.y, ox: win.offset.x, oy: win.offset.y, baseX: pr.x - win.offset.x, baseY: pr.y - win.offset.y, w: pr.w, h: pr.h, oscroll: win.sheetScroll ?? 0 };
       ui.dragging = true;
       try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
       e.preventDefault();
@@ -2124,8 +2127,21 @@ screen.addEventListener("pointermove", (e) => {
   }
   if (!drag) return;
   const s = toScreen(e);
+  const dy = s.y - drag.gy;
+  /* A window taller than its band is already filling it and clipped to it, so
+   * there is no "somewhere else" to move it to — dragging it up and down IS
+   * scrolling it, and that is what the gesture is wired to. Without this the
+   * shop and the paperdoll were the two windows on the phone that ignored being
+   * dragged, which is exactly what Radek noticed: some move, some do not. */
+  const over = drag.win.sheetOver ?? 0;
+  if (deck.on && over > 0) {
+    drag.win.sheetScroll = clamp(drag.oscroll - dy, 0, over);
+    drag.win.offset.x = drag.ox + (s.x - drag.gx);
+    e.preventDefault();
+    return;
+  }
   let nx = drag.ox + (s.x - drag.gx);
-  let ny = drag.oy + (s.y - drag.gy);
+  let ny = drag.oy + dy;
   // keep at least a strip of the panel on screen so it stays grabbable
   const keep = 60 * scale;
   const left = clamp(drag.baseX + nx, keep - drag.w, screen.width - keep);
