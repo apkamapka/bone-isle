@@ -8908,6 +8908,43 @@ async function main(): Promise<void> {
     ok(heightFor(16) === two, "…a full corpse stops at two rows and scrolls the rest");
   }
 
+  console.log("Etap 35 — the strip slides out of the way and comes back:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const W = 412 * 2;
+    const d = MB.mobileLayout(W, 915 * 2, 2, 0, 48);
+    const open = MB.stripRect(d, 0);
+    const away = MB.stripRect(d, 1);
+
+    ok(open.x + open.w === W, "open, the strip's outer edge is the screen edge");
+    ok(away.x >= W - 1, "…slid away, the panel itself is off the glass entirely");
+    ok(away.w === open.w && away.y === open.y, "…same size and height either way — it moved, it did not shrink");
+
+    const gOpen = MB.stripHandle(d, open), gAway = MB.stripHandle(d, away);
+    ok(gOpen.x + gOpen.w <= open.x + 1, "the tab sits on the strip's inner edge");
+    ok(gAway.x + gAway.w <= W && gAway.x > W - d.u, "…and stays on screen when the strip is gone, or there is no way back");
+    ok(gOpen.h >= MB.TOUCH_MIN_CSS * 2 && gOpen.w >= 12, "…and is tall enough to hit without aiming");
+
+    const cOpen = MB.stripClaim(d, open, W), cAway = MB.stripClaim(d, away, W);
+    ok(cOpen > cAway * 3, `slid away it claims ${cAway} of ${cOpen} device px — the map gets the rest back`);
+    ok(MB.mapFocusFracX(W, cAway) > MB.mapFocusFracX(W, cOpen),
+      "…so the camera lets the player drift back toward the middle of the glass");
+    ok(MB.sheetSlots(d, 1, cAway)[0].w > MB.sheetSlots(d, 1, cOpen)[0].w,
+      "…and a sheet widens into the space as well");
+  }
+
+  console.log("Etap 35 — a second pack opens as small as the loot does:");
+  {
+    const nfs = await import("node:fs");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    /* The corpse got this rule first and the packs did not, so opening a bag
+     * inside a bag produced a four-row window to show one coin. */
+    ok((panels.match(/lootRows\(p, slots, allRows, cell, gap\)/g) ?? []).length === 3,
+      "every container drawer sizes itself to what is actually in it");
+    ok(!panels.includes("const rows = stripRows(p, allRows, 30 * S, 4 * S, 50 * S);"),
+      "…and none of them still asks for every row it owns");
+  }
+
   console.log("Etap 35 — a long shop list scrolls instead of shrinking to a ribbon:");
   {
     const { drawPanels } = await import("../src/ui/panels.ts");
@@ -8991,7 +9028,7 @@ async function main(): Promise<void> {
       "…but never a corpse: world loot is emptied and abandoned, not kept open all game");
     ok(main.includes("win.stripOut = true;"),
       "…and dragging it tears it out into an ordinary sheet, so nothing on the phone refuses the finger");
-    ok(main.includes("return stripCandidate(ui.windows) ? stripRect(deck) : null;"),
+    ok(main.includes("return stripCandidate(ui.windows) ? stripRect(deck, stripAway ? 1 : 0) : null;"),
       "…with the camera and the renderer calling the SAME chooser, not two copies of the rule");
     ok(main.includes("seq: winSeq++"),
       "…and creation order is stamped, because the window array is z-order and gets reshuffled");
@@ -9058,7 +9095,11 @@ async function main(): Promise<void> {
       "…and a sheet, which only ever exists on a phone, is what turns docking off");
 
     const anchor = panels.slice(panels.indexOf("function anchor("), panels.indexOf("function anchor(") + 1400);
-    const anchor2 = panels.slice(panels.indexOf("function anchor("), panels.indexOf("function anchor(") + 2600);
+    const anchor2 = panels.slice(panels.indexOf("function anchor("), panels.indexOf("function anchor(") + 4200);
+    ok(anchor2.indexOf("if (p.strip)") < anchor2.indexOf("if (p.sheet)"),
+      "the strip is decided before the sheet: it is docked and must take no drag offset");
+    ok(anchor2.includes("x: Math.round(s.x + s.w - w)"),
+      "…right-aligned, so it hugs the glass even when the panel is narrower than its lane");
     ok(anchor2.indexOf("if (p.sheet)") < anchor2.indexOf("if (isDocked("),
       "the sheet is decided before the column, since a phone has no column to consult");
     ok(anchor2.includes("s.y + s.h - h + p.win.offset.y"),
