@@ -53,6 +53,17 @@ export interface Rect {
 export interface MobileLayout {
   /** False when this screen gets the old floating HUD instead. */
   on: boolean;
+  /**
+   * Phone held sideways.
+   *
+   * The two orientations are not variations on one layout, they are opposites,
+   * and the reason is which axis has slack. Upright, height is plentiful and
+   * width is not, so the chrome takes two bands across the top and foot.
+   * Sideways it is the other way round: a band across the foot would eat a
+   * third of an already short axis, so the chrome goes down the SIDES and the
+   * map keeps the full height it has.
+   */
+  landscape: boolean;
   /** The touch unit every measurement below is derived from (device px). */
   u: number;
   gap: number;
@@ -96,6 +107,9 @@ export interface MobileLayout {
   /** The band of screen the world is visible through. */
   mapTop: number;
   mapBottom: number;
+  /** ...and its left and right edges, which only move in landscape. */
+  mapLeft: number;
+  mapRight: number;
   /** Where an open panel sits: full width, pinned against the deck. */
   sheet: Rect;
 }
@@ -112,18 +126,25 @@ export interface MobileLayout {
  * desktop today starts behaving as a phone.
  */
 export function deckEnabled(cssW: number, cssH: number, touch: boolean): boolean {
-  return (touch || Math.min(cssW, cssH) < 620) && cssH > cssW;
+  if (cssH > cssW) return (touch || Math.min(cssW, cssH) < 620) && true;
+  /* Sideways, only on a real touch device.
+   *
+   * Portrait can afford the size test alone, because a tall narrow window is a
+   * phone shape whatever is driving it. A SHORT WIDE window is not — that is
+   * just a desktop browser someone dragged smaller, and it already has the
+   * column. Requiring touch here is what keeps this change off the desktop. */
+  return touch && Math.min(cssW, cssH) < 620;
 }
 
 /** Everything is off, but every field is present. The safe default. */
 export function noDeck(screenH = 0): MobileLayout {
   const z: Rect = { x: 0, y: 0, w: 0, h: 0 };
   return {
-    on: false, u: 0, gap: 0, margin: 0,
+    on: false, landscape: false, u: 0, gap: 0, margin: 0,
     topH: 0, info: z, vitals: z, purse: z,
     menu: z, edit: z, swap: z, minimap: z, tabs: [],
     deckY: screenH, deckH: 0, slots: [],
-    mapTop: 0, mapBottom: screenH, sheet: z,
+    mapTop: 0, mapBottom: screenH, mapLeft: 0, mapRight: 0, sheet: z,
   };
 }
 
@@ -146,6 +167,7 @@ export function mobileLayout(
     TOUCH_MIN_CSS * dpr,
     Math.min(Math.round(Math.min(screenW, screenH) * 0.125), 120 * dpr),
   );
+  if (screenW > screenH) return landscapeLayout(screenW, screenH, u, safeTop, safeBottom);
   const gap = Math.max(2, Math.round(u * 0.06));
   const m = Math.max(2, Math.round(u * 0.08));
   const innerX = m;
@@ -211,11 +233,109 @@ export function mobileLayout(
   const sheet: Rect = { x: innerX, y: mapBottom - sheetH, w: innerW, h: sheetH };
 
   return {
-    on: true, u, gap, margin: m,
+    on: true, landscape: false, u, gap, margin: m,
     topH, info, vitals, purse,
     menu, edit, swap, minimap, tabs,
     deckY, deckH, slots,
-    mapTop, mapBottom, sheet,
+    mapTop, mapBottom, mapLeft: 0, mapRight: screenW, sheet,
+  };
+}
+
+/**
+ * The same deck, turned on its side.
+ *
+ * Every piece is the one the portrait layout uses — status, reveal, edit, swap,
+ * minimap, six slots — and only the arrangement changes, because only the
+ * budget changes. Held sideways a phone has width to burn and almost no height,
+ * so:
+ *
+ *  - status and vitals become ONE row instead of three. There is finally enough
+ *    width to put the zone, both bars and the purse on a single line, and that
+ *    row costs about seven percent of the height instead of a quarter of it.
+ *  - the six slots stand in a column down the LEFT edge, under the left thumb.
+ *  - reveal, edit, swap and the minimap stack down the RIGHT edge, under the
+ *    other one. This is the shape every landscape game on a phone converges on,
+ *    and it is the same shape the desktop column has, for the same reason.
+ *
+ * A band across the foot — the thing that is right in portrait — would be the
+ * single worst choice here: it would spend the scarce axis and leave the
+ * plentiful one untouched.
+ */
+function landscapeLayout(
+  screenW: number, screenH: number, u: number, safeTop: number, safeBottom: number,
+): MobileLayout {
+  const gap = Math.max(2, Math.round(u * 0.06));
+  const m = Math.max(2, Math.round(u * 0.08));
+
+  /* --- one status row across the top -------------------------------------- */
+  const rowH = Math.round(u * 0.62);
+  const topH = safeTop + m + rowH + m;
+  const rowY = safeTop + m;
+  const infoW = Math.round(screenW * 0.26);
+  const purseW = Math.round(Math.min(screenW * 0.24, u * 4.2));
+  const info: Rect = { x: m, y: rowY, w: infoW, h: rowH };
+  const purse: Rect = { x: screenW - m - purseW, y: rowY, w: purseW, h: rowH };
+  const vitX = m + infoW + gap;
+  const vitals: Rect = { x: vitX, y: rowY, w: Math.max(1, purse.x - gap - vitX), h: rowH };
+
+  /* --- left column: the six slots, nothing else --------------------------- */
+  const colY = topH + m;
+  const colH = Math.max(1, screenH - safeBottom - m - colY);
+  const slotW = Math.round(u * 1.15);
+  const slotH = Math.min(Math.round(u * 1.02), Math.floor((colH - (DECK_SLOTS - 1) * gap) / DECK_SLOTS));
+  const slotsH = DECK_SLOTS * slotH + (DECK_SLOTS - 1) * gap;
+  const slotY0 = colY + Math.max(0, Math.round((colH - slotsH) / 2));
+  const slots: Rect[] = [];
+  for (let i = 0; i < DECK_SLOTS; i++) {
+    slots.push({ x: m, y: slotY0 + i * (slotH + gap), w: slotW, h: slotH });
+  }
+
+  /* --- right column: map, then the controls ------------------------------- */
+  const rightW = Math.round(u * 1.85);
+  const rightX = screenW - m - rightW;
+  /* All four full width, stacked. Splitting the reveal and the edit toggle onto
+   * one shared row fitted, but on the smallest landscape phone it put them at
+   * 41 CSS px across — under a fingertip, which the touch unit exists to
+   * prevent. The column has height to spare and no reason to hoard it.
+   *
+   * Order is by reach, not by importance: the top of a side column is the
+   * furthest thing from a thumb resting halfway down it. So the map, which is
+   * only ever read, sits at the top, and the swap — which you hit mid-fight —
+   * gets the easy middle. */
+  let ry = colY;
+  const minimap: Rect = { x: rightX, y: ry, w: rightW, h: rightW };
+  ry += rightW + gap;
+  const swap: Rect = { x: rightX, y: ry, w: rightW, h: u };
+  ry += u + gap;
+  const menu: Rect = { x: rightX, y: ry, w: rightW, h: u };
+  ry += u + gap;
+  const edit: Rect = { x: rightX, y: ry, w: rightW, h: u };
+
+  /* --- what is left is the world ------------------------------------------ */
+  const mapTop = topH;
+  const mapBottom = screenH;
+  const mapLeft = m + slotW + m;
+  const mapRight = rightX - m;
+
+  /* The drop-down still hangs horizontally under the status row: five tabs
+   * stacked in the right column would be taller than the column is. */
+  const tabsW = Math.max(1, mapRight - mapLeft);
+  const tabW = Math.floor((tabsW - (DECK_TABS.length - 1) * gap) / DECK_TABS.length);
+  const tabY = topH + gap;
+  const tabs: Rect[] = DECK_TABS.map((_, i) => ({
+    x: mapLeft + i * (tabW + gap), y: tabY, w: tabW, h: u,
+  }));
+
+  /* A panel takes a LANE of the map rather than a band across it — width is
+   * what this orientation has spare, so spending width is what costs least. */
+  const sheet: Rect = { x: mapLeft, y: mapTop + gap, w: tabsW, h: Math.max(1, mapBottom - mapTop - 2 * gap) };
+
+  return {
+    on: true, landscape: true, u, gap, margin: m,
+    topH, info, vitals, purse,
+    menu, edit, swap, minimap, tabs,
+    deckY: screenH, deckH: 0, slots,
+    mapTop, mapBottom, mapLeft, mapRight, sheet,
   };
 }
 
@@ -238,6 +358,17 @@ export function sheetSlots(d: MobileLayout, count: number, stripW = 0): Rect[] {
    * pixels is how you end up unable to see which one you are dragging into. */
   const narrow = (r: Rect): Rect => (stripW > 0 ? { ...r, w: Math.max(1, r.w - stripW) } : r);
   if (count === 1) return [narrow(d.sheet)];
+  if (d.landscape) {
+    /* Side by side, because sideways it is WIDTH that is spare. Stacking two
+     * panels here would give each about five tiles of height and leave half the
+     * screen's width holding nothing. */
+    const lane = narrow(d.sheet);
+    const each = Math.floor((lane.w - d.gap * 2) / 2);
+    return [
+      { x: lane.x, y: lane.y, w: each, h: lane.h },
+      { x: lane.x + each + d.gap * 2, y: lane.y, w: each, h: lane.h },
+    ];
+  }
   const mapH = Math.max(1, d.mapBottom - d.mapTop);
   /* The band grows when a second panel arrives. Splitting the one-panel band
    * would leave each half too short for a row of items plus its chrome, which
@@ -270,7 +401,9 @@ export function stripRect(d: MobileLayout, hidden = 0): Rect {
    * finger-wide ribbon of world down the outside of the strip: too narrow to
    * see anything in, wide enough to make the strip look as though it had come
    * loose of the edge. */
-  const right = d.sheet.x + d.sheet.w + d.margin;
+  /* The map's right edge, which sideways is the inner edge of the control
+   * column rather than the glass. */
+  const right = d.landscape ? d.mapRight : d.sheet.x + d.sheet.w + d.margin;
   /* `hidden` slides it off to the right. Nothing about a pack you are carrying
    * says it has to be on screen while you fight, and shoving it away has to be
    * cheaper than closing it — closing loses your place in a sixteen-slot list. */
@@ -292,7 +425,8 @@ export function stripHandle(d: MobileLayout, s: Rect): Rect {
  * once it is slid away there is nothing to steer around but the tab.
  */
 export function stripClaim(d: MobileLayout, s: Rect, screenW: number): number {
-  return Math.max(0, screenW - stripHandle(d, s).x);
+  const right = d.on && d.landscape ? d.mapRight : screenW;
+  return Math.max(0, right - stripHandle(d, s).x);
 }
 
 /**
@@ -303,9 +437,11 @@ export function stripClaim(d: MobileLayout, s: Rect, screenW: number): number {
  * tiles off-centre and everything that walks in from the right is already on
  * top of him before it appears.
  */
-export function mapFocusFracX(screenW: number, stripW: number): number {
+export function mapFocusFracX(d: MobileLayout, screenW: number, stripW: number): number {
   if (screenW <= 0) return 0.5;
-  return (screenW - stripW) / 2 / screenW;
+  const left = d.on && d.landscape ? d.mapLeft : 0;
+  const right = (d.on && d.landscape ? d.mapRight : screenW) - stripW;
+  return (left + right) / 2 / screenW;
 }
 
 /** How far a sheet may be dragged: it must stay wholly inside the world band. */
@@ -314,8 +450,11 @@ export function sheetBand(d: MobileLayout): { top: number; bottom: number } {
 }
 
 /** Is this point on either plate (and therefore not on the world)? */
-export function overDeck(d: MobileLayout, sy: number): boolean {
-  return d.on && (sy < d.mapTop || sy >= d.deckY);
+export function overDeck(d: MobileLayout, sx: number, sy: number): boolean {
+  if (!d.on) return false;
+  if (sy < d.mapTop || sy >= d.deckY) return true;
+  // sideways there are two more bands, down the sides
+  return d.landscape && (sx < d.mapLeft || sx >= d.mapRight);
 }
 
 /**
