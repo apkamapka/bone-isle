@@ -8822,6 +8822,92 @@ async function main(): Promise<void> {
       "…with one, the focus moves left, onto the middle of what you can actually see");
   }
 
+  console.log("Etap 35 — the strip goes to the FIRST pack, whatever the z-order says:");
+  {
+    const PN = await import("../src/ui/panels.ts");
+    type W = { kind: string; seq?: number; stripOut?: boolean };
+    const mk = (kind: string, seq: number, extra: Partial<W> = {}): W => ({ kind, seq, ...extra });
+
+    /* The bug, as it shipped: the backpack opened from the tab is kind "bag",
+     * a pack opened from inside it is kind "container", and the rule only knew
+     * the second one — so the strip went to the sub-pack. */
+    const bag = mk("bag", 0), sub = mk("container", 1);
+    ok(PN.stripCandidate([bag, sub] as never) === bag,
+      "the backpack from the tab takes the strip, not the pack opened inside it");
+
+    /* Tapping the sub-pack raises it to the end of the array. Position must not
+     * decide, or the strip would jump between packs as you worked. */
+    ok(PN.stripCandidate([sub, bag] as never) === bag,
+      "…and it keeps it after the other pack is raised over it");
+
+    ok(PN.stripCandidate([mk("loot", 0), bag] as never) === bag,
+      "a corpse never takes the strip, even when it was opened first");
+    ok(PN.stripCandidate([mk("shop", 0), mk("skills", 1)] as never) === undefined,
+      "…nor does anything that is not a pack");
+    ok(PN.stripCandidate([mk("bag", 0, { stripOut: true }), sub] as never) === sub,
+      "…and a pack torn out of the strip hands it to the next one");
+    ok(PN.stripCandidate([] as never) === undefined, "no windows, no strip");
+  }
+
+  console.log("Etap 35 — the strip sits hard against the glass:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h] of [[412, 915], [360, 800]] as const) {
+      const d = MB.mobileLayout(w * 2, h * 2, 2, 0, 48);
+      const st = MB.stripRect(d);
+      /* The sheet margin used to leave a finger-wide ribbon of world outside
+       * the strip: too narrow to see anything in, wide enough to look broken. */
+      ok(st.x + st.w === w * 2, `${w}px: the strip's outer edge IS the screen edge`);
+      ok(st.x + st.w > d.sheet.x + d.sheet.w, "…which is further out than a sheet reaches");
+    }
+  }
+
+  console.log("Etap 35 — a corpse opens sized to its loot:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { mobileLayout, sheetSlots, sheetBand } = await import("../src/ui/mobile.ts");
+    const { resetPanelPrefs } = await import("../src/systems/panelPrefs.ts");
+    resetPanelPrefs?.();
+    const g = createGame();
+    const ctx = (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+      .document.createElement("canvas").getContext("2d");
+    const d = mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
+
+    const heightFor = (items: number): number => {
+      const body = { kind: "beggar", x: 0, y: 0, items: new Array(16).fill(null) } as
+        { items: ({ kind: string; n: number } | null)[] };
+      for (let i = 0; i < items; i++) body.items[i] = { kind: "bones", n: 1 };
+      const win = { kind: "loot", seq: 0, offset: { x: 0, y: 0 }, rect: null, titleBar: null } as never as
+        { rect: { h: number } | null; fit?: number };
+      for (let f = 0; f < 2; f++) {
+        drawPanels({
+          hud: { ctx, scale: 1.72, screenW: 412 * 2, screenH: 915 * 2, touchInput: true, contentTop: d.mapTop },
+          ui: {
+            windows: [win], placing: null, selSlot: null, loot: body, npc: null, stash: null, floor: null,
+            shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+            dragging: false, lookMode: false, inspect: null, split: null,
+          },
+          game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+          act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+          hotspots: [], itemSlots: [], sheets: sheetSlots(d, 1), sheetBand: sheetBand(d),
+        } as never);
+      }
+      return win.rect?.h ?? 0;
+    };
+
+    const one = heightFor(2), two = heightFor(7), band = sheetSlots(d, 1)[0].h;
+    ok(one > 0 && two > 0, "a corpse draws on a sheet");
+    /* Sixteen slots were drawn whatever fell in, so two coins cost four rows of
+     * empty frame — most of the screen, parked on top of the fight. */
+    ok(two > one, `a heavy corpse (7 items) is taller than a light one (${Math.round(one)} → ${Math.round(two)})`);
+    ok(one < band * 0.5, "…and a light one takes under half the band it is allowed");
+    ok(two < band * 0.7, "…a heavy one still leaves most of the world visible");
+    ok(heightFor(4) === one, "four items is still one row — four IS a row");
+    ok(heightFor(5) === two, "…and the fifth is what forces the second");
+    ok(heightFor(16) === two, "…a full corpse stops at two rows and scrolls the rest");
+  }
+
   console.log("Etap 35 — a long shop list scrolls instead of shrinking to a ribbon:");
   {
     const { drawPanels } = await import("../src/ui/panels.ts");
@@ -8899,12 +8985,16 @@ async function main(): Promise<void> {
       "…and off the strip the saved row preference is untouched");
     ok(panels.includes("const room = Math.floor((p.strip.h - chrome + gap) / (cell + gap));"),
       "…while in it the rows are however many the strip is tall enough to hold");
-    ok(panels.includes('w.kind === "container" && !w.stripOut'),
-      "the strip takes the first container opened, and only a container");
+    ok(panels.includes('new Set(["bag", "container", "stash"])'),
+      "the strip takes PACKS — and \"bag\" is in the set, which is the whole point");
+    ok(!panels.includes('STRIP_KINDS: ReadonlySet<string> = new Set(["bag", "container", "stash", "loot"'),
+      "…but never a corpse: world loot is emptied and abandoned, not kept open all game");
     ok(main.includes("win.stripOut = true;"),
       "…and dragging it tears it out into an ordinary sheet, so nothing on the phone refuses the finger");
-    ok(main.includes("const has = ui.windows.some((w) => w.kind === \"container\" && !w.stripOut);"),
-      "…with the camera and the renderer reading the same answer, not two copies of it");
+    ok(main.includes("return stripCandidate(ui.windows) ? stripRect(deck) : null;"),
+      "…with the camera and the renderer calling the SAME chooser, not two copies of the rule");
+    ok(main.includes("seq: winSeq++"),
+      "…and creation order is stamped, because the window array is z-order and gets reshuffled");
   }
 
   console.log("Etap 35 — the phone's overlays clear its own top strip:");
