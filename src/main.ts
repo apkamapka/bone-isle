@@ -48,7 +48,7 @@ import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZ
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
-import { deckEnabled, mobileLayout, noDeck, overDeck, mapFocusFrac, sheetSlots, sheetBand, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
+import { deckEnabled, mobileLayout, noDeck, overDeck, mapFocusFrac, mapFocusFracX, sheetSlots, sheetBand, stripRect, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
 import { drawControlIcon, ICON_SRC, type ControlIcon } from "./ui/icons.ts";
 import {
   dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
@@ -113,6 +113,20 @@ let deck: MobileLayout = noDeck();
  * can see where you are standing.
  */
 let deckMenu = false;
+
+/**
+ * The side strip's geometry this frame, or null when nothing is docked to it.
+ *
+ * Read by the renderer AND by the camera, which is why it is a function rather
+ * than a field: the two run at different points in the frame, and a stale copy
+ * would leave the player standing off-centre for one tick every time a bag
+ * opened or closed.
+ */
+function activeStrip(): { x: number; y: number; w: number; h: number } | null {
+  if (!deck.on) return null;
+  const has = ui.windows.some((w) => w.kind === "container" && !w.stripOut);
+  return has ? stripRect(deck) : null;
+}
 
 /**
  * Notch and gesture-bar insets, in CSS px.
@@ -1970,6 +1984,17 @@ screen.addEventListener("pointerdown", (e) => {
        * from its current rect. Without that the window teleports to centre
        * screen the moment the pointer goes down — which reads as a bug even
        * though the drag afterwards works perfectly. */
+      /* Tear a container out of the phone's side strip. Same idea as the
+       * desktop column below: a window that will not follow the finger reads as
+       * broken, so the grab converts it into an ordinary sheet. */
+      if (deck.on && win.kind === "container" && !win.stripOut) {
+        const st = activeStrip();
+        if (st && pr.x >= st.x - 1) {
+          win.stripOut = true;
+          win.offset.x = 0;
+          win.offset.y = 0;
+        }
+      }
       if (isDocked(win, lastDock)) {
         win.docked = false;
         const fx = (screen.width - lastDock.w - pr.w) / 2;
@@ -2958,7 +2983,11 @@ function hpBar(x: number, y: number, frac: number, w = 28): void {
 function render(): void {
   const world = cw();
   // camera follows player, clamped to island
-  cam.x = clamp(P.x - VW / 2, 0, Math.max(0, world.w * TILE - VW));
+  /* The strip covers the right edge, so the middle of what you can SEE is left
+   * of the middle of the glass. Without this the character stands two tiles off
+   * centre and anything walking in from the right is on him before it appears. */
+  const camStrip = activeStrip();
+  cam.x = clamp(P.x - VW * mapFocusFracX(screen.width, camStrip ? camStrip.w : 0), 0, Math.max(0, world.w * TILE - VW));
   /* The world is still rendered across the whole canvas and the two plates are
    * drawn over its ends, so every screen->world conversion in this file keeps
    * working untouched. What DOES change is where the player is parked: the
@@ -3495,9 +3524,11 @@ function render(): void {
   itemSlots = [];
   if (dock.w > 0) drawSidebar(hud, dock);
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; win.resizeBar = null; }
+  const sideStrip = activeStrip();
+  const sheeted = ui.windows.length - (sideStrip ? 1 : 0);
   drawPanels({
-    hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock,
-    sheets: deck.on ? sheetSlots(deck, ui.windows.length) : null,
+    hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock, strip: sideStrip,
+    sheets: deck.on ? sheetSlots(deck, sheeted, sideStrip ? sideStrip.w : 0) : null,
     sheetBand: deck.on ? sheetBand(deck) : null,
   });
   updateCursor();
