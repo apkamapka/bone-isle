@@ -8945,6 +8945,86 @@ async function main(): Promise<void> {
       "…and none of them still asks for every row it owns");
   }
 
+  console.log("Etap 35 — every window answers a drag, whether it fits or not:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { mobileLayout, sheetSlots, sheetBand } = await import("../src/ui/mobile.ts");
+    const g = createGame();
+    const ctx = (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+      .document.createElement("canvas").getContext("2d");
+    const d = mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
+    const sheets = sheetSlots(d, 1);
+    const smith = (g.worlds.town.npcs as { name?: string }[]).find((n) => (n.name ?? "").includes("Borin"));
+
+    type W = {
+      kind: string; seq: number; offset: { x: number; y: number };
+      rect: { x: number; y: number; w: number; h: number } | null;
+      titleBar: unknown; sheetOver?: number; sheetScroll?: number; fit?: number;
+    };
+    const run = (win: W, tab: string): void => {
+      drawPanels({
+        hud: { ctx, scale: 1.72, screenW: 412 * 2, screenH: 915 * 2, touchInput: true, contentTop: d.mapTop },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: smith ?? null, stash: null,
+          floor: null, shopTab: tab, forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots: [], itemSlots: [], sheets, sheetBand: sheetBand(d),
+      } as never);
+    };
+    const settle = (kind: string, tab = "buy"): W => {
+      const w: W = { kind, seq: 0, offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      run(w, tab); run(w, tab);
+      return w;
+    };
+
+    /* A window that FITS its lane moves when dragged. */
+    const skills = settle("skills");
+    ok((skills.sheetOver ?? 0) === 0, "the skills panel fits its lane");
+    const restY = skills.rect!.y;
+    skills.offset.y = -200;
+    run(skills, "buy");
+    ok(skills.rect!.y < restY, "…and dragging it up moves it up");
+
+    /* A window that OVERFLOWS is already filling the lane and clipped to it, so
+     * there is nowhere to move it TO — the same gesture has to scroll it. This
+     * was the split Radek spotted: the shop and the paperdoll ignored drags. */
+    const shop = settle("shop", "sell");
+    ok((shop.sheetOver ?? 0) > 0, "the smith's sell list overflows its lane");
+    const top0 = shop.rect!.y;
+    shop.sheetScroll = 240;
+    run(shop, "sell");
+    ok(shop.rect!.y < top0, "…and driving its scroll moves the content, which is what a drag on it does");
+    ok(shop.sheetOver !== undefined,
+      "…with the overflow published, so the pointer handler can tell the two cases apart");
+
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok(main.includes("drag.win.sheetScroll = clamp(drag.oscroll - dy, 0, over);"),
+      "the drag routes into the scroll for an overflowing window");
+    ok(main.includes("oscroll: win.sheetScroll ?? 0"),
+      "…from where it stood when you grabbed it, so it does not jump on the first pixel");
+    ok(main.includes("drag.win.offset.x = drag.ox + (s.x - drag.gx);"),
+      "…while sideways still moves the window, as it does for every other one");
+  }
+
+  console.log("Etap 35 — a phone opens a window in its lane, not at a desktop offset:");
+  {
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    /* -120 design units is a tidy stagger on a desktop and a panel shoved a
+     * thumb's width off the lane on a phone, for no reason the player sees. */
+    ok((main.match(/offset: deck\.on \? \{ x: 0, y: 0 \}/g) ?? []).length === 2,
+      "both window-creation sites open centred on a phone");
+    ok(main.includes("base.x + n * 6 * scale"), "…and the desktop stagger is untouched");
+    ok(panels.includes("x: win.rect!.x, w: win.rect!.w"),
+      "the scroll arrows ride on the window's own edge, not the lane's");
+  }
+
   console.log("Etap 35 — a long shop list scrolls instead of shrinking to a ribbon:");
   {
     const { drawPanels } = await import("../src/ui/panels.ts");
