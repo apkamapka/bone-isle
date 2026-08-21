@@ -10,6 +10,7 @@ import {
   BLOOD_HIT_WINDOW_S,
 } from "../config.ts";
 import { stanceAtk, stanceDef } from "./stance.ts";
+import { active as activeState } from "./playerState.ts";
 import type { Equipment } from "../items.ts";
 
 export type SkillKey = "sword" | "shield" | "dist";
@@ -54,11 +55,28 @@ export interface Skill {
  *              because hurtPlayer() actually implements the multi-block cap.
  *              Halve this the day that cap goes away.
  */
-export const skills: Record<SkillKey, Skill> = {
-  sword: { name: "Sword Fighting", lv: 10, pts: 0, color: "#e1483b", active: true, offset: 10, factor: 1.1, base: 50 },
-  shield: { name: "Shielding", lv: 10, pts: 0, color: "#5aa1e8", active: true, offset: 10, factor: 1.1, base: 100 },
-  dist: { name: "Distance Fighting", lv: 10, pts: 0, color: "#6fc06a", active: true, offset: 10, factor: 1.1, base: 50 },
-};
+/**
+ * The three trainable skills of whichever character is currently active.
+ *
+ * A LIVE VIEW, not a table: the data lives on PlayerState (see
+ * playerState.ts), and each property here is a getter that reads it out.
+ * Written this way on purpose — `skills.sword.lv` reads and writes exactly as
+ * it did when this was a plain object, so the ~100 call sites across the
+ * game, the panels and the smoke suite needed no edit at all, while the state
+ * underneath became per-character and swappable.
+ *
+ * The object is frozen: `skills.sword = …` would silently replace the getter
+ * and quietly re-introduce the singleton this replaced. Mutating THROUGH it
+ * (`skills.sword.pts += 1`) is the intended use and still works.
+ */
+export const skills: Record<SkillKey, Skill> = Object.freeze({
+  get sword() { return activeState().skills.sword; },
+  get shield() { return activeState().skills.shield; },
+  get dist() { return activeState().skills.dist; },
+}) as Record<SkillKey, Skill>;
+
+/** Every skill key, in display order. */
+export const SKILL_KEYS: readonly SkillKey[] = ["sword", "shield", "dist"];
 // NOTE: there is deliberately no "speed" skill — Tibia 8.6 has none. Movement
 // speed grows with the character LEVEL instead (SPEED_PER_LEVEL in config.ts,
 // applied in playerSpeed()). A "speed" entry in old saves is simply ignored.
@@ -116,21 +134,19 @@ export type SkillUpFx = (text: string) => void;
  * keypress. The gate costs nothing to anyone actually playing and closes the
  * one place where doing nothing was the optimal strategy.
  */
-let lastBloodHitAt = -Infinity;
-
 /** Record that the player just dealt damage. Called from every attack path. */
 export function markBloodHit(): void {
-  lastBloodHitAt = performance.now() / 1000;
+  activeState().lastBloodHitAt = performance.now() / 1000;
 }
 
 /** True while the blood-hit clock is still warm. */
 export function inCombat(): boolean {
-  return performance.now() / 1000 - lastBloodHitAt < BLOOD_HIT_WINDOW_S;
+  return performance.now() / 1000 - activeState().lastBloodHitAt < BLOOD_HIT_WINDOW_S;
 }
 
 /** Clear the clock (new game / test isolation). */
 export function resetBloodHit(): void {
-  lastBloodHitAt = -Infinity;
+  activeState().lastBloodHitAt = -Infinity;
 }
 
 /**

@@ -14,7 +14,8 @@ import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./syst
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { stance, setStance, STANCES, type Stance } from "./systems/stance.ts";
-import { quests } from "./systems/quests.ts";
+import { chasing, setChase, safeMode, setSafeMode } from "./systems/playerState.ts";
+import { questList } from "./systems/quests.ts";
 import { emptyStash, emptyCorpseBag, emptyEquipment, addItem, addStack, newContainer, giveGold, COIN_KINDS, ITEMS, AMMO_KINDS } from "./items.ts";
 import type { Bag, Equipment, ItemKind, ItemStack } from "./items.ts";
 import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
@@ -45,11 +46,17 @@ const KEY = "bone-isle-save-v2";
  * v8: money became an ITEM (Etap 27). `player.gold` and `corpse.gold` are
  * gone; a pre-v8 balance is minted into coins in the backpack on load, and a
  * corpse's purse is minted into its slots by the same rule.
+ *
+ * v9: the combat toggles became a set (Etap 31). Tibia 8.6 has three
+ * independent switches, not one — stance, chase and secure mode — so the lone
+ * `stance` field grew into `modes`. A v8 save keeps its stance and takes the
+ * defaults for the other two: chase ON (which is what the game already did
+ * before the switch existed) and secure mode OFF.
  */
-const SAVE_V = 8;
+const SAVE_V = 9;
 
 interface SaveData {
-  v: 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   seed: number;
   current: WorldKey;
   player: {
@@ -64,8 +71,10 @@ interface SaveData {
     pack: ItemStack | null; bag?: Bag; eq: Equipment;
   };
   skills: Record<SkillKey, { lv: number; pts: number }>;
-  /** Attack stance. Absent in pre-Etap 19 saves — those load as balanced. */
+  /** Pre-v9 only: the attack stance before it joined the other two toggles. */
   stance?: Stance;
+  /** The three combat toggles. Absent in pre-v9 saves — see SAVE_V. */
+  modes?: { stance?: Stance; chase?: boolean; safeMode?: boolean };
   quests: { id: string; progress: number; done: boolean; claimed: boolean }[];
   structures: Record<WorldKey, Structure[]>;
   /** Items lying on the ground, per world (incl. a death-dropped backpack). */
@@ -123,8 +132,8 @@ export function saveGame(g: Game): void {
       pack: p.pack, eq: p.eq,
     },
     skills: skillDump,
-    stance: stance(),
-    quests: quests.map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
+    modes: { stance: stance(), chase: chasing(), safeMode: safeMode() },
+    quests: questList().map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
     structures: structDump,
     ground: groundDump,
     corpses: corpseDump,
@@ -294,11 +303,16 @@ export function loadGame(): Game | null {
     const s = data.skills?.[k];
     if (s) { skills[k].lv = s.lv; skills[k].pts = s.pts; }
   });
-  // an unknown or missing stance falls back to the default rather than throwing
-  if (data.stance && STANCES.includes(data.stance)) setStance(data.stance);
+  // An unknown or missing toggle falls back to its default rather than
+  // throwing. `data.stance` is the pre-v9 spelling and is still honoured, so a
+  // v8 save keeps the stance its owner left it in.
+  const savedStance = data.modes?.stance ?? data.stance;
+  if (savedStance && STANCES.includes(savedStance)) setStance(savedStance);
+  setChase(data.modes?.chase ?? true);
+  setSafeMode(data.modes?.safeMode ?? false);
 
   for (const qs of data.quests ?? []) {
-    const q = quests.find((x) => x.id === qs.id);
+    const q = questList().find((x) => x.id === qs.id);
     if (q) { q.progress = qs.progress; q.done = qs.done; q.claimed = qs.claimed; }
   }
 

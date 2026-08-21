@@ -27,12 +27,8 @@ import { spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard, spawnAtP
 import { createPlayer } from "./entities/player.ts";
 import { clearMonsterSpells } from "./systems/monsterSpells.ts";
 import type { ItemKind } from "./items.ts";
-import { loadResearchState } from "./systems/tower.ts";
-import { resetTasks } from "./systems/tasks.ts";
-import { resetSkills, resetBloodHit } from "./systems/skills.ts";
-import { resetStance } from "./systems/stance.ts";
-import { resetQuests } from "./systems/quests.ts";
-import { resetOutfit, applyOutfit } from "./systems/outfit.ts";
+import { applyOutfit } from "./systems/outfit.ts";
+import { resetPlayerState } from "./systems/playerState.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
@@ -438,14 +434,12 @@ export function populateAll(worlds: Record<WorldKey, World>, seed = WORLD_SEED):
 export function createGame(seed = WORLD_SEED): Game {
   const worlds = buildWorlds(seed);
   populateAll(worlds, seed);
+  // ONE call wipes the lot now (Etap 31): skills, quests, board tasks,
+  // wardrobe, research, attunement, stance and every combat clock live
+  // together on the character's PlayerState, so a fresh game is a fresh
+  // state object rather than seven separate resets that could drift apart.
+  resetPlayerState();
   const player = createPlayer(worldSpawn(worlds.home));
-  loadResearchState([]); // a fresh game has no research completed
-  resetTasks(); // no board tasks taken yet
-  resetSkills(); // module state — wipe any training from a previous session
-  resetBloodHit(); // …and the combat clock that gates Shielding
-  resetStance(); // …and start every character in the balanced stance
-  resetQuests(); // likewise, quest progress lives in module state
-  resetOutfit(); // and the wardrobe — a fresh hero wears the classic look
   applyOutfit(player);
   return {
     seed,

@@ -17,6 +17,7 @@
 import type { Cost } from "./building.ts";
 import type { ItemKind } from "../items.ts";
 import { ELEMENTS, TIER_CODE } from "./elements.ts";
+import { active as activeState } from "./playerState.ts";
 import type { Element, Tier } from "./elements.ts";
 
 export interface Research {
@@ -93,7 +94,13 @@ export const ATTUNEMENT: Readonly<Record<Element, ItemKind>> = {
   shadow: "windCrystal",
 };
 
-const attuned = new Set<Element>();
+/** The lanes THIS character has opened. On PlayerState, not a module Set:
+ *  attunement is progress, and progress belongs to a character. */
+const attuned = { has: (e: Element) => activeState().attuned.has(e),
+                  add: (e: Element) => activeState().attuned.add(e),
+                  clear: () => activeState().attuned.clear(),
+                  get size() { return activeState().attuned.size; },
+                  [Symbol.iterator]: () => activeState().attuned[Symbol.iterator]() };
 
 export function isAttuned(el: Element): boolean {
   return attuned.has(el);
@@ -278,7 +285,13 @@ export function offersFor(el: Element, towerTier: number): readonly Offer[] {
 }
 
 /** Projects finished. Only Life Crystals can land here now. */
-const done = new Set<string>();
+/** Completed research project ids for THIS character. See `attuned` above. */
+const done = { has: (id: string) => activeState().research.has(id),
+               add: (id: string) => activeState().research.add(id),
+               delete: (id: string) => activeState().research.delete(id),
+               clear: () => activeState().research.clear(),
+               get size() { return activeState().research.size; },
+               [Symbol.iterator]: () => activeState().research[Symbol.iterator]() };
 
 export function isResearched(id: string): boolean {
   if (done.has(id)) return true;

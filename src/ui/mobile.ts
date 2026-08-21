@@ -84,10 +84,25 @@ export interface MobileLayout {
    * up here and lets the deck shrink to the six slots alone.
    */
   menu: Rect;
-  /** HUD-edit toggle. Rare, so it lives up top rather than in the thumb zone. */
+  /**
+   * HUD-edit toggle. It USED to sit on the utility row and no longer does.
+   *
+   * You bind a slot once and then never again; you toggle pursuit in the
+   * middle of a fight. When the combat controls arrived there was one row
+   * between them, and the rare thing gives way to the mid-fight one — so edit
+   * moved into the drop-down beside the panel tabs, which is where the other
+   * once-a-session controls already live.
+   */
   edit: Rect;
   /** Weapon swap — bindable to a slot as well, which is why it may sit here. */
   swap: Rect;
+  /**
+   * Chase opponent / stand while fighting. A STATE, so it stays lit while on:
+   * "am I following?" has to be answerable without pressing anything.
+   */
+  chase: Rect;
+  /** Mark the nearest creature — Tibia's crossed swords. */
+  atk: Rect;
   /** Minimap, square, at the right end of the utility row. */
   minimap: Rect;
   /**
@@ -142,7 +157,7 @@ export function noDeck(screenH = 0): MobileLayout {
   return {
     on: false, landscape: false, u: 0, gap: 0, margin: 0,
     topH: 0, info: z, vitals: z, purse: z,
-    menu: z, edit: z, swap: z, minimap: z, tabs: [],
+    menu: z, edit: z, swap: z, chase: z, atk: z, minimap: z, tabs: [],
     deckY: screenH, deckH: 0, slots: [],
     mapTop: 0, mapBottom: screenH, mapLeft: 0, mapRight: 0, sheet: z,
   };
@@ -193,20 +208,29 @@ export function mobileLayout(
    * three leave, which is most of it — you aim at it in a hurry, and the desktop
    * column draws it as one wide bar under its buttons for the same reason. */
   const menu: Rect = { x: innerX, y, w: tabH, h: tabH };
-  const editW = Math.round(u * 1.5);
-  const edit: Rect = { x: menu.x + menu.w + gap, y, w: editW, h: tabH };
+  /* Chase gets one and a half units because it carries a WORD — CHASE or
+   * STAND — and a square would clip it. The mark button is square because it
+   * carries a glyph, and a square is what a glyph wants. */
+  const chaseW = Math.round(u * 1.5);
+  const chase: Rect = { x: menu.x + menu.w + gap, y, w: chaseW, h: tabH };
+  const atk: Rect = { x: chase.x + chase.w + gap, y, w: tabH, h: tabH };
   const minimap: Rect = { x: innerX + innerW - tabH, y, w: tabH, h: tabH };
-  const swapX = edit.x + edit.w + gap;
+  const swapX = atk.x + atk.w + gap;
   const swap: Rect = { x: swapX, y, w: Math.max(1, minimap.x - gap - swapX), h: tabH };
   y += tabH + m;
   const topH = y;
 
-  /* The drop-down. Below the strip, over the world, drawn only when open. */
-  const tabW = Math.floor((innerW - (DECK_TABS.length - 1) * gap) / DECK_TABS.length);
+  /* The drop-down. Below the strip, over the world, drawn only when open.
+   * Six cells now, not five: the edit toggle joins the panel tabs here having
+   * given up its seat on the utility row. Six across a 360-wide phone is 55
+   * CSS px each, still clear of the finger floor. */
+  const dropCells = DECK_TABS.length + 1;
+  const tabW = Math.floor((innerW - (dropCells - 1) * gap) / dropCells);
   const tabY = topH + gap;
   const tabs: Rect[] = DECK_TABS.map((_, i) => ({
     x: innerX + i * (tabW + gap), y: tabY, w: tabW, h: tabH,
   }));
+  const edit: Rect = { x: innerX + DECK_TABS.length * (tabW + gap), y: tabY, w: tabW, h: tabH };
 
   /* --- thumb deck: the six slots, and nothing else ------------------------ */
   const slotH = Math.round(u * 1.02);
@@ -235,7 +259,7 @@ export function mobileLayout(
   return {
     on: true, landscape: false, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, minimap, tabs,
+    menu, edit, swap, chase, atk, minimap, tabs,
     deckY, deckH, slots,
     mapTop, mapBottom, mapLeft: 0, mapRight: screenW, sheet,
   };
@@ -305,11 +329,16 @@ function landscapeLayout(
   let ry = colY;
   const minimap: Rect = { x: rightX, y: ry, w: rightW, h: rightW };
   ry += rightW + gap;
+  /* The three mid-fight controls take the easy middle of the column, in the
+   * order you reach for them: swap the weapon, mark something, decide whether
+   * to follow it. The reveal sits below them because a panel is not a fight. */
   const swap: Rect = { x: rightX, y: ry, w: rightW, h: u };
   ry += u + gap;
-  const menu: Rect = { x: rightX, y: ry, w: rightW, h: u };
+  const atk: Rect = { x: rightX, y: ry, w: rightW, h: u };
   ry += u + gap;
-  const edit: Rect = { x: rightX, y: ry, w: rightW, h: u };
+  const chase: Rect = { x: rightX, y: ry, w: rightW, h: u };
+  ry += u + gap;
+  const menu: Rect = { x: rightX, y: ry, w: rightW, h: u };
 
   /* --- what is left is the world ------------------------------------------ */
   const mapTop = topH;
@@ -320,11 +349,13 @@ function landscapeLayout(
   /* The drop-down still hangs horizontally under the status row: five tabs
    * stacked in the right column would be taller than the column is. */
   const tabsW = Math.max(1, mapRight - mapLeft);
-  const tabW = Math.floor((tabsW - (DECK_TABS.length - 1) * gap) / DECK_TABS.length);
+  const dropCells = DECK_TABS.length + 1; // …plus the edit toggle, as in portrait
+  const tabW = Math.floor((tabsW - (dropCells - 1) * gap) / dropCells);
   const tabY = topH + gap;
   const tabs: Rect[] = DECK_TABS.map((_, i) => ({
     x: mapLeft + i * (tabW + gap), y: tabY, w: tabW, h: u,
   }));
+  const edit: Rect = { x: mapLeft + DECK_TABS.length * (tabW + gap), y: tabY, w: tabW, h: u };
 
   /* A panel takes a LANE of the map rather than a band across it — width is
    * what this orientation has spare, so spending width is what costs least. */
@@ -333,7 +364,7 @@ function landscapeLayout(
   return {
     on: true, landscape: true, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, minimap, tabs,
+    menu, edit, swap, chase, atk, minimap, tabs,
     deckY: screenH, deckH: 0, slots,
     mapTop, mapBottom, mapLeft, mapRight, sheet,
   };

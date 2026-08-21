@@ -12,7 +12,7 @@ import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, r
 import type { TaskReward } from "../systems/tasks.ts";
 import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed, walletAcross } from "../items.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
-import { quests } from "../systems/quests.ts";
+import { questList } from "../systems/quests.ts";
 import { SHOPS } from "../entities/npcs.ts";
 import { OUTFIT_COLORS, HUE_STEPS, SAT_ROWS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
 import { heroPreviewFrame } from "../gfx/heroSheet.ts";
@@ -2070,11 +2070,11 @@ function drawQuests(p: PanelInput): void {
   const { ctx, scale: S } = hud;
   const w = 320 * S;
   const rowH = 40 * S;
-  const h = 20 * S + quests.length * rowH + 16 * S;
+  const h = 20 * S + questList().length * rowH + 16 * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "QUEST LOG")) return;
   let ry = y + 18 * S;
-  for (const q of quests) {
+  for (const q of questList()) {
     const need = q.goal.kind === "build" ? 1 : q.goal.need;
     const prog = Math.min(q.progress, need);
     const color = q.claimed ? "#7a8a7c" : q.done ? "#9fe8a8" : "#f3eedd";

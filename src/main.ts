@@ -35,7 +35,9 @@ import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
-import { quests, claimQuest, syncCollectQuests } from "./systems/quests.ts";
+import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
+import { chasing, toggleChase } from "./systems/playerState.ts";
+import { TARGET_SEEK_PX } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
 import { addItem, addStack, removeItem, removeItemUnpacked, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
@@ -57,7 +59,7 @@ import {
 } from "./ui/dock.ts";
 import { drawPanels, isDocked, visibleRows, stripCandidate, STRIP_KINDS, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import { Tile } from "./world/types.ts";
-import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
+import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
 import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays } from "./systems/containers.ts";
 import type { ContainerRef } from "./systems/containers.ts";
@@ -664,7 +666,7 @@ const act: PanelActions = {
   buy: (kind: ItemKind) => { doBuy(kind); },
   sell: (kind: ItemKind) => { doSell(kind); },
   claim: (id: string) => {
-    const q = quests.find((x) => x.id === id);
+    const q = questList().find((x) => x.id === id);
     if (!q) return;
     const r = q.reward;
     if (r.item && !canCarry(P, r.item, r.itemN ?? 1)) { flash("too heavy"); return; }
@@ -1893,6 +1895,11 @@ initInput(screen, {
     const s = cycleStance();
     flash(STANCE_LABEL[s], STANCE_COLOR[s]);
   },
+  onChase: () => {
+    const on = toggleChase();
+    flash(on ? "chase opponent" : "stand while fighting", on ? "#e1483b" : "#5aa1e8");
+  },
+  onAttackNearest: attackNearest,
   onEscape: () => {
     if (throwPending) { throwPending = null; flash("throw cancelled", "#8ab6ff"); return; }
     if (aimPending) { aimPending = null; flash("cast cancelled", "#8ab6ff"); return; }
@@ -2732,7 +2739,15 @@ function update(dt: number): void {
       else if (!moved && atCenter(P)) P.dest = null;
     }
   } else if (P.target && !kiting) {
-    // melee / walk-up targets: approach along the grid, then act
+    // melee / walk-up targets: approach along the grid, then act.
+    //
+    // STAND WHILE FIGHTING (chase off) applies to CREATURES only. Walking up
+    // to a chest, a corpse or an NPC is not a chase — it is the only way to
+    // reach them, and a player who turned off pursuit did not mean "never
+    // walk to a body again". Tibia draws the line in the same place: the
+    // toggle is labelled for opponents.
+    const chaseBlocked = !chasing()
+      && (P.target.kind === "mob" || P.target.kind === "dummy");
     const tp = targetPoint();
     if (tp) {
       // Anything that OPENS A PANEL is measured with the very rule the panel
@@ -2745,7 +2760,10 @@ function update(dt: number): void {
         : t.kind === "structure" ? structInReach(t.s)
         : dist(P.x, P.y, tp.x, tp.y) <= (t.kind === "dummy" || t.kind === "mob" ? mode.reach : MELEE_REACH_PX);
       if (inReach) resolveTarget();
-      else {
+      else if (chaseBlocked) {
+        // standing our ground: keep the mark, take no step. tickMeleeFire
+        // below still swings the moment the creature walks into reach.
+      } else {
         const moved = walkGrid(world, toTile(tp.x), toTile(tp.y), budget);
         // the route ran out without arriving (walled-in chest, corpse across
         // water): let go rather than shuffle against the obstacle forever
@@ -2762,7 +2780,9 @@ function update(dt: number): void {
     if (tp) {
       const d = dist(P.x, P.y, tp.x, tp.y);
       const blocked = P.target?.kind === "mob" && !lineOfSight(world, P.x, P.y, tp.x, tp.y);
-      if (d > mode.reach || blocked) walkGrid(world, toTile(tp.x), toTile(tp.y), budget);
+      // Standing archer: hold the spot and let the shot lapse rather than
+      // walking into the pack. This is the case the switch was asked for.
+      if (chasing() && (d > mode.reach || blocked)) walkGrid(world, toTile(tp.x), toTile(tp.y), budget);
     }
   } else if (P.gather) {
     const gp = gatherPoint();
@@ -2891,6 +2911,45 @@ function update(dt: number): void {
   if (saveTimer > 5) { saveTimer = 0; saveGame(game); }
 }
 
+/**
+ * Mark the nearest creature — or let the current mark go.
+ *
+ * Chase is half a feature without something to chase. Until now the only way
+ * to pick a fight was to tap the creature itself, which is fine alone on a
+ * beach and hopeless in a corridor with four skeletons and (soon) three other
+ * players standing on each other. This is Tibia's crossed-swords button.
+ *
+ * Nearest by WALKING distance would be the honest measure, but a BFS per
+ * keypress across a 105x100 floor to answer "which one is closest" is a lot
+ * of work for a question the player is asking about what they can see. Line
+ * of sight plus straight-line distance gets the same answer everywhere it
+ * matters and cannot pick something through a wall.
+ */
+function attackNearest(): void {
+  // pressing it again with a mark in hand releases it — one key, both ways
+  if (P.target?.kind === "mob") {
+    P.target = null;
+    flash("target released", "#8ab6ff");
+    return;
+  }
+  const world = cw();
+  let best: Monster | null = null;
+  let bestD = Infinity;
+  for (const m of world.monsters) {
+    if (m.hp <= 0) continue;
+    const d = dist(P.x, P.y, m.x, m.y);
+    if (d >= bestD || d > TARGET_SEEK_PX) continue;
+    if (!lineOfSight(world, P.x, P.y, m.x, m.y)) continue;
+    best = m;
+    bestD = d;
+  }
+  if (!best) { flash("nothing in sight", "#e0a06a"); return; }
+  P.target = { kind: "mob", m: best };
+  P.dest = null;
+  P.gather = null;
+  pendingLoot = null;
+}
+
 function resolveTarget(): void {
   const t = P.target;
   if (!t) return;
@@ -3010,6 +3069,67 @@ function drawSprite(spr: HTMLCanvasElement, x: number, y: number, face = 1, bobY
     vctx.drawImage(spr, dx, dy);
   }
   vctx.restore();
+}
+
+/**
+ * The attack mark: four corner brackets around the creature's TILE.
+ *
+ * Tibia's own answer, and it is the right one for a touch screen. A full
+ * outline reads as a selection box and hides the sprite's silhouette; corners
+ * leave the body clear while still being unmistakable in a pack. Drawn on the
+ * tile rather than the sprite so a dragon and a beggar are marked identically
+ * — with a crowd of players on one screen, "which one am I hitting" has to be
+ * answerable at a glance and at any body size.
+ *
+ * Two passes, black under red, so the mark survives on light sand and in a
+ * dark cavern without a drop shadow.
+ */
+/**
+ * Crossed swords, drawn rather than baked.
+ *
+ * The five sidebar icons are 16x16 PNGs on a fixed grid, and this button is
+ * not on that grid — it is sized from the phone's touch unit, which lands
+ * anywhere between 40 and 120 device pixels. Scaling a 16px sprite to 53 is
+ * the mush the icon loader exists to avoid, so the glyph is two rotated
+ * rectangles per blade instead: crisp at any size, and it costs no asset.
+ */
+function crossedSwords(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  const t = Math.max(2, Math.round(r * 0.22));   // blade thickness
+  const grip = Math.round(r * 0.5);              // how far the hilt runs back
+  for (const dir of [-1, 1] as const) {
+    ctx.save();
+    ctx.rotate((dir * Math.PI) / 4);
+    ctx.fillStyle = color;
+    ctx.fillRect(-Math.round(t / 2), -r, t, r + grip);          // blade + tang
+    ctx.fillRect(-Math.round(r * 0.34), grip - t, Math.round(r * 0.68), t); // crossguard
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function targetBox(x: number, y: number): void {
+  const left = Math.round(x - cam.x - TILE / 2);
+  const top = Math.round(y - cam.y - TILE / 2);
+  const arm = Math.round(TILE * 0.3); // how far each bracket runs along the edge
+
+  /** Eight rectangles: a horizontal and a vertical stub at each corner. */
+  const brackets = (pad: number, t: number, color: string): void => {
+    vctx.fillStyle = color;
+    const l = left - pad;
+    const tp = top - pad;
+    const r = left + TILE + pad - t;
+    const b = top + TILE + pad - t;
+    const len = arm + pad;
+    vctx.fillRect(l, tp, len, t); vctx.fillRect(l, tp, t, len); // top-left
+    vctx.fillRect(r - len + t, tp, len, t); vctx.fillRect(r, tp, t, len); // top-right
+    vctx.fillRect(l, b, len, t); vctx.fillRect(l, b - len + t, t, len); // bottom-left
+    vctx.fillRect(r - len + t, b, len, t); vctx.fillRect(r, b - len + t, t, len); // bottom-right
+  };
+
+  brackets(1, 4, "#000");       // outline, so the mark reads on sand and in the dark
+  brackets(0, 2, "#e1483b");    // the mark itself
 }
 
 function hpBar(x: number, y: number, frac: number, w = 28): void {
@@ -3429,6 +3549,7 @@ function render(): void {
       drawSprite(spr, m.x, m.y, 1, bob);
       vctx.globalAlpha = 1;
       hpBar(m.x, m.y - spr.height - 8, m.hp / m.maxhp);
+      if (P.target?.kind === "mob" && P.target.m === m) targetBox(m.x, m.y);
     } });
   }
   // player — hand-drawn LPC art when the sheet is up, the baked outfit until then
@@ -3794,18 +3915,41 @@ function drawDockControls(d: DockLayout, top: number): void {
    * not fit in sixteen units at any font. They live on a bar across the foot of
    * the map now, where there is room for them to be the size of an item. */
 
-  // Row 2: quick weapon swap — a combat control, which is where Tibia keeps it.
+  /* Row 2: the two combat controls, side by side — quick weapon swap and
+   * chase/stand. Tibia keeps its fight toggles together in the console for the
+   * same reason: they are pressed mid-fight, so the thumb should find them as
+   * one place rather than hunt two.
+   *
+   * They SHARE a row rather than each taking one. A second full-width bar
+   * would push the containers below it down by another 22 units, and the
+   * column's whole argument is that it leaves the map alone. */
   const wy = top + bh + gap;
   const wh = Math.round(SWAP_H * S);
+  const halfW = Math.round((d.innerW - gap) / 2);
   const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
-  buttonBox(sctx, d.innerX, wy, d.innerW, wh, S, {});
   sctx.textAlign = "center";
   sctx.textBaseline = "middle";
+  sctx.font = `bold ${Math.round(wh * 0.42)}px 'Courier New',monospace`;
+
+  buttonBox(sctx, d.innerX, wy, halfW, wh, S, {});
   sctx.fillStyle = "#e9e2c8";
-  sctx.font = `bold ${Math.round(wh * 0.45)}px 'Courier New',monospace`;
-  sctx.fillText(bowOn ? "\u2192MELEE" : "\u2192BOW", d.innerX + d.innerW / 2, wy + wh / 2);
-  hotspots.push({ x: d.innerX, y: wy, w: d.innerW, h: wh, fn: () => swapWeapon() });
-  touchButtons.push({ x: d.innerX, y: wy, w: d.innerW, h: wh });
+  sctx.fillText(bowOn ? "\u2192MELEE" : "\u2192BOW", d.innerX + halfW / 2, wy + wh / 2);
+  hotspots.push({ x: d.innerX, y: wy, w: halfW, h: wh, fn: () => swapWeapon() });
+  touchButtons.push({ x: d.innerX, y: wy, w: halfW, h: wh });
+
+  /* Chase is a STATE, not an action, so unlike the swap it stays lit while
+   * on — the player has to be able to answer "am I following?" without
+   * pressing anything. Red for chase, blue for stand, matching the stance
+   * chip's language where red is committed and blue is careful. */
+  const cx = d.innerX + halfW + gap;
+  const chase = chasing();
+  buttonBox(sctx, cx, wy, halfW, wh, S, {
+    on: chase, face: chase ? "rgba(150,58,48,.92)" : undefined,
+  });
+  sctx.fillStyle = chase ? "#ffb3a8" : "#8ab6ff";
+  sctx.fillText(chase ? "CHASE" : "STAND", cx + halfW / 2, wy + wh / 2);
+  hotspots.push({ x: cx, y: wy, w: halfW, h: wh, fn: () => toggleChase() });
+  touchButtons.push({ x: cx, y: wy, w: halfW, h: wh });
 }
 
 /**
@@ -3989,10 +4133,32 @@ function drawDeck(): void {
   hotspots.push({ ...d.menu, fn: () => { deckMenu = !deckMenu; } });
   touchButtons.push({ x: d.menu.x, y: d.menu.y, w: d.menu.w, h: d.menu.h });
 
-  hudBtn(d.edit.x, d.edit.y, d.edit.w, d.edit.h, editing ? "DONE" : "EDIT", editing, () => {
-    toggleHudLock();
-    flash(hudLocked() ? "slots locked" : "tap a slot to bind it", "#8ab6ff");
+  /* Chase, drawn as a lit STATE rather than a press. Red for pursuit and blue
+   * for holding ground, the same language the stance chip uses: red is
+   * committed, blue is careful. */
+  const onChase = chasing();
+  buttonBox(ctx, d.chase.x, d.chase.y, d.chase.w, d.chase.h, scale, {
+    on: onChase, face: onChase ? "rgba(150,58,48,.92)" : undefined,
   });
+  hudText(h, onChase ? "CHASE" : "STAND", d.chase.x + d.chase.w / 2,
+    d.chase.y + d.chase.h / 2, u * 0.24, onChase ? "#ffb3a8" : "#8ab6ff", "center", true,
+    d.chase.w - u * 0.12);
+  hotspots.push({ ...d.chase, fn: () => { if (!editing) toggleChase(); } });
+  touchButtons.push({ ...d.chase });
+
+  /* Mark the nearest creature. Crossed swords, drawn rather than lettered:
+   * there is no three-letter word for "attack the nearest thing" that reads
+   * at this size, and the glyph is the one every Tibia client already uses.
+   * Lit while a mark is held, so the button also answers "am I fighting?". */
+  const marked = P.target?.kind === "mob";
+  buttonBox(ctx, d.atk.x, d.atk.y, d.atk.w, d.atk.h, scale, {
+    on: marked, face: marked ? "rgba(150,58,48,.92)" : undefined,
+  });
+  crossedSwords(ctx, d.atk.x + d.atk.w / 2, d.atk.y + d.atk.h / 2,
+    Math.round(d.atk.h * 0.42), marked ? "#ffb3a8" : "#e9e2c8");
+  hotspots.push({ ...d.atk, fn: () => { if (!editing) attackNearest(); } });
+  touchButtons.push({ ...d.atk });
+
   const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
   hudBtn(d.swap.x, d.swap.y, d.swap.w, d.swap.h, bowOn ? "\u2192MELEE" : "\u2192BOW", false, () => {
     if (!editing) swapWeapon();
@@ -4020,6 +4186,21 @@ function drawDeck(): void {
       hotspots.push({ x: r.x, y: r.y, w: r.w, h: r.h, fn: () => { togglePanel(kind); deckMenu = false; } });
       touchButtons.push({ ...r });
     });
+    /* …and the edit toggle as the sixth cell. It lost its seat on the utility
+     * row to the combat controls: you bind a slot once, and you toggle pursuit
+     * mid-fight, so the rare control is the one that moves. */
+    const er = d.edit;
+    buttonBox(ctx, er.x, er.y, er.w, er.h, scale, {
+      on: editing, face: editing ? "rgba(202,162,58,.92)" : undefined,
+      accent: editing ? CHROME.goldText : undefined,
+    });
+    hudText(h, editing ? "DONE" : "EDIT", er.x + er.w / 2, er.y + er.h / 2, u * 0.24,
+      editing ? "#201a10" : "rgba(233,226,200,.85)", "center", true, er.w - u * 0.08);
+    hotspots.push({ x: er.x, y: er.y, w: er.w, h: er.h, fn: () => {
+      toggleHudLock();
+      flash(hudLocked() ? "slots locked" : "tap a slot to bind it", "#8ab6ff");
+    } });
+    touchButtons.push({ ...er });
   }
   /* Empty slots are drawn on the deck even out of edit mode, unlike the old
    * floating HUD which hid them. A row with holes in it is a row you have to

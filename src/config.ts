@@ -556,6 +556,17 @@ export const MONSTER_AGGRO_RANGE = 6 * TILE;
 export const MONSTER_AGGRO_HOLD_RANGE = 8 * TILE;
 
 /**
+ * How far "attack nearest" will reach for a creature.
+ *
+ * Eight tiles, matching MONSTER_AGGRO_HOLD_RANGE rather than the tighter
+ * aggro range: the button should be able to mark anything that could already
+ * be coming for you, and one that stops short of that reads as broken. It is
+ * also comfortably inside the game window, so the button never marks
+ * something the player cannot see.
+ */
+export const TARGET_SEEK_PX = 8 * TILE;
+
+/**
  * How far a creature posted by a hand-drawn map may drift from its post while
  * idle. Camp dwellers in the Deep Wildlands have always carried a leash like
  * this; creatures placed by a map glyph did not, and `guard` — the only thing

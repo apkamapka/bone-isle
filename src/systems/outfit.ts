@@ -11,6 +11,7 @@
 import { PLAYER_MAP, bake } from "../gfx/sprites.ts";
 import { ADV_DOWN, ADV_SIDE, ADV_UP } from "../gfx/adventurer.ts";
 import { setHeroDyes, type HeroZone } from "../gfx/heroSheet.ts";
+import { active as activeState } from "./playerState.ts";
 import type { Player } from "../entities/player.ts";
 
 /** The four render facings. `left` is `side` mirrored at draw time, so only
@@ -144,7 +145,24 @@ export interface OutfitSave {
 
 const PALETTE_GEN = 133;
 
-const state: OutfitSave = defaults();
+/** This character's wardrobe. A live view onto PlayerState — see
+ *  playerState.ts for why none of this is a module `let` any more. */
+const state: OutfitSave = Object.freeze({
+  get pal() { return activeState().outfit.pal; },
+  set pal(v: number | undefined) { activeState().outfit.pal = v; },
+  get hair() { return activeState().outfit.hair; },
+  set hair(v: number) { activeState().outfit.hair = v; },
+  get primary() { return activeState().outfit.primary; },
+  set primary(v: number) { activeState().outfit.primary = v; },
+  get secondary() { return activeState().outfit.secondary; },
+  set secondary(v: number) { activeState().outfit.secondary = v; },
+  get shoes() { return activeState().outfit.shoes; },
+  set shoes(v: number) { activeState().outfit.shoes = v; },
+  get current() { return activeState().outfit.current; },
+  set current(v: string) { activeState().outfit.current = v; },
+  get owned() { return activeState().outfit.owned; },
+  set owned(v: string[]) { activeState().outfit.owned = v; },
+}) as OutfitSave;
 
 function defaults(): OutfitSave {
   return { ...DEFAULT_DYES, current: DEFAULT_OUTFIT, owned: [DEFAULT_OUTFIT] };

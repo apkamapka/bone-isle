@@ -9,7 +9,8 @@ function ok(cond: boolean, name: string): void {
 }
 
 async function main(): Promise<void> {
-  const { quests, claimQuest, resetQuests } = await import("../src/systems/quests.ts");
+  const { questList, claimQuest, resetQuests } = await import("../src/systems/quests.ts");
+  const quests = questList();
   const { createPlayer } = await import("../src/entities/player.ts");
   const items = await import("../src/items.ts");
   const tasks = await import("../src/systems/tasks.ts");
@@ -2537,7 +2538,8 @@ async function main(): Promise<void> {
 
     // ---- rewards need a slot for the coin, and say so ----
     {
-      const { quests: qs, claimQuest: claim, resetQuests: reset } = await import("../src/systems/quests.ts");
+      const { questList: qList, claimQuest: claim, resetQuests: reset } = await import("../src/systems/quests.ts");
+      const qs = qList();
       const { createPlayer: mkP } = await import("../src/entities/player.ts");
       reset();
       const q = qs.find((x) => x.reward.gold && !x.reward.item);
@@ -3005,7 +3007,7 @@ async function main(): Promise<void> {
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 8, "saving writes the current v8 format");
+    ok(stored.v === 9, "saving writes the current v9 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
@@ -8659,7 +8661,10 @@ async function main(): Promise<void> {
       "…the deck reaches the bottom edge, leaving no strip of world under it");
 
     // every widget inside its own plate, nothing straddling into the world
-    for (const r of [d.info, d.purse, d.vitals, d.menu, d.edit, d.swap, d.minimap]) {
+    /* `edit` is absent from this list ON PURPOSE (Etap 31): it gave up its
+     * seat on the utility row to the combat controls and now hangs in the
+     * drop-down, which is checked with the tabs below. */
+    for (const r of [d.info, d.purse, d.vitals, d.menu, d.chase, d.atk, d.swap, d.minimap]) {
       ok(r.y >= 0 && r.y + r.h <= d.topH, "a top-strip widget stays inside the top strip");
     }
     for (const r of d.slots) {
@@ -8670,13 +8675,13 @@ async function main(): Promise<void> {
     }
     /* The drop-down is drawn OVER the world, so it costs no permanent height —
      * that saving is the whole reason the tabs went behind a button. */
-    for (const r of d.tabs) {
+    for (const r of [...d.tabs, d.edit]) {
       ok(r.y >= d.topH, "a drop-down tab hangs below the strip rather than inside it");
     }
     ok(d.tabs[d.tabs.length - 1].x + d.tabs[d.tabs.length - 1].w <= W,
       "…and the last one still fits the screen");
-    ok(d.menu.x < d.edit.x && d.edit.x < d.swap.x && d.swap.x < d.minimap.x,
-      "the utility row reads left to right: reveal, edit, swap, map");
+    ok(d.menu.x < d.chase.x && d.chase.x < d.atk.x && d.atk.x < d.swap.x && d.swap.x < d.minimap.x,
+      "the utility row reads left to right: reveal, chase, mark, swap, map");
 
     // the six slots run left to right without overlapping
     for (let i = 1; i < d.slots.length; i++) {
@@ -9057,10 +9062,14 @@ async function main(): Promise<void> {
       for (let i = 1; i < d.slots.length; i++) {
         ok(d.slots[i].y >= d.slots[i - 1].y + d.slots[i - 1].h, `slot ${i + 1} sits below slot ${i}`);
       }
-      for (const r of [d.menu, d.edit, d.swap, d.minimap]) {
+      /* `edit` left this column for the drop-down in Etap 31, for the same
+       * reason it left the portrait strip: a once-a-session control does not
+       * outrank two mid-fight ones. */
+      for (const r of [d.menu, d.swap, d.chase, d.atk, d.minimap]) {
         ok(r.x >= d.mapRight, "a control stays in the right-hand column");
         ok(r.x + r.w <= w * dpr, "…and inside the glass");
       }
+      ok(d.edit.y === d.tabs[0].y, "…and the edit toggle hangs with the tabs instead");
       // status, both bars and the purse all on ONE row — there is width for it
       ok(d.info.y === d.vitals.y && d.vitals.y === d.purse.y, "status, vitals and purse share one row");
       ok(d.info.x + d.info.w <= d.vitals.x && d.vitals.x + d.vitals.w <= d.purse.x,
@@ -9260,6 +9269,184 @@ async function main(): Promise<void> {
       "…and one that does not fit sits still while the viewport moves over it");
     ok(panels.includes("Math.min(SHEET_MAX_GROW, sheet.w / natW)"),
       "…sized by WIDTH alone, so a long list is scrolled rather than shrunk to a ribbon");
+  }
+
+
+  /* ================= Etap 31: PlayerState + the combat toggles =============
+   *
+   * The point of this whole block is ONE property: every per-character piece
+   * of state now hangs off a swappable object, so a process can hold more
+   * than one character. That is not visible in the game and cannot be caught
+   * by playing it — it can only be caught here, which is why these tests
+   * exist before the multiplayer work rather than after it. */
+  {
+    console.log("Etap 31 - PlayerState is per character:");
+    const ps = await import("../src/systems/playerState.ts");
+    const sk = await import("../src/systems/skills.ts");
+    const st = await import("../src/systems/stance.ts");
+    const qu = await import("../src/systems/quests.ts");
+    const tk = await import("../src/systems/tasks.ts");
+    const tw = await import("../src/systems/tower.ts");
+
+    /* --- the swap itself: two characters, no shared reads ----------------- */
+    const alice = ps.resetPlayerState();
+    sk.skills.sword.lv = 42;
+    st.setStance("offensive");
+    qu.questList()[0].progress = 3;
+    ps.setChase(false);
+
+    const bob = ps.newPlayerState();
+    ps.setActive(bob);
+    ok(sk.skills.sword.lv === 10, "a second character reads his OWN sword skill, not the first one's");
+    ok(st.stance() === "balanced", "…his own stance");
+    ok(qu.questList()[0].progress === 0, "…his own quest progress");
+    ok(ps.chasing() === true, "…and his own combat toggles");
+
+    ps.setActive(alice);
+    ok(sk.skills.sword.lv === 42, "switching back restores the first character's skill");
+    ok(st.stance() === "offensive", "…his stance");
+    ok(qu.questList()[0].progress === 3, "…his quest progress");
+    ok(ps.chasing() === false, "…and his toggles");
+
+    /* The skills façade is the risky one: it keeps its old NAME so ~100 call
+     * sites did not change, which is exactly how a stale singleton could hide
+     * in plain sight. Prove the object is a live view and not a snapshot. */
+    ps.setActive(bob);
+    sk.skills.shield.pts = 7;
+    ok(bob.skills.shield.pts === 7, "writing through `skills` writes into the ACTIVE state, not a copy");
+    ok(alice.skills.shield.pts === 0, "…and leaves the other character untouched");
+    ok(Object.isFrozen(sk.skills), "`skills` is frozen, so a stray assignment cannot restore the singleton");
+
+    /* Same question for the two Set-backed ones in the tower. */
+    tw.loadAttunedState(["fire"]);
+    tw.loadResearchState(["r_test_only"]);
+    ok(tw.attunedState().includes("fire"), "attunement lands on the active character");
+    ps.setActive(alice);
+    ok(!tw.attunedState().includes("fire"), "…and is not visible to another one");
+    ok(tw.researchState().length === 0, "research likewise");
+
+    /* …and the board, whose runtime is a getter/setter pair. */
+    ps.setActive(bob);
+    tk.loadTaskState({ activeId: null, kills: 5, earned: 11 });
+    ok(tk.taskState().kills === 5 && tk.taskState().earned === 11, "board progress lands on the active character");
+    ps.setActive(alice);
+    ok(tk.taskState().kills === 0, "…and the other character's board is his own");
+
+    /* A fresh state must be genuinely fresh — a shared default object would
+     * make every new character an alias of the last one. */
+    const c1 = ps.newPlayerState();
+    const c2 = ps.newPlayerState();
+    c1.skills.dist.lv = 55;
+    c1.quests[0].done = true;
+    ok(c2.skills.dist.lv === 10, "newPlayerState deep-copies the skill table rather than sharing it");
+    ok(c2.quests[0].done === false, "…and the quest chain too");
+    ok(c1.research !== c2.research && c1.shieldBlockTimes !== c2.shieldBlockTimes,
+      "…and every collection on it");
+
+    ps.resetPlayerState();
+  }
+
+  {
+    console.log("Etap 31 - combat toggles:");
+    const ps = await import("../src/systems/playerState.ts");
+    ps.resetPlayerState();
+
+    ok(ps.chasing() === true,
+      "chase defaults ON — which is what the game did before the switch existed");
+    ok(ps.safeMode() === false, "secure mode defaults OFF");
+    ok(ps.toggleChase() === false && ps.chasing() === false, "the toggle flips and reports the new setting");
+    ok(ps.toggleChase() === true, "…and back");
+
+    ok(ps.mayAttackPlayer() === true, "with secure mode off, a player may be attacked");
+    ps.setSafeMode(true);
+    ok(ps.mayAttackPlayer() === false, "…and with it on, may not");
+    ok(ps.modes().safeMode === true, "the flag is readable as state, not only through the guard");
+    ps.resetPlayerState();
+
+    /* Wiring. `chasing()` has to gate BOTH walk-up paths — the melee approach
+     * and the archer closing the gap — or "stand" only half works. */
+    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    ok(main.includes('const chaseBlocked = !chasing()'),
+      "the melee approach consults chase before taking a step");
+    ok(main.includes('(P.target.kind === "mob" || P.target.kind === "dummy")'),
+      "…and only for creatures: a corpse or a chest is still walked to");
+    ok(main.includes("if (chasing() && (d > mode.reach || blocked))"),
+      "the archer's gap-closing consults it too");
+    ok(main.indexOf("else if (chaseBlocked) {") < main.indexOf("const moved = walkGrid(world, toTile(tp.x)"),
+      "standing our ground is decided BEFORE the walk, not after it");
+
+    /* Attack-nearest must not reach through walls, and must be releasable. */
+    ok(main.includes("if (!lineOfSight(world, P.x, P.y, m.x, m.y)) continue;"),
+      "attack-nearest will not mark a creature through a wall");
+    ok(main.includes('if (P.target?.kind === "mob") {\n    P.target = null;'),
+      "…and pressing it again releases the mark rather than re-marking");
+    const cfg = (await import("node:fs")).readFileSync("src/config.ts", "utf8");
+    ok(cfg.includes("export const TARGET_SEEK_PX = 8 * TILE;"),
+      "…reaching eight tiles, matching the range a creature can already hold a chase from");
+  }
+
+  {
+    console.log("Etap 31 - the save carries all three toggles:");
+    const save = (await import("node:fs")).readFileSync("src/save.ts", "utf8");
+    ok(save.includes("const SAVE_V = 9;"), "the format is bumped, because `stance` grew into `modes`");
+    ok(save.includes("modes: { stance: stance(), chase: chasing(), safeMode: safeMode() }"),
+      "all three toggles are written");
+    ok(save.includes("const savedStance = data.modes?.stance ?? data.stance;"),
+      "a pre-v9 save keeps the stance its owner left it in");
+    ok(save.includes("setChase(data.modes?.chase ?? true);"),
+      "…and takes chase ON, so loading an old character does not silently change how it fights");
+    ok(save.includes("setSafeMode(data.modes?.safeMode ?? false);"),
+      "…and secure mode off");
+
+    /* createGame must not go back to resetting seven modules by hand: a reset
+     * that is a list is a reset that drifts out of step with the state. */
+    const game = (await import("node:fs")).readFileSync("src/game.ts", "utf8");
+    ok(game.includes("resetPlayerState();"), "a fresh game is one fresh state object");
+    ok(!game.includes("resetSkills()") && !game.includes("resetQuests()") && !game.includes("resetStance()"),
+      "…not seven separate resets that could each be forgotten");
+  }
+
+  {
+    console.log("Etap 31 - the phone deck carries the combat controls:");
+    const mob = await import("../src/ui/mobile.ts");
+    const port = mob.mobileLayout(1080, 2400, 3, 0, 0);
+    const land = mob.mobileLayout(2400, 1080, 3, 0, 0);
+
+    for (const [name, d] of [["portrait", port], ["landscape", land]] as const) {
+      ok(d.chase.w > 0 && d.chase.h > 0, `${name}: chase has a box`);
+      ok(d.atk.w > 0 && d.atk.h > 0, `${name}: the mark button has a box`);
+      const min = mob.TOUCH_MIN_CSS * 3;
+      ok(d.chase.h >= min && d.atk.h >= min && d.atk.w >= min,
+        `${name}: both clear the finger floor`);
+      /* Nothing on the utility row may overlap: an overlapping hotspot is a
+       * button that silently steals another's taps. */
+      const row = [d.menu, d.chase, d.atk, d.swap, d.minimap];
+      let clear = true;
+      for (let i = 0; i < row.length; i++) {
+        for (let j = i + 1; j < row.length; j++) {
+          const a = row[i], b = row[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+        }
+      }
+      ok(clear, `${name}: no two controls overlap`);
+      ok(d.swap.w > 0, `${name}: the swap still gets real width after the two new buttons`);
+    }
+
+    /* EDIT gave up its seat on the utility row and must now sit with the tabs. */
+    ok(port.edit.y === port.tabs[0].y, "portrait: EDIT moved into the drop-down, beside the panel tabs");
+    ok(port.edit.x > port.tabs[port.tabs.length - 1].x, "…as the last cell");
+    ok(port.edit.y > port.topH, "…which means it is no longer on the strip at all");
+    ok(land.edit.y === land.tabs[0].y, "landscape: likewise");
+
+    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    ok(main.includes("hotspots.push({ ...d.chase, fn: () => { if (!editing) toggleChase(); } });"),
+      "the chase box is wired to the toggle");
+    ok(main.includes("hotspots.push({ ...d.atk, fn: () => { if (!editing) attackNearest(); } });"),
+      "…and the mark box to attack-nearest");
+    ok(main.includes('const marked = P.target?.kind === "mob";'),
+      "the mark button lights while a creature is marked, so it also answers \"am I fighting?\"");
+    ok(main.includes('if (P.target?.kind === "mob" && P.target.m === m) targetBox(m.x, m.y);'),
+      "and the marked creature wears corner brackets in the world");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

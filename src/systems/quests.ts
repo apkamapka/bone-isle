@@ -3,6 +3,7 @@ import type { MonsterKind } from "../world/types.ts";
 import type { Player } from "../entities/player.ts";
 import { addItem, bagCount, bagRoomFor, giveGold, walletRoomFor } from "../items.ts";
 import type { ItemKind } from "../items.ts";
+import { active } from "./playerState.ts";
 
 export type QuestGoal =
   | { kind: "kill"; monster: MonsterKind; need: number }
@@ -20,43 +21,18 @@ export interface Quest {
   claimed: boolean;
 }
 
-export const quests: Quest[] = [
-  {
-    id: "q1", title: "Pest Control",
-    desc: "The road to the Wildlands crawls with snakes. Cull 5 of them.",
-    goal: { kind: "kill", monster: "snake", need: 5 },
-    reward: { gold: 20, exp: 30 },
-    progress: 0, done: false, claimed: false,
-  },
-  {
-    id: "q2", title: "Rattle the Bones",
-    desc: "Skeletons haunt the ruins. Bring peace to 6 of them.",
-    goal: { kind: "kill", monster: "skeleton", need: 6 },
-    reward: { item: "shortSword", itemN: 1, exp: 50 },
-    progress: 0, done: false, claimed: false,
-  },
-  {
-    id: "q3", title: "Stock the Forge",
-    desc: "The smith needs raw stone. Gather 20 stone.",
-    goal: { kind: "collect", item: "stone", need: 20 },
-    reward: { gold: 30, exp: 40 },
-    progress: 0, done: false, claimed: false,
-  },
-  {
-    id: "q4", title: "A Roof of Your Own",
-    desc: "Build a Forge on your Home Isle to craft real gear.",
-    goal: { kind: "build", struct: "forge" },
-    reward: { item: "hpPotion", itemN: 3, exp: 60 },
-    progress: 0, done: false, claimed: false,
-  },
-  {
-    id: "q5", title: "Horns of the Deep",
-    desc: "Minotaurs hold the deep caverns. Slay 3 to prove your strength.",
-    goal: { kind: "kill", monster: "minotaur", need: 3 },
-    reward: { item: "amulet", itemN: 1, gold: 100, exp: 200 },
-    progress: 0, done: false, claimed: false,
-  },
-];
+/**
+ * The quest chain of whichever character is active.
+ *
+ * A FUNCTION, not an exported array: the chain is progress, and progress
+ * belongs to a character, so it lives on PlayerState. The pristine copy is
+ * built by `defaultQuests()` in playerState.ts — kept there rather than here
+ * so this module can import `active()` without the two files forming a value
+ * cycle.
+ */
+export function questList(): Quest[] {
+  return active().quests;
+}
 
 export type QuestFx = (text: string) => void;
 
@@ -70,7 +46,7 @@ function bump(q: Quest, fx?: QuestFx): void {
 }
 
 export function onMonsterKilled(kind: MonsterKind, fx?: QuestFx): void {
-  for (const q of quests) {
+  for (const q of questList()) {
     if (!q.done && q.goal.kind === "kill" && q.goal.monster === kind) {
       q.progress++;
       bump(q, fx);
@@ -79,7 +55,7 @@ export function onMonsterKilled(kind: MonsterKind, fx?: QuestFx): void {
 }
 
 export function onItemCollected(item: ItemKind, n: number, fx?: QuestFx): void {
-  for (const q of quests) {
+  for (const q of questList()) {
     if (!q.done && q.goal.kind === "collect" && q.goal.item === item) {
       q.progress += n;
       bump(q, fx);
@@ -88,7 +64,7 @@ export function onItemCollected(item: ItemKind, n: number, fx?: QuestFx): void {
 }
 
 export function onStructureBuilt(struct: string, fx?: QuestFx): void {
-  for (const q of quests) {
+  for (const q of questList()) {
     if (!q.done && q.goal.kind === "build" && q.goal.struct === struct) {
       q.progress = 1;
       bump(q, fx);
@@ -98,7 +74,7 @@ export function onStructureBuilt(struct: string, fx?: QuestFx): void {
 
 /** Sync collect-quests to the current bag total (called after any pickup). */
 export function syncCollectQuests(p: Player, fx?: QuestFx): void {
-  for (const q of quests) {
+  for (const q of questList()) {
     if (!q.done && q.goal.kind === "collect") {
       q.progress = Math.max(q.progress, bagCount(p.bag, q.goal.item));
       bump(q, fx);
@@ -132,7 +108,7 @@ export function claimQuest(p: Player, q: Quest, giveExp?: (n: number) => void, f
 
 /** Reset the whole chain to its pristine state (used when starting a new game). */
 export function resetQuests(): void {
-  for (const q of quests) {
+  for (const q of questList()) {
     q.progress = 0;
     q.done = false;
     q.claimed = false;

@@ -7,6 +7,7 @@
  */
 import { beep } from "../audio.ts";
 import { markBloodHit } from "./skills.ts";
+import { active as activeState } from "./playerState.ts";
 import { ELEMENTS, ELEMENT_COLOR, TIER_CODE, crystalDamage, type Element, type Tier } from "./elements.ts";
 import { MONSTER_DEFS } from "../entities/monsters.ts";
 import { addFloat } from "../fx.ts";
@@ -39,19 +40,19 @@ export function isCrystal(kind: ItemKind): boolean {
  * the main loop. See CRYSTAL_COOLDOWN_S in config.ts for why healing joined
  * it: with no mana in the game, the turn is the only price a heal can pay.
  */
-let offensiveCd = 0;
 export function tickCrystalCooldown(dt: number): void {
-  offensiveCd = Math.max(0, offensiveCd - dt);
+  const st = activeState();
+  st.crystalCd = Math.max(0, st.crystalCd - dt);
 }
 
 /** Seconds left on the shared crystal cooldown. Read by the smoke tests. */
 export function crystalCooldownLeft(): number {
-  return offensiveCd;
+  return activeState().crystalCd;
 }
 
 /** Clear the timer (new game / test isolation). */
 export function resetCrystalCooldown(): void {
-  offensiveCd = 0;
+  activeState().crystalCd = 0;
 }
 
 /**
@@ -288,12 +289,12 @@ export function useCrystal(
     // what is hitting you. The refusal is silent about which crystal blocked
     // it — "not ready" is the same message either way, because to the player
     // there is now only one cooldown to learn.
-    if (offensiveCd > 0) {
+    if (activeState().crystalCd > 0) {
       addFloat(world, p.x, p.y - 44, "not ready", "#8ab6ff");
       return false;
     }
     removeItem(p.bag, kind, 1);
-    offensiveCd = CRYSTAL_COOLDOWN_S;
+    activeState().crystalCd = CRYSTAL_COOLDOWN_S;
     const amount = HEAL_CRYSTAL_BASE + p.level * 3;
     p.hp = Math.min(p.maxhp, p.hp + amount);
     addFloat(world, p.x, p.y - 40, `+${amount}`, "#7dff9e");
@@ -304,7 +305,7 @@ export function useCrystal(
   // ---- the elemental line ----
   const spec = CRYSTAL_SPECS[kind];
   if (spec) {
-    if (offensiveCd > 0) {
+    if (activeState().crystalCd > 0) {
       addFloat(world, p.x, p.y - 44, "not ready", "#8ab6ff");
       return false;
     }
@@ -331,7 +332,7 @@ export function useCrystal(
       // aiming is the skill, and a wave that refunds itself on a miss is a
       // wave you fire blindly.
       removeItem(p.bag, kind, 1);
-      offensiveCd = CRYSTAL_COOLDOWN_S;
+      activeState().crystalCd = CRYSTAL_COOLDOWN_S;
       paint(world, shape, spec.element, spec.tier, spec.role);
       if (hit.length) markBloodHit();
       for (const m of hit) damageWithElement(world, p, m, spec, col);
@@ -369,7 +370,7 @@ export function useCrystal(
       toY = target.y;
     }
     removeItem(p.bag, kind, 1);
-    offensiveCd = CRYSTAL_COOLDOWN_S;
+    activeState().crystalCd = CRYSTAL_COOLDOWN_S;
     markBloodHit();
     p.face = toX < p.x ? -1 : 1;
 

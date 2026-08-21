@@ -20,6 +20,7 @@ import {
 import type { ItemKind } from "../items.ts";
 import { onMonsterKilled } from "./quests.ts";
 import { onTaskKill } from "./tasks.ts";
+import { active as activeState } from "./playerState.ts";
 import type { Player } from "../entities/player.ts";
 import type { World, Monster, Structure } from "../world/types.ts";
 
@@ -255,13 +256,13 @@ export function applyDeathPenalty(world: World, p: Player): void {
  * Rolling record of when the shield engaged a hit. Only SHIELD_BLOCK_MAX hits
  * per SHIELD_BLOCK_WINDOW_S get shield defense (Tibia's "your shield can only
  * block two creatures"); any further hit inside the window bypasses the shield
- * and is reduced by worn armor alone. Module state — resets naturally as the
- * window slides, and explicitly via resetShieldWindow (tests, respawn).
+ * and is reduced by worn armor alone. Lives on the character's PlayerState —
+ * two characters fighting the same pack must not share one window — and
+ * resets naturally as the window slides, or explicitly via resetShieldWindow
+ * (tests, respawn).
  */
-let shieldBlockTimes: number[] = [];
-
 export function resetShieldWindow(): void {
-  shieldBlockTimes = [];
+  activeState().shieldBlockTimes = [];
 }
 
 /**
@@ -287,15 +288,16 @@ export function hurtPlayer(
 ): boolean {
   if (p.dead) return false;
   const now = performance.now() / 1000;
-  shieldBlockTimes = shieldBlockTimes.filter((t) => now - t < SHIELD_BLOCK_WINDOW_S);
+  const st = activeState();
+  st.shieldBlockTimes = st.shieldBlockTimes.filter((t) => now - t < SHIELD_BLOCK_WINDOW_S);
   // Elemental damage lands whole: no shield, no armor, no block training.
   // This is the mirror of the rule the player already fights under — a
   // crystal goes "straight past its armor", and that bypass is the entire
   // reason to carry one. A dragon's fire had been running the full defence
   // pipeline, which is why a field rolling 14-30 was showing up as -4 and
   // reading as harmless. A shield cannot be raised against a burning floor.
-  const blocked = !elemental && shieldBlockTimes.length < SHIELD_BLOCK_MAX;
-  if (blocked) shieldBlockTimes.push(now);
+  const blocked = !elemental && st.shieldBlockTimes.length < SHIELD_BLOCK_MAX;
+  if (blocked) st.shieldBlockTimes.push(now);
 
   const fromShield = blocked ? rollShieldBlock(p.eq) : 0;
   const afterShield = raw - fromShield;

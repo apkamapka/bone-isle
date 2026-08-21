@@ -34,14 +34,19 @@ export interface InputHandlers {
   onLook: () => void;
   /** Cycle the attack stance (offensive → balanced → defensive). */
   onStance: () => void;
+  /** Toggle chase opponent / stand while fighting. */
+  onChase: () => void;
+  /** Mark the nearest creature, or drop the mark if one is already held. */
+  onAttackNearest: () => void;
   onEscape: () => void;
 }
 
 /**
  * Wire up listeners. Movement keys (WASD/arrows) never double as panel
  * hotkeys — Skills lives on `K`, so holding `S` to walk south never pops
- * the panel. Stance sits on `X`: a combat control wants a key you can reach
- * without letting go of the movement hand.
+ * the panel. The three combat controls sit on `X` (stance), `C` (chase) and
+ * SPACE (attack nearest): a combat control wants a key you can reach without
+ * letting go of the movement hand.
  */
 export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
   addEventListener("keydown", (e) => {
@@ -58,6 +63,10 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     else if (k === "q") h.onPanel("quest");
     else if (k === "l") h.onLook();
     else if (k === "x") h.onStance();
+    // C for chase and SPACE for "attack nearest" — both sit under the hand
+    // that is not walking, because both are pressed mid-fight.
+    else if (k === "c") h.onChase();
+    else if (k === " ") h.onAttackNearest();
     else if (k === "1") h.onSpell(0);
     else if (k === "2") h.onSpell(1);
     else if (k === "3") h.onSpell(2);

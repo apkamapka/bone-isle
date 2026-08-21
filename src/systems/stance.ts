@@ -6,10 +6,14 @@
  * and is where a character starts. The stance is the only combat choice a
  * player makes mid-fight, so it is deliberately one keypress with no cooldown.
  *
- * Module state rather than a Player field: the save layer writes it explicitly
- * (see save.ts) and an older save that lacks it simply keeps the default.
+ * The stance itself lives on the character's PlayerState (with the other two
+ * combat toggles, chase and secure mode) rather than in a module `let`, so a
+ * process can hold more than one character. This file keeps the rules — the
+ * cycle order, the labels, the multipliers — because those are the same for
+ * everyone and belong to the game, not to a character.
  */
 import { STANCE_ATK, STANCE_DEF } from "../config.ts";
+import { active } from "./playerState.ts";
 
 export type Stance = "offensive" | "balanced" | "defensive";
 
@@ -29,33 +33,32 @@ export const STANCE_COLOR: Readonly<Record<Stance, string>> = {
   defensive: "#5aa1e8",
 };
 
-let current: Stance = "balanced";
-
 export function stance(): Stance {
-  return current;
+  return active().modes.stance;
 }
 
 export function setStance(s: Stance): void {
-  current = s;
+  active().modes.stance = s;
 }
 
 /** Advance one step through STANCES and return the new stance. */
 export function cycleStance(): Stance {
-  current = STANCES[(STANCES.indexOf(current) + 1) % STANCES.length];
-  return current;
+  const m = active().modes;
+  m.stance = STANCES[(STANCES.indexOf(m.stance) + 1) % STANCES.length];
+  return m.stance;
 }
 
 /** Back to the starting stance (new game / test isolation). */
 export function resetStance(): void {
-  current = "balanced";
+  active().modes.stance = "balanced";
 }
 
 /** Damage multiplier of the current stance. */
 export function stanceAtk(): number {
-  return STANCE_ATK[current];
+  return STANCE_ATK[stance()];
 }
 
 /** Shield-ceiling multiplier of the current stance. */
 export function stanceDef(): number {
-  return STANCE_DEF[current];
+  return STANCE_DEF[stance()];
 }

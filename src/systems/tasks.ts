@@ -11,6 +11,7 @@
  */
 import { addItem, removeItem, bagCount, bagRoomFor, giveGold, walletRoomFor } from "../items.ts";
 import { canCarry } from "../entities/player.ts";
+import { active as activeState } from "./playerState.ts";
 import type { ItemKind, Bag } from "../items.ts";
 import type { MonsterKind } from "../world/types.ts";
 import type { Player } from "../entities/player.ts";
@@ -107,14 +108,19 @@ export const EXCHANGES: readonly Exchange[] = [
 
 /* ---------------- runtime state (persisted via save.ts) ---------------- */
 
-interface TaskRuntime {
-  activeId: string | null;
-  /** Kill progress for the active kill-task (collect-tasks read the bag). */
-  kills: number;
-  /** Lifetime Task Points earned — used to gate higher-tier tasks. */
-  earned: number;
-}
-const rt: TaskRuntime = { activeId: null, kills: 0, earned: 0 };
+/* The runtime shape is `TaskSave`, declared with the save helpers below —
+   there is exactly one definition now that the state lives on PlayerState:
+   activeId (the task in hand), kills (progress on a kill-task; collect-tasks
+   read the bag instead) and earned (lifetime points, which gate higher tiers). */
+
+/** This character's board progress. Lives on PlayerState, not in a module
+ *  `let`, so a process can run more than one character at a time. */
+const rt = { get activeId() { return activeState().tasks.activeId; },
+             set activeId(v: string | null) { activeState().tasks.activeId = v; },
+             get kills() { return activeState().tasks.kills; },
+             set kills(v: number) { activeState().tasks.kills = v; },
+             get earned() { return activeState().tasks.earned; },
+             set earned(v: number) { activeState().tasks.earned = v; } };
 
 export function taskById(id: string): TaskDef | undefined {
   return TASKS.find((t) => t.id === id);
