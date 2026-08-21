@@ -48,7 +48,7 @@ import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZ
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
-import { deckEnabled, mobileLayout, noDeck, overDeck, mapFocusFrac, mapFocusFracX, sheetSlots, sheetBand, stripRect, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
+import { deckEnabled, mobileLayout, noDeck, overDeck, mapFocusFrac, mapFocusFracX, sheetSlots, sheetBand, stripRect, stripHandle, stripClaim, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
 import { drawControlIcon, ICON_SRC, type ControlIcon } from "./ui/icons.ts";
 import {
   dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
@@ -122,9 +122,24 @@ let deckMenu = false;
  * would leave the player standing off-centre for one tick every time a bag
  * opened or closed.
  */
+/**
+ * Is the side strip slid away?
+ *
+ * Transient, like the drop-down: a pack tucked out of the way for one fight
+ * should not still be tucked away next session, when you have forgotten you
+ * put it there and can only see a tab.
+ */
+let stripAway = false;
+
 function activeStrip(): { x: number; y: number; w: number; h: number } | null {
   if (!deck.on) return null;
-  return stripCandidate(ui.windows) ? stripRect(deck) : null;
+  return stripCandidate(ui.windows) ? stripRect(deck, stripAway ? 1 : 0) : null;
+}
+
+/** Width the strip and its tab are claiming from the map this frame. */
+function stripWidth(): number {
+  const s = activeStrip();
+  return s ? stripClaim(deck, s, screen.width) : 0;
 }
 
 /**
@@ -2996,8 +3011,7 @@ function render(): void {
   /* The strip covers the right edge, so the middle of what you can SEE is left
    * of the middle of the glass. Without this the character stands two tiles off
    * centre and anything walking in from the right is on him before it appears. */
-  const camStrip = activeStrip();
-  cam.x = clamp(P.x - VW * mapFocusFracX(screen.width, camStrip ? camStrip.w : 0), 0, Math.max(0, world.w * TILE - VW));
+  cam.x = clamp(P.x - VW * mapFocusFracX(screen.width, stripWidth()), 0, Math.max(0, world.w * TILE - VW));
   /* The world is still rendered across the whole canvas and the two plates are
    * drawn over its ends, so every screen->world conversion in this file keeps
    * working untouched. What DOES change is where the player is parked: the
@@ -3538,7 +3552,7 @@ function render(): void {
   const sheeted = ui.windows.length - (sideStrip ? 1 : 0);
   drawPanels({
     hud, ui, game, player: P, mouse, act, hotspots, itemSlots, dock, strip: sideStrip,
-    sheets: deck.on ? sheetSlots(deck, sheeted, sideStrip ? sideStrip.w : 0) : null,
+    sheets: deck.on ? sheetSlots(deck, sheeted, stripWidth()) : null,
     sheetBand: deck.on ? sheetBand(deck) : null,
   });
   updateCursor();
@@ -3961,6 +3975,27 @@ function drawDeck(): void {
    * floating HUD which hid them. A row with holes in it is a row you have to
    * look at to count; a full row of six is one your thumb learns the shape of. */
   d.slots.forEach((r, i) => drawActionSlot(i, r.x, r.y, r.w, r.h));
+
+  /* --- the strip's tab, drawn last so it rides over the panel it controls --- */
+  const side = activeStrip();
+  if (side) {
+    const gr = stripHandle(d, side);
+    buttonBox(ctx, gr.x, gr.y, gr.w, gr.h, scale, { face: "rgba(28,22,12,.96)", accent: CHROME.gold });
+    ctx.fillStyle = "#e8c06a";
+    const dot = Math.max(1, Math.round(u * 0.045));
+    for (let i = -1; i <= 1; i++) {
+      ctx.fillRect(Math.round(gr.x + gr.w / 2 - dot / 2),
+        Math.round(gr.y + gr.h / 2 + i * dot * 3), dot, dot);
+    }
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ffe9a8";
+    ctx.font = `bold ${Math.round(u * 0.3)}px 'Courier New',monospace`;
+    ctx.fillText(stripAway ? "\u25c0" : "\u25b6", gr.x + gr.w / 2, gr.y + gr.h * (stripAway ? 0.2 : 0.2));
+    ctx.fillText(stripAway ? "\u25c0" : "\u25b6", gr.x + gr.w / 2, gr.y + gr.h * 0.8);
+    hotspots.push({ ...gr, fn: () => { stripAway = !stripAway; } });
+    touchButtons.push({ x: gr.x, y: gr.y, w: gr.w, h: gr.h });
+  }
 
   if (editing) {
     hudText(h, "tap a slot to bind \u00b7 EDIT again when done",
