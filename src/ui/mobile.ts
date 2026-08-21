@@ -264,14 +264,35 @@ export function sheetSlots(d: MobileLayout, count: number, stripW = 0): Rect[] {
  * It is also not permanent: no container open, no strip, and the map is whole
  * again. That is what makes the trade cheap enough to take.
  */
-export function stripRect(d: MobileLayout): Rect {
+export function stripRect(d: MobileLayout, hidden = 0): Rect {
   const w = Math.round(d.u * 1.6);
   /* Hard against the glass, not inset by the sheet's margin. The margin left a
    * finger-wide ribbon of world down the outside of the strip: too narrow to
    * see anything in, wide enough to make the strip look as though it had come
    * loose of the edge. */
   const right = d.sheet.x + d.sheet.w + d.margin;
-  return { x: Math.max(0, right - w), y: d.mapTop, w, h: d.mapBottom - d.mapTop };
+  /* `hidden` slides it off to the right. Nothing about a pack you are carrying
+   * says it has to be on screen while you fight, and shoving it away has to be
+   * cheaper than closing it — closing loses your place in a sixteen-slot list. */
+  const off = Math.round(w * Math.max(0, Math.min(1, hidden)));
+  return { x: right - w + off, y: d.mapTop, w, h: d.mapBottom - d.mapTop };
+}
+
+/** The tab you grab to slide the strip away, and to bring it back. */
+export function stripHandle(d: MobileLayout, s: Rect): Rect {
+  const w = Math.max(2, Math.round(d.u * 0.4));
+  const h = Math.round(d.u * 1.8);
+  return { x: s.x - w, y: Math.round(s.y + (s.h - h) / 2), w, h };
+}
+
+/**
+ * How much width the strip actually claims right now, tab included.
+ *
+ * The camera and the sheets both need this rather than the strip's own width:
+ * once it is slid away there is nothing to steer around but the tab.
+ */
+export function stripClaim(d: MobileLayout, s: Rect, screenW: number): number {
+  return Math.max(0, screenW - stripHandle(d, s).x);
 }
 
 /**

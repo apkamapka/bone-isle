@@ -122,12 +122,12 @@ export function visibleRows(kind: PanelKind, totalRows: number): number {
 export const SCROLLBAR_W = 9;
 
 /**
- * Rows for a corpse, or a pile on the ground.
+ * Rows for any container drawn on a phone sheet — a corpse, a pile on the
+ * ground, or the second pack.
  *
- * A corpse holds sixteen slots whatever happened to fall into it, so showing
- * them all made a window four rows tall to display two items — on a phone that
- * is most of the screen spent on empty frame, parked on top of the fight you
- * are still in.
+ * A container shows sixteen slots whatever happens to be in it, so one coin
+ * cost four rows of empty frame: on a phone that is nearly half the screen,
+ * parked on top of the fight you are still in.
  *
  * So it is sized to the loot instead: one row for a light corpse, two for a
  * heavy one. The cut is at four because four IS one row, and the moment a fifth
@@ -136,7 +136,7 @@ export const SCROLLBAR_W = 9;
  * Phone only, and only until the player says otherwise — the -/+ buttons still
  * win, and the desktop keeps the behaviour it had.
  */
-function lootRows(
+export function lootRows(
   p: PanelInput, slots: readonly unknown[], allRows: number, cell: number, gap: number,
 ): number {
   if (p.strip) return stripRows(p, allRows, cell, gap, 50 * p.hud.scale);
@@ -351,6 +351,22 @@ function anchor(p: PanelInput, w: number, h: number): { x: number; y: number } {
    * panel's own footer — close button, scroll arrows, slot counter — then sits
    * next to the deck within the thumb's reach, while the part that scrolls off
    * the top is the part you only read. */
+  /* The strip is docked, so it takes no offset at all.
+   *
+   * This is what pushed it back off the edge: a bag window carries a desktop
+   * starting offset of -120 design units, meant to keep a fresh window clear of
+   * the others, and the sheet branch below was dutifully adding it. On a phone
+   * that is most of a thumb's width of map covered for no reason. Right-aligned
+   * rather than centred, so the panel hugs the glass even when it comes out
+   * narrower than the lane it was given. */
+  if (p.strip) {
+    const s = p.strip;
+    const over = Math.max(0, h - s.h);
+    const sc = Math.max(0, Math.min(over, p.win.sheetScroll ?? 0));
+    p.win.sheetScroll = sc;
+    p.win.sheetY = undefined;
+    return { x: Math.round(s.x + s.w - w), y: Math.round(s.y - sc) };
+  }
   if (p.sheet) {
     const s = p.sheet;
     const band = p.sheetBand ?? { top: s.y, bottom: s.y + s.h };
@@ -1379,9 +1395,9 @@ function drawBag(p: PanelInput): void {
 
   const cols = p.strip ? 1 : 4;
   const allRows = Math.ceil(slots.length / cols);
-  const rows = stripRows(p, allRows, 30 * S, 4 * S, 50 * S);
   const cell = 32 * S;
   const gap = 4 * S;
+  const rows = lootRows(p, slots, allRows, cell, gap);
   const gridW = cols * cell + (cols - 1) * gap;
   const w = dockedW(p, gridW + 24 * S);
   const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S + RESIZE_BAR * S;
@@ -1923,9 +1939,9 @@ function drawContainerWin(p: PanelInput): void {
 
   const cols = p.strip ? 1 : 4;
   const allRows = Math.ceil(slots.length / cols);
-  const rows = stripRows(p, allRows, 30 * S, 4 * S, 50 * S);
   const cell = 32 * S;
   const gap = 4 * S;
+  const rows = lootRows(p, slots, allRows, cell, gap);
   const gridW = cols * cell + (cols - 1) * gap;
   const w = dockedW(p, gridW + 24 * S);
   const h = 20 * S + rows * cell + (rows - 1) * gap + 16 * S + RESIZE_BAR * S;
