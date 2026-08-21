@@ -378,6 +378,7 @@ function anchor(p: PanelInput, w: number, h: number): { x: number; y: number } {
     const x = Math.round(Math.max(0, Math.min(Math.max(0, screenW - w), cx)));
 
     const over = Math.max(0, h - s.h);
+    p.win.sheetOver = over;
     if (over > 0) {
       /* Taller than the band: the window sits still and the VIEWPORT moves over
        * it. Bottom-pinning a scrolling panel would mean its top drifted every
@@ -389,6 +390,7 @@ function anchor(p: PanelInput, w: number, h: number): { x: number; y: number } {
     }
     p.win.sheetScroll = 0;
     const want = s.y + s.h - h + p.win.offset.y;
+    /* falls through to the movable case below */
     const y = Math.round(Math.max(band.top, Math.min(Math.max(band.top, band.bottom - h), want)));
     /* Hold still through a pixel or two of self-inflicted movement. */
     const held = p.win.sheetY;
@@ -486,6 +488,17 @@ export interface PanelWindow {
    * here, where every panel passes through, rather than in each of them.
    */
   sheetScroll?: number;
+  /**
+   * How far this window overflows its sheet, in screen px; 0 when it fits.
+   *
+   * Published so the pointer handler can tell the two kinds of window apart.
+   * A window that fits MOVES when you drag it; one that overflows is already
+   * filling the band and clipped to it, so moving it and scrolling it are the
+   * same gesture — and reading this is how the drag knows which one it is
+   * doing. Before it existed, half the windows on the phone simply ignored
+   * being dragged, which is the sort of thing that reads as a broken app.
+   */
+  sheetOver?: number;
   /**
    * How far this window can be scrolled, in rows. Zero means it cannot.
    *
@@ -988,7 +1001,10 @@ export function drawPanels(
         ...base.hotspots.slice(hsFrom).filter(inside));
       base.itemSlots.splice(isFrom, base.itemSlots.length - isFrom,
         ...base.itemSlots.slice(isFrom).filter(inside));
-      sheetScrollBar(p, sheet, win.rect!.h - sheet.h);
+      /* Pinned to the WINDOW's edge rather than the band's. A panel narrower
+       * than its lane left the arrows floating in open world, apparently
+       * controlling nothing. */
+      sheetScrollBar(p, { ...sheet, x: win.rect!.x, w: win.rect!.w }, win.rect!.h - sheet.h);
     }
     // Auto-fit: if the window (at fit=1) wouldn't fit on screen, compute the
     // exact factor that makes it fit. Corrects on the next frame (invisible
