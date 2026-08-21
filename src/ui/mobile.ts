@@ -232,9 +232,12 @@ export function mobileLayout(
  * pixels, which is one row of items and a title bar, and would leave no world
  * on screen at all.
  */
-export function sheetSlots(d: MobileLayout, count: number): Rect[] {
+export function sheetSlots(d: MobileLayout, count: number, stripW = 0): Rect[] {
   if (!d.on || count <= 0) return [];
-  if (count === 1) return [d.sheet];
+  /* A sheet never runs under the strip: two panels fighting for the same
+   * pixels is how you end up unable to see which one you are dragging into. */
+  const narrow = (r: Rect): Rect => (stripW > 0 ? { ...r, w: Math.max(1, r.w - stripW) } : r);
+  if (count === 1) return [narrow(d.sheet)];
   const mapH = Math.max(1, d.mapBottom - d.mapTop);
   /* The band grows when a second panel arrives. Splitting the one-panel band
    * would leave each half too short for a row of items plus its chrome, which
@@ -244,9 +247,39 @@ export function sheetSlots(d: MobileLayout, count: number): Rect[] {
   const gap = d.gap * 2;
   const each = Math.floor((bandH - gap) / 2);
   return [
-    { x: d.sheet.x, y: top, w: d.sheet.w, h: each },
-    { x: d.sheet.x, y: top + each + gap, w: d.sheet.w, h: each },
+    narrow({ x: d.sheet.x, y: top, w: d.sheet.w, h: each }),
+    narrow({ x: d.sheet.x, y: top + each + gap, w: d.sheet.w, h: each }),
   ];
+}
+
+/**
+ * The container strip: one column of slots down the right edge of the world.
+ *
+ * This is Radek's shape, and it beats a sheet on the only measurement that
+ * matters — how much world you can still see while a bag is open. A sheet costs
+ * about twelve tiles of HEIGHT out of twenty-two; the strip costs about two
+ * tiles of WIDTH out of thirteen. Roughly twice the world, for the container
+ * you keep open all the time.
+ *
+ * It is also not permanent: no container open, no strip, and the map is whole
+ * again. That is what makes the trade cheap enough to take.
+ */
+export function stripRect(d: MobileLayout): Rect {
+  const w = Math.round(d.u * 1.6);
+  return { x: d.mapBottom > d.mapTop ? d.sheet.x + d.sheet.w - w : 0, y: d.mapTop, w, h: d.mapBottom - d.mapTop };
+}
+
+/**
+ * Where the player sits ACROSS the screen, as a fraction of canvas width.
+ *
+ * The strip covers the right edge, so the middle of what you can actually see
+ * is left of the middle of the glass. Without this the character stands two
+ * tiles off-centre and everything that walks in from the right is already on
+ * top of him before it appears.
+ */
+export function mapFocusFracX(screenW: number, stripW: number): number {
+  if (screenW <= 0) return 0.5;
+  return (screenW - stripW) / 2 / screenW;
 }
 
 /** How far a sheet may be dragged: it must stay wholly inside the world band. */

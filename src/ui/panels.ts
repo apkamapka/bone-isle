@@ -90,6 +90,21 @@ export function visibleRows(kind: PanelKind, totalRows: number): number {
 export const SCROLLBAR_W = 9;
 
 /**
+ * How many rows a container shows.
+ *
+ * In the strip it is however many the strip is tall enough to hold, because the
+ * strip's height is fixed and any leftover would just be empty frame. Anywhere
+ * else it is the player's saved preference, exactly as before.
+ */
+export function stripRows(
+  p: PanelInput, allRows: number, cell: number, gap: number, chrome: number,
+): number {
+  if (!p.strip) return visibleRows(p.win.kind, allRows);
+  const room = Math.floor((p.strip.h - chrome + gap) / (cell + gap));
+  return Math.max(1, Math.min(allRows, room));
+}
+
+/**
  * The first visible row, clamped to what there is to show.
  *
  * Called every frame rather than trusted, because the container behind the
@@ -368,6 +383,12 @@ export interface PanelWindow {
   /** Auto-fit factor (≤1) applied to this window so it never spills off-screen. */
   fit?: number;
   /**
+   * Torn out of the phone's side strip by dragging it, and living as an
+   * ordinary sheet from now on. Without this the strip would be the one window
+   * on the phone that refuses to follow your finger.
+   */
+  stripOut?: boolean;
+  /**
    * Last settled top edge as a sheet, in screen px.
    *
    * A sheet is pinned to the BOTTOM of its band, so its top is derived from its
@@ -533,6 +554,15 @@ export interface PanelInput {
   sheet?: Rect | null;
   /** How far up and down a sheet may be dragged; the world band's edges. */
   sheetBand?: { top: number; bottom: number } | null;
+  /**
+   * Set on the ONE container docked to the phone's side strip.
+   *
+   * Its presence changes how a container draws itself: one column instead of
+   * four, and as many rows as the strip is tall rather than as many as the
+   * saved preference asks for. A four-column grid squeezed into a strip would
+   * be four columns of specks; one column of full-size cells is the point.
+   */
+  strip?: Rect | null;
 }
 
 /** A small square title-bar button; returns nothing, pushes its hotspot. */
@@ -797,7 +827,8 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
 }
 
 export function drawPanels(
-  base: Omit<PanelInput, "win" | "dock" | "sheet"> & { dock?: DockLayout; sheets?: Rect[] | null },
+  base: Omit<PanelInput, "win" | "dock" | "sheet" | "strip">
+    & { dock?: DockLayout; sheets?: Rect[] | null; strip?: Rect | null },
 ): void {
   /* An absent dock is a legal state, not an oversight — every headless caller
    * and every narrow screen is in it. Normalising here means no drawing code
@@ -805,12 +836,27 @@ export function drawPanels(
   const dock = base.dock ?? NO_DOCK;
   const sheets = base.sheets ?? null;
   const band = base.sheetBand ?? null;
-  const full: Omit<PanelInput, "win"> = { ...base, dock, sheet: sheets?.[0] ?? null, sheetBand: band };
+  /* One container gets the strip: the first one opened that has not been torn
+   * out of it. Everything else — shops, the paperdoll, a second pack — queues
+   * for the sheets, which have already been narrowed to clear the strip. */
+  const strip = base.strip ?? null;
+  const stripWin = strip
+    ? base.ui.windows.find((w) => w.kind === "container" && !w.stripOut)
+    : undefined;
+  let sheetAt = 0;
+  const full: Omit<PanelInput, "win"> = {
+    ...base, dock, sheet: sheets?.[0] ?? null, sheetBand: band, strip: null,
+  };
   const hud = base.hud;
   const origScale = hud.scale;
   const baseScale = hud.panelScale ?? hud.scale;
-  base.ui.windows.forEach((win, winIndex) => {
-    const sheet = sheets ? sheets[Math.min(winIndex, sheets.length - 1)] : null;
+  base.ui.windows.forEach((win) => {
+    const onStrip = !!strip && win === stripWin;
+    const sheet = onStrip
+      ? strip
+      : sheets && sheets.length
+        ? sheets[Math.min(sheetAt++, sheets.length - 1)]
+        : null;
     /* Draw each window at the panel scale, times the user's per-window zoom,
      * shrunk by its auto-fit factor so it can never spill off-screen.
      *
@@ -824,7 +870,7 @@ export function drawPanels(
      * has one width and a stack that does not line up is worse than none. */
     const docked = isDocked(win, dock) && !sheet;
     hud.scale = docked ? dock.s : baseScale * panelZoom(win.kind) * (win.fit ?? 1);
-    const p: PanelInput = { ...base, win, dock, sheet, sheetBand: band };
+    const p: PanelInput = { ...base, win, dock, sheet, sheetBand: band, strip: onStrip ? strip : null };
     /* Clip a scrolling sheet to its band, and remember where this window's
      * hitboxes start so the ones that end up outside the hole can be dropped.
      * A button you cannot see but can still press is worse than no button. */
@@ -1267,9 +1313,9 @@ function drawBag(p: PanelInput): void {
   const slots = slotsOf(ref, player);
   if (!slots) return;
 
-  const cols = 4;
+  const cols = p.strip ? 1 : 4;
   const allRows = Math.ceil(slots.length / cols);
-  const rows = visibleRows(p.win.kind, allRows);
+  const rows = stripRows(p, allRows, 30 * S, 4 * S, 50 * S);
   const cell = 32 * S;
   const gap = 4 * S;
   const gridW = cols * cell + (cols - 1) * gap;
@@ -1761,11 +1807,11 @@ function drawWorldContainer(
   const slots = slotsOf(ref, p.player);
   if (!slots) return;
 
-  const cols = 4;
+  const cols = p.strip ? 1 : 4;
   const allRows = Math.ceil(slots.length / cols);
-  const rows = visibleRows(p.win.kind, allRows);
   const cell = 30 * S;
   const gap = 4 * S;
+  const rows = stripRows(p, allRows, cell, gap, 50 * S);
   const gridW = cols * cell + (cols - 1) * gap;
   const w = dockedW(p, gridW + 24 * S);
   const h = 20 * S + rows * cell + (rows - 1) * gap + 30 * S + RESIZE_BAR * S;
@@ -1811,9 +1857,9 @@ function drawContainerWin(p: PanelInput): void {
   const slots = slotsOf(ref, player);
   if (!slots) return;
 
-  const cols = 4;
+  const cols = p.strip ? 1 : 4;
   const allRows = Math.ceil(slots.length / cols);
-  const rows = visibleRows(p.win.kind, allRows);
+  const rows = stripRows(p, allRows, 30 * S, 4 * S, 50 * S);
   const cell = 32 * S;
   const gap = 4 * S;
   const gridW = cols * cell + (cols - 1) * gap;
