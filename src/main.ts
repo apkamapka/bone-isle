@@ -3027,7 +3027,7 @@ function render(): void {
   /* The strip covers the right edge, so the middle of what you can SEE is left
    * of the middle of the glass. Without this the character stands two tiles off
    * centre and anything walking in from the right is on him before it appears. */
-  cam.x = clamp(P.x - VW * mapFocusFracX(screen.width, stripWidth()), 0, Math.max(0, world.w * TILE - VW));
+  cam.x = clamp(P.x - VW * mapFocusFracX(deck, screen.width, stripWidth()), 0, Math.max(0, world.w * TILE - VW));
   /* The world is still rendered across the whole canvas and the two plates are
    * drawn over its ends, so every screen->world conversion in this file keeps
    * working untouched. What DOES change is where the player is parked: the
@@ -3893,10 +3893,22 @@ function drawDeck(): void {
   // --- plates. Opaque, because a translucent one still reads as world -------
   ctx.fillStyle = "rgba(10,8,5,.96)";
   ctx.fillRect(0, 0, screen.width, d.topH);
-  ctx.fillRect(0, d.deckY, screen.width, screen.height - d.deckY);
-  ctx.fillStyle = "rgba(202,162,58,.32)";
-  ctx.fillRect(0, d.topH - hair, screen.width, hair);
-  ctx.fillRect(0, d.deckY, screen.width, hair);
+  const edge = "rgba(202,162,58,.32)";
+  if (d.landscape) {
+    /* Sideways the chrome runs down the sides, so the map keeps the full height
+     * it has — the axis this orientation is short of. */
+    ctx.fillRect(0, d.topH, d.mapLeft, screen.height - d.topH);
+    ctx.fillRect(d.mapRight, d.topH, screen.width - d.mapRight, screen.height - d.topH);
+    ctx.fillStyle = edge;
+    ctx.fillRect(0, d.topH - hair, screen.width, hair);
+    ctx.fillRect(d.mapLeft - hair, d.topH, hair, screen.height - d.topH);
+    ctx.fillRect(d.mapRight, d.topH, hair, screen.height - d.topH);
+  } else {
+    ctx.fillRect(0, d.deckY, screen.width, screen.height - d.deckY);
+    ctx.fillStyle = edge;
+    ctx.fillRect(0, d.topH - hair, screen.width, hair);
+    ctx.fillRect(0, d.deckY, screen.width, hair);
+  }
   ctx.textBaseline = "middle";
 
   // --- info row: where you are, and how rich -------------------------------
@@ -3916,22 +3928,44 @@ function drawDeck(): void {
     u * 0.27, "#f3eedd", "left", true, d.purse.w - cw2 - tpW - u * 0.2);
 
   // --- vitals: the two numbers you actually watch, HP and how full you are --
-  const barH = Math.round((d.vitals.h - Math.max(2, Math.round(u * 0.05))) / 2);
-  const labW = Math.round(u * 1.5);
-  const bw = d.vitals.w - labW;
   const cap = carryCap(P);
   const used = Math.round(carriedWeight(P));
-  deckBar(d.vitals.x, d.vitals.y, bw, barH, P.hp / P.maxhp, "#e1483b", "#5d1a14");
-  hudText(h, `${Math.ceil(P.hp)}/${P.maxhp}`, d.vitals.x + d.vitals.w, d.vitals.y + barH / 2,
-    u * 0.24, "#ffd9d4", "right", true, labW - u * 0.1);
-  const capY = d.vitals.y + d.vitals.h - barH;
-  deckBar(d.vitals.x, capY, bw, barH, used / cap, used >= cap ? "#e06a4a" : "#caa15a", "#3a3222");
-  hudText(h, `${used}/${cap}`, d.vitals.x + d.vitals.w, capY + barH / 2,
-    u * 0.24, used >= cap ? "#ffb59a" : "#e8dcc0", "right", false, labW - u * 0.1);
-  /* Level rides on the experience bar's own colour inside the HP row's slack
-   * rather than taking a third line: a phone strip that grows a row per number
-   * ends up taller than the map it is describing. */
-  hudText(h, `Lv ${P.level}`, d.vitals.x + u * 0.15, d.vitals.y + barH / 2, u * 0.2,
+  /** One labelled bar. Both orientations want the same thing in a different box. */
+  const vbar = (
+    bx: number, by: number, bwid: number, bhi: number,
+    frac: number, label: string, fg: string, bg: string, col: string, bold: boolean,
+  ): number => {
+    const labW = Math.round(u * 1.5);
+    const inner = Math.max(1, bwid - labW);
+    deckBar(bx, by, inner, bhi, frac, fg, bg);
+    hudText(h, label, bx + bwid, by + bhi / 2, u * 0.24, col, "right", bold, labW - u * 0.1);
+    return by + bhi / 2;
+  };
+  let hpMid: number;
+  if (d.landscape) {
+    /* Shoulder to shoulder. Sideways there is width for both on the one row,
+     * and that row is the whole of the status chrome — three stacked rows would
+     * spend the axis this orientation cannot spare. */
+    const half = Math.floor((d.vitals.w - d.gap * 2) / 2);
+    const bh = Math.round(d.vitals.h * 0.62);
+    const by = d.vitals.y + Math.round((d.vitals.h - bh) / 2);
+    hpMid = vbar(d.vitals.x, by, half, bh, P.hp / P.maxhp,
+      `${Math.ceil(P.hp)}/${P.maxhp}`, "#e1483b", "#5d1a14", "#ffd9d4", true);
+    vbar(d.vitals.x + half + d.gap * 2, by, d.vitals.w - half - d.gap * 2, bh, used / cap,
+      `${used}/${cap}`, used >= cap ? "#e06a4a" : "#caa15a", "#3a3222",
+      used >= cap ? "#ffb59a" : "#e8dcc0", false);
+  } else {
+    const barH = Math.round((d.vitals.h - Math.max(2, Math.round(u * 0.05))) / 2);
+    hpMid = vbar(d.vitals.x, d.vitals.y, d.vitals.w, barH, P.hp / P.maxhp,
+      `${Math.ceil(P.hp)}/${P.maxhp}`, "#e1483b", "#5d1a14", "#ffd9d4", true);
+    vbar(d.vitals.x, d.vitals.y + d.vitals.h - barH, d.vitals.w, barH, used / cap,
+      `${used}/${cap}`, used >= cap ? "#e06a4a" : "#caa15a", "#3a3222",
+      used >= cap ? "#ffb59a" : "#e8dcc0", false);
+  }
+  /* Level rides inside the HP bar's own slack rather than taking a line of its
+   * own: a status strip that grows a row per number ends up taller than the map
+   * it is describing. */
+  hudText(h, `Lv ${P.level}`, d.vitals.x + u * 0.15, hpMid, u * 0.2,
     "rgba(230,212,255,.9)", "left", true);
 
   /* --- utility row: reveal, edit, swap, minimap ---------------------------
@@ -3970,7 +4004,7 @@ function drawDeck(): void {
   if (deckMenu) {
     const r0 = d.tabs[0];
     ctx.fillStyle = "rgba(10,8,5,.92)";
-    ctx.fillRect(0, d.topH, screen.width, r0.h + 2 * d.gap);
+    ctx.fillRect(d.mapLeft, d.topH, Math.max(1, d.mapRight - d.mapLeft), r0.h + 2 * d.gap);
     d.tabs.forEach((r, i) => {
       const kind = DECK_TABS[i] as PanelKind;
       const on = hasWindow(kind);
@@ -4244,7 +4278,7 @@ function overTouchButton(sx: number, sy: number): boolean {
   if (throwPending) return true;        // aiming a throw — the tap must land, not steer
   if (aimPending) return true;          // aiming a Burst — likewise
   // the two plates are not the world: a press on them must never walk or steer
-  if (overDeck(deck, sy)) return true;
+  if (overDeck(deck, sx, sy)) return true;
   for (const b of touchButtons) {
     if (sx >= b.x && sx < b.x + b.w && sy >= b.y && sy < b.y + b.h) return true;
   }
