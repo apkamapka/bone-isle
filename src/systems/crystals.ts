@@ -8,6 +8,7 @@
 import { beep } from "../audio.ts";
 import { markBloodHit } from "./skills.ts";
 import { active as activeState } from "./playerState.ts";
+import { monsterById } from "../world/entities.ts";
 import { ELEMENTS, ELEMENT_COLOR, TIER_CODE, crystalDamage, type Element, type Tier } from "./elements.ts";
 import { MONSTER_DEFS } from "../entities/monsters.ts";
 import { addFloat } from "../fx.ts";
@@ -169,16 +170,20 @@ export const CRYSTAL_SPECS: Readonly<Record<string, CrystalSpec>> = (() => {
  */
 function pickTarget(world: World, p: Player, range: number): World["monsters"][number] | null {
   const t = p.target;
-  if (t && t.kind === "mob" && t.m.hp > 0 && world.monsters.includes(t.m)) {
-    if (dist(p.x, p.y, t.m.x, t.m.y) > range) {
+  // The marked creature, resolved in THIS world. A mark left behind on another
+  // island resolves to nothing here and falls through to the nearest-target
+  // search below, which is exactly right — it is not on screen to aim at.
+  const marked = t && t.kind === "mob" ? monsterById(world, t.id) : undefined;
+  if (marked && marked.hp > 0) {
+    if (dist(p.x, p.y, marked.x, marked.y) > range) {
       addFloat(world, p.x, p.y - 44, "too far", "#ff9e6a");
       return null;
     }
-    if (!lineOfSight(world, p.x, p.y, t.m.x, t.m.y)) {
+    if (!lineOfSight(world, p.x, p.y, marked.x, marked.y)) {
       addFloat(world, p.x, p.y - 44, "no line of sight", "#ff9e6a");
       return null;
     }
-    return t.m;
+    return marked;
   }
   // no marked target: nearest creature with a CLEAR line — crystals never
   // blast through cave walls, same rule as every other ranged attack

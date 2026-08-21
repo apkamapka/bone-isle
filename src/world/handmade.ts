@@ -25,6 +25,7 @@ import { TILE } from "../config.ts";
 import { SPR, bakeTree } from "../gfx/sprites.ts";
 import { NPC_DATA, bakeWorldCanvas } from "./generate.ts";
 import { npcRest } from "../entities/npcs.ts";
+import { nextEntityId } from "./entities.ts";
 import { FOOTPRINT, BLOCK } from "../gfx/sceneryArt.ts";
 import type { MonsterKind, SceneryKind } from "./types.ts";
 import { Tile } from "./types.ts";
@@ -232,7 +233,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           // A one-time hoard, the same furniture the cave floors bury at their
           // bottom. Solid: you open it from the next tile, you do not stand in
           // it. What is inside is game.ts's call, keyed by world.
-          w.structures.push({ key: "treasure", tx: x, ty: y, anim: 0 });
+          w.structures.push({ id: nextEntityId(), key: "treasure", tx: x, ty: y, anim: 0 });
           solid[y][x] = true;
           break;
         default: {
@@ -301,6 +302,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
               }
               const b = place.beat ?? {};
               w.npcs.push({
+                id: nextEntityId(),
                 key: place.key, name: meta.name, spr: meta.spr, bob: (x + y) % 3,
                 x: cx, y: cy, tx: x, ty: y,
                 hx: x, hy: y,

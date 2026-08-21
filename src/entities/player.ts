@@ -6,19 +6,34 @@ import { toTile, tileCenter } from "../world/grid.ts";
 import { activeBonus } from "../systems/derived.ts";
 import { ITEMS, walletValue, emptyEquipment, gearStat, itemWeight, bagWeight, addItem, newContainer, NO_BAG } from "../items.ts";
 import type { Bag, Equipment, ItemKind, ItemStack } from "../items.ts";
-import type { Vec, Monster, Tree, RockNode, Structure, Corpse, Npc, GroundItem } from "../world/types.ts";
+import type { Vec, Tree, RockNode } from "../world/types.ts";
 
 /**
  * What the player is currently auto-acting on. A discriminated union so the
  * update loop can branch safely without `any`.
  */
+/**
+ * What the player is currently auto-acting on — BY ID, not by reference.
+ *
+ * It used to hold the object itself, which was exact and free and completely
+ * unsendable: a client cannot post a pointer. Holding the id instead means
+ * "attack that one" is a number, which is the shape it has to be the moment a
+ * server owns the creature.
+ *
+ * The change pays for itself before any network exists. A held reference to a
+ * monster stays perfectly alive after the monster dies — the object is only
+ * garbage once nothing points at it — so every user of a target had to ask
+ * `world.monsters.includes(m)` to find out whether it was looking at a
+ * corpse-to-be. A held id simply fails to resolve. The check and the lookup
+ * become the same operation.
+ */
 export type Target =
-  | { kind: "mob"; m: Monster }
-  | { kind: "dummy"; s: Structure }
-  | { kind: "corpse"; c: Corpse }
-  | { kind: "npc"; n: Npc }
-  | { kind: "structure"; s: Structure }
-  | { kind: "ground"; gi: GroundItem };
+  | { kind: "mob"; id: number }
+  | { kind: "dummy"; id: number }
+  | { kind: "corpse"; id: number }
+  | { kind: "npc"; id: number }
+  | { kind: "structure"; id: number }
+  | { kind: "ground"; id: number };
 
 /** Resource node the player is walking up to and harvesting. */
 export type GatherTask =

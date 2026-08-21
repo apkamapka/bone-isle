@@ -9445,8 +9445,127 @@ async function main(): Promise<void> {
       "…and the mark box to attack-nearest");
     ok(main.includes('const marked = P.target?.kind === "mob";'),
       "the mark button lights while a creature is marked, so it also answers \"am I fighting?\"");
-    ok(main.includes('if (P.target?.kind === "mob" && P.target.m === m) targetBox(m.x, m.y);'),
+    ok(main.includes('if (P.target?.kind === "mob" && P.target.id === m.id) targetBox(m.x, m.y);'),
       "and the marked creature wears corner brackets in the world");
+  }
+
+
+  /* ============ Etap 32: entities have ids, targets hold them =============
+   *
+   * The property under test is that "that one" is a NUMBER now. None of it is
+   * visible in the game — a target still works exactly as it did — so the
+   * only way this stays true through the next twenty sessions is here. */
+  {
+    console.log("Etap 32 - every entity carries an id:");
+    const ent = await import("../src/world/entities.ts");
+    const { createGame } = await import("../src/game.ts");
+
+    const g = createGame(12345);
+    const seen = new Set<number>();
+    let total = 0;
+    let unstamped = 0;
+    for (const key of Object.keys(g.worlds)) {
+      const w = g.worlds[key as keyof typeof g.worlds];
+      for (const list of [w.monsters, w.corpses, w.ground, w.npcs, w.structures]) {
+        for (const e of list as { id: number }[]) {
+          total++;
+          if (!e.id) unstamped++;
+          seen.add(e.id);
+        }
+      }
+    }
+    ok(total > 100, `a fresh game builds a good many entities (${total})`);
+    ok(unstamped === 0, "…and every single one is stamped");
+    ok(seen.size === total, "…with an id that is unique across ALL worlds, not just its own");
+
+    /* Uniqueness across worlds is the whole reason the counter is global: a
+     * per-world counter would let a stale target from another island resolve
+     * against a completely different creature here. */
+    const homeIds = new Set(g.worlds.home.structures.map((e) => e.id));
+    const townIds = new Set(g.worlds.town.npcs.map((e) => e.id));
+    ok([...homeIds].every((id) => !townIds.has(id)), "two worlds never hand out the same id");
+
+    /* Lookup, and the half that matters: a dead id resolves to nothing. */
+    const wild = g.worlds.wild;
+    const victim = wild.monsters[0];
+    ok(!!victim, "the Wildlands has creatures to look up");
+    ok(ent.monsterById(wild, victim.id) === victim, "an id resolves back to its creature");
+    wild.monsters.splice(wild.monsters.indexOf(victim), 1);
+    ok(ent.monsterById(wild, victim.id) === undefined,
+      "…and once it is spliced out, the SAME id resolves to nothing");
+    ok(ent.monsterById(wild, 0) === undefined, "id 0 is never a real entity");
+    ok(ent.monsterById(wild, 999999999) === undefined, "nor is an id that was never issued");
+
+    /* Structures resolve from home as a fallback, because a Storage Chest is
+     * consulted from wherever the character happens to be standing. */
+    const chestish = g.worlds.home.structures[0];
+    if (chestish) {
+      ok(ent.structureById(g.worlds.wild, chestish.id, g.worlds.home) === chestish,
+        "a home structure resolves even while the character is elsewhere");
+      ok(ent.structureById(g.worlds.wild, chestish.id) === undefined,
+        "…but only when home is actually offered as the fallback");
+    }
+
+    /* stampWorld must never renumber something already stamped: doing so would
+     * silently invalidate whatever target the player is holding. */
+    const before = wild.monsters.map((m) => m.id);
+    ent.stampWorld(wild);
+    ok(wild.monsters.every((m, i) => m.id === before[i]), "stampWorld leaves stamped entities alone");
+    const orphan = { id: 0, kind: "wood", n: 1, x: 0, y: 0, t: 5 } as (typeof wild.ground)[number];
+    wild.ground.push(orphan);
+    ent.stampWorld(wild);
+    ok(orphan.id > 0, "…and stamps the one that arrived without an id");
+  }
+
+  {
+    console.log("Etap 32 - the target holds an id, not a pointer:");
+    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    const player = (await import("node:fs")).readFileSync("src/entities/player.ts", "utf8");
+
+    ok(player.includes('| { kind: "mob"; id: number }'), "the Target union carries ids");
+    ok(!/\{ kind: "(mob|corpse|ground|npc|dummy|structure)"; (m|c|gi|n|s):/.test(player),
+      "…and no member still carries an object");
+
+    /* Every constructor site. A single `{ kind: "mob", m }` left behind would
+     * not typecheck, but a `{ kind: "mob", id: m.id }` written as a literal
+     * number somewhere would — so pin the shape. */
+    for (const lit of [
+      'P.target = { kind: "mob", id: m.id };',
+      'P.target = { kind: "ground", id: gi.id };',
+      'P.target = { kind: "corpse", id: c.id };',
+      'P.target = { kind: "npc", id: n.id };',
+      'P.target = { kind: "dummy", id: s.id };',
+      'else P.target = { kind: "structure", id: s.id };',
+      'P.target = { kind: "mob", id: best.id };',
+    ]) ok(main.includes(lit), `target constructor: ${lit.trim()}`);
+
+    /* Toggling the attack off by re-clicking must compare ids, not objects. */
+    ok(main.includes('if (P.target?.kind === "mob" && P.target.id === m.id) {'),
+      "re-clicking the marked creature compares by id");
+    ok(main.includes('if (P.target?.kind === "dummy" && P.target.id === s.id) {'),
+      "…and so does re-clicking the dummy");
+
+    /* The liveness checks the ids replaced must be GONE, not merely bypassed:
+     * leaving them would mean two sources of truth about whether a target is
+     * still real, which is how they drift apart. */
+    ok(!main.includes("!cw().monsters.includes(m)"),
+      "the old `monsters.includes` liveness check is gone from the fire ticks");
+    ok(!main.includes("if (cw().ground.includes(t.gi))"),
+      "…and the ground `includes` guard is gone from resolveTarget");
+    ok(main.includes("const m = targetMob(t);\n  if (!m || m.hp <= 0) { P.target = null; return; }"),
+      "…replaced by a failed lookup, which answers both questions at once");
+
+    const cry = (await import("node:fs")).readFileSync("src/systems/crystals.ts", "utf8");
+    ok(cry.includes('const marked = t && t.kind === "mob" ? monsterById(world, t.id) : undefined;'),
+      "crystals aim at the marked creature by id, resolved in the world being cast in");
+    ok(!cry.includes("world.monsters.includes(t.m)"), "…and its old reference check is gone");
+
+    /* Ids are runtime-only. If one ever reached the save file, loading would
+     * either collide with the live counter or need it persisted. */
+    const save = (await import("node:fs")).readFileSync("src/save.ts", "utf8");
+    ok(save.includes("stampWorlds(worlds);"), "a loaded game is stamped rather than trusting saved ids");
+    const game = (await import("node:fs")).readFileSync("src/game.ts", "utf8");
+    ok(game.includes("stampWorlds(worlds);"), "…and so is a freshly built one");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

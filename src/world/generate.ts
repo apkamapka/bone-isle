@@ -7,6 +7,7 @@ import { TILE, MAP_TILE, SPRITE_SCALE } from "../config.ts";
 import { wrnd, wrndi, rnd, rndi, dist } from "../util.ts";
 import { SPR, bakeTree, spriteSource } from "../gfx/sprites.ts";
 import { npcRest } from "../entities/npcs.ts";
+import { nextEntityId } from "./entities.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldOpts, Vec, NpcKey } from "./types.ts";
 
@@ -219,6 +220,7 @@ export function makeWorld(opts: WorldOpts): World {
       spot ??= place();
       if (spot) {
         w.npcs.push({
+          id: nextEntityId(),
           key, name, spr, bob: wrnd(0, 3),
           x: spot.x * TILE + TILE / 2, y: spot.y * TILE + TILE / 2,
           tx: spot.x, ty: spot.y, hx: spot.x, hy: spot.y,

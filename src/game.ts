@@ -29,6 +29,7 @@ import { clearMonsterSpells } from "./systems/monsterSpells.ts";
 import type { ItemKind } from "./items.ts";
 import { applyOutfit } from "./systems/outfit.ts";
 import { resetPlayerState } from "./systems/playerState.ts";
+import { stampWorlds } from "./world/entities.ts";
 import { emptyStash } from "./items.ts";
 import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
@@ -434,6 +435,9 @@ export function populateAll(worlds: Record<WorldKey, World>, seed = WORLD_SEED):
 export function createGame(seed = WORLD_SEED): Game {
   const worlds = buildWorlds(seed);
   populateAll(worlds, seed);
+  // Creatures are stamped by pushMonster and structures by their placers; this
+  // catches anything a hand-authored spec dropped in directly. Idempotent.
+  stampWorlds(worlds);
   // ONE call wipes the lot now (Etap 31): skills, quests, board tasks,
   // wardrobe, research, attunement, stance and every combat clock live
   // together on the character's PlayerState, so a fresh game is a fresh

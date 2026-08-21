@@ -161,6 +161,12 @@ export interface BuildSpot {
 
 /** A placed structure instance. */
 export interface Structure {
+  /**
+   * Stable runtime identity. See `src/world/entities.ts` for why every entity
+   * has one now: over a network, "that one" has to be a number, not a pointer.
+   */
+  id: number;
+
   key: string;
   tx: number;
   ty: number;
@@ -206,6 +212,12 @@ export interface CoastWater {
 
 /** Item stack lying on the ground (e.g. dropped when the bag is full). */
 export interface GroundItem {
+  /**
+   * Stable runtime identity. See `src/world/entities.ts` for why every entity
+   * has one now: over a network, "that one" has to be a number, not a pointer.
+   */
+  id: number;
+
   kind: ItemStack["kind"];
   n: number;
   x: number;
@@ -267,6 +279,12 @@ export type MonsterKind =
 
 /** A live monster instance. */
 export interface Monster {
+  /**
+   * Stable runtime identity. See `src/world/entities.ts` for why every entity
+   * has one now: over a network, "that one" has to be a number, not a pointer.
+   */
+  id: number;
+
   kind: MonsterKind;
   x: number;
   y: number;
@@ -322,6 +340,12 @@ export interface Monster {
 
 /** A lootable corpse left behind when a monster dies. */
 export interface Corpse {
+  /**
+   * Stable runtime identity. See `src/world/entities.ts` for why every entity
+   * has one now: over a network, "that one" has to be a number, not a pointer.
+   */
+  id: number;
+
   name: string;
   x: number;
   y: number;
@@ -348,6 +372,12 @@ export type NpcDir = "up" | "left" | "down" | "right";
  * map placed him on.
  */
 export interface Npc {
+  /**
+   * Stable runtime identity. See `src/world/entities.ts` for why every entity
+   * has one now: over a network, "that one" has to be a number, not a pointer.
+   */
+  id: number;
+
   key: NpcKey;
   name: string;
   x: number;

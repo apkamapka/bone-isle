@@ -15,6 +15,7 @@ import { TILE, MAP_TILE } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { seedWorldRng, wrand, wrndi, dist } from "../util.ts";
 import { bakeWorldCanvas, toMapPx } from "./generate.ts";
+import { nextEntityId } from "./entities.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldKey } from "./types.ts";
 
@@ -274,7 +275,7 @@ export function makeCaveWorld(opts: CaveOpts): World {
   // step 5b), after the canvas bake so the sprite draws as a structure.
   if (treasureCell) {
     const [tx, ty] = treasureCell;
-    w.structures.push({ key: "treasure", tx, ty, anim: 0 });
+    w.structures.push({ id: nextEntityId(), key: "treasure", tx, ty, anim: 0 });
     solid[ty][tx] = true; // a chest is furniture, not floor
   }
   return w;

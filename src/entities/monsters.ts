@@ -3,6 +3,7 @@ import { rnd, rndi, wrnd, dist } from "../util.ts";
 import { WILD_ENTRANCE_SAFE_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HOLD_RANGE, POST_LEASH_PX, SHOT_SPEED, TILE } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { randomWalkable, lineOfSight } from "../world/collision.ts";
+import { nextEntityId } from "../world/entities.ts";
 import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
 import { inHavenBand } from "../world/collision.ts";
 import { stepFacing } from "../gfx/mobSheet.ts";
@@ -886,6 +887,7 @@ function pushMonster(
   // roster, density top-up, respawn, camp and chest guard all land here.
   if (inHavenBand(w, ty)) return false;
   w.monsters.push({
+    id: nextEntityId(),
     kind,
     x: tileCenter(tx),
     y: tileCenter(ty),

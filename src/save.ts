@@ -5,6 +5,7 @@ import { expNeeded } from "./config.ts";
 import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn, feetBlocked, worldSpawn } from "./world/collision.ts";
 import { placeWalker } from "./world/grid.ts";
+import { stampWorlds, nextEntityId } from "./world/entities.ts";
 import { applyStructureSolidity, canPlaceAt, STRUCTS, CHEST_SLOTS } from "./systems/building.ts";
 import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState, attunedState, loadAttunedState } from "./systems/tower.ts";
@@ -202,7 +203,7 @@ export function loadGame(): Game | null {
         .filter((gi) => validItem(gi) && typeof gi.x === "number" && typeof gi.y === "number")
         .map((gi) => {
           const st = validItem(gi)!;
-          return { kind: st.kind, n: st.n, x: gi.x * pos, y: gi.y * pos,
+          return { id: nextEntityId(), kind: st.kind, n: st.n, x: gi.x * pos, y: gi.y * pos,
             t: typeof gi.t === "number" ? gi.t : GROUND_DESPAWN_S,
             ...(st.items ? { items: st.items } : {}) };
         });
@@ -212,6 +213,7 @@ export function loadGame(): Game | null {
       worlds[k].corpses = cs
         .filter((c) => c && typeof c.x === "number" && typeof c.y === "number" && Array.isArray(c.items))
         .map((c) => ({
+          id: nextEntityId(),
           name: typeof c.name === "string" ? c.name : "corpse",
           x: c.x * pos, y: c.y * pos,
           // pre-v7 corpses were a compact list; pour it into real slots
@@ -346,7 +348,7 @@ export function loadGame(): Game | null {
     if (firstChest) left = addItem((firstChest.inv ??= emptyStash(CHEST_SLOTS[1])), st.kind, st.n);
     if (left > 0) {
       const at = portalSpawn(worlds.home);
-      worlds.home.ground.push({ kind: st.kind, n: left, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16, t: GROUND_DESPAWN_S });
+      worlds.home.ground.push({ id: nextEntityId(), kind: st.kind, n: left, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16, t: GROUND_DESPAWN_S });
     }
   }
 
@@ -360,10 +362,19 @@ export function loadGame(): Game | null {
     if (firstChest) placed = addStack((firstChest.inv ??= emptyStash(CHEST_SLOTS[1])), st);
     if (!placed) {
       const at = portalSpawn(worlds.home);
-      worlds.home.ground.push({ kind: st.kind, n: st.n, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16,
+      worlds.home.ground.push({ id: nextEntityId(), kind: st.kind, n: st.n, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16,
         t: GROUND_DESPAWN_S, ...(st.items ? { items: st.items } : {}) });
     }
   }
+
+  /* Belt and braces. Every entity this function rebuilt is stamped where it is
+   * built, and every structure the world generator placed is stamped there —
+   * but a migration path that quietly drops a structure through without an id
+   * would produce an entity nothing can ever target, and that is a bug you
+   * would only find by clicking the one chest that came out of an old save.
+   * `stampWorlds` skips anything already stamped, so this costs one pass over
+   * five short lists per world and closes the hole for good. */
+  stampWorlds(worlds);
 
   return {
     seed: WORLD_SEED,

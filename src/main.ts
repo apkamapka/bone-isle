@@ -12,6 +12,7 @@ import { itemSprite } from "./gfx/itemArt.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
+import type { Target } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnAtPost } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
@@ -37,6 +38,7 @@ import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
 import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
+import { nextEntityId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { TARGET_SEEK_PX } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
 import { addItem, addStack, removeItem, removeItemUnpacked, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
@@ -981,7 +983,7 @@ function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }, co
   const near = contents ? undefined
     : dest.ground.find((g) => g.kind === kind && !g.items && Math.hypot(g.x - gx, g.y - gy) < 14);
   if (near) near.n += n;
-  else dest.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S, ...(contents ? { items: contents } : {}) });
+  else dest.ground.push({ id: nextEntityId(), kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S, ...(contents ? { items: contents } : {}) });
   flash(`whoosh — ${n} ${ITEMS[kind].name} through the portal!`, "#8ab6ff");
   beep(600, 0.12, "sine", 0.05, -220);
 }
@@ -1022,7 +1024,7 @@ function dropToGround(kind: ItemKind, n: number, tx?: number, ty?: number): void
   // into a container, whose `n` is an object count and not a quantity
   const near = world.ground.find((g) => g.kind === kind && !g.items && Math.hypot(g.x - gx, g.y - gy) < 14);
   if (near) near.n += n;
-  else world.ground.push({ kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
+  else world.ground.push({ id: nextEntityId(), kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
   flash(`dropped ${n} ${ITEMS[kind].name}`, "#cfa86a");
   beep(200, 0.06, "sine", 0.04, -60);
 }
@@ -1282,7 +1284,7 @@ function dropContainerToGround(st: ItemStack, tx?: number, ty?: number): void {
     gy = P.y + 4 + (Math.random() - 0.5) * 16;
   }
   // never merged into a nearby stack: two backpacks are two objects
-  world.ground.push({ kind: st.kind, n: 1, x: gx, y: gy, t: GROUND_DESPAWN_S, items: st.items });
+  world.ground.push({ id: nextEntityId(), kind: st.kind, n: 1, x: gx, y: gy, t: GROUND_DESPAWN_S, items: st.items });
   flash(`dropped ${ITEMS[st.kind].name}`, "#cfa86a");
   beep(200, 0.06, "sine", 0.04, -60);
 }
@@ -1305,7 +1307,11 @@ function liftFloorStack(gi: GroundItem, to: ContainerRef, ti: number | null): vo
    * is not in the world, so its reach was checked above instead — hence
    * `sourceChecked`. */
   const shim: Bag = [{ kind: gi.kind, n: gi.n, items: gi.items }];
-  const via: ContainerRef = { c: "corpse", body: { name: "", x: gi.x, y: gi.y, items: shim, t: 0 } };
+    /* id 0 on purpose: this body never enters `world.corpses`, so nothing
+   * will ever look it up, and spending a real id on a holder that lives
+   * for one statement would make the counter lie about how many entities
+   * the session has actually created. */
+  const via: ContainerRef = { c: "corpse", body: { id: 0, name: "", x: gi.x, y: gi.y, items: shim, t: 0 } };
   if (!moveItems(via, 0, to, ti, gi.n, { sourceChecked: true })) return;
   const leftover = shim[0];
   if (leftover) { gi.n = leftover.n; gi.items = leftover.items; }
@@ -1527,7 +1533,7 @@ function giveMaterial(kind: ItemKind, n: number): void {
   const w0 = cw();
   const near = w0.ground.find((gi) => gi.kind === kind && Math.hypot(gi.x - P.x, gi.y - P.y) < 14);
   if (near) near.n += left;
-  else w0.ground.push({ kind, n: left, x: P.x, y: P.y, t: GROUND_DESPAWN_S });
+  else w0.ground.push({ id: nextEntityId(), kind, n: left, x: P.x, y: P.y, t: GROUND_DESPAWN_S });
   flash(`${left} ${ITEMS[kind].name} dropped at your feet`, "#e0a06a");
 }
 
@@ -2232,12 +2238,12 @@ function worldClick(w: Vec): void {
   for (const m of world.monsters) {
     if (Math.abs(w.x - m.x) < m.spr.width / 2 && w.y > m.y - m.spr.height && w.y < m.y + 10) {
       // clicking the monster you're already attacking STOPS the attack (Tibia-style toggle)
-      if (P.target?.kind === "mob" && P.target.m === m) {
+      if (P.target?.kind === "mob" && P.target.id === m.id) {
         P.target = null;
         flash("attack stopped", "#8ab6ff");
         return;
       }
-      P.target = { kind: "mob", m };
+      P.target = { kind: "mob", id: m.id };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
     }
@@ -2245,7 +2251,7 @@ function worldClick(w: Vec): void {
   // dropped ground items — walk over and pick up (Tibia-style, no telekinesis)
   for (const gi of world.ground) {
     if (Math.abs(w.x - gi.x) < 18 && w.y > gi.y - 28 && w.y < gi.y + 8) {
-      P.target = { kind: "ground", gi };
+      P.target = { kind: "ground", id: gi.id };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
     }
@@ -2266,7 +2272,7 @@ function worldClick(w: Vec): void {
         moveMarker = null;
         return;
       }
-      P.target = { kind: "corpse", c };
+      P.target = { kind: "corpse", id: c.id };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
     }
@@ -2275,7 +2281,7 @@ function worldClick(w: Vec): void {
   for (const n of world.npcs) {
     const spr = npcSpr(n);
     if (Math.abs(w.x - n.x) < spr.width / 2 && w.y > n.y - spr.height && w.y < n.y + 10) {
-      P.target = { kind: "npc", n };
+      P.target = { kind: "npc", id: n.id };
       // clicked: he stops where he is and turns to face you, Tibia-style. The
       // hold is refreshed by tickNpcTalk for as long as the conversation lasts.
       n.talk = NPC_TALK_HOLD_S;
@@ -2299,14 +2305,14 @@ function worldClick(w: Vec): void {
     if (Math.abs(w.x - c.x) < half && w.y > c.baseY - reach && w.y < c.baseY + 8) {
       if (s.key === "dummy" || s.key === "range") {
         // re-clicking the dummy you're training on stops the attack (toggle)
-        if (P.target?.kind === "dummy" && P.target.s === s) {
+        if (P.target?.kind === "dummy" && P.target.id === s.id) {
           P.target = null;
           flash("attack stopped", "#8ab6ff");
           return;
         }
-        P.target = { kind: "dummy", s };
+        P.target = { kind: "dummy", id: s.id };
       }
-      else P.target = { kind: "structure", s };
+      else P.target = { kind: "structure", id: s.id };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
     }
@@ -2347,15 +2353,47 @@ function worldClick(w: Vec): void {
 
 /* ---------------- interaction ranges ---------------- */
 
+/* ---------------- resolving the target ----------------
+ *
+ * The five helpers below turn the held id back into the thing itself, in the
+ * CURRENT world, or null when it is gone. Null is the useful half: a monster
+ * that died, a corpse that decayed, a stack somebody else picked up — all of
+ * them stop resolving on their own, so the "is this still real?" question
+ * that used to be scattered through the update loop as `includes()` calls is
+ * answered by the same call that fetches the thing.
+ *
+ * Each one refuses a target of the wrong kind, so a call site cannot resolve
+ * a corpse id against the monster list and get a coincidental hit. */
+
+function targetMob(t: Target | null = P.target): Monster | null {
+  return t?.kind === "mob" ? monsterById(cw(), t.id) ?? null : null;
+}
+function targetCorpse(t: Target | null = P.target): Corpse | null {
+  return t?.kind === "corpse" ? corpseById(cw(), t.id) ?? null : null;
+}
+function targetGround(t: Target | null = P.target): GroundItem | null {
+  return t?.kind === "ground" ? groundById(cw(), t.id) ?? null : null;
+}
+function targetNpc(t: Target | null = P.target): Npc | null {
+  return t?.kind === "npc" ? npcById(cw(), t.id) ?? null : null;
+}
+/** Dummies and plain structures share a list, so they share a resolver. */
+function targetStruct(t: Target | null = P.target): Structure | null {
+  return t?.kind === "dummy" || t?.kind === "structure"
+    ? structureById(cw(), t.id, game.worlds.home) ?? null : null;
+}
+
 function targetPoint(): Vec | null {
   const t = P.target;
   if (!t) return null;
-  if (t.kind === "mob") return { x: t.m.x, y: t.m.y };
-  if (t.kind === "corpse") return { x: t.c.x, y: t.c.y };
-  if (t.kind === "ground") return { x: t.gi.x, y: t.gi.y };
-  if (t.kind === "npc") return { x: t.n.x, y: t.n.y };
+  if (t.kind === "mob") { const m = targetMob(t); return m ? { x: m.x, y: m.y } : null; }
+  if (t.kind === "corpse") { const c = targetCorpse(t); return c ? { x: c.x, y: c.y } : null; }
+  if (t.kind === "ground") { const g = targetGround(t); return g ? { x: g.x, y: g.y } : null; }
+  if (t.kind === "npc") { const n = targetNpc(t); return n ? { x: n.x, y: n.y } : null; }
   // structure: stand just below the sprite base (footprint-aware anchor)
-  const c = structCenter(t.s);
+  const st = targetStruct(t);
+  if (!st) return null;
+  const c = structCenter(st);
   return { x: c.x, y: c.baseY - 4 };
 }
 
@@ -2377,7 +2415,7 @@ function attackMode(): { ranged: boolean; reach: number; arrow: ItemKind | null 
     // at the Archery Range practice arrows fire first (that's their job);
     // against anything else only combat arrows count.
     const t = P.target;
-    const arrow = t?.kind === "dummy" && t.s.key === "range"
+    const arrow = t?.kind === "dummy" && targetStruct(t)?.key === "range"
       ? bestPracticeArrow(P.bag, P.ammo)
       : activeArrow(P.bag, P.ammo);
     if (arrow) return { ranged: true, reach: bow.range, arrow };
@@ -2401,9 +2439,10 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
   const t = P.target;
   if (!t || !mode.arrow) return;
   if (t.kind === "mob") {
-    const m = t.m;
-    // let go of a target that has died or left the current island
-    if (m.hp <= 0 || !cw().monsters.includes(m)) { P.target = null; return; }
+    // A target that died, decayed or was left on another island simply stops
+    // resolving — no separate liveness check needed any more.
+    const m = targetMob(t);
+    if (!m || m.hp <= 0) { P.target = null; return; }
     faceDelta(m.x - P.x, m.y - P.y);
     // range AND a clear line of fire — arrows no longer thread cave walls
     // (which made the dragon a shooting-gallery target from total safety)
@@ -2416,9 +2455,10 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
     const tp = targetPoint();
     if (!tp) return;
     faceDelta(tp.x - P.x, tp.y - P.y);
-    if (dist(P.x, P.y, tp.x, tp.y) <= mode.reach && P.atkCd <= 0) {
+    const st = targetStruct(t);
+    if (st && dist(P.x, P.y, tp.x, tp.y) <= mode.reach && P.atkCd <= 0) {
       P.atkCd = P.atkRate;
-      shootDummy(cw(), P, t.s, mode.arrow);
+      shootDummy(cw(), P, st, mode.arrow);
     }
   }
 }
@@ -2433,8 +2473,8 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
 function tickMeleeFire(): void {
   const t = P.target;
   if (!t || t.kind !== "mob") return;
-  const m = t.m;
-  if (m.hp <= 0 || !cw().monsters.includes(m)) { P.target = null; return; }
+  const m = targetMob(t);
+  if (!m || m.hp <= 0) { P.target = null; return; }
   if (dist(P.x, P.y, m.x, m.y) <= MELEE_REACH_PX && P.atkCd <= 0) {
     P.atkCd = P.atkRate;
     faceDelta(m.x - P.x, m.y - P.y);
@@ -2554,7 +2594,7 @@ function tickNpcTalk(world: World): void {
   const hold = (n: Npc | null | undefined): void => {
     if (n && world.npcs.includes(n)) n.talk = NPC_TALK_HOLD_S;
   };
-  if (P.target?.kind === "npc") hold(P.target.n);
+  if (P.target?.kind === "npc") { const n = targetNpc(); if (n) hold(n); }
   if (hasWindow("shop")) hold(ui.npc);
   if (hasWindow("tasks")) hold(world.npcs.find((n) => n.key === "taskmaster"));
   if (hasWindow("wardrobe")) hold(world.npcs.find((n) => n.key === "tailor"));
@@ -2757,7 +2797,7 @@ function update(dt: number): void {
       // away. Fighting keeps its pixel reach: a blade is not a window.
       const t = P.target;
       const inReach = t.kind === "corpse" || t.kind === "ground" ? withinReach(tp.x, tp.y)
-        : t.kind === "structure" ? structInReach(t.s)
+        : t.kind === "structure" ? (() => { const st = targetStruct(t); return !!st && structInReach(st); })()
         : dist(P.x, P.y, tp.x, tp.y) <= (t.kind === "dummy" || t.kind === "mob" ? mode.reach : MELEE_REACH_PX);
       if (inReach) resolveTarget();
       else if (chaseBlocked) {
@@ -2944,7 +2984,7 @@ function attackNearest(): void {
     bestD = d;
   }
   if (!best) { flash("nothing in sight", "#e0a06a"); return; }
-  P.target = { kind: "mob", m: best };
+  P.target = { kind: "mob", id: best.id };
   P.dest = null;
   P.gather = null;
   pendingLoot = null;
@@ -2953,32 +2993,42 @@ function attackNearest(): void {
 function resolveTarget(): void {
   const t = P.target;
   if (!t) return;
+  /* Every branch resolves its id first and lets go of a target that no longer
+   * exists. That "if it is gone, drop it" line used to be three different
+   * checks in three different shapes — `includes()`, `hp <= 0`, and nothing at
+   * all for structures — and now it is one, because a stale id cannot resolve. */
   if (t.kind === "mob") {
+    const m = targetMob(t);
+    if (!m) { P.target = null; return; }
     if (P.atkCd <= 0) {
       P.atkCd = P.atkRate;
       const mode = attackMode();
       if (mode.ranged && mode.arrow) {
-        if (playerShoot(cw(), P, t.m, mode.arrow)) P.target = null;
+        if (playerShoot(cw(), P, m, mode.arrow)) P.target = null;
       } else {
         if (equippedBow(P.eq)) warnNoArrows();
-        if (playerAttack(cw(), P, t.m)) P.target = null;
+        if (playerAttack(cw(), P, m)) P.target = null;
       }
     }
   } else if (t.kind === "dummy") {
+    const st = targetStruct(t);
+    if (!st) { P.target = null; return; }
     if (P.atkCd <= 0) {
       P.atkCd = P.atkRate;
       const mode = attackMode();
-      if (mode.ranged && mode.arrow) shootDummy(cw(), P, t.s, mode.arrow);
-      else if (t.s.key === "range") {
+      if (mode.ranged && mode.arrow) shootDummy(cw(), P, st, mode.arrow);
+      else if (st.key === "range") {
         // the straw butt only takes arrows — no bow (or an empty quiver)
         // means nothing to train with, so let go instead of punching it
         flash("you need a bow and arrows", "#e0a06a");
         P.target = null;
       }
-      else { if (equippedBow(P.eq)) warnNoArrows(); hitDummy(cw(), P, t.s); }
+      else { if (equippedBow(P.eq)) warnNoArrows(); hitDummy(cw(), P, st); }
     }
   } else if (t.kind === "corpse") {
-    ui.loot = t.c; openWindow("loot"); P.target = null;
+    const c = targetCorpse(t);
+    if (c) { ui.loot = c; openWindow("loot"); }
+    P.target = null;
   } else if (t.kind === "ground") {
     /* A CONTAINER on the floor opens; anything else is picked up.
      *
@@ -2987,25 +3037,34 @@ function resolveTarget(): void {
      * only ever swallow whole. Ordinary loot keeps the walk-over-and-take
      * behaviour, which is a kindness Tibia never offered and worth keeping.
      * To pick a container UP you drag it — into your bag, or onto the Bag
-     * slot to wear it. */
-    if (cw().ground.includes(t.gi)) {
-      if (isContainer(t.gi.kind)) { ui.floor = t.gi; openWindow("floor"); }
-      else pickupGround(t.gi);
+     * slot to wear it.
+     *
+     * The `includes()` guard this branch used to open with is gone: somebody
+     * else having taken the stack in the meantime is now the same thing as the
+     * id failing to resolve. */
+    const gi = targetGround(t);
+    if (gi) {
+      if (isContainer(gi.kind)) { ui.floor = gi; openWindow("floor"); }
+      else pickupGround(gi);
     }
     P.target = null;
   } else if (t.kind === "npc") {
-    if (t.n.key === "taskmaster") { openWindow("tasks"); }
-    else if (t.n.key === "tailor") { openWindow("wardrobe"); }
+    const n = targetNpc(t);
+    if (!n) { P.target = null; return; }
+    if (n.key === "taskmaster") { openWindow("tasks"); }
+    else if (n.key === "tailor") { openWindow("wardrobe"); }
     // Someone with neither a shop nor a panel of their own has nothing to open
     // yet — say so rather than putting an empty window on screen.
-    else if (!SHOPS[t.n.key]) { flash(`${t.n.name} has nothing to say… yet`, "#b9a6d8"); }
-    else { ui.npc = t.n; ui.shopTab = "buy"; openWindow("shop"); }
+    else if (!SHOPS[n.key]) { flash(`${n.name} has nothing to say… yet`, "#b9a6d8"); }
+    else { ui.npc = n; ui.shopTab = "buy"; openWindow("shop"); }
     P.target = null;
   } else if (t.kind === "structure") {
-    if (t.s.key === "forge") openWindow("forge");
-    else if (t.s.key === "tower") openWindow("tower");
-    else if (t.s.key === "chest") { ui.stash = t.s; openWindow("stash"); }
-    else if (t.s.key === "treasure") openTreasure(t.s);
+    const st = targetStruct(t);
+    if (!st) { P.target = null; return; }
+    if (st.key === "forge") openWindow("forge");
+    else if (st.key === "tower") openWindow("tower");
+    else if (st.key === "chest") { ui.stash = st; openWindow("stash"); }
+    else if (st.key === "treasure") openTreasure(st);
     P.target = null;
   }
 }
@@ -3549,7 +3608,7 @@ function render(): void {
       drawSprite(spr, m.x, m.y, 1, bob);
       vctx.globalAlpha = 1;
       hpBar(m.x, m.y - spr.height - 8, m.hp / m.maxhp);
-      if (P.target?.kind === "mob" && P.target.m === m) targetBox(m.x, m.y);
+      if (P.target?.kind === "mob" && P.target.id === m.id) targetBox(m.x, m.y);
     } });
   }
   // player — hand-drawn LPC art when the sheet is up, the baked outfit until then

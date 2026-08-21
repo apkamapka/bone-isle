@@ -8,6 +8,7 @@ import {
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
+import { nextEntityId } from "../world/entities.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
 import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
@@ -173,6 +174,7 @@ export function killMonster(world: World, p: Player, m: Monster): void {
 
   const { items, gold } = rollLoot(m.kind);
   world.corpses.push({
+    id: nextEntityId(),
     name: m.kind,
     x: m.x,
     y: m.y,
@@ -232,7 +234,7 @@ export function applyDeathPenalty(world: World, p: Player): void {
       }
     }
     if (lost) {
-      world.corpses.push({ name: "your body", x: p.x, y: p.y, items: body, t: PLAYER_CORPSE_DECAY_S });
+      world.corpses.push({ id: nextEntityId(), name: "your body", x: p.x, y: p.y, items: body, t: PLAYER_CORPSE_DECAY_S });
       addFloat(world, p.x, p.y - 60, "you dropped your backpack!", "#ff9e6a");
     }
   }
