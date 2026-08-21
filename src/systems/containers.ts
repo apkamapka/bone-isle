@@ -12,17 +12,32 @@
  */
 import { contentsOf, isContainer } from "../items.ts";
 import type { Bag, ItemStack } from "../items.ts";
-import type { Corpse, GroundItem, Structure } from "../world/types.ts";
+import type { GroundItem, World } from "../world/types.ts";
+import { corpseById, groundById, structureById } from "../world/entities.ts";
 
 export type ContainerRef =
   /** The slots inside the backpack the player is wearing. */
   | { c: "bag" }
-  /** One Storage Chest's own inventory. */
-  | { c: "stash"; s: Structure }
-  /** A lootable body. */
-  | { c: "corpse"; body: Corpse }
-  /** A container lying loose on the ground — the loot bag. */
-  | { c: "ground"; gi: GroundItem }
+  /** One Storage Chest's own inventory, by entity id. */
+  | { c: "stash"; id: number }
+  /** A lootable body, by entity id. */
+  | { c: "corpse"; id: number }
+  /** A container lying loose on the ground — the loot bag — by entity id. */
+  | { c: "ground"; id: number }
+  /**
+   * A bag held OUTSIDE the world for the length of one operation.
+   *
+   * The deliberate escape hatch, and the only member that still carries an
+   * object. It exists so that lifting a stack off the floor into a pack can
+   * go through `moveItems` like everything else: the source is a GroundItem,
+   * which is not a container, so it is wrapped in a one-slot bag and given an
+   * address for exactly as long as the move takes.
+   *
+   * It is never stored in a window, never survives a frame, and must never be
+   * sent anywhere. If you find yourself wanting to hold one, the thing you
+   * actually want is an entity with an id.
+   */
+  | { c: "loose"; slots: Bag }
   /** A container occupying slot `i` of another container. */
   | { c: "nested"; via: ContainerRef; i: number };
 
@@ -51,9 +66,12 @@ export function sameRef(a: ContainerRef, b: ContainerRef): boolean {
   if (a.c !== b.c) return false;
   switch (a.c) {
     case "bag": return true;
-    case "stash": return a.s === (b as { s: Structure }).s;
-    case "corpse": return a.body === (b as { body: Corpse }).body;
-    case "ground": return a.gi === (b as { gi: GroundItem }).gi;
+    case "stash":
+    case "corpse":
+    case "ground": return a.id === (b as { id: number }).id;
+    // A loose bag is only ever equal to itself, and only within the one
+    // statement that made it — hence identity, which is all it can be.
+    case "loose": return a.slots === (b as { slots: Bag }).slots;
     case "nested": {
       const o = b as { via: ContainerRef; i: number };
       return a.i === o.i && sameRef(a.via, o.via);
@@ -86,10 +104,23 @@ export function depthOf(ref: ContainerRef): number {
  */
 export const MAX_NEST_DEPTH = 6;
 
-/** What `slotsOf` needs from the outside world to resolve a base address. */
+/**
+ * What `slotsOf` needs from the outside world to resolve a base address.
+ *
+ * It grew a world when refs went from holding objects to holding ids: an id
+ * is meaningless without somewhere to look it up. That is the cost of the
+ * change, and it buys the thing that matters — a stale address now resolves
+ * to null on its own, so "is this window still looking at something real?" is
+ * answered by the same call that fetches the slots, rather than by a separate
+ * `includes()` check that could disagree with it.
+ */
 export interface RefWorld {
   /** The worn backpack's slots (an empty frozen array when bagless). */
   bag: Bag;
+  /** The world the character is standing in: bodies and loose stacks. */
+  world: World;
+  /** Home, where the Storage Chests stand — consulted from anywhere. */
+  home: World;
 }
 
 /**
@@ -100,14 +131,16 @@ export interface RefWorld {
 export function slotsOf(ref: ContainerRef, w: RefWorld): Bag | null {
   switch (ref.c) {
     case "bag": return w.bag;
-    case "stash": return ref.s.inv ?? null;
-    case "corpse": return ref.body.items;
+    case "stash": return structureById(w.world, ref.id, w.home)?.inv ?? null;
+    case "corpse": return corpseById(w.world, ref.id)?.items ?? null;
+    case "loose": return ref.slots;
     case "ground": {
-      if (!isContainer(ref.gi.kind)) return null;
+      const gi = groundById(w.world, ref.id);
+      if (!gi || !isContainer(gi.kind)) return null;
       // the GroundItem is not an ItemStack, so borrow one to size the slots
-      const shim: ItemStack = { kind: ref.gi.kind, n: 1, items: ref.gi.items };
+      const shim: ItemStack = { kind: gi.kind, n: 1, items: gi.items };
       const slots = contentsOf(shim);
-      if (slots) ref.gi.items = slots;
+      if (slots) gi.items = slots;
       return slots;
     }
     case "nested": {

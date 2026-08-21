@@ -25,6 +25,7 @@ import type { EqSlot, ItemKind, ItemStack, Recipe, Bag } from "../items.ts";
 import type { Corpse, GroundItem, Npc, Structure } from "../world/types.ts";
 import type { ContainerRef } from "../systems/containers.ts";
 import { slotsOf, stackAt, baseOf, rootOf } from "../systems/containers.ts";
+import type { RefWorld } from "../systems/containers.ts";
 import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed, panelRows } from "../systems/panelPrefs.ts";
@@ -653,6 +654,15 @@ export interface PanelInput {
    */
   strip?: Rect | null;
 }
+
+/**
+ * The resolution context a container address needs.
+ *
+ * Panels already carry the whole `Game`, so this costs nothing to assemble and
+ * saves threading a fourth argument through every grid-drawing function.
+ */
+const refCtx = (p: PanelInput): RefWorld =>
+  ({ bag: p.player.bag, world: p.game.current, home: p.game.worlds.home });
 
 /** A small square title-bar button; returns nothing, pushes its hotspot. */
 function titleBtn(
@@ -1406,7 +1416,7 @@ function drawBag(p: PanelInput): void {
   }
 
   const ref: ContainerRef = { c: "bag" };
-  const slots = slotsOf(ref, player);
+  const slots = slotsOf(ref, refCtx(p));
   if (!slots) return;
 
   const cols = p.strip ? 1 : 4;
@@ -1900,7 +1910,7 @@ function drawWorldContainer(
 ): void {
   const { hud } = p;
   const { ctx, scale: S } = hud;
-  const slots = slotsOf(ref, p.player);
+  const slots = slotsOf(ref, refCtx(p));
   if (!slots) return;
 
   const cols = p.strip ? 1 : 4;
@@ -1946,11 +1956,11 @@ function drawWorldContainer(
  * around it, and goes away the moment that pack does.
  */
 function drawContainerWin(p: PanelInput): void {
-  const { hud, player } = p;
+  const { hud } = p;
   const { scale: S } = hud;
   const ref = p.win.ref;
   if (!ref) return;
-  const slots = slotsOf(ref, player);
+  const slots = slotsOf(ref, refCtx(p));
   if (!slots) return;
 
   const cols = p.strip ? 1 : 4;
@@ -1984,14 +1994,14 @@ function drawContainerWin(p: PanelInput): void {
 function drawLoot(p: PanelInput): void {
   const c = p.ui.loot;
   if (!c) return;
-  drawWorldContainer(p, { c: "corpse", body: c }, "CORPSE — loot",
+  drawWorldContainer(p, { c: "corpse", id: c.id }, "CORPSE — loot",
     () => p.act.takeAllLoot(c));
 }
 
 function drawFloor(p: PanelInput): void {
   const gi = p.ui.floor;
   if (!gi) return;
-  drawWorldContainer(p, { c: "ground", gi }, ITEMS[gi.kind].name.toUpperCase(),
+  drawWorldContainer(p, { c: "ground", id: gi.id }, ITEMS[gi.kind].name.toUpperCase(),
     () => p.act.takeAllLoot(null));
 }
 
@@ -2336,7 +2346,7 @@ function navBar(p: PanelInput, x: number, y: number, ref: ContainerRef): void {
 
 /** What to write on a container window's title bar. */
 function containerTitle(p: PanelInput, ref: ContainerRef, top: string): string {
-  const st = stackAt(ref, p.player);
+  const st = stackAt(ref, refCtx(p));
   return st ? ITEMS[st.kind].name.toUpperCase() : top;
 }
 
@@ -2347,6 +2357,9 @@ function containerHome(ref: ContainerRef): string {
     case "stash": return "in the storage chest";
     case "corpse": return "in the corpse";
     case "ground": return "on the ground";
+    // never surfaces: a loose address lives for one statement and is never
+    // held by a window, so no window can ever be asked where one lives
+    case "loose": return "in hand";
   }
 }
 
@@ -2385,8 +2398,8 @@ function drawStash(p: PanelInput): void {
   hudText(hud, `Chest — click to take  (${used}/${inv.length})`, x + 12 * S, gy + 5 * S, 8 * S,
     full ? "#d96a5a" : "#cfe8d2", "left", true);
   gy += headH;
-  const stashRef: ContainerRef = { c: "stash", s: chest };
-  const shown = slotsOf(stashRef, player) ?? inv;
+  const stashRef: ContainerRef = { c: "stash", id: chest.id };
+  const shown = slotsOf(stashRef, refCtx(p)) ?? inv;
   drawGrid(p, shown, gx, gy, cols, cell, gap, (i) => p.act.moveStack(stashRef, i), stashRef);
   gy += stashRows * (cell + gap) + 8 * S;
 

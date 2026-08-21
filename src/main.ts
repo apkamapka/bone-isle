@@ -38,7 +38,7 @@ import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
 import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
-import { nextEntityId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
+import { nextEntityId, byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { TARGET_SEEK_PX } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
 import { addItem, addStack, removeItem, removeItemUnpacked, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
@@ -64,7 +64,7 @@ import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
 import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays } from "./systems/containers.ts";
-import type { ContainerRef } from "./systems/containers.ts";
+import type { ContainerRef, RefWorld } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 
 /* ------------------------------------------------------------------
@@ -365,6 +365,14 @@ function hudEditing(): boolean {
 }
 
 const cw = (): World => game.current;
+/**
+ * What a container address needs in order to resolve.
+ *
+ * Rebuilt on every call rather than cached: `game.current` changes when the
+ * player takes a ladder, and a stale context would resolve a corpse id
+ * against the floor above. It is three property reads.
+ */
+const refCtx = (): RefWorld => ({ bag: P.bag, world: game.current, home: game.worlds.home });
 const flash = (t: string, c = "#ffe9a8"): void => addFloat(cw(), P.x, P.y - 60, t, c);
 
 /** Recompute the player's max HP from current owned structures. */
@@ -441,7 +449,7 @@ function windowShowing(ref: ContainerRef): PanelWindow | undefined {
  * impossible without a detour through the bag between them.
  */
 function openContainer(ref: ContainerRef): void {
-  if (!slotsOf(ref, P)) return;
+  if (!slotsOf(ref, refCtx())) return;
   const open = windowShowing(ref);
   if (open) { raise(open); return; }
   /* Containers push straight onto the stack rather than going through
@@ -498,7 +506,7 @@ function updateCursor(): void {
 function rowsInWindow(win: PanelWindow): number {
   const ref = viewRefOf(win);
   if (!ref) return 0;
-  const slots = slotsOf(ref, P);
+  const slots = slotsOf(ref, refCtx());
   if (!slots) return 0;
   return Math.ceil(slots.length / 4);
 }
@@ -523,7 +531,7 @@ function sweepContainerWindows(): void {
     if (w.kind !== "container" || !w.ref) continue;
     // a window pointing at a pack that no longer exists has nothing to show
     // and, worse, is a live drop target aimed at nowhere
-    if (!slotsOf(w.ref, P) || !refUsable(w.ref)) ui.windows.splice(i, 1);
+    if (!slotsOf(w.ref, refCtx()) || !refUsable(w.ref)) ui.windows.splice(i, 1);
   }
 }
 
@@ -661,8 +669,8 @@ const act: PanelActions = {
   takeLoot: (c: Corpse, index: number) => { takeOne(c, index); },
   takeAllLoot: (c: Corpse | null) => {
     // null = "whatever the front container window is showing" (a floor bag)
-    const ref = c ? ({ c: "corpse", body: c } as ContainerRef)
-      : ui.floor ? ({ c: "ground", gi: ui.floor } as ContainerRef) : null;
+    const ref = c ? ({ c: "corpse", id: c.id } as ContainerRef)
+      : ui.floor ? ({ c: "ground", id: ui.floor.id } as ContainerRef) : null;
     if (ref) takeAllFrom(ref);
   },
   buy: (kind: ItemKind) => { doBuy(kind); },
@@ -736,7 +744,7 @@ const act: PanelActions = {
 
 /** The slots behind an address, or null if the address has gone stale. */
 function refSlots(ref: ContainerRef): Bag | null {
-  return slotsOf(ref, P);
+  return slotsOf(ref, refCtx());
 }
 
 /**
@@ -753,12 +761,24 @@ function refUsable(ref: ContainerRef): boolean {
   const world = cw();
   switch (base.c) {
     case "bag": return !!P.pack;
-    case "stash":
-      return cw() === game.worlds.home
-        && game.worlds.home.structures.includes(base.s)
-        && structInReach(base.s);
-    case "corpse": return world.corpses.includes(base.body) && withinReach(base.body.x, base.body.y);
-    case "ground": return world.ground.includes(base.gi) && withinReach(base.gi.x, base.gi.y);
+    case "stash": {
+      // Deliberately looked up in HOME only, not through the home fallback:
+      // a chest is reachable when you are standing on the island with it.
+      const st = byId(game.worlds.home.structures, base.id);
+      return cw() === game.worlds.home && !!st && structInReach(st);
+    }
+    // The "is it still there?" half of these used to be an `includes()` call
+    // beside the reach test. A missing entity now simply fails to resolve.
+    case "corpse": {
+      const c = corpseById(world, base.id);
+      return !!c && withinReach(c.x, c.y);
+    }
+    case "ground": {
+      const gi = groundById(world, base.id);
+      return !!gi && withinReach(gi.x, gi.y);
+    }
+    // Held in hand for one statement, by code that already checked the source.
+    case "loose": return true;
   }
 }
 
@@ -771,8 +791,10 @@ function refUsable(ref: ContainerRef): boolean {
  */
 function chestRoomLeft(ref: ContainerRef): number | null {
   const base = baseOf(ref);
-  if (base.c !== "stash" || !base.s.inv) return null;
-  return base.s.inv.length - bagSlotsUsed(base.s.inv);
+  if (base.c !== "stash") return null;
+  const inv = structureById(cw(), base.id, game.worlds.home)?.inv;
+  if (!inv) return null;
+  return inv.length - bagSlotsUsed(inv);
 }
 
 /** Rearrange within one container: fill empty, merge like kinds, else swap. */
@@ -910,8 +932,8 @@ function takeAllFrom(ref: ContainerRef): void {
 function closeIfEmpty(ref: ContainerRef): void {
   const base = baseOf(ref);
   if (base.c !== "corpse") return;
-  const c = base.body;
-  if (c.items.some((s) => s !== null)) return;
+  const c = corpseById(cw(), base.id);
+  if (!c || c.items.some((s) => s !== null)) return;
   const w = cw();
   const idx = w.corpses.indexOf(c);
   if (idx >= 0) w.corpses.splice(idx, 1);
@@ -1242,9 +1264,9 @@ function containerWindowAt(rx: number, ry: number): ContainerRef | null {
 /** The container a root window shows. Nested windows carry their own `ref`. */
 function baseRefOf(kind: PanelKind): ContainerRef | null {
   if (kind === "bag") return P.pack ? { c: "bag" } : null;
-  if (kind === "stash") return ui.stash ? { c: "stash", s: ui.stash } : null;
-  if (kind === "loot") return ui.loot ? { c: "corpse", body: ui.loot } : null;
-  if (kind === "floor") return ui.floor ? { c: "ground", gi: ui.floor } : null;
+  if (kind === "stash") return ui.stash ? { c: "stash", id: ui.stash.id } : null;
+  if (kind === "loot") return ui.loot ? { c: "corpse", id: ui.loot.id } : null;
+  if (kind === "floor") return ui.floor ? { c: "ground", id: ui.floor.id } : null;
   return null;
 }
 
@@ -1298,7 +1320,7 @@ function liftFloorStack(gi: GroundItem, to: ContainerRef, ti: number | null): vo
   const dst = refSlots(to);
   if (!dst) return;
   // a pack cannot be lifted into itself
-  if (baseOf(to).c === "ground" && (baseOf(to) as { gi: GroundItem }).gi === gi) {
+  if (baseOf(to).c === "ground" && (baseOf(to) as { id: number }).id === gi.id) {
     flash("it will not fit inside itself", "#d96a5a");
     return;
   }
@@ -1307,11 +1329,11 @@ function liftFloorStack(gi: GroundItem, to: ContainerRef, ti: number | null): vo
    * is not in the world, so its reach was checked above instead — hence
    * `sourceChecked`. */
   const shim: Bag = [{ kind: gi.kind, n: gi.n, items: gi.items }];
-    /* id 0 on purpose: this body never enters `world.corpses`, so nothing
-   * will ever look it up, and spending a real id on a holder that lives
-   * for one statement would make the counter lie about how many entities
-   * the session has actually created. */
-  const via: ContainerRef = { c: "corpse", body: { id: 0, name: "", x: gi.x, y: gi.y, items: shim, t: 0 } };
+    /* A `loose` address rather than a fake corpse. The stack being lifted is
+   * not in any container yet, so it is handed an address that names the shim
+   * directly — which is exactly what the `loose` member exists for, and it
+   * stops this from being a body that pretends to lie on the floor. */
+  const via: ContainerRef = { c: "loose", slots: shim };
   if (!moveItems(via, 0, to, ti, gi.n, { sourceChecked: true })) return;
   const leftover = shim[0];
   if (leftover) { gi.n = leftover.n; gi.items = leftover.items; }
@@ -1418,7 +1440,7 @@ function openMoveChooser(ref: ContainerRef, index: number): void {
   // drag exists to aim a throw with).
   if (slot.n <= 1) {
     if (rootOf(ref) === "world") { moveItems(ref, index, { c: "bag" }, null, 1); closeIfEmpty(ref); return; }
-    if (canStore && ui.stash) { moveItems(ref, index, { c: "stash", s: ui.stash }, null, 1); return; }
+    if (canStore && ui.stash) { moveItems(ref, index, { c: "stash", id: ui.stash.id }, null, 1); return; }
     if (!touchUI) { dropFromContainer(ref, index, 1); return; }
   }
   ui.split = { kind: slot.kind, index, ref, max: slot.n, n: slot.n, canStore };
@@ -1434,7 +1456,7 @@ function splitConfirm(mode: "store" | "take" | "drop" | "throw" | "move"): void 
     if (sp.to) { moveItems(sp.ref, sp.index, sp.to.ref, sp.to.index, n); closeIfEmpty(sp.ref); }
   } else if (mode === "store") {
     if (!ui.stash || !hasWindow("stash")) { ui.split = null; return; }
-    moveItems(sp.ref, sp.index, { c: "stash", s: ui.stash }, null, n);
+    moveItems(sp.ref, sp.index, { c: "stash", id: ui.stash.id }, null, n);
   } else if (mode === "take") {
     moveItems(sp.ref, sp.index, { c: "bag" }, null, n);
     closeIfEmpty(sp.ref);
@@ -1692,7 +1714,7 @@ function doRecall(): void {
 }
 
 function takeOne(c: Corpse, index: number): void {
-  const ref: ContainerRef = { c: "corpse", body: c };
+  const ref: ContainerRef = { c: "corpse", id: c.id };
   moveItems(ref, index, { c: "bag" }, null, refSlots(ref)?.[index]?.n ?? 1);
   closeIfEmpty(ref);
 }
@@ -1710,7 +1732,7 @@ function takeOne(c: Corpse, index: number): void {
  */
 function navInto(ref: ContainerRef, index: number, win?: PanelWindow): void {
   const target: ContainerRef = { c: "nested", via: ref, i: index };
-  if (!slotsOf(target, P)) return;
+  if (!slotsOf(target, refCtx())) return;
   /* In place, if the click came from the window already showing `ref`. That is
    * the Tibia behaviour and the one Radek asked for: a bag inside a bag
    * replaces the view you clicked in, rather than throwing a fresh window into
@@ -1760,9 +1782,16 @@ function navUp(ref: ContainerRef, win?: PanelWindow): void {
   if (parentOpen) raise(parentOpen);
   else if (parent.c === "nested") openContainer(parent);
   else if (parent.c === "bag") openWindow("bag");
-  else if (parent.c === "stash") { ui.stash = parent.s; openWindow("stash"); }
-  else if (parent.c === "corpse") { ui.loot = parent.body; openWindow("loot"); }
-  else if (parent.c === "ground") { ui.floor = parent.gi; openWindow("floor"); }
+  else if (parent.c === "stash") {
+    const st = structureById(cw(), parent.id, game.worlds.home);
+    if (st) { ui.stash = st; openWindow("stash"); }
+  } else if (parent.c === "corpse") {
+    const c = corpseById(cw(), parent.id);
+    if (c) { ui.loot = c; openWindow("loot"); }
+  } else if (parent.c === "ground") {
+    const gi = groundById(cw(), parent.id);
+    if (gi) { ui.floor = gi; openWindow("floor"); }
+  }
   beep(300, 0.05, "sine", 0.04, -40);
 }
 

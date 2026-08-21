@@ -2332,7 +2332,7 @@ async function main(): Promise<void> {
     {
       const src = fs.readFileSync("src/main.ts", "utf8");
       const sweep = src.slice(src.indexOf("function sweepContainerWindows"), src.indexOf("function openWindow"));
-      ok(sweep.includes("slotsOf(w.ref, P)") && sweep.includes("refUsable(w.ref)"),
+      ok(sweep.includes("slotsOf(w.ref, refCtx())") && sweep.includes("refUsable(w.ref)"),
         "a window pointing at a pack that has moved, dropped or rotted closes itself");
       ok(src.includes("sweepContainerWindows();"), "…and the sweep actually runs");
     }
@@ -8882,9 +8882,16 @@ async function main(): Promise<void> {
     const d = mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
 
     const heightFor = (items: number): number => {
-      const body = { kind: "beggar", x: 0, y: 0, items: new Array(16).fill(null) } as
-        { items: ({ kind: string; n: number } | null)[] };
+      /* The body has to be IN the world now (Etap 32b): a loot window holds a
+       * corpse id, and an id that is in no world resolves to nothing — which
+       * is the whole point of the change. Parking it in `current.corpses` is
+       * what actually killing something would have done. */
+      const body = { id: 900000 + items, name: "beggar", x: 0, y: 0, t: 60,
+        items: new Array(16).fill(null) } as
+        { id: number; items: ({ kind: string; n: number } | null)[] };
       for (let i = 0; i < items; i++) body.items[i] = { kind: "bones", n: 1 };
+      g.current.corpses.length = 0;
+      g.current.corpses.push(body as never);
       const win = { kind: "loot", seq: 0, offset: { x: 0, y: 0 }, rect: null, titleBar: null } as never as
         { rect: { h: number } | null; fit?: number };
       for (let f = 0; f < 2; f++) {
@@ -9566,6 +9573,88 @@ async function main(): Promise<void> {
     ok(save.includes("stampWorlds(worlds);"), "a loaded game is stamped rather than trusting saved ids");
     const game = (await import("node:fs")).readFileSync("src/game.ts", "utf8");
     ok(game.includes("stampWorlds(worlds);"), "…and so is a freshly built one");
+  }
+
+
+  /* ========= Etap 32b: container addresses hold ids too ====================
+   *
+   * The other half of the pointer removal. A ContainerRef is the address of
+   * "where an item is", and it is the thing a client will one day post to a
+   * server as "move this there" — so it has to be made of numbers for the
+   * same reason the attack target was. */
+  {
+    console.log("Etap 32b - ContainerRef holds ids:");
+    const cont = await import("../src/systems/containers.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame(4242);
+    const ctx = { bag: g.player.bag, world: g.current, home: g.worlds.home };
+
+    const src = (await import("node:fs")).readFileSync("src/systems/containers.ts", "utf8");
+    ok(src.includes('| { c: "stash"; id: number }'), "the stash address is an id");
+    ok(src.includes('| { c: "corpse"; id: number }'), "…so is the corpse address");
+    ok(src.includes('| { c: "ground"; id: number }'), "…and the ground address");
+    ok(!/\{ c: "(stash|corpse|ground)"; (s|body|gi):/.test(src),
+      "…and no member still carries the object itself");
+
+    /* Resolution. The interesting case is the STALE one: an address whose
+     * entity is gone must answer null rather than throw or return empties. */
+    const w = g.current;
+    w.corpses.length = 0;
+    const body = { id: 777001, name: "test", x: g.player.x, y: g.player.y, t: 60,
+      items: [{ kind: "bones", n: 3 }, null, null, null] } as never;
+    w.corpses.push(body);
+    const cref = { c: "corpse", id: 777001 } as never;
+    ok(cont.slotsOf(cref, ctx)?.length === 4, "a corpse address resolves to that corpse's slots");
+    w.corpses.length = 0;
+    ok(cont.slotsOf(cref, ctx) === null,
+      "…and once the body is gone the SAME address resolves to null, not to empty slots");
+    ok(cont.slotsOf({ c: "ground", id: 424242 } as never, ctx) === null,
+      "a ground address for a stack nobody ever dropped resolves to null");
+    ok(cont.slotsOf({ c: "stash", id: 424242 } as never, ctx) === null,
+      "…likewise a chest that does not exist");
+
+    /* A chest is resolvable from ANOTHER island, because crafting spends from
+     * every chest on Home wherever the character happens to be standing. */
+    const chest = g.worlds.home.structures.find((st) => st.key === "chest");
+    if (chest) {
+      const away = { bag: g.player.bag, world: g.worlds.wild, home: g.worlds.home };
+      ok(cont.slotsOf({ c: "stash", id: chest.id } as never, away) !== null,
+        "a chest address resolves from another island, since its contents are still spendable");
+    }
+
+    /* sameRef is now a number comparison, which means two addresses built at
+     * different times for the same thing are equal — they were not always, and
+     * that is precisely what made a window forget which container it was. */
+    ok(cont.sameRef({ c: "corpse", id: 5 } as never, { c: "corpse", id: 5 } as never),
+      "two separately-built addresses for one corpse are the same address");
+    ok(!cont.sameRef({ c: "corpse", id: 5 } as never, { c: "ground", id: 5 } as never),
+      "…but the same id in a different list is a different address");
+    ok(cont.sameRef(
+      { c: "nested", via: { c: "stash", id: 9 }, i: 2 } as never,
+      { c: "nested", via: { c: "stash", id: 9 }, i: 2 } as never),
+      "…and nesting compares all the way down");
+
+    /* The one escape hatch, and the rule that keeps it honest. */
+    ok(src.includes('| { c: "loose"; slots: Bag }'), "a loose bag has its own address kind");
+    const loose = [{ kind: "wood", n: 2 }, null] as never;
+    ok(cont.slotsOf({ c: "loose", slots: loose } as never, ctx) === loose,
+      "…which resolves to the bag it names");
+    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    ok(main.includes('const via: ContainerRef = { c: "loose", slots: shim };'),
+      "lifting a stack off the floor uses it instead of inventing a corpse");
+    ok(!main.includes('body: { id: 0,'), "…and the fake body it replaced is gone");
+    ok(!/\{ c: "loose"[^}]*\}/.test((await import("node:fs")).readFileSync("src/ui/panels.ts", "utf8")),
+      "no panel ever builds one, because no window may hold one");
+
+    /* refUsable's old two-part question — "is it in the list AND in reach" —
+     * is one lookup now. Leaving the includes() behind would mean two answers
+     * to the same question, which is how they drift apart. */
+    ok(!main.includes("world.corpses.includes(base.body)"),
+      "the corpse liveness check is gone from refUsable");
+    ok(!main.includes("world.ground.includes(base.gi)"), "…and the ground one");
+    ok(!main.includes("game.worlds.home.structures.includes(base.s)"), "…and the chest one");
+    ok(main.includes("const refCtx = (): RefWorld =>"),
+      "one place builds the resolution context, rebuilt per call so a ladder cannot stale it");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
