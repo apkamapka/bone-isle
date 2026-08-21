@@ -33,6 +33,38 @@ import { NO_DOCK, type DockLayout } from "./dock.ts";
 import type { Rect } from "./mobile.ts";
 import { drawResizeArrows } from "./icons.ts";
 
+/**
+ * Window kinds that may take the phone's side strip.
+ *
+ * Packs you carry, and nothing else. A corpse is deliberately absent: world
+ * loot is a thing you empty and walk away from, so it wants a wide, short,
+ * throwaway sheet rather than the tall column you keep open all game.
+ *
+ * "bag" being in this set is the whole fix. The strip used to look for
+ * `kind === "container"`, which is what a nested pack opens as — but the
+ * backpack itself, opened from the tab, is `kind === "bag"`. So the first pack
+ * never qualified and the strip went to the SECOND one, which is exactly
+ * backwards from what it is for.
+ */
+export const STRIP_KINDS: ReadonlySet<string> = new Set(["bag", "container", "stash"]);
+
+/**
+ * Which open window holds the side strip: the earliest one OPENED, not the
+ * earliest in the array.
+ *
+ * The array is z-order and gets reshuffled every time a window is raised, so
+ * reading position 0 would hand the strip to whichever pack you last tapped.
+ * `seq` is stamped once at creation and never moves.
+ */
+export function stripCandidate(windows: readonly PanelWindow[]): PanelWindow | undefined {
+  let best: PanelWindow | undefined;
+  for (const w of windows) {
+    if (!STRIP_KINDS.has(w.kind) || w.stripOut) continue;
+    if (!best || (w.seq ?? 0) < (best.seq ?? 0)) best = w;
+  }
+  return best;
+}
+
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
   | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks" | "wardrobe"
@@ -88,6 +120,32 @@ export function visibleRows(kind: PanelKind, totalRows: number): number {
 
 /** Width of a container window's scrollbar, in design units. */
 export const SCROLLBAR_W = 9;
+
+/**
+ * Rows for a corpse, or a pile on the ground.
+ *
+ * A corpse holds sixteen slots whatever happened to fall into it, so showing
+ * them all made a window four rows tall to display two items — on a phone that
+ * is most of the screen spent on empty frame, parked on top of the fight you
+ * are still in.
+ *
+ * So it is sized to the loot instead: one row for a light corpse, two for a
+ * heavy one. The cut is at four because four IS one row, and the moment a fifth
+ * item lands a second row has to exist anyway.
+ *
+ * Phone only, and only until the player says otherwise — the -/+ buttons still
+ * win, and the desktop keeps the behaviour it had.
+ */
+function lootRows(
+  p: PanelInput, slots: readonly unknown[], allRows: number, cell: number, gap: number,
+): number {
+  if (p.strip) return stripRows(p, allRows, cell, gap, 50 * p.hud.scale);
+  if (p.sheet && panelRows(p.win.kind) <= 0) {
+    const used = slots.reduce<number>((n, x) => n + (x ? 1 : 0), 0);
+    return Math.max(1, Math.min(allRows, used > 4 ? 2 : 1));
+  }
+  return visibleRows(p.win.kind, allRows);
+}
 
 /**
  * How many rows a container shows.
@@ -388,6 +446,8 @@ export interface PanelWindow {
    * on the phone that refuses to follow your finger.
    */
   stripOut?: boolean;
+  /** Creation order, so "the first pack you opened" survives z-order raising. */
+  seq?: number;
   /**
    * Last settled top edge as a sheet, in screen px.
    *
@@ -626,17 +686,23 @@ function goldPanel(p: PanelInput, x: number, y: number, w: number, h: number, ti
   ctx.moveTo(bx + bs - 3.5 * S, by + 3.5 * S);
   ctx.lineTo(bx + 3.5 * S, by + bs - 3.5 * S);
   ctx.stroke();
-  // collapse / expand toggle
-  bx -= bs + gap;
-  titleBtn(p, bx, by, bs, collapsed ? "▸" : "▾", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a",
-    () => togglePanelCollapsed(kind));
-  if (!collapsed && !isDocked(p.win, p.dock)) {
-    // zoom + / −  (per-window, persisted). Hidden while docked: the column has
-    // ONE width, so a button that promises to change this window's is lying.
+  /* In the strip only the close box fits, or means anything. Four buttons
+   * crammed into one column's width overlapped into an unreadable smear, and
+   * three of the four were lying: the strip sets its own row count from its
+   * height, and zooming a window that is sized to the screen edge does nothing. */
+  if (!p.strip) {
+    // collapse / expand toggle
     bx -= bs + gap;
-    titleBtn(p, bx, by, bs, "+", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a", () => stepPanelZoom(kind, 1));
-    bx -= bs + gap;
-    titleBtn(p, bx, by, bs, "−", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a", () => stepPanelZoom(kind, -1));
+    titleBtn(p, bx, by, bs, collapsed ? "▸" : "▾", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a",
+      () => togglePanelCollapsed(kind));
+    if (!collapsed && !isDocked(p.win, p.dock)) {
+      // zoom + / −  (per-window, persisted). Hidden while docked: the column has
+      // ONE width, so a button that promises to change this window's is lying.
+      bx -= bs + gap;
+      titleBtn(p, bx, by, bs, "+", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a", () => stepPanelZoom(kind, 1));
+      bx -= bs + gap;
+      titleBtn(p, bx, by, bs, "−", "rgba(40,32,20,.9)", "#6e571f", "#cfa86a", () => stepPanelZoom(kind, -1));
+    }
   }
   // draggable region is the title bar minus the button cluster
   p.win.titleBar = { x, y, w: Math.max(20 * S, bx - x - 4 * S), h: barH };
@@ -840,9 +906,7 @@ export function drawPanels(
    * out of it. Everything else — shops, the paperdoll, a second pack — queues
    * for the sheets, which have already been narrowed to clear the strip. */
   const strip = base.strip ?? null;
-  const stripWin = strip
-    ? base.ui.windows.find((w) => w.kind === "container" && !w.stripOut)
-    : undefined;
+  const stripWin = strip ? stripCandidate(base.ui.windows) : undefined;
   let sheetAt = 0;
   const full: Omit<PanelInput, "win"> = {
     ...base, dock, sheet: sheets?.[0] ?? null, sheetBand: band, strip: null,
@@ -1811,7 +1875,7 @@ function drawWorldContainer(
   const allRows = Math.ceil(slots.length / cols);
   const cell = 30 * S;
   const gap = 4 * S;
-  const rows = stripRows(p, allRows, cell, gap, 50 * S);
+  const rows = lootRows(p, slots, allRows, cell, gap);
   const gridW = cols * cell + (cols - 1) * gap;
   const w = dockedW(p, gridW + 24 * S);
   const h = 20 * S + rows * cell + (rows - 1) * gap + 30 * S + RESIZE_BAR * S;

@@ -266,7 +266,12 @@ export function sheetSlots(d: MobileLayout, count: number, stripW = 0): Rect[] {
  */
 export function stripRect(d: MobileLayout): Rect {
   const w = Math.round(d.u * 1.6);
-  return { x: d.mapBottom > d.mapTop ? d.sheet.x + d.sheet.w - w : 0, y: d.mapTop, w, h: d.mapBottom - d.mapTop };
+  /* Hard against the glass, not inset by the sheet's margin. The margin left a
+   * finger-wide ribbon of world down the outside of the strip: too narrow to
+   * see anything in, wide enough to make the strip look as though it had come
+   * loose of the edge. */
+  const right = d.sheet.x + d.sheet.w + d.margin;
+  return { x: Math.max(0, right - w), y: d.mapTop, w, h: d.mapBottom - d.mapTop };
 }
 
 /**
