@@ -8606,7 +8606,9 @@ async function main(): Promise<void> {
   {
     const MB = await import("../src/ui/mobile.ts");
     ok(MB.deckEnabled(412, 915, true), "a phone held upright gets the deck");
-    ok(!MB.deckEnabled(915, 412, true), "…the same phone turned sideways does not — it has no height to give away");
+    ok(MB.deckEnabled(915, 412, true), "…and so does the same phone turned sideways, with its own layout");
+    ok(!MB.deckEnabled(1200, 560, false),
+      "…but a short wide window with no touch does NOT: that is a desktop dragged smaller, and it has the column");
     ok(!MB.deckEnabled(1920, 1080, false), "…and a desktop never does, so the column work is untouched");
     ok(!MB.deckEnabled(1080, 1920, false),
       "…nor does a tall desktop window, which is wide enough for the column it already has");
@@ -8816,9 +8818,9 @@ async function main(): Promise<void> {
     ok(MB.sheetSlots(d, 1, 0)[0].w > MB.sheetSlots(d, 1, st.w)[0].w,
       "…and takes the width back when nothing is docked");
 
-    ok(Math.abs(MB.mapFocusFracX(824, 0) - 0.5) < 1e-9,
+    ok(Math.abs(MB.mapFocusFracX(d, 824, 0) - 0.5) < 1e-9,
       "no strip, no shift — the player stands in the middle of the glass");
-    ok(MB.mapFocusFracX(824, st.w) < 0.5,
+    ok(MB.mapFocusFracX(d, 824, st.w) < 0.5,
       "…with one, the focus moves left, onto the middle of what you can actually see");
   }
 
@@ -8927,7 +8929,7 @@ async function main(): Promise<void> {
 
     const cOpen = MB.stripClaim(d, open, W), cAway = MB.stripClaim(d, away, W);
     ok(cOpen > cAway * 3, `slid away it claims ${cAway} of ${cOpen} device px — the map gets the rest back`);
-    ok(MB.mapFocusFracX(W, cAway) > MB.mapFocusFracX(W, cOpen),
+    ok(MB.mapFocusFracX(d, W, cAway) > MB.mapFocusFracX(d, W, cOpen),
       "…so the camera lets the player drift back toward the middle of the glass");
     ok(MB.sheetSlots(d, 1, cAway)[0].w > MB.sheetSlots(d, 1, cOpen)[0].w,
       "…and a sheet widens into the space as well");
@@ -9023,6 +9025,76 @@ async function main(): Promise<void> {
     ok(main.includes("base.x + n * 6 * scale"), "…and the desktop stagger is untouched");
     ok(panels.includes("x: win.rect!.x, w: win.rect!.w"),
       "the scroll arrows ride on the window's own edge, not the lane's");
+  }
+
+  console.log("Etap 35 — sideways, the chrome goes down the SIDES:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h, dpr] of [[915, 412, 2], [844, 390, 3], [800, 360, 2]] as const) {
+      const d = MB.mobileLayout(w * dpr, h * dpr, dpr, 0, 0);
+      ok(d.landscape, `${w}x${h}: the sideways layout is the one that answers`);
+
+      /* The whole argument. Upright the chrome takes bands off the top and the
+       * foot, because height is what a phone has spare. Turned sideways that is
+       * exactly backwards: a band across the foot would spend a third of the
+       * ONLY short axis. So the chrome moves to the sides and the map keeps its
+       * full height. */
+      ok(d.deckH === 0 && d.mapBottom === h * dpr,
+        "…there is no band across the foot; the world runs to the bottom edge");
+      ok(d.mapLeft > 0 && d.mapRight < w * dpr, "…and takes two bands off the sides instead");
+      ok(d.topH < h * dpr * 0.12,
+        `…while the status row costs ${((d.topH / (h * dpr)) * 100).toFixed(0)}% of the height, not a quarter of it`);
+
+      // every control still hittable, which is the point of the touch unit
+      for (const [name, r] of [["slot", d.slots[0]], ["menu", d.menu], ["edit", d.edit],
+        ["swap", d.swap], ["minimap", d.minimap]] as const) {
+        ok(Math.min(r.w, r.h) / dpr >= MB.TOUCH_MIN_CSS - 1,
+          `${w}x${h}: the ${name} clears a fingertip (${Math.round(Math.min(r.w, r.h) / dpr)} CSS px)`);
+      }
+
+      // slots down the left, under one thumb; controls down the right, under the other
+      ok(d.slots.every((r) => r.x + r.w <= d.mapLeft), "the six slots stand clear of the map, on the left");
+      for (let i = 1; i < d.slots.length; i++) {
+        ok(d.slots[i].y >= d.slots[i - 1].y + d.slots[i - 1].h, `slot ${i + 1} sits below slot ${i}`);
+      }
+      for (const r of [d.menu, d.edit, d.swap, d.minimap]) {
+        ok(r.x >= d.mapRight, "a control stays in the right-hand column");
+        ok(r.x + r.w <= w * dpr, "…and inside the glass");
+      }
+      // status, both bars and the purse all on ONE row — there is width for it
+      ok(d.info.y === d.vitals.y && d.vitals.y === d.purse.y, "status, vitals and purse share one row");
+      ok(d.info.x + d.info.w <= d.vitals.x && d.vitals.x + d.vitals.w <= d.purse.x,
+        "…reading left to right without overlapping");
+
+      const mw = d.mapRight - d.mapLeft, mh = d.mapBottom - d.mapTop;
+      ok((mw * mh) / (w * dpr * h * dpr) > 0.7,
+        `…leaving ${Math.round(((mw * mh) / (w * dpr * h * dpr)) * 100)}% of the glass as world`);
+      ok(mw / mh > 1.6, "…and the map stays wide, which is the whole reason to turn the phone");
+    }
+
+    /* Two panels split the axis that has slack — which is the OTHER one now. */
+    const d = MB.mobileLayout(915 * 2, 412 * 2, 2, 0, 0);
+    const two = MB.sheetSlots(d, 2);
+    ok(two.length === 2, "two panels, two lanes");
+    ok(two[0].x + two[0].w <= two[1].x, "…side by side, not stacked");
+    ok(two[0].y === two[1].y && two[0].h === two[1].h, "…each keeping the full height of the band");
+    ok(two[0].h > two[0].w * 0.5, "…which is what stacking them would have thrown away");
+
+    const st = MB.stripRect(d, 0);
+    ok(st.x + st.w === d.mapRight,
+      "the container strip docks against the control column, not the glass behind it");
+    ok(MB.overDeck(d, 4, (d.mapTop + d.mapBottom) / 2), "the left column refuses world taps");
+    ok(MB.overDeck(d, 915 * 2 - 4, (d.mapTop + d.mapBottom) / 2), "…so does the right one");
+    ok(!MB.overDeck(d, (d.mapLeft + d.mapRight) / 2, (d.mapTop + d.mapBottom) / 2),
+      "…and the map between them still walks the player");
+    /* The control column is wider than the slot column, so the middle of what
+     * you can SEE is left of the middle of the glass — the same correction the
+     * container strip needs, for the same reason. */
+    ok(MB.mapFocusFracX(d, 915 * 2, 0) < 0.5,
+      "the camera aims at the middle of the map, not of the glass");
+    ok(Math.abs(MB.mapFocusFracX(d, 915 * 2, 0) - (d.mapLeft + d.mapRight) / 2 / (915 * 2)) < 1e-9,
+      "…which is exactly the midpoint between the two columns");
+    ok(d.slots.every((r) => r.y + r.h <= d.mapBottom), "…and no slot hangs off the bottom edge");
   }
 
   console.log("Etap 35 — a long shop list scrolls instead of shrinking to a ribbon:");
@@ -9144,8 +9216,8 @@ async function main(): Promise<void> {
     /* The strip and the deck are not the same height, so canvas-centre would
      * leave the character low, half-hidden behind the hotbar. */
     ok(Math.abs(frac - 0.5) > 0.0005, "…which is NOT the centre of the canvas");
-    ok(MB.overDeck(d, 4) && MB.overDeck(d, H - 4), "both plates refuse world taps");
-    ok(!MB.overDeck(d, (d.mapTop + d.mapBottom) / 2), "…and the band between them accepts them");
+    ok(MB.overDeck(d, 200, 4) && MB.overDeck(d, 200, H - 4), "both plates refuse world taps");
+    ok(!MB.overDeck(d, 200, (d.mapTop + d.mapBottom) / 2), "…and the band between them accepts them");
   }
 
   console.log("Etap 35 — the phone's wiring, where it crosses the rest of the game:");
@@ -9159,7 +9231,7 @@ async function main(): Promise<void> {
       "on a phone the deck replaces the floating groups outright — they are not drawn underneath it");
     ok(main.includes("if (deck.on) while (ui.windows.length >= MAX_SHEETS) ui.windows.shift();"),
       "…two panels are open at most, and the oldest gives way — a move needs both its ends");
-    ok(main.includes("if (overDeck(deck, sy)) return true;"),
+    ok(main.includes("if (overDeck(deck, sx, sy)) return true;"),
       "…a press on either plate never walks the player");
     ok(main.includes("cam.y = clamp(P.y - VH * mapFocusFrac(deck, screen.height)"),
       "…and the camera parks the player in the visible band");
