@@ -1080,6 +1080,21 @@ Backpack and Quest — are 16x16 pixel icons: `icon-build.png`, `icon-skill.png`
 `icon-atk.png` joins them on the same 16x16 grid: the crossed-swords glyph on
 the attack-nearest button, which replaced a procedurally drawn pair of blades.
 
+Four more, on the same grid, for the combat controls:
+
+- `icon-chase.png`, `icon-stand.png` — a running figure and a standing one, the
+  two faces of the chase toggle. They replaced the words CHASE and STAND, which
+  were the widest labels on the phone's utility row.
+- `icon-skull-white.png`, `icon-skull-red.png` — the PvP marks. Both are drawn
+  twice over: as the switch that says whether you mean to fight other players,
+  and beside the head of somebody who already has.
+
+The chase and stand figures are drawn in black and two greys, so on a button
+face they are re-coloured at runtime — the alpha channel is used as a stencil
+and flood-filled with the state's colour (`stencil()` in `src/ui/icons.ts`).
+The shape is the file's; only the colour is the interface's. The skulls are
+already coloured and are drawn as they were authored.
+
 **Drawn by the project author.** Original work, no third-party licence attaches
 to them, so they carry no attribution or redistribution conditions.
 

@@ -104,6 +104,18 @@ export interface MobileLayout {
   /** Mark the nearest creature — Tibia's crossed swords. */
   atk: Rect;
   /**
+   * Do I mean to fight other PLAYERS? A white skull, lit when armed.
+   *
+   * It sits on this row and not in a menu because it is the one setting whose
+   * being wrong is discovered by killing somebody. Tibia buries the same
+   * switch two menus deep and every player who has ever lost a friend to it
+   * knows why that was a mistake.
+   *
+   * It only fits here because chase stopped being a WORD: CHASE and STAND
+   * were the widest labels on the strip, and a glyph needs half the room.
+   */
+  skull: Rect;
+  /**
    * Open the chat input, from the drop-down.
    *
    * A fallback rather than the main route: the log lying on the world is
@@ -165,7 +177,7 @@ export function noDeck(screenH = 0): MobileLayout {
   return {
     on: false, landscape: false, u: 0, gap: 0, margin: 0,
     topH: 0, info: z, vitals: z, purse: z,
-    menu: z, edit: z, swap: z, chase: z, atk: z, chat: z, minimap: z, tabs: [],
+    menu: z, edit: z, swap: z, chase: z, atk: z, skull: z, chat: z, minimap: z, tabs: [],
     deckY: screenH, deckH: 0, slots: [],
     mapTop: 0, mapBottom: screenH, mapLeft: 0, mapRight: 0, sheet: z,
   };
@@ -216,14 +228,18 @@ export function mobileLayout(
    * three leave, which is most of it — you aim at it in a hurry, and the desktop
    * column draws it as one wide bar under its buttons for the same reason. */
   const menu: Rect = { x: innerX, y, w: tabH, h: tabH };
-  /* Chase gets one and a half units because it carries a WORD — CHASE or
-   * STAND — and a square would clip it. The mark button is square because it
-   * carries a glyph, and a square is what a glyph wants. */
-  const chaseW = Math.round(u * 1.5);
-  const chase: Rect = { x: menu.x + menu.w + gap, y, w: chaseW, h: tabH };
+  /* Chase used to take one and a half units because it carried a WORD — CHASE
+   * or STAND, the two widest labels on the strip — and a square would clip
+   * them. Radek's running and standing figures say the same thing in a glyph,
+   * so it is square now like the mark button beside it, and the half unit it
+   * gave back is most of what the skull costs. */
+  const chase: Rect = { x: menu.x + menu.w + gap, y, w: tabH, h: tabH };
   const atk: Rect = { x: chase.x + chase.w + gap, y, w: tabH, h: tabH };
+  /* Next to chase and mark, not off in a menu: all three are answers to "how
+   * am I fighting right now", and a player checks them as one glance. */
+  const skull: Rect = { x: atk.x + atk.w + gap, y, w: tabH, h: tabH };
   const minimap: Rect = { x: innerX + innerW - tabH, y, w: tabH, h: tabH };
-  const swapX = atk.x + atk.w + gap;
+  const swapX = skull.x + skull.w + gap;
   const swap: Rect = { x: swapX, y, w: Math.max(1, minimap.x - gap - swapX), h: tabH };
   y += tabH + m;
   const topH = y;
@@ -279,7 +295,7 @@ export function mobileLayout(
   return {
     on: true, landscape: false, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, chat, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, minimap, tabs,
     deckY, deckH, slots,
     mapTop, mapBottom, mapLeft: 0, mapRight: screenW, sheet,
   };
@@ -347,16 +363,31 @@ function landscapeLayout(
    * only ever read, sits at the top, and the swap — which you hit mid-fight —
    * gets the easy middle. */
   let ry = colY;
-  const minimap: Rect = { x: rightX, y: ry, w: rightW, h: rightW };
-  ry += rightW + gap;
-  /* The three mid-fight controls take the easy middle of the column, in the
+  /* The map is a SQUARE and it is no longer the column's width.
+   *
+   * The skull needs a row, and there was nowhere to take one from: measured
+   * across the three landscape phones the suite checks, the column already ran
+   * within about ten pixels of its own floor. It came out of the minimap
+   * instead, which is the only thing up here that is read rather than pressed
+   * — so it is the only thing that can lose height without losing a fingertip.
+   * Centred, because a square narrower than the column looks like a mistake
+   * pinned to one edge and like a deliberate inset in the middle. */
+  const mapSide = Math.round(u * 1.5);
+  const minimap: Rect = {
+    x: rightX + Math.round((rightW - mapSide) / 2), y: ry, w: mapSide, h: mapSide,
+  };
+  ry += mapSide + gap;
+  /* The four mid-fight controls take the easy middle of the column, in the
    * order you reach for them: swap the weapon, mark something, decide whether
-   * to follow it. The reveal sits below them because a panel is not a fight. */
+   * to follow it, decide whether you are fighting people. The reveal sits
+   * below them because a panel is not a fight. */
   const swap: Rect = { x: rightX, y: ry, w: rightW, h: u };
   ry += u + gap;
   const atk: Rect = { x: rightX, y: ry, w: rightW, h: u };
   ry += u + gap;
   const chase: Rect = { x: rightX, y: ry, w: rightW, h: u };
+  ry += u + gap;
+  const skull: Rect = { x: rightX, y: ry, w: rightW, h: u };
   ry += u + gap;
   const menu: Rect = { x: rightX, y: ry, w: rightW, h: u };
 
@@ -388,7 +419,7 @@ function landscapeLayout(
   return {
     on: true, landscape: true, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, chat, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, minimap, tabs,
     deckY: screenH, deckH: 0, slots,
     mapTop, mapBottom, mapLeft, mapRight, sheet,
   };

@@ -38,6 +38,7 @@ import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
 import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
+import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
 import { nextEntityId, byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { TARGET_SEEK_PX } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
@@ -3146,6 +3147,19 @@ function update(dt: number): void {
   P.tpCd = Math.max(0, P.tpCd - dt);
   P.atkCd = Math.max(0, P.atkCd - dt);
   tickCrystalCooldown(dt);
+  /* The clocks that must run WHATEVER the player is doing, ticked here at the
+   * top where nothing can return past them.
+   *
+   * `tickChat` was called only inside the death branch below — twice, from a
+   * bad merge — so on the living path speech never aged: a bubble Radek put
+   * over his own head was still there a minute later, and the log on the world
+   * never faded either, which is the same bug wearing a different hat. A clock
+   * that only runs while you are dead is not a clock.
+   *
+   * The skull's timer goes with it and for the same reason: dying does not
+   * launder a frag, and neither does standing still. */
+  tickChat(dt);
+  tickSkull(dt);
   // mid-fight loot walk: the corpse clicked during combat pops open the
   // moment we're in range (or is forgotten if it despawned / got looted away)
   if (pendingLoot) {
@@ -3169,8 +3183,6 @@ function update(dt: number): void {
     P.deadT -= dt;
     if (P.deadT <= 0) respawnAtHome(game);
     updateFloats(dt);
-  tickChat(dt);
-    tickChat(dt);
     updateSpellFx(dt);  // the spell that killed you still gets to finish
     // …and so does the cast behind it: a creature rooted in its windup when
     // you died would still be rooted when you walked back in.
@@ -3617,6 +3629,30 @@ function sayBubble(entity: number, x: number, y: number): void {
   vctx.fillStyle = b.color;
   vctx.fillText(b.text, sx, sy);
   vctx.globalAlpha = 1;
+}
+
+/**
+ * A skull beside somebody's head — Tibia's PvP mark, in Tibia's place.
+ *
+ * BESIDE, not above. Above the head is where speech goes, and a bubble that
+ * covers the one thing telling you this person kills people is a bubble that
+ * gets somebody killed. Tibia puts it on the right of the name for the same
+ * reason and it has never moved in twenty years.
+ *
+ * `x, y` is the head's top-right corner in WORLD coordinates, computed by the
+ * caller the way `sayBubble` takes its anchor — a rat, a knight and a dragon
+ * all have their head in a different place and the drawing code has no
+ * business guessing which it is looking at.
+ *
+ * Drawn at 1x with nothing behind it. A dark plate went under it first and
+ * came out looking like a sticker pinned to the shoulder — and it was never
+ * needed: both skulls are drawn with a full black outline of their own, which
+ * is the same job done by the art instead of by the renderer.
+ */
+function skullMark(kind: Skull, x: number, y: number): void {
+  const icon = skullIcon(kind);
+  if (!icon) return;
+  drawControlIcon(vctx, icon, Math.round(x - cam.x), Math.round(y - cam.y), ICON_SRC, false);
 }
 
 function targetBox(x: number, y: number): void {
@@ -4074,6 +4110,12 @@ function render(): void {
     if (lpc) drawSprite(lpc, P.x, P.y, 1, 0);
     else drawSprite(P.sprDir[P.dir], P.x, P.y, P.dir === "side" ? P.face : 1, pbob);
     vctx.globalAlpha = 1;
+    /* Measured off the sheet rather than guessed: an LPC cell is 64 tall and
+     * drawn feet-down, and the first row with anything in it is row 15 — so
+     * the head starts at y-49 and its right edge sits about ten pixels out
+     * from centre. A skull hung off the cell's own corner would float a
+     * tile and a half above an empty shoulder. */
+    if (!P.dead) skullMark(skull(), P.x + 10, P.y - 49);
     sayBubble(CHAT_SPEAKER_ID, P.x, P.y - 46);
   } });
 
@@ -4430,11 +4472,11 @@ function drawDockControls(d: DockLayout, top: number): void {
     buttonBox(sctx, bx, top, bw, bh, S, {
       on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
     });
-    /* Snapped to a whole multiple of the 16px source grid. Hand-drawn pixel
-     * art scaled by 1.37x is mush; at exactly 1x, 2x or 3x it is crisp, and
-     * these glyphs are authored on the same grid so they match. */
-    const gs = Math.max(ICON_SRC, Math.floor((Math.min(bw, bh) * 0.86) / ICON_SRC) * ICON_SRC);
-    drawControlIcon(sctx, glyph, Math.round(bx + (bw - gs) / 2), Math.round(top + (bh - gs) / 2), gs, on);
+    /* Snapped to a whole multiple of the 16px source grid — see
+     * `drawSquareIcon`. Hand-drawn pixel art scaled by 1.37x is mush; at
+     * exactly 1x, 2x or 3x it is crisp, and these glyphs are authored on the
+     * same grid so they match. */
+    drawSquareIcon(sctx, glyph, bx, top, bw, bh, on, undefined, 0.86);
     hotspots.push({ x: bx, y: top, w: bw, h: bh, fn: () => togglePanel(panel) });
     touchButtons.push({ x: bx, y: top, w: bw, h: bh });
   });
@@ -4444,41 +4486,62 @@ function drawDockControls(d: DockLayout, top: number): void {
    * not fit in sixteen units at any font. They live on a bar across the foot of
    * the map now, where there is room for them to be the size of an item. */
 
-  /* Row 2: the two combat controls, side by side — quick weapon swap and
-   * chase/stand. Tibia keeps its fight toggles together in the console for the
-   * same reason: they are pressed mid-fight, so the thumb should find them as
-   * one place rather than hunt two.
+  /* Row 2: the three combat controls, side by side — quick weapon swap,
+   * chase/stand, and whether other PLAYERS are fair game. Tibia keeps its
+   * fight toggles together in the console for the same reason: they are
+   * pressed mid-fight, so the hand should find them as one place rather than
+   * hunt three.
    *
-   * They SHARE a row rather than each taking one. A second full-width bar
+   * They SHARE a row rather than each taking one. Another full-width bar
    * would push the containers below it down by another 22 units, and the
-   * column's whole argument is that it leaves the map alone. */
+   * column's whole argument is that it leaves the map alone. There is room
+   * for the third only because chase stopped being a WORD: CHASE and STAND
+   * needed half the row between them, and two square glyphs need a quarter. */
   const wy = top + bh + gap;
   const wh = Math.round(SWAP_H * S);
-  const halfW = Math.round((d.innerW - gap) / 2);
+  /* Square, and sized off the row's own height so the pair cannot drift out
+   * of proportion if SWAP_H ever moves. */
+  const sq = wh;
+  const swapW = Math.max(1, d.innerW - 2 * (sq + gap));
   const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
   sctx.textAlign = "center";
   sctx.textBaseline = "middle";
   sctx.font = `bold ${Math.round(wh * 0.42)}px 'Courier New',monospace`;
 
-  buttonBox(sctx, d.innerX, wy, halfW, wh, S, {});
+  buttonBox(sctx, d.innerX, wy, swapW, wh, S, {});
   sctx.fillStyle = "#e9e2c8";
-  sctx.fillText(bowOn ? "\u2192MELEE" : "\u2192BOW", d.innerX + halfW / 2, wy + wh / 2);
-  hotspots.push({ x: d.innerX, y: wy, w: halfW, h: wh, fn: () => swapWeapon() });
-  touchButtons.push({ x: d.innerX, y: wy, w: halfW, h: wh });
+  sctx.fillText(bowOn ? "\u2192MELEE" : "\u2192BOW", d.innerX + swapW / 2, wy + wh / 2);
+  hotspots.push({ x: d.innerX, y: wy, w: swapW, h: wh, fn: () => swapWeapon() });
+  touchButtons.push({ x: d.innerX, y: wy, w: swapW, h: wh });
 
   /* Chase is a STATE, not an action, so unlike the swap it stays lit while
    * on — the player has to be able to answer "am I following?" without
    * pressing anything. Red for chase, blue for stand, matching the stance
-   * chip's language where red is committed and blue is careful. */
-  const cx = d.innerX + halfW + gap;
+   * chip's language where red is committed and blue is careful; the glyph
+   * takes the colour the word had, so nothing about the reading changed. */
+  const cx = d.innerX + swapW + gap;
   const chase = chasing();
-  buttonBox(sctx, cx, wy, halfW, wh, S, {
+  buttonBox(sctx, cx, wy, sq, wh, S, {
     on: chase, face: chase ? "rgba(150,58,48,.92)" : undefined,
   });
-  sctx.fillStyle = chase ? "#ffb3a8" : "#8ab6ff";
-  sctx.fillText(chase ? "CHASE" : "STAND", cx + halfW / 2, wy + wh / 2);
-  hotspots.push({ x: cx, y: wy, w: halfW, h: wh, fn: () => toggleChase() });
-  touchButtons.push({ x: cx, y: wy, w: halfW, h: wh });
+  drawSquareIcon(sctx, chase ? "chase" : "stand", cx, wy, sq, wh, chase, chaseTint(chase));
+  hotspots.push({ x: cx, y: wy, w: sq, h: wh, fn: () => toggleChase() });
+  touchButtons.push({ x: cx, y: wy, w: sq, h: wh });
+
+  /* …and the white skull: do I mean to fight other people?
+   *
+   * Lit on a RED face rather than the gold one every other pressed button
+   * wears. Gold is this interface's word for "open" — a panel, an edit mode,
+   * something you will close again in a moment. This one is not that, and the
+   * cost of forgetting it is on. */
+  const px = cx + sq + gap;
+  const armed = pvpArmed();
+  buttonBox(sctx, px, wy, sq, wh, S, {
+    on: armed, face: armed ? "rgba(150,58,48,.92)" : undefined,
+  });
+  skullButtonIcon(sctx, px, wy, sq, wh, armed);
+  hotspots.push({ x: px, y: wy, w: sq, h: wh, fn: () => togglePvpSwitch() });
+  touchButtons.push({ x: px, y: wy, w: sq, h: wh });
 
   /* Row 3: mark, chat, edit — the three the phone deck grew and the column
    * did not. Thirds rather than halves because none of them needs a word
@@ -4489,9 +4552,7 @@ function drawDockControls(d: DockLayout, top: number): void {
   buttonBox(sctx, d.innerX, ry, third, wh, S, {
     on: marked, face: marked ? "rgba(150,58,48,.92)" : undefined,
   });
-  const ags = Math.max(ICON_SRC, Math.floor((Math.min(third, wh) * 0.7) / ICON_SRC) * ICON_SRC);
-  drawControlIcon(sctx, "atk", Math.round(d.innerX + (third - ags) / 2),
-    Math.round(ry + (wh - ags) / 2), ags, marked);
+  drawSquareIcon(sctx, "atk", d.innerX, ry, third, wh, marked, undefined, 0.7);
   hotspots.push({ x: d.innerX, y: ry, w: third, h: wh, fn: () => attackNearest() });
   touchButtons.push({ x: d.innerX, y: ry, w: third, h: wh });
 
@@ -4713,14 +4774,20 @@ function drawDeck(): void {
 
   /* Chase, drawn as a lit STATE rather than a press. Red for pursuit and blue
    * for holding ground, the same language the stance chip uses: red is
-   * committed, blue is careful. */
+   * committed, blue is careful.
+   *
+   * A running figure and a standing one now, rather than the words CHASE and
+   * STAND. The picture is not the improvement — the word was perfectly clear —
+   * the WIDTH is: those were the two longest labels on the strip, they made
+   * this the only oblong button in a row of squares, and the half unit they
+   * cost is what the skull beside them is standing on. The colour carries over
+   * unchanged, so the button still reads the same way at a glance. */
   const onChase = chasing();
   buttonBox(ctx, d.chase.x, d.chase.y, d.chase.w, d.chase.h, scale, {
     on: onChase, face: onChase ? "rgba(150,58,48,.92)" : undefined,
   });
-  hudText(h, onChase ? "CHASE" : "STAND", d.chase.x + d.chase.w / 2,
-    d.chase.y + d.chase.h / 2, u * 0.24, onChase ? "#ffb3a8" : "#8ab6ff", "center", true,
-    d.chase.w - u * 0.12);
+  drawSquareIcon(ctx, onChase ? "chase" : "stand", d.chase.x, d.chase.y, d.chase.w, d.chase.h,
+    onChase, chaseTint(onChase), 0.66);
   hotspots.push({ ...d.chase, fn: () => { if (!editing) toggleChase(); } });
   touchButtons.push({ ...d.chase });
 
@@ -4732,12 +4799,24 @@ function drawDeck(): void {
   buttonBox(ctx, d.atk.x, d.atk.y, d.atk.w, d.atk.h, scale, {
     on: marked, face: marked ? "rgba(150,58,48,.92)" : undefined,
   });
-  // whole multiples of the 16px source grid only — a fractional scale is mush
-  const ags = Math.max(ICON_SRC, Math.floor((Math.min(d.atk.w, d.atk.h) * 0.66) / ICON_SRC) * ICON_SRC);
-  drawControlIcon(ctx, "atk", Math.round(d.atk.x + (d.atk.w - ags) / 2),
-    Math.round(d.atk.y + (d.atk.h - ags) / 2), ags, marked);
+  drawSquareIcon(ctx, "atk", d.atk.x, d.atk.y, d.atk.w, d.atk.h, marked, undefined, 0.66);
   hotspots.push({ ...d.atk, fn: () => { if (!editing) attackNearest(); } });
   touchButtons.push({ ...d.atk });
+
+  /* The white skull: do I mean to fight other PLAYERS?
+   *
+   * On the strip rather than behind the menu button, which is the one place
+   * this differs from Tibia on purpose. Tibia buries the same switch two
+   * menus deep, and the cost of that is paid by whoever discovers their
+   * setting was wrong by killing a friend. It is a fight control, so it lives
+   * with the fight controls. */
+  const armed = pvpArmed();
+  buttonBox(ctx, d.skull.x, d.skull.y, d.skull.w, d.skull.h, scale, {
+    on: armed, face: armed ? "rgba(150,58,48,.92)" : undefined,
+  });
+  skullButtonIcon(ctx, d.skull.x, d.skull.y, d.skull.w, d.skull.h, armed);
+  hotspots.push({ ...d.skull, fn: () => { if (!editing) togglePvpSwitch(); } });
+  touchButtons.push({ ...d.skull });
 
   const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
   hudBtn(d.swap.x, d.swap.y, d.swap.w, d.swap.h, bowOn ? "\u2192MELEE" : "\u2192BOW", false, () => {
@@ -4761,10 +4840,10 @@ function drawDeck(): void {
       buttonBox(ctx, r.x, r.y, r.w, r.h, scale, {
         on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
       });
-      // whole multiples of the 16px source grid only — a fractional scale is mush
-      const gs = Math.max(ICON_SRC, Math.floor((Math.min(r.w, r.h) * 0.7) / ICON_SRC) * ICON_SRC);
-      drawControlIcon(ctx, DECK_TABS[i] as ControlIcon,
-        Math.round(r.x + (r.w - gs) / 2), Math.round(r.y + (r.h - gs) / 2 - u * 0.09), gs, on);
+      /* Nudged up by a hair: these are the only glyphs with a word underneath
+       * them, so centring on the box would centre the PAIR too low. */
+      drawSquareIcon(ctx, DECK_TABS[i] as ControlIcon, r.x, r.y, r.w, r.h, on,
+        undefined, 0.7, -u * 0.09);
       hudText(h, DECK_TABS[i], r.x + r.w / 2, r.y + r.h - u * 0.13, u * 0.17,
         on ? "#201a10" : "rgba(233,226,200,.75)", "center", false, r.w - u * 0.08);
       hotspots.push({ x: r.x, y: r.y, w: r.w, h: r.h, fn: () => { togglePanel(kind); deckMenu = false; } });
@@ -4925,6 +5004,79 @@ function cssHeight(): number {
 /** How much width the desktop sidebar is taking, or zero. */
 function dockWidth(): number {
   return lastDock?.w ?? 0;
+}
+
+/**
+ * A 16x16 glyph, centred in a button and snapped to a whole multiple of its
+ * source grid.
+ *
+ * The snapping is the point and it was being copied by hand at every button
+ * that grew a picture — five sites, all spelling out the same `Math.max(...
+ * Math.floor(... / ICON_SRC) * ICON_SRC)`. Pixel art scaled by 1.37x is mush;
+ * at exactly 1x, 2x or 3x it is crisp. One copy of the arithmetic means a
+ * button added next month cannot get it subtly wrong.
+ *
+ * `fill` fraction is per-caller because a glyph in a square button wants more
+ * of the box than one in a wide short bar.
+ */
+function drawSquareIcon(
+  ctx: CanvasRenderingContext2D, icon: ControlIcon,
+  bx: number, by: number, bw: number, bh: number,
+  on: boolean, tint?: string, fill = 0.72, dy = 0,
+): void {
+  const gs = Math.max(ICON_SRC, Math.floor((Math.min(bw, bh) * fill) / ICON_SRC) * ICON_SRC);
+  drawControlIcon(ctx, icon, Math.round(bx + (bw - gs) / 2), Math.round(by + (bh - gs) / 2 + dy),
+    gs, on, tint);
+}
+
+/**
+ * What colour the chase figure is drawn in.
+ *
+ * Blue for standing your ground and warm-white for pursuit — the same red/blue
+ * split the stance chip uses, where red is committed and blue is careful.
+ *
+ * The LIT one is not the colour the word had. CHASE was drawn in #ffb3a8, a
+ * salmon that sat well against the red face because a five-letter word is a
+ * lot of mass; a running figure is a few dozen pixels of stick, and at that
+ * weight the same salmon nearly disappears into the red behind it. So it is
+ * lifted to a near-white that keeps the warm cast — the chrome has no pure
+ * whites anywhere else and one here would read as a different interface.
+ */
+function chaseTint(on: boolean): string {
+  return on ? "#ffe9e4" : "#8ab6ff";
+}
+
+/**
+ * The white-skull switch, drawn the same way on the column and on the deck.
+ *
+ * Armed, it is the art as drawn: bone white on a red face, which is as loud as
+ * this interface gets and is meant to be. Disarmed, the SAME skull at a third
+ * of its weight rather than a different picture or an empty box — the state
+ * has to be readable without pressing anything, and a greyed version of the
+ * thing you would get says that in a way an absence cannot.
+ */
+function skullButtonIcon(
+  ctx: CanvasRenderingContext2D,
+  bx: number, by: number, bw: number, bh: number, armed: boolean,
+): void {
+  const was = ctx.globalAlpha;
+  ctx.globalAlpha = was * (armed ? 1 : 0.34);
+  drawSquareIcon(ctx, "skullWhite", bx, by, bw, bh, armed);
+  ctx.globalAlpha = was;
+}
+
+/**
+ * Flip the PvP switch, and say so out loud.
+ *
+ * The flash is not decoration here the way it is on the stance cycle. This is
+ * the one toggle whose being wrong is discovered by killing somebody, so every
+ * press states the new setting in plain words rather than trusting that the
+ * player noticed a small picture change colour.
+ */
+function togglePvpSwitch(): void {
+  const on = togglePvpArmed();
+  flash(on ? "you will attack other players" : "you will not harm other players",
+    on ? "#e1483b" : "#8ab6ff");
 }
 
 /**

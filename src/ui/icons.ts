@@ -22,7 +22,17 @@
  */
 export const ICON_SRC = 16;
 
-export type ControlIcon = "build" | "skills" | "equip" | "bag" | "quest" | "atk";
+export type ControlIcon =
+  | "build" | "skills" | "equip" | "bag" | "quest" | "atk"
+  /* The two faces of one button: whether you follow what you are fighting.
+   * A word fits in half the room a word needs — CHASE and STAND were the two
+   * widest labels on the row — and freeing that half is what let the skull
+   * sit next to them without taking a row off the map. */
+  | "chase" | "stand"
+  /* Tibia's PvP marks. Two jobs each: the button that says whether you MEAN
+   * to hit another player, and the mark that hangs beside the head of someone
+   * who already has. Same art, drawn twice at different sizes. */
+  | "skullWhite" | "skullRed";
 
 /** The hand-drawn 16x16 art, one file per button. */
 const ICON_SRC_FILE: Record<ControlIcon, string> = {
@@ -32,6 +42,10 @@ const ICON_SRC_FILE: Record<ControlIcon, string> = {
   bag: "/icon-backpack.png",
   quest: "/icon-quest.png",
   atk: "/icon-atk.png",
+  chase: "/icon-chase.png",
+  stand: "/icon-stand.png",
+  skullWhite: "/icon-skull-white.png",
+  skullRed: "/icon-skull-red.png",
 };
 
 const loaded: Partial<Record<ControlIcon, CanvasImageSource>> = {};
@@ -60,6 +74,55 @@ type Cell = readonly [number, number, number, number, number];
 /** 0 = outline/dark, 1 = body, 2 = highlight. */
 const PALETTE_ON = ["#2a2008", "#5d4a14", "#8a6c1c"] as const;
 const PALETTE_OFF = ["#0e0b06", "#c9b483", "#efe4c4"] as const;
+
+/**
+ * Icons whose COLOUR is part of what they mean, and so cannot take the
+ * button's palette.
+ *
+ * The gold-on-dark pair above says "pressed" and "not pressed". A skull says
+ * "white" or "red", and those two words are the entire message — a red skull
+ * drawn in gold because the button happens to be lit is a different fact.
+ * Only ever seen if the PNG fails to load; the art is already these colours.
+ */
+const GLYPH_PALETTE: Partial<Record<ControlIcon, readonly [string, string, string]>> = {
+  skullWhite: ["#15110c", "#e8e8e8", "#ffffff"],
+  skullRed: ["#2a0508", "#ed1c24", "#ff344f"],
+};
+
+/**
+ * Silhouettes of the drawn art, one per colour asked for, made once and kept.
+ *
+ * Radek's chase and stand figures are drawn in black and two greys, which is
+ * right for the art and invisible on a dark button face. Rather than ask for
+ * a second set of files in every colour a button can be, the alpha channel is
+ * used as a stencil and filled with whatever the caller wants — so the shape
+ * stays exactly as drawn and the colour follows the state, the way the WORD
+ * it replaced already did (blue for stand, red for chase).
+ *
+ * Flat fill, not a tint: at sixteen pixels the three greys are one silhouette
+ * anyway, and a flat fill is the only version that survives being drawn on
+ * both the lit and the unlit face.
+ */
+const stencils = new Map<string, HTMLCanvasElement>();
+
+function stencil(art: CanvasImageSource, icon: ControlIcon, color: string): CanvasImageSource {
+  const key = `${icon}|${color}`;
+  const hit = stencils.get(key);
+  if (hit) return hit;
+  if (typeof document === "undefined" || !document.createElement) return art;
+  const c = document.createElement("canvas");
+  c.width = ICON_SRC;
+  c.height = ICON_SRC;
+  const x = c.getContext("2d");
+  if (!x) return art;
+  x.imageSmoothingEnabled = false;
+  x.drawImage(art, 0, 0, ICON_SRC, ICON_SRC);
+  x.globalCompositeOperation = "source-in";
+  x.fillStyle = color;
+  x.fillRect(0, 0, ICON_SRC, ICON_SRC);
+  stencils.set(key, c);
+  return c;
+}
 
 const GLYPHS: Record<ControlIcon, readonly Cell[]> = {
   /* An anvil, not a hammer. A 12-px hammer is a thin bar on a thin stick and
@@ -112,6 +175,40 @@ const GLYPHS: Record<ControlIcon, readonly Cell[]> = {
     [8, 2, 2, 2, 0], [7, 3, 2, 2, 1], [6, 4, 2, 2, 1],
     [4, 6, 2, 2, 1], [3, 7, 2, 2, 1], [2, 8, 2, 2, 0],
   ],
+  /* A figure standing square: head, a torso as wide as the shoulders, two
+   * legs straight down. Read against `chase` below rather than on its own —
+   * the pair only has to be told APART, and the thing that tells them apart
+   * is the outline, not the detail. */
+  stand: [
+    [5, 0, 2, 2, 1],
+    [4, 3, 4, 5, 1], [4, 3, 4, 1, 2],
+    [4, 8, 1, 4, 1], [7, 8, 1, 4, 1],
+  ],
+  /* The same figure mid-stride: leaning, one arm forward, legs scissored.
+   * Asymmetric on purpose — a symmetric running figure reads as a standing
+   * one with its legs apart. */
+  chase: [
+    [5, 0, 2, 2, 1],
+    [4, 3, 4, 4, 1], [4, 3, 4, 1, 2],
+    [2, 5, 2, 1, 1], [8, 4, 2, 1, 1],
+    [3, 7, 2, 3, 1], [2, 10, 2, 2, 1],
+    [7, 7, 2, 3, 1], [8, 10, 2, 2, 1],
+  ],
+  /* A skull: cranium, two sockets, a nose notch and a jaw with a gap in it.
+   * The jaw is what stops it reading as a bald head — a dome with two dark
+   * squares in it is a face at this size. */
+  skullWhite: [
+    [3, 1, 6, 6, 1], [3, 1, 6, 1, 2],
+    [4, 3, 2, 2, 0], [7, 3, 2, 2, 0],
+    [5, 5, 2, 1, 0],
+    [4, 7, 4, 3, 1], [5, 7, 1, 3, 0], [7, 7, 1, 3, 0],
+  ],
+  skullRed: [
+    [3, 1, 6, 6, 1], [3, 1, 6, 1, 2],
+    [4, 3, 2, 2, 0], [7, 3, 2, 2, 0],
+    [5, 5, 2, 1, 0],
+    [4, 7, 4, 3, 1], [5, 7, 1, 3, 0], [7, 7, 1, 3, 0],
+  ],
 };
 
 /**
@@ -119,11 +216,20 @@ const GLYPHS: Record<ControlIcon, readonly Cell[]> = {
  *
  * `on` picks the dark-on-gold palette used when the button is pressed, so the
  * glyph stays legible against the lit face instead of vanishing into it.
+ *
+ * `tint` overrides both: the art is drawn as a flat silhouette in that colour.
+ * Used by the buttons whose glyph replaced a coloured WORD and has to carry
+ * the same meaning the colour did.
+ *
+ * Not only for buttons any more, despite the name: the skulls are drawn over
+ * a player's head in the world with the same call, because the alternative is
+ * a second loader and a second fallback for the same two files.
  */
 export function drawControlIcon(
   ctx: CanvasRenderingContext2D,
   icon: ControlIcon,
   x: number, y: number, size: number, on: boolean,
+  tint?: string,
 ): void {
   const art = loaded[icon];
   if (art) {
@@ -132,12 +238,15 @@ export function drawControlIcon(
      * blur art that is already the right size. */
     const was = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(art, Math.round(x), Math.round(y), Math.round(size), Math.round(size));
+    ctx.drawImage(tint ? stencil(art, icon, tint) : art,
+      Math.round(x), Math.round(y), Math.round(size), Math.round(size));
     ctx.imageSmoothingEnabled = was;
     return;
   }
   const u = size / 12; // 12 authored units mapped onto the requested box
-  const pal = on ? PALETTE_ON : PALETTE_OFF;
+  const pal = tint
+    ? ([tint, tint, tint] as const)
+    : GLYPH_PALETTE[icon] ?? (on ? PALETTE_ON : PALETTE_OFF);
   // Snap to whole pixels: a 12-unit glyph at a fractional unit is mush.
   const px = (v: number): number => Math.round(v);
   for (const [gx, gy, gw, gh, c] of GLYPHS[icon]) {

@@ -3007,7 +3007,7 @@ async function main(): Promise<void> {
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 9, "saving writes the current v9 format");
+    ok(stored.v === 10, "saving writes the current v10 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
@@ -8583,8 +8583,14 @@ async function main(): Promise<void> {
     /* Hand-drawn pixel art scaled by 1.37x is mush; at exactly 1x, 2x or 3x it
      * is crisp. Snapping the draw size is what lets these shapes be swapped
      * for real art without touching any of this code. */
-    ok(src.includes("Math.floor((Math.min(bw, bh) * 0.86) / ICON_SRC) * ICON_SRC"),
+    /* ONE copy of the arithmetic, in `drawSquareIcon`. It used to be spelled
+     * out at every button that grew a picture — five sites by the time the
+     * skull arrived — and five copies of a rounding rule is five chances for
+     * the sixth button to get it subtly wrong. */
+    ok(src.includes("Math.floor((Math.min(bw, bh) * fill) / ICON_SRC) * ICON_SRC"),
       "…and drawn at a whole multiple of it, never a fractional scale");
+    ok((src.match(/Math\.floor\(\(Math\.min\([^)]*\) \* [\w.]+\) \/ ICON_SRC\)/g) ?? []).length === 1,
+      "…from one helper, not copied out at every button that wears a glyph");
     ok(src.includes("Math.max(ICON_SRC,"), "…never smaller than one source pixel per pixel");
 
     interface R { x: number; y: number; w: number; h: number }
@@ -9384,14 +9390,19 @@ async function main(): Promise<void> {
 
     ok(ps.chasing() === true,
       "chase defaults ON — which is what the game did before the switch existed");
-    ok(ps.safeMode() === false, "secure mode defaults OFF");
+    /* Defaults ON, which is a CORRECTION to what this test used to assert.
+     * It shipped defaulting to off, written as "secure mode off" and read as
+     * the harmless side of an invisible flag. It is not: off is the side on
+     * which you hurt people, and nobody could see it until Etap 36 gave it a
+     * button. A default nobody can see is not a choice anybody made. */
+    ok(ps.safeMode() === true, "secure mode defaults ON — off is the side that hurts people");
     ok(ps.toggleChase() === false && ps.chasing() === false, "the toggle flips and reports the new setting");
     ok(ps.toggleChase() === true, "…and back");
 
-    ok(ps.mayAttackPlayer() === true, "with secure mode off, a player may be attacked");
-    ps.setSafeMode(true);
-    ok(ps.mayAttackPlayer() === false, "…and with it on, may not");
-    ok(ps.modes().safeMode === true, "the flag is readable as state, not only through the guard");
+    ok(ps.mayAttackPlayer() === false, "so out of the box a player may NOT be attacked");
+    ps.setSafeMode(false);
+    ok(ps.mayAttackPlayer() === true, "…and only once it is turned off, may they");
+    ok(ps.modes().safeMode === false, "the flag is readable as state, not only through the guard");
     ps.resetPlayerState();
 
     /* Wiring. `chasing()` has to gate BOTH walk-up paths — the melee approach
@@ -9419,15 +9430,18 @@ async function main(): Promise<void> {
   {
     console.log("Etap 31 - the save carries all three toggles:");
     const save = (await import("node:fs")).readFileSync("src/save.ts", "utf8");
-    ok(save.includes("const SAVE_V = 9;"), "the format is bumped, because `stance` grew into `modes`");
+    ok(save.includes("v9: the combat toggles became a set"),
+      "the v9 bump is on the record, because `stance` grew into `modes`");
     ok(save.includes("modes: { stance: stance(), chase: chasing(), safeMode: safeMode() }"),
       "all three toggles are written");
     ok(save.includes("const savedStance = data.modes?.stance ?? data.stance;"),
       "a pre-v9 save keeps the stance its owner left it in");
     ok(save.includes("setChase(data.modes?.chase ?? true);"),
       "…and takes chase ON, so loading an old character does not silently change how it fights");
-    ok(save.includes("setSafeMode(data.modes?.safeMode ?? false);"),
-      "…and secure mode off");
+    /* A v9 save's stored safeMode is the old default, not a decision — the
+     * flag had no button until v10 — so it is replaced rather than obeyed. */
+    ok(save.includes("setSafeMode(data.v >= 10 ? data.modes?.safeMode ?? true : true);"),
+      "…and secure mode ON for anything written before the switch had a button");
 
     /* createGame must not go back to resetting seven modules by hand: a reset
      * that is a list is a reset that drifts out of step with the state. */
@@ -9477,7 +9491,7 @@ async function main(): Promise<void> {
       "…and the mark box to attack-nearest");
     ok(main.includes('const marked = P.target?.kind === "mob";'),
       "the mark button lights while a creature is marked, so it also answers \"am I fighting?\"");
-    ok(main.includes('drawControlIcon(ctx, "atk"'), "…and wears the drawn 16x16 glyph");
+    ok(main.includes('drawSquareIcon(ctx, "atk"'), "…and wears the drawn 16x16 glyph");
     ok(!main.includes("function crossedSwords"),
       "…with the procedural pair deleted, so there is one source of truth for the shape");
     const icons = (await import("node:fs")).readFileSync("src/ui/icons.ts", "utf8");
@@ -9722,12 +9736,20 @@ async function main(): Promise<void> {
     /* One bubble per speaker: a chatterbox must not build a tower of text. */
     ok(chat.bubbles().filter((b) => b.entity === 1).length === 1,
       "a second bubble replaces the first rather than stacking");
-    ok(chat.BUBBLE_S === 8,
-      "speech hangs for eight seconds — long enough to read twice, short of litter");
-    chat.tickChat(5);
-    ok(!!chat.bubbleFor(1), "…so it is still there after five");
-    chat.tickChat(3.5);
-    ok(!chat.bubbleFor(1), "…and gone after eight");
+    ok(chat.BUBBLE_S === 5,
+      "speech hangs for five seconds — long enough to read twice, short of litter");
+    chat.tickChat(4);
+    ok(!!chat.bubbleFor(1), "…so it is still there after four");
+    chat.tickChat(1.5);
+    ok(!chat.bubbleFor(1), "…and gone after five");
+    /* The bubble that would not clear was NOT this constant. `tickChat` was
+     * being called only inside the death branch of `update()`, so on the
+     * living path nothing aged and a bubble stayed until the tab closed.
+     * Eight seconds would have looked exactly as broken as five. */
+    chat.resetChat();
+    chat.say("local", "still here?", chat.SELF, 7);
+    chat.tickChat(chat.BUBBLE_S * 12);
+    ok(!chat.bubbleFor(7), "a bubble left alone for a minute of ticks is long gone");
 
     /* Unread means somebody SPOKE to you. Not that you picked up a bone. */
     chat.resetChat();
@@ -9775,6 +9797,16 @@ async function main(): Promise<void> {
       "every flash is also recorded, so a refusal can be re-read");
     ok(main.includes("drawChatLog();"), "the log is drawn on the world");
     ok(main.includes("tickChat(dt);"), "…and aged");
+    /* WHERE it is aged is the whole bug. Two calls sat inside `if (P.dead)`,
+     * a bad merge apart, and none on the living path — so speech only expired
+     * while the player was a corpse. Pinned by position: the tick has to
+     * happen before the death branch, which returns. */
+    ok((main.match(/\n\s*tickChat\(dt\);/g) ?? []).length === 1,
+      "…exactly once per frame, not twice from a bad merge");
+    ok(main.indexOf("tickChat(dt);") < main.indexOf("if (P.dead) {"),
+      "…on the LIVING path, above the death branch that returns past it");
+    ok(main.indexOf("tickSkull(dt);") < main.indexOf("if (P.dead) {"),
+      "…and the skull's clock with it: dying does not launder a frag");
     ok(main.includes("sayBubble(m.id"), "creatures can speak over their own heads");
 
     /* The keyboard problem. A canvas cannot know the soft keyboard exists, so
@@ -9890,7 +9922,7 @@ async function main(): Promise<void> {
 
     /* The deck grew three controls and the column did not, so a desktop player
      * could not mark a target, open chat with the mouse, or bind a slot. */
-    ok(main.includes('drawControlIcon(sctx, "atk"'), "the column has the mark button");
+    ok(main.includes('drawSquareIcon(sctx, "atk"'), "the column has the mark button");
     ok(main.includes('sctx.fillText("CHAT", chx + third / 2'), "…and a chat button");
     ok(main.includes('sctx.fillText(editing ? "DONE" : "EDIT", ex + third / 2'), "…and edit");
     ok(main.includes("unreadPip(sctx, chx + third, ry, wh);"),
@@ -9956,6 +9988,292 @@ async function main(): Promise<void> {
     ok(m.includes("const ratio = dockOverflow(lastDock) / band;"),
       "dragging the thumb moves content in proportion, so a long stack does not crawl");
     ok(m.includes("if (dockDrag) { dockDrag = null;"), "…and releasing lets go of it");
+  }
+
+  /* ===================== Etap 36: PvP marks and the switch =================
+   *
+   * None of this can be PLAYED yet — there is one character in the world and
+   * he cannot hit himself. It is here now because a skull is a saved,
+   * defaulted, per-character clock, and those are exactly the things that are
+   * expensive to retro-fit onto live characters later. The tests are the only
+   * thing that will keep it honest until there is a second player. */
+  {
+    console.log("Etap 36 - the two skulls:");
+    const ps = await import("../src/systems/playerState.ts");
+    const pvp = await import("../src/systems/pvp.ts");
+    ps.resetPlayerState();
+
+    ok(pvp.skull() === "none" && pvp.frags() === 0,
+      "a new character has no skull and no frags");
+    ok(pvp.pvpArmed() === false,
+      "…and the switch starts OFF, so nobody kills a stranger by accident on their first login");
+    ok(pvp.pvpArmed() === !ps.safeMode(),
+      "the switch IS secure mode, read the way a player thinks about it");
+
+    /* One flag, two readings. Flipping either has to move the other, or the
+     * button and the guard would disagree about the same character. */
+    pvp.setPvpArmed(true);
+    ok(ps.safeMode() === false, "arming the skull clears secure mode");
+    ps.setSafeMode(true);
+    ok(pvp.pvpArmed() === false, "…and setting secure mode disarms the skull");
+    ok(pvp.togglePvpArmed() === true && pvp.pvpArmed() === true,
+      "the toggle flips and reports the new setting, like chase does");
+
+    /* The gate. Three rules today; the point is that there is ONE place to
+     * add the fourth (protection zones) rather than a condition to remember. */
+    ok(pvp.mayHit(30, 30) === true, "armed, two grown characters may fight");
+    pvp.setPvpArmed(false);
+    ok(pvp.mayHit(30, 30) === false, "disarmed, the blow does not land at all");
+    pvp.setPvpArmed(true);
+    ok(pvp.PVP_MIN_LEVEL === 10, "PvP opens at level 10 — the number settled early");
+    ok(pvp.mayHit(9, 30) === false, "a level 9 is not a threat…");
+    ok(pvp.mayHit(30, 9) === false, "…and is not a target either");
+
+    /* The seam. A hit that connects earns its skull in the same call, so
+     * there is no way to write a landed blow that forgot to. */
+    ps.resetPlayerState();
+    pvp.setPvpArmed(true);
+    ok(pvp.resolvePlayerHit(30, 30) === true, "an unprovoked blow lands…");
+    ok(pvp.skull() === "white", "…and the attacker takes the white skull for starting it");
+    ok(Math.abs(pvp.skullLeft() - pvp.WHITE_SKULL_S) < 1e-9, "…for fifteen minutes");
+
+    ps.resetPlayerState();
+    pvp.setPvpArmed(true);
+    ok(pvp.resolvePlayerHit(30, 30, true) === true, "answering a blow lands too…");
+    ok(pvp.skull() === "none",
+      "…and earns NOTHING: the white skull names who started it, not who is fighting");
+
+    ps.resetPlayerState();
+    pvp.setPvpArmed(false);
+    ok(pvp.resolvePlayerHit(30, 30) === false, "a refused blow…");
+    ok(pvp.skull() === "none", "…leaves no mark, because nothing happened");
+
+    /* Clocks. White refreshes and expires; red outranks it and counts frags. */
+    ps.resetPlayerState();
+    pvp.markAggressor();
+    pvp.tickSkull(pvp.WHITE_SKULL_S - 10);
+    ok(pvp.skull() === "white", "the white skull is still there ten seconds out");
+    pvp.markAggressor();
+    ok(Math.abs(pvp.skullLeft() - pvp.WHITE_SKULL_S) < 1e-9,
+      "…hitting a second person refreshes it rather than shortening it");
+    pvp.tickSkull(pvp.WHITE_SKULL_S + 1);
+    ok(pvp.skull() === "none" && pvp.skullLeft() === 0, "…and it runs out");
+
+    ps.resetPlayerState();
+    pvp.markKiller();
+    ok(pvp.skull() === "red" && pvp.frags() === 1, "a kill takes the red skull and counts");
+    pvp.markAggressor();
+    ok(pvp.skull() === "red",
+      "…and white cannot overwrite red: red already says everything white would");
+    pvp.markKiller();
+    ok(pvp.frags() === 2, "frags accumulate");
+    pvp.tickSkull(pvp.RED_SKULL_S + 1);
+    ok(pvp.skull() === "none", "red expires eventually…");
+    ok(pvp.frags() === 2, "…but the frags do not: a frag is a fact, not a timer");
+    ok(pvp.RED_SKULL_S > pvp.WHITE_SKULL_S * 10,
+      "…and it lasts far longer than the warning, which is the whole difference");
+
+    ok(pvp.skullIcon("white") === "skullWhite" && pvp.skullIcon("red") === "skullRed",
+      "each skull names its own art");
+    ok(pvp.skullIcon("none") === null, "…and a clean character draws nothing at all");
+    ps.resetPlayerState();
+  }
+
+  {
+    console.log("Etap 36 - the standing is saved, and a bad one is not trusted:");
+    const nfs = await import("node:fs");
+    const save = nfs.readFileSync("src/save.ts", "utf8");
+    ok(save.includes("const SAVE_V = 10;"), "the format is bumped for the PvP block");
+    ok(save.includes("v10: a character carries a PvP standing"),
+      "…and the bump is explained in the version history, like every one before it");
+    ok(save.includes("pvp: { ...active().pvp }"), "the standing is written");
+    ok(save.includes('pv.skull = sk === "white" || sk === "red" ? sk : "none";'),
+      "…and an unrecognised skull loads as NONE, never as itself");
+    ok(save.includes("pv.frags = Math.max(0, Math.floor(data.pvp?.frags ?? 0));"),
+      "…with a negative or fractional frag count refused");
+    /* Purely additive: a v9 save has no `pvp` block and must load clean
+     * rather than throw or take a skull from nowhere. */
+    const ps = await import("../src/systems/playerState.ts");
+    ps.resetPlayerState();
+    ok(ps.active().pvp.skull === "none" && ps.active().pvp.t === 0,
+      "a character with no stored standing is clean, which is true of every save ever written");
+
+    /* Round trip. The static checks above say the right lines exist; only
+     * writing a save and reading it back says they agree with each other. */
+    const { createGame } = await import("../src/game.ts");
+    const { saveGame, loadGame, deleteSave } = await import("../src/save.ts");
+    const pvp = await import("../src/systems/pvp.ts");
+    const SK = "bone-isle-save-v2";
+    deleteSave();
+
+    const g = createGame();
+    ok(pvp.pvpArmed() === false, "a brand-new game starts with the skull unlit");
+    pvp.markKiller();
+    pvp.tickSkull(60);
+    pvp.setPvpArmed(true);
+    const leftBefore = pvp.skullLeft();
+    saveGame(g);
+    ps.resetPlayerState();
+    ok(pvp.skull() === "none", "…state cleared, so the reload has something to prove");
+    loadGame();
+    ok(pvp.skull() === "red" && pvp.frags() === 1, "a red skull and its frag survive a reload");
+    ok(Math.abs(pvp.skullLeft() - leftBefore) < 1e-6,
+      "…with the clock where it was left, not reset to full");
+    ok(pvp.pvpArmed() === true, "…and a switch the player actually pressed is obeyed");
+
+    /* The v9 line. A stored `safeMode: false` from before the button existed
+     * is a default, not a decision, and must not arm anybody. */
+    const raw = JSON.parse(localStorage.getItem(SK)!);
+    raw.v = 9;
+    raw.modes.safeMode = false;
+    delete raw.pvp;
+    localStorage.setItem(SK, JSON.stringify(raw));
+    ps.resetPlayerState();
+    loadGame();
+    ok(pvp.pvpArmed() === false,
+      "a v9 save cannot arm the skull: nobody could press that button when it was written");
+    ok(pvp.skull() === "none" && pvp.frags() === 0,
+      "…and it loads a clean sheet, since it stored no standing at all");
+    deleteSave();
+    ps.resetPlayerState();
+  }
+
+  {
+    console.log("Etap 36 - the switch and the marks are drawn, not just modelled:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const icons = nfs.readFileSync("src/ui/icons.ts", "utf8");
+
+    for (const f of ["icon-chase.png", "icon-stand.png", "icon-skull-white.png", "icon-skull-red.png"]) {
+      ok(nfs.existsSync(`public/${f}`), `${f} ships`);
+      ok(icons.includes(f), `…and is registered with the other glyphs`);
+    }
+    ok(icons.includes("skullWhite: ["), "the skull has a fallback glyph, so a failed load leaves a shape");
+    ok(icons.includes("chase: [") && icons.includes("stand: ["), "…and so do the two figures");
+
+    /* Radek's chase and stand are drawn in black and two greys — invisible on
+     * a dark button face. The alpha is used as a stencil and flood-filled
+     * with the colour the WORD had, so the shape is his and the colour is the
+     * interface's. */
+    ok(icons.includes('x.globalCompositeOperation = "source-in";'),
+      "art can be re-coloured by stencil rather than by shipping a second file");
+    ok(icons.includes("stencils.set(key, c);"), "…once per colour, then kept");
+    /* ONE function decides the colour, so the column and the deck cannot
+     * drift apart — they are the same control on two screens. */
+    ok(main.includes("function chaseTint("), "one place decides what colour the chase figure is");
+    ok((main.match(/chaseTint\(/g) ?? []).length === 3,
+      "…and both surfaces call it rather than each spelling out a hex");
+    /* Blue carries over from the word unchanged. The lit one does NOT: a
+     * five-letter word is a lot of mass and #ffb3a8 held its own against the
+     * red face; a stick figure at that weight nearly vanishes into it. */
+    ok(main.includes('return on ? "#ffe9e4" : "#8ab6ff";'),
+      "…standing keeps the word's blue, and pursuit is lifted to a near-white that survives the red face");
+    ok(!main.includes('"#ffb3a8"'),
+      "…with the old salmon gone, so nothing still reaches for the colour that stopped working");
+
+    /* The skull is a state, so it must be readable without pressing it. */
+    ok(main.includes("function skullButtonIcon("), "one drawing of the switch, shared by column and deck");
+    ok(main.includes("ctx.globalAlpha = was * (armed ? 1 : 0.34);"),
+      "…dimmed when disarmed rather than replaced or blanked");
+    ok(main.includes('face: armed ? "rgba(150,58,48,.92)" : undefined'),
+      "…and lit RED, not the gold every closeable thing wears");
+
+    /* Pressing it says so in words. This is the one toggle whose being wrong
+     * is discovered by killing somebody. */
+    ok(main.includes("function togglePvpSwitch()"), "the switch has one handler");
+    ok(main.includes('flash(on ? "you will attack other players" : "you will not harm other players"'),
+      "…which states the new setting in plain words, not just a colour change");
+    ok(main.includes("fn: () => togglePvpSwitch() }"), "the column's button is wired to it");
+    ok(main.includes("if (!editing) togglePvpSwitch();"),
+      "…and the deck's, without firing while the HUD is being rearranged");
+
+    /* The mark in the world. BESIDE the head — above it is where speech goes. */
+    ok(main.includes("function skullMark("), "the world draws a skull beside a head");
+    ok(main.includes("skullMark(skull(), P.x + 10, P.y - 49);"),
+      "…offset off the measured sprite, not off the 64px cell it sits in");
+    ok(main.indexOf("skullMark(skull()") < main.indexOf("sayBubble(CHAT_SPEAKER_ID"),
+      "…and drawn under the bubble, since a bubble must never hide a skull");
+    ok(main.includes("if (!P.dead) skullMark("), "a corpse wears no skull");
+  }
+
+  {
+    console.log("Etap 36 - the combat row makes room without taking any:");
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h, dpr] of [[360, 800, 3], [412, 915, 2], [360, 780, 2],
+      [915, 412, 2], [844, 390, 3], [800, 360, 2]] as const) {
+      const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0);
+      const tag = `${w}x${h}@${dpr}`;
+      const min = MB.TOUCH_MIN_CSS * dpr;
+
+      ok(d.skull.w > 0 && d.skull.h > 0, `${tag}: the skull switch has a box`);
+      ok(Math.min(d.skull.w, d.skull.h) >= min - 1,
+        `${tag}: …that clears a fingertip (${Math.round(Math.min(d.skull.w, d.skull.h) / dpr)} CSS px)`);
+      /* Chase gave up half a unit by losing its word, and that half unit is
+       * what the skull is standing on — so upright it must actually be square
+       * now. Sideways it must NOT be: every row of that column is a
+       * full-width bar, and one square button in a stack of bars is a button
+       * that looks broken. */
+      if (d.landscape) {
+        ok(d.chase.w > d.chase.h, `${tag}: chase stays a full-width bar, like the rest of the column`);
+      } else {
+        ok(Math.abs(d.chase.w - d.chase.h) <= 1,
+          `${tag}: chase is square now that it carries a glyph, not a word`);
+      }
+
+      const row = [d.menu, d.chase, d.atk, d.skull, d.swap, d.minimap];
+      let clear = true;
+      for (let i = 0; i < row.length; i++) {
+        for (let j = i + 1; j < row.length; j++) {
+          const a = row[i], b = row[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+        }
+      }
+      ok(clear, `${tag}: no two controls overlap — an overlap silently steals taps`);
+      ok(d.swap.w >= min, `${tag}: the swap still clears a finger after the skull moved in`);
+
+      if (d.landscape) {
+        /* The column had about ten pixels of slack on the tightest phone the
+         * suite checks, so a sixth full row could not simply be added. It came
+         * out of the minimap, which is the only thing up here that is read
+         * rather than pressed. */
+        const bottom = Math.max(...row.map((r) => r.y + r.h));
+        ok(bottom <= Math.round(h * dpr) - d.margin,
+          `${tag}: the whole column still fits above the bottom edge`);
+        ok(d.minimap.w === d.minimap.h, `${tag}: the minimap stays square after shrinking`);
+        ok(d.minimap.x >= d.mapRight && d.minimap.x + d.minimap.w <= Math.round(w * dpr),
+          `${tag}: …and centred inside the column, not pinned to one edge`);
+        for (const r of row) ok(r.x >= d.mapRight, `${tag}: every control stays out of the map`);
+      } else {
+        ok(d.menu.x < d.chase.x && d.chase.x < d.atk.x && d.atk.x < d.skull.x
+          && d.skull.x < d.swap.x && d.swap.x < d.minimap.x,
+          `${tag}: the row reads left to right: reveal, chase, mark, skull, swap, map`);
+        for (const r of row) ok(r.y >= 0 && r.y + r.h <= d.topH,
+          `${tag}: …all of it inside the top strip`);
+      }
+    }
+  }
+
+  {
+    console.log("Etap 36 - the chat button works with a MOUSE:");
+    const nfs = await import("node:fs");
+    const inp = nfs.readFileSync("src/ui/chatInput.ts", "utf8");
+
+    /* The bug: the game resolves a click on `mousedown`; that handler focused
+     * the field; then mousedown's DEFAULT action moved focus to the canvas,
+     * which blurred it, which closed it. Open and shut in one frame, so the
+     * button appeared dead. A phone never hit it because touch.ts calls
+     * preventDefault on touchstart and no mouse event is ever synthesised. */
+    ok(inp.includes("const OPEN_GRACE_MS = 250;"),
+      "a blur arriving within a moment of opening is the browser's, not the player's");
+    ok(inp.includes("if (now() - openedAt < OPEN_GRACE_MS) {"),
+      "…so it is ignored rather than treated as a dismissal");
+    ok(inp.includes("setTimeout(() => { if (open) field.focus(); }, 0);"),
+      "…and the focus is put back on the next task, since refocusing inside a blur is refused");
+    ok(inp.includes("openedAt = now();"), "opening stamps the clock the grace window reads");
+    ok(inp.includes("hooks.cancel();"),
+      "…and a LATER blur still closes it, which is how tapping the world hides the keyboard");
+    ok(inp.indexOf("if (now() - openedAt < OPEN_GRACE_MS)") < inp.lastIndexOf("hooks.cancel();"),
+      "…in that order: the grace window is checked before anything is cancelled");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

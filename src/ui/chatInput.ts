@@ -47,6 +47,11 @@ const NULL_HANDLE: ChatInputHandle = {
 
 let handle: ChatInputHandle = NULL_HANDLE;
 
+/** Monotonic ms, falling back to the wall clock where `performance` is absent. */
+function now(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
 /** The live handle. Safe to call before init — it simply does nothing. */
 export function chatInput(): ChatInputHandle {
   return handle;
@@ -107,6 +112,20 @@ export function initChatInput(hooks: ChatInputHooks): void {
 
   let open = false;
   let topCss = 0;
+  /**
+   * When the field was opened, in ms. See the blur handler below.
+   */
+  let openedAt = -Infinity;
+  /**
+   * How long after opening a blur is treated as the browser's doing rather
+   * than the player's.
+   *
+   * A quarter of a second. Long enough to cover the frame or two between our
+   * `focus()` and the default action that undoes it; far too short to swallow
+   * a real tap somewhere else, which cannot physically arrive that fast after
+   * the tap that opened the field.
+   */
+  const OPEN_GRACE_MS = 250;
 
   /**
    * Sit the field on the bottom edge of the VISUAL viewport.
@@ -145,14 +164,45 @@ export function initChatInput(hooks: ChatInputHooks): void {
   });
   field.addEventListener("keyup", (e: KeyboardEvent) => e.stopPropagation());
   field.addEventListener("keypress", (e: KeyboardEvent) => e.stopPropagation());
-  // Losing focus closes it. On a phone that is the "hide keyboard" gesture,
-  // and a field left behind after its keyboard is gone is a field that has
-  // eaten the bottom of the screen for nothing.
-  field.addEventListener("blur", () => { if (open) hooks.cancel(); });
+  /**
+   * Losing focus closes it. On a phone that is the "hide keyboard" gesture,
+   * and a field left behind after its keyboard is gone is a field that has
+   * eaten the bottom of the screen for nothing.
+   *
+   * EXCEPT FOR THE CLICK THAT OPENED IT — which is why the CHAT button did
+   * nothing at all on a desktop.
+   *
+   * The game resolves a mouse click on `mousedown`. That handler runs, finds
+   * the button, and calls `focus()` on this field. Then the handler returns
+   * and the browser performs mousedown's DEFAULT action, which is to move
+   * focus to what was clicked — the canvas. So the field was focused and
+   * immediately blurred, the blur called `cancel()`, and the field closed in
+   * the same frame it opened. Nothing was visibly wrong; nothing happened.
+   *
+   * A phone never hit it: touch.ts calls `preventDefault` on `touchstart`, so
+   * no synthetic mouse event is ever generated and nothing steals the focus.
+   * That is the entire difference between the two platforms.
+   *
+   * The fix is here rather than a `preventDefault` on the canvas because the
+   * canvas swallowing focus changes is exactly what makes the "tap the world
+   * to dismiss the keyboard" gesture work. So the blur is kept and the one
+   * blur that is not the player's doing is put back.
+   */
+  field.addEventListener("blur", () => {
+    if (!open) return;
+    if (now() - openedAt < OPEN_GRACE_MS) {
+      // Next task, not this one: refocusing inside a blur handler is refused
+      // outright by some browsers and silently ignored by others.
+      setTimeout(() => { if (open) field.focus(); }, 0);
+      return;
+    }
+    hooks.cancel();
+  });
 
   handle = {
     open(prefill = "") {
       open = true;
+      openedAt = now();
       wrap.style.display = "flex";
       field.value = prefill;
       place();

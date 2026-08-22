@@ -122,13 +122,20 @@ export const OVERLAY_FADE_S = 12;
 /**
  * How long a bubble hangs over a speaker's head.
  *
- * Eight seconds. Four and a half was too short to be useful — on a phone you
- * look down at the deck, look back, and the thing somebody said is gone — and
- * ten started to feel like litter once three people were standing together.
- * Eight is long enough to read twice. Note this is independent of how soon you
- * may speak NEXT: nothing waits on the bubble clearing.
+ * Five seconds, on every platform — there is one number here and there was
+ * never a second one. The reason a bubble sat over Radek's head for more than
+ * a minute on the phone was not this constant: `tickChat` was being called
+ * only on the death path in main.ts, so on the living path nothing aged at
+ * all and the bubble would have stayed until the tab closed. Eight would have
+ * looked exactly as broken as five.
+ *
+ * Five is short of the eight it replaces because eight was measured against a
+ * bubble that never cleared. Long enough to read a line twice, short enough
+ * that three people standing together do not become a wall of text.
+ *
+ * Independent of how soon you may speak NEXT: nothing waits on the clearing.
  */
-export const BUBBLE_S = 8;
+export const BUBBLE_S = 5;
 
 /** A line of speech floating over an entity, addressed BY ID. */
 export interface Bubble {

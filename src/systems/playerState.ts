@@ -42,6 +42,7 @@ import type { Quest } from "./quests.ts";
 import type { TaskSave } from "./tasks.ts";
 import type { OutfitSave } from "./outfit.ts";
 import type { Element } from "./elements.ts";
+import type { PvpState } from "./pvp.ts";
 
 /**
  * The three combat toggles. Tibia 8.6 has exactly these, as three independent
@@ -63,11 +64,20 @@ export interface CombatModes {
   /**
    * Secure mode: never resolve an attack against another PLAYER.
    *
-   * Enforced by `mayAttackPlayer()` below, which currently has nothing to
-   * refuse — there are no other players yet. It is here now because the flag
-   * has to be saved, sent and defaulted correctly from the first character
-   * that ever logs in, and retro-fitting a default onto live characters is
-   * how you get an accidental first frag. No UI until PvP ships.
+   * Enforced by `mayAttackPlayer()` below and by `mayHit()` in pvp.ts, which
+   * currently have nothing to refuse — there are no other players yet.
+   *
+   * DEFAULTS TO TRUE, and that is a correction. It shipped defaulting to
+   * false, which was written as "secure mode off" and read as the harmless
+   * side of a flag nobody could see. It is not: false is the side on which
+   * you hurt people. The flag had no UI at all until the skull button
+   * arrived, so every character alive today is carrying a default rather than
+   * a decision — which is exactly the accidental first frag the original note
+   * was worried about, sitting in the code the whole time.
+   *
+   * The skull button reads this inverted (`pvpArmed()` in pvp.ts) because
+   * "do I mean to fight people?" is the question a player actually asks. A
+   * fresh character answers no.
    */
   safeMode: boolean;
 }
@@ -79,6 +89,12 @@ export interface PlayerState {
   quests: Quest[];
   tasks: TaskSave;
   outfit: OutfitSave;
+  /**
+   * Standing among other players: which skull is worn, how long it has left,
+   * and how many people this character has killed. See systems/pvp.ts for why
+   * it is here before there is anybody to kill.
+   */
+  pvp: PvpState;
   /** Completed Alchemy Tower research project ids. */
   research: Set<string>;
   /** Elemental lanes this character has paid to open. */
@@ -158,14 +174,26 @@ function defaultOutfit(): OutfitSave {
   };
 }
 
+/**
+ * A clean sheet: no skull, no frags.
+ *
+ * Defined here rather than in pvp.ts for the same reason `defaultQuests` is —
+ * pvp.ts reads `active()` out of this module, so the default has to live on
+ * this side of the arrow or the two files import each other.
+ */
+function defaultPvp(): PvpState {
+  return { skull: "none", t: 0, frags: 0 };
+}
+
 /** A brand-new character: nothing trained, nothing done, nothing on cooldown. */
 export function newPlayerState(): PlayerState {
   return {
     skills: defaultSkills(),
-    modes: { stance: "balanced", chase: true, safeMode: false },
+    modes: { stance: "balanced", chase: true, safeMode: true },
     quests: defaultQuests(),
     tasks: { activeId: null, kills: 0, earned: 0 },
     outfit: defaultOutfit(),
+    pvp: defaultPvp(),
     research: new Set<string>(),
     attuned: new Set<Element>(),
     crystalCd: 0,

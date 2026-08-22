@@ -15,7 +15,8 @@ import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./syst
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { stance, setStance, STANCES, type Stance } from "./systems/stance.ts";
-import { chasing, setChase, safeMode, setSafeMode } from "./systems/playerState.ts";
+import { chasing, setChase, safeMode, setSafeMode, active } from "./systems/playerState.ts";
+import type { Skull } from "./systems/pvp.ts";
 import { questList } from "./systems/quests.ts";
 import { emptyStash, emptyCorpseBag, emptyEquipment, addItem, addStack, newContainer, giveGold, COIN_KINDS, ITEMS, AMMO_KINDS } from "./items.ts";
 import type { Bag, Equipment, ItemKind, ItemStack } from "./items.ts";
@@ -53,11 +54,19 @@ const KEY = "bone-isle-save-v2";
  * `stance` field grew into `modes`. A v8 save keeps its stance and takes the
  * defaults for the other two: chase ON (which is what the game already did
  * before the switch existed) and secure mode OFF.
+ *
+ * v10: a character carries a PvP standing (Etap 36) — which skull is worn,
+ * how long it has left, how many players have been killed. Purely ADDITIVE:
+ * nothing is renamed and nothing is transformed, so a v9 save loads with no
+ * migration at all and takes the clean sheet, which is the truthful answer
+ * for every character written before there was anyone to fight. The bump is
+ * here anyway so the version history stays a complete record of the shape —
+ * a format change that is not in this list is a format change nobody can date.
  */
-const SAVE_V = 9;
+const SAVE_V = 10;
 
 interface SaveData {
-  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   seed: number;
   current: WorldKey;
   player: {
@@ -76,6 +85,16 @@ interface SaveData {
   stance?: Stance;
   /** The three combat toggles. Absent in pre-v9 saves — see SAVE_V. */
   modes?: { stance?: Stance; chase?: boolean; safeMode?: boolean };
+  /**
+   * Standing among other players. Absent in pre-v10 saves, which load clean.
+   *
+   * The skull's clock is stored as SECONDS LEFT rather than as the timestamp
+   * it started at, deliberately: it counts play time, not wall time, so a
+   * character who logs out white and comes back a month later comes back
+   * white. Laundering a frag by closing the tab is the one thing this must
+   * not allow.
+   */
+  pvp?: { skull?: Skull; t?: number; frags?: number };
   quests: { id: string; progress: number; done: boolean; claimed: boolean }[];
   structures: Record<WorldKey, Structure[]>;
   /** Items lying on the ground, per world (incl. a death-dropped backpack). */
@@ -134,6 +153,7 @@ export function saveGame(g: Game): void {
     },
     skills: skillDump,
     modes: { stance: stance(), chase: chasing(), safeMode: safeMode() },
+    pvp: { ...active().pvp },
     quests: questList().map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
     structures: structDump,
     ground: groundDump,
@@ -311,7 +331,26 @@ export function loadGame(): Game | null {
   const savedStance = data.modes?.stance ?? data.stance;
   if (savedStance && STANCES.includes(savedStance)) setStance(savedStance);
   setChase(data.modes?.chase ?? true);
-  setSafeMode(data.modes?.safeMode ?? false);
+  /* Secure mode, and the one place the v10 bump does real work.
+   *
+   * The flag has been written since v9 and had no BUTTON until v10, so every
+   * value stored by a v9 save is the old default rather than something its
+   * owner chose — and the old default was the dangerous side. Honouring it
+   * would hand every existing character a lit skull they never asked for.
+   *
+   * So: a v10 save is a decision and is obeyed; anything older is a default
+   * and is replaced with the safe one. This is exactly the line a version
+   * number exists to draw, and it is why the bump is not merely cosmetic. */
+  setSafeMode(data.v >= 10 ? data.modes?.safeMode ?? true : true);
+  /* An unrecognised skull loads as none rather than as itself. The field is
+   * three known strings and anything else in there came from a hand-edited
+   * save or a future version — and of the two ways to be wrong, giving a
+   * player a skull they did not earn is the worse one. */
+  const pv = active().pvp;
+  const sk = data.pvp?.skull;
+  pv.skull = sk === "white" || sk === "red" ? sk : "none";
+  pv.t = pv.skull === "none" ? 0 : Math.max(0, data.pvp?.t ?? 0);
+  pv.frags = Math.max(0, Math.floor(data.pvp?.frags ?? 0));
 
   for (const qs of data.quests ?? []) {
     const q = questList().find((x) => x.id === qs.id);
