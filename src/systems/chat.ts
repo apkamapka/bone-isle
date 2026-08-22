@@ -57,21 +57,35 @@ export interface ChannelDef {
   /** Working today, or waiting for a second player? */
   live: boolean;
   /**
-   * Seconds between messages. Tibia puts two whole minutes on its advertising
-   * channel, which sounds absurd until you have watched an unthrottled trade
-   * channel — the delay IS the moderation, and it costs nothing to honest use.
+   * Seconds between messages, if any.
+   *
+   * Nothing sets this now. A one-second gate on ordinary talk is pure friction
+   * — you type "siema", think of the next word, and the game tells you to
+   * wait — and it was never going to be the real defence anyway: once a server
+   * owns the world, a client-side throttle is a suggestion that any modified
+   * client ignores. Flood protection belongs on the server, and that is where
+   * it will be written. The field stays because the SERVER will set it.
    */
   delayS?: number;
 }
 
+/**
+ * ONE channel you can type in, and two logs the game writes.
+ *
+ * Trade, Party, Guild and Private were here and have been taken out. The
+ * argument for shipping them greyed — teach the final shape now — was wrong in
+ * practice, and playing it showed exactly why: four dead options make the
+ * channel switcher a thing to work out rather than a thing to use, and every
+ * press of it wrote a "not open yet" line into the log, so the first minute
+ * with chat was six lines of apology and an unread badge that would not clear.
+ *
+ * A dead option costs more than a missing one. They come back when they work,
+ * and the `ChannelId` union still names them so that day is a list edit.
+ */
 export const CHANNELS: readonly ChannelDef[] = [
-  { id: "local", name: "Local Chat", short: "SAY", color: "#f3eedd", writable: true, live: true, delayS: 0.6 },
+  { id: "local", name: "Chat", short: "SAY", color: "#f3eedd", writable: true, live: true },
   { id: "loot", name: "Loot", short: "LOOT", color: "#caa15a", writable: false, live: true },
   { id: "server", name: "Server Log", short: "LOG", color: "#8ab6ff", writable: false, live: true },
-  { id: "trade", name: "Trade", short: "TRADE", color: "#6fc06a", writable: true, live: false, delayS: 120 },
-  { id: "party", name: "Party", short: "PARTY", color: "#e8c06a", writable: true, live: false, delayS: 0.6 },
-  { id: "guild", name: "Guild", short: "GUILD", color: "#b9a6d8", writable: true, live: false, delayS: 0.6 },
-  { id: "pm", name: "Private", short: "PM", color: "#ffb3a8", writable: true, live: false, delayS: 0.6 },
 ];
 
 export function channel(id: ChannelId): ChannelDef {
@@ -105,8 +119,17 @@ export const OVERLAY_LINES = 6;
 /** After this many seconds a line fades off the overlay. It stays in the log. */
 export const OVERLAY_FADE_S = 12;
 
-/** How long a bubble hangs over a speaker's head. */
-export const BUBBLE_S = 4.5;
+/**
+ * How long a bubble hangs over a speaker's head.
+ *
+ * Ten seconds. Four and a half was chosen to keep the screen clear and was too
+ * short to be useful: on a phone you look down at the deck, look back, and the
+ * thing somebody said to you is gone. Speech is cheap to leave up — it is one
+ * line of text over one sprite — and the cost of missing it is having to ask
+ * again. Note this is independent of how soon you may speak NEXT: the bubble
+ * lasting ten seconds does not mean waiting ten seconds to answer.
+ */
+export const BUBBLE_S = 10;
 
 /** A line of speech floating over an entity, addressed BY ID. */
 export interface Bubble {
@@ -127,6 +150,9 @@ interface ChatState {
   /** The channel the input field will send to. */
   active: ChannelId;
 }
+
+/** How the player's own lines are attributed. Never counts as unread. */
+export const SELF = "You";
 
 const state: ChatState = { lines: [], bubbles: [], unread: {}, cooldown: {}, active: "local" };
 
@@ -191,7 +217,18 @@ export function push(ch: ChannelId, text: string, from?: string, color?: string)
   };
   state.lines.push(line);
   if (state.lines.length > CHAT_HISTORY) state.lines.splice(0, state.lines.length - CHAT_HISTORY);
-  if (ch !== state.active) state.unread[ch] = (state.unread[ch] ?? 0) + 1;
+  /* Only somebody SPEAKING counts as unread.
+   *
+   * It used to be any line at all, which meant picking up a bone lit the red
+   * badge on the reveal button — and since the game writes a line for almost
+   * everything, the badge was permanently on and could not be cleared by
+   * anything the player did. A badge that is always lit conveys nothing.
+   *
+   * Your own words do not count either, for the obvious reason.
+   */
+  if (from && from !== SELF && ch !== state.active) {
+    state.unread[ch] = (state.unread[ch] ?? 0) + 1;
+  }
   return line;
 }
 

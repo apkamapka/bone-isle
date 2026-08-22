@@ -9454,6 +9454,12 @@ async function main(): Promise<void> {
       "…and the mark box to attack-nearest");
     ok(main.includes('const marked = P.target?.kind === "mob";'),
       "the mark button lights while a creature is marked, so it also answers \"am I fighting?\"");
+    ok(main.includes('drawControlIcon(ctx, "atk"'), "…and wears the drawn 16x16 glyph");
+    ok(!main.includes("function crossedSwords"),
+      "…with the procedural pair deleted, so there is one source of truth for the shape");
+    const icons = (await import("node:fs")).readFileSync("src/ui/icons.ts", "utf8");
+    ok(icons.includes('atk: "/icon-atk.png"'), "the art is registered with the other five");
+    ok(icons.includes("atk: ["), "…and has a fallback glyph, so a failed load leaves a shape not a hole");
     ok(main.includes('if (P.target?.kind === "mob" && P.target.id === m.id) targetBox(m.x, m.y);'),
       "and the marked creature wears corner brackets in the world");
   }
@@ -9666,49 +9672,53 @@ async function main(): Promise<void> {
     const chat = await import("../src/systems/chat.ts");
     chat.resetChat();
 
-    ok(chat.CHANNELS.length >= 7, "every channel the game will need is modelled, not just today's");
-    ok(chat.LIVE_CHANNELS.every((c) => c.live), "…and the live ones are separable from the rest");
-    ok(chat.channel("trade").live === false,
-      "Trade is present but not live — the player learns the final shape now, not later");
-    ok(chat.channel("trade").delayS === 120,
-      "…and carries Tibia's two-minute advertising delay, which IS the moderation");
+    /* ONE writable channel. Trade / Party / Guild / PM were modelled here and
+     * have been removed — see the note in chat.ts. A dead option costs more
+     * than a missing one. */
+    ok(chat.CHANNELS.length === 3, "three channels: one to talk in, two the game writes");
+    ok(chat.CHANNELS.filter((c) => c.writable).length === 1,
+      "…exactly one is writable, so there is nothing to choose between");
+    ok(chat.CHANNELS.every((c) => c.live), "…and none of them is a dead option");
+    ok(chat.CHANNELS.every((c) => c.delayS === undefined),
+      "no client-side throttle: it is friction here and unenforceable once a server exists");
     ok(chat.channel("loot").writable === false, "Loot is a log, not a channel");
 
-    /* Sending, and the three ways it can be refused. Every refusal has to be
-     * explainable — a message that just fails to appear reads as a bug. */
-    const r1 = chat.say("local", "hello", "You", 1);
+    const r1 = chat.say("local", "hello", chat.SELF, 1);
     ok(r1.ok, "a live writable channel accepts a message");
     ok(chat.linesIn("local").length === 1, "…and it lands in that channel");
     ok(!!chat.bubbleFor(1), "…and over the speaker's head, addressed by entity id");
 
-    const r2 = chat.say("local", "again", "You", 1);
-    ok(!r2.ok && r2.reason === "throttled", "a second message inside the delay is refused");
-    ok(!r2.ok && r2.reason === "throttled" && r2.waitS > 0, "…and says how long to wait");
-    const r3 = chat.say("trade", "wts sword", "You", 1);
-    ok(!r3.ok && r3.reason === "not-yet", "a channel that is not open yet says so");
-    const r4 = chat.say("loot", "x", "You", 1);
-    ok(!r4.ok && r4.reason === "read-only", "a log refuses to be typed into");
-    ok(!chat.say("local", "   ", "You", 1).ok, "whitespace is not a message");
-
-    chat.tickChat(1);
-    ok(chat.cooldownLeft("local") === 0, "the throttle drains");
-    ok(chat.say("local", "third", "You", 1).ok, "…and then lets the next one through");
+    /* The complaint that produced this change: typing twice in a row. */
+    ok(chat.say("local", "siema", chat.SELF, 1).ok,
+      "a second message straight after the first is NOT refused");
+    ok(chat.say("local", "and a third", chat.SELF, 1).ok, "…nor a third");
+    const r4 = chat.say("loot", "x", chat.SELF, 1);
+    ok(!r4.ok && r4.reason === "read-only", "a log still refuses to be typed into");
+    ok(!chat.say("local", "   ", chat.SELF, 1).ok, "whitespace is not a message");
 
     /* One bubble per speaker: a chatterbox must not build a tower of text. */
     ok(chat.bubbles().filter((b) => b.entity === 1).length === 1,
       "a second bubble replaces the first rather than stacking");
-    chat.tickChat(chat.BUBBLE_S + 0.1);
-    ok(!chat.bubbleFor(1), "…and bubbles expire");
+    ok(chat.BUBBLE_S === 10,
+      "speech hangs for ten seconds — long enough to look at the deck and back");
+    chat.tickChat(5);
+    ok(!!chat.bubbleFor(1), "…so it is still there after five");
+    chat.tickChat(5.5);
+    ok(!chat.bubbleFor(1), "…and gone after ten");
 
-    /* Unread. The pip is the only always-visible chat affordance, so the count
-     * behind it has to be right. */
+    /* Unread means somebody SPOKE to you. Not that you picked up a bone. */
     chat.resetChat();
     chat.setActiveChannel("local");
     chat.logLoot("a bone");
     chat.logServer("you advanced");
-    ok(chat.unread() === 2, "lines in other channels count as unread");
-    ok(chat.unread("loot") === 1, "…per channel");
-    ok(chat.unread("local") === 0, "…but not in the channel you are looking at");
+    ok(chat.unread() === 0,
+      "the game's own log lines raise no badge — a badge that is always lit says nothing");
+    chat.say("local", "hi", chat.SELF, 1);
+    ok(chat.unread() === 0, "…and neither do your own words");
+    chat.push("local", "oi", "Someone");
+    chat.setActiveChannel("loot"); // look away, then have someone speak
+    chat.push("local", "oi again", "Someone");
+    ok(chat.unread("local") === 1, "somebody else speaking in a channel you are not on does");
     chat.markAllRead();
     ok(chat.unread() === 0, "opening chat clears the count");
 
@@ -9751,6 +9761,8 @@ async function main(): Promise<void> {
       "…and re-places itself when the keyboard opens or closes");
     ok(inp.includes("e.stopPropagation()"),
       "typing does not leak into the game's hotkeys — `w` types a w, it does not walk north");
+    ok(!inp.includes("cycleChannel"),
+      "no channel switcher: with one channel a switcher is a control that does nothing");
     ok(inp.includes('field.autocapitalize = "off"'),
       "…and the phone keyboard does not autocorrect a trade offer");
 
@@ -9812,7 +9824,8 @@ async function main(): Promise<void> {
     const menu = nfs.readFileSync("src/ui/contextMenu.ts", "utf8");
     ok(menu.includes('verb: "walk"'), "the menu always offers the one verb every tile has");
     ok(main.includes('verb: "trade"') && main.includes("enabled: false"),
-      "Trade is in the menu, greyed — the shape the player learns is the final one");
+      "Trade stays in the long-press menu, greyed — one entry on a menu you have to\n" +
+      "       ask for reads differently from four dead tabs you cannot avoid");
     ok(main.includes("popupFrame(sctx, x, y, w, h, S);"),
       "the menu wears the same frame as the inspect card, not a hand-rolled box");
     ok(main.includes("if (contextMenuTap(sx, sy)) return;"),

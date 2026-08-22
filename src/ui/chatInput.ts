@@ -20,23 +20,18 @@
  * the game's chrome, echoing the channel it will send to — is decoration on
  * top of that one fact.
  */
-import type { ChannelId } from "../systems/chat.ts";
 
 export interface ChatInputHooks {
   /** The player pressed Enter with something typed. */
   send(text: string): void;
   /** Escape, or a tap outside. */
   cancel(): void;
-  /** Tab / the channel button — cycle which channel this will go to. */
-  cycleChannel(): void;
 }
 
 interface ChatInputHandle {
   open(prefill?: string): void;
   close(): void;
   isOpen(): boolean;
-  /** Repaint the label after the channel changed. */
-  setChannel(id: ChannelId, name: string, color: string): void;
   /** Where the field currently sits, in CSS px from the top of the layout
    *  viewport — so the game can lift the log above it. Zero when closed. */
   topCss(): number;
@@ -47,7 +42,6 @@ const NULL_HANDLE: ChatInputHandle = {
   open: () => undefined,
   close: () => undefined,
   isOpen: () => false,
-  setChannel: () => undefined,
   topCss: () => 0,
 };
 
@@ -79,9 +73,13 @@ export function initChatInput(hooks: ChatInputHooks): void {
     "align-items:center", "gap:8px", "z-index:50",
   ].join(";");
 
+  /* A plain label, not a button. With one channel there is nothing to switch
+   * to, and a chip that looks pressable and does nothing is worse than no chip
+   * at all — so it loses its pointer cursor and its click handler and just
+   * says what the field is for. */
   label.style.cssText = [
     "font:bold 12px 'Courier New',monospace", "color:#caa15a",
-    "flex:0 0 auto", "user-select:none", "cursor:pointer",
+    "flex:0 0 auto", "user-select:none",
     "padding:4px 6px", "border:1px solid rgba(202,162,58,.4)",
     "border-radius:2px", "white-space:nowrap",
   ].join(";");
@@ -143,9 +141,6 @@ export function initChatInput(hooks: ChatInputHooks): void {
     } else if (e.key === "Escape") {
       field.value = "";
       hooks.cancel();
-    } else if (e.key === "Tab") {
-      e.preventDefault();
-      hooks.cycleChannel();
     }
   });
   field.addEventListener("keyup", (e: KeyboardEvent) => e.stopPropagation());
@@ -154,8 +149,6 @@ export function initChatInput(hooks: ChatInputHooks): void {
   // and a field left behind after its keyboard is gone is a field that has
   // eaten the bottom of the screen for nothing.
   field.addEventListener("blur", () => { if (open) hooks.cancel(); });
-  label.addEventListener("mousedown", (e) => { e.preventDefault(); hooks.cycleChannel(); });
-  label.addEventListener("touchstart", (e) => { e.preventDefault(); hooks.cycleChannel(); }, { passive: false });
 
   handle = {
     open(prefill = "") {
@@ -175,11 +168,6 @@ export function initChatInput(hooks: ChatInputHooks): void {
       field.blur();
     },
     isOpen: () => open,
-    setChannel(_id, name, color) {
-      label.textContent = name;
-      label.style.color = color;
-      label.style.borderColor = color;
-    },
     topCss: () => topCss,
   };
 }

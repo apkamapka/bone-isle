@@ -1077,6 +1077,9 @@ The five buttons at the top of the docked sidebar — Build, Skills, Equipment,
 Backpack and Quest — are 16x16 pixel icons: `icon-build.png`, `icon-skill.png`,
 `icon-eq.png`, `icon-backpack.png`, `icon-quest.png`.
 
+`icon-atk.png` joins them on the same 16x16 grid: the crossed-swords glyph on
+the attack-nearest button, which replaced a procedurally drawn pair of blades.
+
 **Drawn by the project author.** Original work, no third-party licence attaches
 to them, so they carry no attribution or redistribution conditions.
 

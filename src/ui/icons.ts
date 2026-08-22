@@ -22,7 +22,7 @@
  */
 export const ICON_SRC = 16;
 
-export type ControlIcon = "build" | "skills" | "equip" | "bag" | "quest";
+export type ControlIcon = "build" | "skills" | "equip" | "bag" | "quest" | "atk";
 
 /** The hand-drawn 16x16 art, one file per button. */
 const ICON_SRC_FILE: Record<ControlIcon, string> = {
@@ -31,6 +31,7 @@ const ICON_SRC_FILE: Record<ControlIcon, string> = {
   equip: "/icon-eq.png",
   bag: "/icon-backpack.png",
   quest: "/icon-quest.png",
+  atk: "/icon-atk.png",
 };
 
 const loaded: Partial<Record<ControlIcon, CanvasImageSource>> = {};
@@ -101,6 +102,15 @@ const GLYPHS: Record<ControlIcon, readonly Cell[]> = {
     [3, 3, 6, 6, 1],
     [4, 4, 4, 1, 0], [4, 6, 4, 1, 0],
     [1, 9, 10, 2, 1], [1, 9, 10, 1, 2],
+  ],
+  /* Crossed swords. Two diagonals of stepped cells rather than a rotation:
+   * fillRect cannot rotate, and a stair-stepped diagonal is what pixel art
+   * does anyway. Only ever seen if the PNG fails to load. */
+  atk: [
+    [2, 2, 2, 2, 0], [3, 3, 2, 2, 1], [4, 4, 2, 2, 1], [5, 5, 2, 2, 2],
+    [6, 6, 2, 2, 1], [7, 7, 2, 2, 1], [8, 8, 2, 2, 0],
+    [8, 2, 2, 2, 0], [7, 3, 2, 2, 1], [6, 4, 2, 2, 1],
+    [4, 6, 2, 2, 1], [3, 7, 2, 2, 1], [2, 8, 2, 2, 0],
   ],
 };
 

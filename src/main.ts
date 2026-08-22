@@ -44,9 +44,8 @@ import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./
 import { addItem, addStack, removeItem, removeItemUnpacked, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
-  CHANNELS, activeChannel, setActiveChannel, bubbleFor, channel,
-  formatLine, lineAlpha, logServer, markAllRead, overlayLines,
-  say, tickChat, unread,
+  SELF, activeChannel, bubbleFor, formatLine, lineAlpha, logServer,
+  markAllRead, overlayLines, say, tickChat, unread,
 } from "./systems/chat.ts";
 import { chatInput, initChatInput } from "./ui/chatInput.ts";
 import { groundEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
@@ -2147,8 +2146,6 @@ function initWakeLock(): void {
  */
 function openChat(prefill = ""): void {
   markAllRead();
-  const ch = channel(activeChannel());
-  chatInput().setChannel(ch.id, ch.short, ch.color);
   chatInput().open(prefill);
 }
 
@@ -2156,28 +2153,16 @@ function closeChat(): void {
   chatInput().close();
 }
 
-/** Step to the next channel you are allowed to type in. */
-function cycleChatChannel(): void {
-  const writable = CHANNELS.filter((c) => c.writable);
-  const i = writable.findIndex((c) => c.id === activeChannel());
-  const next = writable[(i + 1) % writable.length];
-  setActiveChannel(next.id);
-  chatInput().setChannel(next.id, next.short, next.color);
-  if (!next.live) {
-    logServer(`${next.name} opens when the world does — nobody to talk to yet.`, "#e0a06a");
-  }
-}
-
-/** Send what was typed, and explain any refusal rather than swallowing it. */
+/**
+ * Send what was typed.
+ *
+ * There is exactly one channel to send to, so there is nothing to choose and
+ * nothing to refuse except an empty line — which is silently dropped, because
+ * "you typed nothing" is not news. The refusal branches this function used to
+ * carry went with the channels they were apologising for.
+ */
 function sendChat(text: string): void {
-  const ch = activeChannel();
-  const r = say(ch, text, "You", CHAT_SPEAKER_ID);
-  if (!r.ok) {
-    if (r.reason === "not-yet") logServer(`${channel(ch).name} is not open yet.`, "#e0a06a");
-    else if (r.reason === "throttled") {
-      logServer(`${channel(ch).name}: wait ${Math.ceil(r.waitS)}s before posting again.`, "#e0a06a");
-    } else if (r.reason === "read-only") logServer(`${channel(ch).name} is a log, not a channel.`, "#e0a06a");
-  }
+  say(activeChannel(), text, SELF, CHAT_SPEAKER_ID);
   closeChat();
 }
 
@@ -2192,7 +2177,7 @@ function sendChat(text: string): void {
  */
 const CHAT_SPEAKER_ID = -1;
 
-initChatInput({ send: sendChat, cancel: closeChat, cycleChannel: cycleChatChannel });
+initChatInput({ send: sendChat, cancel: closeChat });
 initWakeLock();
 
 initInput(screen, {
@@ -3564,31 +3549,6 @@ function drawSprite(spr: HTMLCanvasElement, x: number, y: number, face = 1, bobY
  * dark cavern without a drop shadow.
  */
 /**
- * Crossed swords, drawn rather than baked.
- *
- * The five sidebar icons are 16x16 PNGs on a fixed grid, and this button is
- * not on that grid — it is sized from the phone's touch unit, which lands
- * anywhere between 40 and 120 device pixels. Scaling a 16px sprite to 53 is
- * the mush the icon loader exists to avoid, so the glyph is two rotated
- * rectangles per blade instead: crisp at any size, and it costs no asset.
- */
-function crossedSwords(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string): void {
-  ctx.save();
-  ctx.translate(cx, cy);
-  const t = Math.max(2, Math.round(r * 0.22));   // blade thickness
-  const grip = Math.round(r * 0.5);              // how far the hilt runs back
-  for (const dir of [-1, 1] as const) {
-    ctx.save();
-    ctx.rotate((dir * Math.PI) / 4);
-    ctx.fillStyle = color;
-    ctx.fillRect(-Math.round(t / 2), -r, t, r + grip);          // blade + tang
-    ctx.fillRect(-Math.round(r * 0.34), grip - t, Math.round(r * 0.68), t); // crossguard
-    ctx.restore();
-  }
-  ctx.restore();
-}
-
-/**
  * A line of speech over someone's head.
  *
  * No frame and no background plate. Tibia draws speech as bare text and it is
@@ -4681,8 +4641,10 @@ function drawDeck(): void {
   buttonBox(ctx, d.atk.x, d.atk.y, d.atk.w, d.atk.h, scale, {
     on: marked, face: marked ? "rgba(150,58,48,.92)" : undefined,
   });
-  crossedSwords(ctx, d.atk.x + d.atk.w / 2, d.atk.y + d.atk.h / 2,
-    Math.round(d.atk.h * 0.42), marked ? "#ffb3a8" : "#e9e2c8");
+  // whole multiples of the 16px source grid only — a fractional scale is mush
+  const ags = Math.max(ICON_SRC, Math.floor((Math.min(d.atk.w, d.atk.h) * 0.66) / ICON_SRC) * ICON_SRC);
+  drawControlIcon(ctx, "atk", Math.round(d.atk.x + (d.atk.w - ags) / 2),
+    Math.round(d.atk.y + (d.atk.h - ags) / 2), ags, marked);
   hotspots.push({ ...d.atk, fn: () => { if (!editing) attackNearest(); } });
   touchButtons.push({ ...d.atk });
 
