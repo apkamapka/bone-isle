@@ -7685,10 +7685,33 @@ async function main(): Promise<void> {
       run(many, true);
       const rects = many.map((m) => m.rect as unknown as { x: number; y: number; h: number } | null);
       ok(rects.every((r) => !!r), "every window still draws when the column overflows");
+      /* CHANGED (Etap 34): the column used to keep only what fitted and let the
+       * rest float over the map, which is the bug Radek hit — open a fourth
+       * thing and it lands on the game. Now every docked window stays IN the
+       * column and the column scrolls. */
       const stacked = rects.filter((r) => r && r.x === dock.innerX);
-      ok(stacked.length >= 2, `the column takes what fits (${stacked.length} of ${many.length})`);
-      ok(stacked.every((r) => !!r && r.y + r.h <= dock.stackBottom + 1),
-        "…and nothing docked ever runs off the bottom of it");
+      ok(stacked.length === many.length,
+        `all ${many.length} stay in the column rather than spilling onto the map`);
+      const dockMod = await import("../src/ui/dock.ts");
+      ok(dockMod.dockOverflow(dock) > 0, "…and the column reports that it now overflows");
+      const lowest = Math.max(...stacked.map((r) => (r ? r.y + r.h : 0)));
+      ok(lowest > dock.stackBottom,
+        "…which is what having somewhere to scroll TO means");
+
+      /* Scrolling moves the stack and is clamped at both ends. */
+      const top0 = (rects[0] as { y: number }).y;
+      dockMod.setDockScroll(dock, 1e6);
+      const max = dockMod.dockScroll();
+      ok(max > 0 && max === dockMod.dockOverflow(dock),
+        "scrolling past the end stops at the end");
+      run(many, true);
+      ok((many[0].rect as unknown as { y: number }).y < top0,
+        "…and the first window really did move up");
+      dockMod.setDockScroll(dock, -500);
+      ok(dockMod.dockScroll() === 0, "…and it cannot be scrolled above the top");
+      run(many, true);
+      ok(Math.abs((many[0].rect as unknown as { y: number }).y - top0) < 2,
+        "…back where it started");
     }
   }
 
@@ -8425,7 +8448,7 @@ async function main(): Promise<void> {
   {
     const nfs = await import("node:fs");
     const src = nfs.readFileSync("src/main.ts", "utf8");
-    const wheel = src.slice(src.indexOf('addEventListener("wheel"'), src.indexOf('addEventListener("wheel"') + 1100);
+    const wheel = src.slice(src.indexOf('addEventListener("wheel"'), src.indexOf('addEventListener("wheel"') + 1900);
     /* One path for every scrollable window: the panel that drew it records how
      * far it can go, so the wheel need not know a container grid from a shop. */
     ok(wheel.includes("const max = win.scrollMax ?? 0;") && wheel.includes("if (max <= 0) return;"),
@@ -8518,8 +8541,8 @@ async function main(): Promise<void> {
     const dock = nfs.readFileSync("src/ui/dock.ts", "utf8");
     ok(!dock.includes("SLOT_ROW_H"),
       "the column no longer reserves a row for slots that moved out of it");
-    ok(dock.includes("export const CONTROLS_H = BTN_ROW_H + GAP + SWAP_H;"),
-      "…so the controls block is two rows, not three");
+    ok(dock.includes("export const CONTROLS_H = BTN_ROW_H + GAP + SWAP_H + GAP + SWAP_H;"),
+      "…and the controls block is three rows: panels, swap+chase, mark+chat+edit");
 
     const controls = src.slice(src.indexOf("function drawDockControls"), src.indexOf("function drawDockControls") + 1600);
     ok(!controls.includes("drawActionSlot"), "…and draws no action slots itself");
@@ -9699,12 +9722,12 @@ async function main(): Promise<void> {
     /* One bubble per speaker: a chatterbox must not build a tower of text. */
     ok(chat.bubbles().filter((b) => b.entity === 1).length === 1,
       "a second bubble replaces the first rather than stacking");
-    ok(chat.BUBBLE_S === 10,
-      "speech hangs for ten seconds — long enough to look at the deck and back");
+    ok(chat.BUBBLE_S === 8,
+      "speech hangs for eight seconds — long enough to read twice, short of litter");
     chat.tickChat(5);
     ok(!!chat.bubbleFor(1), "…so it is still there after five");
-    chat.tickChat(5.5);
-    ok(!chat.bubbleFor(1), "…and gone after ten");
+    chat.tickChat(3.5);
+    ok(!chat.bubbleFor(1), "…and gone after eight");
 
     /* Unread means somebody SPOKE to you. Not that you picked up a bone. */
     chat.resetChat();
@@ -9856,6 +9879,83 @@ async function main(): Promise<void> {
     ok(main.includes('document.addEventListener("visibilitychange"'),
       "…and re-taken on return, since the browser drops it whenever the tab hides");
     ok(main.includes("catch {"), "…failing quietly, because a dimming screen beats a crash on start-up");
+  }
+
+
+  /* ============ Etap 34: the desktop catches up with the phone ============ */
+  {
+    console.log("Etap 34 - the column does everything the deck does:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+
+    /* The deck grew three controls and the column did not, so a desktop player
+     * could not mark a target, open chat with the mouse, or bind a slot. */
+    ok(main.includes('drawControlIcon(sctx, "atk"'), "the column has the mark button");
+    ok(main.includes('sctx.fillText("CHAT", chx + third / 2'), "…and a chat button");
+    ok(main.includes('sctx.fillText(editing ? "DONE" : "EDIT", ex + third / 2'), "…and edit");
+    ok(main.includes("unreadPip(sctx, chx + third, ry, wh);"),
+      "…with the unread pip on chat, since a desktop has no reveal button to hang it on");
+
+    /* Binding was gated on `touchUI`, which meant six action slots on a
+     * desktop and no way to fill any of them. */
+    ok(main.includes("function hudEditing(): boolean {\n  return !hudLocked();\n}"),
+      "editing no longer requires a touchscreen");
+    const hl = nfs.readFileSync("src/systems/hudLayout.ts", "utf8");
+    ok(hl.includes("locked: true"),
+      "…and the lock still defaults on, so nothing changes until EDIT is pressed");
+  }
+
+  {
+    console.log("Etap 34 - the sidebar scrolls:");
+    const dockMod = await import("../src/ui/dock.ts");
+    const d = dockMod.dockLayout(1920, 917, 2, true);
+
+    dockMod.reportDockStack(d, 0);
+    ok(dockMod.dockOverflow(d) === 0, "a stack that fits reports no overflow");
+    ok(dockMod.dockScroll() === 0, "…and cannot be scrolled");
+    dockMod.scrollDock(d, 300);
+    ok(dockMod.dockScroll() === 0, "…even when asked to");
+
+    const band = d.stackBottom - d.stackTop;
+    dockMod.reportDockStack(d, band + 400);
+    ok(dockMod.dockOverflow(d) === 400, "overflow is what runs past the bottom, exactly");
+    dockMod.scrollDock(d, 150);
+    ok(dockMod.dockScroll() === 150, "…and the stack moves");
+    dockMod.scrollDock(d, 1000);
+    ok(dockMod.dockScroll() === 400, "…up to the end and no further");
+
+    /* Shrinking the stack under a scrolled column must pull the view back, or
+     * closing a window leaves the player looking at empty space. */
+    dockMod.reportDockStack(d, band + 100);
+    ok(dockMod.dockScroll() === 100, "closing something re-clamps the view rather than stranding it");
+    dockMod.reportDockStack(d, 0);
+    ok(dockMod.dockScroll() === 0, "…and closing everything returns to the top");
+
+    const src = (await import("node:fs")).readFileSync("src/ui/panels.ts", "utf8");
+    ok(src.includes("let y = d.stackTop - dockScroll();"), "placement honours the scroll");
+    ok(!src.includes("if (y + h <= d.stackBottom) return { x: d.innerX, y };"),
+      "…and the old \"does not fit, so float it over the map\" branch is gone");
+    ok(src.includes("hud.ctx.rect(dock.x, dock.stackTop, dock.w"),
+      "a docked window is clipped to the band, so it cannot draw over the map or the vitals");
+    ok(src.includes("const inBand = (r: { y: number; h: number }): boolean =>"),
+      "…and its hitboxes are trimmed to match: a button you cannot see, you cannot press");
+    ok(src.includes("function drawDockScrollBar("), "the column draws a position readout");
+    ok(src.includes("if (over <= 0) return;"), "…only when there is somewhere to go");
+
+    /* Tearing a window out by hand still works — that is the player's choice,
+     * and it is the thing the old behaviour was taking away from them. */
+    ok(src.includes("win.docked !== false"), "a window dragged out of the column stays out");
+
+    const m = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    ok(m.includes("scrollDock(lastDock, (e.deltaY > 0 ? 1 : -1)"),
+      "the wheel scrolls the column");
+    ok(m.indexOf("const max = win.scrollMax ?? 0;") < m.indexOf("scrollDock(lastDock"),
+      "…but only after any window under the pointer has declined it");
+    ok(m.includes("s.x >= lastDock.x && dockOverflow(lastDock) > 0"),
+      "…and only with the pointer actually over the column");
+    ok(m.includes("const ratio = dockOverflow(lastDock) / band;"),
+      "dragging the thumb moves content in proportion, so a long stack does not crawl");
+    ok(m.includes("if (dockDrag) { dockDrag = null;"), "…and releasing lets go of it");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

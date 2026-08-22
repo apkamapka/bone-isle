@@ -30,7 +30,7 @@ import { homeChests } from "../game.ts";
 import type { Game } from "../game.ts";
 import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed, panelRows } from "../systems/panelPrefs.ts";
 import { CHROME, panelFrame, popupFrame, raisedBox, sunkenBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
-import { NO_DOCK, type DockLayout } from "./dock.ts";
+import { NO_DOCK, dockScroll, dockOverflow, reportDockStack, type DockLayout } from "./dock.ts";
 import type { Rect } from "./mobile.ts";
 import { drawResizeArrows } from "./icons.ts";
 
@@ -319,6 +319,46 @@ function sheetScrollBar(p: PanelInput, s: Rect, over: number): void {
   ctx.fillRect(bx + Math.round(bs * 0.32), thumbY, Math.round(bs * 0.36), thumbH);
 }
 
+/**
+ * The column's own scrollbar: a slim track down its right edge.
+ *
+ * Deliberately NOT the sheet's arrows-plus-track. Those buttons are sized for
+ * a thumb and would eat a sixth of a 220-pixel column for a control a mouse
+ * does not need — on a desktop the wheel is the scroll gesture and the bar is
+ * a POSITION READOUT that also happens to be draggable. So: no arrows, a
+ * three-pixel track, and it only appears when there is somewhere to go.
+ *
+ * It sits in the column's padding rather than inside the content lane, so
+ * turning it on does not make every docked window a few pixels narrower and
+ * break the exact fit the whole column is built around.
+ */
+function drawDockScrollBar(
+  ctx: CanvasRenderingContext2D, hotspots: Hotspot[], d: DockLayout,
+): void {
+  const over = dockOverflow(d);
+  if (over <= 0) return;
+  const sc = dockScroll();
+  const band = Math.max(1, d.stackBottom - d.stackTop);
+  const w = Math.max(3, Math.round(d.s * 3));
+  const x = d.x + d.w - w - Math.round(d.s * 2);
+
+  ctx.fillStyle = "rgba(0,0,0,.45)";
+  ctx.fillRect(x, d.stackTop, w, band);
+  const thumbH = Math.max(Math.round(d.s * 12), Math.round((band * band) / (band + over)));
+  const thumbY = d.stackTop + Math.round(((band - thumbH) * sc) / over);
+  ctx.fillStyle = "rgba(202,162,58,.85)";
+  ctx.fillRect(x, thumbY, w, thumbH);
+
+  /* The grab target is wider than the paint. Three pixels is right for
+   * something you look at and wrong for something you catch with a mouse. */
+  const grab = Math.max(w, Math.round(d.s * 10));
+  hotspots.push({
+    x: x - Math.round((grab - w) / 2), y: d.stackTop, w: grab, h: band,
+    fn: () => undefined, // pressing the track does nothing; DRAGGING it scrolls
+    dockTrack: true,
+  });
+}
+
 /** Is this window in the column right now? */
 export function isDocked(win: PanelWindow, dock: DockLayout): boolean {
   return dock.w > 0 && win.docked !== false && DOCKABLE_PANELS.includes(win.kind);
@@ -400,15 +440,23 @@ function anchor(p: PanelInput, w: number, h: number): { x: number; y: number } {
     return { x, y: settled };
   }
   if (isDocked(p.win, d)) {
-    let y = d.stackTop;
+    /* The column SCROLLS now.
+     *
+     * It used to spill: a window that did not fit was quietly un-docked and
+     * left floating over the map, which is the behaviour Radek hit — open a
+     * fourth thing and it lands on top of the game. The comment that used to
+     * sit here said "rather than invent a scrollbar", and inventing the
+     * scrollbar turned out to be the smaller job.
+     *
+     * Windows still float when the player DRAGS one out; that is a choice, and
+     * it stays. What is gone is the column making that choice for them.
+     */
+    let y = d.stackTop - dockScroll();
     for (const q of p.ui.windows) {
       if (q === p.win) break;
       if (q.rect && isDocked(q, d)) y += q.rect.h + DOCK_GAP * S;
     }
-    // The column is full. Rather than hide the window or invent a scrollbar,
-    // it floats — visible, grabbable, and back in the stack the moment
-    // something above it is closed or rolled up.
-    if (y + h <= d.stackBottom) return { x: d.innerX, y };
+    return { x: d.innerX, y };
   }
   // Centre on the MAP, not the whole canvas: with a sidebar open, dead centre
   // of the canvas is off-centre to everything the player is looking at.
@@ -424,6 +472,13 @@ export interface Hotspot {
   w: number;
   h: number;
   fn: () => void;
+  /**
+   * The sidebar's scroll track. Marked rather than positioned-by-guesswork so
+   * the pointer layer can start a DRAG on it — a plain hotspot only knows how
+   * to be clicked, and a track that jumps a page on click is not what a
+   * desktop scrollbar does.
+   */
+  dockTrack?: boolean;
 }
 
 /** A draggable inventory cell recorded during draw. */
@@ -978,12 +1033,22 @@ export function drawPanels(
      * hitboxes start so the ones that end up outside the hole can be dropped.
      * A button you cannot see but can still press is worse than no button. */
     const overflowing = !!sheet && !!win.rect && win.rect.h > sheet.h;
+    /* A docked window is clipped to the stack band for the same reason a sheet
+     * is clipped to its own: scrolled up, its top half now lies over the fixed
+     * blocks, and scrolled down its foot lies over the map. Same treatment,
+     * same hitbox trim afterwards. */
+    const clipDock = docked && dock.w > 0;
     const hsFrom = base.hotspots.length;
     const isFrom = base.itemSlots.length;
     if (overflowing && sheet) {
       hud.ctx.save();
       hud.ctx.beginPath();
       hud.ctx.rect(sheet.x, sheet.y, sheet.w, sheet.h);
+      hud.ctx.clip();
+    } else if (clipDock) {
+      hud.ctx.save();
+      hud.ctx.beginPath();
+      hud.ctx.rect(dock.x, dock.stackTop, dock.w, Math.max(0, dock.stackBottom - dock.stackTop));
       hud.ctx.clip();
     }
     switch (win.kind) {
@@ -1002,6 +1067,17 @@ export function drawPanels(
       case "stash": drawStash(p); break;
       case "wardrobe": drawWardrobe(p); break;
       default: break;
+    }
+    if (clipDock && !(overflowing && sheet)) {
+      hud.ctx.restore();
+      // A button you can see half of you may press; one scrolled entirely out
+      // of the band you may not. Same rule as the phone sheets.
+      const inBand = (r: { y: number; h: number }): boolean =>
+        r.y + r.h > dock.stackTop && r.y < dock.stackBottom;
+      base.hotspots.splice(hsFrom, base.hotspots.length - hsFrom,
+        ...base.hotspots.slice(hsFrom).filter(inBand));
+      base.itemSlots.splice(isFrom, base.itemSlots.length - isFrom,
+        ...base.itemSlots.slice(isFrom).filter(inBand));
     }
     if (overflowing && sheet) {
       hud.ctx.restore();
@@ -1045,6 +1121,17 @@ export function drawPanels(
     }
     if (!sheet) win.sheetY = undefined; // off a phone the memory is meaningless
   });
+  /* Tell the dock how tall the stack came out. Measured from the windows that
+   * were actually drawn, so a window that closed itself mid-frame cannot leave
+   * the column scrollable past the end of nothing. */
+  if (dock.w > 0) {
+    let wanted = 0;
+    for (const q of base.ui.windows) {
+      if (q.rect && isDocked(q, dock)) wanted += q.rect.h + DOCK_GAP * baseScale;
+    }
+    reportDockStack(dock, Math.max(0, wanted - DOCK_GAP * baseScale));
+    drawDockScrollBar(hud.ctx, base.hotspots, dock);
+  }
   hud.scale = origScale;
   if (base.ui.placing) drawPlacingHint(full);
   drawItemTooltip(full);

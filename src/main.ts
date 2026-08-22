@@ -62,6 +62,7 @@ import { deckEnabled, mobileLayout, noDeck, overDeck, mapFocusFrac, mapFocusFrac
 import { drawControlIcon, ICON_SRC, type ControlIcon } from "./ui/icons.ts";
 import {
   dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
+  dockOverflow, dockScroll, setDockScroll, scrollDock,
   VITALS_FIT, GOLD_ROW_H, BTN_ROW_H, SWAP_H, BLOCK_BAR,
   type DockLayout, type DockBlock,
 } from "./ui/dock.ts";
@@ -366,8 +367,16 @@ let hudDrag: { id: HudGroup; dx: number; dy: number; moved: boolean; gw: number;
 let hudGrips: { id: HudGroup; x: number; y: number; w: number; h: number; gx: number; gy: number; gw: number; gh: number }[] = [];
 /** True when the customizable HUD is in edit (unlocked) mode. The same
  *  drag-and-drop HUD is used everywhere — desktop included (Etap 13). */
+/**
+ * Are the action slots being re-bound right now?
+ *
+ * This used to require `touchUI`, which quietly meant a desktop player had six
+ * action slots and no way to put anything in them — the bar was configurable
+ * on a phone and read-only on a computer, which is precisely backwards. The
+ * lock defaults to on, so nothing changes until the EDIT button is pressed.
+ */
 function hudEditing(): boolean {
-  return touchUI && !hudLocked();
+  return !hudLocked();
 }
 
 const cw = (): World => game.current;
@@ -2375,6 +2384,20 @@ screen.addEventListener("pointerdown", (e) => {
       return;
     }
   }
+  /* The sidebar's scroll track. Checked before the panels below it because it
+   * is drawn over them: what you can see, you grab. */
+  if (lastDock && lastDock.w > 0 && dockOverflow(lastDock) > 0) {
+    for (const hsp of hotspots) {
+      if (!hsp.dockTrack) continue;
+      if (s.x >= hsp.x && s.x < hsp.x + hsp.w && s.y >= hsp.y && s.y < hsp.y + hsp.h) {
+        dockDrag = { grabY: s.y, from: dockScroll() };
+        suppressClick = true;
+        try { screen.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+        e.preventDefault();
+        return;
+      }
+    }
+  }
   // mobile HUD edit: grab a group's drag grip to reposition it
   if (hudEditing()) {
     for (const g of hudGrips) {
@@ -2433,9 +2456,31 @@ screen.addEventListener("wheel", (e) => {
     e.preventDefault();
     return;
   }
+  /* Nothing under the pointer wanted it, so the COLUMN takes it — but only
+   * when the pointer is actually over the column. Scrolling the sidebar from
+   * the middle of the map would be a surprise, and the map has its own reason
+   * to want the wheel one day. */
+  if (lastDock && lastDock.w > 0 && s.x >= lastDock.x && dockOverflow(lastDock) > 0) {
+    scrollDock(lastDock, (e.deltaY > 0 ? 1 : -1) * Math.round(40 * scale));
+    e.preventDefault();
+  }
 }, { passive: false });
 
+/** Dragging the sidebar's scroll track. */
+let dockDrag: { grabY: number; from: number } | null = null;
+
 screen.addEventListener("pointermove", (e) => {
+  if (dockDrag && lastDock) {
+    const s = toScreen(e);
+    /* The thumb travels the band while the content travels the overflow, so
+     * a pixel of thumb is worth (overflow / band) pixels of content. Without
+     * that ratio a long stack crawls and a short one bolts. */
+    const band = Math.max(1, lastDock.stackBottom - lastDock.stackTop);
+    const ratio = dockOverflow(lastDock) / band;
+    setDockScroll(lastDock, dockDrag.from + (s.y - dockDrag.grabY) * ratio);
+    e.preventDefault();
+    return;
+  }
   if (sizing) {
     const s = toScreen(e);
     /* Rounded, not truncated, so the edge feels stuck to the cursor rather
@@ -2507,6 +2552,7 @@ const endDrag = (): void => {
   ui.dragging = false;
 };
 addEventListener("pointerup", (e) => {
+  if (dockDrag) { dockDrag = null; ui.dragging = false; }
   if (hudDrag) {
     // tidy up: snap to a pixel grid, magnetize to nearby screen edges
     if (hudDrag.moved) {
@@ -2531,7 +2577,7 @@ addEventListener("pointerup", (e) => {
   }
   endDrag();
 });
-addEventListener("pointercancel", () => { hudDrag = null; if (itemDrag && !itemDrag.touch) itemDrag = null; suppressClick = false; endDrag(); });
+addEventListener("pointercancel", () => { dockDrag = null; hudDrag = null; if (itemDrag && !itemDrag.touch) itemDrag = null; suppressClick = false; endDrag(); });
 
 /**
  * One-time treasure chests, Tibia-style: the first open yields the prize with
@@ -4433,6 +4479,51 @@ function drawDockControls(d: DockLayout, top: number): void {
   sctx.fillText(chase ? "CHASE" : "STAND", cx + halfW / 2, wy + wh / 2);
   hotspots.push({ x: cx, y: wy, w: halfW, h: wh, fn: () => toggleChase() });
   touchButtons.push({ x: cx, y: wy, w: halfW, h: wh });
+
+  /* Row 3: mark, chat, edit — the three the phone deck grew and the column
+   * did not. Thirds rather than halves because none of them needs a word
+   * longer than four letters, and a fourth row would cost another container. */
+  const ry = wy + wh + gap;
+  const third = Math.round((d.innerW - gap * 2) / 3);
+  const marked = P.target?.kind === "mob";
+  buttonBox(sctx, d.innerX, ry, third, wh, S, {
+    on: marked, face: marked ? "rgba(150,58,48,.92)" : undefined,
+  });
+  const ags = Math.max(ICON_SRC, Math.floor((Math.min(third, wh) * 0.7) / ICON_SRC) * ICON_SRC);
+  drawControlIcon(sctx, "atk", Math.round(d.innerX + (third - ags) / 2),
+    Math.round(ry + (wh - ags) / 2), ags, marked);
+  hotspots.push({ x: d.innerX, y: ry, w: third, h: wh, fn: () => attackNearest() });
+  touchButtons.push({ x: d.innerX, y: ry, w: third, h: wh });
+
+  sctx.font = `bold ${Math.round(wh * 0.42)}px 'Courier New',monospace`;
+  const chx = d.innerX + third + gap;
+  const chatOn = chatInput().isOpen();
+  buttonBox(sctx, chx, ry, third, wh, S, {
+    on: chatOn, face: chatOn ? "rgba(202,162,58,.92)" : undefined,
+    accent: chatOn ? CHROME.goldText : undefined,
+  });
+  sctx.fillStyle = chatOn ? "#201a10" : "#e9e2c8";
+  sctx.fillText("CHAT", chx + third / 2, ry + wh / 2);
+  /* Unread rides here on the desktop, where there is no reveal button to hang
+   * it on — same pip, same rule: only a person speaking lights it. */
+  unreadPip(sctx, chx + third, ry, wh);
+  hotspots.push({ x: chx, y: ry, w: third, h: wh,
+    fn: () => { if (chatInput().isOpen()) closeChat(); else openChat(); } });
+  touchButtons.push({ x: chx, y: ry, w: third, h: wh });
+
+  const ex = chx + third + gap;
+  const editing = hudEditing();
+  buttonBox(sctx, ex, ry, third, wh, S, {
+    on: editing, face: editing ? "rgba(202,162,58,.92)" : undefined,
+    accent: editing ? CHROME.goldText : undefined,
+  });
+  sctx.fillStyle = editing ? "#201a10" : "#e9e2c8";
+  sctx.fillText(editing ? "DONE" : "EDIT", ex + third / 2, ry + wh / 2);
+  hotspots.push({ x: ex, y: ry, w: third, h: wh, fn: () => {
+    toggleHudLock();
+    flash(hudLocked() ? "slots locked" : "click a slot to bind it", "#8ab6ff");
+  } });
+  touchButtons.push({ x: ex, y: ry, w: third, h: wh });
 }
 
 /**

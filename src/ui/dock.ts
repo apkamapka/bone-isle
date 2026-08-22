@@ -63,7 +63,16 @@ export const STATUS_H = GOLD_ROW_H + GAP + Math.round(68 * VITALS_FIT);
  * slot with a small picture floating in the middle of it. */
 export const BTN_ROW_H = Math.floor((DOCK_INNER - 4 * GAP) / 5);
 export const SWAP_H = 20;
-export const CONTROLS_H = BTN_ROW_H + GAP + SWAP_H;
+/**
+ * Three rows now, not two: panel buttons, then swap + chase, then mark + chat
+ * + edit.
+ *
+ * The phone deck grew those three controls and the column did not, so a
+ * desktop player could not mark a target, could not open chat with the mouse
+ * and could not bind an action slot at all. A sidebar that does less than the
+ * phone version of the same screen is a sidebar with a bug in it.
+ */
+export const CONTROLS_H = BTN_ROW_H + GAP + SWAP_H + GAP + SWAP_H;
 
 /**
  * Narrower than this (CSS px) and the column costs more map than it saves, so
@@ -175,6 +184,53 @@ export function dockLayout(screenW: number, screenH: number, s: number, enabled:
   }
 
   return { w, x, innerX, innerW, s, blocks, stackTop: y, stackBottom: screenH - pad };
+}
+
+/**
+ * How far the container stack is scrolled, in device px.
+ *
+ * Module state rather than a field on anything, because it is a VIEW position
+ * and not a fact about the game: it belongs to this browser tab and this
+ * window size, survives nothing, and means nothing to a second character. It
+ * is also the one piece of dock state that must not be persisted — restoring a
+ * scroll offset against a stack that has since changed height puts the player
+ * looking at nothing.
+ */
+let scroll = 0;
+/** Total height the stack wanted last frame, measured while drawing it. */
+let stackWanted = 0;
+
+/** How far past the bottom the stack runs. Zero when everything fits. */
+export function dockOverflow(d: DockLayout): number {
+  return Math.max(0, stackWanted - (d.stackBottom - d.stackTop));
+}
+
+export function dockScroll(): number {
+  return scroll;
+}
+
+/** Move the stack, clamped to what there is. */
+export function setDockScroll(d: DockLayout, v: number): void {
+  scroll = Math.max(0, Math.min(dockOverflow(d), v));
+}
+
+export function scrollDock(d: DockLayout, dy: number): void {
+  setDockScroll(d, scroll + dy);
+}
+
+/**
+ * Record how tall the stack came out, and re-clamp.
+ *
+ * Measured during the draw rather than predicted before it, because a docked
+ * window's height depends on its contents — a backpack with a nested bag open
+ * is taller than the same backpack closed — and there is no honest way to know
+ * that without laying it out. One frame of lag on the clamp is invisible; the
+ * alternative is a second layout pass every frame for a number that changes
+ * when the player opens something.
+ */
+export function reportDockStack(d: DockLayout, wanted: number): void {
+  stackWanted = wanted;
+  if (scroll > dockOverflow(d)) scroll = dockOverflow(d);
 }
 
 /** Is this point inside the column? Used to decide a drag's destination. */

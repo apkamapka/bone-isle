@@ -122,14 +122,13 @@ export const OVERLAY_FADE_S = 12;
 /**
  * How long a bubble hangs over a speaker's head.
  *
- * Ten seconds. Four and a half was chosen to keep the screen clear and was too
- * short to be useful: on a phone you look down at the deck, look back, and the
- * thing somebody said to you is gone. Speech is cheap to leave up — it is one
- * line of text over one sprite — and the cost of missing it is having to ask
- * again. Note this is independent of how soon you may speak NEXT: the bubble
- * lasting ten seconds does not mean waiting ten seconds to answer.
+ * Eight seconds. Four and a half was too short to be useful — on a phone you
+ * look down at the deck, look back, and the thing somebody said is gone — and
+ * ten started to feel like litter once three people were standing together.
+ * Eight is long enough to read twice. Note this is independent of how soon you
+ * may speak NEXT: nothing waits on the bubble clearing.
  */
-export const BUBBLE_S = 10;
+export const BUBBLE_S = 8;
 
 /** A line of speech floating over an entity, addressed BY ID. */
 export interface Bubble {
