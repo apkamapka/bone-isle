@@ -33,6 +33,12 @@ export interface TouchDragHooks {
   end(sx: number, sy: number, moved: boolean): void;
 }
 
+/** How long a still finger must rest before it becomes a long press. */
+export const LONG_PRESS_MS = 420;
+
+/** How far it may drift and still count as still, in device px. */
+export const LONG_PRESS_SLOP = 14;
+
 /**
  * Wire touch handlers. A touch that starts on the left ~45% and lower ~65% of
  * the screen drives a floating joystick (its base appears where you press);
@@ -46,12 +52,17 @@ export function initTouch(
   onTap: (sx: number, sy: number) => void,
   blocked?: (sx: number, sy: number) => boolean,
   drag?: TouchDragHooks,
+  onLongPress?: (sx: number, sy: number) => void,
 ): void {
   let joyId: number | null = null;
   let joyStart = { x: 0, y: 0, t: 0, moved: false };
   let dragId: number | null = null;
   let dragFrom = { x: 0, y: 0 };
   let dragMoved = false;
+  let tapId: number | null = null;
+  let tapStart = { x: 0, y: 0, moved: false };
+  let longTimer: number | null = null;
+  let longFired = false;
 
   const toDevice = (t: Touch): { x: number; y: number } => {
     const r = canvas.getBoundingClientRect();
@@ -83,6 +94,21 @@ export function initTouch(
         touch.knobY = y;
         touch.jx = 0;
         touch.jy = 0;
+      } else if (onLongPress) {
+        /* With a long press wired up, a plain touch waits for RELEASE rather
+         * than firing on contact. It has to: the same finger cannot both have
+         * already tapped and be about to open a menu. The cost is that a tap
+         * registers a few tens of milliseconds later, which is imperceptible;
+         * the alternative is a menu that opens on top of an action it has
+         * already taken. The joystick zone has worked this way all along. */
+        tapId = t.identifier;
+        tapStart = { x, y, moved: false };
+        longFired = false;
+        longTimer = setTimeout(() => {
+          if (tapId !== t.identifier || tapStart.moved) return;
+          longFired = true;
+          onLongPress(tapStart.x, tapStart.y);
+        }, LONG_PRESS_MS) as unknown as number;
       } else {
         onTap(x, y);
       }
@@ -96,6 +122,13 @@ export function initTouch(
         const { x, y } = toDevice(t);
         if (Math.hypot(x - dragFrom.x, y - dragFrom.y) > 12) dragMoved = true;
         drag.move(x, y);
+        continue;
+      }
+      if (t.identifier === tapId) {
+        const { x, y } = toDevice(t);
+        // A finger that has wandered is no longer resting on one tile, so the
+        // press is abandoned rather than fired at wherever it ended up.
+        if (Math.hypot(x - tapStart.x, y - tapStart.y) > LONG_PRESS_SLOP) tapStart.moved = true;
         continue;
       }
       if (t.identifier !== joyId) continue;
@@ -116,6 +149,13 @@ export function initTouch(
 
   const end = (e: TouchEvent): void => {
     for (const t of Array.from(e.changedTouches)) {
+      if (t.identifier === tapId) {
+        if (longTimer !== null) { clearTimeout(longTimer); longTimer = null; }
+        // the long press already acted; releasing must not act again
+        if (!longFired && !tapStart.moved) onTap(tapStart.x, tapStart.y);
+        tapId = null;
+        continue;
+      }
       if (t.identifier === dragId && drag) {
         const { x, y } = toDevice(t);
         drag.end(x, y, dragMoved);

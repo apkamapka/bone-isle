@@ -38,6 +38,8 @@ export interface InputHandlers {
   onChase: () => void;
   /** Mark the nearest creature, or drop the mark if one is already held. */
   onAttackNearest: () => void;
+  /** Open (or close) the chat input. */
+  onChat: () => void;
   onEscape: () => void;
 }
 
@@ -67,6 +69,10 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     // that is not walking, because both are pressed mid-fight.
     else if (k === "c") h.onChase();
     else if (k === " ") h.onAttackNearest();
+    // ENTER opens chat, the way it does in every game with a chat. The field
+    // itself swallows keydown while focused, so `w` types a w rather than
+    // walking north — see ui/chatInput.ts.
+    else if (k === "enter") h.onChat();
     else if (k === "1") h.onSpell(0);
     else if (k === "2") h.onSpell(1);
     else if (k === "3") h.onSpell(2);

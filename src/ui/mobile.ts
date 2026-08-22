@@ -103,6 +103,14 @@ export interface MobileLayout {
   chase: Rect;
   /** Mark the nearest creature — Tibia's crossed swords. */
   atk: Rect;
+  /**
+   * Open the chat input, from the drop-down.
+   *
+   * A fallback rather than the main route: the log lying on the world is
+   * itself tappable, which is where chat is normally opened from. This exists
+   * for the case the log cannot cover — a silent world with nothing to tap.
+   */
+  chat: Rect;
   /** Minimap, square, at the right end of the utility row. */
   minimap: Rect;
   /**
@@ -157,7 +165,7 @@ export function noDeck(screenH = 0): MobileLayout {
   return {
     on: false, landscape: false, u: 0, gap: 0, margin: 0,
     topH: 0, info: z, vitals: z, purse: z,
-    menu: z, edit: z, swap: z, chase: z, atk: z, minimap: z, tabs: [],
+    menu: z, edit: z, swap: z, chase: z, atk: z, chat: z, minimap: z, tabs: [],
     deckY: screenH, deckH: 0, slots: [],
     mapTop: 0, mapBottom: screenH, mapLeft: 0, mapRight: 0, sheet: z,
   };
@@ -220,17 +228,29 @@ export function mobileLayout(
   y += tabH + m;
   const topH = y;
 
-  /* The drop-down. Below the strip, over the world, drawn only when open.
-   * Six cells now, not five: the edit toggle joins the panel tabs here having
-   * given up its seat on the utility row. Six across a 360-wide phone is 55
-   * CSS px each, still clear of the finger floor. */
-  const dropCells = DECK_TABS.length + 1;
-  const tabW = Math.floor((innerW - (dropCells - 1) * gap) / dropCells);
+  /* The drop-down: a 2x5 GRID, not a longer row.
+   *
+   * Five tabs fitted across a row. Seven does not — 360 CSS px over seven
+   * cells is 47 px each before gaps, and by the time Friends and Party arrive
+   * it is under forty, which is below what a fingertip can hit. The obvious
+   * fix is a scrolling row, and it has a failure mode you can see on any
+   * client that uses one: a tab cut off mid-word reads as a rendering bug
+   * rather than as "there is more this way".
+   *
+   * A second row costs one row of world, only while the menu is open, and it
+   * is drawn OVER the world so it costs no permanent height at all. Ten cells
+   * at full size, nothing to scroll, nothing to guess at. */
+  const DROP_COLS = 5;
+  const tabW = Math.floor((innerW - (DROP_COLS - 1) * gap) / DROP_COLS);
   const tabY = topH + gap;
-  const tabs: Rect[] = DECK_TABS.map((_, i) => ({
-    x: innerX + i * (tabW + gap), y: tabY, w: tabW, h: tabH,
-  }));
-  const edit: Rect = { x: innerX + DECK_TABS.length * (tabW + gap), y: tabY, w: tabW, h: tabH };
+  const cell = (i: number): Rect => ({
+    x: innerX + (i % DROP_COLS) * (tabW + gap),
+    y: tabY + Math.floor(i / DROP_COLS) * (tabH + gap),
+    w: tabW, h: tabH,
+  });
+  const tabs: Rect[] = DECK_TABS.map((_, i) => cell(i));
+  const chat: Rect = cell(DECK_TABS.length);
+  const edit: Rect = cell(DECK_TABS.length + 1);
 
   /* --- thumb deck: the six slots, and nothing else ------------------------ */
   const slotH = Math.round(u * 1.02);
@@ -259,7 +279,7 @@ export function mobileLayout(
   return {
     on: true, landscape: false, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, minimap, tabs,
+    menu, edit, swap, chase, atk, chat, minimap, tabs,
     deckY, deckH, slots,
     mapTop, mapBottom, mapLeft: 0, mapRight: screenW, sheet,
   };
@@ -349,13 +369,17 @@ function landscapeLayout(
   /* The drop-down still hangs horizontally under the status row: five tabs
    * stacked in the right column would be taller than the column is. */
   const tabsW = Math.max(1, mapRight - mapLeft);
-  const dropCells = DECK_TABS.length + 1; // …plus the edit toggle, as in portrait
-  const tabW = Math.floor((tabsW - (dropCells - 1) * gap) / dropCells);
+  const DROP_COLS = 5; // the same 2x5 grid as portrait — see the note there
+  const tabW = Math.floor((tabsW - (DROP_COLS - 1) * gap) / DROP_COLS);
   const tabY = topH + gap;
-  const tabs: Rect[] = DECK_TABS.map((_, i) => ({
-    x: mapLeft + i * (tabW + gap), y: tabY, w: tabW, h: u,
-  }));
-  const edit: Rect = { x: mapLeft + DECK_TABS.length * (tabW + gap), y: tabY, w: tabW, h: u };
+  const cell = (i: number): Rect => ({
+    x: mapLeft + (i % DROP_COLS) * (tabW + gap),
+    y: tabY + Math.floor(i / DROP_COLS) * (u + gap),
+    w: tabW, h: u,
+  });
+  const tabs: Rect[] = DECK_TABS.map((_, i) => cell(i));
+  const chat: Rect = cell(DECK_TABS.length);
+  const edit: Rect = cell(DECK_TABS.length + 1);
 
   /* A panel takes a LANE of the map rather than a band across it — width is
    * what this orientation has spare, so spending width is what costs least. */
@@ -364,7 +388,7 @@ function landscapeLayout(
   return {
     on: true, landscape: true, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, minimap, tabs,
+    menu, edit, swap, chase, atk, chat, minimap, tabs,
     deckY: screenH, deckH: 0, slots,
     mapTop, mapBottom, mapLeft, mapRight, sheet,
   };

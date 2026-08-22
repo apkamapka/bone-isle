@@ -9076,7 +9076,8 @@ async function main(): Promise<void> {
         ok(r.x >= d.mapRight, "a control stays in the right-hand column");
         ok(r.x + r.w <= w * dpr, "…and inside the glass");
       }
-      ok(d.edit.y === d.tabs[0].y, "…and the edit toggle hangs with the tabs instead");
+      ok(d.edit.y > d.tabs[0].y && d.edit.y >= d.topH,
+        "…and the edit toggle hangs on the drop-down's second row");
       // status, both bars and the purse all on ONE row — there is width for it
       ok(d.info.y === d.vitals.y && d.vitals.y === d.purse.y, "status, vitals and purse share one row");
       ok(d.info.x + d.info.w <= d.vitals.x && d.vitals.x + d.vitals.w <= d.purse.x,
@@ -9440,10 +9441,11 @@ async function main(): Promise<void> {
     }
 
     /* EDIT gave up its seat on the utility row and must now sit with the tabs. */
-    ok(port.edit.y === port.tabs[0].y, "portrait: EDIT moved into the drop-down, beside the panel tabs");
-    ok(port.edit.x > port.tabs[port.tabs.length - 1].x, "…as the last cell");
-    ok(port.edit.y > port.topH, "…which means it is no longer on the strip at all");
-    ok(land.edit.y === land.tabs[0].y, "landscape: likewise");
+    ok(port.edit.y > port.topH, "portrait: EDIT moved off the strip into the drop-down");
+    ok(port.edit.y > port.tabs[0].y, "…onto the grid's second row, below the five panel tabs");
+    ok(port.chat.y === port.edit.y && port.chat.x < port.edit.x,
+      "…with CHAT beside it, first on that row");
+    ok(land.edit.y > land.tabs[0].y, "landscape: likewise");
 
     const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
     ok(main.includes("hotspots.push({ ...d.chase, fn: () => { if (!editing) toggleChase(); } });"),
@@ -9655,6 +9657,192 @@ async function main(): Promise<void> {
     ok(!main.includes("game.worlds.home.structures.includes(base.s)"), "…and the chest one");
     ok(main.includes("const refCtx = (): RefWorld =>"),
       "one place builds the resolution context, rebuilt per call so a ladder cannot stale it");
+  }
+
+
+  /* ============ Etap 33: chat, and the rest of the touch surface ========== */
+  {
+    console.log("Etap 33 - chat channels:");
+    const chat = await import("../src/systems/chat.ts");
+    chat.resetChat();
+
+    ok(chat.CHANNELS.length >= 7, "every channel the game will need is modelled, not just today's");
+    ok(chat.LIVE_CHANNELS.every((c) => c.live), "…and the live ones are separable from the rest");
+    ok(chat.channel("trade").live === false,
+      "Trade is present but not live — the player learns the final shape now, not later");
+    ok(chat.channel("trade").delayS === 120,
+      "…and carries Tibia's two-minute advertising delay, which IS the moderation");
+    ok(chat.channel("loot").writable === false, "Loot is a log, not a channel");
+
+    /* Sending, and the three ways it can be refused. Every refusal has to be
+     * explainable — a message that just fails to appear reads as a bug. */
+    const r1 = chat.say("local", "hello", "You", 1);
+    ok(r1.ok, "a live writable channel accepts a message");
+    ok(chat.linesIn("local").length === 1, "…and it lands in that channel");
+    ok(!!chat.bubbleFor(1), "…and over the speaker's head, addressed by entity id");
+
+    const r2 = chat.say("local", "again", "You", 1);
+    ok(!r2.ok && r2.reason === "throttled", "a second message inside the delay is refused");
+    ok(!r2.ok && r2.reason === "throttled" && r2.waitS > 0, "…and says how long to wait");
+    const r3 = chat.say("trade", "wts sword", "You", 1);
+    ok(!r3.ok && r3.reason === "not-yet", "a channel that is not open yet says so");
+    const r4 = chat.say("loot", "x", "You", 1);
+    ok(!r4.ok && r4.reason === "read-only", "a log refuses to be typed into");
+    ok(!chat.say("local", "   ", "You", 1).ok, "whitespace is not a message");
+
+    chat.tickChat(1);
+    ok(chat.cooldownLeft("local") === 0, "the throttle drains");
+    ok(chat.say("local", "third", "You", 1).ok, "…and then lets the next one through");
+
+    /* One bubble per speaker: a chatterbox must not build a tower of text. */
+    ok(chat.bubbles().filter((b) => b.entity === 1).length === 1,
+      "a second bubble replaces the first rather than stacking");
+    chat.tickChat(chat.BUBBLE_S + 0.1);
+    ok(!chat.bubbleFor(1), "…and bubbles expire");
+
+    /* Unread. The pip is the only always-visible chat affordance, so the count
+     * behind it has to be right. */
+    chat.resetChat();
+    chat.setActiveChannel("local");
+    chat.logLoot("a bone");
+    chat.logServer("you advanced");
+    ok(chat.unread() === 2, "lines in other channels count as unread");
+    ok(chat.unread("loot") === 1, "…per channel");
+    ok(chat.unread("local") === 0, "…but not in the channel you are looking at");
+    chat.markAllRead();
+    ok(chat.unread() === 0, "opening chat clears the count");
+
+    /* The log is bounded: a line per coin picked up, forever, is a slow leak. */
+    chat.resetChat();
+    for (let i = 0; i < chat.CHAT_HISTORY + 50; i++) chat.logServer(`line ${i}`);
+    ok(chat.chatLines().length === chat.CHAT_HISTORY, "the log is capped");
+    ok(chat.chatLines()[chat.CHAT_HISTORY - 1].text === `line ${chat.CHAT_HISTORY + 49}`,
+      "…and it is the OLDEST lines that go");
+
+    /* The overlay shows the newest few from ALL channels, and fades them. */
+    chat.resetChat();
+    for (let i = 0; i < 20; i++) chat.logServer(`l${i}`);
+    const shown = chat.overlayLines();
+    ok(shown.length === chat.OVERLAY_LINES, "the overlay shows a fixed few");
+    ok(shown[shown.length - 1].text === "l19", "…newest last, so it reads downward like a transcript");
+    chat.tickChat(chat.OVERLAY_FADE_S + 1);
+    ok(chat.overlayLines().length === 0, "…and old lines leave the world");
+    ok(chat.chatLines().length === 20, "…without leaving the log");
+    chat.resetChat();
+  }
+
+  {
+    console.log("Etap 33 - chat is wired into the game, not just modelled:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const inp = nfs.readFileSync("src/ui/chatInput.ts", "utf8");
+
+    ok(main.includes("const flash = (t: string, c = \"#ffe9a8\"): void => {")
+      && main.includes("logServer(t, c);"),
+      "every flash is also recorded, so a refusal can be re-read");
+    ok(main.includes("drawChatLog();"), "the log is drawn on the world");
+    ok(main.includes("tickChat(dt);"), "…and aged");
+    ok(main.includes("sayBubble(m.id"), "creatures can speak over their own heads");
+
+    /* The keyboard problem. A canvas cannot know the soft keyboard exists, so
+     * the field has to be a DOM element anchored to the visual viewport. */
+    ok(inp.includes("visualViewport"), "the input rides the VISUAL viewport, not the layout one");
+    ok(inp.includes('vv?.addEventListener("resize", place)'),
+      "…and re-places itself when the keyboard opens or closes");
+    ok(inp.includes("e.stopPropagation()"),
+      "typing does not leak into the game's hotkeys — `w` types a w, it does not walk north");
+    ok(inp.includes('field.autocapitalize = "off"'),
+      "…and the phone keyboard does not autocorrect a trade offer");
+
+    /* The log is the way in. No permanent chat button eats a tap on the world. */
+    ok(main.includes("fn: () => openChat(),"), "tapping the log opens the input");
+    ok(main.includes("if (!typing) {"), "…but not while it is already open");
+    ok(main.includes("unreadPip(ctx, d.menu.x + d.menu.w"),
+      "unread rides the reveal button, the one control always on screen");
+  }
+
+  {
+    console.log("Etap 33 - the drop-down is a 2x5 grid:");
+    const mob = await import("../src/ui/mobile.ts");
+    for (const [name, d] of [
+      ["portrait", mob.mobileLayout(1080, 2400, 3, 0, 0)],
+      ["landscape", mob.mobileLayout(2400, 1080, 3, 0, 0)],
+    ] as const) {
+      const cells = [...d.tabs, d.chat, d.edit];
+      ok(cells.length === 7, `${name}: seven cells live in the drop-down`);
+      const rows = new Set(cells.map((c) => c.y));
+      ok(rows.size === 2, `${name}: laid out on two rows, not one long one`);
+      const cols = new Set(d.tabs.map((c) => c.x));
+      ok(cols.size === 5, `${name}: five to a row`);
+      const min = mob.TOUCH_MIN_CSS * 3;
+      ok(cells.every((c) => c.w >= min * 0.9 && c.h >= min),
+        `${name}: every cell is still thumb-sized — which a seven-wide row would not be`);
+      let clear = true;
+      for (let i = 0; i < cells.length; i++) {
+        for (let j = i + 1; j < cells.length; j++) {
+          const a = cells[i], b = cells[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+        }
+      }
+      ok(clear, `${name}: no two cells overlap`);
+    }
+  }
+
+  {
+    console.log("Etap 33 - touch: tolerance, long press, double tap:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const touch = nfs.readFileSync("src/ui/touch.ts", "utf8");
+
+    /* Tap tolerance is TOUCH ONLY. Widening a mouse click steals the gap the
+     * player deliberately aimed at. */
+    ok(main.includes("if (touchUI && forgivingTap(world, w)) return;"),
+      "tap tolerance runs on touch only");
+    ok(main.indexOf("forgivingTap(world, w)") < main.indexOf("// monsters\n  for (const m of world.monsters)"),
+      "…and only after the exact hitboxes have missed, so it cannot override a deliberate hit");
+    ok(main.includes("const m = pick(world.monsters.filter((x) => x.hp > 0));"),
+      "creatures are picked first — the extra reach only matters in a fight");
+
+    ok(touch.includes("LONG_PRESS_MS"), "a long press is a real gesture in the touch layer");
+    ok(touch.includes("if (!longFired && !tapStart.moved) onTap(tapStart.x, tapStart.y);"),
+      "…and a press that already opened the menu does not also tap on release");
+    ok(touch.includes("> LONG_PRESS_SLOP) tapStart.moved = true"),
+      "…and a finger that wanders abandons it rather than firing somewhere else");
+
+    const menu = nfs.readFileSync("src/ui/contextMenu.ts", "utf8");
+    ok(menu.includes('verb: "walk"'), "the menu always offers the one verb every tile has");
+    ok(main.includes('verb: "trade"') && main.includes("enabled: false"),
+      "Trade is in the menu, greyed — the shape the player learns is the final one");
+    ok(main.includes("popupFrame(sctx, x, y, w, h, S);"),
+      "the menu wears the same frame as the inspect card, not a hand-rolled box");
+    ok(main.includes("if (contextMenuTap(sx, sy)) return;"),
+      "a tap while the menu is open goes to the menu first");
+
+    ok(main.includes("const DOUBLE_TAP_MS = 320;"), "double tap has a tuned window");
+    ok(main.includes("sameRef(lastSlotTap.ref, itemDrag.ref ?? { c: \"bag\" })"),
+      "…matched by SLOT, not by screen position, so a re-laid-out window does not break it");
+    ok(main.includes('flash("open another container to send to"'),
+      "…and with nowhere to send, it says so rather than quietly dropping the stack");
+  }
+
+  {
+    console.log("Etap 33 - installed to the home screen:");
+    const nfs = await import("node:fs");
+    const man = JSON.parse(nfs.readFileSync("public/manifest.webmanifest", "utf8"));
+    ok(man.display === "fullscreen", "installed, the game takes the whole panel");
+    ok(Array.isArray(man.display_override) && man.display_override.includes("standalone"),
+      "…falling back to standalone where fullscreen is refused");
+    const purposes = man.icons.map((i: { purpose: string }) => i.purpose);
+    ok(purposes.includes("maskable"), "a maskable icon exists, so launchers do not crop the art off");
+    for (const i of man.icons) ok(nfs.existsSync(`public${i.src}`), `${i.src} is actually there`);
+    const html = nfs.readFileSync("index.html", "utf8");
+    ok(html.includes('rel="manifest"'), "…and index.html links it, or none of it happens");
+
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok(main.includes('nav.wakeLock.request("screen")'), "the screen is held awake during a hunt");
+    ok(main.includes('document.addEventListener("visibilitychange"'),
+      "…and re-taken on return, since the browser drops it whenever the tab hides");
+    ok(main.includes("catch {"), "…failing quietly, because a dimming screen beats a crash on start-up");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

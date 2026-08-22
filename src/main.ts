@@ -43,6 +43,13 @@ import { TARGET_SEEK_PX } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
 import { addItem, addStack, removeItem, removeItemUnpacked, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
+import {
+  CHANNELS, activeChannel, setActiveChannel, bubbleFor, channel,
+  formatLine, lineAlpha, logServer, markAllRead, overlayLines,
+  say, tickChat, unread,
+} from "./systems/chat.ts";
+import { chatInput, initChatInput } from "./ui/chatInput.ts";
+import { groundEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
@@ -373,7 +380,19 @@ const cw = (): World => game.current;
  * against the floor above. It is three property reads.
  */
 const refCtx = (): RefWorld => ({ bag: P.bag, world: game.current, home: game.worlds.home });
-const flash = (t: string, c = "#ffe9a8"): void => addFloat(cw(), P.x, P.y - 60, t, c);
+/**
+ * Say something to the player.
+ *
+ * Two places at once, on purpose. The float is how it is READ — it appears
+ * where the eyes already are and needs no attention — and the log is how it is
+ * RE-read, which nothing before this could do: a refusal you blinked past was
+ * simply gone. Every one of the hundred-odd `flash` calls in this file became
+ * a Server Log line for free the moment this one line changed.
+ */
+const flash = (t: string, c = "#ffe9a8"): void => {
+  addFloat(cw(), P.x, P.y - 60, t, c);
+  logServer(t, c);
+};
 
 /** Recompute the player's max HP from current owned structures. */
 function recomputeBonuses(): void {
@@ -1270,6 +1289,57 @@ function baseRefOf(kind: PanelKind): ContainerRef | null {
   return null;
 }
 
+/**
+ * Double-tap a stack to send it to the other open container.
+ *
+ * WHY THIS IS NOT JUST A CONVENIENCE
+ * ----------------------------------
+ * Dragging works and will keep working, but it is the gesture that survives a
+ * network worst. A drag is a conversation: finger down, something lifts, it
+ * follows, it lands. Over a wire the middle of that conversation is a
+ * prediction — the client has already lifted the item and drawn it under the
+ * thumb before the server has agreed to any of it — so a rejected drag has to
+ * be un-drawn, mid-gesture, with the finger still down. That is the ugliest
+ * failure mode in the whole inventory.
+ *
+ * A double tap has no middle. It is one message, and a rejected one simply
+ * does not happen: the stack stays where it was and a line appears in the log.
+ * Building it now means the drag code never has to become the only way to
+ * move anything, which is the position it would otherwise be in the day the
+ * server arrives.
+ *
+ * WHERE "THE OTHER ONE" IS
+ * ------------------------
+ * The topmost open container that is not the one holding the stack. That is
+ * unambiguous whenever two are open, which is the case this is for — bag and
+ * chest, bag and corpse. With only the bag open there is no other side and it
+ * says so rather than guessing at the floor, because "send" quietly meaning
+ * "drop on the ground" is how you lose a rare.
+ */
+function sendStack(from: ContainerRef, index: number): boolean {
+  const slots = refSlots(from);
+  const st = slots?.[index];
+  if (!slots || !st) return false;
+
+  // Newest window first: with three containers open, the one you just opened
+  // is the one you are filling.
+  const open: ContainerRef[] = [];
+  for (let i = ui.windows.length - 1; i >= 0; i--) {
+    const r = viewRefOf(ui.windows[i]);
+    if (r) open.push(r);
+  }
+  if (P.pack) open.push({ c: "bag" });
+
+  const dest = open.find((r) => !sameRef(baseOf(r), baseOf(from)) && !isInside(r, from) && refUsable(r));
+  if (!dest) {
+    flash("open another container to send to", "#e0a06a");
+    return false;
+  }
+  if (!moveItems(from, index, dest, null, st.n)) return false;
+  beep(420, 0.04, "sine", 0.03, -30);
+  return true;
+}
+
 /** Take `n` out of a container and put them on the ground (optionally aimed). */
 function dropFromContainer(ref: ContainerRef, index: number, n: number, tx?: number, ty?: number): void {
   const slots = refSlots(ref);
@@ -1839,8 +1909,118 @@ function pointInOpenPanel(sx: number, sy: number): boolean {
   return false;
 }
 
+/** "snake" -> "Snake"; monster kinds are stored as their lowercase key. */
+function titleCase(k: string): string {
+  return k.charAt(0).toUpperCase() + k.slice(1);
+}
+
+/**
+ * Describe what is on a tile, into the log.
+ *
+ * Tibia's "look" writes a sentence rather than opening anything, and that is
+ * the right shape for a phone: a popup would cover the thing being looked at.
+ * It also gives the log its first job that is not a warning.
+ */
+function lookAtTile(at: Vec): void {
+  const world = cw();
+  const tx = toTile(at.x);
+  const ty = toTile(at.y);
+  const near = (ex: number, ey: number): boolean =>
+    Math.abs(toTile(ex) - tx) <= 1 && Math.abs(toTile(ey) - ty) <= 1;
+
+  const m = world.monsters.find((x) => x.hp > 0 && near(x.x, x.y));
+  if (m) { logServer(`You see ${titleCase(m.kind)} — ${Math.ceil(m.hp)}/${m.maxhp} hp.`); return; }
+  const n = world.npcs.find((x) => near(x.x, x.y));
+  if (n) { logServer(`You see ${n.name}.`); return; }
+  const gi = world.ground.find((x) => near(x.x, x.y));
+  if (gi) { logServer(`You see ${gi.n > 1 ? `${gi.n} ` : ""}${ITEMS[gi.kind].name}.`); return; }
+  const c = world.corpses.find((x) => near(x.x, x.y));
+  if (c) { logServer(`You see the remains of ${titleCase(c.name)}.`); return; }
+  logServer(`You see the ground. (${tx}, ${ty})`);
+}
+
+/* ---------------- the long-press menu ---------------- */
+
+let ctxMenu: ContextMenu | null = null;
+
+/**
+ * Build and open the menu for whatever is under the finger.
+ *
+ * Ordered the way the verbs are urgent: what is ON the tile first, walking
+ * last. That is the opposite of how the list reads, so "Walk here" sits at the
+ * bottom where the thumb naturally rests and the object's own verbs sit above
+ * it, closest to the thing they act on.
+ */
+function openContextMenu(sx: number, sy: number): void {
+  if (P.dead || hudEditing()) return;
+  // A press on chrome is a press on chrome; the menu is for the world.
+  if (pointInOpenPanel(sx, sy) || overTouchButton(sx, sy)) return;
+
+  const at: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
+  const world = cw();
+  const entries: MenuEntry[] = [];
+  const tx = toTile(at.x);
+  const ty = toTile(at.y);
+  const near = (ex: number, ey: number): boolean =>
+    Math.abs(toTile(ex) - tx) <= 1 && Math.abs(toTile(ey) - ty) <= 1;
+
+  const m = world.monsters.find((x) => x.hp > 0 && near(x.x, x.y));
+  if (m) {
+    entries.push({ verb: "attack", label: `Attack ${titleCase(m.kind)}`, enabled: true,
+      run: () => { P.target = { kind: "mob", id: m.id }; P.dest = null; P.gather = null; } });
+    entries.push({ verb: "look", label: "Look", enabled: true,
+      run: () => logServer(`You see ${titleCase(m.kind)} — ${Math.ceil(m.hp)}/${m.maxhp} hp.`) });
+  }
+  const c = world.corpses.find((x) => near(x.x, x.y));
+  if (c) {
+    entries.push({ verb: "loot", label: "Look inside", enabled: true,
+      run: () => { P.target = { kind: "corpse", id: c.id }; P.dest = null; } });
+  }
+  const gi = world.ground.find((x) => near(x.x, x.y));
+  if (gi) {
+    entries.push({ verb: "take", label: `Take ${ITEMS[gi.kind].name}`, enabled: true,
+      run: () => { P.target = { kind: "ground", id: gi.id }; P.dest = null; } });
+  }
+  const n = world.npcs.find((x) => near(x.x, x.y));
+  if (n) {
+    entries.push({ verb: "talk", label: `Talk to ${n.name}`, enabled: true,
+      run: () => { P.target = { kind: "npc", id: n.id }; n.talk = NPC_TALK_HOLD_S; P.dest = null; } });
+    /* The entry this whole menu was built for. Greyed rather than missing:
+     * the shape the player learns today is the shape they keep. */
+    entries.push({ verb: "trade", label: `Trade with ${n.name}`, enabled: false,
+      why: "Trading opens with the world." });
+  }
+  entries.push(...groundEntries(
+    () => { P.dest = { x: at.x, y: at.y }; P.target = null; P.gather = null; moveMarker = { x: at.x, y: at.y, t: 0.5 }; },
+    () => lookAtTile(at),
+  ));
+
+  ctxMenu = { sx, sy, at, entries, rects: [] };
+}
+
+function closeContextMenu(): void {
+  ctxMenu = null;
+}
+
+/** A tap while the menu is open: run an entry, or dismiss. Returns handled. */
+function contextMenuTap(sx: number, sy: number): boolean {
+  if (!ctxMenu) return false;
+  for (const r of ctxMenu.rects) {
+    if (sx >= r.x && sx < r.x + r.w && sy >= r.y && sy < r.y + r.h) {
+      const e = ctxMenu.entries[r.i];
+      closeContextMenu();
+      if (!e.enabled) { flash(e.why ?? "not yet", "#e0a06a"); return true; }
+      e.run?.();
+      return true;
+    }
+  }
+  closeContextMenu();
+  return true; // the dismissing tap is spent on dismissing; it does not also walk
+}
+
 function handleWorldTap(sx: number, sy: number): void {
   unlockAudio();
+  if (contextMenuTap(sx, sy)) return;
   // hotspots are collected during draw; the topmost window's are last, so
   // check them first (reverse) to respect z-order on overlapping panels.
   for (let i = hotspots.length - 1; i >= 0; i--) {
@@ -1916,6 +2096,105 @@ function handleWorldTap(sx: number, sy: number): void {
   worldClick(w);
 }
 
+/* ---------------- screen wake lock ---------------- */
+
+/**
+ * Stop the phone dimming out mid-hunt.
+ *
+ * A bow fight is thirty seconds of watching and one tap; the screen timeout
+ * does not know the difference between that and a phone face-down on a table,
+ * so it dims exactly when the fight gets interesting. Native games get this
+ * for free from the OS. On the web it is one API, and one that is genuinely
+ * optional: `wakeLock` is absent on older iOS and the request can be refused
+ * outright on low battery, so every path here fails quietly and the game
+ * carries on. A dimming screen is a nuisance; a crash on start-up is not.
+ *
+ * The lock is dropped by the browser whenever the tab is hidden and has to be
+ * taken again on return — hence the visibility listener, without which it
+ * works exactly once per session and then silently stops.
+ */
+let wakeLock: { release: () => Promise<void>; released: boolean } | null = null;
+
+async function acquireWakeLock(): Promise<void> {
+  const nav = navigator as unknown as {
+    wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void>; released: boolean }> };
+  };
+  if (!nav.wakeLock || document.visibilityState !== "visible") return;
+  try {
+    wakeLock = await nav.wakeLock.request("screen");
+  } catch {
+    // refused (battery saver, no permission, unsupported) — not our problem
+    wakeLock = null;
+  }
+}
+
+function initWakeLock(): void {
+  if (typeof document === "undefined") return;
+  void acquireWakeLock();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && (!wakeLock || wakeLock.released)) void acquireWakeLock();
+  });
+}
+
+/* ---------------- chat ---------------- */
+
+/**
+ * Open the input field.
+ *
+ * Reading chat needs no button — the log lies on the world and is always
+ * there. Only WRITING needs chrome, and only while it is happening, which is
+ * why this is a verb rather than a panel.
+ */
+function openChat(prefill = ""): void {
+  markAllRead();
+  const ch = channel(activeChannel());
+  chatInput().setChannel(ch.id, ch.short, ch.color);
+  chatInput().open(prefill);
+}
+
+function closeChat(): void {
+  chatInput().close();
+}
+
+/** Step to the next channel you are allowed to type in. */
+function cycleChatChannel(): void {
+  const writable = CHANNELS.filter((c) => c.writable);
+  const i = writable.findIndex((c) => c.id === activeChannel());
+  const next = writable[(i + 1) % writable.length];
+  setActiveChannel(next.id);
+  chatInput().setChannel(next.id, next.short, next.color);
+  if (!next.live) {
+    logServer(`${next.name} opens when the world does — nobody to talk to yet.`, "#e0a06a");
+  }
+}
+
+/** Send what was typed, and explain any refusal rather than swallowing it. */
+function sendChat(text: string): void {
+  const ch = activeChannel();
+  const r = say(ch, text, "You", CHAT_SPEAKER_ID);
+  if (!r.ok) {
+    if (r.reason === "not-yet") logServer(`${channel(ch).name} is not open yet.`, "#e0a06a");
+    else if (r.reason === "throttled") {
+      logServer(`${channel(ch).name}: wait ${Math.ceil(r.waitS)}s before posting again.`, "#e0a06a");
+    } else if (r.reason === "read-only") logServer(`${channel(ch).name} is a log, not a channel.`, "#e0a06a");
+  }
+  closeChat();
+}
+
+/**
+ * The id the player speaks under.
+ *
+ * The player is not an entity in `world` — there is only ever one of them, so
+ * they never needed an id. A bubble is addressed BY id though, so they are
+ * given a reserved one here rather than a special case in the bubble code.
+ * When other players arrive they will be real entities and this constant goes
+ * away; until then it is the one seam that has to know the difference.
+ */
+const CHAT_SPEAKER_ID = -1;
+
+initChatInput({ send: sendChat, cancel: closeChat, cycleChannel: cycleChatChannel });
+initWakeLock();
+
 initInput(screen, {
   toWorld: (sx, sy): Vec => ({ x: sx / vScale + cam.x, y: sy / vScale + cam.y }),
   onMove: (sx, sy) => { mouse.sx = sx; mouse.sy = sy; },
@@ -1930,12 +2209,14 @@ initInput(screen, {
     const s = cycleStance();
     flash(STANCE_LABEL[s], STANCE_COLOR[s]);
   },
+  onChat: () => { if (chatInput().isOpen()) closeChat(); else openChat(); },
   onChase: () => {
     const on = toggleChase();
     flash(on ? "chase opponent" : "stand while fighting", on ? "#e1483b" : "#5aa1e8");
   },
   onAttackNearest: attackNearest,
   onEscape: () => {
+    if (chatInput().isOpen()) { closeChat(); return; }
     if (throwPending) { throwPending = null; flash("throw cancelled", "#8ab6ff"); return; }
     if (aimPending) { aimPending = null; flash("cast cancelled", "#8ab6ff"); return; }
     if (assignSlot !== null) { assignSlot = null; return; }
@@ -1971,6 +2252,19 @@ initInput(screen, {
     handleWorldTap(sx, sy);
   },
 });
+/**
+ * How long the second tap has to arrive.
+ *
+ * 320ms. Longer and a slow double-use of a potion starts sending it away
+ * instead of drinking it; shorter and the gesture stops working for anyone
+ * who is not quick with their hands, which on a phone in a fight is most
+ * people. The platform double-click default is around 500ms and is tuned for
+ * a mouse, where nothing else is competing for the same finger.
+ */
+const DOUBLE_TAP_MS = 320;
+
+let lastSlotTap: { ref: ContainerRef; index: number; t: number } | null = null;
+
 if (isTouchDevice()) initTouch(screen, handleWorldTap, overTouchButton, {
   // finger drag-and-drop from inventory panels: still finger = tap (use/
   // equip/chooser as before), moving finger = drag with the same drop rules
@@ -1984,10 +2278,27 @@ if (isTouchDevice()) initTouch(screen, handleWorldTap, overTouchButton, {
   end: (sx, sy, moved) => {
     if (!itemDrag) { if (!moved) handleWorldTap(sx, sy); return; }
     if (itemDrag.active) resolveItemDrop(sx, sy);
-    else if (!moved) handleWorldTap(itemDrag.sx, itemDrag.sy); // a plain tap
+    else if (!moved) {
+      /* A second still tap on the SAME slot, soon enough, sends the stack
+       * across instead of using it. Same slot rather than same place: the
+       * window may have re-laid itself out between the two taps, and a
+       * position check would then read as the gesture randomly not working. */
+      const now = performance.now();
+      const same = lastSlotTap
+        && lastSlotTap.index === itemDrag.index
+        && sameRef(lastSlotTap.ref, itemDrag.ref ?? { c: "bag" })
+        && now - lastSlotTap.t < DOUBLE_TAP_MS;
+      if (same) {
+        lastSlotTap = null;
+        sendStack(itemDrag.ref ?? { c: "bag" }, itemDrag.index);
+      } else {
+        lastSlotTap = { ref: itemDrag.ref ?? { c: "bag" }, index: itemDrag.index, t: now };
+        handleWorldTap(itemDrag.sx, itemDrag.sy); // the plain tap: use / equip
+      }
+    }
     itemDrag = null;
   },
-});
+}, openContextMenu);
 
 // Right-click: suppress the browser's context menu so it never interrupts play.
 screen.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -2263,6 +2574,10 @@ function openTreasure(s: Structure): void {
 function worldClick(w: Vec): void {
   if (P.dead) return;
   const world = cw();
+  // A finger is about a centimetre wide and a snake is eighteen pixels; the
+  // exact hitboxes below are what a mouse deserves and what a thumb cannot
+  // hit. See `forgivingTap`.
+  if (touchUI && forgivingTap(world, w)) return;
   // monsters
   for (const m of world.monsters) {
     if (Math.abs(w.x - m.x) < m.spr.width / 2 && w.y > m.y - m.spr.height && w.y < m.y + 10) {
@@ -2410,6 +2725,80 @@ function targetNpc(t: Target | null = P.target): Npc | null {
 function targetStruct(t: Target | null = P.target): Structure | null {
   return t?.kind === "dummy" || t?.kind === "structure"
     ? structureById(cw(), t.id, game.worlds.home) ?? null : null;
+}
+
+/**
+ * Tap tolerance: on TOUCH, a tap that lands near something counts as a tap on it.
+ *
+ * The exact hitboxes in `worldClick` are sprite-shaped, which is correct for a
+ * cursor and hopeless for a thumb — a snake is eighteen pixels wide and a
+ * fingertip covers about forty. The fix is Tibia's: widen the question from
+ * "what is under this pixel" to "what is on this tile or the eight around it",
+ * and let creatures win ties.
+ *
+ * MOUSE IS DELIBERATELY EXCLUDED. Widening a click means a click on the empty
+ * tile beside a skeleton starts a fight instead of taking a step, and with a
+ * cursor that is not forgiveness, it is theft — the player aimed at the gap
+ * and hit the gap. A finger never had that precision to begin with.
+ *
+ * Runs only AFTER the exact pass has missed, so it can never override a
+ * deliberate hit, and it is ordered: creatures, then loot, then bodies, then
+ * people, then buildings. That order is the order of urgency in a fight, and
+ * a fight is the only time the extra reach matters.
+ */
+function forgivingTap(world: World, w: Vec): boolean {
+  const tx = toTile(w.x);
+  const ty = toTile(w.y);
+  /** Within one tile of the tap, in tile space. */
+  const near = (ex: number, ey: number): boolean =>
+    Math.abs(toTile(ex) - tx) <= 1 && Math.abs(toTile(ey) - ty) <= 1;
+  /** Of the candidates that qualify, the one nearest the finger. */
+  const pick = <T extends { x: number; y: number }>(list: readonly T[]): T | null => {
+    let best: T | null = null;
+    let bestD = Infinity;
+    for (const e of list) {
+      if (!near(e.x, e.y)) continue;
+      const d = dist(w.x, w.y, e.x, e.y);
+      if (d < bestD) { best = e; bestD = d; }
+    }
+    return best;
+  };
+
+  const m = pick(world.monsters.filter((x) => x.hp > 0));
+  if (m) {
+    if (P.target?.kind === "mob" && P.target.id === m.id) {
+      P.target = null;
+      flash("attack stopped", "#8ab6ff");
+      return true;
+    }
+    P.target = { kind: "mob", id: m.id };
+    P.dest = null; P.gather = null; moveMarker = null;
+    return true;
+  }
+  const gi = pick(world.ground);
+  if (gi) {
+    P.target = { kind: "ground", id: gi.id };
+    P.dest = null; P.gather = null; moveMarker = null;
+    return true;
+  }
+  const c = pick(world.corpses);
+  if (c) {
+    // deliberately does NOT reproduce the loot-while-attacking dance from the
+    // exact pass: that path needs a marked monster, and if there were one
+    // nearby the creature branch above would already have taken this tap
+    P.target = { kind: "corpse", id: c.id };
+    P.dest = null; P.gather = null; moveMarker = null;
+    return true;
+  }
+  const n = pick(world.npcs);
+  if (n) {
+    P.target = { kind: "npc", id: n.id };
+    n.talk = NPC_TALK_HOLD_S;
+    faceToward(n, P.x, P.y);
+    P.dest = null; P.gather = null; moveMarker = null;
+    return true;
+  }
+  return false;
 }
 
 function targetPoint(): Vec | null {
@@ -2749,6 +3138,8 @@ function update(dt: number): void {
     P.deadT -= dt;
     if (P.deadT <= 0) respawnAtHome(game);
     updateFloats(dt);
+  tickChat(dt);
+    tickChat(dt);
     updateSpellFx(dt);  // the spell that killed you still gets to finish
     // …and so does the cast behind it: a creature rooted in its windup when
     // you died would still be rooted when you walked back in.
@@ -3197,6 +3588,31 @@ function crossedSwords(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   ctx.restore();
 }
 
+/**
+ * A line of speech over someone's head.
+ *
+ * No frame and no background plate. Tibia draws speech as bare text and it is
+ * the right call twice over: a plate the width of a sentence covers the tiles
+ * either side of the speaker, and in a crowd four plates cover the fight. Two
+ * passes of text, black under colour, reads on sand and in a cavern alike and
+ * costs nothing but the letters themselves.
+ */
+function sayBubble(entity: number, x: number, y: number): void {
+  const b = bubbleFor(entity);
+  if (!b) return;
+  // the last half-second fades, so speech leaves rather than vanishing
+  vctx.globalAlpha = Math.min(1, b.t / 0.5);
+  vctx.font = "bold 12px 'Courier New',monospace";
+  vctx.textAlign = "center";
+  const sx = Math.round(x - cam.x);
+  const sy = Math.round(y - cam.y);
+  vctx.fillStyle = "#000";
+  vctx.fillText(b.text, sx + 1, sy + 1);
+  vctx.fillStyle = b.color;
+  vctx.fillText(b.text, sx, sy);
+  vctx.globalAlpha = 1;
+}
+
 function targetBox(x: number, y: number): void {
   const left = Math.round(x - cam.x - TILE / 2);
   const top = Math.round(y - cam.y - TILE / 2);
@@ -3638,6 +4054,7 @@ function render(): void {
       vctx.globalAlpha = 1;
       hpBar(m.x, m.y - spr.height - 8, m.hp / m.maxhp);
       if (P.target?.kind === "mob" && P.target.id === m.id) targetBox(m.x, m.y);
+      sayBubble(m.id, m.x, m.y - spr.height - 20);
     } });
   }
   // player — hand-drawn LPC art when the sheet is up, the baked outfit until then
@@ -3651,6 +4068,7 @@ function render(): void {
     if (lpc) drawSprite(lpc, P.x, P.y, 1, 0);
     else drawSprite(P.sprDir[P.dir], P.x, P.y, P.dir === "side" ? P.face : 1, pbob);
     vctx.globalAlpha = 1;
+    sayBubble(CHAT_SPEAKER_ID, P.x, P.y - 46);
   } });
 
   drawList.sort((a, b) => a.y - b.y);
@@ -3771,6 +4189,7 @@ function render(): void {
   drawHud(hud, game, P);
   hotspots = [];
   itemSlots = [];
+  drawChatLog();
   if (dock.w > 0) drawSidebar(hud, dock);
   for (const win of ui.windows) { win.rect = null; win.titleBar = null; win.resizeBar = null; }
   const sideStrip = activeStrip();
@@ -3780,6 +4199,7 @@ function render(): void {
     sheets: deck.on ? sheetSlots(deck, sheeted, stripWidth()) : null,
     sheetBand: deck.on ? sheetBand(deck) : null,
   });
+  drawContextMenu();
   updateCursor();
   // ghost of the item being dragged, following the cursor
   if (itemDrag && itemDrag.active) {
@@ -3867,10 +4287,23 @@ function drawActionSlot(i: number, x: number, y: number, w: number, h: number): 
     label = hudEditing() ? "+" : "";
     sub = hudEditing() ? "bind" : `${i + 1}`;
   }
+  /* An UNBOUND slot is drawn down to a shadow, not merely darker.
+   *
+   * Six equally solid cells along the bottom edge read as six things you own,
+   * and four of them do nothing. The position has to stay — that is the whole
+   * value of a fixed bar, that slot four is always slot four — but the weight
+   * does not. So an empty slot keeps its outline and loses almost everything
+   * else: the position survives, the clutter goes. Editing is the exception,
+   * where empty slots are precisely what you are looking for and get lit up
+   * instead. */
+  const empty = !slot;
+  const was = ctx.globalAlpha;
+  if (empty && !hudEditing()) ctx.globalAlpha = was * 0.42;
   slotCell(ctx, x, y, w, h, scale, {
-    face: usable ? "rgba(46,58,54,.92)" : "rgba(24,26,30,.8)",
+    face: usable ? "rgba(46,58,54,.92)" : empty ? "rgba(18,20,24,.55)" : "rgba(24,26,30,.8)",
     accent: hudEditing() ? "#8ab6ff" : usable ? "#caa15a" : undefined,
   });
+  ctx.globalAlpha = was;
   /* The bound rune's own picture, above its name.
    *
    * A name plus a number tells you what a slot holds only if you stop and read
@@ -3895,13 +4328,15 @@ function drawActionSlot(i: number, x: number, y: number, w: number, h: number): 
   const subY = slot?.type === "crystal" ? h * 0.86 : h * 0.74;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  if (empty && !hudEditing()) ctx.globalAlpha = was * 0.42;
   ctx.fillStyle = usable ? "#e9e2c8" : hudEditing() ? "#8ab6ff" : "#7a808a";
   ctx.font = `bold ${Math.round(h * (slot?.type === "crystal" ? 0.2 : 0.26))}px 'Courier New',monospace`;
   ctx.fillText(label, x + w / 2, y + iconY);
   ctx.font = `${Math.round(h * 0.17)}px 'Courier New',monospace`;
   ctx.fillStyle = usable ? "#ffe9a8" : "#7a808a";
   ctx.fillText(sub, x + w / 2, y + subY);
-  const idx = i;
+  ctx.globalAlpha = was; // …but the HOTSPOT is full strength: an empty slot is
+  const idx = i;         // still bindable, it just does not shout about it
   hotspots.push({ x, y, w, h, fn: () => slotTap(idx) });
   touchButtons.push({ x, y, w, h });
   actionSlotRects.push({ i: idx, x, y, w, h });
@@ -4218,6 +4653,10 @@ function drawDeck(): void {
   ctx.fillStyle = mOn ? "#201a10" : "#e9e2c8";
   ctx.font = `bold ${Math.round(d.menu.h * 0.5)}px 'Courier New',monospace`;
   ctx.fillText(deckMenu ? "\u00d7" : "\u2261", d.menu.x + d.menu.w / 2, d.menu.y + d.menu.h / 2);
+  /* Unread chat rides on the reveal button rather than on a chat button of its
+   * own. There is no permanent chat button — the log is the way in — so this
+   * is the only control that is always on screen and can carry the count. */
+  unreadPip(ctx, d.menu.x + d.menu.w, d.menu.y, u);
   hotspots.push({ ...d.menu, fn: () => { deckMenu = !deckMenu; } });
   touchButtons.push({ x: d.menu.x, y: d.menu.y, w: d.menu.w, h: d.menu.h });
 
@@ -4257,8 +4696,12 @@ function drawDeck(): void {
   /* --- the drop-down, over the world, only while it is open ---------------- */
   if (deckMenu) {
     const r0 = d.tabs[0];
+    /* The plate now covers TWO rows — the grid's height, not one tab's. Taken
+     * from the lowest cell rather than assumed, so the plate cannot drift out
+     * of step with the layout the way a hard-coded `2 *` would. */
+    const lowest = Math.max(d.edit.y + d.edit.h, d.chat.y + d.chat.h, r0.y + r0.h);
     ctx.fillStyle = "rgba(10,8,5,.92)";
-    ctx.fillRect(d.mapLeft, d.topH, Math.max(1, d.mapRight - d.mapLeft), r0.h + 2 * d.gap);
+    ctx.fillRect(d.mapLeft, d.topH, Math.max(1, d.mapRight - d.mapLeft), lowest - d.topH + d.gap);
     d.tabs.forEach((r, i) => {
       const kind = DECK_TABS[i] as PanelKind;
       const on = hasWindow(kind);
@@ -4274,8 +4717,25 @@ function drawDeck(): void {
       hotspots.push({ x: r.x, y: r.y, w: r.w, h: r.h, fn: () => { togglePanel(kind); deckMenu = false; } });
       touchButtons.push({ ...r });
     });
-    /* …and the edit toggle as the sixth cell. It lost its seat on the utility
-     * row to the combat controls: you bind a slot once, and you toggle pursuit
+    /* Chat on the second row. The log lying on the world is the usual way in —
+     * you tap what you are already reading — so this covers the one case that
+     * cannot: a quiet world with no log to tap. */
+    const cr = d.chat;
+    const chatOpen = chatInput().isOpen();
+    buttonBox(ctx, cr.x, cr.y, cr.w, cr.h, scale, {
+      on: chatOpen, face: chatOpen ? "rgba(202,162,58,.92)" : undefined,
+      accent: chatOpen ? CHROME.goldText : undefined,
+    });
+    hudText(h, "CHAT", cr.x + cr.w / 2, cr.y + cr.h / 2, u * 0.24,
+      chatOpen ? "#201a10" : "rgba(233,226,200,.85)", "center", true, cr.w - u * 0.08);
+    hotspots.push({ x: cr.x, y: cr.y, w: cr.w, h: cr.h, fn: () => {
+      deckMenu = false;
+      if (chatInput().isOpen()) closeChat(); else openChat();
+    } });
+    touchButtons.push({ ...cr });
+
+    /* …and the edit toggle beside it. It lost its seat on the utility row to
+     * the combat controls: you bind a slot once, and you toggle pursuit
      * mid-fight, so the rare control is the one that moves. */
     const er = d.edit;
     buttonBox(ctx, er.x, er.y, er.w, er.h, scale, {
@@ -4321,6 +4781,176 @@ function drawDeck(): void {
       screen.width / 2, d.mapTop + u * 0.35, u * 0.21, "rgba(207,232,210,.92)", "center", false,
       screen.width - u * 0.5);
   }
+}
+
+/**
+ * The message log, lying on the world.
+ *
+ * Bottom-left of the world band, no frame, oldest at the top. Three decisions
+ * worth stating, because each of them was the alternative once:
+ *
+ *  - NO PLATE behind the text. A dark panel the width of the longest line
+ *    would cover a quarter of the map permanently, to hold six lines that are
+ *    perfectly readable with a black outline. The outline costs a second
+ *    fillText and covers nothing.
+ *
+ *  - IT IS THE BUTTON. Tapping the block of text opens the input. There is no
+ *    separate chat button anywhere, because a button over the world eats a tap
+ *    aimed at a tile, and the log is already sitting there being looked at. No
+ *    lines, no hotspot — the affordance appears exactly when there is
+ *    something to tap.
+ *
+ *  - IT MOVES FOR THE KEYBOARD. With the field open, `chatInput().topCss()`
+ *    reports where the field's top edge landed and the log stacks upward from
+ *    there. Otherwise a phone keyboard would bury the last thing anybody said,
+ *    which is the message you are most likely replying to.
+ */
+function drawChatLog(): void {
+  const lines = overlayLines();
+  if (!lines.length) return;
+
+  const S = scale;
+  const size = Math.max(9, Math.round((deck.on ? deck.u * 0.24 : 9 * S)));
+  const lh = Math.round(size * 1.45);
+  const pad = Math.round(size * 0.7);
+  const left = (deck.on ? deck.mapLeft : 0) + pad;
+  const maxW = (deck.on ? deck.mapRight : screen.width - dockWidth()) - left - pad;
+
+  // Bottom edge: above the deck normally, above the keyboard while typing.
+  const dpr = screen.height / Math.max(1, cssHeight());
+  const typing = chatInput().isOpen();
+  const bottom = typing
+    ? Math.min(deck.on ? deck.deckY : screen.height, chatInput().topCss() * dpr) - pad
+    : (deck.on ? deck.deckY : screen.height - Math.round(HOTBAR_SLOT * S * 1.6)) - pad;
+
+  vctx.save();
+  vctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.font = `bold ${size}px 'Courier New',monospace`;
+  sctx.textAlign = "left";
+  sctx.textBaseline = "alphabetic";
+
+  let y = bottom - (lines.length - 1) * lh;
+  const top = y - lh;
+  for (const l of lines) {
+    const a = lineAlpha(l);
+    if (a > 0) {
+      const text = fitLine(formatLine(l), maxW, size);
+      sctx.globalAlpha = a * 0.85;
+      sctx.fillStyle = "#000";
+      sctx.fillText(text, left + 1, y + 1);
+      sctx.globalAlpha = a;
+      sctx.fillStyle = l.color;
+      sctx.fillText(text, left, y);
+    }
+    y += lh;
+  }
+  sctx.globalAlpha = 1;
+  vctx.restore();
+
+  // The block itself is the affordance — see the comment above.
+  if (!typing) {
+    hotspots.push({
+      x: left - pad, y: top, w: maxW + pad * 2, h: bottom - top + pad,
+      fn: () => openChat(),
+    });
+  }
+}
+
+/** Trim a line to the width available, with an ellipsis when it will not fit. */
+function fitLine(text: string, maxW: number, size: number): string {
+  const perChar = size * 0.6; // monospace: one measure would do, but this is a hot path
+  const fits = Math.max(4, Math.floor(maxW / perChar));
+  return text.length <= fits ? text : text.slice(0, fits - 1) + "\u2026";
+}
+
+/** CSS height of the canvas, for turning device px back into layout px. */
+function cssHeight(): number {
+  const r = screen.getBoundingClientRect?.();
+  return r && r.height ? r.height : screen.height;
+}
+
+/** How much width the desktop sidebar is taking, or zero. */
+function dockWidth(): number {
+  return lastDock?.w ?? 0;
+}
+
+/**
+ * The unread-message pip: a small dot on a control's top-right corner.
+ *
+ * A count rather than a plain dot once there is more than one, because "three
+ * people said something" and "someone said something" are different enough to
+ * be worth eight pixels. Capped at 9+ — past that the number is noise and the
+ * useful information is "a lot".
+ */
+function unreadPip(ctx: CanvasRenderingContext2D, rx: number, ry: number, u: number): void {
+  const n = unread();
+  if (n <= 0) return;
+  const r = Math.max(4, Math.round(u * 0.17));
+  const cx = Math.round(rx - r * 0.6);
+  const cy = Math.round(ry + r * 0.6);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = "#e1483b";
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = `bold ${Math.round(r * 1.3)}px 'Courier New',monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(n > 9 ? "9+" : String(n), cx, cy + 1);
+}
+
+/**
+ * Draw the long-press menu.
+ *
+ * Hangs off the finger, flipping to whichever side has room — a menu that
+ * opens off the edge of the screen is a menu you cannot use, and on a phone
+ * every press near the right edge would do exactly that. It is drawn LAST, on
+ * top of the panels, because it was opened by a gesture on top of them and
+ * anything else would put it behind the thing it was invoked from.
+ */
+function drawContextMenu(): void {
+  const cm = ctxMenu;
+  if (!cm) return;
+  const S = scale;
+  const rowH = Math.round((deck.on ? deck.u : 22 * S) * 0.9);
+  const pad = Math.round(rowH * 0.34);
+  const font = Math.round(rowH * 0.4);
+  sctx.font = `bold ${font}px 'Courier New',monospace`;
+  let wid = 0;
+  for (const e of cm.entries) wid = Math.max(wid, sctx.measureText(e.label).width);
+  const w = Math.round(wid + pad * 2);
+  const h = rowH * cm.entries.length;
+
+  // flip toward whichever side and edge has the room
+  let x = cm.sx + Math.round(rowH * 0.3);
+  let y = cm.sy - Math.round(rowH * 0.3);
+  if (x + w > screen.width) x = Math.max(0, cm.sx - w - Math.round(rowH * 0.3));
+  if (y + h > screen.height) y = Math.max(0, screen.height - h);
+  if (y < 0) y = 0;
+
+  /* `popupFrame`, not a hand-rolled outline. The menu is window chrome and has
+   * to look like the rest of it — the inspect card and the quantity chooser
+   * already use this exact frame, and a flat stroked box beside them would
+   * read as a different application. */
+  popupFrame(sctx, x, y, w, h, S);
+
+  cm.rects = [];
+  sctx.textAlign = "left";
+  sctx.textBaseline = "middle";
+  cm.entries.forEach((e, i) => {
+    const ry = y + i * rowH;
+    if (i > 0) {
+      sctx.fillStyle = "rgba(202,162,58,.16)";
+      sctx.fillRect(x + pad / 2, ry, w - pad, 1);
+    }
+    // A disabled entry is dim, not hidden: it teaches the shape of the menu
+    // the player will eventually have, and says why when pressed.
+    sctx.fillStyle = e.enabled ? "#e9e2c8" : "rgba(233,226,200,.32)";
+    sctx.font = `bold ${font}px 'Courier New',monospace`;
+    sctx.fillText(e.label, x + pad, ry + rowH / 2);
+    cm.rects.push({ x, y: ry, w, h: rowH, i });
+    touchButtons.push({ x, y: ry, w, h: rowH });
+  });
 }
 
 function drawTouchControls(): void {
