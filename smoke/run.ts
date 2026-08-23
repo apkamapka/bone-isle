@@ -3011,7 +3011,7 @@ async function main(): Promise<void> {
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 10, "saving writes the current v10 format");
+    ok(stored.v === 11, "saving writes the current v11 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
@@ -8552,7 +8552,12 @@ async function main(): Promise<void> {
   {
     const nfs = await import("node:fs");
     const src = nfs.readFileSync("src/main.ts", "utf8");
-    const pick = src.slice(src.indexOf("function drawAssignPicker"), src.indexOf("function drawAssignPicker") + 2200);
+    /* Sliced to the next function rather than to a fixed byte count. The
+     * window was 2200 characters, which fitted until the picker grew icons
+     * and an ordering — after which the assertions below failed on text that
+     * was still there, just past the edge of the ruler. */
+    const pick = src.slice(src.indexOf("function drawAssignPicker"),
+      src.indexOf("function overTouchButton"));
     ok(pick.includes("Math.min(rows.length, Math.floor((sh * 0.8"),
       "the picker caps its rows to the display rather than sizing to the list");
     ok(pick.includes("assignScroll = clamp(assignScroll"), "…clamping the offset every time it draws");
@@ -10093,7 +10098,8 @@ async function main(): Promise<void> {
     console.log("Etap 36 - the standing is saved, and a bad one is not trusted:");
     const nfs = await import("node:fs");
     const save = nfs.readFileSync("src/save.ts", "utf8");
-    ok(save.includes("const SAVE_V = 10;"), "the format is bumped for the PvP block");
+    ok(save.includes("v10: a character carries a PvP standing"),
+      "the v10 bump for the PvP block is on the record");
     ok(save.includes("v10: a character carries a PvP standing"),
       "…and the bump is explained in the version history, like every one before it");
     ok(save.includes("pvp: { ...active().pvp }"), "the standing is written");
@@ -10621,6 +10627,215 @@ async function main(): Promise<void> {
     ok(!hl.hudLocked(), "…and the toggle still works within a session");
     hl.setHudLocked(true);
     localStorage.removeItem("bone-isle-hud-v2");
+  }
+
+  /* ============ Etap 39: the hotbar has a length ===========================
+   *
+   * Six was never a considered number — it was the number the first bar
+   * happened to have. A player attuned to two elements wants four attack
+   * crystals and still wants heal, recall and the swap: seven things, six
+   * holes. */
+  {
+    console.log("Etap 39 - adding and removing rows:");
+    const A = await import("../src/systems/actions.ts");
+    A.setActionSlotCount(A.ACTION_SLOTS_MIN);
+
+    ok(A.actionSlotCount() === 6, "a bar starts at six, which is what every character had");
+    ok(A.ACTION_SLOT_STEP === 6, "…and moves a ROW at a time, matching the phone deck's width");
+    ok(A.actionSlots.length === A.ACTION_SLOTS_MAX,
+      "the array is always full length, however much of it is in play");
+
+    ok(A.addActionSlots() === true && A.actionSlotCount() === 12, "plus adds a row");
+    ok(A.addActionSlots() && A.addActionSlots() && A.actionSlotCount() === 24, "…up to four rows");
+    ok(A.addActionSlots() === false && A.actionSlotCount() === 24,
+      "…and refuses past the ceiling, reporting it rather than silently doing nothing");
+    while (A.removeActionSlots()) { /* down to the floor */ }
+    ok(A.actionSlotCount() === 6, "minus walks back to six…");
+    ok(A.removeActionSlots() === false,
+      "…and stops there: a hotbar of zero is not a smaller hotbar, it is a missing one");
+
+    /* Shrinking must not DESTROY. "I lost my hotkeys by tapping minus" would
+     * be a worse bug than any this feature fixes. */
+    A.setActionSlotCount(12);
+    A.setSlot(9, { type: "swap" });
+    ok(A.slotAt(9)?.type === "swap", "a binding in the second row takes");
+    A.removeActionSlots();
+    ok(A.actionSlotCount() === 6, "…the row is dropped…");
+    ok(A.slotAt(9) === null,
+      "…and the binding under it stops firing, so a key cannot trigger a ghost");
+    A.addActionSlots();
+    ok(A.slotAt(9)?.type === "swap",
+      "…but putting the row back brings the binding with it, because nothing was thrown away");
+    A.setSlot(9, null);
+
+    /* Only whole rows exist, however the number arrives. */
+    A.setActionSlotCount(7);
+    ok(A.actionSlotCount() === 6, "an off-row count from a save rounds to a whole row (7 → 6)");
+    A.setActionSlotCount(1000);
+    ok(A.actionSlotCount() === 24, "…and an absurd one is clamped, not trusted");
+    A.setActionSlotCount(0);
+    ok(A.actionSlotCount() === 6, "…as is a zero");
+    A.setActionSlotCount(6);
+  }
+
+  {
+    console.log("Etap 39 - the length survives a reload:");
+    const A = await import("../src/systems/actions.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { saveGame, loadGame, deleteSave } = await import("../src/save.ts");
+    const nfs = await import("node:fs");
+    const save = nfs.readFileSync("src/save.ts", "utf8");
+    const SK = "bone-isle-save-v2";
+    deleteSave();
+
+    ok(save.includes("const SAVE_V = 11;"), "the format is bumped for the bar's length");
+    ok(save.includes("v11: the hotbar has a length"), "…and the bump is on the record");
+
+    const g = createGame();
+    A.setActionSlotCount(18);
+    A.setSlot(13, { type: "swap" });
+    saveGame(g);
+    A.setActionSlotCount(6);
+    loadGame();
+    ok(A.actionSlotCount() === 18, "a lengthened bar comes back lengthened");
+    ok(A.slotAt(13)?.type === "swap", "…with the bindings that were only reachable at that length");
+
+    /* Pre-v11 saves have no length at all and must read as six, which is what
+     * they were written under. */
+    const raw = JSON.parse(localStorage.getItem(SK)!);
+    delete raw.slotCount;
+    raw.v = 10;
+    localStorage.setItem(SK, JSON.stringify(raw));
+    A.setActionSlotCount(24);
+    loadGame();
+    ok(A.actionSlotCount() === 6,
+      "a save written before the bar had a length reads as six, which is what it had");
+    deleteSave();
+    A.setActionSlotCount(6);
+  }
+
+  {
+    console.log("Etap 39 - the deck grows by rows without losing the thumb:");
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h, dpr] of [[360, 800, 3], [412, 915, 2], [915, 412, 2], [800, 360, 2]] as const) {
+      let lastMap = Infinity;
+      for (const n of [6, 12, 18, 24]) {
+        const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0, n);
+        const tag = `${w}x${h}@${dpr} n=${n}`;
+        ok(d.slots.length === n, `${tag}: every slot gets a box`);
+        ok(Math.min(...d.slots.map((r) => Math.min(r.w, r.h))) >= MB.TOUCH_MIN_CSS * dpr - 1,
+          `${tag}: …all of them finger-sized`);
+
+        let clear = true;
+        let onScreen = true;
+        for (let i = 0; i < n; i++) {
+          const a = d.slots[i];
+          if (a.x < 0 || a.y < 0 || a.x + a.w > Math.round(w * dpr) || a.y + a.h > Math.round(h * dpr)) onScreen = false;
+          for (let j = i + 1; j < n; j++) {
+            const b = d.slots[j];
+            if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+          }
+        }
+        ok(clear, `${tag}: no two slots overlap`);
+        ok(onScreen, `${tag}: …and none of them is off the glass`);
+
+        /* The first six keep the position nearest the thumb whatever the
+         * length: upright that is the bottom row, sideways the outer column.
+         * Reading order would hand the easiest row to the overflow. */
+        if (d.landscape) {
+          ok(d.slots[0].x <= d.slots[n - 1].x,
+            `${tag}: slot 1 stays on the outer column, overflow marches inward`);
+          ok(d.slots.every((r) => r.x + r.w <= d.mapLeft),
+            `${tag}: …and the map starts past ALL the columns, not just the first`);
+        } else {
+          ok(d.slots[0].y >= d.slots[n - 1].y,
+            `${tag}: slot 1 stays on the bottom row, overflow stacks above`);
+        }
+
+        const map = (d.mapBottom - d.mapTop) * (d.mapRight - d.mapLeft);
+        ok(map < lastMap, `${tag}: a longer bar costs map, which is the honest trade`);
+        ok(map > 0, `${tag}: …but never all of it`);
+        lastMap = map;
+      }
+    }
+  }
+
+  {
+    console.log("Etap 39 - the other two bars, and the keys:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const input = nfs.readFileSync("src/input.ts", "utf8");
+    const hl = await import("../src/systems/hudLayout.ts");
+
+    const bar = main.slice(main.indexOf("function drawHotbar("),
+      main.indexOf("function drawGroupGrip("));
+    ok(bar.includes("const n = actionSlotCount();"), "the desktop bar reads the live length");
+    ok(bar.includes("const perRow = Math.ceil(n / rows);"),
+      "…splitting into EVEN rows, so eighteen is two nines and not a twelve and a stub");
+    ok(bar.includes("bottom - (rows - 1 - row) * (slot + gap)"),
+      "…stacking upward, so the bottom row stays on the line the hand already knows");
+    ok(!bar.includes("const n = 6;"), "…and the hard six is gone");
+
+    /* The draggable floating slots too — that path is the one a narrow desktop
+     * window gets, and it had its own hard six. */
+    ok(main.includes("for (let i = 0; i < actionSlotCount(); i++) {"),
+      "the floating HUD draws as many squares as the bar is long");
+    ok(hl.HUD_GROUPS.includes("slot23" as never),
+      "…and every one of them has a place to be dragged to");
+    ok(hl.HUD_GROUPS.filter((g) => g.startsWith("slot")).length === 24,
+      "…positions go to the MAXIMUM, so shortening and lengthening puts them back");
+    hl.resetHudLayout();
+    const p9 = hl.placeHud("slot9" as never, 10, 10, 400, 800);
+    const p3 = hl.placeHud("slot3" as never, 10, 10, 400, 800);
+    ok(p9.x !== p3.x || p9.y !== p3.y,
+      "…and a second-row slot does not default on top of a first-row one");
+
+    /* Ten of the twenty-four get a key. There is no eleventh digit, and
+     * inventing a chord would cost every player something to remember. */
+    ok(input.includes('k >= "1" && k <= "9"'), "keys 1-9 fire the first nine slots");
+    ok(input.includes('else if (k === "0") h.onSpell(9);'), "…and 0 fires the tenth");
+
+    /* The control lives with the layout, because "how many buttons" and
+     * "where the buttons go" are the same question asked twice. */
+    ok(main.includes("`${n} KEYS`"), "edit mode shows the current length");
+    ok(main.includes("if (removeActionSlots()) {") && main.includes("if (addActionSlots()) {"),
+      "…with a minus and a plus beside it");
+    ok(main.includes('flash(`${ACTION_SLOTS_MIN} is the fewest`'),
+      "…which say why when they refuse, rather than vanishing at the limit");
+    ok(main.includes("dim = false,"), "…and are drawn dim there instead of disappearing");
+  }
+
+  {
+    console.log("Etap 39 - the picker opens on the answer:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const pick = main.slice(main.indexOf("function drawAssignPicker"),
+      main.indexOf("function overTouchButton"));
+
+    /* Seventy-odd bindable crystals in registry order meant a player owning
+     * four scrolled past sixty-eight rows reading "0 charges" to find them —
+     * which is exactly what the screenshot showed: seven rows, six useless. */
+    ok(pick.includes("(have > 0 ? owned : empty).push({"),
+      "what you are carrying is separated from what you are not");
+    ok(pick.includes("rows.push(...owned, ...empty);"),
+      "…and comes first, so the list opens on the answer");
+    ok(pick.includes('sub: have > 0 ? `${have} charges` : "none carried"'),
+      "…with the empty ones still listed, since binding one you mean to buy is reasonable");
+    ok(pick.includes("const live = r.have > 0;") && pick.includes('rgba(243,238,221,.45)'),
+      "…drawn dim rather than hidden");
+    ok(pick.includes('ctx.fillStyle = live ? "#9fe8a8"'),
+      "…and the charge count is green when there is one, since it is the reason the line exists");
+
+    /* Seventy items whose names differ by one word and whose ART differs at a
+     * glance. Reading was the slow way to tell them apart and the only one. */
+    ok(pick.includes("const spr = itemSprite(r.icon);"), "each crystal shows its own art");
+    ok(pick.includes("const k = Math.max(1, Math.floor(box / Math.max(spr.width, spr.height)));"),
+      "…at a whole multiple, because a crystal scaled by 1.4 is mush");
+
+    /* On a phone the dialog was a wall of eight-pixel text: `scale` is the
+     * world's ruler and is small there. */
+    ok(pick.includes("const rowH = deck.on"), "rows are measured differently on a phone…");
+    ok(pick.includes("TOUCH_MIN_CSS"), "…against the one number that means a fingertip");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
