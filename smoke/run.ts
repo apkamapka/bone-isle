@@ -10443,7 +10443,12 @@ async function main(): Promise<void> {
     const slot = main.slice(main.indexOf("function probeSlotDrag("),
       main.indexOf("function probeSlotDrag(") + 900);
     ok(slot.includes("if (ctxMenu) return false;"), "…and the slot-drag probe too");
-    ok(main.includes("if (ctxMenu) return;\n  // mouse convenience: right-click an action slot"),
+    /* Scoped to the handler rather than matched against the line that used to
+     * follow it: the picker's own modal guard now sits between them, which is
+     * a different modal doing the same job. */
+    const down = main.slice(main.indexOf('screen.addEventListener("pointerdown"'),
+      main.indexOf('screen.addEventListener("pointermove"'));
+    ok(down.indexOf("if (ctxMenu) return;") < down.indexOf("win.resizeBar"),
       "…and nothing behind the menu — title bar, resize foot, item — takes a pointerdown");
   }
 
@@ -10836,6 +10841,89 @@ async function main(): Promise<void> {
      * world's ruler and is small there. */
     ok(pick.includes("const rowH = deck.on"), "rows are measured differently on a phone…");
     ok(pick.includes("TOUCH_MIN_CSS"), "…against the one number that means a fingertip");
+  }
+
+  /* ============ Etap 40: reachable on the device you are holding ===========
+   *
+   * Both of these shipped working on a desktop and missing on a phone, which
+   * is the same bug twice: a control drawn on a surface one interface never
+   * draws, and a scroll target sized for a mouse. */
+  {
+    console.log("Etap 40 - the picker scrolls with a finger:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+
+    /* It was the only scrolling thing in the game a phone could not scroll:
+     * the world has a joystick, panels have thumb-sized bars, and this had a
+     * nine-pixel arrow and a wheel handler. */
+    ok(main.includes("let assignDrag: { grabY: number; from: number; moved: boolean } | null = null;"),
+      "a press inside the list starts a scroll");
+    ok(main.includes("const rows = -dy / assignBody.rowH;"),
+      "…content follows the finger, measured in rows");
+    ok(main.includes("if (Math.abs(dy) > 4 * scale) assignDrag.moved = true;"),
+      "…with slop, so a tap from a shaky thumb still binds the row it landed on");
+    ok(main.includes("if (assignDrag.moved) {"),
+      "…and only a REAL drag eats the click, or the list would scroll and never choose");
+
+    /* Geometry is published as it draws, the way the docked column's thumb
+     * does, because the pointer handlers run long before the renderer. */
+    ok(main.includes("assignBody = {"), "the list's body is published for the pointer handlers");
+    ok(main.includes("x: x + 6 * S, y: ry, w: w - 12 * S, h: shown * rowH,"),
+      "…the ROWS only, so a press on the title still falls through and closes it");
+    ok(main.includes("if (assignSlot === null) { assignBody = null; return; }"),
+      "…and cleared when the dialog closes, so a stale rect cannot swallow a press");
+
+    /* The arrows too. Nine of `scale` is a mouse target; on a phone `scale` is
+     * the world's small ruler. */
+    const pick = main.slice(main.indexOf("function drawAssignPicker"),
+      main.indexOf("function overTouchButton"));
+    ok(pick.includes("const sbw = deck.on"), "the scroll arrows are measured per device…");
+    ok(pick.includes("TOUCH_MIN_CSS * Math.min(devicePixelRatio || 1, 2) * 0.8"),
+      "…against a fingertip on the one that has no wheel");
+  }
+
+  {
+    console.log("Etap 40 - the hotbar length is reachable on a phone:");
+    const MB = await import("../src/ui/mobile.ts");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+
+    /* The desktop control sits on the edit strip. `drawTouchControls` hands
+     * the screen to `drawDeck` and RETURNS before that strip, so on a phone
+     * the buttons were on a surface that is never drawn. */
+    const touch = main.slice(main.indexOf("function drawTouchControls("),
+      main.indexOf("function drawTouchControls(") + 400);
+    ok(touch.includes("if (deck.on) { drawDeck(); return; }"),
+      "the phone still returns before the desktop edit strip…");
+    ok(main.includes("[d.keysLess,") && main.includes("[d.keysMore,"),
+      "…so the length controls are drawn by the deck itself");
+    ok(main.includes("const ok = delta < 0 ? removeActionSlots() : addActionSlots();"),
+      "…wired to the same two functions the desktop buttons call");
+    ok(main.includes('flash(`${actionSlotCount()} hotkeys`, "#8ab6ff"); saveGame(game);'),
+      "…saving, so a bar lengthened on a phone is still long tomorrow");
+    ok(main.includes('hudText(h, `${n} keys`'),
+      "…and the current length is printed under the button, not only flashed");
+
+    for (const [w, h, dpr] of [[360, 800, 3], [412, 915, 2], [915, 412, 2], [800, 360, 2]] as const) {
+      const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0, 6);
+      const tag = `${w}x${h}@${dpr}`;
+      for (const [name, r] of [["keysLess", d.keysLess], ["keysMore", d.keysMore]] as const) {
+        ok(r.w > 0 && r.h > 0, `${tag}: ${name} has a box`);
+        ok(Math.min(r.w, r.h) >= MB.TOUCH_MIN_CSS * dpr - 1, `${tag}: …finger-sized`);
+      }
+      /* They are the grid's last two cells — it is 2x5 and eight were spoken
+       * for, so this fills it exactly and costs no room. */
+      const cells = [...d.tabs, d.chat, d.edit, d.look, d.keysLess, d.keysMore];
+      ok(cells.length === 10, `${tag}: the drop-down grid is exactly full`);
+      let clear = true;
+      for (let i = 0; i < cells.length; i++) {
+        for (let j = i + 1; j < cells.length; j++) {
+          const a = cells[i], b = cells[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+        }
+      }
+      ok(clear, `${tag}: …with nothing overlapping`);
+    }
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
