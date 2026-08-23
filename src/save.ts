@@ -10,7 +10,7 @@ import { applyStructureSolidity, canPlaceAt, STRUCTS, CHEST_SLOTS } from "./syst
 import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState, attunedState, loadAttunedState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
-import { serializeSlots, loadSlots, type SlotAction } from "./systems/actions.ts";
+import { serializeSlots, loadSlots, actionSlotCount, setActionSlotCount, type SlotAction } from "./systems/actions.ts";
 import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./systems/outfit.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
@@ -62,11 +62,15 @@ const KEY = "bone-isle-save-v2";
  * for every character written before there was anyone to fight. The bump is
  * here anyway so the version history stays a complete record of the shape —
  * a format change that is not in this list is a format change nobody can date.
+ *
+ * v11: the hotbar has a length (Etap 39). Additive again, and an absent one
+ * reads as six — which is what every character had when it was the only
+ * possible answer.
  */
-const SAVE_V = 10;
+const SAVE_V = 11;
 
 interface SaveData {
-  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
   seed: number;
   current: WorldKey;
   player: {
@@ -111,6 +115,8 @@ interface SaveData {
   attuned?: string[];
   tasks?: TaskSave;
   slots?: (SlotAction | null)[];
+  /** How many of `slots` are in play. Absent before v11, when it was six. */
+  slotCount?: number;
   /** Wardrobe: dye choices + owned/current outfit (Etap 10). */
   outfit?: OutfitSave;
   /** One-time treasure chests already opened. */
@@ -162,6 +168,12 @@ export function saveGame(g: Game): void {
     attuned: attunedState(),
     tasks: taskState(),
     slots: serializeSlots(),
+    /* Saved beside the bindings rather than with the HUD layout, because it
+     * is a property of the CHARACTER: how many things this one has to reach
+     * for. The layout file decides where the bar sits on this device; this
+     * decides how long it is. Note `slots` is the full array either way, so
+     * a bar shortened and lengthened again comes back with its bindings. */
+    slotCount: actionSlotCount(),
     outfit: outfitSave(),
     opened: g.opened,
   };
@@ -361,6 +373,8 @@ export function loadGame(): Game | null {
   loadAttunedState(data.attuned);
   loadTaskState(data.tasks);
   loadSlots(data.slots);
+  // Absent in pre-v11 saves, where six was the only length there was.
+  setActionSlotCount(data.slotCount ?? 6);
   loadOutfitSave(data.outfit); // absent in older saves → classic look
   applyOutfit(player);
 

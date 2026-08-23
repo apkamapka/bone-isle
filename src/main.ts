@@ -24,7 +24,11 @@ import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } 
 import { setActiveBonus } from "./systems/derived.ts";
 import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
 import { useCrystal, tickCrystalCooldown, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
-import { actionSlots, setSlot, BINDABLE_CRYSTALS } from "./systems/actions.ts";
+import {
+  actionSlots, setSlot, BINDABLE_CRYSTALS,
+  actionSlotCount, addActionSlots, removeActionSlots,
+  ACTION_SLOTS_MIN, ACTION_SLOTS_MAX, ACTION_SLOT_STEP,
+} from "./systems/actions.ts";
 import {
   hudLocked, toggleHudLock, placeHud, moveHudGroup, saveHudLayout, resetHudLayout, loadHudLayout,
   hudUserScale, stepHudUserScale, hudMenuOpen, toggleHudMenu, applyHudPreset, snapHudGroup,
@@ -60,7 +64,7 @@ import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZ
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
-import { deckEnabled, mobileLayout, noDeck, overDeck, mapFocusFrac, mapFocusFracX, sheetSlots, sheetBand, stripRect, stripHandle, stripClaim, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
+import { deckEnabled, mobileLayout, noDeck, overDeck, TOUCH_MIN_CSS, mapFocusFrac, mapFocusFracX, sheetSlots, sheetBand, stripRect, stripHandle, stripClaim, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
 import { drawControlIcon, ICON_SRC, type ControlIcon } from "./ui/icons.ts";
 import {
   dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
@@ -231,7 +235,8 @@ function resize(): void {
    * chance of the plate and the hit areas disagreeing by a rounding. */
   if (deckEnabled(cw, ch, isTouchDevice())) {
     const safe = safeInsets();
-    deck = mobileLayout(screen.width, screen.height, dpr, safe.top * dpr, safe.bottom * dpr);
+    deck = mobileLayout(screen.width, screen.height, dpr, safe.top * dpr, safe.bottom * dpr,
+      actionSlotCount());
   } else {
     deck = noDeck(screen.height);
   }
@@ -4479,7 +4484,19 @@ function slotTap(i: number): void {
 }
 
 /** A flat rectangular HUD button with a single label. Registers a hotspot. */
-function hudBtn(x: number, y: number, w: number, h: number, label: string, on: boolean, fn: () => void): void {
+function hudBtn(
+  x: number, y: number, w: number, h: number, label: string, on: boolean, fn: () => void,
+  /**
+   * Drawn dim, still pressable, and its handler is expected to say WHY.
+   *
+   * A ± at its limit is not removed, because a button that vanishes at the
+   * end of its range takes the range with it: the player cannot see that
+   * twenty-four was the ceiling, only that the plus is gone and something is
+   * broken. Dim says "this is as far as it goes", and pressing it says so out
+   * loud.
+   */
+  dim = false,
+): void {
   const ctx = sctx;
   buttonBox(ctx, x, y, w, h, scale, {
     on,
@@ -4488,7 +4505,7 @@ function hudBtn(x: number, y: number, w: number, h: number, label: string, on: b
   });
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = on ? "#201a10" : "#e9e2c8";
+  ctx.fillStyle = on ? "#201a10" : dim ? "rgba(233,226,200,.3)" : "#e9e2c8";
   ctx.font = `bold ${Math.round(h * 0.42)}px 'Courier New',monospace`;
   ctx.fillText(label, x + w / 2, y + h / 2);
   hotspots.push({ x, y, w, h, fn });
@@ -4780,17 +4797,35 @@ const HOTBAR_SLOT = 30;
  * Not across the whole canvas: it centres on the visible map so the sidebar
  * does not push it off-centre from everything the player is actually watching.
  */
+/** Slots per row on a desktop hotbar. */
+const HOTBAR_ROW_MAX = 12;
+
 function drawHotbar(): void {
   const S = scale;
   const slot = HOTBAR_SLOT * S;
   const gap = 4 * S;
-  const n = 6;
-  const total = n * slot + (n - 1) * gap;
+  const n = actionSlotCount();
+  /* Split into EVEN rows rather than filling twelve and leaving a stub.
+   * Eighteen slots is two rows of nine, not a twelve and a six — a ragged
+   * bar reads as a bar that has broken, and the whole value of a hotbar is
+   * that its shape is the thing you remember. */
+  const rows = Math.max(1, Math.ceil(n / HOTBAR_ROW_MAX));
+  const perRow = Math.ceil(n / rows);
   const mapW = screen.width - sidebarW;
-  const x0 = Math.round((mapW - total) / 2);
-  const y = Math.round(screen.height - slot - 8 * S);
+  const bottom = Math.round(screen.height - slot - 8 * S);
   for (let i = 0; i < n; i++) {
-    drawActionSlot(i, x0 + i * (slot + gap), y, slot, slot);
+    const row = Math.floor(i / perRow);
+    const col = i % perRow;
+    /* How many are actually on THIS row — the last one may be short by one
+     * when the count does not divide evenly — so each row centres on itself
+     * instead of hanging off the left. */
+    const inRow = Math.min(perRow, n - row * perRow);
+    const total = inRow * slot + (inRow - 1) * gap;
+    const x0 = Math.round((mapW - total) / 2);
+    /* Rows stack UPWARD: the bottom row keeps the line the bar has always
+     * been on, so adding a row moves nothing the hand already knows. */
+    drawActionSlot(i, x0 + col * (slot + gap),
+      bottom - (rows - 1 - row) * (slot + gap), slot, slot);
   }
 }
 
@@ -5414,10 +5449,10 @@ function drawTouchControls(): void {
     if (editing) drawGroupGrip("panels", panelPos.x, panelPos.y, bs, colH);
   }
 
-  // --- action slots: six independently-placeable squares (group "slot0..5") ---
+  // --- action slots: independently-placeable squares (group "slot0..N") ---
   const sw6 = bs * 0.92;
   if (!docked) {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < actionSlotCount(); i++) {
       if (!editing && !actionSlots[i]) continue; // keep the play HUD tidy — empty slots only show in edit mode
       const gid = `slot${i}` as HudGroup;
       const pos = placeHud(gid, sw6, bs, sw, sh);
@@ -5490,12 +5525,57 @@ function drawTouchControls(): void {
       });
       px2 += pw3 + gap;
     }
-    const hy = clamp(py2 + btnH + gap, m, sh - m);
+
+    /* --- how many hotkeys --------------------------------------------------
+     *
+     * Here, in edit mode, because the length of the bar is a layout decision
+     * and this is the screen for layout decisions. Putting it in a settings
+     * panel would separate "how many buttons" from "where the buttons go",
+     * which are the same question asked twice.
+     *
+     * A ROW at a time. Six is the phone deck's width, so every press adds or
+     * removes exactly one line on both interfaces, and the bar never ends up
+     * with a ragged tail. */
+    const n = actionSlotCount();
+    const countW = bs * 1.5;
+    const row3W = sq * 2 + countW + gap * 2;
+    let px3 = clamp((sw - row3W) / 2, m, sw - row3W - m);
+    const py3 = py2 + btnH + gap;
+    const canLess = n > ACTION_SLOTS_MIN;
+    hudBtn(px3, py3, sq, btnH, "\u2212", false, () => {
+      if (removeActionSlots()) {
+        flash(`${actionSlotCount()} hotkeys`, "#8ab6ff");
+        saveGame(game);
+      } else {
+        /* Refused rather than silently ignored. The floor exists because a
+         * hotbar of zero is not a smaller hotbar, it is a missing one. */
+        flash(`${ACTION_SLOTS_MIN} is the fewest`, "#e0a06a");
+      }
+    }, !canLess);
+    px3 += sq + gap;
+    slotCell(sctx, px3, py3, countW, btnH, scale, { face: "rgba(16,26,24,.85)" });
+    sctx.textAlign = "center";
+    sctx.textBaseline = "middle";
+    sctx.fillStyle = "#e9e2c8";
+    sctx.font = `bold ${Math.round(btnH * 0.42)}px 'Courier New',monospace`;
+    sctx.fillText(`${n} KEYS`, px3 + countW / 2, py3 + btnH / 2);
+    px3 += countW + gap;
+    const canMore = n < ACTION_SLOTS_MAX;
+    hudBtn(px3, py3, sq, btnH, "+", false, () => {
+      if (addActionSlots()) {
+        flash(`${actionSlotCount()} hotkeys`, "#8ab6ff");
+        saveGame(game);
+      } else {
+        flash(`${ACTION_SLOTS_MAX} is the most`, "#e0a06a");
+      }
+    }, !canMore);
+
+    const hy = clamp(py3 + btnH + gap, m, sh - m);
     sctx.textAlign = "center";
     sctx.textBaseline = "middle";
     sctx.fillStyle = "rgba(207,232,210,.85)";
     sctx.font = `${Math.round(9 * scale)}px 'Courier New',monospace`;
-    sctx.fillText("drag handles · tap a slot to bind · groups snap to a grid", sw / 2, hy);
+    sctx.fillText(`drag handles \u00b7 tap a slot to bind \u00b7 \u00b1${ACTION_SLOT_STEP} hotkeys`, sw / 2, hy);
   }
 }
 
@@ -5518,18 +5598,46 @@ function drawAssignPicker(): void {
   // full-screen scrim closes the picker (pushed first, so rows below take priority)
   hotspots.push({ x: 0, y: 0, w: sw, h: sh, fn: () => { assignSlot = null; } });
 
-  const rows: { label: string; sub: string; fn: () => void }[] = [];
+  /* THE ORDER IS THE FIX.
+   *
+   * Every crystal in the registry is bindable, and there are seventy-odd of
+   * them. Listed by registry order, a player who owns four crystals scrolls
+   * past sixty-eight rows reading "0 charges" to find them — which is exactly
+   * what Radek's screenshot shows: seven rows visible, six of them useless.
+   *
+   * So: what you actually HAVE comes first, and the rest keep their registry
+   * order below. Nothing is hidden — a crystal you have run dry is still
+   * bindable, and binding one you intend to buy is a reasonable thing to do —
+   * but the list now opens on the answer instead of on the alphabet.
+   */
+  type Row = {
+    label: string; sub: string; icon?: ItemKind; have: number; fn: () => void;
+  };
+  const rows: Row[] = [];
+  const owned: Row[] = [];
+  const empty: Row[] = [];
   for (const k of BINDABLE_CRYSTALS) {
-    rows.push({
-      label: ITEMS[k].name, sub: `${bagCount(P.bag, k)} charges`,
+    const have = bagCount(P.bag, k);
+    (have > 0 ? owned : empty).push({
+      label: ITEMS[k].name,
+      sub: have > 0 ? `${have} charges` : "none carried",
+      icon: k, have,
       fn: () => { setSlot(slotIdx, { type: "crystal", item: k }); assignSlot = null; saveGame(game); },
     });
   }
-  rows.push({ label: "Swap Weapon", sub: "toggle bow / melee", fn: () => { setSlot(slotIdx, { type: "swap" }); assignSlot = null; saveGame(game); } });
-  rows.push({ label: "Clear slot", sub: "leave empty", fn: () => { setSlot(slotIdx, null); assignSlot = null; saveGame(game); } });
+  rows.push({ label: "Swap Weapon", sub: "toggle bow / melee", have: 1,
+    fn: () => { setSlot(slotIdx, { type: "swap" }); assignSlot = null; saveGame(game); } });
+  rows.push({ label: "Clear slot", sub: "leave empty", have: 1,
+    fn: () => { setSlot(slotIdx, null); assignSlot = null; saveGame(game); } });
+  rows.push(...owned, ...empty);
 
   const w = clamp(mapW * 0.66, 220 * S, 420 * S);
-  const rowH = 30 * S;
+  /* Rows tall enough for a FINGER on the phone, where this dialog was a wall
+   * of eight-pixel text. `scale` is the world's ruler and is small there;
+   * TOUCH_MIN_CSS is the one number that means "a fingertip". */
+  const rowH = deck.on
+    ? Math.max(30 * S, Math.round(TOUCH_MIN_CSS * Math.min(devicePixelRatio || 1, 2) * 0.92))
+    : 30 * S;
   /* Every bindable crystal is a row here, and there are dozens. Sized to the
    * list, the dialog ran off the top and bottom of the display; capped and
    * scrolled, the rows stay the size they were designed at. */
@@ -5565,17 +5673,51 @@ function drawAssignPicker(): void {
     raisedBox(ctx, sx + S, ty, sbw - 2 * S, th, "rgba(202,162,58,.55)", CHROME.gold, "#3a2c0e", S);
   }
   for (const r of rows.slice(assignScroll, assignScroll + shown)) {
-    buttonBox(ctx, x + 6 * S, ry + 2 * S, w - 12 * S, rowH - 4 * S, S,
-      { face: "rgba(40,52,60,.92)" });
+    const rx = x + 6 * S;
+    const rw = w - 12 * S;
+    const rh = rowH - 4 * S;
+    /* A crystal you are not carrying is dimmed, not hidden — binding one you
+     * are about to buy is a reasonable thing to want. Dimmed is enough: it
+     * answers "why is this here and greyed" the moment you read the charges
+     * under it, and it stops sixty-eight dead entries reading as loudly as
+     * the four live ones. */
+    const live = r.have > 0;
+    buttonBox(ctx, rx, ry + 2 * S, rw, rh, S,
+      { face: live ? "rgba(40,52,60,.92)" : "rgba(28,34,40,.86)" });
+
+    /* The ICON, which is most of the readability.
+     *
+     * These are seventy items whose names differ by one word — Bedrock Shard,
+     * Bedrock Burst, Bedrock Nova — and whose ART differs by colour and shape
+     * at a glance. Reading was the slow way to tell them apart and it was the
+     * only way on offer. */
+    let tx0 = rx + 10 * S;
+    if (r.icon) {
+      const spr = itemSprite(r.icon);
+      const box = rh - 6 * S;
+      const k = Math.max(1, Math.floor(box / Math.max(spr.width, spr.height)));
+      const iw = spr.width * k, ih = spr.height * k;
+      const was = ctx.globalAlpha;
+      if (!live) ctx.globalAlpha = was * 0.4;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(spr, Math.round(rx + 6 * S + (box - iw) / 2),
+        Math.round(ry + 2 * S + (rh - ih) / 2), iw, ih);
+      ctx.globalAlpha = was;
+      tx0 = rx + 6 * S + box + 8 * S;
+    }
+
     ctx.textAlign = "left";
-    ctx.fillStyle = "#f3eedd";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = live ? "#f3eedd" : "rgba(243,238,221,.45)";
     ctx.font = `bold ${Math.round(9 * S)}px 'Courier New',monospace`;
-    ctx.fillText(r.label, x + 16 * S, ry + rowH * 0.4);
-    ctx.fillStyle = "rgba(220,214,190,.6)";
+    ctx.fillText(r.label, tx0, ry + rowH * 0.4);
+    /* Charges in green when there are some. The number is the whole reason
+     * this line exists and it was the same grey as the word "none". */
+    ctx.fillStyle = live ? "#9fe8a8" : "rgba(220,214,190,.35)";
     ctx.font = `${Math.round(7 * S)}px 'Courier New',monospace`;
-    ctx.fillText(r.sub, x + 16 * S, ry + rowH * 0.72);
+    ctx.fillText(r.sub, tx0, ry + rowH * 0.72);
     const yy = ry, fn = r.fn;
-    hotspots.push({ x: x + 6 * S, y: yy + 2 * S, w: w - 12 * S, h: rowH - 4 * S, fn });
+    hotspots.push({ x: rx, y: yy + 2 * S, w: rw, h: rh, fn });
     ry += rowH;
   }
 }

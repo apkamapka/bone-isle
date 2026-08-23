@@ -73,12 +73,12 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     // itself swallows keydown while focused, so `w` types a w rather than
     // walking north — see ui/chatInput.ts.
     else if (k === "enter") h.onChat();
-    else if (k === "1") h.onSpell(0);
-    else if (k === "2") h.onSpell(1);
-    else if (k === "3") h.onSpell(2);
-    else if (k === "4") h.onSpell(3);
-    else if (k === "5") h.onSpell(4);
-    else if (k === "6") h.onSpell(5);
+    /* Hotkeys 1-9 then 0, which is ten of the twenty-four slots the bar can
+     * now hold. The rest are mouse-only and that is not a gap to fill: a
+     * keyboard has no eleventh digit, and inventing a modifier for rows most
+     * players will never add would cost every player a chord to remember. */
+    else if (k >= "1" && k <= "9") h.onSpell(k.charCodeAt(0) - 49);
+    else if (k === "0") h.onSpell(9);
     else if (k === "escape") h.onEscape();
     keys[k] = true;
   });
