@@ -208,12 +208,18 @@ export function mobileLayout(
   dpr: number,
   safeTop = 0,
   safeBottom = 0,
+  /**
+   * How many action slots to lay out. Passed in rather than imported so this
+   * module stays a pure function of its arguments — the tests set a hotbar
+   * length by calling with a number, not by reaching into game state.
+   */
+  slotCount = DECK_SLOTS,
 ): MobileLayout {
   const u = Math.max(
     TOUCH_MIN_CSS * dpr,
     Math.min(Math.round(Math.min(screenW, screenH) * 0.125), 120 * dpr),
   );
-  if (screenW > screenH) return landscapeLayout(screenW, screenH, u, safeTop, safeBottom);
+  if (screenW > screenH) return landscapeLayout(screenW, screenH, u, safeTop, safeBottom, slotCount);
   const gap = Math.max(2, Math.round(u * 0.06));
   const m = Math.max(2, Math.round(u * 0.08));
   const innerX = m;
@@ -280,16 +286,32 @@ export function mobileLayout(
   const edit: Rect = cell(DECK_TABS.length + 1);
   const look: Rect = cell(DECK_TABS.length + 2);
 
-  /* --- thumb deck: the six slots, and nothing else ------------------------ */
+  /* --- thumb deck: the action slots, and nothing else ---------------------
+   *
+   * One row of six, or several. The deck grows UPWARD as rows are added, and
+   * the first six keep the bottom line: that is the only part of the screen a
+   * thumb reaches without moving the hand, so it belongs to the slots the
+   * player set up first. Extra rows stack above, further away, which is the
+   * right way round — they are the overflow, not the promotion.
+   *
+   * Numbering therefore runs bottom-up: slots 1–6 on the bottom row, 7–12 on
+   * the one above it. Reading order would put 1–6 on top and hand the easiest
+   * row to the least-used bindings. */
+  const rows = Math.max(1, Math.ceil(slotCount / DECK_SLOTS));
   const slotH = Math.round(u * 1.02);
-  const deckH = m + slotH + m + safeBottom;
+  const deckH = m + rows * slotH + (rows - 1) * gap + m + safeBottom;
   const deckY = Math.max(topH, screenH - deckH);
 
-  const slotY = deckY + m;
   const slotW = Math.floor((innerW - (DECK_SLOTS - 1) * gap) / DECK_SLOTS);
   const slots: Rect[] = [];
-  for (let i = 0; i < DECK_SLOTS; i++) {
-    slots.push({ x: innerX + i * (slotW + gap), y: slotY, w: slotW, h: slotH });
+  for (let i = 0; i < slotCount; i++) {
+    const row = Math.floor(i / DECK_SLOTS);
+    const col = i % DECK_SLOTS;
+    slots.push({
+      x: innerX + col * (slotW + gap),
+      y: deckY + m + (rows - 1 - row) * (slotH + gap),
+      w: slotW, h: slotH,
+    });
   }
 
   /* --- the map window, and the sheet an open panel drops into ------------- */
@@ -335,6 +357,7 @@ export function mobileLayout(
  */
 function landscapeLayout(
   screenW: number, screenH: number, u: number, safeTop: number, safeBottom: number,
+  slotCount: number,
 ): MobileLayout {
   const gap = Math.max(2, Math.round(u * 0.06));
   const m = Math.max(2, Math.round(u * 0.08));
@@ -354,12 +377,22 @@ function landscapeLayout(
   const colY = topH + m;
   const colH = Math.max(1, screenH - safeBottom - m - colY);
   const slotW = Math.round(u * 1.15);
-  const slotH = Math.min(Math.round(u * 1.02), Math.floor((colH - (DECK_SLOTS - 1) * gap) / DECK_SLOTS));
-  const slotsH = DECK_SLOTS * slotH + (DECK_SLOTS - 1) * gap;
+  /* Sideways the slots run down the LEFT edge as a column, so extra rows are
+   * extra columns marching inward. Same rule as upright: the first six keep
+   * the edge nearest the thumb and the overflow sits beside them. */
+  const perCol = DECK_SLOTS;
+  const cols = Math.max(1, Math.ceil(slotCount / perCol));
+  const slotH = Math.min(Math.round(u * 1.02), Math.floor((colH - (perCol - 1) * gap) / perCol));
+  const slotsH = perCol * slotH + (perCol - 1) * gap;
   const slotY0 = colY + Math.max(0, Math.round((colH - slotsH) / 2));
   const slots: Rect[] = [];
-  for (let i = 0; i < DECK_SLOTS; i++) {
-    slots.push({ x: m, y: slotY0 + i * (slotH + gap), w: slotW, h: slotH });
+  for (let i = 0; i < slotCount; i++) {
+    const col = Math.floor(i / perCol);
+    slots.push({
+      x: m + col * (slotW + gap),
+      y: slotY0 + (i % perCol) * (slotH + gap),
+      w: slotW, h: slotH,
+    });
   }
 
   /* --- right column: map, then the controls ------------------------------- */
@@ -406,7 +439,10 @@ function landscapeLayout(
   /* --- what is left is the world ------------------------------------------ */
   const mapTop = topH;
   const mapBottom = screenH;
-  const mapLeft = m + slotW + m;
+  /* The map starts past ALL the slot columns, not past one. Reading `slotW`
+   * alone was correct while there was exactly one column and would have put
+   * the second one on top of the world. */
+  const mapLeft = m + cols * slotW + (cols - 1) * gap + m;
   const mapRight = rightX - m;
 
   /* The drop-down still hangs horizontally under the status row: five tabs
