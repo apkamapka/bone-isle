@@ -134,6 +134,16 @@ export interface MobileLayout {
    * alone, so the answer arrives in the log with nothing on top of it.
    */
   look: Rect;
+  /**
+   * Shorten and lengthen the hotbar, a row at a time.
+   *
+   * These are the drop-down's last two cells, and they are here rather than on
+   * the edit strip because the edit strip does not exist on this interface:
+   * `drawTouchControls` hands the screen to the deck and returns before it.
+   * A control that only draws on the other device is not a control.
+   */
+  keysLess: Rect;
+  keysMore: Rect;
   /** Minimap, square, at the right end of the utility row. */
   minimap: Rect;
   /**
@@ -188,7 +198,8 @@ export function noDeck(screenH = 0): MobileLayout {
   return {
     on: false, landscape: false, u: 0, gap: 0, margin: 0,
     topH: 0, info: z, vitals: z, purse: z,
-    menu: z, edit: z, swap: z, chase: z, atk: z, skull: z, chat: z, look: z, minimap: z, tabs: [],
+    menu: z, edit: z, swap: z, chase: z, atk: z, skull: z, chat: z, look: z,
+    keysLess: z, keysMore: z, minimap: z, tabs: [],
     deckY: screenH, deckH: 0, slots: [],
     mapTop: 0, mapBottom: screenH, mapLeft: 0, mapRight: 0, sheet: z,
   };
@@ -285,6 +296,8 @@ export function mobileLayout(
   const chat: Rect = cell(DECK_TABS.length);
   const edit: Rect = cell(DECK_TABS.length + 1);
   const look: Rect = cell(DECK_TABS.length + 2);
+  const keysLess: Rect = cell(DECK_TABS.length + 3);
+  const keysMore: Rect = cell(DECK_TABS.length + 4);
 
   /* --- thumb deck: the action slots, and nothing else ---------------------
    *
@@ -329,7 +342,7 @@ export function mobileLayout(
   return {
     on: true, landscape: false, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, skull, chat, look, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, look, keysLess, keysMore, minimap, tabs,
     deckY, deckH, slots,
     mapTop, mapBottom, mapLeft: 0, mapRight: screenW, sheet,
   };
@@ -460,6 +473,8 @@ function landscapeLayout(
   const chat: Rect = cell(DECK_TABS.length);
   const edit: Rect = cell(DECK_TABS.length + 1);
   const look: Rect = cell(DECK_TABS.length + 2);
+  const keysLess: Rect = cell(DECK_TABS.length + 3);
+  const keysMore: Rect = cell(DECK_TABS.length + 4);
 
   /* A panel takes a LANE of the map rather than a band across it — width is
    * what this orientation has spare, so spending width is what costs least. */
@@ -468,7 +483,7 @@ function landscapeLayout(
   return {
     on: true, landscape: true, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, skull, chat, look, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, look, keysLess, keysMore, minimap, tabs,
     deckY: screenH, deckH: 0, slots,
     mapTop, mapBottom, mapLeft, mapRight, sheet,
   };
