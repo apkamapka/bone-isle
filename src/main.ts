@@ -49,7 +49,7 @@ import {
   markAllRead, overlayLines, say, tickChat, unread,
 } from "./systems/chat.ts";
 import { chatInput, initChatInput } from "./ui/chatInput.ts";
-import { groundEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
+import { groundEntries, playerEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
@@ -332,6 +332,17 @@ let aimPending: ItemKind | null = null;
  *  (release without movement) still resolves as walk-over-and-pick-up. */
 function probeGroundDrag(sx: number, sy: number, isTouch: boolean): boolean {
   if (P.dead || ui.lookMode || ui.split || ui.inspect) return false;
+  /* An open menu is MODAL over the world.
+   *
+   * It is drawn last, on top of everything, and it opens right beside the
+   * thing it is about — so its entries routinely lie over the very ground
+   * item they describe. Without this the press that means "Take" is claimed
+   * as the start of a drag of that same item, `suppressClick` is set, and the
+   * entry never runs: the menu appears to do nothing at exactly the moment it
+   * is most obviously correct. `contextMenuTap` already treats every press as
+   * spent on the menu while it is up; this is the same rule, enforced one
+   * layer earlier where the drag probes live. */
+  if (ctxMenu) return false;
   if (pointInOpenPanel(sx, sy) || ui.placing || hudEditing()) return false;
   const wx = sx / vScale + cam.x;
   const wy = sy / vScale + cam.y;
@@ -349,6 +360,7 @@ function probeGroundDrag(sx: number, sy: number, isTouch: boolean): boolean {
  *  Shared by mouse pointerdown and the touch drag hooks. */
 function probeSlotDrag(sx: number, sy: number, isTouch: boolean): boolean {
   if (ui.lookMode || ui.split || ui.inspect) return false;
+  if (ctxMenu) return false; // modal — see the note in probeGroundDrag
   for (let i = itemSlots.length - 1; i >= 0; i--) {
     const it = itemSlots[i];
     if (sx >= it.x && sx < it.x + it.w && sy >= it.y && sy < it.y + it.h) {
@@ -1930,12 +1942,44 @@ function titleCase(k: string): string {
  * the right shape for a phone: a popup would cover the thing being looked at.
  * It also gives the log its first job that is not a warning.
  */
+/**
+ * Is that tile the one the player is standing on?
+ *
+ * Exact, not the ±1 the entity searches use — those are loose because a
+ * sprite is taller than its tile and you are aiming at a drawn body rather
+ * than a square. You are never aiming at your OWN body: you are aiming at a
+ * tile you already know, and a loose test would answer "yourself" for the
+ * square beside you, which is the square you meant to walk to.
+ *
+ * Shared by the menu and by the look so the two cannot disagree about who is
+ * being pointed at — a menu headed "Look at yourself" whose Look then
+ * describes the floor is worse than either behaviour on its own.
+ */
+function onPlayerTile(tx: number, ty: number): boolean {
+  return P.tx === tx && P.ty === ty;
+}
+
 function lookAtTile(at: Vec): void {
   const world = cw();
   const tx = toTile(at.x);
   const ty = toTile(at.y);
   const near = (ex: number, ey: number): boolean =>
     Math.abs(toTile(ex) - tx) <= 1 && Math.abs(toTile(ey) - ty) <= 1;
+
+  /* Yourself first, for the same reason the menu resolves people before
+   * things: if you pointed at your own square, the answer is you, even with
+   * a rat breathing on the next tile that the loose search below would
+   * otherwise claim. */
+  if (onPlayerTile(tx, ty)) {
+    logServer(`You see yourself — level ${P.level}, ${Math.ceil(P.hp)}/${P.maxhp} hp.`);
+    const s = skull();
+    if (s !== "none") {
+      logServer(s === "red"
+        ? "You are marked with a red skull."
+        : "You are marked with a white skull.");
+    }
+    return;
+  }
 
   const m = world.monsters.find((x) => x.hp > 0 && near(x.x, x.y));
   if (m) { logServer(`You see ${titleCase(m.kind)} — ${Math.ceil(m.hp)}/${m.maxhp} hp.`); return; }
@@ -1953,7 +1997,30 @@ function lookAtTile(at: Vec): void {
 let ctxMenu: ContextMenu | null = null;
 
 /**
- * Build and open the menu for whatever is under the finger.
+ * Walk to a world point, the way every route into "go there" wants it.
+ *
+ * Shared by the menu's "Walk here" and by whatever else asks. The one subtle
+ * part is the ranged target: with a bow drawn, walking must NOT drop the mark,
+ * or shoot-and-run stops working the moment you tell the character where to
+ * stand. That rule used to live only in the desktop right-click branch, which
+ * is exactly where it got lost when right-click became a menu.
+ */
+function walkToPoint(at: Vec): void {
+  P.dest = { x: at.x, y: at.y };
+  P.gather = null;
+  const keepShot = !!P.target
+    && (P.target.kind === "mob" || P.target.kind === "dummy")
+    && attackMode().ranged;
+  if (!keepShot) P.target = null;
+  moveMarker = { x: at.x, y: at.y, t: 0.5 };
+}
+
+/**
+ * Build and open the menu for whatever is under the pointer.
+ *
+ * Opened by a right-click on a desktop and by a long press on a phone — the
+ * same menu, the same entries, built here once. Those are the same gesture on
+ * two devices and there is no reason for them to have different answers.
  *
  * Ordered the way the verbs are urgent: what is ON the tile first, walking
  * last. That is the opposite of how the list reads, so "Walk here" sits at the
@@ -1973,12 +2040,25 @@ function openContextMenu(sx: number, sy: number): void {
   const near = (ex: number, ey: number): boolean =>
     Math.abs(toTile(ex) - tx) <= 1 && Math.abs(toTile(ey) - ty) <= 1;
 
+  /* PEOPLE FIRST, and today that means exactly one person: you.
+   *
+   * The player is not an entity in `world` — there has only ever been one, so
+   * he never needed to be in a list — which is why this is a coordinate test
+   * rather than a `find`. When other players arrive they WILL be entities and
+   * this becomes the same `find` as the four below it, feeding the same
+   * builder with `self: false`. That is the whole reason the builder takes a
+   * name and a flag instead of reading the player directly. */
+  if (onPlayerTile(tx, ty)) {
+    entries.push(...playerEntries(
+      { name: SELF, self: true, tradeLive: false, mayAttack: false },
+      { look: () => lookAtTile(at), trade: () => undefined, attack: () => undefined },
+    ));
+  }
+
   const m = world.monsters.find((x) => x.hp > 0 && near(x.x, x.y));
   if (m) {
     entries.push({ verb: "attack", label: `Attack ${titleCase(m.kind)}`, enabled: true,
       run: () => { P.target = { kind: "mob", id: m.id }; P.dest = null; P.gather = null; } });
-    entries.push({ verb: "look", label: "Look", enabled: true,
-      run: () => logServer(`You see ${titleCase(m.kind)} — ${Math.ceil(m.hp)}/${m.maxhp} hp.`) });
   }
   const c = world.corpses.find((x) => near(x.x, x.y));
   if (c) {
@@ -1999,10 +2079,10 @@ function openContextMenu(sx: number, sy: number): void {
     entries.push({ verb: "trade", label: `Trade with ${n.name}`, enabled: false,
       why: "Trading opens with the world." });
   }
-  entries.push(...groundEntries(
-    () => { P.dest = { x: at.x, y: at.y }; P.target = null; P.gather = null; moveMarker = { x: at.x, y: at.y, t: 0.5 }; },
-    () => lookAtTile(at),
-  ));
+  /* Walk and the one Look. `lookAtTile` resolves the tile itself and answers
+   * with the creature first, so nothing above needs to add a Look of its own
+   * — and when the monster branch did, a rat offered two identical ones. */
+  entries.push(...groundEntries(() => walkToPoint(at), () => lookAtTile(at)));
 
   ctxMenu = { sx, sy, at, entries, rects: [] };
 }
@@ -2212,6 +2292,9 @@ initInput(screen, {
   onAttackNearest: attackNearest,
   onEscape: () => {
     if (chatInput().isOpen()) { closeChat(); return; }
+    /* The menu goes first. It is drawn on top of everything and opened by a
+     * gesture, so it is what "the thing in my way" means while it is up. */
+    if (ctxMenu) { closeContextMenu(); return; }
     if (throwPending) { throwPending = null; flash("throw cancelled", "#8ab6ff"); return; }
     if (aimPending) { aimPending = null; flash("cast cancelled", "#8ab6ff"); return; }
     if (assignSlot !== null) { assignSlot = null; return; }
@@ -2225,23 +2308,24 @@ initInput(screen, {
   onClick: ({ sx, sy, button }) => {
     if (suppressClick) return;
     if (button === 2) {
-      // right-click: pure "walk here", ignore targets (Tibia-style)
+      /* Right-click opens the MENU — the same one a long press opens on a
+       * phone. It used to be a bare "walk here, ignore whatever is standing
+       * on the tile", which is a good verb and is now the menu's first entry
+       * rather than the whole of the button.
+       *
+       * That costs a click on a move you used to make in one, and it buys the
+       * only place a verb can go once an object has more than one of them:
+       * another player is somebody you might look at, trade with or attack,
+       * and no gesture picks between those on its own. It is also what Tibia
+       * does with the same button. */
       if (P.dead || ui.dragging) return;
-      // …except while aiming, where it puts the cursor away instead of
-      // marching the player into his own fireball
+      // …except while aiming, where right-click still means "put the cursor
+      // away" rather than opening a menu on top of your own fireball.
       if (aimPending) { aimPending = null; flash("cast cancelled", "#8ab6ff"); return; }
       if (ui.placing) return;
-      // don't walk when the click lands on an open panel
-      if (pointInOpenPanel(sx, sy)) return;
-      const w: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
-      P.dest = { x: w.x, y: w.y };
-      P.gather = null;
-      // keep a ranged attack target so right-click "walk here" doubles as kiting
-      const keepShot = !!P.target
-        && (P.target.kind === "mob" || P.target.kind === "dummy")
-        && attackMode().ranged;
-      if (!keepShot) P.target = null;
-      moveMarker = { x: w.x, y: w.y, t: 0.5 };
+      // A second right-click moves the menu rather than stacking one.
+      closeContextMenu();
+      openContextMenu(sx, sy);
       return;
     }
     handleWorldTap(sx, sy);
@@ -2317,6 +2401,11 @@ const toScreen = (e: { clientX: number; clientY: number }): { x: number; y: numb
 };
 screen.addEventListener("pointerdown", (e) => {
   const s = toScreen(e);
+  /* While the menu is up, nothing behind it may claim the press — not a title
+   * bar, not a resize foot, not an item. The press belongs to the menu, which
+   * either runs an entry or dismisses itself; `contextMenuTap` decides which,
+   * and it is reached through the ordinary click path below. */
+  if (ctxMenu) return;
   // mouse convenience: right-click an action slot to open the rebind picker
   if (e.button === 2) {
     for (const r of actionSlotRects) {

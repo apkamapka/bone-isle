@@ -10276,6 +10276,154 @@ async function main(): Promise<void> {
       "…in that order: the grace window is checked before anything is cancelled");
   }
 
+  /* ============ Etap 37: one menu, two gestures ============================
+   *
+   * Right-click and long press are the same gesture on two devices, so they
+   * open the same menu built by the same code. What is tested here is mostly
+   * the LIST — the builder is pure, which is the only reason the "another
+   * player" branch can be checked at all while there is nobody to right-click. */
+  {
+    console.log("Etap 37 - the menu for another person:");
+    const CM = await import("../src/ui/contextMenu.ts");
+    const noop = { look: () => undefined, trade: () => undefined, attack: () => undefined };
+
+    const other = CM.playerEntries(
+      { name: "Radek", self: false, tradeLive: false, mayAttack: true }, noop);
+    ok(other.map((e) => e.verb).join(",") === "look,trade,attack",
+      "look, trade, attack — in that order");
+    /* Escalation, not alphabetical. The harmless verb sits where the finger
+     * lands and the irreversible one is furthest from it: this menu opens
+     * under a fingertip that has been held still, and Attack under the thumb
+     * starts fights nobody meant to start. */
+    ok(other[0].verb === "look", "…the harmless one where the finger already is");
+    ok(other[other.length - 1].verb === "attack", "…and the irreversible one furthest away");
+    ok(other.every((e) => e.label.includes("Radek")),
+      "every entry names who it is about, so a menu over a crowd is unambiguous");
+    ok(other[1].enabled === false && other[1].why === "Trading opens with the world.",
+      "Trade is dim until there is a world to trade in, and says so");
+    ok(other[2].enabled === true, "…while Attack is live once the rules allow it");
+
+    /* The rules are the CALLER's. This file draws menus; pvp.ts owns who may
+     * hit whom, and the two must not both have an opinion. */
+    const barred = CM.playerEntries(
+      { name: "Radek", self: false, tradeLive: false, mayAttack: false,
+        attackWhy: "Your skull is unlit." }, noop);
+    ok(barred[2].enabled === false && barred[2].why === "Your skull is unlit.",
+      "a refused attack is dim and carries the caller's reason, not a made-up one");
+
+    const tradeable = CM.playerEntries(
+      { name: "Radek", self: false, tradeLive: true, mayAttack: true }, noop);
+    ok(tradeable[1].enabled === true, "…and Trade lights up the day trading ships, with no edit here");
+
+    /* Yourself: the same three, so the shape you learn today is the shape you
+     * keep. The two refusals are true ones and will still be true when the
+     * world is full of people. */
+    const self = CM.playerEntries(
+      { name: "You", self: true, tradeLive: true, mayAttack: true }, noop);
+    ok(self.map((e) => e.verb).join(",") === "look,trade,attack",
+      "your own menu is the same three entries");
+    ok(self[0].enabled === true && self[0].label === "Look at yourself",
+      "…you may always look at yourself");
+    ok(self[1].enabled === false && self[1].why === "You cannot trade with yourself.",
+      "…but not trade with yourself, even once trading is live");
+    ok(self[2].enabled === false && self[2].why === "You cannot attack yourself.",
+      "…nor attack yourself, even with every PvP rule satisfied");
+    let sawLook = 0;
+    CM.playerEntries({ name: "You", self: true, tradeLive: false, mayAttack: false },
+      { look: () => { sawLook++; }, trade: () => undefined, attack: () => undefined })[0].run?.();
+    ok(sawLook === 1, "…and your own Look is wired to something, not left as a label");
+
+    /* Ground is unchanged and still always answers. */
+    let walked = 0, looked = 0;
+    const g = CM.groundEntries(() => { walked++; }, () => { looked++; });
+    ok(g.map((e) => e.verb).join(",") === "walk,look", "a bare tile still offers walk and look");
+    g[0].run?.(); g[1].run?.();
+    ok(walked === 1 && looked === 1, "…and both are wired to what the caller passed");
+  }
+
+  {
+    console.log("Etap 37 - the same menu on both gestures, and only one Look in it:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+
+    /* Right-click used to walk. It opens the menu now — the same function the
+     * long press has always called, so the two devices cannot drift apart. */
+    ok(main.includes("openContextMenu(sx, sy);\n      return;"),
+      "right-click opens the context menu");
+    ok((main.match(/openContextMenu\b/g) ?? []).length >= 3,
+      "…the same builder the long press passes to initTouch, not a second one");
+    ok(!main.includes('// right-click: pure "walk here", ignore targets (Tibia-style)'),
+      "…and the old bare walk-here branch is gone");
+
+    /* The verb it replaced is not lost, it moved into the list — including
+     * the ranged-target rule, which lived only in the deleted branch. */
+    ok(main.includes("function walkToPoint("), "walking to a point is one function now");
+    ok(main.includes("groundEntries(() => walkToPoint(at), () => lookAtTile(at))"),
+      "…and \"Walk here\" is what calls it, so the verb survived the change");
+    ok(main.includes("&& attackMode().ranged;\n  if (!keepShot) P.target = null;"),
+      "…carrying the kiting rule with it: walking with a bow drawn keeps the mark");
+
+    /* Two identical Looks on a monster tile was a real bug: both ran the same
+     * code, and a duplicate entry makes a player hunt for the difference. */
+    ok(!main.includes('entries.push({ verb: "look", label: "Look", enabled: true,'),
+      "the monster no longer pushes a second Look of its own");
+    ok((main.match(/verb: "look"/g) ?? []).length === 0,
+      "…there is exactly one Look in the menu and groundEntries owns it");
+
+    /* The player branch. A coordinate test today because the player is not in
+     * any world list; a `find` like the other four the day he is. */
+    ok(main.includes("if (onPlayerTile(tx, ty)) {"),
+      "right-clicking your own tile opens the person menu");
+    /* The menu and the look have to agree about who is being pointed at. A
+     * menu headed "Look at yourself" whose Look then described the floor is
+     * worse than either half would be alone — which is what it did before
+     * `lookAtTile` learned the player exists at all. */
+    ok((main.match(/onPlayerTile\(/g) ?? []).length === 3,
+      "…and one test decides it, used by both the menu and the look");
+    const look = main.slice(main.indexOf("function lookAtTile("),
+      main.indexOf("/* ---------------- the long-press menu"));
+    ok(look.includes("You see yourself — level"),
+      "looking at your own tile describes YOU, not the ground under you");
+    ok(look.indexOf("onPlayerTile(tx, ty)") < look.indexOf("world.monsters.find"),
+      "…and wins over a creature on the next tile, which the loose search would otherwise claim");
+    ok(look.includes("You are marked with a red skull."),
+      "…and mentions a skull you are wearing, since that is the thing you would want to check");
+    ok(main.includes("playerEntries(") && main.includes("self: true"),
+      "…built by the shared builder, so it is the shape other players will get");
+    /* Scoped to the builder's own body: `lookAtTile` above it searches the
+     * same lists, so a bare indexOf across the file compares the wrong two
+     * lines and passes or fails for no reason. */
+    const build = main.slice(main.indexOf("function openContextMenu("),
+      main.indexOf("function closeContextMenu("));
+    ok(build.indexOf("if (onPlayerTile(tx, ty))") < build.indexOf("world.monsters.find"),
+      "…and people are resolved before things, since a person is what you meant to press");
+
+    /* Escape has to reach it: the menu is drawn over everything, so while it
+     * is up it IS the thing in the way. */
+    ok(main.includes("if (ctxMenu) { closeContextMenu(); return; }"),
+      "escape dismisses the menu");
+    const esc = main.slice(main.indexOf("onEscape: () => {"),
+      main.indexOf("onClick: ({ sx, sy, button })"));
+    ok(esc.indexOf("if (ctxMenu) { closeContextMenu(); return; }") < esc.indexOf("if (throwPending)"),
+      "…before anything underneath it");
+    ok(esc.indexOf("chatInput().isOpen()") < esc.indexOf("if (ctxMenu)"),
+      "…though the chat field still outranks it: a keyboard covers more than a menu does");
+
+    /* The menu opens BESIDE the thing it is about, so its entries routinely
+     * lie over that thing. Without modality the press meaning "Take" is
+     * claimed as the start of a drag of the very item being taken, and the
+     * menu appears to do nothing exactly when it is most obviously right. */
+    const ground = main.slice(main.indexOf("function probeGroundDrag("),
+      main.indexOf("function probeSlotDrag("));
+    ok(ground.includes("if (ctxMenu) return false;"),
+      "an open menu stops the ground-drag probe claiming the press");
+    const slot = main.slice(main.indexOf("function probeSlotDrag("),
+      main.indexOf("function probeSlotDrag(") + 900);
+    ok(slot.includes("if (ctxMenu) return false;"), "…and the slot-drag probe too");
+    ok(main.includes("if (ctxMenu) return;\n  // mouse convenience: right-click an action slot"),
+      "…and nothing behind the menu — title bar, resize foot, item — takes a pointerdown");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
