@@ -4886,6 +4886,31 @@ function drawGroupGrip(id: HudGroup, gx: number, gy: number, gw: number, gh: num
   hudGrips.push({ id, x: gx, y, w, h, gx, gy, gw, gh });
 }
 
+/**
+ * Lengthen or shorten the hotbar by one row.
+ *
+ * ONE function for both surfaces, and the reason is the bug it fixes. The
+ * desktop toolbar and the phone's drop-down each had their own copy of
+ * "call add/remove, flash, save" — and only the desktop one worked, because
+ * only the desktop bar reads the length while it draws.
+ *
+ * The phone's slot RECTS are computed in `resize()`, which runs when the
+ * window changes size and at nothing else. So the count went up, the label
+ * said so, the log said so, and the deck kept the six boxes it had measured
+ * at start-up. Re-measuring is the whole fix, and putting it here means the
+ * next surface to grow a button cannot forget it.
+ */
+function stepHotkeyRows(delta: -1 | 1): void {
+  if (!(delta < 0 ? removeActionSlots() : addActionSlots())) {
+    flash(delta < 0 ? `${ACTION_SLOTS_MIN} is the fewest` : `${ACTION_SLOTS_MAX} is the most`,
+      "#e0a06a");
+    return;
+  }
+  resize();          // the deck measures its slots there, not per frame
+  saveGame(game);
+  flash(`${actionSlotCount()} hotkeys`, "#8ab6ff");
+}
+
 /** Action-slot rects this frame (mouse right-click = open the rebind picker). */
 let actionSlotRects: { i: number; x: number; y: number; w: number; h: number }[] = [];
 
@@ -5159,43 +5184,47 @@ function drawDeck(): void {
     } });
     touchButtons.push({ ...lr });
 
-    /* --- how many hotkeys, on the two cells the grid had left ---------------
-     *
-     * On a desktop this lives on the edit strip beside the scale and the
-     * presets. That strip does not exist here: `drawTouchControls` hands the
-     * whole screen to `drawDeck` and returns before reaching it, so the
-     * control Radek was told about was on a surface his phone never draws.
-     * A feature you can only reach on the other device is not shipped.
-     *
-     * Not behind EDIT, either. The deck's layout is fixed — there is nothing
-     * to drag — so edit mode here means only "tap a slot to bind", and hiding
-     * the length behind it would be a second thing to discover before the
-     * first one. The grid is 2x5 and had exactly two cells spare. */
-    const n = actionSlotCount();
-    for (const [rect, label, delta] of [
-      [d.keysLess, `\u2212${ACTION_SLOT_STEP}`, -1],
-      [d.keysMore, `+${ACTION_SLOT_STEP}`, 1],
-    ] as const) {
-      const can = delta < 0 ? n > ACTION_SLOTS_MIN : n < ACTION_SLOTS_MAX;
-      buttonBox(ctx, rect.x, rect.y, rect.w, rect.h, scale, {});
-      hudText(h, label, rect.x + rect.w / 2, rect.y + rect.h * 0.4, u * 0.24,
-        can ? "#e9e2c8" : "rgba(233,226,200,.3)", "center", true, rect.w - u * 0.08);
-      /* The current length under the button, because the flash is gone in two
-       * seconds and "how many do I have" is the question you are answering. */
-      hudText(h, `${n} keys`, rect.x + rect.w / 2, rect.y + rect.h * 0.72, u * 0.17,
-        "rgba(220,214,190,.55)", "center", false, rect.w - u * 0.08);
-      hotspots.push({ x: rect.x, y: rect.y, w: rect.w, h: rect.h, fn: () => {
-        const ok = delta < 0 ? removeActionSlots() : addActionSlots();
-        if (ok) { flash(`${actionSlotCount()} hotkeys`, "#8ab6ff"); saveGame(game); }
-        else flash(delta < 0 ? `${ACTION_SLOTS_MIN} is the fewest` : `${ACTION_SLOTS_MAX} is the most`, "#e0a06a");
-      } });
-      touchButtons.push({ ...rect });
-    }
   }
   /* Empty slots are drawn on the deck even out of edit mode, unlike the old
    * floating HUD which hid them. A row with holes in it is a row you have to
    * look at to count; a full row of six is one your thumb learns the shape of. */
   d.slots.forEach((r, i) => drawActionSlot(i, r.x, r.y, r.w, r.h));
+
+  /* --- how many slots there are, while EDIT is on -------------------------
+   *
+   * Riding on top of the deck, touching the thing it changes, so a press and
+   * the row appearing are the same glance. Only while editing: the rest of
+   * the time this band is map.
+   *
+   * On the desktop the identical control sits on the edit strip. That strip
+   * does not exist here — `drawTouchControls` hands the screen to this
+   * function and returns before reaching it — which is how the first attempt
+   * shipped a button that only drew on the other device. */
+  if (hudEditing()) {
+    const kb = d.keysBar;
+    const n = actionSlotCount();
+    const third = Math.floor((kb.w - 2 * d.gap) / 3);
+    const cells: { x: number; w: number }[] = [
+      { x: kb.x, w: third },
+      { x: kb.x + third + d.gap, w: kb.w - 2 * (third + d.gap) },
+      { x: kb.x + kb.w - third, w: third },
+    ];
+    for (const [i, c] of cells.entries()) {
+      const mid = i === 1;
+      const can = i === 0 ? n > ACTION_SLOTS_MIN : n < ACTION_SLOTS_MAX;
+      buttonBox(ctx, c.x, kb.y, c.w, kb.h, scale,
+        mid ? { face: "rgba(16,26,24,.9)" } : {});
+      hudText(h, mid ? `${n} HOTKEYS` : i === 0 ? `\u2212${ACTION_SLOT_STEP}` : `+${ACTION_SLOT_STEP}`,
+        c.x + c.w / 2, kb.y + kb.h / 2, u * 0.26,
+        mid ? "#e9e2c8" : can ? "#e9e2c8" : "rgba(233,226,200,.3)",
+        "center", true, c.w - u * 0.1);
+      if (!mid) {
+        const delta = i === 0 ? -1 : 1;
+        hotspots.push({ x: c.x, y: kb.y, w: c.w, h: kb.h, fn: () => stepHotkeyRows(delta) });
+      }
+      touchButtons.push({ x: c.x, y: kb.y, w: c.w, h: kb.h });
+    }
+  }
 
   /* --- the strip's tab, drawn last so it rides over the panel it controls --- */
   const side = activeStrip();
@@ -5612,16 +5641,10 @@ function drawTouchControls(): void {
     let px3 = clamp((sw - row3W) / 2, m, sw - row3W - m);
     const py3 = py2 + btnH + gap;
     const canLess = n > ACTION_SLOTS_MIN;
-    hudBtn(px3, py3, sq, btnH, "\u2212", false, () => {
-      if (removeActionSlots()) {
-        flash(`${actionSlotCount()} hotkeys`, "#8ab6ff");
-        saveGame(game);
-      } else {
-        /* Refused rather than silently ignored. The floor exists because a
-         * hotbar of zero is not a smaller hotbar, it is a missing one. */
-        flash(`${ACTION_SLOTS_MIN} is the fewest`, "#e0a06a");
-      }
-    }, !canLess);
+    /* Refused rather than silently ignored, inside `stepHotkeyRows`: the floor
+     * exists because a hotbar of zero is not a smaller hotbar, it is a missing
+     * one, and a button that does nothing without saying why is a bug report. */
+    hudBtn(px3, py3, sq, btnH, "\u2212", false, () => stepHotkeyRows(-1), !canLess);
     px3 += sq + gap;
     slotCell(sctx, px3, py3, countW, btnH, scale, { face: "rgba(16,26,24,.85)" });
     sctx.textAlign = "center";
@@ -5631,14 +5654,7 @@ function drawTouchControls(): void {
     sctx.fillText(`${n} KEYS`, px3 + countW / 2, py3 + btnH / 2);
     px3 += countW + gap;
     const canMore = n < ACTION_SLOTS_MAX;
-    hudBtn(px3, py3, sq, btnH, "+", false, () => {
-      if (addActionSlots()) {
-        flash(`${actionSlotCount()} hotkeys`, "#8ab6ff");
-        saveGame(game);
-      } else {
-        flash(`${ACTION_SLOTS_MAX} is the most`, "#e0a06a");
-      }
-    }, !canMore);
+    hudBtn(px3, py3, sq, btnH, "+", false, () => stepHotkeyRows(1), !canMore);
 
     const hy = clamp(py3 + btnH + gap, m, sh - m);
     sctx.textAlign = "center";

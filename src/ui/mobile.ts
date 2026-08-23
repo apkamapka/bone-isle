@@ -135,15 +135,21 @@ export interface MobileLayout {
    */
   look: Rect;
   /**
-   * Shorten and lengthen the hotbar, a row at a time.
+   * Where the hotbar-length strip goes while EDIT is on.
    *
-   * These are the drop-down's last two cells, and they are here rather than on
-   * the edit strip because the edit strip does not exist on this interface:
-   * `drawTouchControls` hands the screen to the deck and returns before it.
-   * A control that only draws on the other device is not a control.
+   * Always measured, drawn only while editing — the same arrangement the
+   * drop-down cells have. It sits ADJACENT TO THE SLOTS rather than in a menu,
+   * because it changes how many of them there are and you want to watch that
+   * happen; and it exists only in edit mode, so it costs the map nothing while
+   * you are playing.
+   *
+   * The desktop puts the same control on its edit strip. This interface has no
+   * edit strip at all — `drawTouchControls` hands the screen to the deck and
+   * returns before reaching it — which is how the first attempt shipped a
+   * button that only drew on the other device. The drop-down's last two cells
+   * are left empty on purpose; they are spoken for.
    */
-  keysLess: Rect;
-  keysMore: Rect;
+  keysBar: Rect;
   /** Minimap, square, at the right end of the utility row. */
   minimap: Rect;
   /**
@@ -199,7 +205,7 @@ export function noDeck(screenH = 0): MobileLayout {
     on: false, landscape: false, u: 0, gap: 0, margin: 0,
     topH: 0, info: z, vitals: z, purse: z,
     menu: z, edit: z, swap: z, chase: z, atk: z, skull: z, chat: z, look: z,
-    keysLess: z, keysMore: z, minimap: z, tabs: [],
+    keysBar: z, minimap: z, tabs: [],
     deckY: screenH, deckH: 0, slots: [],
     mapTop: 0, mapBottom: screenH, mapLeft: 0, mapRight: 0, sheet: z,
   };
@@ -230,7 +236,7 @@ export function mobileLayout(
     TOUCH_MIN_CSS * dpr,
     Math.min(Math.round(Math.min(screenW, screenH) * 0.125), 120 * dpr),
   );
-  if (screenW > screenH) return landscapeLayout(screenW, screenH, u, safeTop, safeBottom, slotCount);
+  if (screenW > screenH) return landscapeLayout(screenW, screenH, u, safeTop, safeBottom, slotCount, dpr);
   const gap = Math.max(2, Math.round(u * 0.06));
   const m = Math.max(2, Math.round(u * 0.08));
   const innerX = m;
@@ -296,8 +302,6 @@ export function mobileLayout(
   const chat: Rect = cell(DECK_TABS.length);
   const edit: Rect = cell(DECK_TABS.length + 1);
   const look: Rect = cell(DECK_TABS.length + 2);
-  const keysLess: Rect = cell(DECK_TABS.length + 3);
-  const keysMore: Rect = cell(DECK_TABS.length + 4);
 
   /* --- thumb deck: the action slots, and nothing else ---------------------
    *
@@ -327,6 +331,18 @@ export function mobileLayout(
     });
   }
 
+  /* The length strip rides directly on top of the deck, over the map. It is
+   * only ever drawn in edit mode, so the map keeps this band the rest of the
+   * time — and while it IS drawn, it is touching the thing it changes. */
+  /* Full fingertip, no fraction of one. The strip holds three buttons and the
+   * two that matter are a minus and a plus — the smallest targets on it — so
+   * shaving a fifth off "finger-sized" here is shaving it off exactly the
+   * controls that need it. */
+  const keysBarH = Math.max(Math.round(u * 0.62), Math.round(TOUCH_MIN_CSS * dpr));
+  const keysBar: Rect = {
+    x: innerX, y: Math.max(topH, deckY - gap - keysBarH), w: innerW, h: keysBarH,
+  };
+
   /* --- the map window, and the sheet an open panel drops into ------------- */
   const mapTop = topH;
   const mapBottom = deckY;
@@ -342,7 +358,7 @@ export function mobileLayout(
   return {
     on: true, landscape: false, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, skull, chat, look, keysLess, keysMore, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, look, keysBar, minimap, tabs,
     deckY, deckH, slots,
     mapTop, mapBottom, mapLeft: 0, mapRight: screenW, sheet,
   };
@@ -370,7 +386,7 @@ export function mobileLayout(
  */
 function landscapeLayout(
   screenW: number, screenH: number, u: number, safeTop: number, safeBottom: number,
-  slotCount: number,
+  slotCount: number, dpr: number,
 ): MobileLayout {
   const gap = Math.max(2, Math.round(u * 0.06));
   const m = Math.max(2, Math.round(u * 0.08));
@@ -473,8 +489,21 @@ function landscapeLayout(
   const chat: Rect = cell(DECK_TABS.length);
   const edit: Rect = cell(DECK_TABS.length + 1);
   const look: Rect = cell(DECK_TABS.length + 2);
-  const keysLess: Rect = cell(DECK_TABS.length + 3);
-  const keysMore: Rect = cell(DECK_TABS.length + 4);
+
+  /* Sideways there is no room under the slots — the column is centred in a
+   * band it very nearly fills, and putting the strip above or below it landed
+   * ON the slots on every screen tested. So it goes BESIDE them: bottom-left,
+   * immediately right of the last column, over a corner of the map.
+   *
+   * Over the map is fine here in a way it would not be during play: this only
+   * draws in edit mode, when you are looking at the slots and not at the
+   * world behind them. */
+  const keysBarH = Math.max(Math.round(u * 0.62), Math.round(TOUCH_MIN_CSS * dpr));
+  const keysBar: Rect = {
+    x: m + cols * slotW + (cols - 1) * gap + gap,
+    y: screenH - safeBottom - m - keysBarH,
+    w: Math.round(u * 4.2), h: keysBarH,
+  };
 
   /* A panel takes a LANE of the map rather than a band across it — width is
    * what this orientation has spare, so spending width is what costs least. */
@@ -483,7 +512,7 @@ function landscapeLayout(
   return {
     on: true, landscape: true, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, skull, chat, look, keysLess, keysMore, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, look, keysBar, minimap, tabs,
     deckY: screenH, deckH: 0, slots,
     mapTop, mapBottom, mapLeft, mapRight, sheet,
   };

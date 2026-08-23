@@ -10803,9 +10803,10 @@ async function main(): Promise<void> {
     /* The control lives with the layout, because "how many buttons" and
      * "where the buttons go" are the same question asked twice. */
     ok(main.includes("`${n} KEYS`"), "edit mode shows the current length");
-    ok(main.includes("if (removeActionSlots()) {") && main.includes("if (addActionSlots()) {"),
-      "…with a minus and a plus beside it");
-    ok(main.includes('flash(`${ACTION_SLOTS_MIN} is the fewest`'),
+    ok(main.includes("() => stepHotkeyRows(-1), !canLess)")
+      && main.includes("() => stepHotkeyRows(1), !canMore)"),
+      "…with a minus and a plus beside it, both going through the one function");
+    ok(main.includes('flash(delta < 0 ? `${ACTION_SLOTS_MIN} is the fewest`'),
       "…which say why when they refuse, rather than vanishing at the limit");
     ok(main.includes("dim = false,"), "…and are drawn dim there instead of disappearing");
   }
@@ -10895,34 +10896,54 @@ async function main(): Promise<void> {
       main.indexOf("function drawTouchControls(") + 400);
     ok(touch.includes("if (deck.on) { drawDeck(); return; }"),
       "the phone still returns before the desktop edit strip…");
-    ok(main.includes("[d.keysLess,") && main.includes("[d.keysMore,"),
-      "…so the length controls are drawn by the deck itself");
-    ok(main.includes("const ok = delta < 0 ? removeActionSlots() : addActionSlots();"),
-      "…wired to the same two functions the desktop buttons call");
-    ok(main.includes('flash(`${actionSlotCount()} hotkeys`, "#8ab6ff"); saveGame(game);'),
-      "…saving, so a bar lengthened on a phone is still long tomorrow");
-    ok(main.includes('hudText(h, `${n} keys`'),
-      "…and the current length is printed under the button, not only flashed");
+    ok(main.includes("if (hudEditing()) {\n    const kb = d.keysBar;"),
+      "…so the length strip is drawn by the deck itself, behind EDIT");
+    ok(main.includes("fn: () => stepHotkeyRows(delta) })"),
+      "…wired to the same one function the desktop buttons call");
+    ok(main.includes("`${n} HOTKEYS`"),
+      "…printing the current length between the two buttons, not only flashing it");
 
+    /* THE BUG. The count went up, the label said so, the log said so, and the
+     * deck kept the six boxes it measured at start-up: `mobileLayout` runs in
+     * `resize()`, which fires on a window resize and at nothing else. */
+    const step = main.slice(main.indexOf("function stepHotkeyRows("),
+      main.indexOf("/** Action-slot rects this frame"));
+    ok(step.includes("resize();"),
+      "changing the length re-measures the deck, or the slots never appear");
+    ok(step.includes("saveGame(game);") && step.includes("flash(`${actionSlotCount()} hotkeys`"),
+      "…then saves and says the new number");
+    ok(step.indexOf("resize();") < step.indexOf("saveGame(game);"),
+      "…re-measuring before saving, so a frame can never draw the old rects");
+    ok((main.match(/removeActionSlots\(\)/g) ?? []).length === 1
+      && (main.match(/addActionSlots\(\)/g) ?? []).length === 1,
+      "…and there is exactly ONE caller of each, which is why both surfaces agree");
+
+    /* The strip is measured always and drawn only while editing, and the
+     * drop-down's last two cells are deliberately left empty. */
     for (const [w, h, dpr] of [[360, 800, 3], [412, 915, 2], [915, 412, 2], [800, 360, 2]] as const) {
-      const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0, 6);
-      const tag = `${w}x${h}@${dpr}`;
-      for (const [name, r] of [["keysLess", d.keysLess], ["keysMore", d.keysMore]] as const) {
-        ok(r.w > 0 && r.h > 0, `${tag}: ${name} has a box`);
-        ok(Math.min(r.w, r.h) >= MB.TOUCH_MIN_CSS * dpr - 1, `${tag}: …finger-sized`);
+      for (const n of [6, 24]) {
+        const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0, n);
+        const tag = `${w}x${h}@${dpr} n=${n}`;
+        const kb = d.keysBar;
+        ok(kb.h >= MB.TOUCH_MIN_CSS * dpr - 1,
+          `${tag}: the strip is a full fingertip tall, not a fraction of one`);
+        ok(kb.x >= 0 && kb.y >= d.topH
+          && kb.x + kb.w <= Math.round(w * dpr) && kb.y + kb.h <= Math.round(h * dpr),
+          `${tag}: …on the glass and clear of the top strip`);
+        /* Sideways it had to move: the slot column is centred in a band it
+         * nearly fills, so above and below both landed ON the slots. */
+        ok(!d.slots.some((r) => kb.x < r.x + r.w && r.x < kb.x + kb.w
+          && kb.y < r.y + r.h && r.y < kb.y + kb.h),
+          `${tag}: …and never covers a slot, which is the thing it is changing`);
+        /* Its three cells are a minus, a readout and a plus. The two that
+         * matter are the smallest, so they are the ones to measure. */
+        const third = Math.floor((kb.w - 2 * d.gap) / 3);
+        ok(third >= MB.TOUCH_MIN_CSS * dpr - 1,
+          `${tag}: …with the minus and plus each finger-wide (${Math.round(third / dpr)} CSS px)`);
       }
-      /* They are the grid's last two cells — it is 2x5 and eight were spoken
-       * for, so this fills it exactly and costs no room. */
-      const cells = [...d.tabs, d.chat, d.edit, d.look, d.keysLess, d.keysMore];
-      ok(cells.length === 10, `${tag}: the drop-down grid is exactly full`);
-      let clear = true;
-      for (let i = 0; i < cells.length; i++) {
-        for (let j = i + 1; j < cells.length; j++) {
-          const a = cells[i], b = cells[j];
-          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
-        }
-      }
-      ok(clear, `${tag}: …with nothing overlapping`);
+      const d6 = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0, 6);
+      ok([...d6.tabs, d6.chat, d6.edit, d6.look].length === 8,
+        `${w}x${h}@${dpr}: the drop-down keeps its last two cells free for later`);
     }
   }
 
