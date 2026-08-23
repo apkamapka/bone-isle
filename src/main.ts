@@ -2500,6 +2500,18 @@ screen.addEventListener("pointerdown", (e) => {
    * either runs an entry or dismisses itself; `contextMenuTap` decides which,
    * and it is reached through the ordinary click path below. */
   if (ctxMenu) return;
+  /* The picker is modal, and while it is up a press inside its list is a
+   * SCROLL until it proves otherwise. `moved` decides at pointerup: a press
+   * that never travelled is a tap on a row and is handled by the ordinary
+   * click path, which is why nothing is chosen here. */
+  if (assignSlot !== null) {
+    const b = assignBody;
+    if (b && s.x >= b.x && s.x < b.x + b.w && s.y >= b.y && s.y < b.y + b.h && b.max > 0) {
+      assignDrag = { grabY: s.y, from: assignScroll, moved: false };
+      e.preventDefault();
+    }
+    return;
+  }
   // mouse convenience: right-click an action slot to open the rebind picker
   if (e.button === 2) {
     for (const r of actionSlotRects) {
@@ -2654,6 +2666,21 @@ screen.addEventListener("wheel", (e) => {
 let dockDrag: { grabY: number; from: number } | null = null;
 
 screen.addEventListener("pointermove", (e) => {
+  if (assignDrag && assignBody) {
+    const s = toScreen(e);
+    const dy = s.y - assignDrag.grabY;
+    /* Content follows the finger: drag UP and the list moves up, which means
+     * the offset goes DOWN the list. The row height is the ruler, so a finger
+     * travelling one row's worth of pixels moves the list by one row. */
+    const rows = -dy / assignBody.rowH;
+    const want = clamp(Math.round(assignDrag.from + rows), 0, assignBody.max);
+    if (want !== assignScroll) assignScroll = want;
+    /* A few pixels of slop before it counts as a drag, so a tap with a shaky
+     * thumb still binds the row it landed on. */
+    if (Math.abs(dy) > 4 * scale) assignDrag.moved = true;
+    e.preventDefault();
+    return;
+  }
   if (dockDrag && lastDock) {
     const s = toScreen(e);
     /* The thumb travels the band while the content travels the overflow, so
@@ -2736,6 +2763,16 @@ const endDrag = (): void => {
   ui.dragging = false;
 };
 addEventListener("pointerup", (e) => {
+  if (assignDrag) {
+    /* Only a real drag suppresses the click. Suppressing every press would
+     * make the list unscrollable AND unusable, which is worse than either. */
+    if (assignDrag.moved) {
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 0);
+    }
+    assignDrag = null;
+    return;
+  }
   if (dockDrag) { dockDrag = null; ui.dragging = false; }
   if (hudDrag) {
     // tidy up: snap to a pixel grid, magnetize to nearby screen edges
@@ -5121,6 +5158,39 @@ function drawDeck(): void {
       flash(ui.lookMode ? "look mode on — tap anything" : "look mode off", "#8ab6ff");
     } });
     touchButtons.push({ ...lr });
+
+    /* --- how many hotkeys, on the two cells the grid had left ---------------
+     *
+     * On a desktop this lives on the edit strip beside the scale and the
+     * presets. That strip does not exist here: `drawTouchControls` hands the
+     * whole screen to `drawDeck` and returns before reaching it, so the
+     * control Radek was told about was on a surface his phone never draws.
+     * A feature you can only reach on the other device is not shipped.
+     *
+     * Not behind EDIT, either. The deck's layout is fixed — there is nothing
+     * to drag — so edit mode here means only "tap a slot to bind", and hiding
+     * the length behind it would be a second thing to discover before the
+     * first one. The grid is 2x5 and had exactly two cells spare. */
+    const n = actionSlotCount();
+    for (const [rect, label, delta] of [
+      [d.keysLess, `\u2212${ACTION_SLOT_STEP}`, -1],
+      [d.keysMore, `+${ACTION_SLOT_STEP}`, 1],
+    ] as const) {
+      const can = delta < 0 ? n > ACTION_SLOTS_MIN : n < ACTION_SLOTS_MAX;
+      buttonBox(ctx, rect.x, rect.y, rect.w, rect.h, scale, {});
+      hudText(h, label, rect.x + rect.w / 2, rect.y + rect.h * 0.4, u * 0.24,
+        can ? "#e9e2c8" : "rgba(233,226,200,.3)", "center", true, rect.w - u * 0.08);
+      /* The current length under the button, because the flash is gone in two
+       * seconds and "how many do I have" is the question you are answering. */
+      hudText(h, `${n} keys`, rect.x + rect.w / 2, rect.y + rect.h * 0.72, u * 0.17,
+        "rgba(220,214,190,.55)", "center", false, rect.w - u * 0.08);
+      hotspots.push({ x: rect.x, y: rect.y, w: rect.w, h: rect.h, fn: () => {
+        const ok = delta < 0 ? removeActionSlots() : addActionSlots();
+        if (ok) { flash(`${actionSlotCount()} hotkeys`, "#8ab6ff"); saveGame(game); }
+        else flash(delta < 0 ? `${ACTION_SLOTS_MIN} is the fewest` : `${ACTION_SLOTS_MAX} is the most`, "#e0a06a");
+      } });
+      touchButtons.push({ ...rect });
+    }
   }
   /* Empty slots are drawn on the deck even out of edit mode, unlike the old
    * floating HUD which hid them. A row with holes in it is a row you have to
@@ -5582,9 +5652,29 @@ function drawTouchControls(): void {
 /** How far the rebind picker's list is scrolled, in rows. */
 let assignScroll = 0;
 
+/**
+ * Where the picker's scrollable body is, and how tall a row is, recorded as it
+ * draws.
+ *
+ * The pointer handlers need both to turn a drag into rows, and they run long
+ * before the draw does. Publishing the geometry is the same trick the docked
+ * column uses for its own thumb.
+ */
+let assignBody: { x: number; y: number; w: number; h: number; rowH: number; max: number } | null = null;
+
+/**
+ * A finger dragging the picker's list.
+ *
+ * Necessary, not a nicety. The list is the only scrolling thing in the game a
+ * phone could not scroll: the world has a joystick, panels have their own
+ * scroll bars sized for a thumb, and this had a nine-pixel arrow. Radek could
+ * see seventy crystals and reach the first fourteen.
+ */
+let assignDrag: { grabY: number; from: number; moved: boolean } | null = null;
+
 /** The rebind picker overlay: choose what an action slot triggers. */
 function drawAssignPicker(): void {
-  if (assignSlot === null) return;
+  if (assignSlot === null) { assignBody = null; return; }
   const slotIdx = assignSlot;
   const ctx = sctx;
   const S = scale;
@@ -5652,8 +5742,21 @@ function drawAssignPicker(): void {
   ctx.font = `bold ${Math.round(11 * S)}px 'Courier New',monospace`;
   ctx.fillText(`Bind slot ${slotIdx + 1}`, x + w / 2, y + 14 * S);
   let ry = y + 26 * S;
+  /* Published for the pointer handlers, which run long before this does. The
+   * body is the row area only — the title is not draggable, so a press there
+   * still falls through to the scrim and closes the dialog. */
+  assignBody = {
+    x: x + 6 * S, y: ry, w: w - 12 * S, h: shown * rowH,
+    rowH, max: Math.max(0, rows.length - shown),
+  };
   if (rows.length > shown) {
-    const sbw = 9 * S;
+    /* Arrows sized for whatever is pointing at them. Nine pixels is a mouse
+     * target; on a phone `S` is the world's small ruler and nine of them is a
+     * speck, which is how this list ended up unscrollable on the one device
+     * that has no wheel. */
+    const sbw = deck.on
+      ? Math.max(9 * S, Math.round(TOUCH_MIN_CSS * Math.min(devicePixelRatio || 1, 2) * 0.8))
+      : 9 * S;
     const sx = x + w - sbw - 4 * S;
     const arrow = (dir: -1 | 1, ay: number, can: boolean): void => {
       buttonBox(ctx, sx, ay, sbw, sbw, S, { accent: can ? CHROME.gold : undefined });
