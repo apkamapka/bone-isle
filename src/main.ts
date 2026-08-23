@@ -5589,40 +5589,58 @@ function drawTouchControls(): void {
     });
   }
 
-  // --- edit strip: scale, presets, reset — pinned top-center while editing ---
+  /* --- edit strip, pinned top-centre while editing -------------------------
+   *
+   * WHAT IS AND IS NOT ON IT DEPENDS ON WHETHER THE COLUMN IS UP.
+   *
+   * The scale stepper and the three presets move and size the FLOATING HUD —
+   * the draggable vitals, panel buttons and loose slot squares. Those only
+   * exist when there is no docked column; with the column up the same widgets
+   * live inside it at the column's own fixed unit, and neither control has
+   * anything to act on. Radek called the whole strip redundant on a desktop,
+   * and on a docked one that was not a preference, it was true: four buttons
+   * and three presets that visibly did nothing when pressed.
+   *
+   * So they are drawn where they work and absent where they do not. The
+   * hotkey count is the exception and is always here, because the bar exists
+   * on both. */
   if (editing) {
     const btnH = bs * 0.5;
     const sq = bs * 0.55;
-    const pctW = bs * 1.1;
-    const row1W = sq * 2 + pctW + bs * 1.3 + gap * 3;
-    let ex = clamp((sw - row1W) / 2, m, sw - row1W - m);
-    const ey = m + 2 * scale;
-    hudBtn(ex, ey, sq, btnH, "−", false, () => { stepHudUserScale(-1); saveHudLayout(); });
-    ex += sq + gap;
-    slotCell(sctx, ex, ey, pctW, btnH, scale, { face: "rgba(16,26,24,.85)" });
-    sctx.textAlign = "center";
-    sctx.textBaseline = "middle";
-    sctx.fillStyle = "#e9e2c8";
-    sctx.font = `bold ${Math.round(btnH * 0.42)}px 'Courier New',monospace`;
-    sctx.fillText(`${Math.round(u * 100)}%`, ex + pctW / 2, ey + btnH / 2);
-    ex += pctW + gap;
-    hudBtn(ex, ey, sq, btnH, "+", false, () => { stepHudUserScale(1); saveHudLayout(); });
-    ex += sq + gap;
-    hudBtn(ex, ey, bs * 1.3, btnH, "RESET", false, () => {
-      resetHudLayout();
-      flash("HUD layout reset", "#8ab6ff");
-    });
-    // presets row
-    const pw3 = bs * 1.5;
-    const row2W = pw3 * 3 + gap * 2;
-    let px2 = clamp((sw - row2W) / 2, m, sw - row2W - m);
-    const py2 = ey + btnH + gap;
-    for (const [label, name] of [["CLASSIC", "classic"], ["COMPACT", "compact"], ["LEFTY", "lefty"]] as const) {
-      hudBtn(px2, py2, pw3, btnH, label, false, () => {
-        applyHudPreset(name);
-        flash(`preset: ${label.toLowerCase()}`, "#8ab6ff");
+    let rowY = m + 2 * scale;
+
+    if (!docked) {
+      const pctW = bs * 1.1;
+      const row1W = sq * 2 + pctW + bs * 1.3 + gap * 3;
+      let ex = clamp((sw - row1W) / 2, m, sw - row1W - m);
+      hudBtn(ex, rowY, sq, btnH, "\u2212", false, () => { stepHudUserScale(-1); saveHudLayout(); });
+      ex += sq + gap;
+      slotCell(sctx, ex, rowY, pctW, btnH, scale, { face: "rgba(16,26,24,.85)" });
+      sctx.textAlign = "center";
+      sctx.textBaseline = "middle";
+      sctx.fillStyle = "#e9e2c8";
+      sctx.font = `bold ${Math.round(btnH * 0.42)}px 'Courier New',monospace`;
+      sctx.fillText(`${Math.round(u * 100)}%`, ex + pctW / 2, rowY + btnH / 2);
+      ex += pctW + gap;
+      hudBtn(ex, rowY, sq, btnH, "+", false, () => { stepHudUserScale(1); saveHudLayout(); });
+      ex += sq + gap;
+      hudBtn(ex, rowY, bs * 1.3, btnH, "RESET", false, () => {
+        resetHudLayout();
+        flash("HUD layout reset", "#8ab6ff");
       });
-      px2 += pw3 + gap;
+      rowY += btnH + gap;
+
+      const pw3 = bs * 1.5;
+      const row2W = pw3 * 3 + gap * 2;
+      let px2 = clamp((sw - row2W) / 2, m, sw - row2W - m);
+      for (const [label, name] of [["CLASSIC", "classic"], ["COMPACT", "compact"], ["LEFTY", "lefty"]] as const) {
+        hudBtn(px2, rowY, pw3, btnH, label, false, () => {
+          applyHudPreset(name);
+          flash(`preset: ${label.toLowerCase()}`, "#8ab6ff");
+        });
+        px2 += pw3 + gap;
+      }
+      rowY += btnH + gap;
     }
 
     /* --- how many hotkeys --------------------------------------------------
@@ -5639,29 +5657,31 @@ function drawTouchControls(): void {
     const countW = bs * 1.5;
     const row3W = sq * 2 + countW + gap * 2;
     let px3 = clamp((sw - row3W) / 2, m, sw - row3W - m);
-    const py3 = py2 + btnH + gap;
-    const canLess = n > ACTION_SLOTS_MIN;
     /* Refused rather than silently ignored, inside `stepHotkeyRows`: the floor
      * exists because a hotbar of zero is not a smaller hotbar, it is a missing
      * one, and a button that does nothing without saying why is a bug report. */
-    hudBtn(px3, py3, sq, btnH, "\u2212", false, () => stepHotkeyRows(-1), !canLess);
+    hudBtn(px3, rowY, sq, btnH, "\u2212", false, () => stepHotkeyRows(-1), n <= ACTION_SLOTS_MIN);
     px3 += sq + gap;
-    slotCell(sctx, px3, py3, countW, btnH, scale, { face: "rgba(16,26,24,.85)" });
+    slotCell(sctx, px3, rowY, countW, btnH, scale, { face: "rgba(16,26,24,.85)" });
     sctx.textAlign = "center";
     sctx.textBaseline = "middle";
     sctx.fillStyle = "#e9e2c8";
     sctx.font = `bold ${Math.round(btnH * 0.42)}px 'Courier New',monospace`;
-    sctx.fillText(`${n} KEYS`, px3 + countW / 2, py3 + btnH / 2);
+    sctx.fillText(`${n} KEYS`, px3 + countW / 2, rowY + btnH / 2);
     px3 += countW + gap;
-    const canMore = n < ACTION_SLOTS_MAX;
-    hudBtn(px3, py3, sq, btnH, "+", false, () => stepHotkeyRows(1), !canMore);
+    hudBtn(px3, rowY, sq, btnH, "+", false, () => stepHotkeyRows(1), n >= ACTION_SLOTS_MAX);
 
-    const hy = clamp(py3 + btnH + gap, m, sh - m);
+    /* The hint names only what is actually on screen. "Drag handles" with the
+     * column up would be pointing at handles that are not there. */
+    const hy = clamp(rowY + btnH + gap, m, sh - m);
     sctx.textAlign = "center";
     sctx.textBaseline = "middle";
     sctx.fillStyle = "rgba(207,232,210,.85)";
     sctx.font = `${Math.round(9 * scale)}px 'Courier New',monospace`;
-    sctx.fillText(`drag handles \u00b7 tap a slot to bind \u00b7 \u00b1${ACTION_SLOT_STEP} hotkeys`, sw / 2, hy);
+    sctx.fillText(docked
+      ? `click a slot to bind \u00b7 \u00b1${ACTION_SLOT_STEP} hotkeys`
+      : `drag handles \u00b7 click a slot to bind \u00b7 \u00b1${ACTION_SLOT_STEP} hotkeys`,
+      sw / 2, hy);
   }
 }
 

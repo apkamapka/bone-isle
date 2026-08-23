@@ -10803,9 +10803,25 @@ async function main(): Promise<void> {
     /* The control lives with the layout, because "how many buttons" and
      * "where the buttons go" are the same question asked twice. */
     ok(main.includes("`${n} KEYS`"), "edit mode shows the current length");
-    ok(main.includes("() => stepHotkeyRows(-1), !canLess)")
-      && main.includes("() => stepHotkeyRows(1), !canMore)"),
+    ok(main.includes("() => stepHotkeyRows(-1), n <= ACTION_SLOTS_MIN)")
+      && main.includes("() => stepHotkeyRows(1), n >= ACTION_SLOTS_MAX)"),
       "…with a minus and a plus beside it, both going through the one function");
+
+    /* The scale stepper and the presets move the FLOATING HUD, which does not
+     * exist while the column is up — so with the dock on they were four
+     * buttons and three presets that visibly did nothing when pressed. They
+     * are drawn where they act and absent where they do not; the hotkey count
+     * is always there, because the bar exists on both. */
+    const strip = main.slice(main.indexOf("if (editing) {\n    const btnH = bs * 0.5;"),
+      main.indexOf("function drawAssignPicker"));
+    ok(strip.includes("if (!docked) {"), "the edit strip hides what the dock makes meaningless");
+    ok(strip.indexOf("stepHudUserScale(-1)") > strip.indexOf("if (!docked) {")
+      && strip.indexOf('"CLASSIC"') > strip.indexOf("if (!docked) {"),
+      "…namely the scale stepper and the three presets");
+    ok(strip.indexOf("stepHotkeyRows(-1)") > strip.indexOf("rowY += btnH + gap;\n    }"),
+      "…while the hotkey count sits outside that branch and always draws");
+    ok(strip.includes("sctx.fillText(docked"),
+      "…and the hint names only what is on screen, not handles that are not there");
     ok(main.includes('flash(delta < 0 ? `${ACTION_SLOTS_MIN} is the fewest`'),
       "…which say why when they refuse, rather than vanishing at the limit");
     ok(main.includes("dim = false,"), "…and are drawn dim there instead of disappearing");
