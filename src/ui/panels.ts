@@ -37,17 +37,28 @@ import { drawResizeArrows } from "./icons.ts";
 /**
  * Window kinds that may take the phone's side strip.
  *
- * Packs you carry, and nothing else. A corpse is deliberately absent: world
- * loot is a thing you empty and walk away from, so it wants a wide, short,
- * throwaway sheet rather than the tall column you keep open all game.
+ * Packs you CARRY, and nothing else.
  *
- * "bag" being in this set is the whole fix. The strip used to look for
- * `kind === "container"`, which is what a nested pack opens as — but the
- * backpack itself, opened from the tab, is `kind === "bag"`. So the first pack
- * never qualified and the strip went to the SECOND one, which is exactly
+ * A corpse is deliberately absent: world loot is a thing you empty and walk
+ * away from, so it wants a wide, short, throwaway sheet rather than the tall
+ * column you keep open all game.
+ *
+ * A Storage Chest used to be in here and was exactly the same mistake wearing
+ * furniture. Radek found it by opening one with no pack open: with nothing
+ * else to claim the strip the chest took it, and a fifty-slot grid squeezed
+ * into a one-column ruler is the unreadable postage stamp in the corner of
+ * that screenshot. With a pack already open the chest fell through to a sheet
+ * and looked fine — which is why it survived this long. The test is not "is
+ * it a container", it is "do I keep this open while I play": a chest is
+ * somewhere you go, like a corpse, not something you carry.
+ *
+ * "bag" being in this set is the other half of the rule. The strip used to
+ * look for `kind === "container"`, which is what a nested pack opens as — but
+ * the backpack itself, opened from the tab, is `kind === "bag"`. So the first
+ * pack never qualified and the strip went to the SECOND one, which is exactly
  * backwards from what it is for.
  */
-export const STRIP_KINDS: ReadonlySet<string> = new Set(["bag", "container", "stash"]);
+export const STRIP_KINDS: ReadonlySet<string> = new Set(["bag", "container"]);
 
 /**
  * Which open window holds the side strip: the earliest one OPENED, not the

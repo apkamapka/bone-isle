@@ -8878,6 +8878,18 @@ async function main(): Promise<void> {
 
     ok(PN.stripCandidate([mk("loot", 0), bag] as never) === bag,
       "a corpse never takes the strip, even when it was opened first");
+
+    /* Nor a Storage Chest, and this one had to be found by playing. With a
+     * pack already open the chest fell through to a sheet and looked right;
+     * with NOTHING open it took the strip, and a fifty-slot grid squeezed
+     * into a one-column ruler is an unreadable stamp in the corner. The test
+     * is not "is it a container" but "do I keep this open while I play". */
+    ok(PN.stripCandidate([mk("stash", 0), bag] as never) === bag,
+      "a storage chest never takes the strip either, even opened first…");
+    ok(PN.stripCandidate([mk("stash", 0)] as never) === undefined,
+      "…and alone it takes NO strip, so it opens as the full-width sheet it needs");
+    ok(PN.stripCandidate([mk("floor", 0)] as never) === undefined,
+      "…same for a bag left lying on the ground: somewhere you go, not something you carry");
     ok(PN.stripCandidate([mk("shop", 0), mk("skills", 1)] as never) === undefined,
       "…nor does anything that is not a pack");
     ok(PN.stripCandidate([mk("bag", 0, { stripOut: true }), sub] as never) === sub,
@@ -9220,10 +9232,8 @@ async function main(): Promise<void> {
       "…and off the strip the saved row preference is untouched");
     ok(panels.includes("const room = Math.floor((p.strip.h - chrome + gap) / (cell + gap));"),
       "…while in it the rows are however many the strip is tall enough to hold");
-    ok(panels.includes('new Set(["bag", "container", "stash"])'),
+    ok(panels.includes('new Set(["bag", "container"])'),
       "the strip takes PACKS — and \"bag\" is in the set, which is the whole point");
-    ok(!panels.includes('STRIP_KINDS: ReadonlySet<string> = new Set(["bag", "container", "stash", "loot"'),
-      "…but never a corpse: world loot is emptied and abandoned, not kept open all game");
     ok(main.includes("win.stripOut = true;"),
       "…and dragging it tears it out into an ordinary sheet, so nothing on the phone refuses the finger");
     ok(main.includes("return stripCandidate(ui.windows) ? stripRect(deck, stripAway ? 1 : 0) : null;"),
