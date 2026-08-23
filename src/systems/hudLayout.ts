@@ -20,11 +20,26 @@
  */
 import { clamp } from "../util.ts";
 
-export type HudGroup =
-  | "vitals" | "panels" | "swap"
-  | "slot0" | "slot1" | "slot2" | "slot3" | "slot4" | "slot5";
+/**
+ * A draggable HUD group.
+ *
+ * The slots run to the hotbar's MAXIMUM, not its current length, because a
+ * position is a place the player put something: shorten the bar, lengthen it
+ * again, and slot 9 has to come back where it was rather than in the middle
+ * of the map. Positions for rows that are not currently shown cost two
+ * numbers each and are never read.
+ */
+export type SlotGroup = `slot${number}`;
+export type HudGroup = "vitals" | "panels" | "swap" | SlotGroup;
+
+/** Kept in step with ACTION_SLOTS_MAX in systems/actions.ts. */
+const MAX_SLOTS = 24;
+/** How many slots sit in one row of the layout presets below. */
+const ROW = 6;
+
 export const HUD_GROUPS: readonly HudGroup[] = [
-  "vitals", "panels", "swap", "slot0", "slot1", "slot2", "slot3", "slot4", "slot5",
+  "vitals", "panels", "swap",
+  ...Array.from({ length: MAX_SLOTS }, (_, i) => `slot${i}` as HudGroup),
 ];
 
 export type HudOrient = "portrait" | "landscape";
@@ -60,7 +75,16 @@ function classicPos(): PosMap {
     panels: { x: 0.86, y: 0.48 },
     swap: { x: 0.78, y: 0.72 },
   } as PosMap;
-  for (let i = 0; i < 6; i++) pos[`slot${i}` as HudGroup] = { x: 0.15 + i * 0.125, y: 0.88 };
+  /* Rows stack UPWARD from the original line. The first six keep the exact
+   * places they have always had, so adding a row moves nothing the player had
+   * already learned — the new one appears above, out of the way of the thumb
+   * that was already resting on the old one. */
+  for (let i = 0; i < MAX_SLOTS; i++) {
+    pos[`slot${i}` as HudGroup] = {
+      x: 0.15 + (i % ROW) * 0.125,
+      y: 0.88 - Math.floor(i / ROW) * 0.08,
+    };
+  }
   return pos;
 }
 
@@ -74,9 +98,14 @@ function compactPos(o: HudOrient): PosMap {
     } as PosMap;
     // 2 columns x 3 rows above the swap button
     const xs = [0.62, 0.81];
-    const ys = [0.52, 0.63, 0.74];
-    for (let i = 0; i < 6; i++) {
-      pos[`slot${i}` as HudGroup] = { x: xs[i % 2], y: ys[Math.floor(i / 2)] };
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      /* Two columns marching up the right edge. Generated rather than listed
+       * so a row added in actions.ts cannot leave slots stacked on top of one
+       * another at whatever the last hand-written coordinate was. */
+      pos[`slot${i}` as HudGroup] = {
+        x: xs[i % 2],
+        y: clamp(0.74 - Math.floor(i / 2) * 0.11, 0.02, 0.92),
+      };
     }
     return pos;
   }
@@ -87,9 +116,11 @@ function compactPos(o: HudOrient): PosMap {
   } as PosMap;
   // 3 columns x 2 rows in the bottom-right corner
   const xs = [0.64, 0.75, 0.86];
-  const ys = [0.56, 0.76];
-  for (let i = 0; i < 6; i++) {
-    pos[`slot${i}` as HudGroup] = { x: xs[i % 3], y: ys[Math.floor(i / 3)] };
+  for (let i = 0; i < MAX_SLOTS; i++) {
+    pos[`slot${i}` as HudGroup] = {
+      x: xs[i % 3],
+      y: clamp(0.76 - Math.floor(i / 3) * 0.2, 0.02, 0.92),
+    };
   }
   return pos;
 }
@@ -149,8 +180,11 @@ function readPosMap(into: PosMap, data: unknown): void {
   // migrate a pre-per-slot layout: spread the six slots from the old bar anchor
   const legacy = src.actions;
   if (legacy && typeof legacy.x === "number" && typeof legacy.y === "number" && !src.slot0) {
-    for (let i = 0; i < 6; i++) {
-      into[`slot${i}` as HudGroup] = { x: clamp(legacy.x + i * 0.125, 0, 1), y: clamp(legacy.y, 0, 1) };
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      into[`slot${i}` as HudGroup] = {
+        x: clamp(legacy.x + (i % ROW) * 0.125, 0, 1),
+        y: clamp(legacy.y - Math.floor(i / ROW) * 0.08, 0, 1),
+      };
     }
   }
 }
