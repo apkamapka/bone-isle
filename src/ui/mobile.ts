@@ -123,6 +123,17 @@ export interface MobileLayout {
    * for the case the log cannot cover — a silent world with nothing to tap.
    */
   chat: Rect;
+  /**
+   * The LOOK toggle: tap a thing, read what it is.
+   *
+   * A MODE rather than a menu entry, and only on this interface. The long
+   * press that opens the world menu ends with a fingertip resting on the very
+   * thing being described and a menu unfolding over what is left of it — the
+   * one verb whose entire job is "let me see that" is the one verb a finger
+   * cannot afford. A toggle costs one tap up front and then leaves the screen
+   * alone, so the answer arrives in the log with nothing on top of it.
+   */
+  look: Rect;
   /** Minimap, square, at the right end of the utility row. */
   minimap: Rect;
   /**
@@ -177,7 +188,7 @@ export function noDeck(screenH = 0): MobileLayout {
   return {
     on: false, landscape: false, u: 0, gap: 0, margin: 0,
     topH: 0, info: z, vitals: z, purse: z,
-    menu: z, edit: z, swap: z, chase: z, atk: z, skull: z, chat: z, minimap: z, tabs: [],
+    menu: z, edit: z, swap: z, chase: z, atk: z, skull: z, chat: z, look: z, minimap: z, tabs: [],
     deckY: screenH, deckH: 0, slots: [],
     mapTop: 0, mapBottom: screenH, mapLeft: 0, mapRight: 0, sheet: z,
   };
@@ -267,6 +278,7 @@ export function mobileLayout(
   const tabs: Rect[] = DECK_TABS.map((_, i) => cell(i));
   const chat: Rect = cell(DECK_TABS.length);
   const edit: Rect = cell(DECK_TABS.length + 1);
+  const look: Rect = cell(DECK_TABS.length + 2);
 
   /* --- thumb deck: the six slots, and nothing else ------------------------ */
   const slotH = Math.round(u * 1.02);
@@ -295,7 +307,7 @@ export function mobileLayout(
   return {
     on: true, landscape: false, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, skull, chat, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, look, minimap, tabs,
     deckY, deckH, slots,
     mapTop, mapBottom, mapLeft: 0, mapRight: screenW, sheet,
   };
@@ -411,6 +423,7 @@ function landscapeLayout(
   const tabs: Rect[] = DECK_TABS.map((_, i) => cell(i));
   const chat: Rect = cell(DECK_TABS.length);
   const edit: Rect = cell(DECK_TABS.length + 1);
+  const look: Rect = cell(DECK_TABS.length + 2);
 
   /* A panel takes a LANE of the map rather than a band across it — width is
    * what this orientation has spare, so spending width is what costs least. */
@@ -419,7 +432,7 @@ function landscapeLayout(
   return {
     on: true, landscape: true, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, skull, chat, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, look, minimap, tabs,
     deckY: screenH, deckH: 0, slots,
     mapTop, mapBottom, mapLeft, mapRight, sheet,
   };

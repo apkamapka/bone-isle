@@ -44,6 +44,29 @@ const SRC: Record<SceneryKind, string> = {
  * of stonework and has to seal all four, or the player walks into the middle
  * of it. The sprite is centred over the block, not over the corner tile.
  */
+/**
+ * What each of these is CALLED, for the look.
+ *
+ * Kept here beside the footprint rather than in the look code: the two facts
+ * about a piece of scenery that anything outside this file ever needs are how
+ * big it is and what to call it, and splitting them across two modules is how
+ * a new kind arrives with a size and no name.
+ */
+export const SCENERY_NAME: Record<SceneryKind, string> = {
+  skullPole: "a skull totem",
+  deadTree: "a dead tree",
+  felledTree: "a felled tree",
+  well: "a well",
+  tent: "a tent",
+  boulderA: "a boulder",
+  boulderB: "a boulder",
+  barn: "a barn",
+  houseA: "a house",
+  houseB: "a house",
+  smithy: "a smithy",
+  windmill: "a windmill",
+};
+
 export const FOOTPRINT: Record<SceneryKind, { w: number; h: number }> = {
   skullPole: { w: 1, h: 1 },
   deadTree: { w: 1, h: 1 },

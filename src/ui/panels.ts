@@ -21,7 +21,7 @@ import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
 import { bestTier } from "../systems/building.ts";
 import { smeltYield, canSmelt, COAL_PER_SMELT, GEM_TROPHIES, GEM_TROPHY_KINDS, GEM_COAL } from "../systems/smelt.ts";
-import type { EqSlot, ItemKind, ItemStack, Recipe, Bag } from "../items.ts";
+import type { EqSlot, ItemKind, Recipe, Bag } from "../items.ts";
 import type { Corpse, GroundItem, Npc, Structure } from "../world/types.ts";
 import type { ContainerRef } from "../systems/containers.ts";
 import { slotsOf, stackAt, baseOf, rootOf } from "../systems/containers.ts";
@@ -818,73 +818,33 @@ function icon(p: PanelInput, spr: HTMLCanvasElement, x: number, y: number, sc: n
   p.hud.ctx.drawImage(spr, x, y, iconW(spr, sc), iconH(spr, sc));
 }
 
-/** Set each frame by whichever slot the mouse is over; drawn as a hover tooltip. */
-let tooltipKind: ItemKind | null = null;
-/** The actual stack the tooltip is describing, when the hover was over one.
- *  Containers need it: their weight is not a property of their KIND. */
-let tooltipStack: ItemStack | null = null;
-
-/** A small "Look" toggle in the panel body; taps describe items when it's on. */
 /**
- * The Look toggle, on the title bar.
+ * REMOVED: the hover tooltip.
  *
- * It used to sit at y+15S — one row under the bar and directly over the first
- * row of slots, which is what made it look like it had escaped the frame. On
- * the bar it overlaps nothing, costs no height (which matters in a column),
- * and sits with the other mode buttons where a toggle belongs.
+ * Resting the mouse on a bag slot used to pop a card with the item's weight
+ * and value. It was cheap to add and it is wrong: a card appears over your
+ * inventory every time the cursor crosses it on the way somewhere else, so
+ * the information you did not ask for covers the slots you were reaching
+ * for. Looking is a thing you DO — right-click, Look — not a thing that
+ * happens to you for moving a mouse.
+ *
+ * The card itself is unchanged and still lives in `drawInspect`; only the way
+ * in changed. What follows the removal is that the panels no longer need to
+ * know where the cursor is in order to describe things, which is why the
+ * queue variables are gone rather than merely unset.
  */
-function lookToggle(p: PanelInput, x: number, y: number, w: number): void {
-  const { ctx, scale: S } = p.hud;
-  const bw = 26 * S;
-  const bh = 10 * S;
-  const bx = x + w - bw - 60 * S; // clear of the −/+/▾/× cluster on the right
-  const by = y + 2 * S;
-  const on = p.ui.lookMode;
-  buttonBox(ctx, bx, by, bw, bh, S, {
-    on, face: on ? "rgba(90,161,232,.85)" : undefined,
-    hover: hovering(p, bx, by, bw, bh), accent: on ? "#cfe8ff" : undefined,
-  });
-  hudText(p.hud, "Look", bx + bw / 2, by + bh / 2, 6.5 * S, on ? "#0b2036" : "#cfa86a", "center", true, bw - 2 * S);
-  p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.toggleLook() });
-  /* Carve it out of the drag region, or pressing it just moves the window:
-   * the title bar is grabbed on pointerdown, long before hotspots are read. */
-  const tb = p.win.titleBar;
-  if (tb) {
-    const cut = tb.x + tb.w - bx;
-    if (cut > 0) tb.w = Math.max(0, tb.w - cut);
-  }
-}
-
-/** Draw the queued hover tooltip (if any) near the cursor, then clear it. */
-function drawItemTooltip(base: Omit<PanelInput, "win">): void {
-  if (!tooltipKind) return;
-  const kind = tooltipKind;
-  const stack = tooltipStack;
-  tooltipKind = null;
-  tooltipStack = null;
-  const { ctx, scale: S, screenW, screenH } = base.hud;
-  const lines = itemInfoLines(kind, stack);
-  const title = ITEMS[kind].name;
-  const fs = 7 * S;
-  ctx.font = `${fs}px monospace`;
-  let tw = ctx.measureText(title).width;
-  for (const l of lines) tw = Math.max(tw, ctx.measureText(l).width);
-  const pad = 6 * S;
-  const w = tw + pad * 2;
-  const h = pad * 2 + (lines.length + 1) * (fs + 2 * S);
-  let x = base.mouse.sx + 12 * S;
-  let y = base.mouse.sy + 12 * S;
-  if (x + w > screenW) x = screenW - w - 4 * S;
-  if (y + h > screenH) y = screenH - h - 4 * S;
-  popupFrame(ctx, x, y, w, h, S, "rgba(22,17,10,.96)");
-  let ly = y + pad + fs / 2;
-  hudText(base.hud, title, x + pad, ly, fs, "#ffe9a8", "left", true);
-  ly += fs + 2 * S;
-  for (const l of lines) {
-    hudText(base.hud, l, x + pad, ly, fs, "#d7d2c0", "left");
-    ly += fs + 2 * S;
-  }
-}
+/*
+ * REMOVED: the Look toggle that sat on every container's title bar.
+ *
+ * It was the third way into the same mode — the L key, this button, and now
+ * the drop-down's LOOK on a phone and right-click → Look on a desktop. Three
+ * doors into one room, each with its own hit box carved out of the title
+ * bar's drag region, and one of them repeated on every open window.
+ *
+ * The mode itself is alive and is reached the two ways above; only the button
+ * is gone. `p.act.toggleLook` stays in the action set because the L key still
+ * calls it.
+ */
 
 /** Centered inspect popup (mobile/keyboard Look). Tap it or press Esc to close. */
 function drawInspect(base: Omit<PanelInput, "win">): void {
@@ -1134,7 +1094,6 @@ export function drawPanels(
   }
   hud.scale = origScale;
   if (base.ui.placing) drawPlacingHint(full);
-  drawItemTooltip(full);
   drawInspect(full);
   drawSplit(full);
 }
@@ -1396,7 +1355,6 @@ function drawEquip(p: PanelInput): void {
        * be permanent. */
       p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, index: 0, kind: "backpack", n: worn ? 1 : 0, eqSlot: "pack" });
       if (worn) {
-        if (hovering(p, cx, cy, slot, slot)) { tooltipKind = worn.kind; tooltipStack = worn; }
         const used = (worn.items ?? []).filter((q) => q !== null).length;
         hudText(hud, `${used}/${worn.items?.length ?? 0}`, cx + slot - 3 * S, cy + 9 * S, 6 * S, "#ffe9a8", "right");
         p.hotspots.push({ x: cx, y: cy, w: slot, h: slot,
@@ -1419,7 +1377,6 @@ function drawEquip(p: PanelInput): void {
       if (ammoKind) {
         const n = bagCount(player.bag, ammoKind);
         hudText(hud, `${n}`, cx + slot - 3 * S, cy + slot - 6 * S, 7 * S, "#ffe9a8", "right");
-        if (hovering(p, cx, cy, slot, slot)) tooltipKind = ammoKind;
       }
       // Clicking cycles through the ammo actually in the bag. Look mode still
       // inspects, so the slot never stops being readable.
@@ -1444,7 +1401,6 @@ function drawEquip(p: PanelInput): void {
     if (equipped) {
       const spr = itemSprite(equipped);
       icon(p, spr, cx + (slot - iconW(spr, 2 * S)) / 2, cy + (slot - iconH(spr, 2 * S)) / 2 - 3 * S, 2 * S);
-      if (hovering(p, cx, cy, slot, slot)) tooltipKind = equipped;
       const eqk = equipped;
       // register as a draggable item cell so worn gear can be dragged straight
       // to the ground / bag / storage chest, exactly like a backpack item
@@ -1516,7 +1472,6 @@ function drawBag(p: PanelInput): void {
   const h = 20 * S + rows * cell + (rows - 1) * gap + 20 * S + RESIZE_BAR * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "BACKPACK")) return;
-  lookToggle(p, x, y, w);
   /* No gold line here any more. Money is coins in these very cells now, so a
    * separate total would be printing the same thing twice — and worse, in a
    * different unit: the row said "3157 gold" while the slot beside it said 31,
@@ -1551,7 +1506,6 @@ function drawBag(p: PanelInput): void {
         hudText(hud, `${used}/${stackSlot.items.length}`, cx + cell / 2, cy + cell - 4 * S, 6 * S,
           used >= stackSlot.items.length ? "#d96a5a" : "rgba(220,214,190,.75)", "center");
       }
-      if (hov) { tooltipKind = stackSlot.kind; tooltipStack = stackSlot; }
       const def = ITEMS[stackSlot.kind];
       const idx = i;
       const k = stackSlot.kind;
@@ -2382,7 +2336,6 @@ function drawGrid(
         hudText(hud, `${used}/${slot.items.length}`, cx + cell / 2, cy + cell - 4 * S, 6 * S,
           used >= slot.items.length ? "#d96a5a" : "rgba(220,214,190,.75)", "center");
       }
-      if (hov) { tooltipKind = slot.kind; tooltipStack = slot; }
       const idx = i;
       const kind = slot.kind;
       const nested = isContainer(kind);

@@ -166,7 +166,17 @@ export function loadHudLayout(): void {
   if (raw) {
     try {
       const data = JSON.parse(raw) as Partial<HudLayoutState>;
-      if (typeof data.locked === "boolean") state.locked = data.locked;
+      /* `locked` is deliberately NOT read back.
+       *
+       * Edit mode is a mode you are IN, not a setting you have. It disables
+       * walking — that is the point, you are arranging the row your thumb
+       * walks with — so a session that ends inside it hands the next one a
+       * game where the character will not move and nothing on screen says
+       * why. Radek hit exactly that, and a new player hitting it has no way
+       * to know the word EDIT is what is holding them still.
+       *
+       * The layout it produced is a preference and is loaded below. Being
+       * mid-edit is not, and boots off every time. */
       if (typeof data.scale === "number") state.scale = clamp(data.scale, HUD_SCALE_MIN, HUD_SCALE_MAX);
       if (typeof data.menuOpen === "boolean") state.menuOpen = data.menuOpen;
       if (data.pos) {
@@ -188,7 +198,7 @@ export function loadHudLayout(): void {
   if (!rawV1) return;
   try {
     const data = JSON.parse(rawV1) as { locked?: unknown; pos?: unknown };
-    if (typeof data.locked === "boolean") state.locked = data.locked;
+    // `locked` skipped here too — see the note in the v2 branch above.
     if (data.pos) {
       readPosMap(state.pos.portrait, data.pos);
       readPosMap(state.pos.landscape, data.pos);

@@ -3,9 +3,10 @@ import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HO
 import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers, isSafeTile } from "./world/collision.ts";
 import { carryCap, carriedWeight } from "./entities/player.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, chebToPoint, type Occupied } from "./world/grid.ts";
+import { nearestHit, footprintHit } from "./world/pick.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx/fireSheet.ts";
-import { scenerySprite, FOOTPRINT } from "./gfx/sceneryArt.ts";
+import { scenerySprite, FOOTPRINT, SCENERY_NAME } from "./gfx/sceneryArt.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
 import { itemSprite } from "./gfx/itemArt.ts";
@@ -1942,6 +1943,14 @@ function titleCase(k: string): string {
  * the right shape for a phone: a popup would cover the thing being looked at.
  * It also gives the log its first job that is not a warning.
  */
+/** What a structure is called, tier and all. */
+function structureName(s: Structure): string {
+  const def = STRUCTS[s.key as keyof typeof STRUCTS];
+  if (!def) return s.key === "treasure" ? "a treasure chest" : "something built here";
+  const tier = (s.tier ?? 1) > 1 ? ` (tier ${s.tier})` : "";
+  return `${def.name}${tier}`;
+}
+
 /**
  * Is that tile the one the player is standing on?
  *
@@ -1963,8 +1972,6 @@ function lookAtTile(at: Vec): void {
   const world = cw();
   const tx = toTile(at.x);
   const ty = toTile(at.y);
-  const near = (ex: number, ey: number): boolean =>
-    Math.abs(toTile(ex) - tx) <= 1 && Math.abs(toTile(ey) - ty) <= 1;
 
   /* Yourself first, for the same reason the menu resolves people before
    * things: if you pointed at your own square, the answer is you, even with
@@ -1981,14 +1988,37 @@ function lookAtTile(at: Vec): void {
     return;
   }
 
-  const m = world.monsters.find((x) => x.hp > 0 && near(x.x, x.y));
+  /* Then things that MOVE, then things that were dropped, then things that
+   * were built, then the landscape. Roughly "how likely is this what you
+   * meant", and it matters: a coin lying at the foot of a chest should be
+   * the coin, and a rat standing in front of the chest should be the rat. */
+  const m = nearestHit(world.monsters, at, (x) => x.hp > 0);
   if (m) { logServer(`You see ${titleCase(m.kind)} — ${Math.ceil(m.hp)}/${m.maxhp} hp.`); return; }
-  const n = world.npcs.find((x) => near(x.x, x.y));
+  const n = nearestHit(world.npcs, at);
   if (n) { logServer(`You see ${n.name}.`); return; }
-  const gi = world.ground.find((x) => near(x.x, x.y));
+  const gi = nearestHit(world.ground, at);
   if (gi) { logServer(`You see ${gi.n > 1 ? `${gi.n} ` : ""}${ITEMS[gi.kind].name}.`); return; }
-  const c = world.corpses.find((x) => near(x.x, x.y));
+  const c = nearestHit(world.corpses, at);
   if (c) { logServer(`You see the remains of ${titleCase(c.name)}.`); return; }
+
+  /* Everything below is addressed by TILE rather than by pixel, and each one
+   * has a footprint bigger than the square that names it — which is why
+   * looking at a chest used to report the ground. A structure is anchored by
+   * its top-left tile, so three of its four squares matched nothing at all
+   * and fell through to the floor. That is the bug Radek hit on the chest,
+   * and the rocks and trees below were simply never searched. */
+  const st = footprintHit(world.structures, tx, ty,
+    (s) => { const k = footprint(s.key); return { w: k, h: k }; });
+  if (st) { logServer(`You see ${structureName(st)}.`); return; }
+  const tr = world.trees.find((t) => t.tx === tx && t.ty === ty);
+  if (tr) { logServer(tr.stump ? "You see a tree stump." : "You see a tree."); return; }
+  const rk = world.rocks.find((r) => r.tx === tx && r.ty === ty);
+  if (rk) { logServer(rk.depleted ? "You see a spent rock." : "You see a rock."); return; }
+  const sc = footprintHit(world.scenery, tx, ty, (s) => FOOTPRINT[s.kind]);
+  if (sc) { logServer(`You see ${SCENERY_NAME[sc.kind]}.`); return; }
+  const fi = world.fires.find((f) => f.tx === tx && f.ty === ty);
+  if (fi) { logServer("You see a campfire."); return; }
+
   logServer(`You see the ground. (${tx}, ${ty})`);
 }
 
@@ -2029,7 +2059,35 @@ function walkToPoint(at: Vec): void {
  */
 function openContextMenu(sx: number, sy: number): void {
   if (P.dead || hudEditing()) return;
-  // A press on chrome is a press on chrome; the menu is for the world.
+
+  /* AN INVENTORY SLOT, before anything else.
+   *
+   * Slots live inside panels, so this has to come above the panel guard below
+   * or the menu would refuse the press for being "on chrome". Reverse order
+   * for the same reason the tap sweep uses it: the topmost window's slots are
+   * registered last, and on overlapping panels the top one owns the pixel.
+   *
+   * Look is the only entry. Every other verb an item has — use, equip, split,
+   * drop — already has a one-click or drag gesture that works, and adding a
+   * second way to do each would be two code paths per verb to keep in step.
+   * Describing an item was the one thing with no gesture at all: it used to
+   * happen by ITSELF whenever the cursor drifted over a slot, which is not a
+   * gesture, it is an accident that happens to be useful sometimes. */
+  for (let i = itemSlots.length - 1; i >= 0; i--) {
+    const it = itemSlots[i];
+    if (sx < it.x || sx >= it.x + it.w || sy < it.y || sy >= it.y + it.h) continue;
+    if (it.n <= 0) return; // an empty cell has nothing to describe
+    const kind = it.kind;
+    ctxMenu = {
+      sx, sy, at: { x: 0, y: 0 },
+      entries: [{ verb: "look", label: `Look at ${ITEMS[kind].name}`, enabled: true,
+        run: () => { ui.inspect = kind; } }],
+      rects: [],
+    };
+    return;
+  }
+
+  // A press on the rest of the chrome is a press on chrome; this is for the world.
   if (pointInOpenPanel(sx, sy) || overTouchButton(sx, sy)) return;
 
   const at: Vec = { x: sx / vScale + cam.x, y: sy / vScale + cam.y };
@@ -2037,15 +2095,13 @@ function openContextMenu(sx: number, sy: number): void {
   const entries: MenuEntry[] = [];
   const tx = toTile(at.x);
   const ty = toTile(at.y);
-  const near = (ex: number, ey: number): boolean =>
-    Math.abs(toTile(ex) - tx) <= 1 && Math.abs(toTile(ey) - ty) <= 1;
 
   /* PEOPLE FIRST, and today that means exactly one person: you.
    *
    * The player is not an entity in `world` — there has only ever been one, so
    * he never needed to be in a list — which is why this is a coordinate test
    * rather than a `find`. When other players arrive they WILL be entities and
-   * this becomes the same `find` as the four below it, feeding the same
+   * this becomes the same lookup as the four below it, feeding the same
    * builder with `self: false`. That is the whole reason the builder takes a
    * name and a flag instead of reading the player directly. */
   if (onPlayerTile(tx, ty)) {
@@ -2055,22 +2111,26 @@ function openContextMenu(sx: number, sy: number): void {
     ));
   }
 
-  const m = world.monsters.find((x) => x.hp > 0 && near(x.x, x.y));
+  /* `nearestHit`, not `find` — same reason as the look. A menu offering
+   * "Take Plate Armor" while the cursor is on the knight armour beside it is
+   * worse than the look getting it wrong, because the look only misinforms
+   * and the menu acts. */
+  const m = nearestHit(world.monsters, at, (x) => x.hp > 0);
   if (m) {
     entries.push({ verb: "attack", label: `Attack ${titleCase(m.kind)}`, enabled: true,
       run: () => { P.target = { kind: "mob", id: m.id }; P.dest = null; P.gather = null; } });
   }
-  const c = world.corpses.find((x) => near(x.x, x.y));
+  const c = nearestHit(world.corpses, at);
   if (c) {
     entries.push({ verb: "loot", label: "Look inside", enabled: true,
       run: () => { P.target = { kind: "corpse", id: c.id }; P.dest = null; } });
   }
-  const gi = world.ground.find((x) => near(x.x, x.y));
+  const gi = nearestHit(world.ground, at);
   if (gi) {
     entries.push({ verb: "take", label: `Take ${ITEMS[gi.kind].name}`, enabled: true,
       run: () => { P.target = { kind: "ground", id: gi.id }; P.dest = null; } });
   }
-  const n = world.npcs.find((x) => near(x.x, x.y));
+  const n = nearestHit(world.npcs, at);
   if (n) {
     entries.push({ verb: "talk", label: `Talk to ${n.name}`, enabled: true,
       run: () => { P.target = { kind: "npc", id: n.id }; n.talk = NPC_TALK_HOLD_S; P.dest = null; } });
@@ -2079,10 +2139,25 @@ function openContextMenu(sx: number, sy: number): void {
     entries.push({ verb: "trade", label: `Trade with ${n.name}`, enabled: false,
       why: "Trading opens with the world." });
   }
-  /* Walk and the one Look. `lookAtTile` resolves the tile itself and answers
-   * with the creature first, so nothing above needs to add a Look of its own
-   * — and when the monster branch did, a rat offered two identical ones. */
-  entries.push(...groundEntries(() => walkToPoint(at), () => lookAtTile(at)));
+  /* Walk, and Look ONLY WHERE A POINTER CAN AFFORD IT.
+   *
+   * On a desktop, Look belongs here: the cursor is a pixel, the menu opens
+   * away from it, and you can see what you asked about while you read the
+   * answer.
+   *
+   * On a phone none of that holds. The menu opens under a fingertip that has
+   * been resting on the target for four hundred milliseconds, so the menu
+   * covers the very thing being described — and the finger covered it before
+   * the menu did. Radek's verdict after playing it was that it worked badly,
+   * and it is not a bug to be tuned: it is the gesture being wrong for the
+   * verb. Touch gets the LOOK toggle on the drop-down instead, where you tap
+   * a thing once, briefly, and read an answer that is nowhere near your hand.
+   *
+   * `deck.on` rather than `isTouchDevice()`: a laptop with a touchscreen has
+   * a mouse too, and the question is which INTERFACE is on screen. */
+  entries.push(...(deck.on
+    ? [{ verb: "walk" as const, label: "Walk here", enabled: true, run: () => walkToPoint(at) }]
+    : groundEntries(() => walkToPoint(at), () => lookAtTile(at))));
 
   ctxMenu = { sx, sy, at, entries, rects: [] };
 }
@@ -2182,6 +2257,20 @@ function handleWorldTap(sx: number, sy: number): void {
     }
     return;
   }
+  /* Look mode: the tap DESCRIBES what it landed on and does nothing else.
+   *
+   * Below the armed cursors on purpose. A throw or a Burst is something the
+   * player armed one tap ago and is about to spend; look mode is a standing
+   * setting they may have left on since Tuesday, and the recent, deliberate
+   * thing has to win. Above walking, obviously, or the mode would do nothing
+   * at all on the one surface it exists for.
+   *
+   * This is the whole of "look at everything" on a phone. It used to reach
+   * only inventory slots — the panels honoured `lookMode` and the world knew
+   * nothing about it — which is why the toggle felt broken: you turned looking
+   * on, tapped a chest, and walked to it.
+   */
+  if (ui.lookMode) { lookAtTile(w); return; }
   worldClick(w);
 }
 
@@ -4970,6 +5059,33 @@ function drawDeck(): void {
       flash(hudLocked() ? "slots locked" : "tap a slot to bind it", "#8ab6ff");
     } });
     touchButtons.push({ ...er });
+
+    /* …and LOOK, the third mode on this row.
+     *
+     * Blue, not gold. Gold in this interface means "something is open and you
+     * will close it in a moment"; this is a mode you play in for as long as
+     * you are curious, and it changes what every tap on the world DOES. It
+     * gets the same blue the stance chip uses for careful, which is what
+     * looking is.
+     *
+     * The menu closes behind it, unlike EDIT: edit mode is arranging the very
+     * row the button sits in, so the row has to stay. Looking is done at the
+     * world, and a drop-down covering half of it would be absurd. */
+    const lr = d.look;
+    const looking = ui.lookMode;
+    buttonBox(ctx, lr.x, lr.y, lr.w, lr.h, scale, {
+      on: looking, face: looking ? "rgba(90,161,232,.85)" : undefined,
+      accent: looking ? "#cfe8ff" : undefined,
+    });
+    hudText(h, "LOOK", lr.x + lr.w / 2, lr.y + lr.h / 2, u * 0.24,
+      looking ? "#0b2036" : "rgba(233,226,200,.85)", "center", true, lr.w - u * 0.08);
+    hotspots.push({ x: lr.x, y: lr.y, w: lr.w, h: lr.h, fn: () => {
+      deckMenu = false;
+      ui.lookMode = !ui.lookMode;
+      if (!ui.lookMode) ui.inspect = null;
+      flash(ui.lookMode ? "look mode on — tap anything" : "look mode off", "#8ab6ff");
+    } });
+    touchButtons.push({ ...lr });
   }
   /* Empty slots are drawn on the deck even out of edit mode, unlike the old
    * floating HUD which hid them. A row with holes in it is a row you have to

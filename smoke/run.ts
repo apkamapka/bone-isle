@@ -2689,7 +2689,11 @@ async function main(): Promise<void> {
     const ml = hl.placeHud("swap", 10, 10, 800, 400);
     ok(Math.abs(mp.x - 0.25 * 400) < 1 && Math.abs(ml.x - 0.25 * 800) < 1,
       "a v1 layout migrates into both orientations");
-    ok(!hl.hudLocked(), "the v1 lock state migrates too");
+    /* The lock is deliberately NOT restored, from either format. Edit mode
+     * disables walking, so a session that ended inside it used to hand the
+     * next one a character who would not move and no clue why. The LAYOUT is
+     * a preference and migrates; being mid-edit is not one. */
+    ok(hl.hudLocked(), "…but the lock boots on regardless of what was stored");
     ok(localStorage.getItem("bone-isle-hud-v2") !== null, "migration writes the v2 key");
 
     // full round-trip: layout, scale and menu state survive a reload
@@ -7810,7 +7814,7 @@ async function main(): Promise<void> {
     ok(drawn[0].length >= 1, "an absurdly small budget still draws something rather than looping forever");
   }
 
-  console.log("Etap 34 — the Look toggle is on the bar, not over the slots:");
+  console.log("Etap 34 \u2014 no window draws a Look toggle any more:");
   {
     const { drawPanels } = await import("../src/ui/panels.ts");
     const { createGame } = await import("../src/game.ts");
@@ -7832,30 +7836,26 @@ async function main(): Promise<void> {
         dragging: false, lookMode: false, inspect: null, split: null,
       } as never,
       game: g, player: g.player, mouse: { sx: 0, sy: 0 },
-      /* Every hotspot gets fired to find the Look one, so every action has to
-       * be safe to call — a bare object throws on the close button first. */
       act: new Proxy({}, {
         get: (_t, k) => (k === "toggleLook" ? () => { toggled = true; } : () => { /* no-op */ }),
       }) as never,
       hotspots, itemSlots: [],
     } as never);
 
-    const r = bag.rect as unknown as { x: number; y: number; w: number; h: number } | null;
     const look = hotspots.find((hs) => { hs.fn(); const t = toggled; toggled = false; return t; });
     /* Firing every hotspot to find one also presses the roll-up and zoom
      * buttons, which write straight to the persisted panel preferences. Put
      * them back, or every later test inherits a collapsed backpack. */
     (await import("../src/systems/panelPrefs.ts")).resetPanelPrefs();
-    ok(!!look, "the backpack window still offers a Look toggle");
-    /* It used to be drawn one row under the bar, straight on top of the first
-     * row of slots — which is what made it look like it had escaped the frame. */
-    ok(!!look && !!r && look.y >= r.y && look.y + look.h <= r.y + 14 * 3,
-      "…and it sits within the title bar, clear of the slot grid below");
-    ok(!!look && !!r && look.x >= r.x && look.x + look.w <= r.x + r.w,
-      "…and inside the window's own width");
-    const tb = bag.titleBar as unknown as { x: number; w: number } | null;
-    ok(!!tb && !!look && tb.x + tb.w <= look.x,
-      "…carved out of the drag region, or pressing it would just move the window");
+    /* It used to live on every container's title bar, and that was the third
+     * door into one mode: the L key, this button, and — since Etap 38 — the
+     * drop-down's LOOK on a phone and right-click on a desktop. Three doors
+     * into one room, one of them repeated on every open window, each with its
+     * own hit box carved out of the drag region. */
+    ok(!look, "no window carries a Look toggle of its own");
+    const panels = (await import("node:fs")).readFileSync("src/ui/panels.ts", "utf8");
+    ok(panels.includes("REMOVED: the Look toggle"), "…and the removal says where the mode went");
+    ok(!panels.includes("function lookToggle("), "…and the function is gone, not merely unused");
   }
 
   console.log("Etap 35 — long text wraps instead of being cut:");
@@ -10363,12 +10363,24 @@ async function main(): Promise<void> {
     ok(main.includes("&& attackMode().ranged;\n  if (!keepShot) P.target = null;"),
       "…carrying the kiting rule with it: walking with a bow drawn keeps the mark");
 
+    /* Scoped to the builder's own body: `lookAtTile` above it searches the
+     * same lists, so a bare indexOf across the file compares the wrong two
+     * lines and passes or fails for no reason. */
+    const build = main.slice(main.indexOf("function openContextMenu("),
+      main.indexOf("function closeContextMenu("));
+
     /* Two identical Looks on a monster tile was a real bug: both ran the same
      * code, and a duplicate entry makes a player hunt for the difference. */
     ok(!main.includes('entries.push({ verb: "look", label: "Look", enabled: true,'),
       "the monster no longer pushes a second Look of its own");
-    ok((main.match(/verb: "look"/g) ?? []).length === 0,
-      "…there is exactly one Look in the menu and groundEntries owns it");
+    /* One Look in the WORLD half of the builder, and groundEntries owns it.
+     * Sliced past the inventory-slot branch above, which is a different menu
+     * over a different thing and legitimately has a Look of its own. */
+    const worldHalf = build.slice(build.indexOf("// A press on the rest of the chrome"));
+    ok((worldHalf.match(/verb: "look"/g) ?? []).length === 0,
+      "…there is exactly one Look in the world menu and groundEntries owns it");
+    ok(build.includes('label: `Look at ${ITEMS[kind].name}`'),
+      "…while a right-clicked inventory slot gets its own, naming the item");
 
     /* The player branch. A coordinate test today because the player is not in
      * any world list; a `find` like the other four the day he is. */
@@ -10384,18 +10396,13 @@ async function main(): Promise<void> {
       main.indexOf("/* ---------------- the long-press menu"));
     ok(look.includes("You see yourself — level"),
       "looking at your own tile describes YOU, not the ground under you");
-    ok(look.indexOf("onPlayerTile(tx, ty)") < look.indexOf("world.monsters.find"),
+    ok(look.indexOf("onPlayerTile(tx, ty)") < look.indexOf("nearestHit(world.monsters"),
       "…and wins over a creature on the next tile, which the loose search would otherwise claim");
     ok(look.includes("You are marked with a red skull."),
       "…and mentions a skull you are wearing, since that is the thing you would want to check");
     ok(main.includes("playerEntries(") && main.includes("self: true"),
       "…built by the shared builder, so it is the shape other players will get");
-    /* Scoped to the builder's own body: `lookAtTile` above it searches the
-     * same lists, so a bare indexOf across the file compares the wrong two
-     * lines and passes or fails for no reason. */
-    const build = main.slice(main.indexOf("function openContextMenu("),
-      main.indexOf("function closeContextMenu("));
-    ok(build.indexOf("if (onPlayerTile(tx, ty))") < build.indexOf("world.monsters.find"),
+    ok(build.indexOf("if (onPlayerTile(tx, ty))") < build.indexOf("nearestHit(world.monsters"),
       "…and people are resolved before things, since a person is what you meant to press");
 
     /* Escape has to reach it: the menu is drawn over everything, so while it
@@ -10422,6 +10429,188 @@ async function main(): Promise<void> {
     ok(slot.includes("if (ctxMenu) return false;"), "…and the slot-drag probe too");
     ok(main.includes("if (ctxMenu) return;\n  // mouse convenience: right-click an action slot"),
       "…and nothing behind the menu — title bar, resize foot, item — takes a pointerdown");
+  }
+
+  /* ============ Etap 38: looking at things, and getting the RIGHT thing ====
+   *
+   * Three separate bugs met here, all of them findable only by playing:
+   * a look that reported the ground for anything built, a look that named the
+   * wrong one of two neighbours, and an edit mode that survived a reload and
+   * left the character unable to walk. */
+  {
+    console.log("Etap 38 - the pick: nearest, not first:");
+    const { nearestHit, footprintHit } = await import("../src/world/pick.ts");
+    const T = 32;
+    const mid = (t: number): number => t * T + T / 2;
+
+    /* THE BUG, reproduced. Two things a tile apart, the later one first in
+     * the array — which is what `find` used to hand back whichever square you
+     * pointed at. */
+    const plate = { x: mid(10), y: mid(10), tag: "plate" };
+    const knight = { x: mid(11), y: mid(10), tag: "knight" };
+    const dropped = [plate, knight];
+    ok(nearestHit(dropped, { x: mid(11), y: mid(10) })?.tag === "knight",
+      "pointing at the knight armour describes the knight armour…");
+    ok(nearestHit(dropped, { x: mid(10), y: mid(10) })?.tag === "plate",
+      "…and pointing at the plate describes the plate");
+    ok(nearestHit([knight, plate], { x: mid(10), y: mid(10) })?.tag === "plate",
+      "…whichever order they happen to sit in the array, which is what broke it");
+
+    /* The exact tile is a HARD key, not a heavy thumb on the scale. A
+     * neighbour that is physically closer to the click still loses. */
+    const onTile = { x: mid(5) + 15, y: mid(5), tag: "on" };
+    const nextDoor = { x: mid(6) - 15, y: mid(5), tag: "next" };
+    ok(nearestHit([nextDoor, onTile], { x: mid(5), y: mid(5) })?.tag === "on",
+      "something on the tile you pointed at beats a nearer thing on the next one");
+
+    /* …but the loose box stays, or looking at a rat would be a game of skill:
+     * a sprite overhangs the square it stands on. */
+    ok(nearestHit([{ x: mid(7), y: mid(7) }], { x: mid(8), y: mid(8) }) !== null,
+      "a lone thing one tile away is still found");
+    ok(nearestHit([{ x: mid(7), y: mid(7) }], { x: mid(9), y: mid(9) }) === null,
+      "…and two tiles away is not, so the box is a box and not a scan");
+    ok(nearestHit([], { x: 0, y: 0 }) === null, "an empty world answers nothing");
+    ok(nearestHit([{ x: mid(3), y: mid(3), dead: true }], { x: mid(3), y: mid(3) },
+      (e) => !e.dead) === null, "…and a filtered-out candidate is not a candidate");
+
+    /* Footprints. A structure names its TOP-LEFT tile and grows right and
+     * down; measuring to that corner is why looking at a chest used to report
+     * the ground for three of its four squares. */
+    const chest = { tx: 20, ty: 20 };
+    const two = () => ({ w: 2, h: 2 });
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+      ok(footprintHit([chest], 20 + dx, 20 + dy, two) === chest,
+        `every square of a 2x2 footprint answers for it (+${dx},+${dy})`);
+    }
+    ok(footprintHit([chest], 22, 20, two) === null, "…and the square past it does not");
+    ok(footprintHit([chest], 20, 19, two) === null, "…nor the one above, since it grows downward");
+    const mill = { tx: 4, ty: 4 };
+    ok(footprintHit([mill], 8, 8, () => ({ w: 5, h: 5 })) === mill,
+      "a five-tile building answers across its whole block");
+  }
+
+  {
+    console.log("Etap 38 - the look sees everything that is drawn:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const look = main.slice(main.indexOf("function lookAtTile("),
+      main.indexOf("/* ---------------- the long-press menu"));
+
+    /* The reported bug: a chest answered "You see the ground." Structures,
+     * trees, rocks, scenery and fires were simply never searched. */
+    for (const [what, needle] of [
+      ["structures", "footprintHit(world.structures"],
+      ["trees", "world.trees.find"],
+      ["rocks", "world.rocks.find"],
+      ["scenery", "footprintHit(world.scenery"],
+      ["fires", "world.fires.find"],
+    ] as const) {
+      ok(look.includes(needle), `the look searches ${what}`);
+    }
+    ok(look.includes("You see a tree stump.") && look.includes("You see a spent rock."),
+      "…and says when a node is used up, which is the thing you looked to find out");
+    ok(look.includes("structureName(st)"), "a structure is named, tier and all");
+    /* Both searches, in both places, go through the shared pick. */
+    ok((main.match(/nearestHit\(/g) ?? []).length === 8,
+      "look and menu both resolve every entity list through the shared pick");
+    ok(!main.includes(".find((x) => x.hp > 0 && near("),
+      "…and the old first-match-wins search is gone from both");
+
+    /* Every kind of scenery has to have a name, or the look prints undefined
+     * for whichever one nobody thought of. */
+    const art = await import("../src/gfx/sceneryArt.ts");
+    const kinds = Object.keys(art.FOOTPRINT);
+    ok(kinds.length > 0 && kinds.every((k) => typeof (art.SCENERY_NAME as Record<string, string>)[k] === "string"),
+      "every scenery kind that has a size also has a name");
+    ok(Object.keys(art.SCENERY_NAME).length === kinds.length,
+      "…and nothing is named that does not exist");
+  }
+
+  {
+    console.log("Etap 38 - looking is something you DO:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+
+    /* The hover card is gone. It appeared over the inventory every time the
+     * cursor crossed it on the way somewhere else, covering the slots being
+     * reached for with information nobody asked for. */
+    ok(!panels.includes("function drawItemTooltip("), "no window pops a card on hover");
+    ok(!panels.includes("tooltipKind"), "…and the queue it was fed from is gone with it");
+    ok(panels.includes("REMOVED: the hover tooltip"), "…with the reason left where it was");
+    ok(panels.includes("function drawInspect("),
+      "…while the card itself lives on: only the way IN changed");
+
+    /* Right-click on a slot is the new way in. Above the panel guard, because
+     * slots live inside panels and would otherwise be refused as chrome. */
+    const build = main.slice(main.indexOf("function openContextMenu("),
+      main.indexOf("function closeContextMenu("));
+    ok(build.indexOf("for (let i = itemSlots.length - 1") < build.indexOf("pointInOpenPanel(sx, sy)"),
+      "a right-clicked slot is checked before the press is dismissed as chrome");
+    ok(build.includes("if (it.n <= 0) return;"), "…and an empty cell has nothing to describe");
+
+    /* Look mode used to reach inventory slots only: the panels honoured it and
+     * the world had never heard of it, so turning looking on and tapping a
+     * chest walked you to the chest. */
+    ok(main.includes("if (ui.lookMode) { lookAtTile(w); return; }"),
+      "look mode describes what the tap landed on in the WORLD, not just in a bag");
+    const tap = main.slice(main.indexOf("function handleWorldTap("),
+      main.indexOf("/* ---------------- screen wake lock"));
+    ok(tap.indexOf("if (aimPending)") < tap.indexOf("if (ui.lookMode)"),
+      "…below an armed cursor, which the player armed one tap ago");
+    ok(tap.indexOf("if (ui.lookMode)") < tap.indexOf("worldClick(w)"),
+      "…and above walking, or the mode would do nothing on the surface it exists for");
+  }
+
+  {
+    console.log("Etap 38 - LOOK on the drop-down, and the edit trap:");
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h, dpr] of [[360, 800, 3], [412, 915, 2], [915, 412, 2], [800, 360, 2]] as const) {
+      const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0);
+      const tag = `${w}x${h}@${dpr}`;
+      ok(d.look.w > 0 && d.look.h > 0, `${tag}: the LOOK cell exists`);
+      ok(Math.min(d.look.w, d.look.h) >= MB.TOUCH_MIN_CSS * dpr - 1,
+        `${tag}: …and clears a fingertip`);
+      /* It shares the drop-down grid with the tabs, CHAT and EDIT — the grid
+       * is 2x5 and only seven cells were spoken for, so it cost nothing. */
+      const cells = [...d.tabs, d.chat, d.edit, d.look];
+      let clear = true;
+      for (let i = 0; i < cells.length; i++) {
+        for (let j = i + 1; j < cells.length; j++) {
+          const a = cells[i], b = cells[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+        }
+      }
+      ok(clear, `${tag}: no drop-down cell overlaps another`);
+      ok(d.look.h === d.edit.h && d.look.w === d.edit.w,
+        `${tag}: …and LOOK is the same size as the buttons beside it`);
+    }
+
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok(main.includes('flash(ui.lookMode ? "look mode on — tap anything" : "look mode off"'),
+      "pressing LOOK says what it did, since it changes what every later tap means");
+    ok(main.includes("deckMenu = false;\n      ui.lookMode = !ui.lookMode;"),
+      "…and closes the drop-down, unlike EDIT, which is arranging the row it sits in");
+    /* On touch the world menu keeps its actions and loses Look: the gesture
+     * ends with a finger and then a menu on top of the thing being described. */
+    ok(main.includes("entries.push(...(deck.on"), "the touch menu is built differently on purpose");
+    ok(main.includes('label: "Walk here", enabled: true, run: () => walkToPoint(at) }]'),
+      "…keeping Walk here, which is the verb right-click used to be");
+
+    /* The trap: edit mode disables walking, and it was persisted. */
+    const hl = await import("../src/systems/hudLayout.ts");
+    const layout = nfs.readFileSync("src/systems/hudLayout.ts", "utf8");
+    ok(!layout.includes("state.locked = data.locked"),
+      "the lock is never restored from storage, in either format");
+    localStorage.setItem("bone-isle-hud-v2", JSON.stringify({ locked: false, scale: 1 }));
+    hl.loadHudLayout();
+    ok(hl.hudLocked(),
+      "…so a session that ended mid-edit hands the next one a character who can walk");
+    hl.toggleHudLock();
+    ok(!hl.hudLocked(), "…and the toggle still works within a session");
+    hl.setHudLocked(true);
+    localStorage.removeItem("bone-isle-hud-v2");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
