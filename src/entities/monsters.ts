@@ -1,8 +1,8 @@
-/** Monster definitions, danger-band spawning and the wander/chase/attack AI. */
+/** Monster definitions, post spawning and the wander/chase/attack AI. */
 import { rnd, rndi, wrnd, dist } from "../util.ts";
-import { WILD_ENTRANCE_SAFE_PX, SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HOLD_RANGE, POST_LEASH_PX, SHOT_SPEED, TILE } from "../config.ts";
+import { SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HOLD_RANGE, POST_LEASH_PX, SHOT_SPEED, TILE } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
-import { randomWalkable, lineOfSight } from "../world/collision.ts";
+import { lineOfSight } from "../world/collision.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
 import { inHavenBand } from "../world/collision.ts";
@@ -10,8 +10,7 @@ import { stepFacing } from "../gfx/mobSheet.ts";
 import { addBlast, addBolt } from "../gfx/spellFx.ts";
 import { beginCast, isCasting, type MonsterSpell } from "../systems/monsterSpells.ts";
 import type { Occupied } from "../world/grid.ts";
-import { Tile } from "../world/types.ts";
-import type { World, Monster, MonsterKind, Camp } from "../world/types.ts";
+import type { World, Monster, MonsterKind } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
 import type { Resistances, Element, Tier } from "../systems/elements.ts";
 
@@ -105,7 +104,9 @@ export interface MonsterDef {
 
 /**
  * The bestiary, ordered from the entrance outward. `danger` is the spawn band:
- * distance from the Wildlands entrance (0 = the arrival coast, 1 = the farthest
+ * (Etap 40: the danger band this once described is gone; kept only as the
+ * note that hp is what a tier is derived from.) Once: distance from the
+ * entrance (0 = the arrival coast, 1 = the farthest
  * reaches). The six original creatures keep their stats — only their bands were
  * re-tuned to the new distance-from-entrance gradient; the other seven fill and
  * extend the difficulty curve so tougher foes are discovered further in.
@@ -859,19 +860,16 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
 export const MONSTER_KINDS = Object.keys(MONSTER_DEFS) as MonsterKind[];
 
 /**
- * Spawn one monster of `kind`, placed by its danger band: distance from the
- * Wildlands entrance portal, normalised so 0 is the arrival coast and ~1 the
- * farthest reaches. Nothing spawns within the entrance safe radius, spawns
- * keep SPAWN_SPACING_PX apart (no day-one blobs), and when `avoid` is given
- * (the player, on respawns) nothing pops within SPAWN_AVOID_PLAYER_PX of it —
- * returns false in that case so the caller can retry later, Tibia-style.
+ * Shared constructor for a freshly spawned creature.
+ *
+ * Etap 40 dropped the `home` parameter along with the camp system: the only
+ * caller left is `spawnAtPost`, which sets the leash itself from the tile the
+ * map's author drew the creature on.
  */
-/** Shared constructor for a freshly spawned creature. */
 function pushMonster(
   w: World,
   kind: MonsterKind,
   p: { x: number; y: number },
-  home?: { camp: string; x: number; y: number; r: number },
 ): boolean {
   const d = MONSTER_DEFS[kind];
   // grid rule: every creature claims exactly one tile — never spawn onto a
@@ -880,11 +878,10 @@ function pushMonster(
   const ty = toTile(p.y);
   if (w.monsters.some((o) => o.tx === tx && o.ty === ty)) return false;
   // never materialise ON a portal either — a creature spawned on the ladder
-  // would block the floor's entrance from the very first frame. Covers every
-  // spawn path at once (roster, density top-up, chest guard, camp, respawn).
+  // would block the floor's entrance from the very first frame. Covers both
+  // spawn paths at once (authored post and respawn).
   if (w.portals.some((pt) => toTile(pt.x) === tx && toTile(pt.y) === ty)) return false;
-  // A haven inside a hostile map is off limits to every spawn path at once —
-  // roster, density top-up, respawn, camp and chest guard all land here.
+  // A haven inside a hostile map is off limits to every spawn path at once.
   if (inHavenBand(w, ty)) return false;
   w.monsters.push({
     id: nextEntityId(),
@@ -905,60 +902,8 @@ function pushMonster(
     hurtT: 0,
     aggroT: 0,
     orbit: wrnd(0, 1) < 0.5 ? 1 : -1,
-    camp: home?.camp,
-    hx: home?.x,
-    hy: home?.y,
-    hr: home?.r,
   });
   return true;
-}
-
-/**
- * Spawn a creature inside its settlement: a uniform point in the camp disc,
- * walkable, spaced from its packmates, off the lair mouth, and never beside a
- * player standing in the camp. Camp dwellers carry a home leash so they idle
- * around their village instead of drifting across the continent.
- */
-export function spawnMonsterInCamp(
-  w: World,
-  kind: MonsterKind,
-  camp: Camp,
-  avoid?: { x: number; y: number },
-): boolean {
-  for (let tries = 0; tries < 60; tries++) {
-    const a = wrnd(0, Math.PI * 2);
-    const rr = (camp.r - 40) * Math.sqrt(wrnd(0, 1));
-    const x = camp.x + Math.cos(a) * rr;
-    const y = camp.y + Math.sin(a) * rr;
-    const tx = Math.floor(x / TILE);
-    const ty = Math.floor(y / TILE);
-    if (w.solid[ty]?.[tx] !== false || w.tile[ty][tx] === Tile.Water) continue;
-    if (avoid && dist(x, y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
-    // keep the descent hole clear so arrivals from the lair aren't body-blocked
-    if (w.portals.some((pt) => dist(pt.x, pt.y, x, y) < 48)) continue;
-    if (!w.monsters.every((m) => dist(m.x, m.y, x, y) >= SPAWN_SPACING_PX)) continue;
-    if (pushMonster(w, kind, { x, y }, { camp: camp.key, x: camp.x, y: camp.y, r: camp.r })) return true;
-  }
-  return false;
-}
-
-/**
- * Spawn a free roamer in the open wilderness — anywhere walkable on the
- * continent EXCEPT inside settlements and the dock's arrival area. These are
- * the wolves loping through the forests between camps; they carry no home
- * leash and wander wherever the woods take them.
- */
-export function spawnWilderness(w: World, kind: MonsterKind, avoid?: { x: number; y: number }): boolean {
-  const dock = w.portals.find((pt) => pt.dest === "town");
-  for (let tries = 0; tries < 60; tries++) {
-    const cand = randomWalkable(w);
-    if (dock && dist(cand.x, cand.y, dock.x, dock.y) < WILD_ENTRANCE_SAFE_PX) continue;
-    if (w.camps.some((c) => dist(c.x, c.y, cand.x, cand.y) < c.r + 96)) continue;
-    if (avoid && dist(cand.x, cand.y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
-    if (!w.monsters.every((m) => dist(m.x, m.y, cand.x, cand.y) >= SPAWN_SPACING_PX)) continue;
-    if (pushMonster(w, kind, cand)) return true;
-  }
-  return false;
 }
 
 /**
@@ -1031,83 +976,13 @@ export function spawnGuard(
   return false;
 }
 
-export function spawnMonster(w: World, kind: MonsterKind, avoid?: { x: number; y: number }, uniform = false): boolean {
-  const d = MONSTER_DEFS[kind];
-  const entrance = w.portals[0];
-  const ex = entrance ? entrance.x : (w.w / 2) * TILE;
-  const ey = entrance ? entrance.y : (w.h / 2) * TILE;
-  // farthest a tile can sit from the entrance ≈ span to the opposite corner
-  const maxD = Math.max(
-    dist(ex, ey, 0, 0), dist(ex, ey, w.w * TILE, 0),
-    dist(ex, ey, 0, w.h * TILE), dist(ex, ey, w.w * TILE, w.h * TILE),
-  ) || 1;
-
-  // UNIFORM mode (caves/undergrounds): the danger band is a radial-island idea
-  // — spawn distance from the entrance ∝ danger — which in a rectangular cavern
-  // packs every same-tier creature into one far corner and leaves the other
-  // half empty. Underground floors instead spread their roster evenly across
-  // ALL walkable rock, so the whole cavern is populated (Etap 13). We still
-  // keep the entrance clear and honour spacing so it isn't a wall-to-wall blob.
-  if (uniform) {
-    // Prefer a genuinely OPEN cavern tile (most orthogonal neighbours walkable)
-    // so creatures — especially the lone dragon — never end up jammed in a
-    // one-tile rock pocket that reads as "spawned in the wall".
-    const openness = (x: number, y: number): number => {
-      const tx = toTile(x), ty = toTile(y);
-      let open = 0;
-      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        const nx = tx + ox, ny = ty + oy;
-        if (w.solid[ny]?.[nx] === false && w.tile[ny]?.[nx] > 0) open++;
-      }
-      return open;
-    };
-    let best: { x: number; y: number } | null = null;
-    let bestOpen = -1;
-    let fb: { x: number; y: number } | null = null;
-    for (let tries = 0; tries < 100; tries++) {
-      const cand = randomWalkable(w);
-      if (dist(cand.x, cand.y, ex, ey) < WILD_ENTRANCE_SAFE_PX) continue;
-      if (avoid && dist(cand.x, cand.y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
-      if (w.monsters.some((m) => m.tx === toTile(cand.x) && m.ty === toTile(cand.y))) continue;
-      fb ??= cand;
-      if (!w.monsters.every((m) => dist(m.x, m.y, cand.x, cand.y) >= SPAWN_SPACING_PX)) continue;
-      const o = openness(cand.x, cand.y);
-      if (o >= 3) { best = cand; break; }        // wide-open tile: take it
-      if (o > bestOpen) { bestOpen = o; best = cand; } // otherwise keep the most open one
-    }
-    const p = best ?? (avoid ? null : fb);
-    if (!p) return false;
-    return pushMonster(w, kind, p);
-  }
-
-  let match: { x: number; y: number } | null = null;   // spaced + right danger band
-  let spaced: { x: number; y: number } | null = null;  // spaced, wrong band
-  let fallback: { x: number; y: number } | null = null; // passes hard constraints only
-  for (let tries = 0; tries < 40 && !match; tries++) {
-    const cand = randomWalkable(w);
-    const dd = dist(cand.x, cand.y, ex, ey);
-    if (dd < WILD_ENTRANCE_SAFE_PX) continue; // keep the arrival area clear
-    if (avoid && dist(cand.x, cand.y, avoid.x, avoid.y) < SPAWN_AVOID_PLAYER_PX) continue;
-    // grid hard rule: the candidate SQUARE must be free — one creature per tile
-    if (w.monsters.some((m) => m.tx === toTile(cand.x) && m.ty === toTile(cand.y))) continue;
-    fallback ??= cand;
-    if (!w.monsters.every((m) => dist(m.x, m.y, cand.x, cand.y) >= SPAWN_SPACING_PX)) continue;
-    spaced ??= cand;
-    if (Math.abs(dd / maxD - d.danger) < 0.16) match = cand;
-  }
-  // a fresh populate must never lose a creature — but a respawn near a camping
-  // player simply reports failure and gets retried by the caller
-  let p = match ?? spaced ?? (avoid ? null : fallback);
-  // a fresh populate must never lose a creature: last-ditch free-square hunt
-  if (!p && !avoid) {
-    for (let tries = 0; tries < 40 && !p; tries++) {
-      const cand = randomWalkable(w);
-      if (!w.monsters.some((m) => m.tx === toTile(cand.x) && m.ty === toTile(cand.y))) p = cand;
-    }
-  }
-  if (!p) return false;
-  return pushMonster(w, kind, p);
-}
+/* `spawnMonster` (the danger-band / uniform-scatter placer), `spawnWilderness`
+ * (free roamers between settlements) and `spawnMonsterInCamp` (village
+ * garrisons) all lived here and all three went in Etap 40 with the procedural
+ * maps that used them. Every creature in the game is now placed by
+ * `spawnAtPost` onto a square its author chose, and respawns onto that same
+ * square — so a floor cannot slowly re-clump into one corner, which is the
+ * bug the uniform scatter existed to work around in the first place. */
 
 /** Roll a monster's loot into concrete stacks + gold. Runtime randomness —
  *  deliberately NOT the deterministic world RNG, so kills never perturb the

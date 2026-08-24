@@ -10,6 +10,7 @@ import { applyStructureSolidity, canPlaceAt, STRUCTS, CHEST_SLOTS } from "./syst
 import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState, attunedState, loadAttunedState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
+import { missionState, loadMissionState } from "./systems/missions.ts";
 import { serializeSlots, loadSlots, actionSlotCount, setActionSlotCount, type SlotAction } from "./systems/actions.ts";
 import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./systems/outfit.ts";
 import { setActiveBonus } from "./systems/derived.ts";
@@ -66,11 +67,19 @@ const KEY = "bone-isle-save-v2";
  * v11: the hotbar has a length (Etap 39). Additive again, and an absent one
  * reads as six — which is what every character had when it was the only
  * possible answer.
+ *
+ * v12: the Time Sage's chain (Etap 40), plus the world cull that came with it.
+ * The chain is additive and an absent one is a character who has not started —
+ * which every character written before this build genuinely had not. The cull
+ * is the part that needs care: twenty-one maps stopped existing, so a save may
+ * name a `current` world, a structure list, a corpse or a dropped backpack on
+ * a map this build cannot build. Every one of those is dropped on load rather
+ * than crashing, and a player standing on a deleted map wakes on Home Isle.
  */
-const SAVE_V = 11;
+const SAVE_V = 12;
 
 interface SaveData {
-  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
   seed: number;
   current: WorldKey;
   player: {
@@ -100,6 +109,8 @@ interface SaveData {
    */
   pvp?: { skull?: Skull; t?: number; frags?: number };
   quests: { id: string; progress: number; done: boolean; claimed: boolean }[];
+  /** The Time Sage's chain: mission id → stage. Absent before v12. */
+  missions?: Record<string, string>;
   structures: Record<WorldKey, Structure[]>;
   /** Items lying on the ground, per world (incl. a death-dropped backpack). */
   ground?: Partial<Record<WorldKey, GroundItem[]>>;
@@ -161,6 +172,7 @@ export function saveGame(g: Game): void {
     modes: { stance: stance(), chase: chasing(), safeMode: safeMode() },
     pvp: { ...active().pvp },
     quests: questList().map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
+    missions: missionState(),
     structures: structDump,
     ground: groundDump,
     corpses: corpseDump,
@@ -262,12 +274,24 @@ export function loadGame(): Game | null {
   // its carved alcove), re-point every opened id to the new coords so a chest
   // already looted stays looted — no duplicate Marrow-set pieces.
   const openedRaw = Array.isArray(data.opened) ? data.opened.filter((x): x is string => typeof x === "string") : [];
-  const opened = openedRaw.map((id) => {
-    const m = /^treasure:([^:]+):/.exec(id);
-    if (!m) return id;
-    const chest = worlds[m[1] as WorldKey]?.structures.find((s) => s.key === "treasure");
-    return chest ? `treasure:${m[1]}:${chest.tx},${chest.ty}` : id;
-  });
+  const opened = openedRaw
+    /* v12: twenty-one maps stopped existing, and two of them held chests — the
+     * Marrow Blade under the Bone Caverns and the Knight shield in the Bastion.
+     * Their flags name a world that cannot be built, so they can never match a
+     * chest again and are dead weight in every future save. Dropped here.
+     *
+     * An id whose world DOES still exist is kept even when it names no chest:
+     * that is the pre-fix coordinate case the mapping below repairs. */
+    .filter((id) => {
+      const m = /^treasure:([^:]+):/.exec(id);
+      return !m || m[1] in worlds;
+    })
+    .map((id) => {
+      const m = /^treasure:([^:]+):/.exec(id);
+      if (!m) return id;
+      const chest = worlds[m[1] as WorldKey]?.structures.find((s) => s.key === "treasure");
+      return chest ? `treasure:${m[1]}:${chest.tx},${chest.ty}` : id;
+    });
 
   // Migration: structures from very old saves (procedural Home Isle) may sit
   // on tiles that are no longer valid (water, trees, overlaps). Any structure
@@ -369,6 +393,7 @@ export function loadGame(): Game | null {
     if (q) { q.progress = qs.progress; q.done = qs.done; q.claimed = qs.claimed; }
   }
 
+  loadMissionState(data.missions);
   loadResearchState(data.research);
   loadAttunedState(data.attuned);
   loadTaskState(data.tasks);

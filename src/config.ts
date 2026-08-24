@@ -180,29 +180,6 @@ export const CORPSE_SLOTS = 16;
 export const MONSTER_RESPAWN_S = 90;
 
 /**
- * Crowd multiplier for the undergrounds (every dangerous floor except the
- * surface Wildlands). The cave/lair floors are large and were reading as empty
- * between packs, so their per-kind spawn counts are scaled up by this factor;
- * because each kill schedules exactly one same-kind respawn, this raises the
- * steady-state population too, not just the opening one. Bosses (the dragon)
- * are exempt so a lair still nests exactly one. Tune here after playtests.
- */
-export const CAVE_CROWD_MULT = 2.2;
-
-/**
- * Guaranteed underground density (Etap 13). The per-floor rosters above are
- * hand-authored, but floor SIZES vary enormously (the Roost's heart is ~2400
- * walkable tiles against a 6-creature roster), so several floors still read as
- * half-empty however high the multiplier goes. After the roster is placed, a
- * floor holding fewer than one creature per this many walkable tiles is topped
- * up from its OWN roster — the thematic mix is preserved, only the count
- * rises — until it clears the bar. This is what removes the dead zones; raise
- * the number for sparser caves, lower it for a wall-to-wall meat grinder.
- * Bosses (the dragon) are never used as filler.
- */
-export const CAVE_TILES_PER_MONSTER = 34;
-
-/**
  * Master monster switch. When `false`, no creatures are placed on the map and
  * none respawn — the world is walkable and peaceful for free exploration. The
  * whole combat/AI/respawn machinery stays intact; flip back to `true` to bring
@@ -231,24 +208,16 @@ export const SHIELD_BLOCK_MAX = 2;
 export const SHIELD_BLOCK_WINDOW_S = 2;
 
 /**
- * Spawn placement quality. SPAWN_SPACING_PX keeps freshly placed monsters
- * spread out instead of starting the world in pre-formed blobs (with body
- * blocking a blob instantly becomes a deadly surround). SPAWN_AVOID_PLAYER_PX
- * is Tibia's "creatures don't spawn on screen": a respawn never pops within
- * this radius of the player — if the area is camped, it retries a bit later.
+ * Tibia's "creatures don't spawn on screen": a respawn never pops within this
+ * radius of the player — if the area is camped, it retries a bit later.
+ *
+ * Its companion SPAWN_SPACING_PX went in Etap 40. It kept scattered spawns from
+ * starting the world in pre-formed blobs, and nothing scatters any more: the
+ * map's author decides the spacing by where the glyphs go.
  */
-export const SPAWN_SPACING_PX = 56;
 export const SPAWN_AVOID_PLAYER_PX = 240;
 export const RESPAWN_RETRY_S = 3;
 
-/**
- * Wildlands difficulty gradient. Monsters spawn biased by how far they are from
- * the entrance portal (0 = the coast you arrive on, 1 = the farthest reaches),
- * so the weakest creatures ring the entrance and the deadliest lurk in the far
- * corners — Rookgaard-style discovery. No monster spawns within this radius of
- * the entrance, so arriving is never an instant ambush.
- */
-export const WILD_ENTRANCE_SAFE_PX = 192;
 
 /** How long a lootable corpse stays on the ground (seconds). */
 export const CORPSE_DECAY_S = 75;

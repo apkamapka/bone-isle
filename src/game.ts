@@ -1,5 +1,4 @@
 /** Global game state: the three islands, the active one, and the player. */
-import { makeWorld } from "./world/generate.ts";
 import { DEADDEEP2_SPEC } from "./world/deadDeep2Spec.ts";
 import { DEADDEEP_SPEC } from "./world/deadDeepSpec.ts";
 import { MINODEEP_SPEC } from "./world/minoDeepSpec.ts";
@@ -10,7 +9,7 @@ import { BANDITDEEP_SPEC } from "./world/banditDeepSpec.ts";
 import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
-import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, SANCTUM_SPEC, CELLAR_SPEC } from "./world/handmade.ts";
+import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, CELLAR_SPEC } from "./world/handmade.ts";
 import { loadTerrainImages } from "./world/terrainImage.ts";
 import { loadPropArt } from "./world/propArt.ts";
 import { loadMobSheets } from "./gfx/mobSheet.ts";
@@ -20,10 +19,8 @@ import { loadBuildingArt } from "./gfx/buildingArt.ts";
 import { loadControlIcons } from "./ui/icons.ts";
 import { loadSpellArt } from "./gfx/spellArt.ts";
 import { loadItemArt } from "./gfx/itemArt.ts";
-import { makeCaveWorld, addCaveEntrance } from "./world/cave.ts";
-import { makeDeepWildWorld, LAIRS } from "./world/deepwild.ts";
 import { portalSpawn, worldSpawn } from "./world/collision.ts";
-import { spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnGuard, spawnAtPost } from "./entities/monsters.ts";
+import { spawnAtPost } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
 import { clearMonsterSpells } from "./systems/monsterSpells.ts";
 import type { ItemKind } from "./items.ts";
@@ -31,13 +28,11 @@ import { applyOutfit } from "./systems/outfit.ts";
 import { resetPlayerState } from "./systems/playerState.ts";
 import { stampWorlds } from "./world/entities.ts";
 import { emptyStash } from "./items.ts";
-import { seedWorldRng } from "./util.ts";
 import { beep } from "./audio.ts";
-import { WORLD_SEED, MONSTERS_ENABLED, CAVE_CROWD_MULT, CAVE_TILES_PER_MONSTER, TILE } from "./config.ts";
+import { WORLD_SEED, MONSTERS_ENABLED } from "./config.ts";
 import type { Portal, World, WorldKey } from "./world/types.ts";
 import type { Player } from "./entities/player.ts";
 import type { Bag } from "./items.ts";
-import type { MonsterKind } from "./world/types.ts";
 
 /**
  * Every Storage Chest's inventory on Home Isle, backpack-excluded. Crafting,
@@ -65,221 +60,65 @@ export interface Game {
   opened: string[];
 }
 
-/**
- * Monster rosters per dangerous world. Difficulty is the descent: the surface
- * carries only the low tiers, and each Bone Caverns floor down adds heavier
- * ones — so pushing deeper, not running laps, is how you meet tougher foes.
- */
-type DangerKey = "wild" | "cave1" | "cave2" | "cave3"
-  | "warren1" | "cove1" | "hollow1" | "hollow2" | "goblin1" | "goblin2"
-  | "orcfort1" | "orcfort2" | "bastion1" | "bastion2" | "grave1" | "grave2"
-  | "roost1" | "roost2" | "roost3";
-// Per-floor populations. THE tuning knob for crowd pressure: with body
-// blocking + the 2-attacker shield cap, every extra creature in a pack now
-// matters (3rd+ hits pierce the shield), so adjust counts here after playtests.
-const POPULATIONS: Readonly<Record<DangerKey, Partial<Record<MonsterKind, number>>>> = {
-  // Surface: tiers 1-2, the ~level 1-8 hunting grounds. Etap 19 emptied the
-  // vermin half of this roster along with their placeholder art, so the four
-  // survivors carry the whole beach — no shooter debuts up here any more, the
-  // orc archer on -1 is now the player's first ranged opponent.
-  wild: {
-    bandit: 6, snake: 5, skeleton: 4, goblin: 3,
-  },
-  // -1: tiers 2-3 (~level 8-13). The first spear-throwing orcs appear.
-  cave1: {
-    skeleton: 5, goblin: 5, ghoul: 4, orc: 3, orcArcher: 3,
-  },
-  // -2: tiers 3-4 (~level 12-17). The orc war camp and the minotaur outposts.
-  // Bumped after playtests: the floor is bigger than -1 but read as sparse.
-  cave2: {
-    orc: 5, orcArcher: 4, orcWarrior: 5, goblinLegionary: 3,
-    minotaur: 6, minotaurArcher: 4, orcShaman: 3,
-  },
-  // -3: tier 5 (~level 17-20+) and the dragon's lair — ONE dragon nests in
-  // the deepest band (danger 0.99, same as the Bone Lord) on a 10-minute
-  // respawn, guarding the way to the Marrow Blade chest. Bumped like -2.
-  cave3: {
-    orcBerserker: 6, minotaurGuard: 4, minotaurMage: 4, dragon: 1,
-    skeletonWarrior: 4, demonSkeleton: 1, // TEMP-ETAP18: until they get their own grounds
-  },
-  // ---- Deep Wildlands camp lairs: each settlement's dungeon, difficulty ----
-  // ---- rising floor by floor (Etap 9b). Floor -1s tested as "ok"; the    ----
-  // ---- deeper floors are bigger and read as empty, so -2/-3 run ~double. ----
-  warren1:  { bandit: 7, snake: 5 },
-  // Etap 19: the cove's crabs and the hollow's spiders went out with the
-  // art cull, and a floor with an empty roster spawns literally nothing —
-  // the density top-up draws from the roster too. These four keep their
-  // depth tier with stand-ins from the surviving bestiary until the camps
-  // are re-themed around creatures that actually have sheets.
-  cove1:    { snake: 7, bandit: 3 },
-  hollow1:  { skeleton: 5, goblin: 4 },
-  hollow2:  { goblin: 9, skeleton: 7 },
-  goblin1:  { goblin: 8 },
-  goblin2:  { goblin: 10, goblinLegionary: 6 },
-  orcfort1: { orc: 4, orcArcher: 3, orcWarrior: 3 },
-  orcfort2: { orcWarrior: 7, orcShaman: 5, orcBerserker: 4 },
-  bastion1: { minotaur: 4, minotaurArcher: 3 },
-  bastion2: { minotaurGuard: 5, minotaurMage: 4, minotaur: 6 },
-  grave1:   { skeleton: 6, ghoul: 5 },
-  grave2:   { skeleton: 8, ghoul: 6,
-              skeletonWarrior: 4, demonSkeleton: 1 }, // TEMP-ETAP18: see cave3
-  roost1:   { orc: 3, ghoul: 3 },
-  roost2:   { orcBerserker: 6, minotaurGuard: 3 },
-  // the Roost's heart: the SECOND dragon (the cavern one guards the chest;
-  // this one guards nothing but its hoard) with the same 10-minute clock
-  roost3:   { dragon: 1, orcBerserker: 5 },
-};
+/* ------------------------------------------------------------------ *
+ *  WHERE THE POPULATION TABLES WENT (Etap 40)
+ *
+ *  `POPULATIONS`, `CAMP_POPULATIONS`, `WILDERNESS_ROAMERS`, `HOARD_GUARDS`
+ *  and `TEST_POSTS` all lived here, and all five are gone. They scattered a
+ *  roster across a procedurally rolled floor by distance from its entrance —
+ *  a good answer for a map nobody had drawn, and the wrong one for a map
+ *  somebody had. Every world that survives is hand-authored: its creatures
+ *  are glyphs on the grid, at the spacing its author chose, and they respawn
+ *  onto the very tile they were drawn on.
+ *
+ *  So there is nothing left to tune here. Crowd pressure is now a property of
+ *  the map file, which is where it was always going to end up once the maps
+ *  were being drawn rather than generated. To make a floor harder, add
+ *  creatures to its spec.
+ * ------------------------------------------------------------------ */
 
 /**
- * Deep Wildlands SURFACE population (Etap 9b). Settlements carry themed
- * garrisons that spawn inside the camp ring and stay leashed to it; the open
- * forest between camps belongs to the wolves — free roamers with no leash,
- * spawned anywhere on the mainland outside settlements and the dock area.
- */
-const CAMP_POPULATIONS: Readonly<Record<string, Partial<Record<MonsterKind, number>>>> = {
-  warren:  { bandit: 5, snake: 3 },
-  cove:    { snake: 6 },
-  hollow:  { skeleton: 4, goblin: 3, bandit: 2 },
-  goblin:  { goblin: 5, goblinLegionary: 2 },
-  orcfort: { orc: 4, orcArcher: 3, orcWarrior: 2 },
-  bastion: { minotaur: 4, minotaurArcher: 2, minotaurGuard: 1 },
-  grave:   { skeleton: 4, ghoul: 3 },
-  roost:   { ghoul: 3 },
-};
-// Etap 19: the free roamers between camps were the two wolves. Bandits and
-// goblin raiders hold the open forest instead — same count, same no-leash rule.
-const WILDERNESS_ROAMERS: Partial<Record<MonsterKind, number>> = { bandit: 26, goblin: 10 };
-
-/**
- * One-time chest prizes by world (Etap 9c): the Marrow Blade's chest at the
- * bottom of the Bone Caverns, and the five Marrow-set pieces hoarded on the
- * deepest floors of the martial camps — difficulty rising with the prize.
- * main.ts reads this map in openTreasure; worlds absent here fall back to the
- * classic blade, so old saves behave exactly as before.
+ * One-time chest prizes by world: the four Knight-set pieces buried under the
+ * Bone Reach, two to a floor.
+ *
+ * Etap 40 took two entries with it. `cave3` held the Marrow Blade and
+ * `bastion2` the Knight shield, and both maps are gone — the shield still
+ * drops from the Black Knight at 5%, but THE MARROW BLADE NOW HAS NO SOURCE
+ * AT ALL. It is left in the item table on purpose: the sword exists, it is
+ * simply not findable until a mission map buries it again.
+ *
+ * Worlds absent here fall back to the blade in `openTreasure`, which is now a
+ * fallback nothing reaches — every chest in the game is listed.
  */
 export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ItemKind[]>>> = {
-  cave3: ["marrowBlade"],
-  bastion2: ["knightShield"],
-  // The two floors under the Bone Reach hold two pieces apiece. All four were
-  // lifted out of the Deep Wildlands lairs (roost3, orcfort2, grave2, goblin2),
-  // which now bury nothing, so every piece of the set is still findable once.
   orcdeep1: ["knightBody", "knightLegs"],
   minodeep1: ["knightHelm", "knightBoots"],
 };
 
 /**
- * The elite guard details posted around each Marrow chest — a tier above the
- * floor's regular roster, leashed to the hoard so they never abandon their
- * post and respawning right back beside it.
+ * Build every map. Twelve hand-authored specs, parsed from their glyph grids —
+ * no seed, no RNG, no procedural terrain anywhere in the game since Etap 40.
+ *
+ * `seed` is kept in the signature and on `Game` because the save carries it
+ * and because a shard will want one, but nothing in here reads it any more:
+ * two players on the same world now stand on byte-identical maps by
+ * construction rather than by agreeing on a number.
  */
-const HOARD_GUARDS: Readonly<Partial<Record<WorldKey, Partial<Record<MonsterKind, number>>>>> = {
-  bastion2: { minotaurGuard: 2, minotaurMage: 1 },
-};
-/**
- * TEMP-ETAP28: single specimens parked on the open Wildlands for playtesting.
- *
- * Both of these are top-of-the-curve creatures with no hunting grounds of
- * their own yet — the dragon nests two descents down and the knight has
- * nowhere at all — so there is no way to fight either one repeatedly without
- * clearing a cave first. Posting one of each at opposite ends of the surface
- * island makes them reachable in a minute from the dock, and keeps them far
- * enough apart that neither wanders into the other's fight.
- *
- * Deliberately NOT in `POPULATIONS`: that table is the danger-band roster and
- * scatters its creatures across the whole map by distance from the beach,
- * which is exactly what is not wanted here.
- *
- * The post is stated as a COMPASS SIDE rather than a coordinate. The Wildlands
- * is procedural and radial, so no fixed tile is guaranteed to be land — the
- * first attempt at this put the dragon at (52,11) and dropped it in the sea,
- * where it silently failed to spawn at all. `edgePost` walks the island's
- * spine instead and finds real ground, which also survives a change of seed.
- *
- * Grep TEMP-ETAP28 to pull both when they get proper grounds.
- */
-const TEST_POSTS: Readonly<Partial<Record<string, readonly {
-  kind: MonsterKind; side: "north" | "south";
-}[]>>> = {
-  wild: [
-    { kind: "dragon", side: "north" },
-    { kind: "blackKnight", side: "south" },
-  ],
-};
-
-/**
- * A tile near the north or south end of a map's central column, a few steps
- * inland from the coast so the creature is not standing in the surf.
- */
-function edgePost(w: World, side: "north" | "south"): { tx: number; ty: number } {
-  const tx = Math.floor(w.w / 2);
-  const step = side === "north" ? 1 : -1;
-  const from = side === "north" ? 0 : w.h - 1;
-  for (let ty = from; ty >= 0 && ty < w.h; ty += step) {
-    if (w.solid[ty]?.[tx] === false && (w.tile[ty]?.[tx] ?? 0) > 0) {
-      return { tx, ty: Math.min(w.h - 1, Math.max(0, ty + step * 3)) };
-    }
-  }
-  return { tx, ty: Math.floor(w.h / 2) };
-}
-
-const DANGER_KEYS = Object.keys(POPULATIONS) as DangerKey[];
-
-/** Stable per-key salt so each world's RNG stream is its own. */
-function keySalt(key: string): number {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
-  return h;
-}
-
-/** Build every map from a seed (deterministic terrain, layout & descent). */
-export function buildWorlds(seed: number): Record<WorldKey, World> {
-  // Seed the world RNG for the procedural Wildlands. The hub islands are
-  // hand-authored (no RNG) and each cave floor re-seeds itself, so the surface
-  // stays deterministic from the seed alone.
-  seedWorldRng(seed);
-  const home = makeHandmadeWorld(HOME_SPEC);
-  const town = makeHandmadeWorld(TOWN_SPEC);
-  const sanctum = makeHandmadeWorld(SANCTUM_SPEC);
-  const cellar = makeHandmadeWorld(CELLAR_SPEC);
-  const reach = makeHandmadeWorld(REACH_SPEC);
-  const bandit = makeHandmadeWorld(BANDIT_SPEC);
-  const banditdeep1 = makeHandmadeWorld(BANDITDEEP_SPEC);
-  const banditdeep2 = makeHandmadeWorld(BANDITDEEP2_SPEC);
-  const banditdeep3 = makeHandmadeWorld(BANDITDEEP3_SPEC);
-  const orcdeep1 = makeHandmadeWorld(ORCDEEP_SPEC);
-  const minodeep1 = makeHandmadeWorld(MINODEEP_SPEC);
-  const deaddeep1 = makeHandmadeWorld(DEADDEEP_SPEC);
-  const deaddeep2 = makeHandmadeWorld(DEADDEEP2_SPEC);
-  const wild = makeWorld({
-    key: "wild", name: "Wildlands", safe: false, w: 104, h: 80,
-    buildSpots: false, npcs: false,
-    trees: 40, rocks: 34, herbs: 20, mushrooms: 8, bones: 18, grassShift: -14,
-    portals: [{ dest: "town", label: "to Bonetown" }],
-  });
-  // the cave mouth sits far out in the wilds; ladders chain the floors down
-  addCaveEntrance(wild, "cave1", seed ^ keySalt("caveEntrance"));
-  const cave1 = makeCaveWorld({
-    key: "cave1", name: "Bone Caverns -1", w: 72, h: 56, seed: seed ^ keySalt("cave1"),
-    up: "wild", down: "cave2", rocks: 16, bones: 12,
-  });
-  const cave2 = makeCaveWorld({
-    key: "cave2", name: "Bone Caverns -2", w: 76, h: 60, seed: seed ^ keySalt("cave2"),
-    up: "cave1", down: "cave3", rocks: 18, bones: 12,
-  });
-  const cave3 = makeCaveWorld({
-    key: "cave3", name: "Bone Caverns -3", w: 80, h: 64, seed: seed ^ keySalt("cave3"),
-    up: "cave2", rocks: 20, bones: 14,
-    treasure: true, // the Marrow Blade chest waits at the very bottom
-  });
-  // The Deep Wildlands rolls from its own salted stream AFTER everything else,
-  // so adding it changes not a single tile of the older islands (old saves see
-  // the exact same Wildlands/caverns they were rolled on).
-  seedWorldRng(seed ^ keySalt("deepwild"));
-  const deepwild = makeDeepWildWorld();
-  // …and every camp's lair floors, each from its own salted seed. The record
-  // is completed by the loop below, hence the cast: TypeScript can't see that
-  // LAIRS covers exactly the remaining WorldKey members.
-  const worlds = { home, town, sanctum, cellar, reach, bandit, banditdeep1, banditdeep2, banditdeep3, orcdeep1, minodeep1, deaddeep1, deaddeep2, wild, deepwild, cave1, cave2, cave3 } as Record<WorldKey, World>;
+export function buildWorlds(_seed: number): Record<WorldKey, World> {
+  const worlds: Record<WorldKey, World> = {
+    home: makeHandmadeWorld(HOME_SPEC),
+    town: makeHandmadeWorld(TOWN_SPEC),
+    cellar: makeHandmadeWorld(CELLAR_SPEC),
+    bandit: makeHandmadeWorld(BANDIT_SPEC),
+    banditdeep1: makeHandmadeWorld(BANDITDEEP_SPEC),
+    banditdeep2: makeHandmadeWorld(BANDITDEEP2_SPEC),
+    banditdeep3: makeHandmadeWorld(BANDITDEEP3_SPEC),
+    reach: makeHandmadeWorld(REACH_SPEC),
+    orcdeep1: makeHandmadeWorld(ORCDEEP_SPEC),
+    minodeep1: makeHandmadeWorld(MINODEEP_SPEC),
+    deaddeep1: makeHandmadeWorld(DEADDEEP_SPEC),
+    deaddeep2: makeHandmadeWorld(DEADDEEP2_SPEC),
+  };
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
   loadMobSheets();           // directional walk cycles for humanoid creatures
@@ -289,152 +128,37 @@ export function buildWorlds(seed: number): Record<WorldKey, World> {
   loadControlIcons();        // the five sidebar buttons, 16x16 each
   loadItemArt();             // drawn icons over the baked stand-ins
   loadSpellArt();            // bolts and blooms, one strip per element and tier
-  for (const l of LAIRS) {
-    const lw = makeCaveWorld({
-      key: l.key, name: l.name, w: l.w, h: l.h, seed: seed ^ keySalt(l.key),
-      up: l.up, down: l.down, rocks: l.rocks, bones: l.bones, treasure: l.treasure,
-    });
-    // a Marrow-set chest gets a virtual "hoard" camp around it: the elite
-    // guard detail spawns inside that circle, stands leashed to the chest,
-    // and — via the same camp-respawn path as the villages — returns to its
-    // post when slain
-    const chest = lw.structures.find((st) => st.key === "treasure");
-    if (chest) {
-      lw.camps.push({
-        key: "hoard", name: `${l.name} hoard`,
-        x: chest.tx * TILE + TILE / 2, y: chest.ty * TILE + TILE / 2, r: 192,
-      });
-    }
-    worlds[l.key] = lw;
-  }
   return worlds;
 }
 
-/** Populate one dangerous world from its own deterministic RNG stream. */
-export function populateWorld(w: World, seed = WORLD_SEED): void {
-  // the continent populates by settlement, not by danger band
-  if (w.key === "deepwild") {
-    w.monsters.length = 0;
-    w.respawns.length = 0;
-    if (!MONSTERS_ENABLED) return;
-    seedWorldRng(seed ^ keySalt(w.key));
-    for (const camp of w.camps) {
-      const pop = CAMP_POPULATIONS[camp.key];
-      if (!pop) continue;
-      for (const kind of Object.keys(pop) as MonsterKind[]) {
-        for (let i = 0; i < (pop[kind] ?? 0); i++) spawnMonsterInCamp(w, kind, camp);
-      }
-    }
-    for (const kind of Object.keys(WILDERNESS_ROAMERS) as MonsterKind[]) {
-      for (let i = 0; i < (WILDERNESS_ROAMERS[kind] ?? 0); i++) spawnWilderness(w, kind);
-    }
-    return;
-  }
-  // A hand-drawn map places its own creatures: use them verbatim rather than
-  // scattering a roster, so the author's spacing is what the player meets.
-  if (w.mobPosts?.length) {
-    w.monsters.length = 0;
-    w.respawns.length = 0;
-    if (!MONSTERS_ENABLED) return;
-    for (const post of w.mobPosts) spawnAtPost(w, post.kind, post.tx, post.ty);
-    return;
-  }
-  const pop = POPULATIONS[w.key as DangerKey];
-  if (!pop) return;
+/**
+ * Populate one map from the creature posts its author drew on it.
+ *
+ * That is the whole function now. Etap 40 removed the other two paths — the
+ * radial danger band and the Deep Wildlands settlement scatter — along with
+ * the maps that needed them, and with them went the crowd multiplier, the
+ * density top-up and the chest-guard dragon. A hand-drawn floor gets exactly
+ * the creatures on exactly the squares its spec names.
+ *
+ * A safe map has no posts and simply comes out empty, so this is safe to call
+ * on every world without checking which.
+ */
+export function populateWorld(w: World): void {
+  if (!w.mobPosts?.length) return;
   w.monsters.length = 0;
   w.respawns.length = 0;
   if (!MONSTERS_ENABLED) return; // peaceful mode: leave every floor empty
-  seedWorldRng(seed ^ keySalt(w.key));
-  // Undergrounds (every dangerous floor except the surface Wildlands) get the
-  // crowd multiplier so their big, sparse caverns fill in, AND spawn uniformly
-  // across the whole floor rather than in a danger-band ring — so the entire
-  // cavern is populated instead of clumping at the entrance/exit. The surface
-  // Wildlands is a radial island and keeps its distance-from-beach danger band.
-  const crowded = w.key !== "wild";
-  // A chest world posts a dragon ON the chest below; worlds whose roster
-  // already lists one (cave3, roost3) SPEND that dragon on guard duty rather
-  // than fielding a second, so the floor's boss count is unchanged.
-  const chest = w.structures.find((s) => s.key === "treasure");
-  for (const kind of Object.keys(pop) as MonsterKind[]) {
-    let n = pop[kind] ?? 0;
-    if (kind === "dragon" && chest) n = Math.max(0, n - 1);
-    if (crowded && kind !== "dragon") n = Math.round(n * CAVE_CROWD_MULT);
-    for (let i = 0; i < n; i++) spawnMonster(w, kind, undefined, crowded);
-  }
-  // Density floor: top the cavern up from its own roster until it clears the
-  // one-creature-per-N-walkable-tiles bar, so no floor reads as half-empty
-  // regardless of how small its authored roster is (Etap 13). UNDERGROUNDS
-  // ONLY — the surface Wildlands keeps its deliberately trimmed roster.
-  let walkTiles = 0;
-  if (crowded) {
-    for (let y = 0; y < w.h; y++) {
-      for (let x = 0; x < w.w; x++) if (!w.solid[y][x] && w.tile[y][x] > 0) walkTiles++;
-    }
-  }
-  const target = Math.floor(walkTiles / CAVE_TILES_PER_MONSTER);
-  // filler pool = this floor's own creatures, bosses excluded, repeated in
-  // proportion to their roster weight so the mix stays true to the theme
-  const filler: MonsterKind[] = [];
-  for (const kind of Object.keys(pop) as MonsterKind[]) {
-    if (kind === "dragon") continue;
-    for (let i = 0; i < (pop[kind] ?? 0); i++) filler.push(kind);
-  }
-  if (filler.length) {
-    let guard = 0;
-    while (w.monsters.length < target && guard < 4000) {
-      const kind = filler[guard % filler.length];
-      spawnMonster(w, kind, undefined, crowded);
-      guard++;
-    }
-  }
-
-  // Test specimens last, so they are never displaced by the roster or by the
-  // density top-up above — both of those fill space and would happily park a
-  // bandit on the tile the dragon was meant to stand on.
-  for (const post of TEST_POSTS[w.key] ?? []) {
-    const at = edgePost(w, post.side);
-    spawnAtPost(w, post.kind, at.tx, at.ty);
-  }
-
-  // the Marrow chest's elite guard detail, posted around the hoard
-  const guards = HOARD_GUARDS[w.key];
-  const hoard = w.camps.find((c) => c.key === "hoard");
-  if (guards && hoard) {
-    for (const kind of Object.keys(guards) as MonsterKind[]) {
-      for (let i = 0; i < (guards[kind] ?? 0); i++) spawnMonsterInCamp(w, kind, hoard);
-    }
-  }
-  // EVERY one-time treasure chest is now guarded by a dragon coiled on its
-  // hoard (Etap 13) — the prize has to be fought for, never just walked to.
-  // Posted directly beside the chest so it's unmistakably ITS guardian, and
-  // registered as a `guard` respawn so killing it only clears the way for a
-  // while. Worlds whose roster already lists a dragon (cave3, roost3) spend
-  // that dragon here instead of adding a second one.
-  const chestGuard = chest;
-  if (chestGuard) spawnGuard(w, "dragon", chestGuard.tx, chestGuard.ty);
+  for (const post of w.mobPosts) spawnAtPost(w, post.kind, post.tx, post.ty);
 }
 
-/**
- * Populate the Wildlands, the caverns, the continent, and every lair floor —
- * plus any hand-drawn map that places its own creatures.
- *
- * That last clause is easy to forget and expensive to miss: a map with
- * authored posts carries no roster, so it is absent from DANGER_KEYS and would
- * otherwise be skipped entirely and stand empty. Driving it off `mobPosts`
- * rather than a second hard-coded list means a new authored map populates the
- * day it is added, with nothing here to update.
- */
-export function populateAll(worlds: Record<WorldKey, World>, seed = WORLD_SEED): void {
-  for (const k of DANGER_KEYS) populateWorld(worlds[k], seed);
-  populateWorld(worlds.deepwild, seed);
-  for (const k of Object.keys(worlds) as WorldKey[]) {
-    if (worlds[k].mobPosts?.length) populateWorld(worlds[k], seed);
-  }
+/** Populate every map that carries authored creature posts. */
+export function populateAll(worlds: Record<WorldKey, World>): void {
+  for (const k of Object.keys(worlds) as WorldKey[]) populateWorld(worlds[k]);
 }
 
 export function createGame(seed = WORLD_SEED): Game {
   const worlds = buildWorlds(seed);
-  populateAll(worlds, seed);
+  populateAll(worlds);
   // Creatures are stamped by pushMonster and structures by their placers; this
   // catches anything a hand-authored spec dropped in directly. Idempotent.
   stampWorlds(worlds);
@@ -454,13 +178,6 @@ export function createGame(seed = WORLD_SEED): Game {
     tpFlash: 0,
     opened: [],
   };
-}
-
-/** 8-way compass word for a direction vector (screen space: +y is south). */
-function compass(dx: number, dy: number): string {
-  const ns = dy < -8 ? "north" : dy > 8 ? "south" : "";
-  const ew = dx < -8 ? "west" : dx > 8 ? "east" : "";
-  return (ns + ew) || "east";
 }
 
 /** Teleport the player through a portal to `dest`. */
@@ -492,20 +209,13 @@ export function travelTo(g: Game, dest: WorldKey): void {
        < Math.hypot(best.x - g.player.x, best.y - g.player.y) ? pt : best
   ), undefined) ?? target.portals[0];
   const p = portalSpawn(target, back);
-  // arriving on the surface: point the way to the cave mouth so it's findable
-  let extra = "";
-  if (dest === "wild") {
-    const mouth = target.portals.find((pt) => pt.dest === "cave1");
-    if (mouth) extra = "  ·  cave mouth to the " + compass(mouth.x - p.x, mouth.y - p.y);
-  }
-  // arriving on the Deep Wildlands: point the way to the nearest camp
-  if (dest === "deepwild" && target.camps.length) {
-    let best = target.camps[0];
-    for (const c of target.camps) {
-      if (Math.hypot(c.x - p.x, c.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y)) best = c;
-    }
-    extra = "  ·  " + best.name + " to the " + compass(best.x - p.x, best.y - p.y);
-  }
+  // The two arrival hints — "cave mouth to the north-west" on the Wildlands and
+  // "orc fort to the east" on the Deep Wildlands — went with those maps in
+  // Etap 40, and the `compass()` helper that phrased them went too. Both
+  // existed because a procedural island gives you no landmark to steer by; a
+  // drawn one does. The zone banner below still has room for a suffix if a
+  // mission map ever wants to point at something.
+  const extra = "";
   // Every creature's committed cast belongs to the island it was cast on.
   // Leaving mid-windup and coming back to a fireball resolving in your face is
   // the same class of bug the FX module already guards against by world.

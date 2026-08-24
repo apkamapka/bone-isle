@@ -1,13 +1,13 @@
 /**
  * Hand-authored hub islands (Home Isle & Bonetown).
  *
- * Instead of rolling these from the world RNG like the Wildlands, they are laid
+ * Since Etap 40 this is the ONLY way a map is made. They are laid
  * out by hand as character grids — one glyph per tile — so shops, build plots
  * and portals sit exactly where they were designed to. The parser turns a grid
  * into the very same `World` shape `makeWorld` produces, so every downstream
  * system (collision, spawns, resource nodes, NPCs, build spots, save/load, the
  * baker) works unchanged. Because nothing here touches the world RNG, the
- * Wildlands stays deterministic from the seed regardless of hub edits.
+ * every map is byte-identical on every device, by construction.
  *
  * Glyph legend (shared):
  *   ~ water    . grass    , sand    # ruined wall
@@ -167,7 +167,6 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     buildSpots: [],
     portals: [],
     gates: [],
-    camps: [],
     coastWater: [],
     // Authored maps have no radial silhouette; the baker no longer needs one.
     landR: () => Math.max(W, H),
@@ -452,8 +451,8 @@ export const TOWN_SPEC: HandmadeSpec = {
   safeMaxY: 25,
   grassShift: 4,
   rows: TOWN_ROWS,
-  // Only the Home Isle gate is authored on the redrawn map; the Wildlands,
-  // Deep Wildlands and Sanctum doors come back as those maps are redrawn.
+  // The plaza has two doors: the gate home, and the trapdoor into the Time
+  // Sage's cellar. Everything else in the game hangs off the cellar's pads.
   portals: {
     P: { dest: "home", label: "to Home Isle" },
     // a proper teleport pad, 2x2 like the ones downstairs — the glyph marks
@@ -467,57 +466,6 @@ export const TOWN_SPEC: HandmadeSpec = {
     z: { key: "timesage", beat: { west: 4, east: 4 }, floor: Tile.Dirt },
   },
   monsters: { b: "bandit" },
-};
-
-/* ------------------------------------------------------------------ */
-/*  BONE SANCTUM — the crypt beneath the western temple. Five chambers */
-/*  sealed by level gates (10/15/20/25/30); each holds a dormant       */
-/*  teleport pad that will link to a quest realm in a future stage.    */
-/* ------------------------------------------------------------------ */
-const SANCTUM_ROWS: readonly string[] = [
-  "##############################",
-  "##############################",
-  "##############################",
-  "##############################",
-  "###o===#====#====#====#===o###",
-  "###====#====#====#====#====###",
-  "###=a==#=b==#=c==#=d==#=e==###",
-  "###====#====#====#====#====###",
-  "###====#====#====#====#====###",
-  "###====#====#====#====#====###",
-  "####11###22###33###44###55####",
-  "###========================###",
-  "###==========o==o==========###",
-  "###==o==================o==###",
-  "###====#==============#====###",
-  "###========================###",
-  "###========================###",
-  "###========================###",
-  "###====#==============#====###",
-  "###===========U============###",
-  "###=o====================o=###",
-  "##############################",
-  "##############################",
-  "##############################",
-];
-
-const dormant = (label: string) =>
-  ({ dest: "sanctum", label, inactive: true, floor: Tile.Cave } as const);
-
-export const SANCTUM_SPEC: HandmadeSpec = {
-  key: "sanctum",
-  name: "Bone Sanctum",
-  safe: true,
-  rows: SANCTUM_ROWS,
-  portals: {
-    U: { dest: "town", label: "to Bonetown", style: "ladderUp", floor: Tile.Cave },
-    a: dormant("Dormant Portal I"),
-    b: dormant("Dormant Portal II"),
-    c: dormant("Dormant Portal III"),
-    d: dormant("Dormant Portal IV"),
-    e: dormant("Dormant Portal V"),
-  },
-  gates: { "1": 10, "2": 15, "3": 20, "4": 25, "5": 30 },
 };
 
 /* ------------------------------------------------------------------ */
@@ -541,9 +489,15 @@ export const SANCTUM_SPEC: HandmadeSpec = {
 /*  PNG carries the same margin as flat black.                             */
 /*                                                                     */
 /*  Fourteen pads carry an X in the artwork; each is a 2x2 block and   */
-/*  the portal glyph sits on its top-left tile. The bottom pair is     */
-/*  live and leads to the Wildlands and the Deep Wildlands; the other  */
-/*  twelve are dormant until their hunting grounds are built.          */
+/*  the portal glyph sits on its top-left tile. Two are live — the     */
+/*  Gallows Coast and the Bone Reach, the grounds a new character      */
+/*  levels on. The other twelve are dormant, and the Time Sage opens   */
+/*  them one at a time as his missions are written.                    */
+/*                                                                     */
+/*  Fourteen is not a number anything depends on. When it runs out the */
+/*  answer is a SECOND cellar, not a wider one, so nothing outside this*/
+/*  file counts the pads — the smoke suite checks that each is 2x2,    */
+/*  walkable, unshared and reachable, and never how many there are.    */
 /* ------------------------------------------------------------------ */
 const CELLAR_ROWS: readonly string[] = [
   "##############################",
@@ -609,16 +563,14 @@ export const CELLAR_SPEC: HandmadeSpec = {
   rows: CELLAR_ROWS,
   portals: {
     U: { dest: "town", label: "back up to Bonetown", span: 2, floor: Tile.Cave },
-    // the four that will open first, once their hunting grounds exist
+    // Named for grounds that do not exist yet. The names are placeholders and
+    // will be replaced by the missions that open these doors.
     a: sealed("Minotaur Halls — sealed"),
     b: sealed("Undead Crypt — sealed"),
-    // …except the bottom pair, which is live already: until those grounds are
-    // built it carries you to the two islands that DO have monsters on them.
-    // Neither island has a way back to the cellar, so you arrive beside its own
-    // gate to Bonetown and return that way — see the note in `travelTo`.
-    // The Wildlands slot now carries you to the Gallows Coast instead. The old
-    // procedural island is left standing but unreachable — it is on its way
-    // out, and orphaning it here is the first step rather than an oversight.
+    // The two live pads. Neither island has a way back to the cellar, so you
+    // arrive beside its own gate to Bonetown and return that way — see the
+    // note in `travelTo`. These are the grounds a character levels on before
+    // the sage will speak to them about anything.
     c: { dest: "bandit", label: "to the Gallows Coast", span: 2, floor: Tile.Cave },
     d: { dest: "reach", label: "to the Bone Reach", span: 2, floor: Tile.Cave },
     // and ten more the sage has not named yet

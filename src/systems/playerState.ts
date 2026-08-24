@@ -43,6 +43,7 @@ import type { TaskSave } from "./tasks.ts";
 import type { OutfitSave } from "./outfit.ts";
 import type { Element } from "./elements.ts";
 import type { PvpState } from "./pvp.ts";
+import type { MissionSave } from "./missions.ts";
 
 /**
  * The three combat toggles. Tibia 8.6 has exactly these, as three independent
@@ -88,6 +89,12 @@ export interface PlayerState {
   modes: CombatModes;
   quests: Quest[];
   tasks: TaskSave;
+  /**
+   * The Time Sage's chain: mission id → stage. Absent means `locked`, so a
+   * brand-new character is an empty object rather than fourteen rows of
+   * nothing — and a mission that has not been written yet costs no storage.
+   */
+  missions: MissionSave;
   outfit: OutfitSave;
   /**
    * Standing among other players: which skull is worn, how long it has left,
@@ -129,7 +136,7 @@ function defaultQuests(): Quest[] {
   return [
     {
       id: "q1", title: "Pest Control",
-      desc: "The road to the Wildlands crawls with snakes. Cull 5 of them.",
+      desc: "The Gallows Coast crawls with snakes. Cull 5 of them.",
       goal: { kind: "kill", monster: "snake", need: 5 },
       reward: { gold: 20, exp: 30 },
       progress: 0, done: false, claimed: false,
@@ -157,7 +164,7 @@ function defaultQuests(): Quest[] {
     },
     {
       id: "q5", title: "Horns of the Deep",
-      desc: "Minotaurs hold the deep caverns. Slay 3 to prove your strength.",
+      desc: "Minotaurs hold the deep under the Reach. Slay 3 to prove your strength.",
       goal: { kind: "kill", monster: "minotaur", need: 3 },
       reward: { item: "amulet", itemN: 1, gold: 100, exp: 200 },
       progress: 0, done: false, claimed: false,
@@ -192,6 +199,7 @@ export function newPlayerState(): PlayerState {
     modes: { stance: "balanced", chase: true, safeMode: true },
     quests: defaultQuests(),
     tasks: { activeId: null, kills: 0, earned: 0 },
+    missions: {},
     outfit: defaultOutfit(),
     pvp: defaultPvp(),
     research: new Set<string>(),

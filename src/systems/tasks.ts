@@ -82,7 +82,7 @@ export const TASKS: readonly TaskDef[] = [
   // --- Tier 2 (needs 16 lifetime points) ---
   {
     id: "t_ghouls", title: "Restless Dead",
-    desc: "Ghouls prowl the deep Wildlands. Put 12 back in the ground.",
+    desc: "Ghouls prowl the Charnel Deep. Put 12 back in the ground.",
     goal: { kind: "kill", monster: "ghoul", need: 12 },
     reward: { points: 5, gold: 130, exp: 240, item: "boneArrow", itemN: 20 }, reqPoints: 16,
   },

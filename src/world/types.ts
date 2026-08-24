@@ -16,41 +16,36 @@ export const Tile = {
 } as const;
 export type Tile = (typeof Tile)[keyof typeof Tile];
 
-/** The surface islands, the Deep Wildlands, and the Bone Caverns (-1..-3). */
-export type WorldKey = "home" | "town" | "wild" | "deepwild" | "cave1" | "cave2" | "cave3"
-  // The Gallows Coast — the human ladder's hunting ground, traced from Tiled,
-  // and the cellars under it. Six holes are cut into the island and all six
-  // drop onto the same floor, each onto its own ladder.
+/**
+ * Every map in the game. All twelve are hand-authored: laid out as glyph grids
+ * and painted in Tiled, with their creatures placed one at a time rather than
+ * scattered from a roster.
+ *
+ * Etap 40 retired the procedural half of the world — the Wildlands, the Deep
+ * Wildlands, the three Bone Caverns floors, the fifteen camp lairs and the
+ * Bone Sanctum, twenty-one maps in all. Nothing rolls terrain from the seed
+ * any more, so `POPULATIONS` and the danger-band scatter went with them: what
+ * the author drew is what the player meets. See `game.ts` for the fallout.
+ */
+export type WorldKey =
+  // The hubs: the player's own island, the town, and the Time Sage's cellar
+  // under it — fourteen pads, twelve of them still dormant.
+  | "home" | "town" | "cellar"
+  // The Gallows Coast — the human ladder's hunting ground, and the cellars
+  // under it. Six holes are cut into the island and all six drop onto the same
+  // floor, each onto its own ladder.
   | "bandit" | "banditdeep1" | "banditdeep2" | "banditdeep3"
-  // The Bone Reach — the island behind the Time Sage's fourth pad, traced from
-  // Tiled. Three descents are cut into it; two of the three are dug.
+  // The Bone Reach — the island behind the Time Sage's second live pad.
+  // Three descents are cut into it.
   | "reach"
-  // Orc Deep -1 — the pit under the Reach's southern descent, hand-authored in
-  // Tiled. Thirty-one orcs and the two Marrow plate pieces.
+  // Orc Deep -1 — the pit under the Reach's southern descent.
   | "orcdeep1"
   // Minotaur Deep -1 — the labyrinth under the Reach's western descent.
-  // Forty-five minotaurs and the Marrow helm and boots.
   | "minodeep1"
   // Charnel Deep -1 — the maze under the Reach's northern descent, and the
-  // hollow below it. The dead hold the maze in equal thirds; the hollow holds
-  // one dragon and nothing else.
-  | "deaddeep1" | "deaddeep2"
-  // The Bone Sanctum — the crypt beneath the western temple; its level-gated
-  // teleport chambers will link to quest realms in a future stage.
-  | "sanctum"
-  // The Time Sage's cellar under Bonetown: fourteen dormant pads that will
-  // become the hunting grounds (orcs, trolls, minotaurs, undead) later on.
-  | "cellar"
-  // Deep Wildlands camp lairs — each settlement descends into its own dungeon
-  // (one to three floors; deeper floors are larger and will carry harder tiers)
-  | "warren1"
-  | "cove1"
-  | "hollow1" | "hollow2"
-  | "goblin1" | "goblin2"
-  | "orcfort1" | "orcfort2"
-  | "bastion1" | "bastion2"
-  | "grave1" | "grave2"
-  | "roost1" | "roost2" | "roost3";
+  // Cinder Hollow below it. The dead hold the maze in equal thirds; the hollow
+  // holds one dragon and nothing else.
+  | "deaddeep1" | "deaddeep2";
 
 /** A point in world (pixel) space. */
 export interface Vec {
@@ -187,22 +182,6 @@ export interface Reserved {
   r: number;
 }
 
-/**
- * A themed monster settlement on the Deep Wildlands (orc fort, graveyard,
- * dragon roost…). Purely descriptive for now: it marks a circle of terrain
- * and decoration; a later stage attaches per-camp rosters and respawns so
- * creatures live in their villages instead of roaming in bands.
- */
-export interface Camp {
-  key: string;
-  name: string;
-  /** Centre in world px. */
-  x: number;
-  y: number;
-  /** Radius in px. */
-  r: number;
-}
-
 /** Animated coastal water tile (foam/wave dashes). */
 export interface CoastWater {
   x: number;
@@ -232,7 +211,7 @@ export interface GroundItem {
 }
 
 /**
- * Monster kinds present on the Wildlands and down the Bone Caverns.
+ * Every monster kind in the game. Each is placed by hand on a map.
  *
  * Etap 19 cut the bestiary down to the creatures that own real artwork: every
  * kind listed here has a drawn walk sheet under `public/`. The sixteen that
@@ -324,15 +303,12 @@ export interface Monster {
    *  body-blocked — half the pack circles left, half right, so they surround
    *  the player instead of queueing in a single line behind each other. */
   orbit: 1 | -1;
-  /** Camp this creature belongs to (Deep Wildlands settlements). A slain
-   *  camp dweller respawns back home instead of anywhere on the continent. */
-  camp?: string;
-  /** Treasure-chest guard: the chest tile it is posted on, so a slain guard
-   *  respawns back beside its hoard rather than anywhere on the floor. */
+  /** The tile this creature is posted to: the square the map's author put it
+   *  on, or a treasure chest it guards. A slain creature respawns back here. */
   guard?: { tx: number; ty: number };
   /** Home point + leash radius in px: wandering beyond it turns the creature
-   *  back toward home, so villagers idle around their village. Roamers
-   *  (wilderness wolves) simply have no home set. */
+   *  back toward home, so a posted creature idles around its post instead of
+   *  drifting across the map. */
   hx?: number;
   hy?: number;
   hr?: number;
@@ -433,8 +409,6 @@ export interface Shot {
 export interface Respawn {
   kind: MonsterKind;
   t: number;
-  /** Camp the slain creature came from — it respawns back there. */
-  camp?: string;
   /** The tile this creature is posted to: a treasure hoard, or an authored
    *  spawn point on a hand-drawn map. Either way it respawns back here rather
    *  than anywhere on the floor. */
@@ -492,10 +466,9 @@ export interface World {
   structures: Structure[];
   buildSpots: BuildSpot[];
   portals: Portal[];
-  /** Level-sealed doorways (Bone Sanctum); toggled by applyGates(). */
+  /** Level-sealed doorways, toggled by applyGates(). The mission maps will
+   *  use these to hold the echo's entrance shut until the player is ready. */
   gates: LevelGate[];
-  /** Themed settlements (Deep Wildlands); empty elsewhere. */
-  camps: Camp[];
   coastWater: CoastWater[];
   /** Authored spawn point (world px) — the map's own start tile. Hand-drawn
    *  maps mark it with a glyph; when absent the player lands beside a portal

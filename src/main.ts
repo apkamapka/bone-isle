@@ -14,7 +14,7 @@ import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
-import { updateMonsters, MONSTER_DEFS, spawnMonster, spawnMonsterInCamp, spawnWilderness, spawnAtPost } from "./entities/monsters.ts";
+import { updateMonsters, MONSTER_DEFS, spawnAtPost } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
@@ -3535,23 +3535,18 @@ function update(dt: number): void {
     });
     // respawns — never on top of the player (Tibia: nothing spawns on screen);
     // if the whole area is camped, the respawn retries a few seconds later.
-    // Camp dwellers return to their settlement; frontier roamers to the wilds.
     if (MONSTERS_ENABLED) {
       for (let i = world.respawns.length - 1; i >= 0; i--) {
         const r = world.respawns[i];
         r.t -= dt;
         if (r.t <= 0) {
-          const camp = r.camp ? world.camps.find((c) => c.key === r.camp) : undefined;
-          // caves respawn uniformly across the floor (same as populate), so
-          // kills don't slowly re-clump every creature back into one corner.
-          const caveUniform = world.key !== "wild" && world.key !== "deepwild";
+          // Every creature in the game is posted, so this is the only path
+          // left: it goes back to the square the map's author drew it on, or
+          // — if the player is standing there — to the nearest free ring
+          // around it. Etap 40 removed the camp and scatter branches.
           const done = r.guard
             ? spawnAtPost(world, r.kind, r.guard.tx, r.guard.ty, P)
-            : camp
-              ? spawnMonsterInCamp(world, r.kind, camp, P)
-              : world.key === "deepwild"
-                ? spawnWilderness(world, r.kind, P)
-                : spawnMonster(world, r.kind, P, caveUniform);
+            : false;
           if (done) world.respawns.splice(i, 1);
           else r.t = RESPAWN_RETRY_S;
         }
@@ -3736,6 +3731,21 @@ function resolveTarget(): void {
     if (!n) { P.target = null; return; }
     if (n.key === "taskmaster") { openWindow("tasks"); }
     else if (n.key === "tailor") { openWindow("wardrobe"); }
+    /* Chronos stands in two places, and only ONE of them gives missions.
+     *
+     * The plaza is a signpost: he greets you and points at the trapdoor, and
+     * that is the whole of it. Every mission, every relic and every pad is
+     * business conducted downstairs, in front of the pads themselves — so a
+     * player can never be told about a door while standing nowhere near it,
+     * and two people talking to "the sage" are never talking to two different
+     * sages with two different states. `cellar` is the check rather than
+     * `!safe` or a coordinate: it is the room the pads are in. */
+    else if (n.key === "timesage") {
+      flash(cw().key === "cellar"
+        ? "Chronos: \u201cthe pads are cold. Not yet.\u201d"
+        : "Chronos: \u201cthe trapdoor north of here. History is kept downstairs.\u201d",
+        "#b9a6d8");
+    }
     // Someone with neither a shop nor a panel of their own has nothing to open
     // yet — say so rather than putting an empty window on screen.
     else if (!SHOPS[n.key]) { flash(`${n.name} has nothing to say… yet`, "#b9a6d8"); }
