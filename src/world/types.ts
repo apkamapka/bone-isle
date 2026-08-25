@@ -38,8 +38,10 @@ export type WorldKey =
   // The Bone Reach — the island behind the Time Sage's second live pad.
   // Three descents are cut into it.
   | "reach"
-  // Orc Deep -1 — the pit under the Reach's southern descent.
-  | "orcdeep1"
+  // Orc Deep -1 — the pit under the Reach's southern descent, and the lower
+  // pit under that. The same two mazes as the minotaur branch, each turned a
+  // quarter turn, so the ground is shared and the walking is not.
+  | "orcdeep1" | "orcdeep2"
   // Minotaur Deep -1 — the labyrinth under the Reach's western descent, and
   // the lower labyrinth under that. The horns hold the first floor, their
   // guard the second, and the branch's one hoard sits at the bottom of it.

@@ -4,6 +4,7 @@ import { DEADDEEP_SPEC } from "./world/deadDeepSpec.ts";
 import { MINODEEP_SPEC } from "./world/minoDeepSpec.ts";
 import { MINODEEP2_SPEC } from "./world/minoDeep2Spec.ts";
 import { ORCDEEP_SPEC } from "./world/orcDeepSpec.ts";
+import { ORCDEEP2_SPEC } from "./world/orcDeep2Spec.ts";
 import { BANDITDEEP2_SPEC } from "./world/banditDeep2Spec.ts";
 import { BANDITDEEP3_SPEC } from "./world/banditDeep3Spec.ts";
 import { BANDITDEEP_SPEC } from "./world/banditDeepSpec.ts";
@@ -90,11 +91,16 @@ export interface Game {
  * AT ALL. It is left in the item table on purpose: the sword exists, it is
  * simply not findable until a mission map buries it again.
  *
- * The 80x80 redraw of the minotaur floors took a third: `minodeep1` no longer
- * has a chest at all. THE KNIGHT HELM AND BOOTS THEREFORE HAVE NO CHEST
- * SOURCE — like the blade, they remain in the item table and still drop from
- * the Black Knight at 5%, and the branch's one hoard is now the shield and the
- * platinum at the bottom of -2, where the drawing marks it.
+ * The 80x80 redraw took the other two. Neither `minodeep1` nor `orcdeep1`
+ * buries anything now; each branch has ONE hoard and it sits at the bottom of
+ * its -2, where the drawings mark it — the minotaur shield under the horns,
+ * the orcish shield under the orcs, ten platinum with each.
+ *
+ * SO NO CHEST IN THE GAME HOLDS KNIGHT GEAR ANY MORE. All four pieces stay in
+ * the item table and all four still drop from the Black Knight at 5% apiece,
+ * which was always meant to be the repeatable source; what is gone is the
+ * one-off that handed a level-25 character half the set for a walk. If that
+ * turns out to be too steep a cut, this table is where it is put back.
  *
  * Worlds absent here fall back to the blade in `openTreasure`, which is a
  * fallback nothing reaches — every chest in the game is listed.
@@ -102,8 +108,8 @@ export interface Game {
 export type ChestPrize = ItemKind | readonly [ItemKind, number];
 
 export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize[]>>> = {
-  orcdeep1: ["knightBody", "knightLegs"],
   minodeep2: ["minotaurShield", ["platinumCoin", 10]],
+  orcdeep2: ["orcishShield", ["platinumCoin", 10]],
 };
 
 /**
@@ -126,6 +132,7 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     banditdeep3: makeHandmadeWorld(BANDITDEEP3_SPEC),
     reach: makeHandmadeWorld(REACH_SPEC),
     orcdeep1: makeHandmadeWorld(ORCDEEP_SPEC),
+    orcdeep2: makeHandmadeWorld(ORCDEEP2_SPEC),
     minodeep1: makeHandmadeWorld(MINODEEP_SPEC),
     minodeep2: makeHandmadeWorld(MINODEEP2_SPEC),
     deaddeep1: makeHandmadeWorld(DEADDEEP_SPEC),

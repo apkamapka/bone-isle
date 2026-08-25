@@ -95,7 +95,7 @@ async function main(): Promise<void> {
         w.reach.mobPosts?.map((m) => [m.kind, m.tx, m.ty]),
       ]);
     ok(sig(w1) === sig(w2), "two builds → byte-identical maps");
-    ok(Object.keys(w1).length === 13, `thirteen maps, all hand-authored (${Object.keys(w1).length})`);
+    ok(Object.keys(w1).length === 14, `fourteen maps, all hand-authored (${Object.keys(w1).length})`);
     // …and nothing in here reads the seed any more, so a different one must
     // produce the same world rather than a new one.
     ok(sig(buildWorlds(WORLD_SEED + 1)) === sig(w1), "…and the seed no longer moves a tile");
@@ -5461,21 +5461,23 @@ async function main(): Promise<void> {
     const worlds = buildWorlds(WORLD_SEED);
     populateAll(worlds);
 
+    // Both -1 floors are 80x80 traces now, and neither buries anything: each
+    // branch keeps ONE hoard and it sits at the bottom of its -2, so `chest`
+    // is null here and the assertion below reads the other way round. The orc
+    // floor is the minotaur floor turned a quarter turn, which is why the two
+    // rows below share a wall count to the square.
     const FLOORS = [
       {
         key: "orcdeep1" as const, spec: ORCDEEP_SPEC, png: "orcdeep-terrain.png",
-        w: 40, h: 50, walls: 927, ladder: [32, 38], glyph: "2", chest: [8, 4],
-        prizes: 2, fires: 18, wells: 2, boulders: 7,
-        head: { orcBerserker: 16, orcShaman: 10, orcWarrior: 5 }, total: 31,
+        w: 80, h: 80, walls: 2642, ladder: [9, 55], glyph: "2", chest: null,
+        prizes: 0, fires: 34, wells: 4, boulders: 22,
+        head: { orc: 38, orcArcher: 24, orcWarrior: 23 }, total: 85,
       },
       {
-        // Redrawn at 80x80. The floor that replaced it buries nothing: the
-        // branch's one hoard moved to the bottom of -2, so `chest` is null
-        // here and the assertion below reads the other way round for it.
         key: "minodeep1" as const, spec: MINODEEP_SPEC, png: "minodeep-terrain.png",
         w: 80, h: 80, walls: 2642, ladder: [55, 70], glyph: "1", chest: null,
         prizes: 0, fires: 34, wells: 4, boulders: 22,
-        head: { minotaur: 61, minotaurArcher: 39 }, total: 100,
+        head: { minotaur: 52, minotaurArcher: 33 }, total: 85,
       },
     ];
 
@@ -5588,13 +5590,13 @@ async function main(): Promise<void> {
       }
     }
 
-    /* --- nothing stands in the flames on either minotaur floor ---
+    /* --- nothing stands in the flames on any of the four ---
      * The four nudged markers this used to name were artefacts of the old
      * 60x50 drawing, where Tiled had dropped creatures onto props. The 80x80
      * redraw lays its posts down after the furniture instead of beside it, so
      * there is nothing to nudge — but the property those nudges existed to buy
      * still has to hold, and it is checked directly here. */
-    for (const key of ["minodeep1", "minodeep2"] as const) {
+    for (const key of ["minodeep1", "minodeep2", "orcdeep1", "orcdeep2"] as const) {
       const m = worlds[key];
       const onFire = m.mobPosts!.filter((q) =>
         m.fires.some((fi) => fi.tx === q.tx && fi.ty === q.ty));
@@ -5676,8 +5678,8 @@ async function main(): Promise<void> {
     /* --- who lives on -1: a graded mix, and room to land --- */
     {
       const n = (k: string) => m1.mobPosts!.filter((p) => p.kind === k).length;
-      ok(n("minotaur") === 61 && n("minotaurArcher") === 39,
-        `sixty-one horns and thirty-nine bows on -1 (${m1.mobPosts!.length} posts)`);
+      ok(n("minotaur") === 52 && n("minotaurArcher") === 33,
+        `fifty-two horns and thirty-three bows on -1 (${m1.mobPosts!.length} posts)`);
       ok(m1.monsters.length === m1.mobPosts!.length,
         "…and the populated floor spawns exactly those, no roamer rolled in");
       ok(m1.mobPosts!.every((p) => p.kind === "minotaur" || p.kind === "minotaurArcher"),
@@ -5697,8 +5699,8 @@ async function main(): Promise<void> {
     /* --- who lives on -2: the guard, and six mages on the hoard --- */
     {
       const n = (k: string) => m2.mobPosts!.filter((p) => p.kind === k).length;
-      ok(n("minotaurGuard") === 90 && n("minotaurMage") === 6,
-        `ninety guards and six mages on -2 (${m2.mobPosts!.length} posts)`);
+      ok(n("minotaurGuard") === 71 && n("minotaurMage") === 6,
+        `seventy-one guards and six mages on -2 (${m2.mobPosts!.length} posts)`);
       ok(m2.monsters.length === m2.mobPosts!.length, "…and every one of them stood up");
       const nearest = Math.min(...m2.mobPosts!.map((p) => d2[p.ty][p.tx]));
       ok(nearest >= 8, `…with the same clear landing at the foot of the ladder (${nearest})`);
@@ -5712,12 +5714,13 @@ async function main(): Promise<void> {
         .filter(([x, y]) => !m2.solid[y][x]);
       ok(approach.length > 0, `…from ${approach.length} open square(s) beside it`);
 
-      // The mages are the chamber and the chamber is the mages: every one of
-      // them is on the hoard, and not one is posted anywhere else on the floor.
+      // One mage holds the hoard; the rest are spread. Six of them in one
+      // chamber was a wall of fire, not a fight.
       const dc = walk(m2, approach[0][0], approach[0][1]);
       const mages = m2.mobPosts!.filter((p) => p.kind === "minotaurMage");
-      const far = Math.max(...mages.map((p) => dc[p.ty][p.tx]));
-      ok(far <= 10, `all six mages stand within ten steps of the hoard (worst ${far})`);
+      ok(mages.some((p) => dc[p.ty][p.tx] <= 4), "a mage holds the hoard itself");
+      ok(mages.filter((p) => dc[p.ty][p.tx] <= 12).length === 1,
+        "…and only the one: the other five are out in the maze");
     }
 
     /* --- what the hoard holds, and that a stack can be part of it --- */
@@ -5760,6 +5763,206 @@ async function main(): Promise<void> {
       stand("minodeep1", "reach");
       const back = Math.hypot(g.player.x / 32 - 8, g.player.y / 32 - 85);
       ok(back < 3, `…and on the island you come up the minotaurs' hole (${back.toFixed(1)} tiles off)`);
+    }
+  }
+
+  console.log("The orc branch, the same two mazes turned a quarter turn each:");
+  {
+    const fs = await import("node:fs");
+    const { ORCDEEP_SPEC } = await import("../src/world/orcDeepSpec.ts");
+    const { ORCDEEP2_SPEC } = await import("../src/world/orcDeep2Spec.ts");
+    const { MINODEEP_SPEC: MD1 } = await import("../src/world/minoDeepSpec.ts");
+    const { MINODEEP2_SPEC: MD2 } = await import("../src/world/minoDeep2Spec.ts");
+    const { populateAll, travelTo, createGame, CHEST_PRIZES } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    const o1 = worlds.orcdeep1;
+    const o2 = worlds.orcdeep2;
+
+    /* --- the rotation is exact, square for square --- */
+    // The claim the whole branch rests on: these are not two maps that look
+    // alike, they are the same collision turned ninety degrees. Checked
+    // against the FLOOR grids, which carry rock and cave and nothing else, so
+    // a creature or a boulder moving cannot make this pass or fail.
+    const rock = (spec: { floor?: readonly string[] }, x: number, y: number) =>
+      spec.floor![y][x] === "#";
+    let cw = 0, ccw = 0;
+    for (let y = 0; y < 80; y++) for (let x = 0; x < 80; x++) {
+      if (rock(MD1, x, y) === rock(ORCDEEP_SPEC, 79 - y, x)) cw++;
+      if (rock(MD2, x, y) === rock(ORCDEEP2_SPEC, y, 79 - x)) ccw++;
+    }
+    ok(cw === 6400, `Orc Deep -1 is Minotaur Deep -1 turned clockwise, to the square (${cw}/6400)`);
+    ok(ccw === 6400, `Orc Deep -2 is Minotaur Deep -2 turned anticlockwise (${ccw}/6400)`);
+
+    /* --- both exports ship, turned the same way as the grid --- */
+    for (const [file, w] of [
+      ["orcdeep-terrain.png", o1], ["orcdeep2-terrain.png", o2],
+    ] as const) {
+      const url = new URL(`../public/${file}`, import.meta.url);
+      ok(fs.existsSync(url), `public/${file} ships with it`);
+      if (fs.existsSync(url)) {
+        const png = fs.readFileSync(url);
+        ok(png.readUInt32BE(16) === w.w * 32 && png.readUInt32BE(20) === w.h * 32,
+          `…exactly ${w.w * 32}x${w.h * 32}, so it lines up 1:1 with the grid`);
+      }
+    }
+
+    /* --- the markers came round with the rotation --- */
+    const at = (p: { x: number; y: number }): [number, number] =>
+      [Math.floor(p.x / 32), Math.floor(p.y / 32)];
+    const up1 = o1.portals.find((p) => p.dest === "reach")!;
+    const dn1 = o1.portals.find((p) => p.dest === "orcdeep2")!;
+    const up2 = o2.portals.find((p) => p.dest === "orcdeep1")!;
+    ok(at(up1).join(",") === "9,55", "the ladder up to the Reach turned to (9,55)");
+    ok(at(dn1).join(",") === "69,16", "…and the hole down to (69,16)");
+    ok(at(up2).join(",") === "10,63", "the lower pit's ladder turned to (10,63)");
+    ok(o1.portals.length === 2 && o2.portals.length === 1,
+      "two ways off -1, one off -2 — the lower pit is a dead end, as the labyrinth's is");
+
+    /* --- one space each, furniture included --- */
+    const walkFrom = (w: typeof o1, sx: number, sy: number): number[][] => {
+      const d: number[][] = Array.from({ length: w.h }, () => new Array(w.w).fill(-1));
+      d[sy][sx] = 0;
+      const q: [number, number][] = [[sx, sy]];
+      for (let i = 0; i < q.length; i++) {
+        const [x, y] = q[i];
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + ax, ny = y + ay;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h || d[ny][nx] >= 0 || w.solid[ny][nx]) continue;
+          d[ny][nx] = d[y][x] + 1; q.push([nx, ny]);
+        }
+      }
+      return d;
+    };
+    const d1 = walkFrom(o1, ...at(up1));
+    const d2 = walkFrom(o2, ...at(up2));
+    for (const [w, d, tag] of [[o1, d1, "-1"], [o2, d2, "-2"]] as const) {
+      let open = 0, seen = 0;
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) {
+        if (!w.solid[y][x]) open++;
+        if (d[y][x] >= 0) seen++;
+      }
+      ok(open === seen, `Orc Deep ${tag}: every open square walks to the ladder (${seen}/${open})`);
+    }
+
+    /* --- three ranks on -1, graded outward --- */
+    {
+      const n = (k: string) => o1.mobPosts!.filter((p) => p.kind === k).length;
+      ok(n("orc") === 38 && n("orcArcher") === 24 && n("orcWarrior") === 23,
+        `thirty-eight orcs, twenty-four bows, twenty-three warriors (${o1.mobPosts!.length} posts)`);
+      ok(o1.monsters.length === o1.mobPosts!.length, "…and every one of them stood up");
+      ok(Math.min(...o1.mobPosts!.map((p) => d1[p.ty][p.tx])) >= 8,
+        "eight steps around the ladder stay clear, so you can land and draw");
+      const mean = (k: string) => {
+        const ps = o1.mobPosts!.filter((p) => p.kind === k);
+        return ps.reduce((s2, p) => s2 + d1[p.ty][p.tx], 0) / ps.length;
+      };
+      ok(mean("orcWarrior") > mean("orc") + 8,
+        `the warriors sit deeper in than the plain orcs (${mean("orc").toFixed(0)} vs ${mean("orcWarrior").toFixed(0)} steps)`);
+      // The archers deliberately do NOT grade: a flat share of every stretch,
+      // so no part of the floor is safe from being shot and none is only that.
+      const spanA = Math.abs(mean("orcArcher") - (mean("orc") + mean("orcWarrior")) / 2);
+      ok(spanA < 12, `…while the bows hold every stretch evenly (${spanA.toFixed(0)} steps off centre)`);
+    }
+
+    /* --- berserkers and isolated shamans on -2 --- */
+    {
+      const n = (k: string) => o2.mobPosts!.filter((p) => p.kind === k).length;
+      ok(n("orcBerserker") === 67 && n("orcShaman") === 10,
+        `sixty-seven berserkers and ten shamans (${o2.mobPosts!.length} posts)`);
+      ok(o2.monsters.length === o2.mobPosts!.length, "…and every one of them stood up");
+      ok(Math.min(...o2.mobPosts!.map((p) => d2[p.ty][p.tx])) >= 8,
+        "…with the same clear landing at the foot of the ladder");
+      const chest = o2.structures.find((st) => st.key === "treasure")!;
+      ok(chest !== undefined && chest.tx === 13 && chest.ty === 6,
+        "the hoard turned to (13,6) with the rest of the map");
+      ok(o2.solid[chest.ty][chest.tx], "…and it is furniture: you open it from the tile beside it");
+      const dc = walkFrom(o2, chest.tx, chest.ty + 1);
+      const sh = o2.mobPosts!.filter((p) => p.kind === "orcShaman");
+      ok(sh.some((p) => dc[p.ty][p.tx] <= 4), "a shaman holds the hoard itself");
+      ok(sh.filter((p) => dc[p.ty][p.tx] <= 12).length === 1,
+        "…and only the one: the other nine are out in the pit");
+    }
+
+    /* --- what the orc hoard holds --- */
+    {
+      const prizes = CHEST_PRIZES.orcdeep2!;
+      ok(CHEST_PRIZES.orcdeep1 === undefined, "-1 is keyed to no prize — it buries nothing now");
+      const kinds = prizes.map((p) => (Array.isArray(p) ? p[0] : p));
+      const counts = prizes.map((p) => (Array.isArray(p) ? p[1] : 1));
+      ok(kinds.join(",") === "orcishShield,platinumCoin" && counts.join(",") === "1,10",
+        "the orc hoard is the orcish shield and ten platinum");
+      // Knight gear is off the chest table entirely now; the Black Knight is
+      // the only source, which is what the repeatable drop was always for.
+      const knight = ["knightHelm", "knightBody", "knightLegs", "knightBoots"];
+      const inChests = Object.values(CHEST_PRIZES).flat()
+        .map((p) => (Array.isArray(p) ? p[0] : p));
+      ok(knight.every((k) => !inChests.includes(k)),
+        "no chest in the game hands out knight gear any more");
+      const bk = (await import("../src/entities/monsters.ts")).MONSTER_DEFS.blackKnight;
+      ok(knight.every((k) => bk.loot.some((l) => l.kind === k)),
+        "…and all four pieces still drop from the Black Knight");
+    }
+
+    /* --- and the branch walks end to end --- */
+    {
+      const g = createGame(WORLD_SEED);
+      populateAll(g.worlds);
+      const stand = (from: string, dest: string) => {
+        const w = g.worlds[from as keyof typeof g.worlds];
+        const pad = w.portals.find((p) => p.dest === dest)!;
+        g.current = w; g.player.x = pad.x; g.player.y = pad.y;
+        travelTo(g, dest as never);
+        const inWall = g.current.solid[Math.floor(g.player.y / 32)][Math.floor(g.player.x / 32)];
+        ok(g.current.key === dest && !inWall, `${from} -> ${dest}, and you land on open ground`);
+      };
+      stand("reach", "orcdeep1");
+      stand("orcdeep1", "orcdeep2");
+      stand("orcdeep2", "orcdeep1");
+      const backOn1 = Math.hypot(g.player.x / 32 - 69, g.player.y / 32 - 16);
+      ok(backOn1 < 3, `…coming up you stand at the hole you went down (${backOn1.toFixed(1)} tiles off)`);
+      stand("orcdeep1", "reach");
+      const back = Math.hypot(g.player.x / 32 - 79, g.player.y / 32 - 90);
+      ok(back < 3, `…and on the island you come up the orcs' hole (${back.toFixed(1)} tiles off)`);
+    }
+  }
+
+  console.log("No square in the game is under two casters at once:");
+  {
+    // The rule the minotaur mages and the orc shamans are both posted under,
+    // stated once and checked on every floor that has a caster on it. A
+    // creature's threat is the squares inside its bolt's range that it can
+    // also SEE — the maze does half the work — and no two casters' threats may
+    // overlap. Six mages in one chamber was a wall of fire and not a fight.
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const { lineOfSight } = await import("../src/world/collision.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    for (const key of ["minodeep2", "orcdeep2"] as const) {
+      const w = worlds[key];
+      const casters = w.mobPosts!.filter((p) => {
+        const r = MONSTER_DEFS[p.kind].ranged;
+        return r !== undefined && r.range >= 240;
+      });
+      const seen = new Map<string, string>();
+      let clash = 0;
+      for (const c of casters) {
+        const rg = MONSTER_DEFS[c.kind].ranged!.range / 32;
+        const fx = c.tx * 32 + 16, fy = c.ty * 32 + 16;
+        for (let y = Math.max(0, c.ty - 9); y < Math.min(w.h, c.ty + 10); y++) {
+          for (let x = Math.max(0, c.tx - 9); x < Math.min(w.w, c.tx + 10); x++) {
+            if (w.solid[y][x] || Math.hypot(x - c.tx, y - c.ty) > rg) continue;
+            if (!lineOfSight(w, fx, fy, x * 32 + 16, y * 32 + 16)) continue;
+            const k = `${x},${y}`;
+            const held = seen.get(k);
+            if (held !== undefined && held !== `${c.tx},${c.ty}`) clash++;
+            else seen.set(k, `${c.tx},${c.ty}`);
+          }
+        }
+      }
+      ok(clash === 0,
+        `${w.name}: ${casters.length} casters, and not one square of the ${seen.size} they cover is under two of them (${clash} clashes)`);
     }
   }
 
@@ -6848,8 +7051,8 @@ async function main(): Promise<void> {
     /* --- the twelve, and only the twelve --- */
     const keys = Object.keys(worlds).sort();
     ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 cellar deaddeep1 "
-      + "deaddeep2 home minodeep1 minodeep2 orcdeep1 reach town",
-      `thirteen maps and no others (${keys.length}: ${keys.join(" ")})`);
+      + "deaddeep2 home minodeep1 minodeep2 orcdeep1 orcdeep2 reach town",
+      `fourteen maps and no others (${keys.length}: ${keys.join(" ")})`);
     for (const dead of ["cave.ts", "deepwild.ts"]) {
       ok(!nfs.existsSync(new URL(`../src/world/${dead}`, import.meta.url)),
         `${dead} is gone, not merely unreferenced`);
