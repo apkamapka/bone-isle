@@ -27,8 +27,11 @@
  * Inside a region the posts are spread as evenly as the ground allows — nine
  * or ten tiles between kin, never a knot — and then ranked toward the hole cut
  * down to -1. The lightest of a family keeps the region's rim, the heaviest
- * stands over its own descent: minotaur guards on the mouth at (8,85), orc
- * berserkers on (79,90), the demon skeleton six tiles off (89,13). The snakes
+ * stands over its own descent: orc berserkers on (79,90), the demon skeleton
+ * six tiles off (89,13). The minotaurs are the exception, and deliberately:
+ * their camp around the mouth at (8,85) was picketed by four guards and is
+ * now plain horns throughout, because the guard was moved a floor and a half
+ * down. The surface camp is the doorway to the branch, not a wall across it. The snakes
  * and the goblins have no lair dug yet, so their ranks close on the squarest
  * ground their region owns instead, and will move once those holes are cut.
  * Eight tiles around the pad home stay clear, so you can land and draw.
@@ -37,7 +40,9 @@
  *   F campfire   Y skull totem   V dead tree   v felled tree
  *   N tent   W well   Q q black boulder (two variants)
  *   T tree   R rock   H herb
- *   creatures: s snake n bandit k skeleton K skeletonWarrior g ghoul d demonSkeleton G goblin L goblinLegionary m minotaur a minotaurArcher u minotaurGuard r orc c orcArcher e orcWarrior h orcShaman z orcBerserker
+ *   creatures: s snake n bandit k skeleton K skeletonWarrior g ghoul d demonSkeleton G goblin L goblinLegionary m minotaur a minotaurArcher r orc c orcArcher e orcWarrior h orcShaman z orcBerserker
+ *   (`u` stays mapped to the guard though nothing on the island paints one
+ *   any more — a single keystroke puts the picket back if it is ever wanted)
  */
 import type { HandmadeSpec } from "./handmade.ts";
 import { Tile } from "./types.ts";
@@ -147,7 +152,7 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~~~~~~~~~~~......W..................................R.........v...................cR...........~~~",
     "~~~~~~~~~~~~............F...............................................F..................R.....~~~",
     "~~~~~~~~~~.........Vv................V.........R.......r........................................c.~~",
-    "~~~~~~~~~.u..........R...q....V...........HR...............N...V....R.......RHT.R............T....~~",
+    "~~~~~~~~~.m..........R...q....V...........HR...............N...V....R.......RHT.R............T....~~",
     "~~~~~~~~..............V......N.................F...N...................................R..........~~",
     "~~~~~~~................................F................................e.........................~~",
     "~~~~~~..F.....R.N....a.........R....R...............F....T........................................~~",
@@ -157,7 +162,7 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~....................v...........V................F.............V.....N.F.......................~~",
     "~~~..........................N.................T.........................................V.....T..~~",
     "~~~......R......R...................F.............F.........RF.........R.....R............R.......~~",
-    "~~~.......N...u..N.......R..........N................................................V....T.....e.~~",
+    "~~~.......N...m..N.......R..........N................................................V....T.....e.~~",
     "~~~..........F................V...................V.....................VN........V..h.......T...~~~",
     "~~~......V.....R.................R...a...................N....e.....vVN....h......v..............~~~",
     "~~~.........V............a...............V..........N..........V.R.................F.............~~~",
@@ -165,8 +170,8 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~~...............v....N...................F.........W..~...................N..............T....~~~",
     "~~~~....V........V.....................W...V....c....F..~~~.........VN...R................R......~~~",
     "~~~~~......N...................N...................R..~~~~~~~~.........F........V...............~~~~",
-    "~~~~~..u..............................................~~~~~~~~~~................................~~~~",
-    "~~~~~~.....W.....u.......R....F.......................~~~~~~~~~~~~~............2......V.........~~~~",
+    "~~~~~..m..............................................~~~~~~~~~~................................~~~~",
+    "~~~~~~.....W.....m.......R....F.......................~~~~~~~~~~~~~............2......V.........~~~~",
     "~~~~~~~..........N......HN...............q...........~~~~~~~~~~~~~~~........RN.....R....q....T..~~~~",
     "~~~~~~~~...F....................T............T......~~~~~~~~~~~~~~~~~~............z.........R...~~~~",
     "~~~~~~~~~..........................................~~~~~~~~~~~~~~~~~~~~.z......W...F............~~~~",

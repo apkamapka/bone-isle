@@ -2,6 +2,7 @@
 import { DEADDEEP2_SPEC } from "./world/deadDeep2Spec.ts";
 import { DEADDEEP_SPEC } from "./world/deadDeepSpec.ts";
 import { MINODEEP_SPEC } from "./world/minoDeepSpec.ts";
+import { MINODEEP2_SPEC } from "./world/minoDeep2Spec.ts";
 import { ORCDEEP_SPEC } from "./world/orcDeepSpec.ts";
 import { BANDITDEEP2_SPEC } from "./world/banditDeep2Spec.ts";
 import { BANDITDEEP3_SPEC } from "./world/banditDeep3Spec.ts";
@@ -78,8 +79,10 @@ export interface Game {
  * ------------------------------------------------------------------ */
 
 /**
- * One-time chest prizes by world: the four Knight-set pieces buried under the
- * Bone Reach, two to a floor.
+ * One-time chest prizes by world. An entry is either a kind — one of it — or a
+ * kind and a count, because the minotaur branch's hoard pays part of its worth
+ * in coin and ten separate `platinumCoin` entries would have read as ten
+ * separate finds in the message the chest flashes.
  *
  * Etap 40 took two entries with it. `cave3` held the Marrow Blade and
  * `bastion2` the Knight shield, and both maps are gone — the shield still
@@ -87,12 +90,20 @@ export interface Game {
  * AT ALL. It is left in the item table on purpose: the sword exists, it is
  * simply not findable until a mission map buries it again.
  *
- * Worlds absent here fall back to the blade in `openTreasure`, which is now a
+ * The 80x80 redraw of the minotaur floors took a third: `minodeep1` no longer
+ * has a chest at all. THE KNIGHT HELM AND BOOTS THEREFORE HAVE NO CHEST
+ * SOURCE — like the blade, they remain in the item table and still drop from
+ * the Black Knight at 5%, and the branch's one hoard is now the shield and the
+ * platinum at the bottom of -2, where the drawing marks it.
+ *
+ * Worlds absent here fall back to the blade in `openTreasure`, which is a
  * fallback nothing reaches — every chest in the game is listed.
  */
-export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ItemKind[]>>> = {
+export type ChestPrize = ItemKind | readonly [ItemKind, number];
+
+export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize[]>>> = {
   orcdeep1: ["knightBody", "knightLegs"],
-  minodeep1: ["knightHelm", "knightBoots"],
+  minodeep2: ["minotaurShield", ["platinumCoin", 10]],
 };
 
 /**
@@ -116,6 +127,7 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     reach: makeHandmadeWorld(REACH_SPEC),
     orcdeep1: makeHandmadeWorld(ORCDEEP_SPEC),
     minodeep1: makeHandmadeWorld(MINODEEP_SPEC),
+    minodeep2: makeHandmadeWorld(MINODEEP2_SPEC),
     deaddeep1: makeHandmadeWorld(DEADDEEP_SPEC),
     deaddeep2: makeHandmadeWorld(DEADDEEP2_SPEC),
   };

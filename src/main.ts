@@ -2810,15 +2810,24 @@ function openTreasure(s: Structure): void {
   const id = `treasure:${cw().key}:${s.tx},${s.ty}`;
   if (game.opened.includes(id)) { flash("the chest is empty", "#bdb59c"); return; }
   game.opened.push(id);
-  // World-keyed prizes (the Marrow set). A chest may hold more than one piece
-  // — Orc Deep -1 buries both plate pieces together — and anything unmapped
-  // falls back to the classic blade, so old saves behave identically.
-  const prizes: readonly ItemKind[] = CHEST_PRIZES[cw().key] ?? ["marrowBlade"];
+  // World-keyed prizes. A chest may hold more than one piece — Orc Deep -1
+  // buries both plate pieces together — and an entry may carry a count, which
+  // is how the minotaur hoard pays ten platinum without reading as ten finds.
+  // Anything unmapped falls back to the classic blade, so old saves behave
+  // identically.
+  const prizes = CHEST_PRIZES[cw().key] ?? (["marrowBlade"] as const);
+  const parts: string[] = [];
   for (const prize of prizes) {
-    const fits = freeCap(P) >= itemWeight(prize, 1) && addItem(P.bag, prize, 1) === 0;
-    if (!fits) dropToGround(prize, 1);
+    const kind: ItemKind = Array.isArray(prize) ? prize[0] : (prize as ItemKind);
+    const n: number = Array.isArray(prize) ? prize[1] : 1;
+    // A stack that will not fit is dropped WHOLE rather than split across the
+    // bag and the floor: two half-piles of platinum is worse to pick up than
+    // one whole one, and `addItem` already reports the remainder it refused.
+    const fits = freeCap(P) >= itemWeight(kind, n) && addItem(P.bag, kind, n) === 0;
+    if (!fits) dropToGround(kind, n);
+    parts.push(n > 1 ? `${n} ${ITEMS[kind].name}` : ITEMS[kind].name);
   }
-  flash(`You have found ${prizes.map((k) => ITEMS[k].name).join(" and ")}.`, "#ffe9a8");
+  flash(`You have found ${parts.join(" and ")}.`, "#ffe9a8");
   beep(660, 0.18, "sine", 0.06, 220);
   saveGame(game);
 }

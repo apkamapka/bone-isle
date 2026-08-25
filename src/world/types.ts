@@ -40,8 +40,10 @@ export type WorldKey =
   | "reach"
   // Orc Deep -1 — the pit under the Reach's southern descent.
   | "orcdeep1"
-  // Minotaur Deep -1 — the labyrinth under the Reach's western descent.
-  | "minodeep1"
+  // Minotaur Deep -1 — the labyrinth under the Reach's western descent, and
+  // the lower labyrinth under that. The horns hold the first floor, their
+  // guard the second, and the branch's one hoard sits at the bottom of it.
+  | "minodeep1" | "minodeep2"
   // Charnel Deep -1 — the maze under the Reach's northern descent, and the
   // Cinder Hollow below it. The dead hold the maze in equal thirds; the hollow
   // holds one dragon and nothing else.
