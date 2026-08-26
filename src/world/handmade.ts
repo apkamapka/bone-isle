@@ -74,8 +74,19 @@ export interface HandmadeSpec {
    *  per-spec rather than hard-coded, because the same letter already means a
    *  portal on Bonetown. */
   spawn?: string;
-  /** Rows 0..safeMaxY stay a haven even though the map itself is hostile. */
-  safeMaxY?: number;
+  /**
+   * Squares that stay a haven even though the map itself is hostile, written
+   * as inclusive `[x0, y0, x1, y1]` boxes and burned into a per-tile mask when
+   * the world is parsed.
+   *
+   * Rectangles rather than a glyph because the haven is a property of the
+   * GROUND, not of what stands on it: every square of two of Bonetown's six
+   * islands is town, whether it carries a house, a road or nothing at all, and
+   * a glyph would have to be repeated on all sixteen hundred of them and kept
+   * in step with every edit. Overlap is harmless and water inside a box is
+   * harmless too, since nothing can stand there to ask.
+   */
+  safeRects?: readonly (readonly [number, number, number, number])[];
   /** Glyph → creature posted on that tile (plain grass or road underneath). */
   monsters?: Readonly<Record<string, MonsterKind>>;
   /**
@@ -115,6 +126,26 @@ const baseTileOf = (ch: string): Tile => {
   return Tile.Grass; // '.' and every feature glyph sit on grass
 };
 
+/**
+ * Burn a spec's haven rectangles into one bit per tile.
+ *
+ * Undefined when the spec names none, and that absence is meaningful: it is
+ * what `inHaven` reads to answer "this map has no sanctuary" without a bounds
+ * check on an array that was never built. Boxes are clamped rather than
+ * refused, so a rectangle drawn a tile past the shore is a rounding error and
+ * not a crash.
+ */
+function havenMask(spec: HandmadeSpec, W: number, H: number): Uint8Array | undefined {
+  if (!spec.safeRects?.length) return undefined;
+  const mask = new Uint8Array(W * H);
+  for (const [x0, y0, x1, y1] of spec.safeRects) {
+    for (let y = Math.max(0, y0); y <= Math.min(H - 1, y1); y++) {
+      for (let x = Math.max(0, x0); x <= Math.min(W - 1, x1); x++) mask[y * W + x] = 1;
+    }
+  }
+  return mask;
+}
+
 /** Parse a character grid into a full World (same contract as makeWorld). */
 export function makeHandmadeWorld(spec: HandmadeSpec): World {
   const rows = spec.rows;
@@ -146,7 +177,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     key: spec.key,
     name: spec.name,
     safe: spec.safe,
-    safeMaxY: spec.safeMaxY,
+    safeMask: havenMask(spec, W, H),
     w: W,
     h: H,
     tile,
@@ -376,97 +407,11 @@ export const HOME_SPEC: HandmadeSpec = {
 };
 
 /* ------------------------------------------------------------------ */
-/*  BONETOWN — the hub. NPCs round a plaza; two portals (home / wild).  */
+/*  BONETOWN lives in its own file now. Six islands and 106 squares    */
+/*  across is more grid than the rest of this module put together, and  */
+/*  no longer something to scroll past on the way to the cellar.        */
 /* ------------------------------------------------------------------ */
-const TOWN_ROWS: readonly string[] = [
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~........~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~.....::::.T....~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~......::::::......~~~~~~~~~~~~.............~~~~~~~~~",
-  "~~~~~~~....T..::C:::.......~~~~~~~.......R...T..R....~~~~~~~",
-  "~~~~~~~.......::::::...T.....~~~......T.:::::::::..T..~~~~~~",
-  "~~~~~~~....R...::::....................:::::::::::....~~~~~~",
-  "~~~~~~.........::::R....R.......T.....:::::::::::::.R.~~~~~~",
-  "~~~~~~~.T.::::::::::::::.............:::s:::::::h:::...~~~~~",
-  "~~~~~~~...::::::::::::::...T..R....T.:::::::::::::::.T~~~~~~",
-  "~~~~~~....::::::::::::::::::::::::::::::::::::::::::..~~~~~~",
-  "~~~~~~~..R::::::z:::::::::::::::::::::::::::P:::::::...~~~~~",
-  "~~~~~~~~..::::::::::::::::::::::::::::::::::::::::::..~~~~~~",
-  "~~~~~~~~..::::::::::::::::::::::::::::::::::::::::::T..~~~~~",
-  "~~~~~~~..T::::::::::::::T............:::::::::::e:::..~~~~~~",
-  "~~~~~~~~..::::::::::::::............R:::g:::t:::::::..~~~~~~",
-  "~~~~~~~.......T...R.T....R..T.........:::::::::::::....~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~........T....:::::::::::.R.T~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~........:::::::::.....~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~..R.......#::.......R.~~~~~",
-  "~~~~~~~....~.....~......~~~~~~~~~~~....T...#::.T..T...~~~~~~",
-  "~~~~~~...T....T....T.......~~~~~~~~~########:########~~~~~~~",
-  "~~~~~~T.......bR.......T.......~~~~~~......:::......~~~~~~~~",
-  "~~~~~...R...T...........R..T....~~~~~~T.T..:::R..T..~~~~~~~~",
-  "~~~~~~..........T....T.............~~......:::.......~~~~~~~",
-  "~~~~~~~.T..................R.T..T.R....b.T.:::...R...~~~~~~~",
-  "~~~~~~~~..R..T......R...T............T..T.R:::.Tb..T.~~~~~~~",
-  "~~~~~~~~.......R.T..:::::::::::::b::::::::::::T.......~~~~~~",
-  "~~~~~~~~...........::b:::::b::::::::::::::::::...T....~~~~~~",
-  "~~~~~~~~...T......::::::::::::::::::::::::::::.T....T.~~~~~~",
-  "~~~~~~~.....b.T..R:::..T..R.T..............:::.........~~~~~",
-  "~~~~~~...T........:::T........T..T.R.T...T.:::T..T..T.~~~~~~",
-  "~~~~~~.R..........:::...T....b.............:b:.....R.R~~~~~~",
-  "~~~~~~.....b....T.:::......................:::R........~~~~~",
-  "~~~~~...T...T.R...:::T.R...T..T.R.T...T..T.:::...T....~~~~~~",
-  "~~~~~.............:::......................:::.....T.~~~~~~~",
-  "~~~~~.............:::...T...............T..:::T.R....~~~~~~~",
-  "~~~~....R..T.R.T..:::T......T..T..T..T.R..T:::......~~~~~~~~",
-  "~~~~~.T...........::::::::::::::::::::::::::::...T..~~~~~~~~",
-  "~~~~~~.............:::::::::::::::::::::::::::.T...~~~~~~~~~",
-  "~~~~~~...T..........::::::::::::::::::::b:::::.....~~~~~~~~~",
-  "~~~~~........T...........T.............T...:::T...T.~~~~~~~~",
-  "~~~~~~.T.........T..T..........T.R.T.......:::......~~~~~~~~",
-  "~~~~~~...R..b.~~..b.........T............T.:::R.Tb...~~~~~~~",
-  "~~~~~~~~~~~~~~~~~...R..T.R...........T.R...::::::::T.~~~~~~~",
-  "~~~~~~~~~~~~~~~~~...............T..........::::::::...~~~~~~",
-  "~~~~~~~~~~~~~~~~..T...............~~~~~..T.::::::::..~~~~~~~",
-  "~~~~~~~~~~~~~~~~~.......T...T...~~~~~~~~~..R.T.....T..~~~~~~",
-  "~~~~~~~~~~~~~~~~~~.R.....b..~~~~~~~~~~~~~~.....bT.R..~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~..T.....~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-];
-
-export const TOWN_SPEC: HandmadeSpec = {
-  key: "town",
-  name: "Bonetown",
-  // No longer a blanket haven: the fence on row 25 splits the map. North of it
-  // is town and nothing hostile may set foot there; south of it is the first
-  // hunting ground a new character can reach.
-  safe: false,
-  safeMaxY: 25,
-  grassShift: 4,
-  rows: TOWN_ROWS,
-  // The plaza has two doors: the gate home, and the trapdoor into the Time
-  // Sage's cellar. Everything else in the game hangs off the cellar's pads.
-  portals: {
-    P: { dest: "home", label: "to Home Isle" },
-    // a proper teleport pad, 2x2 like the ones downstairs — the glyph marks
-    // its top-left tile, so it covers (16,8)…(17,9) on the northern tongue
-    C: { dest: "cellar", label: "to the Time Sage's cellar", span: 2, floor: Tile.Dirt },
-  },
-  npcs: {
-    s: "smith", h: "herbalist", e: "elder", g: "taskmaster", t: "tailor",
-    // Chronos paces the western plaza: four tiles east, four west, one row —
-    // never north or south, so he stays on the line the map put him on.
-    z: { key: "timesage", beat: { west: 4, east: 4 }, floor: Tile.Dirt },
-  },
-  monsters: { b: "bandit" },
-};
+export { TOWN_SPEC } from "./townSpec.ts";
 
 /* ------------------------------------------------------------------ */
 /*  THE TIME SAGE'S CELLAR — under the northern dirt tongue in town.   */

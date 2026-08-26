@@ -5,7 +5,7 @@ import { SPR } from "../gfx/sprites.ts";
 import { lineOfSight } from "../world/collision.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
-import { inHavenBand } from "../world/collision.ts";
+import { inHaven } from "../world/collision.ts";
 import { stepFacing } from "../gfx/mobSheet.ts";
 import { addBlast, addBolt } from "../gfx/spellFx.ts";
 import { beginCast, isCasting, type MonsterSpell } from "../systems/monsterSpells.ts";
@@ -882,7 +882,7 @@ function pushMonster(
   // spawn paths at once (authored post and respawn).
   if (w.portals.some((pt) => toTile(pt.x) === tx && toTile(pt.y) === ty)) return false;
   // A haven inside a hostile map is off limits to every spawn path at once.
-  if (inHavenBand(w, ty)) return false;
+  if (inHaven(w, tx, ty)) return false;
   w.monsters.push({
     id: nextEntityId(),
     kind,
@@ -1048,7 +1048,7 @@ export function updateMonsters(
   };
 
   const occOf = (self: Monster): Occupied => (tx, ty) =>
-    (tx === ptx && ty === pty) || onPortal(tx, ty) || inHavenBand(w, ty) ||
+    (tx === ptx && ty === pty) || onPortal(tx, ty) || inHaven(w, tx, ty) ||
     w.monsters.some((o) => o !== self && o.tx === tx && o.ty === ty);
 
   /**

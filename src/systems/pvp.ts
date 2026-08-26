@@ -129,16 +129,26 @@ export function togglePvpArmed(): boolean {
  * May this character land a blow on that one, right now?
  *
  * THE one place the question is answered, so that the rules that are still
- * missing — protection zones, party members, guild wars — are a list to
- * extend here rather than a condition to remember at every call site. Today
- * it knows three of them: the switch, the level floor on the attacker, and
- * the level floor on the victim.
+ * missing — party members, guild wars — are a list to extend here rather than
+ * a condition to remember at every call site. Today it knows four: the switch,
+ * the level floor on the attacker, the level floor on the victim, and the
+ * protection zone.
+ *
+ * The zone arrives as a bare boolean because this module is rules and has no
+ * business importing a World to look a tile up in — the same division the
+ * context menu already draws, where the caller works out `mayAttack` and the
+ * menu only draws it. Whoever throws the punch knows which square it is thrown
+ * on; `isSafeTile` turns that into the answer.
  *
  * Monsters do not come through here and never did. Secure mode has never had
- * anything to say about a rat.
+ * anything to say about a rat, and neither has a protection zone — a creature
+ * that got into town would be a bug in the haven mask, not a licence.
  */
-export function mayHit(attackerLevel: number, victimLevel: number): boolean {
+export function mayHit(
+  attackerLevel: number, victimLevel: number, inSafeZone = false,
+): boolean {
   if (!pvpArmed()) return false;
+  if (inSafeZone) return false;
   if (attackerLevel < PVP_MIN_LEVEL || victimLevel < PVP_MIN_LEVEL) return false;
   return true;
 }

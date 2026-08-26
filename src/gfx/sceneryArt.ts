@@ -36,6 +36,28 @@ const SRC: Record<SceneryKind, string> = {
   houseB: "./prop-house-b.png",
   smithy: "./prop-smithy.png",
   windmill: "./prop-windmill.png",
+  // The town set — thirty files, one kind each, all `prop-town-*`.
+  chapel: "./prop-town-chapel.png", shrine: "./prop-town-shrine.png",
+  shop: "./prop-town-shop.png", townhouse: "./prop-town-townhouse.png",
+  watchtower: "./prop-town-watchtower.png",
+  shophouse: "./prop-town-shophouse.png", cottage: "./prop-town-cottage.png",
+  bank: "./prop-town-bank.png", observatory: "./prop-town-observatory.png",
+  storefront: "./prop-town-storefront.png",
+  shoprow: "./prop-town-shoprow.png", keep: "./prop-town-keep.png",
+  workshop: "./prop-town-workshop.png",
+  warehouse: "./prop-town-warehouse.png", temple: "./prop-town-temple.png",
+  apothecary: "./prop-town-apothecary.png", inn: "./prop-town-inn.png",
+  manor: "./prop-town-manor.png", towerhouse: "./prop-town-towerhouse.png",
+  market: "./prop-town-market.png", tavern: "./prop-town-tavern.png",
+  tradehouse: "./prop-town-tradehouse.png",
+  stonehouse: "./prop-town-stonehouse.png",
+  greatTemple: "./prop-town-greattemple.png",
+  guildhall: "./prop-town-guildhall.png",
+  stallRed: "./prop-town-stall-red.png",
+  stallGrey: "./prop-town-stall-grey.png",
+  stallOpen: "./prop-town-stall-open.png",
+  windmillCloth: "./prop-town-windmill-cloth.png",
+  windmillLattice: "./prop-town-windmill-lattice.png",
 };
 
 /**
@@ -65,6 +87,19 @@ export const SCENERY_NAME: Record<SceneryKind, string> = {
   houseB: "a house",
   smithy: "a smithy",
   windmill: "a windmill",
+  chapel: "a chapel", shrine: "a roadside shrine", shop: "a shop",
+  townhouse: "a townhouse", watchtower: "a watchtower", shophouse: "a shop",
+  cottage: "a cottage", bank: "the counting house",
+  observatory: "an observatory", storefront: "a shopfront",
+  shoprow: "a row of shops", keep: "the keep", workshop: "a workshop",
+  warehouse: "a warehouse", temple: "a temple", apothecary: "an apothecary",
+  inn: "an inn", manor: "a manor house", towerhouse: "a tower house",
+  market: "the market hall", tavern: "a tavern",
+  tradehouse: "the trade house", stonehouse: "a stone house",
+  greatTemple: "the great temple", guildhall: "the guildhall",
+  stallRed: "a market stall", stallGrey: "a market stall",
+  stallOpen: "a market stall", windmillCloth: "a windmill",
+  windmillLattice: "a windmill",
 };
 
 export const FOOTPRINT: Record<SceneryKind, { w: number; h: number }> = {
@@ -84,6 +119,21 @@ export const FOOTPRINT: Record<SceneryKind, { w: number; h: number }> = {
   houseB: { w: 4, h: 5 },
   smithy: { w: 4, h: 4 },
   windmill: { w: 5, h: 5 },
+  // Read straight off the artwork: every town PNG is exactly its footprint
+  // times 32 pixels, so these numbers cannot drift out of step with the file.
+  chapel: { w: 2, h: 3 }, shrine: { w: 2, h: 2 }, shop: { w: 2, h: 3 },
+  townhouse: { w: 2, h: 4 }, watchtower: { w: 2, h: 4 },
+  shophouse: { w: 3, h: 2 }, cottage: { w: 3, h: 3 }, bank: { w: 3, h: 3 },
+  observatory: { w: 3, h: 5 }, storefront: { w: 4, h: 2 },
+  shoprow: { w: 4, h: 2 }, keep: { w: 4, h: 3 }, workshop: { w: 4, h: 3 },
+  warehouse: { w: 4, h: 3 }, temple: { w: 4, h: 3 },
+  apothecary: { w: 4, h: 3 }, inn: { w: 4, h: 3 }, manor: { w: 4, h: 3 },
+  towerhouse: { w: 4, h: 4 }, market: { w: 5, h: 2 }, tavern: { w: 5, h: 3 },
+  tradehouse: { w: 5, h: 3 }, stonehouse: { w: 5, h: 3 },
+  greatTemple: { w: 5, h: 5 }, guildhall: { w: 6, h: 2 },
+  stallRed: { w: 3, h: 2 }, stallGrey: { w: 3, h: 2 },
+  stallOpen: { w: 3, h: 2 }, windmillCloth: { w: 6, h: 6 },
+  windmillLattice: { w: 6, h: 6 },
 };
 
 /**
@@ -122,6 +172,22 @@ export const BLOCK: Record<SceneryKind, { w: number; h: number }> = {
   houseB: { w: 4, h: 2 },
   smithy: { w: 4, h: 2 },
   windmill: { w: 5, h: 2 },
+  // Two rows of wall for a building, three for a tower, and ONE for a market
+  // stall — the row behind its counter has to stay walkable or the trader
+  // cannot stand in his own stall.
+  chapel: { w: 2, h: 2 }, shrine: { w: 2, h: 1 }, shop: { w: 2, h: 2 },
+  townhouse: { w: 2, h: 2 }, watchtower: { w: 2, h: 2 },
+  shophouse: { w: 3, h: 1 }, cottage: { w: 3, h: 2 }, bank: { w: 3, h: 2 },
+  observatory: { w: 3, h: 2 }, storefront: { w: 4, h: 1 },
+  shoprow: { w: 4, h: 1 }, keep: { w: 4, h: 2 }, workshop: { w: 4, h: 2 },
+  warehouse: { w: 4, h: 2 }, temple: { w: 4, h: 2 },
+  apothecary: { w: 4, h: 2 }, inn: { w: 4, h: 2 }, manor: { w: 4, h: 2 },
+  towerhouse: { w: 4, h: 2 }, market: { w: 5, h: 1 }, tavern: { w: 5, h: 2 },
+  tradehouse: { w: 5, h: 2 }, stonehouse: { w: 5, h: 2 },
+  greatTemple: { w: 5, h: 2 }, guildhall: { w: 6, h: 1 },
+  stallRed: { w: 3, h: 1 }, stallGrey: { w: 3, h: 1 },
+  stallOpen: { w: 3, h: 1 }, windmillCloth: { w: 6, h: 2 },
+  windmillLattice: { w: 6, h: 2 },
 };
 
 /**
@@ -144,6 +210,14 @@ const FALLBACK: Record<SceneryKind, SpriteName> = {
   houseB: "hut",
   smithy: "hut",
   windmill: "hut",
+  chapel: "hut", shrine: "hut", shop: "hut", townhouse: "hut",
+  watchtower: "hut", shophouse: "hut", cottage: "hut", bank: "hut",
+  observatory: "hut", storefront: "hut", shoprow: "hut", keep: "hut",
+  workshop: "hut", warehouse: "hut", temple: "hut", apothecary: "hut",
+  inn: "hut", manor: "hut", towerhouse: "hut", market: "hut", tavern: "hut",
+  tradehouse: "hut", stonehouse: "hut", greatTemple: "hut", guildhall: "hut",
+  stallRed: "hut", stallGrey: "hut", stallOpen: "hut", windmillCloth: "hut",
+  windmillLattice: "hut",
 };
 
 export const SCENERY_KINDS = Object.keys(SRC) as SceneryKind[];

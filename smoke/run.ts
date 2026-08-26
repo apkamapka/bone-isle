@@ -18,6 +18,7 @@ async function main(): Promise<void> {
   const { buildWorlds } = await import("../src/game.ts");
   const { WORLD_SEED, TILE, BAG_SIZE: cfgBagSize, CORPSE_SLOTS: cfgCorpseSlots } = await import("../src/config.ts");
   const { lineOfSight } = await import("../src/world/collision.ts");
+  const { makeHandmadeWorld } = await import("../src/world/handmade.ts");
   const { Tile } = await import("../src/world/types.ts");
   const { STRUCTS, canPlaceAt } = await import("../src/systems/building.ts");
   const { SPRITE_SCALE: SPRITE_SCALE2 } = await import("../src/config.ts");
@@ -105,7 +106,12 @@ async function main(): Promise<void> {
      * The probe sweeps EVERY map in both orientations rather than naming one,
      * because which map happens to own a one-tile-thick wall is a property of
      * the artwork and changes whenever a map is redrawn. Pinning it to a
-     * particular island is how this test rots.
+     * particular island is how this test rots — and sweeping is only half a
+     * cure, since a redraw can take the LAST such wall away and leave the
+     * sweep finding nothing to check. Bonetown's fence was that wall, and the
+     * six-island map has no fence, so the probe now falls back to a grid built
+     * here for the purpose. What is under test is `lineOfSight`, not the
+     * furniture of any island.
      *
      * It also keys on the TILE CODE rather than on solidity: `sightBlockedAt`
      * does, so a solid tile painted as something other than Wall does not stop
@@ -131,7 +137,18 @@ async function main(): Promise<void> {
         }
       }
     }
-    ok(checked, "found a wall-flanked corridor to test");
+    if (!checked) {
+      const probe = makeHandmadeWorld({
+        key: "home", name: "line-of-sight probe", safe: true,
+        rows: ["~~~~~", "~...~", "~.#.~", "~...~", "~~~~~"], portals: {},
+      });
+      const p1x = 2 * TILE + TILE / 2, p1y = 1 * TILE + TILE / 2;
+      const p2x = 2 * TILE + TILE / 2, p2y = 3 * TILE + TILE / 2;
+      ok(!lineOfSight(probe, p1x, p1y, p2x, p2y), "wall between two floor tiles blocks sight");
+      ok(lineOfSight(probe, p1x, p1y, p1x, p1y + 0.1), "point-blank sight is clear");
+      checked = true;
+    }
+    ok(checked, "a wall-flanked corridor was tested");
   }
 
   console.log("free-form building (canPlaceAt):");
@@ -3123,48 +3140,129 @@ async function main(): Promise<void> {
     ok(fellBack > 0, `…including the ${fellBack} that mark no spawn glyph and fall back to a portal`);
   }
 
-  console.log("Bonetown redrawn in Tiled:");
+  console.log("safeRects: a haven any shape, burned into one bit per tile:");
+  {
+    const { makeHandmadeWorld } = await import("../src/world/handmade.ts");
+    const { inHaven, isSafeTile } = await import("../src/world/collision.ts");
+    const rows = ["......", "......", "......", "......"];
+
+    const none = makeHandmadeWorld({ key: "home", name: "no haven", safe: false, rows, portals: {} });
+    ok(none.safeMask === undefined, "a spec that names no rectangles builds no mask");
+    ok(!inHaven(none, 2, 2), "…and nothing on it is sanctuary");
+    ok(!isSafeTile(none, 2, 2), "…not even to the zone label");
+
+    const two = makeHandmadeWorld({
+      key: "home", name: "two havens", safe: false, rows, portals: {},
+      // deliberately disjoint, which is the whole reason this is not a row
+      // number: no single band can cover the left column and the right one
+      // without covering the middle as well
+      safeRects: [[0, 0, 0, 3], [5, 0, 5, 3]],
+    });
+    ok(two.safeMask!.length === 6 * 4, "the mask is one bit per square");
+    ok(inHaven(two, 0, 0) && inHaven(two, 0, 3) && inHaven(two, 5, 2),
+      "both rectangles are sanctuary, all the way to their corners");
+    ok(!inHaven(two, 2, 0) && !inHaven(two, 3, 3),
+      "…and the ground between them is not, which a row band could never say");
+    ok(!inHaven(two, -1, 0) && !inHaven(two, 6, 0) && !inHaven(two, 0, 9),
+      "off the map is never sanctuary");
+
+    /* A box drawn a tile past the shore is a rounding error in the tracing, not
+     * a reason to refuse the map: it is clamped and the rest of the rectangle
+     * still lands. Overlap is fine too — the mask is bits, not a count. */
+    const over = makeHandmadeWorld({
+      key: "home", name: "clamped", safe: false, rows, portals: {},
+      safeRects: [[-3, -3, 1, 1], [1, 1, 2, 2], [4, 2, 99, 99]],
+    });
+    ok(inHaven(over, 0, 0) && inHaven(over, 1, 1) && inHaven(over, 5, 3),
+      "clamped rectangles still cover what is on the map");
+    ok(!inHaven(over, 3, 0), "…and only what they were drawn over");
+
+    /* A wholly safe world does not need one, and must not be made to grow one:
+     * `inHaven` answers false there so that a test arena can still post
+     * creatures on a safe map, which is the distinction it was written for. */
+    const safe = makeHandmadeWorld({ key: "home", name: "all safe", safe: true, rows, portals: {} });
+    ok(!inHaven(safe, 2, 2) && isSafeTile(safe, 2, 2),
+      "a wholly safe map has no band, yet every square of it counts as safe");
+  }
+
+  console.log("Bonetown — six islands:");
   {
     const { walkable } = await import("../src/world/grid.ts");
+    const { inHaven } = await import("../src/world/collision.ts");
     const town = buildWorlds(WORLD_SEED).town;
-    ok(town.w === 60 && town.h === 60, "the town is the 60x60 grid exported from Tiled");
-    ok(!town.safe && town.safeMaxY === 25,
-      "the town is split: a haven down to the fence on row 25, hunting ground below");
-    ok(town.trees.length === 114 && town.rocks.length === 48,
-      "every authored tree and rock came across, duplicates dropped");
+    ok(town.w === 106 && town.h === 106, `the town is the 106x106 grid exported from Tiled (${town.w}x${town.h})`);
+    ok(town.trees.length === 311 && town.rocks.length === 139,
+      `every authored tree and rock came across (${town.trees.length}/${town.rocks.length})`);
     ok(town.npcs.length === 6, "all six townsfolk are present");
     ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
     ok(town.portals.length === 2 && town.portals.some((p) => p.dest === "home")
       && town.portals.some((p) => p.dest === "cellar"),
       "two gates: Home Isle and the Time Sage's cellar");
-    // the split has to hold in practice, not just in the flag
+    ok(town.portals.every((p) => p.span === 2),
+      "…both of them four squares, sitting on the circles the map paints for them");
+    ok(town.scenery.length === 35,
+      `every building, stall, mill and camp tent came across (${town.scenery.length})`);
+
+    /* --- the haven is two islands, not a row band ---------------------------
+     * The old town split on a fence: north of row 25 was town, south was
+     * hunting ground, and one number said so. Six islands cannot be described
+     * that way — C and D are safe and sit at rows 32..69, and so do parts of B
+     * and E, which are not. So the flag became a mask, and what is worth
+     * asserting is no longer a number but the two properties the mask exists
+     * for: the town is inside it and every creature is outside it. */
+    ok(!town.safe && town.safeMask !== undefined,
+      "the town is not wholly safe, and carries a haven mask instead");
+    ok(town.safeMask!.length === town.w * town.h, "…one bit per square");
+    let havenTiles = 0;
+    for (const b of town.safeMask!) havenTiles += b;
+    ok(havenTiles === 1619, `…covering the two town islands and the bridge between them (${havenTiles})`);
+    ok(inHaven(town, 50, 45) && inHaven(town, 20, 46),
+      "the market square and the sage's island are both sanctuary");
+    ok(!inHaven(town, 63, 20) && !inHaven(town, 60, 80),
+      "…and the wild islands north and south of them are not");
+    ok(!inHaven(town, -1, 45) && !inHaven(town, 999, 45),
+      "off the edge of the map is not sanctuary either");
+
+    // the split has to hold in practice, not just in the mask
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
-    ok(town.mobPosts?.length === 16, "the 16 authored bandit posts came across");
+    ok(town.mobPosts?.length === 64, `the 64 authored creature posts came across (${town.mobPosts?.length})`);
+
+    /* --- ten camps, one rank each, plus four snakes ------------------------
+     * The ladder is checked by SHAPE rather than by tile: every rank on the
+     * road half of the bestiary must be present, each must stand six strong,
+     * and the snakes must be four and alone. Coordinates would pin the camps
+     * to a placement that is meant to be re-authored. */
+    const ROAD_RANKS = ["beggar", "vagrant", "thief", "poacher", "bandit",
+      "smuggler", "cutthroat", "deserter", "brigand", "highwayman"] as const;
+    const byKind = new Map<string, number>();
+    for (const p of town.mobPosts!) byKind.set(p.kind, (byKind.get(p.kind) ?? 0) + 1);
+    ok(ROAD_RANKS.every((k) => byKind.get(k) === 6),
+      "all ten ranks of the road stand six to a camp");
+    ok(byKind.get("snake") === 4, `four snakes, and nothing else besides (${byKind.get("snake")})`);
+    ok(byKind.size === 11, `eleven kinds in all (${byKind.size})`);
 
     // THE test that matters: a real game start, not a hand-driven populate.
     // Calling populateWorld directly proves the function works while the town
     // stands empty in the actual game, which is exactly what happened once.
     const fresh = createGame(WORLD_SEED);
-    ok(fresh.worlds.town.monsters.length === 16,
-      "starting a game actually puts the bandits on the map");
-    ok(fresh.worlds.town.monsters.every((m) => m.kind === "bandit"),
-      "…and they are all bandits");
+    ok(fresh.worlds.town.monsters.length === 64,
+      "starting a game actually puts the camps on the map");
     // and the same must hold after a save round-trip: loadGame() rebuilds the
     // worlds from scratch, so it goes through populateAll all over again
     const { saveGame, loadGame } = await import("../src/save.ts");
     saveGame(fresh);
     const restored = loadGame();
-    ok(restored !== null && restored.worlds.town.monsters.length === 16,
+    ok(restored !== null && restored.worlds.town.monsters.length === 64,
       "loading a save leaves the town populated too");
 
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length === 16, "exactly as many bandits as the map asks for — no roster padding");
-    ok(town.monsters.every((m) => m.ty > 25),
-      "not one bandit spawned north of the fence");
+    ok(town.monsters.length === 64, "exactly as many creatures as the map asks for — no roster padding");
+    ok(town.monsters.every((m) => !inHaven(town, m.tx, m.ty)),
+      "not one creature spawned inside the haven");
     // authored placement means EXACT placement, not "somewhere in the region"
     const posts = new Set(town.mobPosts!.map((p) => p.ty * town.w + p.tx));
     ok(town.monsters.every((m) => posts.has(m.ty * town.w + m.tx)),
-      "every bandit stands on the tile the map marked, not a scattered one");
+      "every creature stands on the tile the map marked, not a scattered one");
     ok(town.monsters.every((m) => m.guard !== undefined),
       "each one remembers its post, so a kill respawns it back there");
     // and the placement is stable: repopulating must not shuffle them
@@ -3172,37 +3270,48 @@ async function main(): Promise<void> {
     popTown(town, WORLD_SEED);
     const after = town.monsters.map((m) => m.ty * town.w + m.tx).sort((a, b) => a - b);
     ok(before.join() === after.join(), "repopulating puts them back on the same squares");
-    ok(town.npcs.every((n) => Math.floor(n.y / TILE) <= 25),
+    ok(town.npcs.every((n) => inHaven(town, Math.floor(n.x / TILE), Math.floor(n.y / TILE))),
       "every townsperson stands inside the haven");
 
-    // Reachability: trees and rocks are clearable, so the honest invariant is
-    // that nothing is walled off by TERRAIN. Flood fill treating props as
-    // passable and require the whole town to be one piece.
-    const start = { x: Math.floor(town.portals[0].x / TILE), y: Math.floor(town.portals[0].y / TILE) };
-    const clear = (x: number, y: number) =>
-      x >= 0 && y >= 0 && x < town.w && y < town.h &&
-      town.tile[y][x] !== Tile.Water && town.tile[y][x] !== Tile.Wall;
+    /* --- six islands, and every one of them reachable on foot --------------
+     * Flood fill from the gate home with trees and rock counted as WALLS, not
+     * as clearable props. That is the stricter of the two readings and the
+     * only one a creature obeys: a bandit cannot chop his way out of a copse,
+     * so a camp fenced in by the scatter is a camp that never fights. Bridges
+     * are the only crossings, so reaching all six proves they are all decked. */
+    const home = town.portals.find((p) => p.dest === "home")!;
+    const start = { x: Math.floor(home.x / TILE), y: Math.floor(home.y / TILE) };
     const seen = new Set<number>([start.y * town.w + start.x]);
     const st = [[start.x, start.y]];
     while (st.length) {
       const [x, y] = st.pop()!;
       for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
         const nx = x + ox, ny = y + oy, id = ny * town.w + nx;
-        if (seen.has(id) || !clear(nx, ny)) continue;
+        if (seen.has(id) || nx < 0 || ny < 0 || nx >= town.w || ny >= town.h) continue;
+        if (town.solid[ny][nx]) continue;
         seen.add(id); st.push([nx, ny]);
       }
     }
-    let open = 0;
-    for (let y = 0; y < town.h; y++) for (let x = 0; x < town.w; x++) if (clear(x, y)) open++;
-    ok(seen.size === open, "no corner of the town is walled off by terrain");
+    ok(town.mobPosts!.every((p) => seen.has(p.ty * town.w + p.tx)),
+      "no creature is walled in by the scatter");
+    ok(town.npcs.every((n) => seen.has(n.hy * town.w + n.hx)),
+      "…nor is any townsperson");
+    // one probe per island, taken off the camps and the two gates
+    const ISLANDS: [string, number, number][] = [
+      ["north-west", 25, 20], ["north-east", 60, 11], ["town", 50, 45],
+      ["the sage's", 25, 46], ["south-east", 52, 95], ["south-west", 29, 65],
+    ];
+    let marooned = "";
+    for (const [name, x, y] of ISLANDS) {
+      if (town.solid[y][x]) marooned = `${name} (probe is solid)`;
+      else if (!seen.has(y * town.w + x)) marooned = name;
+    }
+    ok(marooned === "", `all six islands are walkable-to across the bridges${marooned && " — " + marooned}`);
 
-    // the fence really is a barrier, and the road really is the way through
-    let fence = 0;
-    for (let y = 0; y < town.h; y++) for (let x = 0; x < town.w; x++)
-      if (town.tile[y][x] === Tile.Wall) fence++;
-    ok(fence === 18, "the fence line is 18 solid tiles");
     ok(town.npcs.every((n) => walkable(town, Math.floor(n.x / TILE), Math.floor(n.y / TILE))),
       "every townsperson stands somewhere you can reach them");
+    ok(town.tile.every((r) => r.every((t) => t !== Tile.Wall)),
+      "there is no fence on this map — the sea is the wall now");
   }
 
   console.log("Beggar — the floor of the ladder (the bandit's old job):");
@@ -3716,7 +3825,7 @@ async function main(): Promise<void> {
     }
     ok(unwalkable === "", `every beat is walkable end to end${unwalkable && " — " + unwalkable}`);
     // 5 shopkeepers x 9 tiles + the sage's 9-tile line
-    ok(beatTiles === 54, `every beat covers the tiles it should (${beatTiles})`);
+    ok(beatTiles === 61, `every beat covers the tiles it should (${beatTiles})`);
 
     // Half a minute of pacing. Nobody may leave their beat on any single tick —
     // not merely end up back inside it — and nobody may share a square.
@@ -3820,35 +3929,41 @@ async function main(): Promise<void> {
     const { buildWorlds } = await import("../src/game.ts");
     const { WORLD_SEED, TILE: T } = await import("../src/config.ts");
 
-    /* --- the sage in town: the tile the printscreen showed, pacing one row --- */
+    /* --- the sage in town: his own island, drifting around the trapdoor ---
+     * He used to pace one row of the old plaza, nine tiles wide. The six-island
+     * map gives him an island to himself and a four-by-four square beside the
+     * cellar door, which is what the Tiled pin asks for; the shape of the beat
+     * changed, the thing being tested — that he is placed where the map says
+     * and stays inside what the spec grants him — did not. */
     const town = makeHandmadeWorld(TOWN_SPEC);
     const sage = town.npcs.find((n) => n.key === "timesage")!;
     ok(!!sage, "Chronos stands in Bonetown");
     ok(sage.name === "Chronos the Time Sage", `named in English (${sage.name})`);
-    ok(sage.tx === 16 && sage.ty === 15,
-      `on the tile the printscreen showed (${sage.tx},${sage.ty})`);
-    ok(sage.bx0 === sage.hx - 4 && sage.bx1 === sage.hx + 4,
-      "four tiles east and west");
-    ok(sage.by0 === sage.hy && sage.by1 === sage.hy, "…and never north or south");
-    for (let dx = -4; dx <= 4; dx++) {
-      ok(!town.solid[sage.hy][sage.hx + dx], `his beat is clear at +${dx}`);
+    ok(sage.tx === 25 && sage.ty === 46,
+      `on the tile the Tiled pin marked (${sage.tx},${sage.ty})`);
+    ok(sage.bx0 === sage.hx - 1 && sage.bx1 === sage.hx + 2,
+      "four tiles across");
+    ok(sage.by0 === sage.hy - 1 && sage.by1 === sage.hy + 2, "…and four deep");
+    for (let dy = -1; dy <= 2; dy++) {
+      for (let dx = -1; dx <= 2; dx++) {
+        ok(!town.solid[sage.hy + dy][sage.hx + dx], `his beat is clear at ${dx},${dy}`);
+      }
     }
+    // he is on the sage's island, not in the town across the bridge
+    ok(sage.tx < 32, "…on his own island, west of the bridge");
 
-    // …and he actually walks it: half a minute of pacing must reach both ends
-    // of the line and never step off the row.
-    let minTx = sage.tx;
-    let maxTx = sage.tx;
-    let leftRow = false;
+    // …and he actually walks it: a minute of drifting must reach both ends of
+    // the square and never leave it.
+    let minTx = sage.tx, maxTx = sage.tx, minTy = sage.ty, maxTy = sage.ty;
     for (let i = 0; i < 4000; i++) {
       updateNpcs(town, 1 / 60, -9999, -9999);
-      if (sage.ty !== sage.hy) leftRow = true;
-      minTx = Math.min(minTx, sage.tx);
-      maxTx = Math.max(maxTx, sage.tx);
+      minTx = Math.min(minTx, sage.tx); maxTx = Math.max(maxTx, sage.tx);
+      minTy = Math.min(minTy, sage.ty); maxTy = Math.max(maxTy, sage.ty);
     }
-    ok(!leftRow, "he never leaves his row");
-    ok(minTx >= sage.hx - 4 && maxTx <= sage.hx + 4,
-      `and never overshoots the four tiles (${minTx}..${maxTx})`);
-    ok(maxTx > minTx, "he does pace — this is not a rooted NPC by accident");
+    ok(minTx >= sage.hx - 1 && maxTx <= sage.hx + 2
+      && minTy >= sage.hy - 1 && maxTy <= sage.hy + 2,
+      `and never overshoots the square (${minTx}..${maxTx} x ${minTy}..${maxTy})`);
+    ok(maxTx > minTx || maxTy > minTy, "he does move — this is not a rooted NPC by accident");
 
     /* --- the trapdoor where the stack was dropped --- */
     const down = town.portals.find((p) => p.dest === "cellar")!;
@@ -4244,9 +4359,44 @@ async function main(): Promise<void> {
       houseB: "prop-house-b.png",
       smithy: "prop-smithy.png",
       windmill: "prop-windmill.png",
+      // the town set — thirty of them, all `prop-town-*`
+      chapel: "prop-town-chapel.png", shrine: "prop-town-shrine.png",
+      shop: "prop-town-shop.png", townhouse: "prop-town-townhouse.png",
+      watchtower: "prop-town-watchtower.png", shophouse: "prop-town-shophouse.png",
+      cottage: "prop-town-cottage.png", bank: "prop-town-bank.png",
+      observatory: "prop-town-observatory.png", storefront: "prop-town-storefront.png",
+      shoprow: "prop-town-shoprow.png", keep: "prop-town-keep.png",
+      workshop: "prop-town-workshop.png", warehouse: "prop-town-warehouse.png",
+      temple: "prop-town-temple.png", apothecary: "prop-town-apothecary.png",
+      inn: "prop-town-inn.png", manor: "prop-town-manor.png",
+      towerhouse: "prop-town-towerhouse.png", market: "prop-town-market.png",
+      tavern: "prop-town-tavern.png", tradehouse: "prop-town-tradehouse.png",
+      stonehouse: "prop-town-stonehouse.png", greatTemple: "prop-town-greattemple.png",
+      guildhall: "prop-town-guildhall.png", stallRed: "prop-town-stall-red.png",
+      stallGrey: "prop-town-stall-grey.png", stallOpen: "prop-town-stall-open.png",
+      windmillCloth: "prop-town-windmill-cloth.png",
+      windmillLattice: "prop-town-windmill-lattice.png",
     };
 
-    ok(scn.SCENERY_KINDS.length === 12, "twelve kinds of scenery are registered");
+    ok(scn.SCENERY_KINDS.length === 42, `forty-two kinds of scenery are registered (${scn.SCENERY_KINDS.length})`);
+    ok(scn.SCENERY_KINDS.every((k) => FILES[k] !== undefined),
+      "…and this test knows the filename of every one of them");
+
+    /* --- the town set is cut to the tile, not merely near it -----------------
+     * The five Gallows Coast buildings were illustrations shrunk to fit and
+     * land a few pixels shy of their box. The thirty town props were drawn at
+     * this size, so their PNGs are EXACTLY footprint x 32 — which is what lets
+     * the footprint be read off the file instead of typed in beside it, and
+     * what would silently shift every one of them if a file were ever
+     * re-exported at the wrong scale. */
+    for (const kind of scn.SCENERY_KINDS) {
+      const file = FILES[kind];
+      if (!file.startsWith("prop-town-")) continue;
+      const [w, h] = png(file);
+      const fp = scn.FOOTPRINT[kind];
+      ok(w === fp.w * T && h === fp.h * T,
+        `${kind} is exactly its footprint (${w}x${h} for ${fp.w}x${fp.h})`);
+    }
     for (const kind of scn.SCENERY_KINDS) {
       const file = FILES[kind];
       ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
@@ -4273,9 +4423,17 @@ async function main(): Promise<void> {
      * overhang. The buildings are four and five deep and seal two, which is the
      * same idea and not a weaker one — with a single row a five-tile house
      * would let you stand four tiles inside its own wall. What must hold either
-     * way is that the roof is never solid and never less than half the object. */
-    ok(scn.SCENERY_KINDS.every((k) => scn.BLOCK[k].h <= Math.max(1, Math.floor(scn.FOOTPRINT[k].h / 2))),
-      "no prop seals more than half its own depth");
+     * way is that the roof is never solid and never less than half the object.
+     *
+     * The bound ROUNDS UP, and used to round down. Rounding down was free while
+     * every building was four or five deep, because floor and ceil agree there.
+     * The town set brought three-deep houses — a row of doorway, a row of wall,
+     * a row of roof — and under the old bound such a house could seal only its
+     * doorway, leaving the player standing in the middle of the wall, drawn
+     * behind the building and therefore invisible. Being stopped by a wall is
+     * the better wrong answer than vanishing into one. */
+    ok(scn.SCENERY_KINDS.every((k) => scn.BLOCK[k].h <= Math.max(1, Math.ceil(scn.FOOTPRINT[k].h / 2))),
+      "no prop seals more than half its own depth, rounded up");
     ok(scn.SCENERY_KINDS.every((k) => scn.FOOTPRINT[k].h === 1 || scn.BLOCK[k].h < scn.FOOTPRINT[k].h),
       "…and anything deeper than one row keeps overhang to hide behind");
     ok(scn.SCENERY_KINDS.filter((k) => scn.FOOTPRINT[k].h <= 2).every((k) => scn.BLOCK[k].h === 1),
@@ -10606,8 +10764,8 @@ async function main(): Promise<void> {
     ok(pvp.togglePvpArmed() === true && pvp.pvpArmed() === true,
       "the toggle flips and reports the new setting, like chase does");
 
-    /* The gate. Three rules today; the point is that there is ONE place to
-     * add the fourth (protection zones) rather than a condition to remember. */
+    /* The gate. Four rules today; the point is that there is ONE place to add
+     * the fifth (party, guild war) rather than a condition to remember. */
     ok(pvp.mayHit(30, 30) === true, "armed, two grown characters may fight");
     pvp.setPvpArmed(false);
     ok(pvp.mayHit(30, 30) === false, "disarmed, the blow does not land at all");
@@ -10615,6 +10773,27 @@ async function main(): Promise<void> {
     ok(pvp.PVP_MIN_LEVEL === 10, "PvP opens at level 10 — the number settled early");
     ok(pvp.mayHit(9, 30) === false, "a level 9 is not a threat…");
     ok(pvp.mayHit(30, 9) === false, "…and is not a target either");
+
+    /* The protection zone. It arrives as a bare boolean because this module is
+     * rules and must not import a World to look a tile up in; whoever throws
+     * the punch knows the square, and `isSafeTile` turns that into the answer.
+     * Omitting it must mean "not in one", or every existing call site would
+     * quietly change meaning the day the argument was added. */
+    ok(pvp.mayHit(30, 30, true) === false, "…and nobody may fight inside a protection zone");
+    ok(pvp.mayHit(30, 30, false) === true, "…while one step outside it they may");
+    ok(pvp.mayHit(30, 30) === pvp.mayHit(30, 30, false),
+      "…and leaving the argument off means the same as saying no");
+
+    /* …and the zone the town actually draws answers the same way. Two islands
+     * of six are sanctuary, so this cannot be asked of a row number. */
+    {
+      const { isSafeTile } = await import("../src/world/collision.ts");
+      const tw = buildWorlds(WORLD_SEED).town;
+      ok(pvp.mayHit(30, 30, isSafeTile(tw, 50, 45)) === false,
+        "no duel in the market square");
+      ok(pvp.mayHit(30, 30, isSafeTile(tw, 60, 80)) === true,
+        "…and no sanctuary out on the hunting islands");
+    }
 
     /* The seam. A hit that connects earns its skull in the same call, so
      * there is no way to write a landed blow that forgot to. */

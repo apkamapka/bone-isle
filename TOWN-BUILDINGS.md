@@ -1,8 +1,9 @@
 # Town buildings — `public/prop-town-*.png`
 
-Thirty settlement props, ready to place but **not yet wired into the game**.
-They sit in `public/` and nothing references them. This file is the note that
-tells whoever wires them up what each one is, how big it is, and what it is for.
+Thirty settlement props, **wired and standing**. All thirty are `SceneryKind`s
+now (`src/world/types.ts`, `src/gfx/sceneryArt.ts`) and twenty-five of them are
+placed on Bonetown (`src/world/townSpec.ts`). This file is the note that says
+what each one is, how big it is, and what it is for.
 
 Everything here is *scenery*, not *structure*. Structures are the Home Isle
 things the player builds and hits (`build-*.png`, `src/gfx/buildingArt.ts`);
@@ -25,12 +26,22 @@ way already — the footprint is readable straight off the image (`width / 32` b
 
 ## The catalogue
 
-`Blocks` is the *suggested* `BLOCK` entry: how many rows counted **up from the
-bottom** stop a walker. The rest is overhang the player walks behind, exactly
-like a tree's crown. Width always matches the footprint — a narrower block hugs
-the left edge of the sprite instead of centring under it, which is a trap worth
-remembering when a building's solid part is narrower than its art (see the
-windmills).
+`Blocks` is the `BLOCK` entry as it now ships: how many rows counted **up from
+the bottom** stop a walker. The rest is overhang the player walks behind,
+exactly like a tree's crown. Width always matches the footprint — a narrower
+block hugs the left edge of the sprite instead of centring under it, which is a
+trap worth remembering when a building's solid part is narrower than its art
+(see the windmills).
+
+**The depths changed when these were wired up, and the numbers below are the
+ones in the code.** The suite has always held every prop to "seal no more than
+half your own depth", and that bound rounded DOWN — which was free while every
+building was four or five deep, because floor and ceil agree there. A
+three-deep town house is a row of doorway, a row of wall and a row of roof, and
+under the old bound it could seal only the doorway: the player stood in the
+middle of the wall, drawn behind the building and therefore invisible. The
+bound now rounds up. So two-deep props seal one row (the tent's rule),
+three-deep seal two, four-deep seal two, and nothing seals its roof.
 
 ### Civic and grand
 
@@ -41,21 +52,21 @@ windmills).
 | `prop-town-greattemple.png` | `greatTemple` | 5 x 5 | 5 x 2 | The big one. Two tiers of sweeping roof over a gabled porch, stone plinths either side. Biggest piece in the set — give it a square, not a street. |
 | `prop-town-observatory.png` | `observatory` | 3 x 5 | 3 x 2 | Round stone tower, external spiral stair climbing the right side, glazed lookout gallery under a red cap. Scholar's tower — mage guild, library, Time Sage. |
 | `prop-town-chapel.png` | `chapel` | 2 x 3 | 2 x 2 | Small stone church, red spire, bell in the tower, cross on top. |
-| `prop-town-shrine.png` | `shrine` | 2 x 2 | 2 x 2 | Brick shrine, barred arch, steep roof. Smallest building here — roadside, graveyard, courtyard corner. |
+| `prop-town-shrine.png` | `shrine` | 2 x 2 | 2 x 1 | Brick shrine, barred arch, steep roof. Smallest building here — roadside, graveyard, courtyard corner. |
 | `prop-town-bank.png` | `bank` | 3 x 3 | 3 x 2 | Classical pediment, pilasters, barred metal gate. Reads as vault/depot; sandstone, so it stands out from the grey ones. |
-| `prop-town-guildhall.png` | `guildhall` | 6 x 2 | 6 x 2 | Long half-timbered hall, central gabled porch, a run of windows. Widest piece in the set. |
-| `prop-town-watchtower.png` | `watchtower` | 2 x 4 | 2 x 3 | Plain stone tower, barred door, conical roof. Wall corners, gate flanks, town edge. |
+| `prop-town-guildhall.png` | `guildhall` | 6 x 2 | 6 x 1 | Long half-timbered hall, central gabled porch, a run of windows. Widest piece in the set. |
+| `prop-town-watchtower.png` | `watchtower` | 2 x 4 | 2 x 2 | Plain stone tower, barred door, conical roof. Wall corners, gate flanks, town edge. |
 
 ### Trade
 
 | File | Kind | Tiles | Blocks | What it is |
 | --- | --- | --- | --- | --- |
 | `prop-town-tradehouse.png` | `tradehouse` | 5 x 3 | 5 x 2 | Broad stone-and-timber house, wide red roof, external stair, hanging coin-purse sign. The trade hub's anchor building. |
-| `prop-town-market.png` | `market` | 5 x 2 | 5 x 2 | Wide roof on posts over an open arcade, big double gate, stall canopy. |
+| `prop-town-market.png` | `market` | 5 x 2 | 5 x 1 | Wide roof on posts over an open arcade, big double gate, stall canopy. |
 | `prop-town-warehouse.png` | `warehouse` | 4 x 3 | 4 x 2 | Stone, arched stair entrance, cantilevered loading crane on the left. Docks, or wherever goods move. |
-| `prop-town-shoprow.png` | `shoprow` | 4 x 2 | 4 x 2 | Two arched shop bays under side awnings flanking a gabled porch. Two vendors under one roof. |
-| `prop-town-storefront.png` | `storefront` | 4 x 2 | 4 x 2 | Plain wide house, veranda posts, signed door. The cheapest way to fill a street with something that looks open for business. |
-| `prop-town-shophouse.png` | `shophouse` | 3 x 2 | 3 x 2 | Narrow version of the same idea — deep overhanging roof on posts, one window, signed door. |
+| `prop-town-shoprow.png` | `shoprow` | 4 x 2 | 4 x 1 | Two arched shop bays under side awnings flanking a gabled porch. Two vendors under one roof. |
+| `prop-town-storefront.png` | `storefront` | 4 x 2 | 4 x 1 | Plain wide house, veranda posts, signed door. The cheapest way to fill a street with something that looks open for business. |
+| `prop-town-shophouse.png` | `shophouse` | 3 x 2 | 3 x 1 | Narrow version of the same idea — deep overhanging roof on posts, one window, signed door. |
 | `prop-town-shop.png` | `shop` | 2 x 3 | 2 x 2 | Round stone turret with a conical roof and a **blank hanging shop sign**. |
 | `prop-town-apothecary.png` | `apothecary` | 4 x 3 | 4 x 2 | Warm plaster manor, cupola, hanging bottle sign, name-board. Fits the herbalist. |
 | `prop-town-workshop.png` | `workshop` | 4 x 3 | 4 x 2 | Grey slate roof over an open timber loft, raised on a stone terrace, side annex. Craft quarter. |
@@ -73,7 +84,7 @@ the frontages don't all measure the same.
 | `prop-town-manor.png` | `manor` | 4 x 3 | 4 x 2 | Sister to the inn — more chimneys, more dormers, a big blank name-board on the left. The grandest private house. |
 | `prop-town-towerhouse.png` | `towerhouse` | 4 x 4 | 4 x 2 | Tall: stone ground floor, open timbered balcony, tiered roofs, hanging sign. Tallest non-tower building. |
 | `prop-town-stonehouse.png` | `stonehouse` | 5 x 3 | 5 x 2 | Sprawling stone-and-timber house, upper bay window, stone terrace on the left, narrow door. |
-| `prop-town-townhouse.png` | `townhouse` | 2 x 4 | 2 x 3 | Three storeys, stone ground floor, timber above. Narrow — the building to line a street with. |
+| `prop-town-townhouse.png` | `townhouse` | 2 x 4 | 2 x 2 | Three storeys, stone ground floor, timber above. Narrow — the building to line a street with. |
 | `prop-town-cottage.png` | `cottage` | 3 x 3 | 3 x 2 | Compact, steep hip roof, central chimney, dormer. **No door on the front** — this is scenery you look at, not enter. Filler. |
 
 ### Market stalls

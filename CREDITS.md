@@ -847,20 +847,20 @@ which is the contract `src/gfx/sceneryArt.ts` draws against.
 
 | File | Size | Footprint | Blocks |
 | --- | --- | --- | --- |
-| `prop-town-shrine.png` | 64 x 64 | 2 x 2 | 2 x 2 |
+| `prop-town-shrine.png` | 64 x 64 | 2 x 2 | 2 x 1 |
 | `prop-town-chapel.png` | 64 x 96 | 2 x 3 | 2 x 2 |
 | `prop-town-shop.png` | 64 x 96 | 2 x 3 | 2 x 2 |
-| `prop-town-townhouse.png` | 64 x 128 | 2 x 4 | 2 x 3 |
-| `prop-town-watchtower.png` | 64 x 128 | 2 x 4 | 2 x 3 |
-| `prop-town-shophouse.png` | 96 x 64 | 3 x 2 | 3 x 2 |
+| `prop-town-townhouse.png` | 64 x 128 | 2 x 4 | 2 x 2 |
+| `prop-town-watchtower.png` | 64 x 128 | 2 x 4 | 2 x 2 |
+| `prop-town-shophouse.png` | 96 x 64 | 3 x 2 | 3 x 1 |
 | `prop-town-stall-red.png` | 96 x 64 | 3 x 2 | 3 x 1 |
 | `prop-town-stall-grey.png` | 96 x 64 | 3 x 2 | 3 x 1 |
 | `prop-town-stall-open.png` | 96 x 64 | 3 x 2 | 3 x 1 |
 | `prop-town-bank.png` | 96 x 96 | 3 x 3 | 3 x 2 |
 | `prop-town-cottage.png` | 96 x 96 | 3 x 3 | 3 x 2 |
 | `prop-town-observatory.png` | 96 x 160 | 3 x 5 | 3 x 2 |
-| `prop-town-shoprow.png` | 128 x 64 | 4 x 2 | 4 x 2 |
-| `prop-town-storefront.png` | 128 x 64 | 4 x 2 | 4 x 2 |
+| `prop-town-shoprow.png` | 128 x 64 | 4 x 2 | 4 x 1 |
+| `prop-town-storefront.png` | 128 x 64 | 4 x 2 | 4 x 1 |
 | `prop-town-keep.png` | 128 x 96 | 4 x 3 | 4 x 2 |
 | `prop-town-workshop.png` | 128 x 96 | 4 x 3 | 4 x 2 |
 | `prop-town-warehouse.png` | 128 x 96 | 4 x 3 | 4 x 2 |
@@ -869,20 +869,22 @@ which is the contract `src/gfx/sceneryArt.ts` draws against.
 | `prop-town-inn.png` | 128 x 96 | 4 x 3 | 4 x 2 |
 | `prop-town-manor.png` | 128 x 96 | 4 x 3 | 4 x 2 |
 | `prop-town-towerhouse.png` | 128 x 128 | 4 x 4 | 4 x 2 |
-| `prop-town-market.png` | 160 x 64 | 5 x 2 | 5 x 2 |
+| `prop-town-market.png` | 160 x 64 | 5 x 2 | 5 x 1 |
 | `prop-town-tavern.png` | 160 x 96 | 5 x 3 | 5 x 2 |
 | `prop-town-tradehouse.png` | 160 x 96 | 5 x 3 | 5 x 2 |
 | `prop-town-stonehouse.png` | 160 x 96 | 5 x 3 | 5 x 2 |
 | `prop-town-greattemple.png` | 160 x 160 | 5 x 5 | 5 x 2 |
-| `prop-town-guildhall.png` | 192 x 64 | 6 x 2 | 6 x 2 |
+| `prop-town-guildhall.png` | 192 x 64 | 6 x 2 | 6 x 1 |
 | `prop-town-windmill-cloth.png` | 192 x 192 | 6 x 6 | 6 x 2 |
 | `prop-town-windmill-lattice.png` | 192 x 192 | 6 x 6 | 6 x 2 |
 
 The footprints in that table are read off the images rather than chosen: the
-files were delivered pre-cut to a whole number of tiles and the filenames they
-arrived under said so. The block column is a recommendation and is not yet in
-the code — nothing references these files. `TOWN-BUILDINGS.md` says what each
-one is and how to wire it up.
+files were delivered pre-cut to a whole number of tiles, and the smoke suite
+now checks that every one of them is exactly its footprint times 32 — so a file
+re-exported at the wrong scale is caught rather than silently shifting the
+building off its own plot. The block column is what ships in
+`src/gfx/sceneryArt.ts`. `TOWN-BUILDINGS.md` says what each one is and where it
+stands.
 
 The three stalls block one row rather than two so a vendor can stand behind the
 counter. The two windmills are 6 x 6 and are not the 5 x 5 Gallows Coast

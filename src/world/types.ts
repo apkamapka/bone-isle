@@ -133,7 +133,21 @@ export type SceneryKind = "skullPole" | "deadTree" | "felledTree"
   // Buildings. Same contract as everything else here — the glyph names the
   // top-left square of the footprint and the sprite is anchored bottom-centre
   // over the block — they are simply four and five tiles instead of one.
-  | "barn" | "houseA" | "houseB" | "smithy" | "windmill";
+  | "barn" | "houseA" | "houseB" | "smithy" | "windmill"
+  // The town set. Same contract again; what separates them from the five above
+  // is only where they came from — these are native pixel art at the tile
+  // scale rather than illustrations shrunk to fit, which is why they are drawn
+  // a shade finer and why Bonetown does not mix the two families.
+  | "chapel" | "shrine" | "shop" | "townhouse" | "watchtower"
+  | "shophouse" | "cottage" | "bank" | "observatory"
+  | "storefront" | "shoprow" | "keep" | "workshop" | "warehouse"
+  | "temple" | "apothecary" | "inn" | "manor" | "towerhouse"
+  | "market" | "tavern" | "tradehouse" | "stonehouse" | "greatTemple"
+  | "guildhall"
+  // Market stalls seal one row, not two: the back row stays walkable so the
+  // trader can stand behind his own counter.
+  | "stallRed" | "stallGrey" | "stallOpen"
+  | "windmillCloth" | "windmillLattice";
 
 /**
  * A standing object taller than its tile — a skull totem, a dead tree.
@@ -478,11 +492,19 @@ export interface World {
    *  maps mark it with a glyph; when absent the player lands beside a portal
    *  exactly as before, so procedural islands are unaffected. */
   spawn?: Vec;
-  /** Rows 0..safeMaxY are a haven inside an otherwise dangerous map: no
-   *  creature may spawn there and none may step into it. Bonetown uses it —
-   *  north of the fence is town, south of it is hunting ground. Absent on
-   *  maps that are wholly safe or wholly hostile. */
-  safeMaxY?: number;
+  /**
+   * The haven inside an otherwise dangerous map: no creature may spawn on
+   * these squares and none may step onto one. Absent on maps that are wholly
+   * safe or wholly hostile.
+   *
+   * One bit per tile, `ty * w + tx`, rather than the row band this used to be.
+   * Bonetown outgrew the band the day it became six islands: its two safe ones
+   * sit at rows 32..69, and so do two of the four wild ones. A haven that can
+   * only say "everything above row N" cannot describe that map at all, and a
+   * mask can describe any map, so the band went rather than gaining a sibling.
+   * Built once from the spec's `safeRects` when the world is parsed.
+   */
+  safeMask?: Uint8Array;
   /** Authored creature posts: exactly where the map says a creature stands.
    *  Maps carrying these populate from them instead of scattering a roster,
    *  and each creature respawns back onto its own post. */

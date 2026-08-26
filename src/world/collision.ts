@@ -110,22 +110,28 @@ export function randomWalkable(w: World): Vec {
 }
 
 /**
- * The haven band inside an otherwise hostile map: rows 0..safeMaxY.
+ * The haven inside an otherwise hostile map.
  *
  * Creatures consult THIS — not `isSafeTile` — before spawning and before every
  * step, and the distinction matters. A wholly safe world already keeps its
  * monsters out by never running their update at all; folding that case in here
  * as well would also forbid deliberately placing creatures on a safe map,
- * which the test arenas rely on. So this answers false when there is no band.
+ * which the test arenas rely on. So this answers false when there is no mask.
+ *
+ * It reads a tile rather than a row because Bonetown's haven is two islands out
+ * of six and no row band can draw that. Off-map is not a haven: a creature
+ * asking about a square outside the world has bigger problems than sanctuary.
  */
-export function inHavenBand(w: World, ty: number): boolean {
-  return w.safeMaxY !== undefined && ty <= w.safeMaxY;
+export function inHaven(w: World, tx: number, ty: number): boolean {
+  if (!w.safeMask) return false;
+  if (tx < 0 || ty < 0 || tx >= w.w || ty >= w.h) return false;
+  return w.safeMask[ty * w.w + tx] === 1;
 }
 
 /** Is the player standing somewhere nothing can reach them? Used for the
  *  zone label, where a wholly safe map counts as safe everywhere. */
-export function isSafeTile(w: World, _tx: number, ty: number): boolean {
-  return w.safe || inHavenBand(w, ty);
+export function isSafeTile(w: World, tx: number, ty: number): boolean {
+  return w.safe || inHaven(w, tx, ty);
 }
 
 /** Where an arriving player lands: the map's authored spawn tile when it has
