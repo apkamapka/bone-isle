@@ -4421,8 +4421,11 @@ async function main(): Promise<void> {
       const ps = r.mobPosts!.filter((p) => p.kind === kind);
       return ps.reduce((s, p) => s + Math.hypot(p.tx - sx, p.ty - sy), 0) / ps.length;
     };
-    ok(meanDist("snake") < meanDist("orcBerserker"),
-      "snakes sit nearer the way home than orc berserkers");
+    // Was measured against the orc berserker, which no longer stands on the
+    // island — the warrior is the heaviest thing the orc camp fields now, and
+    // it is the far end of the same line the snake sits at the near end of.
+    ok(meanDist("snake") < meanDist("orcWarrior"),
+      "snakes sit nearer the way home than orc warriors");
     // the demon skeleton is ranked by depth inland now, not by distance from
     // the pad, so the ladder that still holds across regions is the outer one
     /* --- five regions, one family each, spread not knotted --- */
@@ -4445,7 +4448,9 @@ async function main(): Promise<void> {
         goblin: ["goblin", "goblinLegionary"],
         // Two ranks, not three. The guard is a floor and a half down now.
         minotaur: ["minotaur", "minotaurArcher"],
-        orc: ["orc", "orcArcher", "orcWarrior", "orcShaman", "orcBerserker"],
+        // Three ranks, not five. The shaman and the berserker came off the
+        // island with the same move that took the minotaur guard off it.
+        orc: ["orc", "orcArcher", "orcWarrior"],
       };
       const familyOf = (k: string): string =>
         k.startsWith("orc") ? "orc" : k.startsWith("minotaur") ? "minotaur"
@@ -4462,7 +4467,11 @@ async function main(): Promise<void> {
         // thirteen, and `minotaurGuard` is absent rather than zero so that one
         // reappearing anywhere on the Reach trips the roster check below.
         minotaur: 13, minotaurArcher: 7,
-        orc: 7, orcArcher: 5, orcWarrior: 4, orcShaman: 2, orcBerserker: 2,
+        // The two shamans and the two berserkers became two orcs and two
+        // warriors where they stood: seven plus two, four plus two. Both
+        // heavier ranks are absent rather than zero, so one reappearing on
+        // the Reach trips the roster check below.
+        orc: 9, orcArcher: 5, orcWarrior: 6,
       };
       const wrong = Object.entries(HEAD)
         .filter(([k, n]) => p.filter((m) => m.kind === k).length !== n)

@@ -27,8 +27,12 @@
  * Inside a region the posts are spread as evenly as the ground allows — nine
  * or ten tiles between kin, never a knot — and then ranked toward the hole cut
  * down to -1. The lightest of a family keeps the region's rim, the heaviest
- * stands over its own descent: orc berserkers on (79,90), the demon skeleton
- * six tiles off (89,13). The minotaurs are the exception, and deliberately:
+ * stands over its own descent: orc warriors on (79,90), the demon skeleton six
+ * tiles off (89,13). The orcs' shamans and berserkers came off the island
+ * with the same move that took the minotaur guard off it — both ranks now
+ * hold Orc Deep -2 — so the warrior is the heaviest thing the surface camp
+ * fields, and it is what stands on the mouth. The minotaurs go one further,
+ * and deliberately:
  * their camp around the mouth at (8,85) was picketed by four guards and is
  * now plain horns throughout, because the guard was moved a floor and a half
  * down. The surface camp is the doorway to the branch, not a wall across it. The snakes
@@ -40,9 +44,11 @@
  *   F campfire   Y skull totem   V dead tree   v felled tree
  *   N tent   W well   Q q black boulder (two variants)
  *   T tree   R rock   H herb
- *   creatures: s snake n bandit k skeleton K skeletonWarrior g ghoul d demonSkeleton G goblin L goblinLegionary m minotaur a minotaurArcher r orc c orcArcher e orcWarrior h orcShaman z orcBerserker
- *   (`u` stays mapped to the guard though nothing on the island paints one
- *   any more — a single keystroke puts the picket back if it is ever wanted)
+ *   creatures: s snake n bandit k skeleton K skeletonWarrior g ghoul d demonSkeleton G goblin L goblinLegionary m minotaur a minotaurArcher r orc c orcArcher e orcWarrior
+ *   (`u`, `h` and `z` stay mapped to the minotaur guard, the orc shaman and
+ *   the berserker though nothing on the island paints one any more — the
+ *   three ranks live a floor or two down, and one keystroke brings any of
+ *   them back to the surface if that is ever wanted)
  */
 import type { HandmadeSpec } from "./handmade.ts";
 import { Tile } from "./types.ts";
@@ -163,8 +169,8 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~..........................N.................T.........................................V.....T..~~",
     "~~~......R......R...................F.............F.........RF.........R.....R............R.......~~",
     "~~~.......N...m..N.......R..........N................................................V....T.....e.~~",
-    "~~~..........F................V...................V.....................VN........V..h.......T...~~~",
-    "~~~......V.....R.................R...a...................N....e.....vVN....h......v..............~~~",
+    "~~~..........F................V...................V.....................VN........V..r.......T...~~~",
+    "~~~......V.....R.................R...a...................N....e.....vVN....r......v..............~~~",
     "~~~.........V............a...............V..........N..........V.R.................F.............~~~",
     "~~~..F..1...R...........................N.....R..F..............N............R.....N........Q....~~~",
     "~~~~...............v....N...................F.........W..~...................N..............T....~~~",
@@ -173,8 +179,8 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~~~..m..............................................~~~~~~~~~~................................~~~~",
     "~~~~~~.....W.....m.......R....F.......................~~~~~~~~~~~~~............2......V.........~~~~",
     "~~~~~~~..........N......HN...............q...........~~~~~~~~~~~~~~~........RN.....R....q....T..~~~~",
-    "~~~~~~~~...F....................T............T......~~~~~~~~~~~~~~~~~~............z.........R...~~~~",
-    "~~~~~~~~~..........................................~~~~~~~~~~~~~~~~~~~~.z......W...F............~~~~",
+    "~~~~~~~~...F....................T............T......~~~~~~~~~~~~~~~~~~............e.........R...~~~~",
+    "~~~~~~~~~..........................................~~~~~~~~~~~~~~~~~~~~.e......W...F............~~~~",
     "~~~~~~~~~~~~...................Q.....T............~~~~~~~~~~~~~~~~~~~~~~...........N...........~~~~~",
     "~~~~~~~~~~~~~~~~~~~~~~.....a...........a.......~~~~~~~~~~~~~~~~~~~~~~~~~~.......V.............~~~~~~",
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~.................~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~................e.~~~~~~~",
