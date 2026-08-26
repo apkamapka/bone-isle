@@ -822,6 +822,57 @@ to four tiles left a shed with sticks on it, so it takes 5 x 5.
 Like the Bone Reach objects, these are scenery rather than terrain: they stand
 taller than the squares they occupy and the player walks behind the roof.
 
+## Town buildings — `public/prop-town-*.png`
+
+Source: **CraftPix.net**, standard (non-Enterprise) licence —
+https://craftpix.net/file-licenses/
+
+Same grant as the Home Isle buildings and the spell effects: commercial use and
+sale of the game are permitted outright, attribution is a courtesy rather than
+an obligation, and clause 3.1.1 forbids feeding these files to a model as
+training data.
+
+> **These files must not sit in a public repository.** 1.1.3 forbids
+> distributing source files and 1.2.1 forbids redistributing the art in any
+> form another end user could take and use; a public GitHub repo is exactly
+> that. Serving them from Vercel as part of the running game is fine. Git keeps
+> every blob it has ever stored, so a file that has been pushed once is not
+> removed by deleting it in a later commit.
+
+Fourteen city buildings, shipped **as drawn**. Unlike the Gallows Coast props
+these needed no cutting: they are native pixel art already at the tile scale,
+so nothing was resized, requantised or restyled. Each file is exactly its
+footprint times 32 pixels, with the art seated flush against the bottom edge —
+which is the contract `src/gfx/sceneryArt.ts` draws against.
+
+| File | Size | Footprint | Blocks |
+| --- | --- | --- | --- |
+| `prop-town-chapel.png` | 64 x 96 | 2 x 3 | 2 x 2 |
+| `prop-town-shop.png` | 64 x 96 | 2 x 3 | 2 x 2 |
+| `prop-town-townhouse.png` | 64 x 128 | 2 x 4 | 2 x 3 |
+| `prop-town-watchtower.png` | 64 x 128 | 2 x 4 | 2 x 3 |
+| `prop-town-bank.png` | 96 x 96 | 3 x 3 | 3 x 2 |
+| `prop-town-keep.png` | 128 x 96 | 4 x 3 | 4 x 2 |
+| `prop-town-workshop.png` | 128 x 96 | 4 x 3 | 4 x 2 |
+| `prop-town-warehouse.png` | 128 x 96 | 4 x 3 | 4 x 2 |
+| `prop-town-temple.png` | 128 x 96 | 4 x 3 | 4 x 2 |
+| `prop-town-apothecary.png` | 128 x 96 | 4 x 3 | 4 x 2 |
+| `prop-town-market.png` | 160 x 64 | 5 x 2 | 5 x 2 |
+| `prop-town-tavern.png` | 160 x 96 | 5 x 3 | 5 x 2 |
+| `prop-town-tradehouse.png` | 160 x 96 | 5 x 3 | 5 x 2 |
+| `prop-town-guildhall.png` | 192 x 64 | 6 x 2 | 6 x 2 |
+
+The footprints in that table are read off the images rather than chosen: the
+files were delivered pre-cut to a whole number of tiles and the filenames they
+arrived under said so. The block column is a recommendation and is not yet in
+the code — nothing references these files. `TOWN-BUILDINGS.md` says what each
+one is and how to wire it up.
+
+One difference from the Gallows Coast set worth knowing before they are placed:
+those carry a soft elliptical ground shadow baked in during their cut, and
+these do not. Once prop art has loaded `artShadow` is a no-op, so a building
+without its own shadow has none at all.
+
 ## Black Knight — `public/mob-black-knight-walk.png`, `public/mob-black-knight-dead.png`
 
 Source: **Universal LPC Spritesheet Character Generator**, CC-BY-SA 3.0 —
