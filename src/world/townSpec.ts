@@ -37,21 +37,24 @@
  * south — stay wild; both their ends are hunting ground and there is nothing
  * there to protect.
  *
- * THE TOWN IS BUILT OF ONE FAMILY, ON PURPOSE. The prop set holds two of
- * everything — warm plaster beside grey stone, and, worse, two human scales
- * whose doorways differ by a factor of two. The first draft of this map used
- * one of each and read as a sample sheet: a chapel whose door was shorter than
- * the player stood next to a manor whose door was not. So the town is warm
- * plaster only, at the large scale only, out of nine kinds repeated —
- * `manor`, `inn`, `apothecary`, `temple`, `shoprow`, `storefront`,
- * `shophouse`, `guildhall`, `bank` — with `greattemple` once, at the head of
- * the square, five tiles deep against everything else's three so the eye has
- * somewhere to land. The grey-stone half of the pack is unused here and is
- * coherent WITH ITSELF, which is what it is being saved for.
+ * THE SQUARE IS EMPTY, and that is deliberate rather than unfinished. Nothing
+ * stands on the paving but four market stalls; the `scenery` map below has no
+ * building in it at all.
  *
- * The one exception is the sage's `observatory`, and it is an exception on the
- * same principle: it stands on his island, where there is no other building
- * within sight of it to clash with.
+ * The history is worth keeping, because the prop set is still in `public/` and
+ * whoever fills this square next will hit the same two traps. The pack holds
+ * two of everything — warm plaster beside grey stone, and two human scales
+ * whose doorways differ by a factor of two. A first draft used one of each and
+ * read as a sample sheet: a chapel whose door was shorter than the player
+ * stood beside a manor whose door was not. A second draft used one family at
+ * one size and still read as a row of models, because every prop shipped small
+ * — so all thirty were redrawn at twice the size, and a manor that had been
+ * four tiles by three became eight by six. That is the state the art is in:
+ * doubled, coherent, and unused here.
+ *
+ * The stalls did NOT double and are the one thing still standing. A stall is a
+ * table under a canvas, so it was already person-sized, which is exactly why
+ * it survives on a square where nothing else did.
  *
  * Camp centres are chosen, not searched for. Picking them by percentile of
  * distance from the bridge put five of ten within thirteen tiles of the edge
@@ -136,13 +139,13 @@ const TOWN_ROWS: readonly string[] = [
   "~~~~~~~..........~~~~...............~~~~~.....T.........R.....::::.~~~~~~~~~...3..T...TR......T.R...~~~~~~",
   "~~~~~~~~...~~~~~~~~~~~~~~~...~~~...~~~~~..TT....T.T..........T::::...~~~~~~~~.......TR......T.......~~~~~~",
   "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~..:::::::::::::::::::::::::....~~~~~~~~.........R............~~~~~~",
-  "~~~~~~~~~~~~...........~~~~~~~~~~~~~~~..:::D:::::::Q:::::::::::::::::::~~~~~~~........T.....T......~~~~~~~",
+  "~~~~~~~~~~~~...........~~~~~~~~~~~~~~~..:::::::::::::::::::::::::::::::~~~~~~~........T.....T......~~~~~~~",
   "~~~~~~~~~~~..T::::::::::.......~~~~~~...:::::::::::::::::::::::::::::::.~~~~~~...T....T.R.........~~~~~~~~",
   "~~~~~~~~~~~..:::::::::::::......~~~~..T.:::::::::::::::::::::::::::::::.~~~~~~~..T..T...........w~~~~~~~~~",
   "~~~~~~~~~~~.:::::::::::::::R.T.~~~~.....:::::::::::::::::::::::::::::::..~~~~~~....R....w...R...~~~~~~~~~~",
   "~~~~~~~~~~~:::::::::::::::::...~~~...ToR:::::::::::::::::::::::::::::::T.~~~~~~.....R..........~~~~~~~~~~~",
   "~~~~~~~~~~::::::::::::::::::...~~~....TR::::::::::::::::::::::::::p::::..~~~~~~.S.....T........~~~~~~~~~~~",
-  "~~~~~~~~~~::::::::::::::::::..~~~~.....R:::I:::::::::::::::::::::::::::..~~~~~~.............m..~~~~~~~~~~~",
+  "~~~~~~~~~~::::::::::::::::::..~~~~.....R:::::::::::::::::::::::::::::::..~~~~~~.............m..~~~~~~~~~~~",
   "~~~~~~~~~~:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::T..~~~~~~...............~~~~~~~~~~~",
   "~~~~~~~~~~::::::::C::::::z:::::::::::::::::::::::::::::::::::::::::g:::....~~~~~~~....m........~~~~~~~~~~~",
   "~~~~~~~~~~:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::.::..~~~~~~~............~~~~~~~~~~~",
@@ -152,7 +155,7 @@ const TOWN_ROWS: readonly string[] = [
   "~~~~~~~~~~:::::::::::::::::....~~~..TTT.:::::::::::::::::::::::::::::::::::.~~~~~~~~~~~........~~~~~~~~~~~",
   "~~~~~~~~~~.:::::::::::::::.R...~~~......:::::s::::t::::h:::::::::::::::.::..~~~~~~~~~~~~.......~~~~~~~~~~~",
   "~~~~~~~~~~..:::::::::::::......~~~~.....:::::::::::::::::::::::::::::::.T...~~~~~~~~~~~~~......~~~~~~~~~~~",
-  "~~~~~~~~~~...R::::::RR....T..T.~~~~.....:G::::::::::::::N:::::::U::::::.....~~~~~~~~~~~~~~.....~~~~~~~~~~~",
+  "~~~~~~~~~~...R::::::RR....T..T.~~~~.....:::::::::::::::::::::::::::::::.....~~~~~~~~~~~~~~.....~~~~~~~~~~~",
   "~~~~~~~~~~~..T.T.......T........~~~~..T.:::::::::::::::::::::::::::::::oT..~~~~~~~~~~~~~~~~w..~~~~~~~~~~~~",
   "~~~~~~~~~~~..TT..TTT..T....RR...~~~~~.T.:::::::::::::::::::::::::::::::.T..~~~~~..~~~~~~~~~~~~~~~~~~~~~~~~",
   "~~~~~~~~~~~.......TR.M.T...T..~~~~~~~...:::::::::::::::::::::::::::::::...~~~~~..6.~~~~~~~~~~~~~~~~~~~~~~~",

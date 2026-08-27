@@ -3202,24 +3202,36 @@ async function main(): Promise<void> {
       "two gates: Home Isle and the Time Sage's cellar");
     ok(town.portals.every((p) => p.span === 2),
       "…both of them four squares, sitting on the circles the map paints for them");
-    ok(town.scenery.length === 34,
-      `every building, stall and camp tent came across (${town.scenery.length})`);
-    /* SIX buildings, where the first draft of this square had twenty-two. Every
-     * prop in the pack is now drawn at twice the size it shipped at, because at
-     * the original scale a manor stood barely two player-heights and its
-     * doorway came up to the character's shoulder. Doubled, the same square
-     * holds a sixth of what it did — which is the trade this assertion exists
-     * to keep. If this number climbs back into the twenties, the square has
-     * been refilled with models of buildings. */
-    const houses = town.scenery.filter((s) => scn2.FOOTPRINT[s.kind].w >= 6);
-    ok(houses.length === 6, `six buildings, not a street of sheds (${houses.length})`);
-    ok(houses.every((s) => scn2.FOOTPRINT[s.kind].h >= 4),
-      "…and every one of them at least four tiles deep");
-    /* The stalls stayed at their original size on purpose: a stall is a table
-     * under a canvas, the one thing in the set that was already person-sized. */
+    ok(town.scenery.length === 28,
+      `every stall and camp tent came across (${town.scenery.length})`);
+
+    /* --- NOTHING IS BUILT ON THE SQUARE ------------------------------------
+     * Four stalls and twenty-four camp tents, and not one building. That is a
+     * decision rather than an unfinished state, so it is pinned: if a house
+     * reappears on the paving it should be because someone put it there on
+     * purpose and came here to say so.
+     *
+     * The prop set is still in `public/` and still registered, so the trap is
+     * still live for whoever fills this square next. It holds two of
+     * everything — warm plaster beside grey stone, and two human scales whose
+     * doorways differ by a factor of two — and every one of the thirty props
+     * has been redrawn at twice the size it shipped at, because at the
+     * original scale a manor stood barely two player-heights. */
+    const houses = town.scenery.filter((s) => !s.kind.startsWith("stall") && s.kind !== "tent");
+    ok(houses.length === 0,
+      `nothing is built on the square${houses.length ? " — " + houses[0].kind : ""}`);
+
+    /* The stalls are the exception, and the reason is scale: a stall is a
+     * table under a canvas, so it was already person-sized and never doubled.
+     * That is exactly why it is the one thing still standing here. */
     const stalls = town.scenery.filter((s) => s.kind.startsWith("stall"));
     ok(stalls.length === 4 && stalls.every((s) => scn2.FOOTPRINT[s.kind].w === 3),
       `four stalls, still three tiles wide (${stalls.length})`);
+    ok(town.scenery.filter((s) => s.kind === "tent").length === 24,
+      "…and the rest is camp canvas, out on the wild islands");
+    ok(town.scenery.filter((s) => s.kind === "tent")
+        .every((s) => !inHaven(town, s.tx, s.ty)),
+      "…none of which stands in town");
     /* The town is built of ONE family at ONE scale, and this is the assertion
      * that keeps it that way. The pack holds two of everything — warm plaster
      * beside grey stone, and two human scales whose doorways differ by a
