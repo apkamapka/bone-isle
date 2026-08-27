@@ -839,44 +839,51 @@ training data.
 > every blob it has ever stored, so a file that has been pushed once is not
 > removed by deleting it in a later commit.
 
-Thirty settlement props, shipped **as drawn**. Unlike the Gallows Coast props
-these needed no cutting: they are native pixel art already at the tile scale,
-so nothing was resized, requantised or restyled. Each file is exactly its
-footprint times 32 pixels, with the art seated flush against the bottom edge —
-which is the contract `src/gfx/sceneryArt.ts` draws against.
+Thirty settlement props. They arrived as native pixel art cut to a whole
+number of tiles and nothing was requantised or restyled, but **twenty-seven of
+the thirty are now drawn at twice the size they shipped at** — a plain 2x
+nearest-neighbour scale, so the pixels are square blocks and no colour was
+invented. At the original scale a four-by-three manor stood barely two
+player-heights and its doorway came up to the character's shoulder; a street of
+them read as a row of models. The three market stalls were left alone, a stall
+being the one thing in the set that was already person-sized.
+
+Each file is exactly its footprint times 32 pixels, with the art seated flush
+against the bottom edge — which is the contract `src/gfx/sceneryArt.ts` draws
+against, and which the smoke suite checks file by file.
 
 | File | Size | Footprint | Blocks |
 | --- | --- | --- | --- |
-| `prop-town-shrine.png` | 64 x 64 | 2 x 2 | 2 x 1 |
-| `prop-town-chapel.png` | 64 x 96 | 2 x 3 | 2 x 2 |
-| `prop-town-shop.png` | 64 x 96 | 2 x 3 | 2 x 2 |
-| `prop-town-townhouse.png` | 64 x 128 | 2 x 4 | 2 x 2 |
-| `prop-town-watchtower.png` | 64 x 128 | 2 x 4 | 2 x 2 |
-| `prop-town-shophouse.png` | 96 x 64 | 3 x 2 | 3 x 1 |
-| `prop-town-stall-red.png` | 96 x 64 | 3 x 2 | 3 x 1 |
 | `prop-town-stall-grey.png` | 96 x 64 | 3 x 2 | 3 x 1 |
 | `prop-town-stall-open.png` | 96 x 64 | 3 x 2 | 3 x 1 |
-| `prop-town-bank.png` | 96 x 96 | 3 x 3 | 3 x 2 |
-| `prop-town-cottage.png` | 96 x 96 | 3 x 3 | 3 x 2 |
-| `prop-town-observatory.png` | 96 x 160 | 3 x 5 | 3 x 2 |
-| `prop-town-shoprow.png` | 128 x 64 | 4 x 2 | 4 x 1 |
-| `prop-town-storefront.png` | 128 x 64 | 4 x 2 | 4 x 1 |
-| `prop-town-keep.png` | 128 x 96 | 4 x 3 | 4 x 2 |
-| `prop-town-workshop.png` | 128 x 96 | 4 x 3 | 4 x 2 |
-| `prop-town-warehouse.png` | 128 x 96 | 4 x 3 | 4 x 2 |
-| `prop-town-temple.png` | 128 x 96 | 4 x 3 | 4 x 2 |
-| `prop-town-apothecary.png` | 128 x 96 | 4 x 3 | 4 x 2 |
-| `prop-town-inn.png` | 128 x 96 | 4 x 3 | 4 x 2 |
-| `prop-town-manor.png` | 128 x 96 | 4 x 3 | 4 x 2 |
-| `prop-town-towerhouse.png` | 128 x 128 | 4 x 4 | 4 x 2 |
-| `prop-town-market.png` | 160 x 64 | 5 x 2 | 5 x 1 |
-| `prop-town-tavern.png` | 160 x 96 | 5 x 3 | 5 x 2 |
-| `prop-town-tradehouse.png` | 160 x 96 | 5 x 3 | 5 x 2 |
-| `prop-town-stonehouse.png` | 160 x 96 | 5 x 3 | 5 x 2 |
-| `prop-town-greattemple.png` | 160 x 160 | 5 x 5 | 5 x 2 |
-| `prop-town-guildhall.png` | 192 x 64 | 6 x 2 | 6 x 1 |
-| `prop-town-windmill-cloth.png` | 192 x 192 | 6 x 6 | 6 x 2 |
-| `prop-town-windmill-lattice.png` | 192 x 192 | 6 x 6 | 6 x 2 |
+| `prop-town-stall-red.png` | 96 x 64 | 3 x 2 | 3 x 1 |
+| `prop-town-shrine.png` | 128 x 128 | 4 x 4 | 4 x 2 |
+| `prop-town-chapel.png` | 128 x 192 | 4 x 6 | 4 x 4 |
+| `prop-town-shop.png` | 128 x 192 | 4 x 6 | 4 x 4 |
+| `prop-town-shophouse.png` | 192 x 128 | 6 x 4 | 6 x 2 |
+| `prop-town-shoprow.png` | 256 x 128 | 8 x 4 | 8 x 2 |
+| `prop-town-storefront.png` | 256 x 128 | 8 x 4 | 8 x 2 |
+| `prop-town-townhouse.png` | 128 x 256 | 4 x 8 | 4 x 4 |
+| `prop-town-watchtower.png` | 128 x 256 | 4 x 8 | 4 x 4 |
+| `prop-town-bank.png` | 192 x 192 | 6 x 6 | 6 x 4 |
+| `prop-town-cottage.png` | 192 x 192 | 6 x 6 | 6 x 4 |
+| `prop-town-market.png` | 320 x 128 | 10 x 4 | 10 x 2 |
+| `prop-town-apothecary.png` | 256 x 192 | 8 x 6 | 8 x 4 |
+| `prop-town-guildhall.png` | 384 x 128 | 12 x 4 | 12 x 2 |
+| `prop-town-inn.png` | 256 x 192 | 8 x 6 | 8 x 4 |
+| `prop-town-keep.png` | 256 x 192 | 8 x 6 | 8 x 4 |
+| `prop-town-manor.png` | 256 x 192 | 8 x 6 | 8 x 4 |
+| `prop-town-temple.png` | 256 x 192 | 8 x 6 | 8 x 4 |
+| `prop-town-warehouse.png` | 256 x 192 | 8 x 6 | 8 x 4 |
+| `prop-town-workshop.png` | 256 x 192 | 8 x 6 | 8 x 4 |
+| `prop-town-observatory.png` | 192 x 320 | 6 x 10 | 6 x 4 |
+| `prop-town-stonehouse.png` | 320 x 192 | 10 x 6 | 10 x 4 |
+| `prop-town-tavern.png` | 320 x 192 | 10 x 6 | 10 x 4 |
+| `prop-town-tradehouse.png` | 320 x 192 | 10 x 6 | 10 x 4 |
+| `prop-town-towerhouse.png` | 256 x 256 | 8 x 8 | 8 x 4 |
+| `prop-town-greattemple.png` | 320 x 320 | 10 x 10 | 10 x 4 |
+| `prop-town-windmill-cloth.png` | 384 x 384 | 12 x 12 | 12 x 4 |
+| `prop-town-windmill-lattice.png` | 384 x 384 | 12 x 12 | 12 x 4 |
 
 The footprints in that table are read off the images rather than chosen: the
 files were delivered pre-cut to a whole number of tiles, and the smoke suite

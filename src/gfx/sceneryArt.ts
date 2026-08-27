@@ -121,19 +121,19 @@ export const FOOTPRINT: Record<SceneryKind, { w: number; h: number }> = {
   windmill: { w: 5, h: 5 },
   // Read straight off the artwork: every town PNG is exactly its footprint
   // times 32 pixels, so these numbers cannot drift out of step with the file.
-  chapel: { w: 2, h: 3 }, shrine: { w: 2, h: 2 }, shop: { w: 2, h: 3 },
-  townhouse: { w: 2, h: 4 }, watchtower: { w: 2, h: 4 },
-  shophouse: { w: 3, h: 2 }, cottage: { w: 3, h: 3 }, bank: { w: 3, h: 3 },
-  observatory: { w: 3, h: 5 }, storefront: { w: 4, h: 2 },
-  shoprow: { w: 4, h: 2 }, keep: { w: 4, h: 3 }, workshop: { w: 4, h: 3 },
-  warehouse: { w: 4, h: 3 }, temple: { w: 4, h: 3 },
-  apothecary: { w: 4, h: 3 }, inn: { w: 4, h: 3 }, manor: { w: 4, h: 3 },
-  towerhouse: { w: 4, h: 4 }, market: { w: 5, h: 2 }, tavern: { w: 5, h: 3 },
-  tradehouse: { w: 5, h: 3 }, stonehouse: { w: 5, h: 3 },
-  greatTemple: { w: 5, h: 5 }, guildhall: { w: 6, h: 2 },
+  chapel: { w: 4, h: 6 }, shrine: { w: 4, h: 4 }, shop: { w: 4, h: 6 },
+  townhouse: { w: 4, h: 8 }, watchtower: { w: 4, h: 8 },
+  shophouse: { w: 6, h: 4 }, cottage: { w: 6, h: 6 }, bank: { w: 6, h: 6 },
+  observatory: { w: 6, h: 10 }, storefront: { w: 8, h: 4 },
+  shoprow: { w: 8, h: 4 }, keep: { w: 8, h: 6 }, workshop: { w: 8, h: 6 },
+  warehouse: { w: 8, h: 6 }, temple: { w: 8, h: 6 },
+  apothecary: { w: 8, h: 6 }, inn: { w: 8, h: 6 }, manor: { w: 8, h: 6 },
+  towerhouse: { w: 8, h: 8 }, market: { w: 10, h: 4 }, tavern: { w: 10, h: 6 },
+  tradehouse: { w: 10, h: 6 }, stonehouse: { w: 10, h: 6 },
+  greatTemple: { w: 10, h: 10 }, guildhall: { w: 12, h: 4 },
   stallRed: { w: 3, h: 2 }, stallGrey: { w: 3, h: 2 },
-  stallOpen: { w: 3, h: 2 }, windmillCloth: { w: 6, h: 6 },
-  windmillLattice: { w: 6, h: 6 },
+  stallOpen: { w: 3, h: 2 }, windmillCloth: { w: 12, h: 12 },
+  windmillLattice: { w: 12, h: 12 },
 };
 
 /**
@@ -175,19 +175,19 @@ export const BLOCK: Record<SceneryKind, { w: number; h: number }> = {
   // Two rows of wall for a building, three for a tower, and ONE for a market
   // stall — the row behind its counter has to stay walkable or the trader
   // cannot stand in his own stall.
-  chapel: { w: 2, h: 2 }, shrine: { w: 2, h: 1 }, shop: { w: 2, h: 2 },
-  townhouse: { w: 2, h: 2 }, watchtower: { w: 2, h: 2 },
-  shophouse: { w: 3, h: 1 }, cottage: { w: 3, h: 2 }, bank: { w: 3, h: 2 },
-  observatory: { w: 3, h: 2 }, storefront: { w: 4, h: 1 },
-  shoprow: { w: 4, h: 1 }, keep: { w: 4, h: 2 }, workshop: { w: 4, h: 2 },
-  warehouse: { w: 4, h: 2 }, temple: { w: 4, h: 2 },
-  apothecary: { w: 4, h: 2 }, inn: { w: 4, h: 2 }, manor: { w: 4, h: 2 },
-  towerhouse: { w: 4, h: 2 }, market: { w: 5, h: 1 }, tavern: { w: 5, h: 2 },
-  tradehouse: { w: 5, h: 2 }, stonehouse: { w: 5, h: 2 },
-  greatTemple: { w: 5, h: 2 }, guildhall: { w: 6, h: 1 },
+  chapel: { w: 4, h: 4 }, shrine: { w: 4, h: 2 }, shop: { w: 4, h: 4 },
+  townhouse: { w: 4, h: 4 }, watchtower: { w: 4, h: 4 },
+  shophouse: { w: 6, h: 2 }, cottage: { w: 6, h: 4 }, bank: { w: 6, h: 4 },
+  observatory: { w: 6, h: 4 }, storefront: { w: 8, h: 2 },
+  shoprow: { w: 8, h: 2 }, keep: { w: 8, h: 4 }, workshop: { w: 8, h: 4 },
+  warehouse: { w: 8, h: 4 }, temple: { w: 8, h: 4 },
+  apothecary: { w: 8, h: 4 }, inn: { w: 8, h: 4 }, manor: { w: 8, h: 4 },
+  towerhouse: { w: 8, h: 4 }, market: { w: 10, h: 2 }, tavern: { w: 10, h: 4 },
+  tradehouse: { w: 10, h: 4 }, stonehouse: { w: 10, h: 4 },
+  greatTemple: { w: 10, h: 4 }, guildhall: { w: 12, h: 2 },
   stallRed: { w: 3, h: 1 }, stallGrey: { w: 3, h: 1 },
-  stallOpen: { w: 3, h: 1 }, windmillCloth: { w: 6, h: 2 },
-  windmillLattice: { w: 6, h: 2 },
+  stallOpen: { w: 3, h: 1 }, windmillCloth: { w: 12, h: 4 },
+  windmillLattice: { w: 12, h: 4 },
 };
 
 /**

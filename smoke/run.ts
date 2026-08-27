@@ -3031,6 +3031,7 @@ async function main(): Promise<void> {
   console.log("Home Isle authored in Tiled (map swap):");
   {
     const { walkable } = await import("../src/world/grid.ts");
+    const scn2 = await import("../src/gfx/sceneryArt.ts");
     const { worldSpawn } = await import("../src/world/collision.ts");
     const home = buildWorlds(WORLD_SEED).home;
 
@@ -3188,10 +3189,11 @@ async function main(): Promise<void> {
   console.log("Bonetown — six islands:");
   {
     const { walkable } = await import("../src/world/grid.ts");
+    const scn2 = await import("../src/gfx/sceneryArt.ts");
     const { inHaven } = await import("../src/world/collision.ts");
     const town = buildWorlds(WORLD_SEED).town;
     ok(town.w === 106 && town.h === 106, `the town is the 106x106 grid exported from Tiled (${town.w}x${town.h})`);
-    ok(town.trees.length === 275 && town.rocks.length === 140,
+    ok(town.trees.length === 279 && town.rocks.length === 136,
       `every authored tree and rock came across (${town.trees.length}/${town.rocks.length})`);
     ok(town.npcs.length === 6, "all six townsfolk are present");
     ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
@@ -3200,8 +3202,24 @@ async function main(): Promise<void> {
       "two gates: Home Isle and the Time Sage's cellar");
     ok(town.portals.every((p) => p.span === 2),
       "…both of them four squares, sitting on the circles the map paints for them");
-    ok(town.scenery.length === 45,
-      `every building, stall, tower and camp tent came across (${town.scenery.length})`);
+    ok(town.scenery.length === 32,
+      `every building, stall and camp tent came across (${town.scenery.length})`);
+    /* SIX buildings, where the first draft of this square had twenty-two. Every
+     * prop in the pack is now drawn at twice the size it shipped at, because at
+     * the original scale a manor stood barely two player-heights and its
+     * doorway came up to the character's shoulder. Doubled, the same square
+     * holds a sixth of what it did — which is the trade this assertion exists
+     * to keep. If this number climbs back into the twenties, the square has
+     * been refilled with models of buildings. */
+    const houses = town.scenery.filter((s) => scn2.FOOTPRINT[s.kind].w >= 6);
+    ok(houses.length === 6, `six buildings, not a street of sheds (${houses.length})`);
+    ok(houses.every((s) => scn2.FOOTPRINT[s.kind].h >= 4),
+      "…and every one of them at least four tiles deep");
+    /* The stalls stayed at their original size on purpose: a stall is a table
+     * under a canvas, the one thing in the set that was already person-sized. */
+    const stalls = town.scenery.filter((s) => s.kind.startsWith("stall"));
+    ok(stalls.length === 4 && stalls.every((s) => scn2.FOOTPRINT[s.kind].w === 3),
+      `four stalls, still three tiles wide (${stalls.length})`);
     /* The town is built of ONE family at ONE scale, and this is the assertion
      * that keeps it that way. The pack holds two of everything — warm plaster
      * beside grey stone, and two human scales whose doorways differ by a
@@ -3217,9 +3235,8 @@ async function main(): Promise<void> {
       .filter((s) => OFF_STYLE.includes(s.kind))
       .map((s) => `${s.kind}@${s.tx},${s.ty}`);
     ok(strays.length === 0, `no off-family building stands in town${strays.length ? " — " + strays[0] : ""}`);
-    const towers = town.scenery.filter((s) => s.kind === "observatory");
-    ok(towers.length === 1 && towers[0].tx < 32,
-      "…and the one grey-stone piece on the map is the sage's tower, on his island");
+    ok(town.scenery.every((s) => !OFF_STYLE.includes(s.kind) && s.kind !== "observatory"),
+      "…and no grey-stone piece stands anywhere on the map");
 
     /* --- the haven is two islands, not a row band ---------------------------
      * The old town split on a fence: north of row 25 was town, south was
@@ -3243,7 +3260,7 @@ async function main(): Promise<void> {
 
     // the split has to hold in practice, not just in the mask
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
-    ok(town.mobPosts?.length === 69, `the 69 authored creature posts came across (${town.mobPosts?.length})`);
+    ok(town.mobPosts?.length === 77, `the 77 authored creature posts came across (${town.mobPosts?.length})`);
 
     /* --- ten camps, one rank each, plus four snakes ------------------------
      * The ladder is checked by SHAPE rather than by tile: every rank on the
@@ -3262,25 +3279,34 @@ async function main(): Promise<void> {
       "every rank of the road has a camp of five to eight");
     ok(byKind.get("beggar")! <= byKind.get("highwayman")!,
       "…and the heaviest camp is not the smallest");
-    ok(byKind.get("snake") === 4, `four snakes, and nothing else besides (${byKind.get("snake")})`);
-    ok(byKind.size === 11, `eleven kinds in all (${byKind.size})`);
+    ok(byKind.get("snake") === 4, `four snakes, standing alone (${byKind.get("snake")})`);
+    /* And the alcove: the spit at the far end of island B holds eight wild
+     * warriors, 250 health apiece against the highwayman's 160. It is the one
+     * pocket on the map that is a step up rather than a step along, so it is
+     * checked by kind AND by where it stands — a wild warrior loose among the
+     * road ladder would wreck the opening. */
+    ok(byKind.get("wildWarrior") === 8, `eight wild warriors on the spit (${byKind.get("wildWarrior")})`);
+    const wild = town.mobPosts!.filter((p) => p.kind === "wildWarrior");
+    ok(wild.every((p) => p.tx >= 84 && p.ty >= 44),
+      "…all of them out on the spit, none loose among the road ladder");
+    ok(byKind.size === 12, `twelve kinds in all (${byKind.size})`);
 
     // THE test that matters: a real game start, not a hand-driven populate.
     // Calling populateWorld directly proves the function works while the town
     // stands empty in the actual game, which is exactly what happened once.
     const fresh = createGame(WORLD_SEED);
-    ok(fresh.worlds.town.monsters.length === 69,
+    ok(fresh.worlds.town.monsters.length === 77,
       "starting a game actually puts the camps on the map");
     // and the same must hold after a save round-trip: loadGame() rebuilds the
     // worlds from scratch, so it goes through populateAll all over again
     const { saveGame, loadGame } = await import("../src/save.ts");
     saveGame(fresh);
     const restored = loadGame();
-    ok(restored !== null && restored.worlds.town.monsters.length === 69,
+    ok(restored !== null && restored.worlds.town.monsters.length === 77,
       "loading a save leaves the town populated too");
 
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length === 69, "exactly as many creatures as the map asks for — no roster padding");
+    ok(town.monsters.length === 77, "exactly as many creatures as the map asks for — no roster padding");
     ok(town.monsters.every((m) => !inHaven(town, m.tx, m.ty)),
       "not one creature spawned inside the haven");
     // authored placement means EXACT placement, not "somewhere in the region"
@@ -4449,15 +4475,16 @@ async function main(): Promise<void> {
      * would let you stand four tiles inside its own wall. What must hold either
      * way is that the roof is never solid and never less than half the object.
      *
-     * The bound ROUNDS UP, and used to round down. Rounding down was free while
-     * every building was four or five deep, because floor and ceil agree there.
-     * The town set brought three-deep houses — a row of doorway, a row of wall,
-     * a row of roof — and under the old bound such a house could seal only its
-     * doorway, leaving the player standing in the middle of the wall, drawn
-     * behind the building and therefore invisible. Being stopped by a wall is
-     * the better wrong answer than vanishing into one. */
-    ok(scn.SCENERY_KINDS.every((k) => scn.BLOCK[k].h <= Math.max(1, Math.ceil(scn.FOOTPRINT[k].h / 2))),
-      "no prop seals more than half its own depth, rounded up");
+     * The bound is TWO THIRDS, and it has been half-rounding-down and then
+     * half-rounding-up on the way here. Both were wrong for the same reason:
+     * they are not scale-invariant. A four-by-three house that seals two rows
+     * seals two thirds of itself; drawn at twice the size it is eight by six
+     * and seals four, which is still two thirds and still the same house — yet
+     * `h / 2` says the first is fine and the second is not. Two thirds says
+     * what is actually meant, at any scale a prop happens to be drawn: a third
+     * of the depth is roof, and the roof is never solid. */
+    ok(scn.SCENERY_KINDS.every((k) => scn.BLOCK[k].h <= Math.max(1, Math.floor(scn.FOOTPRINT[k].h * 2 / 3))),
+      "no prop seals more than two thirds of its own depth");
     ok(scn.SCENERY_KINDS.every((k) => scn.FOOTPRINT[k].h === 1 || scn.BLOCK[k].h < scn.FOOTPRINT[k].h),
       "…and anything deeper than one row keeps overhang to hide behind");
     ok(scn.SCENERY_KINDS.filter((k) => scn.FOOTPRINT[k].h <= 2).every((k) => scn.BLOCK[k].h === 1),
