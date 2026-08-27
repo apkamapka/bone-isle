@@ -3193,7 +3193,7 @@ async function main(): Promise<void> {
     const { inHaven } = await import("../src/world/collision.ts");
     const town = buildWorlds(WORLD_SEED).town;
     ok(town.w === 106 && town.h === 106, `the town is the 106x106 grid exported from Tiled (${town.w}x${town.h})`);
-    ok(town.trees.length === 464 && town.rocks.length === 223,
+    ok(town.trees.length === 459 && town.rocks.length === 230,
       `every authored tree and rock came across (${town.trees.length}/${town.rocks.length})`);
     ok(town.npcs.length === 6, "all six townsfolk are present");
     ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
@@ -3250,7 +3250,19 @@ async function main(): Promise<void> {
     ok(town.safeMask!.length === town.w * town.h, "…one bit per square");
     let havenTiles = 0;
     for (const b of town.safeMask!) havenTiles += b;
-    ok(havenTiles === 1619, `…covering the two town islands and the bridge between them (${havenTiles})`);
+    ok(havenTiles === 1675,
+      `…covering the two town islands and the three bridges into them (${havenTiles})`);
+    /* The DECKS of the bridges into town are haven, not just their near ends.
+     * Nothing may step into the haven, so a deck left out is a deck a creature
+     * can walk the length of to stand one square short of the paving — which
+     * is what happened, and made crossing the south bridge a fight. The two
+     * decks between wild islands stay wild: both their ends are hunting
+     * ground, and a safe strip across the middle of one would be a free perch
+     * to shoot from. */
+    ok(inHaven(town, 52, 70) && inHaven(town, 63, 31) && inHaven(town, 31, 46),
+      "all three bridges into town are sanctuary the whole way across");
+    ok(!inHaven(town, 53, 20) && !inHaven(town, 39, 80),
+      "…and the two bridges between wild islands are not");
     ok(inHaven(town, 52, 50) && inHaven(town, 20, 46),
       "the market square and the sage's island are both sanctuary");
     ok(!inHaven(town, 66, 20) && !inHaven(town, 60, 82),
@@ -3260,7 +3272,7 @@ async function main(): Promise<void> {
 
     // the split has to hold in practice, not just in the mask
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
-    ok(town.mobPosts?.length === 66, `the 66 authored creature posts came across (${town.mobPosts?.length})`);
+    ok(town.mobPosts?.length === 84, `the 84 authored creature posts came across (${town.mobPosts?.length})`);
 
     /* --- ten camps, one rank each, plus four snakes ------------------------
      * The ladder is checked by SHAPE rather than by tile: every rank on the
@@ -3275,8 +3287,15 @@ async function main(): Promise<void> {
       * rotate through three shapes. Ten identical camps is what the first pass
       * shipped and it read as one camp stamped ten times, so what is asserted
       * is the range and the ladder, not a single number. */
-    ok(ROAD_RANKS.every((k) => (byKind.get(k) ?? 0) >= 4 && (byKind.get(k) ?? 0) <= 7),
-      "every rank of the road has a camp of four to seven");
+    /* Every rank present, and the count no longer fixed per camp: once the
+      * camps are down the open ground between them is filled with whichever
+      * rank owns it, so a rank that happens to sit on a wide island ends up
+      * with more of it. What must hold is that none is missing and none has
+      * run away with the map. */
+    ok(ROAD_RANKS.every((k) => (byKind.get(k) ?? 0) >= 4),
+      "every rank of the road is present, four or more of it");
+    ok(ROAD_RANKS.every((k) => (byKind.get(k) ?? 0) <= 15),
+      "…and none of them has taken over the map");
 
     /* --- eight tiles between every creature, which is the whole design ------
      * This is the low half of the ladder, the ground a level 1 learns on, and
@@ -3320,32 +3339,31 @@ async function main(): Promise<void> {
      * pocket on the map that is a step up rather than a step along, so it is
      * checked by kind AND by where it stands — a wild warrior loose among the
      * road ladder would wreck the opening. */
-    ok(byKind.get("wildWarrior") === 6, `six wild warriors, in two pockets (${byKind.get("wildWarrior")})`);
+    ok(byKind.get("wildWarrior") === 7, `seven wild warriors, in two pockets (${byKind.get("wildWarrior")})`);
     const wild = town.mobPosts!.filter((p) => p.kind === "wildWarrior");
     const east = wild.filter((p) => p.tx >= 84);
-    const southwest = wild.filter((p) => p.tx <= 24 && p.ty >= 90);
-    ok(east.length === 3 && southwest.length === 3,
-      `three on the eastern spit, three in the south-west arm (${east.length}/${southwest.length})`);
+    const southwest = wild.filter((p) => p.tx <= 30 && p.ty >= 90);
     ok(east.length + southwest.length === wild.length,
-      "…and not one of them loose among the road ladder in between");
+      `every wild warrior is in one of the two pockets, none loose among the road ladder (${east.length}/${southwest.length})`);
+    ok(east.length >= 3 && southwest.length >= 3, "…and neither pocket is a single sentry");
     ok(byKind.size === 12, `twelve kinds in all (${byKind.size})`);
 
     // THE test that matters: a real game start, not a hand-driven populate.
     // Calling populateWorld directly proves the function works while the town
     // stands empty in the actual game, which is exactly what happened once.
     const fresh = createGame(WORLD_SEED);
-    ok(fresh.worlds.town.monsters.length === 66,
+    ok(fresh.worlds.town.monsters.length === 84,
       "starting a game actually puts the camps on the map");
     // and the same must hold after a save round-trip: loadGame() rebuilds the
     // worlds from scratch, so it goes through populateAll all over again
     const { saveGame, loadGame } = await import("../src/save.ts");
     saveGame(fresh);
     const restored = loadGame();
-    ok(restored !== null && restored.worlds.town.monsters.length === 66,
+    ok(restored !== null && restored.worlds.town.monsters.length === 84,
       "loading a save leaves the town populated too");
 
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length === 66, "exactly as many creatures as the map asks for — no roster padding");
+    ok(town.monsters.length === 84, "exactly as many creatures as the map asks for — no roster padding");
     ok(town.monsters.every((m) => !inHaven(town, m.tx, m.ty)),
       "not one creature spawned inside the haven");
     // authored placement means EXACT placement, not "somewhere in the region"
