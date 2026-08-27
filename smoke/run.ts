@@ -3193,7 +3193,7 @@ async function main(): Promise<void> {
     const { inHaven } = await import("../src/world/collision.ts");
     const town = buildWorlds(WORLD_SEED).town;
     ok(town.w === 106 && town.h === 106, `the town is the 106x106 grid exported from Tiled (${town.w}x${town.h})`);
-    ok(town.trees.length === 279 && town.rocks.length === 136,
+    ok(town.trees.length === 458 && town.rocks.length === 229,
       `every authored tree and rock came across (${town.trees.length}/${town.rocks.length})`);
     ok(town.npcs.length === 6, "all six townsfolk are present");
     ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
@@ -3202,7 +3202,7 @@ async function main(): Promise<void> {
       "two gates: Home Isle and the Time Sage's cellar");
     ok(town.portals.every((p) => p.span === 2),
       "…both of them four squares, sitting on the circles the map paints for them");
-    ok(town.scenery.length === 32,
+    ok(town.scenery.length === 34,
       `every building, stall and camp tent came across (${town.scenery.length})`);
     /* SIX buildings, where the first draft of this square had twenty-two. Every
      * prop in the pack is now drawn at twice the size it shipped at, because at
@@ -3260,7 +3260,7 @@ async function main(): Promise<void> {
 
     // the split has to hold in practice, not just in the mask
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
-    ok(town.mobPosts?.length === 77, `the 77 authored creature posts came across (${town.mobPosts?.length})`);
+    ok(town.mobPosts?.length === 85, `the 85 authored creature posts came across (${town.mobPosts?.length})`);
 
     /* --- ten camps, one rank each, plus four snakes ------------------------
      * The ladder is checked by SHAPE rather than by tile: every rank on the
@@ -3279,34 +3279,46 @@ async function main(): Promise<void> {
       "every rank of the road has a camp of five to eight");
     ok(byKind.get("beggar")! <= byKind.get("highwayman")!,
       "…and the heaviest camp is not the smallest");
+    /* Four snakes, one per wild island, and each on a DIFFERENT one — the point
+      * of them is that you meet a creature that is nobody's kin wherever you go,
+      * so four on one island would miss it entirely. */
     ok(byKind.get("snake") === 4, `four snakes, standing alone (${byKind.get("snake")})`);
+    const snakes = town.mobPosts!.filter((p) => p.kind === "snake");
+    ok(snakes.every((p) => !inHaven(town, p.tx, p.ty)), "…none of them in town");
+    const quadrant = (p: { tx: number; ty: number }) =>
+      `${p.tx < 53 ? "w" : "e"}${p.ty < 53 ? "n" : "s"}`;
+    ok(new Set(snakes.map(quadrant)).size === 4, "…one to each corner of the map");
     /* And the alcove: the spit at the far end of island B holds eight wild
      * warriors, 250 health apiece against the highwayman's 160. It is the one
      * pocket on the map that is a step up rather than a step along, so it is
      * checked by kind AND by where it stands — a wild warrior loose among the
      * road ladder would wreck the opening. */
-    ok(byKind.get("wildWarrior") === 8, `eight wild warriors on the spit (${byKind.get("wildWarrior")})`);
+    ok(byKind.get("wildWarrior") === 16, `sixteen wild warriors, in two camps (${byKind.get("wildWarrior")})`);
     const wild = town.mobPosts!.filter((p) => p.kind === "wildWarrior");
-    ok(wild.every((p) => p.tx >= 84 && p.ty >= 44),
-      "…all of them out on the spit, none loose among the road ladder");
+    const east = wild.filter((p) => p.tx >= 84 && p.ty >= 44);
+    const southwest = wild.filter((p) => p.tx <= 24 && p.ty >= 90);
+    ok(east.length === 8 && southwest.length === 8,
+      `eight on the eastern spit, eight in the south-west arm (${east.length}/${southwest.length})`);
+    ok(east.length + southwest.length === wild.length,
+      "…and not one of them loose among the road ladder in between");
     ok(byKind.size === 12, `twelve kinds in all (${byKind.size})`);
 
     // THE test that matters: a real game start, not a hand-driven populate.
     // Calling populateWorld directly proves the function works while the town
     // stands empty in the actual game, which is exactly what happened once.
     const fresh = createGame(WORLD_SEED);
-    ok(fresh.worlds.town.monsters.length === 77,
+    ok(fresh.worlds.town.monsters.length === 85,
       "starting a game actually puts the camps on the map");
     // and the same must hold after a save round-trip: loadGame() rebuilds the
     // worlds from scratch, so it goes through populateAll all over again
     const { saveGame, loadGame } = await import("../src/save.ts");
     saveGame(fresh);
     const restored = loadGame();
-    ok(restored !== null && restored.worlds.town.monsters.length === 77,
+    ok(restored !== null && restored.worlds.town.monsters.length === 85,
       "loading a save leaves the town populated too");
 
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length === 77, "exactly as many creatures as the map asks for — no roster padding");
+    ok(town.monsters.length === 85, "exactly as many creatures as the map asks for — no roster padding");
     ok(town.monsters.every((m) => !inHaven(town, m.tx, m.ty)),
       "not one creature spawned inside the haven");
     // authored placement means EXACT placement, not "somewhere in the region"
