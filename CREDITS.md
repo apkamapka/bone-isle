@@ -946,6 +946,48 @@ is itself CC-BY-SA 3.0; anyone may take it from this repository under those
 terms. The per-layer CSV attribution still owed before release covers these
 layers too.
 
+## Redcap — `public/mob-redcap-walk.png`, `public/mob-redcap-dead.png`, `public/item-blood-cap.png`
+
+Source: **Universal LPC Spritesheet Character Generator**, CC-BY-SA 3.0 — the
+same terms and the same ShareAlike obligation as every other LPC creature here.
+See the LPC section above for the full attribution list and the per-layer note.
+
+Reproducible generator URL (paste it in and the exact character loads):
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_taupe&head=Troll_taupe&expression=Neutral_taupe&nose=Large_nose_taupe&beard=Winter_Beard_dark_gray&mustache=Mustache_gray&hair=Balding_gray&hat=Wizard_Hat_Base_base_red&hat_trim=Santa_Trim_red&neck=Scarf_red&legs=Shorts_leather&socks=High_Socks_brown&shoes=Basic_Boots_leather&weapon=Scythe_scythe>
+
+Layers used: taupe body, troll head, neutral expression, large nose, dark grey
+winter beard, grey moustache, grey balding hair, red wizard hat base, red santa
+trim, red scarf, leather shorts, brown high socks, leather basic boots, scythe.
+
+### Cutting method
+
+The standard recipe, unchanged: rows 8-11 of the full export are the walk (up,
+left, down, right, nine frames each) and row 20 is the death sequence, whose
+last frame is the corpse. One crop rectangle is shared by all thirty-six walk
+frames and kept symmetric about the source cell's centre line, x=32, so the body
+cannot drift as the cycle plays or as it turns. The scythe reaches past the body
+on both sides, so the crop comes out at 60 x 58 per frame; the corpse is 46 x 36,
+cropped to the body. Nothing was recoloured, rescaled or redrawn.
+
+### The cap icon
+
+`item-blood-cap.png` is **not** cut out of the composed character — cropping the
+head off a finished sprite would have taken face and hair pixels with it. It is
+the two hat layers on their own, composited and cropped to their own bounds
+(28 x 23) and centred in a 32 x 32 icon:
+
+- `spritesheets/hat/magic/wizard/base/adult/walk/base_red.png`
+- `spritesheets/hat/holiday/santa/adult/walk/red.png`
+
+taken from the generator's own repository at the paths above, front-facing
+standing frame (row 2, column 0). Same source, same licence, no repainting.
+
+**ShareAlike applies.** These three files are adaptations of CC-BY-SA 3.0
+artwork and are themselves CC-BY-SA 3.0; anyone may take them from this
+repository under those terms. The per-layer CSV attribution still owed before
+release covers these layers too.
+
 ## Dragon — `public/mob-dragon-walk.png`, `public/mob-dragon-dead.png`
 
 Source: **CraftPix.net**, standard (non-Enterprise) licence —

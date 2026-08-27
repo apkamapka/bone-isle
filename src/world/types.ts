@@ -260,6 +260,10 @@ export type MonsterKind =
   | "snake" | "ghoul" | "orcArcher" | "orcWarrior"
   | "minotaurArcher" | "orcShaman" | "orcBerserker"
   | "minotaurGuard" | "minotaurMage"
+  // The Time Sage's first named boss. Not a rank on any ladder and not kin to
+  // anything else in the bestiary: one creature out of Border folklore that
+  // exists to be killed once, in an echo, by a character of about level ten.
+  | "redcap"
   // The armoured goblin rank: the camps' answer to the orc warrior.
   | "goblinLegionary"
   // Etap 18 — the undead heavies. Both are skeletons and both leave the

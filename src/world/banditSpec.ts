@@ -93,6 +93,13 @@ export const BANDIT_SPEC: HandmadeSpec = {
     d: "deserter",
     g: "brigand",
     h: "highwayman",
+    // TEMP-ETAP41. The redcap is a boss for a one-time echo that has not been
+    // drawn yet, and the `homeless` smoke test refuses to let a creature exist
+    // with nowhere to stand. One post out on the eastern camp ground — far
+    // from the landing pad, in the belt the deserters already hold — so he can
+    // be fought and tuned before his own map exists. Grep TEMP-ETAP41 to pull
+    // him and this glyph back out.
+    x: "redcap",
   },
   rows: [
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
@@ -166,7 +173,7 @@ export const BANDIT_SPEC: HandmadeSpec = {
     "~~~~~....R..R...........~~~~....T...v................T.................s.............d.............~~~~~~",
     "~~~~~......Q..R...M.....~~~..M.................p....MVQ.........V....M..T.............R.............~~~~~",
     "~~~~.........Tp..........~~~..............V....W....T........o....T..............R..................~~~~~",
-    "~~~~~............o......~~~~..........M..N........................R................R.............T..~~~~~",
+    "~~~~~............o......~~~~..........M..N........................R................R...........x.T..~~~~~",
     "~~~~~~.............T...~~~~.......o.........T..Q...........................RV............R.X........~~~~~",
     "~~~~~~~..M.............~~~~.................R.F..Rt..a...............................R...............~~~~",
     "~~~~~~~...R.......h.....~~..........................Y........................Rd...o......V..........~~~~~",

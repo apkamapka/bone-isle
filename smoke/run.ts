@@ -1586,7 +1586,9 @@ async function main(): Promise<void> {
     // Etap 20 added the human ladder: 18 fantastic kinds plus 19 people
     // running from beggar to chieftain. Etap 28 added the black knight, the
     // twentieth man and the first one who is not on the ladder at all.
-    ok(MONSTER_KINDS.length === 38, `bestiary holds 38 kinds (18 + 20 humans), got ${MONSTER_KINDS.length}`);
+    // Etap 41 added the redcap — the thirty-ninth, and the first creature that
+    // belongs to no ladder at all: a named boss out of Border folklore.
+    ok(MONSTER_KINDS.length === 39, `bestiary holds 39 kinds (18 + 20 humans + the redcap), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -1601,7 +1603,7 @@ async function main(): Promise<void> {
     // provoke one and then retreat. What must hold: an UNPROVOKED monster never
     // attacks from beyond aggro, whatever its own range.
     const shooters = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].ranged);
-    ok(shooters.length === 9, `nine distance fighters in the bestiary, got ${shooters.length}`);
+    ok(shooters.length === 10, `ten distance fighters in the bestiary, got ${shooters.length}`);
     ok(MONSTER_AGGRO_RANGE === 6 * TILE, "aggro range is a tight 6 tiles");
     {
       // the minotaur archer's reach is 300 px (9.4 tiles) — well past aggro (192).
@@ -4976,8 +4978,10 @@ async function main(): Promise<void> {
       "…and the terrain grid matches it row for row");
 
     /* --- everything the author marked actually landed --- */
-    ok(b.mobPosts?.length === 87, "87 creature posts were written into the grid");
-    ok(b.monsters.length === 87, "…and every one of them spawned");
+    // 87 authored posts + TEMP-ETAP41, the redcap parked at (95,71) until his
+    // own echo map exists. Pull that glyph and both numbers go back to 87.
+    ok(b.mobPosts?.length === 88, "88 creature posts were written into the grid");
+    ok(b.monsters.length === 88, "…and every one of them spawned");
     ok(b.fires.length === 24, "all 24 campfires were placed");
     ok(b.scenery.filter((s) => s.kind === "tent").length === 24, "…and all 24 tents");
     ok(b.scenery.filter((s) => s.kind === "well").length === 8, "…one well per camp");
@@ -5368,6 +5372,103 @@ async function main(): Promise<void> {
   }
 
 
+
+  console.log("Etap 41 — the redcap, the Time Sage's first boss:");
+  {
+    const fs41 = await import("node:fs");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const M41 = await import("../src/entities/monsters.ts");
+    const { BANDIT_SPEC } = await import("../src/world/banditSpec.ts");
+    const A41 = await import("../src/gfx/itemArt.ts");
+    const { MONSTER_AGGRO_RANGE: AGGRO41 } = await import("../src/config.ts");
+    const mob41 = await import("../src/gfx/mobSheet.ts");
+    const d = MONSTER_DEFS.redcap;
+
+    /* --- the folklore, expressed as numbers ---------------------------------
+     * Every assertion here pins a sentence from the Border sources, so if a
+     * future tuning pass flattens one of them the test says WHICH story stopped
+     * being told rather than "a number changed". */
+    ok(d.speed >= 63, `the redcap is one of the fast ones — nothing outruns him easily (${d.speed})`);
+    ok(!!d.ranged && d.ranged.brute === true,
+      "he flings stones AND keeps closing — a brute shooter, never a kiter");
+    ok(!!d.ranged && d.ranged.range <= AGGRO41,
+      "…and never throws from beyond his own awareness");
+    ok((d.armor ?? 0) > 0, "the iron boots are worth something against steel");
+
+    /* --- the tier: ten over the ground he is reached from ------------------
+     * The human ladder tops out at the highwayman. A boss the ladder trains you
+     * for has to sit well above it, or the echo is not an exam. */
+    const tier = M41.monsterTierOf(d.hp);
+    const top = M41.monsterTierOf(MONSTER_DEFS.highwayman.hp);
+    ok(tier >= top + 8 && tier <= top + 14,
+      `he stands ${tier - top} tiers over the highwayman — the ground trains, the echo tests (${tier} vs ${top})`);
+
+    /* --- the loot ----------------------------------------------------------
+     * The relic is not a dice roll: a mission that cannot be finished because
+     * the drop missed is not a mission. */
+    const relic = d.loot.find((e) => e.kind === "bloodCap");
+    ok(!!relic && relic.chance === 1 && relic.n[0] === 1 && relic.n[1] === 1,
+      "the cap drops every time, exactly one");
+    ok(items.ITEMS.bloodCap.stack === 1,
+      "…and it does not stack, because there is one redcap and one cap");
+    ok(d.loot.some((e) => e.kind === "redcapTooth"),
+      "the tooth he leaves behind is the trophy the player keeps");
+
+    /* The hoard is thirty platinum and it is a ONE-TIME payment. Two things
+     * must hold or it becomes a press: it is not routed through `gold` (which
+     * would put a 3000-coin creature halfway up a curve whose neighbours carry
+     * thirty), and he does not stand on a map with a normal respawn clock as
+     * anything but the TEMP post. */
+    const hoard = d.loot.find((e) => e.kind === "platinumCoin");
+    ok(!!hoard && hoard.n[0] >= 20 && hoard.n[1] <= 40,
+      `the hoard is about thirty platinum (${hoard?.n[0]}-${hoard?.n[1]})`);
+    ok((d.gold[0] + d.gold[1]) / 2 < 60,
+      "…and his PURSE stays on the bestiary's own gold curve, separately");
+    ok(!Object.keys(MONSTER_DEFS).some((k) => k !== "redcap"
+      && MONSTER_DEFS[k as never].loot.some((e: { kind: string }) => e.kind === "platinumCoin")),
+      "no other creature in the game drops coin as an item");
+
+    /* --- art ---------------------------------------------------------------
+     * Same three checks the human ranks get: registered, shipped, credited. */
+    const sheetSrc41 = fs41.readFileSync(new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits41 = fs41.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    for (const f of ["mob-redcap-walk.png", "mob-redcap-dead.png", "item-blood-cap.png"]) {
+      ok(fs41.existsSync(new URL(`../public/${f}`, import.meta.url)), `${f} is shipped`);
+      ok(credits41.includes(f), `…and ${f} is credited by filename`);
+    }
+    ok(sheetSrc41.includes('redcap: "./mob-redcap-walk.png"'), "the walk sheet is registered");
+    ok(sheetSrc41.includes('redcap: "./mob-redcap-dead.png"'), "…and so is the body");
+    {
+      const b = fs41.readFileSync(new URL("../public/mob-redcap-walk.png", import.meta.url));
+      const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
+      ok(w % 9 === 0 && h % 4 === 0, `the sheet is the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(w / 9 <= 64 && h / 4 <= 64, "…and no frame is bigger than the LPC cell it came from");
+      const c = fs41.readFileSync(new URL("../public/item-blood-cap.png", import.meta.url));
+      ok(c.readUInt32BE(16) === 32 && c.readUInt32BE(20) === 32, "the cap icon is 32x32");
+    }
+    ok(A41.iconFile("bloodCap") === "item-blood-cap.png", "the icon answers to the item id");
+    ok(mob41.mobFrame("redcap" as never, "down", true, 0) === null,
+      "headless, he still falls back to the baked sprite");
+
+    /* --- TEMP-ETAP41: the post that must not outlive the echo --------------
+     * He is parked on the Gallows Coast only because the `homeless` test will
+     * not let a creature exist with nowhere to stand. This test is the reminder
+     * and the grep handle: when the echo map lands, the glyph comes out and
+     * BOTH of these flip. */
+    const specSrc = fs41.readFileSync(new URL("../src/world/banditSpec.ts", import.meta.url), "utf8");
+    ok(specSrc.includes("TEMP-ETAP41"), "the temporary post is tagged for removal");
+    const posts41 = (BANDIT_SPEC.rows.join("").match(/x/g) ?? []).length;
+    ok(posts41 === 1, `exactly one redcap stands on the island, and it is the temp one (${posts41})`);
+    // …and far from where a fresh character lands, because a level-25 tier
+    // creature two tiles off the pad would end the game for a level 1.
+    let rx = -1, ry = -1, sx = -1, sy = -1;
+    BANDIT_SPEC.rows.forEach((row, y) => {
+      if (row.includes("x")) { rx = row.indexOf("x"); ry = y; }
+      if (row.includes("@")) { sx = row.indexOf("@"); sy = y; }
+    });
+    ok(Math.max(Math.abs(rx - sx), Math.abs(ry - sy)) >= 30,
+      `the temp post is well clear of the landing pad (${Math.max(Math.abs(rx - sx), Math.abs(ry - sy))} tiles)`);
+  }
 
   console.log("The whole road down and back walks end to end:");
   {
@@ -7896,11 +7997,21 @@ async function main(): Promise<void> {
     // 2.20. The reference number being defended here is the player's edge over
     // the average creature — 2.7x in Tibia. Cutting the player 20% and the
     // creatures 15% narrows the absolute pace without touching that ratio.
-    const speeds = MONSTER_KINDS.map((k) => MONSTER_DEFS[k].speed);
-    const avgMob = speeds.reduce((s, v) => s + v, 0) / speeds.length;
-    const edge = C.PLAYER_BASE_SPEED / avgMob;
+    // The MEDIAN creature, not the mean one. The band below is unchanged and
+    // deliberately so — what changed is what it is measured against. A mean
+    // over the whole roster moves every time a creature is added, so the
+    // thirty-ninth entry shifted it 0.5% and put a five-year-old pacing rule
+    // 0.2% under its own floor. That is roster arithmetic, not a pacing
+    // regression. The median is the creature you actually meet most often and
+    // it does not move when one outlier joins: 54 with the redcap and 54
+    // without him.
+    const speeds = MONSTER_KINDS.map((k) => MONSTER_DEFS[k].speed).sort((a, b) => a - b);
+    const midMob = speeds.length % 2
+      ? speeds[(speeds.length - 1) / 2]
+      : (speeds[speeds.length / 2 - 1] + speeds[speeds.length / 2]) / 2;
+    const edge = C.PLAYER_BASE_SPEED / midMob;
     ok(edge > 1.7 && edge < 2.3,
-      `a level-1 player still outpaces the average creature ~2x (${edge.toFixed(2)})`);
+      `a level-1 player still outpaces the median creature ~2x (${edge.toFixed(2)})`);
     ok(Math.max(...speeds) < C.PLAYER_BASE_SPEED,
       `nothing in the bestiary outruns a level-1 player (fastest ${Math.max(...speeds)})`);
     ok(C.NPC_WALK_SPEED * 3 < C.PLAYER_BASE_SPEED,

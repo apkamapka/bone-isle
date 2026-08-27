@@ -362,6 +362,64 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
 
   /* ================================================================== *
+   *  THE REDCAP — the Time Sage's first boss, for a character of ten
+   *
+   *  Everything about him comes out of the Border sources rather than out of
+   *  a stat block, and every line below is a sentence from one of them:
+   *
+   *  "impossible to outrun, despite the iron boots"  → speed 66, the thief's
+   *      pace and two under the cutthroat's, up at the top of the roster where
+   *      the fast archetypes already live. He still does not literally outrun
+   *      a player (nothing in the bestiary does), but he is the fastest thing
+   *      anyone meets before level twenty and he closes the gap you open.
+   *  "flings huge stones at those who take refuge"   → a ranged attack that
+   *      does NOT kite. `brute` is what makes him throw AND keep closing,
+   *      exactly like the dragon, because a creature famous for running you
+   *      down must never back away to plink.
+   *  "iron boots, unhurt by human strength"          → armor 9. Enough to
+   *      make a level-10 character feel the wall without being the wall.
+   *
+   *  The numbers themselves are read off the budget curves at tier 25, which
+   *  is ten tiers over the top of the ground he is meant to be reached from
+   *  (the human ladder, 8-14): the hunting ground is the training, the echo
+   *  is the exam. Melee sits deliberately low in the band because the stones
+   *  are not counted in `dmg` and land on top of it.
+   *
+   *  WHERE HE BELONGS: the one-time echo, and nowhere else. The post on the
+   *  Gallows Coast is TEMP-ETAP41 and exists only so he can be fought before
+   *  the echo map is drawn. He must not end up on a respawning hunting ground
+   *  while his purse is thirty platinum — see the loot note below.
+   * ================================================================== */
+  redcap: {
+    spr: SPR.humanFoe, hp: 300, dmg: [17, 44], speed: 66, atkRate: 2.0, exp: 300,
+    // The purse stays on the curve — what he took off the road, no more than
+    // an orc warrior of the same exp carries. The thirty platinum is NOT here;
+    // it is an explicit hoard in the loot table below. Routing it through
+    // `gold` would have made him a 3000-coin creature sitting halfway up a
+    // ladder whose neighbours carry thirty, and the purse test says so.
+    gold: [25, 55], danger: 0.5, armor: 9,
+    // Iron, and old. Fire barely notices him; the shadow he came out of does
+    // not touch him at all; the storm that split the tower he lives in does.
+    resist: { fire: 0.8, shadow: 0.5, storm: 1.4 },
+    // The stones. Six tiles — inside aggro, so he never plinks from beyond
+    // his own awareness — and a stone is drawn as a plain thrown mass, not
+    // as a spell, because nothing about a redcap is magic.
+    ranged: { range: 6 * TILE, dmg: [15, 38], color: "#9aa0a8", wide: true, brute: true },
+    loot: [
+      // The relic. Flat 100%: the mission cannot be gated behind a dice roll,
+      // and `wantsRelic` in missions.ts is what stops a second one existing.
+      { kind: "bloodCap", chance: 1.0, n: [1, 1] },
+      // The tooth he leaves when he goes.
+      { kind: "redcapTooth", chance: 1.0, n: [1, 1] },
+      // The hoard: everything he ever took, in one pile. Thirty platinum is
+      // three thousand gold and it is a ONE-TIME payment — it is the reason
+      // this creature may only ever stand in a one-time echo. Put him on a map
+      // that respawns him and this line becomes a gold press.
+      { kind: "platinumCoin", chance: 1.0, n: [25, 35] },
+    ],
+  },
+
+  /* ================================================================== *
    *  THE FANTASTIC BESTIARY, lower rungs — levels 15-22
    *
    *  Re-tiered wholesale (Etap 20). In Tibia these are level-8 fodder; here

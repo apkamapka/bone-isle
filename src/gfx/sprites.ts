@@ -1190,6 +1190,10 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   venomGland: SPR.venomGland,
   ghoulClaw: SPR.ghoulClaw, dragonScale: SPR.dragonScaleIcon,
   minotaurHorn: SPR.minotaurHorn, orcEar: SPR.orcEar, goblinFang: SPR.goblinFang, cursedRib: SPR.cursedRib,
+  // The cap ships with its own PNG and never shows this bake. The tooth does
+  // not yet, and borrows the goblin's fang — the nearest honest shape in the
+  // baked set, and a placeholder that reads as "a tooth" rather than as a blob.
+  bloodCap: SPR.cursedRib, redcapTooth: SPR.goblinFang,
   iron: SPR.ironIngot, steel: SPR.steelIngot, essentialGem: SPR.essentialGem, coal: SPR.coalLump,
   mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed, dragonHam: SPR.dragonHam,
   // Etap 22: every piece of the new catalog draws with ONE shared stub until
