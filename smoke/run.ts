@@ -3191,7 +3191,7 @@ async function main(): Promise<void> {
     const { inHaven } = await import("../src/world/collision.ts");
     const town = buildWorlds(WORLD_SEED).town;
     ok(town.w === 106 && town.h === 106, `the town is the 106x106 grid exported from Tiled (${town.w}x${town.h})`);
-    ok(town.trees.length === 311 && town.rocks.length === 139,
+    ok(town.trees.length === 275 && town.rocks.length === 140,
       `every authored tree and rock came across (${town.trees.length}/${town.rocks.length})`);
     ok(town.npcs.length === 6, "all six townsfolk are present");
     ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
@@ -3200,8 +3200,26 @@ async function main(): Promise<void> {
       "two gates: Home Isle and the Time Sage's cellar");
     ok(town.portals.every((p) => p.span === 2),
       "…both of them four squares, sitting on the circles the map paints for them");
-    ok(town.scenery.length === 35,
-      `every building, stall, mill and camp tent came across (${town.scenery.length})`);
+    ok(town.scenery.length === 45,
+      `every building, stall, tower and camp tent came across (${town.scenery.length})`);
+    /* The town is built of ONE family at ONE scale, and this is the assertion
+     * that keeps it that way. The pack holds two of everything — warm plaster
+     * beside grey stone, and two human scales whose doorways differ by a
+     * factor of two. Mixing them is what made the first draft of this map read
+     * as a sample sheet rather than a street, so the small-scale and
+     * grey-stone kinds are named here and forbidden in town. The sage's
+     * observatory is the one exception, and it stands alone on his island
+     * where there is nothing for it to clash with. */
+    const OFF_STYLE = ["chapel", "shop", "watchtower", "townhouse", "cottage",
+      "keep", "warehouse", "workshop", "stonehouse", "towerhouse", "tradehouse",
+      "shrine", "windmillCloth", "windmillLattice"];
+    const strays = town.scenery
+      .filter((s) => OFF_STYLE.includes(s.kind))
+      .map((s) => `${s.kind}@${s.tx},${s.ty}`);
+    ok(strays.length === 0, `no off-family building stands in town${strays.length ? " — " + strays[0] : ""}`);
+    const towers = town.scenery.filter((s) => s.kind === "observatory");
+    ok(towers.length === 1 && towers[0].tx < 32,
+      "…and the one grey-stone piece on the map is the sage's tower, on his island");
 
     /* --- the haven is two islands, not a row band ---------------------------
      * The old town split on a fence: north of row 25 was town, south was
@@ -3216,16 +3234,16 @@ async function main(): Promise<void> {
     let havenTiles = 0;
     for (const b of town.safeMask!) havenTiles += b;
     ok(havenTiles === 1619, `…covering the two town islands and the bridge between them (${havenTiles})`);
-    ok(inHaven(town, 50, 45) && inHaven(town, 20, 46),
+    ok(inHaven(town, 52, 50) && inHaven(town, 20, 46),
       "the market square and the sage's island are both sanctuary");
-    ok(!inHaven(town, 63, 20) && !inHaven(town, 60, 80),
+    ok(!inHaven(town, 66, 20) && !inHaven(town, 60, 82),
       "…and the wild islands north and south of them are not");
     ok(!inHaven(town, -1, 45) && !inHaven(town, 999, 45),
       "off the edge of the map is not sanctuary either");
 
     // the split has to hold in practice, not just in the mask
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
-    ok(town.mobPosts?.length === 64, `the 64 authored creature posts came across (${town.mobPosts?.length})`);
+    ok(town.mobPosts?.length === 69, `the 69 authored creature posts came across (${town.mobPosts?.length})`);
 
     /* --- ten camps, one rank each, plus four snakes ------------------------
      * The ladder is checked by SHAPE rather than by tile: every rank on the
@@ -3236,8 +3254,14 @@ async function main(): Promise<void> {
       "smuggler", "cutthroat", "deserter", "brigand", "highwayman"] as const;
     const byKind = new Map<string, number>();
     for (const p of town.mobPosts!) byKind.set(p.kind, (byKind.get(p.kind) ?? 0) + 1);
-    ok(ROAD_RANKS.every((k) => byKind.get(k) === 6),
-      "all ten ranks of the road stand six to a camp");
+    /* Camp sizes RUN five to eight rather than all being six, and the layouts
+      * rotate through three shapes. Ten identical camps is what the first pass
+      * shipped and it read as one camp stamped ten times, so what is asserted
+      * is the range and the ladder, not a single number. */
+    ok(ROAD_RANKS.every((k) => (byKind.get(k) ?? 0) >= 5 && (byKind.get(k) ?? 0) <= 8),
+      "every rank of the road has a camp of five to eight");
+    ok(byKind.get("beggar")! <= byKind.get("highwayman")!,
+      "…and the heaviest camp is not the smallest");
     ok(byKind.get("snake") === 4, `four snakes, and nothing else besides (${byKind.get("snake")})`);
     ok(byKind.size === 11, `eleven kinds in all (${byKind.size})`);
 
@@ -3245,18 +3269,18 @@ async function main(): Promise<void> {
     // Calling populateWorld directly proves the function works while the town
     // stands empty in the actual game, which is exactly what happened once.
     const fresh = createGame(WORLD_SEED);
-    ok(fresh.worlds.town.monsters.length === 64,
+    ok(fresh.worlds.town.monsters.length === 69,
       "starting a game actually puts the camps on the map");
     // and the same must hold after a save round-trip: loadGame() rebuilds the
     // worlds from scratch, so it goes through populateAll all over again
     const { saveGame, loadGame } = await import("../src/save.ts");
     saveGame(fresh);
     const restored = loadGame();
-    ok(restored !== null && restored.worlds.town.monsters.length === 64,
+    ok(restored !== null && restored.worlds.town.monsters.length === 69,
       "loading a save leaves the town populated too");
 
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length === 64, "exactly as many creatures as the map asks for — no roster padding");
+    ok(town.monsters.length === 69, "exactly as many creatures as the map asks for — no roster padding");
     ok(town.monsters.every((m) => !inHaven(town, m.tx, m.ty)),
       "not one creature spawned inside the haven");
     // authored placement means EXACT placement, not "somewhere in the region"
@@ -3298,8 +3322,8 @@ async function main(): Promise<void> {
       "…nor is any townsperson");
     // one probe per island, taken off the camps and the two gates
     const ISLANDS: [string, number, number][] = [
-      ["north-west", 25, 20], ["north-east", 60, 11], ["town", 50, 45],
-      ["the sage's", 25, 46], ["south-east", 52, 95], ["south-west", 29, 65],
+      ["north-west", 34, 14], ["north-east", 66, 20], ["town", 52, 50],
+      ["the sage's", 25, 46], ["south-east", 60, 82], ["south-west", 24, 72],
     ];
     let marooned = "";
     for (const [name, x, y] of ISLANDS) {
@@ -10789,9 +10813,9 @@ async function main(): Promise<void> {
     {
       const { isSafeTile } = await import("../src/world/collision.ts");
       const tw = buildWorlds(WORLD_SEED).town;
-      ok(pvp.mayHit(30, 30, isSafeTile(tw, 50, 45)) === false,
+      ok(pvp.mayHit(30, 30, isSafeTile(tw, 52, 50)) === false,
         "no duel in the market square");
-      ok(pvp.mayHit(30, 30, isSafeTile(tw, 60, 80)) === true,
+      ok(pvp.mayHit(30, 30, isSafeTile(tw, 60, 82)) === true,
         "…and no sanctuary out on the hunting islands");
     }
 

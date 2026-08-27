@@ -156,6 +156,43 @@ unused `SceneryKind` is a name in five records that nothing renders.
   bottom row, centred or near it, and an NPC standing on the doorstep is the
   point of the building. The exception is `cottage`, which has no door at all.
 
+## The two things that decide whether a street works
+
+Learned the hard way: the first Bonetown built out of this pack used one of
+every kind and had to be thrown away. Two properties of the set caused it, and
+neither is visible from the footprint table above.
+
+**There are two human scales in here, and they differ by about a factor of
+two.** Measured off the artwork, at the doorway:
+
+- doors of roughly 18–24 px — `manor`, `inn`, `apothecary`, `temple`,
+  `greatTemple`, `bank`, `guildhall`, `market`, `shoprow`, `storefront`,
+  `shophouse`, `tradehouse`, `keep`, `warehouse`
+- doors of roughly 10–14 px — `chapel`, `shop`, `watchtower`, `townhouse`, and
+  `cottage`, which has no door at all
+
+A small-scale building beside a large-scale one does not read as a smaller
+building; it reads as a mistake, because the player sprite fits through one
+doorway and not the other. The chapel next to the manor was the tell.
+
+**There are two visual families, and they do not mix.** Warm plaster and
+sandstone under red tile — `manor`, `inn`, `apothecary`, `temple`,
+`greatTemple`, `cottage`, `guildhall`, `market`, `shoprow`, `storefront`,
+`shophouse`, `bank`, `townhouse` — against heavy grey stone — `keep`,
+`warehouse`, `workshop`, `stonehouse`, `towerhouse`, `tradehouse`,
+`observatory`, `watchtower`, `chapel`, `shop`, `shrine`. Both are good sets.
+Neither survives being interleaved with the other along one frontage.
+
+So: **pick one family at one scale, then repeat five to nine kinds.** A town
+made of nine kinds used twice each reads as a town; a town made of twenty-two
+kinds used once each reads as a catalogue, whatever the footprints say.
+Bonetown uses the warm plaster set and leaves the grey stone one whole, for a
+settlement that can be built out of it alone — a mining camp, the shanty at a
+dungeon mouth. The smoke suite pins this: `no off-family building stands in
+town`.
+
+The stalls and the two mills belong to neither family and go with anything.
+
 ## Two notes on how they look
 
 - **No ground shadow, and that is the decision.** The Gallows Coast props carry
