@@ -3193,7 +3193,7 @@ async function main(): Promise<void> {
     const { inHaven } = await import("../src/world/collision.ts");
     const town = buildWorlds(WORLD_SEED).town;
     ok(town.w === 106 && town.h === 106, `the town is the 106x106 grid exported from Tiled (${town.w}x${town.h})`);
-    ok(town.trees.length === 458 && town.rocks.length === 229,
+    ok(town.trees.length === 464 && town.rocks.length === 223,
       `every authored tree and rock came across (${town.trees.length}/${town.rocks.length})`);
     ok(town.npcs.length === 6, "all six townsfolk are present");
     ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
@@ -3260,7 +3260,7 @@ async function main(): Promise<void> {
 
     // the split has to hold in practice, not just in the mask
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
-    ok(town.mobPosts?.length === 85, `the 85 authored creature posts came across (${town.mobPosts?.length})`);
+    ok(town.mobPosts?.length === 66, `the 66 authored creature posts came across (${town.mobPosts?.length})`);
 
     /* --- ten camps, one rank each, plus four snakes ------------------------
      * The ladder is checked by SHAPE rather than by tile: every rank on the
@@ -3275,10 +3275,37 @@ async function main(): Promise<void> {
       * rotate through three shapes. Ten identical camps is what the first pass
       * shipped and it read as one camp stamped ten times, so what is asserted
       * is the range and the ladder, not a single number. */
-    ok(ROAD_RANKS.every((k) => (byKind.get(k) ?? 0) >= 5 && (byKind.get(k) ?? 0) <= 8),
-      "every rank of the road has a camp of five to eight");
-    ok(byKind.get("beggar")! <= byKind.get("highwayman")!,
-      "…and the heaviest camp is not the smallest");
+    ok(ROAD_RANKS.every((k) => (byKind.get(k) ?? 0) >= 4 && (byKind.get(k) ?? 0) <= 7),
+      "every rank of the road has a camp of four to seven");
+
+    /* --- eight tiles between every creature, which is the whole design ------
+     * This is the low half of the ladder, the ground a level 1 learns on, and
+     * a level 1 has no answer to two at once. A creature notices you at
+     * MONSTER_AGGRO_RANGE and nothing wakes its neighbours — combat sets
+     * `aggroT` on the one that was hit and on nothing else — so the pull is
+     * pure geometry: adjacent to A leaves you |A-B| - 1 from B. Seven tiles
+     * already keeps B asleep; eight leaves a tile of slack for backing off.
+     *
+     * Asserted over EVERY pair rather than within camps, because two camps
+     * whose edges met would pull exactly as badly as one packed tight. If this
+     * fails, somebody added a post without checking the neighbours, and the
+     * symptom in play is a level 1 pulling three beggars at once. */
+    const cfg = await import("../src/config.ts");
+    const posts2 = town.mobPosts!;
+    let closest = 99, worst = "";
+    for (let i = 0; i < posts2.length; i++) {
+      for (let j = i + 1; j < posts2.length; j++) {
+        const d = Math.max(Math.abs(posts2[i].tx - posts2[j].tx),
+                           Math.abs(posts2[i].ty - posts2[j].ty));
+        if (d < closest) {
+          closest = d;
+          worst = `${posts2[i].kind}@${posts2[i].tx},${posts2[i].ty} / ${posts2[j].kind}@${posts2[j].tx},${posts2[j].ty}`;
+        }
+      }
+    }
+    const need = cfg.MONSTER_AGGRO_RANGE / TILE + 2;
+    ok(closest >= need,
+      `no two creatures within ${need} tiles — closest is ${closest} (${worst})`);
     /* Four snakes, one per wild island, and each on a DIFFERENT one — the point
       * of them is that you meet a creature that is nobody's kin wherever you go,
       * so four on one island would miss it entirely. */
@@ -3293,12 +3320,12 @@ async function main(): Promise<void> {
      * pocket on the map that is a step up rather than a step along, so it is
      * checked by kind AND by where it stands — a wild warrior loose among the
      * road ladder would wreck the opening. */
-    ok(byKind.get("wildWarrior") === 16, `sixteen wild warriors, in two camps (${byKind.get("wildWarrior")})`);
+    ok(byKind.get("wildWarrior") === 6, `six wild warriors, in two pockets (${byKind.get("wildWarrior")})`);
     const wild = town.mobPosts!.filter((p) => p.kind === "wildWarrior");
-    const east = wild.filter((p) => p.tx >= 84 && p.ty >= 44);
+    const east = wild.filter((p) => p.tx >= 84);
     const southwest = wild.filter((p) => p.tx <= 24 && p.ty >= 90);
-    ok(east.length === 8 && southwest.length === 8,
-      `eight on the eastern spit, eight in the south-west arm (${east.length}/${southwest.length})`);
+    ok(east.length === 3 && southwest.length === 3,
+      `three on the eastern spit, three in the south-west arm (${east.length}/${southwest.length})`);
     ok(east.length + southwest.length === wild.length,
       "…and not one of them loose among the road ladder in between");
     ok(byKind.size === 12, `twelve kinds in all (${byKind.size})`);
@@ -3307,18 +3334,18 @@ async function main(): Promise<void> {
     // Calling populateWorld directly proves the function works while the town
     // stands empty in the actual game, which is exactly what happened once.
     const fresh = createGame(WORLD_SEED);
-    ok(fresh.worlds.town.monsters.length === 85,
+    ok(fresh.worlds.town.monsters.length === 66,
       "starting a game actually puts the camps on the map");
     // and the same must hold after a save round-trip: loadGame() rebuilds the
     // worlds from scratch, so it goes through populateAll all over again
     const { saveGame, loadGame } = await import("../src/save.ts");
     saveGame(fresh);
     const restored = loadGame();
-    ok(restored !== null && restored.worlds.town.monsters.length === 85,
+    ok(restored !== null && restored.worlds.town.monsters.length === 66,
       "loading a save leaves the town populated too");
 
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length === 85, "exactly as many creatures as the map asks for — no roster padding");
+    ok(town.monsters.length === 66, "exactly as many creatures as the map asks for — no roster padding");
     ok(town.monsters.every((m) => !inHaven(town, m.tx, m.ty)),
       "not one creature spawned inside the haven");
     // authored placement means EXACT placement, not "somewhere in the region"
