@@ -172,13 +172,33 @@ export function groundOpen(key: WorldKey, level: number): boolean {
     && stageOf(m.id, level) !== "available");
 }
 
-/** Is this echo still enterable? Only while its mission is unfinished. */
+/**
+ * Is this echo still enterable? Only while the boss is still standing.
+ *
+ * The door shuts on the KILL, not on the hand-in: the boss is a one-time
+ * fight, and a mouth that stayed open at `complete` would let the same
+ * character walk back down to an empty room whose chest is already spent.
+ *
+ * That would brick a careless player — die on the way home and the relic is
+ * gone with the door — were it not for `relicLost`. Chronos notices empty
+ * hands, puts the mission back to `active`, and this reopens with it. So the
+ * safety net is still there; it just runs through the man who wants the cap
+ * instead of leaving the door hanging open for everyone.
+ */
 export function echoOpen(key: WorldKey, level: number): boolean {
-  return MISSIONS.some((m) => {
-    if (m.echo !== key) return false;
-    const s = stageOf(m.id, level);
-    return s === "active" || s === "complete";
-  });
+  return MISSIONS.some((m) => m.echo === key && stageOf(m.id, level) === "active");
+}
+
+/**
+ * Is the way home lit — the pad that appears in an echo when its boss falls?
+ *
+ * The exact complement of `echoOpen` for the same mission: the door in shuts
+ * as the door out opens, both on the kill. It is `complete` and nothing else,
+ * so a player who loses the relic and reopens the echo has to walk back down
+ * and earn the ride home again.
+ */
+export function relicRoadOpen(key: WorldKey, level: number): boolean {
+  return MISSIONS.some((m) => m.echo === key && stageOf(m.id, level) === "complete");
 }
 
 /**

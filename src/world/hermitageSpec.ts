@@ -33,12 +33,14 @@
  * spike, and they stand eight tiles apart like every other post in the game.
  * The boss is the exam; the corridor is not.
  *
- *   U ladder back up to Liddesdale   X the redcap   $ his hoard
+ *   U ladder back up to Liddesdale   W the way home, lit when he falls
+ *   X the redcap   $ his hoard
  *   # rock   = cave floor
  *   R stone   Q q boulder   Y march-stone   o bones
  *   creatures: k skeleton   X redcap
  */
 import type { HandmadeSpec } from "./handmade.ts";
+import { Tile } from "./types.ts";
 
 export const HERMITAGE_SPEC: HandmadeSpec = {
   key: "hermitage",
@@ -46,6 +48,14 @@ export const HERMITAGE_SPEC: HandmadeSpec = {
   safe: false,
   portals: {
     U: { dest: "liddesdale", label: "back up to Liddesdale", style: "ladderUp" },
+    // THE WAY HOME. Dark until the redcap is down, then lit where he fell so
+    // the cap goes straight to the sage's table without the walk back across
+    // the bog. `applyMissionPads` owns it: a pad out of an echo to the cellar
+    // is the relic road, and it opens on `complete` and on nothing else.
+    W: {
+      dest: "cellar", label: "back to Chronos, with the cap",
+      floor: Tile.Cave, inactive: true,
+    },
   },
   scenery: { Y: "skullPole", Q: "boulderA", q: "boulderB" },
   monsters: {
@@ -56,30 +66,30 @@ export const HERMITAGE_SPEC: HandmadeSpec = {
     "##############################",
     "##############################",
     "##############################",
-    "#######U==Yo=o=============###",
-    "#######=========R==R=======###",
-    "#######======o====o=o=o====###",
+    "#######U===R=o============o###",
+    "#######===o==Q=========Q===###",
     "#######====================###",
-    "#######============q=======###",
-    "#######=k==o============k==###",
-    "#######=========k==========###",
+    "#######=======o==k====o====###",
     "#######====================###",
-    "####################==o====###",
-    "####################====R==###",
-    "####################R===Q==###",
+    "#######=k===R=o============###",
+    "#######========Q==R===o====###",
+    "#######==================k=###",
+    "####################=Y=====###",
     "####################=======###",
-    "####################=o=====###",
-    "####################=====k=###",
-    "####====R==o=========R=====###",
-    "####X==============Y=======###",
-    "####====Q=======Ro==q======###",
-    "####====R=o====Q===========###",
-    "####$==o=====o========R====###",
-    "####====q==================###",
-    "####======o=============Q==###",
-    "####===========o==k======R=###",
-    "####=======================###",
-    "####=Yq=====oQ=======o=====###",
+    "####################o======###",
+    "####################=======###",
+    "####################=R=====###",
+    "####################=======###",
+    "####==========q==========R=###",
+    "####X=W======Y=============###",
+    "####======Q======o=Y==k===o###",
+    "####====o==R===============###",
+    "####$============q=========###",
+    "####================o==o===###",
+    "####===========o========q=o###",
+    "####=Q===============o===R=###",
+    "####o=======k=========R====###",
+    "####=R==R========q==o======###",
     "##############################",
     "##############################",
     "##############################",

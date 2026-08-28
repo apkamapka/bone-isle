@@ -2853,6 +2853,13 @@ function openTreasure(s: Structure): void {
  * and the door you need opens again.
  */
 function talkToSage(): void {
+  /* One line per call, and every line SHORT. `fitLine` cuts the log to the
+   * width available and puts an ellipsis on the rest, so a sentence that reads
+   * well in the source arrives on screen as "…one small thing in iron boots t…"
+   * — which is how the first draft of this shipped. A speech is therefore
+   * several flashes of about fifty characters rather than one long one, and
+   * the log stacks them in order. Fifty, not a hundred: the ceiling is set by
+   * a phone held in portrait, not by the desktop window it was written in. */
   const say = (line: string) => flash(`Chronos: \u201c${line}\u201d`, "#b9a6d8");
 
   const cur = currentMission(P.level);
@@ -2864,25 +2871,28 @@ function talkToSage(): void {
         missionHandedIn(cur.id, P.level);
         grantExp(cw(), P, cur.rewardExp);
         say("Still wet. Good \u2014 dry, it is only a hat.");
+        say("The chronicles named that castle. Not the thing in it.");
         beep(660, 0.2, "sine", 0.06, 220);
         saveGame(game);
         return;
       }
       // He wanted it and you have not got it. The echo reopens.
       relicLost(cur.id, P.level);
-      say("Empty hands. The door is still open \u2014 go back down and take it again.");
+      say("Empty hands. I have opened the hole again.");
+      say("Go back down and take it off him twice.");
       saveGame(game);
       return;
     }
-    say("The cap, while the blood on it is still wet. The echo holds as long as you do.");
+    say("The cap. While the blood on it is still wet.");
     return;
   }
 
   const next = offeredMission(P.level);
   if (next) {
     setStage(next.id, "active");
-    say("A lord about to be boiled, a great many furious farmers, and one small "
-      + "thing in iron boots that outlived every one of them. Bring me its cap.");
+    say("Liddesdale. Thirteen twenty. A wet valley, a bad lord.");
+    say("One small thing in iron boots outlived them all.");
+    say("Bring me its cap. Your pad is lit.");
     beep(520, 0.22, "sine", 0.06, 300);
     saveGame(game);
     return;
@@ -2893,7 +2903,7 @@ function talkToSage(): void {
   // of what he used to say and it told nobody anything.
   const nextLocked = MISSIONS.find((m) => stageOf(m.id, P.level) === "locked");
   if (nextLocked) {
-    say(`Come back at level ${nextLocked.reqLevel}. History does not keep for the unready.`);
+    say(`Come back at level ${nextLocked.reqLevel}. History keeps.`);
   } else {
     say("The pads are cold. Every door I know is behind you.");
   }

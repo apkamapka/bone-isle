@@ -15,7 +15,7 @@ import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, CELLAR_SPEC } from "./world/handmade.ts";
 import { loadTerrainImages } from "./world/terrainImage.ts";
-import { missionByGround, missionByEcho, groundOpen, echoOpen } from "./systems/missions.ts";
+import { missionByGround, missionByEcho, groundOpen, echoOpen, relicRoadOpen } from "./systems/missions.ts";
 import { loadPropArt } from "./world/propArt.ts";
 import { loadMobSheets } from "./gfx/mobSheet.ts";
 import { loadFireSheet } from "./gfx/fireSheet.ts";
@@ -232,17 +232,25 @@ export function applyGates(w: World, level: number): void {
  *
  *   a pad onto a hunting GROUND  — lit from the moment the sage hands the
  *       mission over, and lit forever after. The ground is yours.
- *   a mouth into an ECHO         — lit only while the mission is unfinished.
- *       It goes dark for good when the relic reaches the sage, which is what
- *       makes the boss a one-time fight and the hoard a one-time hoard.
+ *   a mouth into an ECHO         — lit only while the boss is still standing.
+ *       It shuts on the KILL, which is what makes the fight one-time and the
+ *       hoard behind him a one-time hoard.
+ *   a pad OUT of an echo         — the relic road, dark until that same kill
+ *       and lit by it. The door in closes as the door out opens.
  *
  * A portal pointing at a world no mission claims is left exactly as authored,
  * so every pad that existed before missions did still behaves as it did.
  */
 export function applyMissionPads(worlds: Record<WorldKey, World>, level: number): void {
   for (const w of Object.values(worlds)) {
+    // A pad standing INSIDE an echo and pointing at the sage's room is the
+    // relic road: the way home that opens where the boss fell. Checked first,
+    // because it is identified by the room it stands in rather than by where
+    // it goes, and `cellar` is a destination half the game points at.
+    const echoHere = missionByEcho(w.key);
     for (const pt of w.portals) {
-      if (missionByGround(pt.dest)) pt.inactive = !groundOpen(pt.dest, level);
+      if (echoHere && pt.dest === "cellar") pt.inactive = !relicRoadOpen(w.key, level);
+      else if (missionByGround(pt.dest)) pt.inactive = !groundOpen(pt.dest, level);
       else if (missionByEcho(pt.dest)) pt.inactive = !echoOpen(pt.dest, level);
     }
   }

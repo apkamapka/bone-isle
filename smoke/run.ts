@@ -5550,10 +5550,23 @@ async function main(): Promise<void> {
     applyMissionPads(ws, 10);
     ok(padTo("liddesdale").inactive === false, "taking the mission lights it");
     ok(holeTo("hermitage").inactive === false, "…and opens the hole down to the lair");
+    /* The kill: the door in shuts, the door out opens, both in the same sweep.
+     * A player standing in the lair when this happens still has the ladder up
+     * to Liddesdale, which is a GROUND door and stays lit — nobody is ever
+     * sealed in with a dead boss. */
+    const wayHome = () => ws.hermitage.portals.find((pt) => pt.dest === "cellar")!;
+    ok(wayHome().inactive === true, "before the kill there is no way home from the lair");
+    MM.setStage("redcap", "complete");
+    applyMissionPads(ws, 10);
+    ok(holeTo("hermitage").inactive === true, "killing him shuts the mouth behind you");
+    ok(wayHome().inactive === false, "…and lights the pad back to Chronos where he fell");
+    ok(ws.hermitage.portals.find((pt) => pt.dest === "liddesdale")!.inactive === false,
+      "…while the ladder up stays open, so nobody is sealed in");
     MM.setStage("redcap", "closed");
     applyMissionPads(ws, 10);
     ok(padTo("liddesdale").inactive === false, "handing the cap in leaves the hunting ground open forever");
     ok(holeTo("hermitage").inactive === true, "…and shuts the lair for good");
+    ok(wayHome().inactive === true, "…both doors of it");
     rps41(); MM.resetMissions();
     applyMissionPads(ws, 10);
     ok(isle.portals.some((pt) => pt.dest === "cellar"), "…the island has a pad home");
@@ -5669,17 +5682,42 @@ async function main(): Promise<void> {
      * boulder on them the player sees two rocks in two art styles on one
      * square, which is what the first cut of this map did. */
     const { LIDDESDALE_SPEC } = await import("../src/world/liddesdaleSpec.ts");
-    ok(LIDDESDALE_SPEC.solids === "%", "the painted outcrops are collision-only glyphs");
+    const { HERMITAGE_SPEC } = await import("../src/world/hermitageSpec.ts");
+    /* The forty patches are MUD and mud is walkable. The same Tiled layer is
+     * floor in the lair below, so one flat slick may not be a wall upstairs and
+     * a puddle downstairs — which is what shipped, and is why the rule is
+     * asserted from BOTH ends here rather than from the island alone. */
+    ok(LIDDESDALE_SPEC.solids === undefined, "the painted mud is not collision");
     ok(!Object.values(LIDDESDALE_SPEC.scenery ?? {}).some((k) => k === "boulderA" || k === "boulderB"),
-      "…and the engine draws no boulder of its own over them");
-    const sealed41 = LIDDESDALE_SPEC.rows.join("").split("").filter((c) => c === "%").length;
-    ok(sealed41 === 244, `all 244 painted rock squares seal (${sealed41})`);
+      "…and the engine draws no boulder over it either");
+    ok(!LIDDESDALE_SPEC.rows.join("").includes("%"), "…so the grid says nothing about it at all");
     ok(ws41.liddesdale.scenery.every((sc) => sc.kind !== "boulderA" && sc.kind !== "boulderB"),
-      "…so not one engine boulder stands on the island");
+      "…and not one engine boulder stands on the island");
+    /* The proof that the two maps agree: a square the GRID leaves as plain
+     * ground is sealed ONLY by a prop standing next to it. A tent and a
+     * boulder are two tiles wide, so they legitimately block the square to
+     * their right — but nothing the terrain export merely PAINTS may block
+     * anything, because a picture is a picture. Mud that stops you upstairs
+     * while the identical layer downstairs is floor is the bug this catches. */
+    for (const [name, w, spec, blank] of [
+      ["Liddesdale", ws41.liddesdale, LIDDESDALE_SPEC, "."],
+      ["the lair", ws41.hermitage, HERMITAGE_SPEC, "="],
+    ] as const) {
+      const propAt = new Set(w.scenery.map((sc) => `${sc.tx},${sc.ty}`));
+      let orphan = 0, sample = "";
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) {
+        if (spec.rows[y][x] !== blank || !w.solid[y][x]) continue;
+        // the widest prop on either map is two squares across and one deep
+        const explained = propAt.has(`${x - 1},${y}`) || propAt.has(`${x},${y - 1}`)
+          || propAt.has(`${x - 1},${y - 1}`);
+        if (!explained) { orphan++; if (!sample) sample = `${x},${y}`; }
+      }
+      ok(orphan === 0,
+        `on ${name}, nothing seals open ground but a prop${orphan ? ` (${orphan}, first at ${sample})` : ""}`);
+    }
 
     /* No grass under the skulls. A feature glyph defaults to grass beneath, so
      * a cave map without a floor grid grows a lawn wherever a bone pile sits. */
-    const { HERMITAGE_SPEC } = await import("../src/world/hermitageSpec.ts");
     ok(HERMITAGE_SPEC.floor?.length === 30, "the lair carries a floor grid");
     let lawn = 0;
     for (let y = 0; y < ws41.hermitage.h; y++) for (let x = 0; x < ws41.hermitage.w; x++) {
@@ -5697,9 +5735,12 @@ async function main(): Promise<void> {
     ok(M41b.wantsRelic("redcap", 10), "…the taken one does");
     M41b.relicTaken("redcap", 10);
     ok(!M41b.wantsRelic("redcap", 10), "…and yields no SECOND cap to sell");
-    ok(M41b.echoOpen("hermitage", 10), "…while the lair stays open, so a lost cap is recoverable");
+    ok(!M41b.echoOpen("hermitage", 10), "…and the lair shuts on the KILL, not on the hand-in");
+    ok(M41b.relicRoadOpen("hermitage", 10), "…while the way home lights where he fell");
     M41b.relicLost("redcap", 10);
-    ok(M41b.wantsRelic("redcap", 10), "losing it reopens the tap rather than bricking the character");
+    ok(M41b.wantsRelic("redcap", 10) && M41b.echoOpen("hermitage", 10),
+      "losing the cap reopens the hole rather than bricking the character");
+    ok(!M41b.relicRoadOpen("hermitage", 10), "…and the ride home has to be earned again");
     M41b.relicTaken("redcap", 10);
     M41b.missionHandedIn("redcap", 10);
     ok(!M41b.echoOpen("hermitage", 10) && M41b.groundOpen("liddesdale", 10),
@@ -7799,20 +7840,22 @@ async function main(): Promise<void> {
       // the boss falls: the echo STAYS OPEN, and stops yielding relics
       M.relicTaken("t1", 8);
       ok(M.stageOf("t1", 8) === "complete", "killing the boss completes it");
-      ok(M.echoOpen("deaddeep2", 8), "…and the echo is still open, so a lost relic is recoverable");
-      ok(!M.wantsRelic("t1", 8), "…but yields no SECOND relic: no farming them to sell");
+      ok(!M.echoOpen("deaddeep2", 8), "…and the echo shuts behind you: the boss is a one-time fight");
+      ok(M.relicRoadOpen("deaddeep2", 8), "…with a way home opening in its place");
+      ok(!M.wantsRelic("t1", 8), "…and no SECOND relic: no farming them to sell");
       ok(M.stageOf("t2", 12) === "locked", "the next link does not open on the kill");
 
       // losing it reopens the tap, and only that
       M.relicLost("t1", 8);
-      ok(M.stageOf("t1", 8) === "active" && M.wantsRelic("t1", 8),
+      ok(M.stageOf("t1", 8) === "active" && M.wantsRelic("t1", 8) && M.echoOpen("deaddeep2", 8),
         "dropping the relic reopens the echo rather than bricking the chain");
       M.relicTaken("t1", 8);
 
       // handing it in is what closes the door and unlocks the next
       M.missionHandedIn("t1", 8);
       ok(M.stageOf("t1", 8) === "closed", "handing the relic in closes the mission");
-      ok(!M.echoOpen("deaddeep2", 8), "…and the echo goes dark for good");
+      ok(!M.echoOpen("deaddeep2", 8) && !M.relicRoadOpen("deaddeep2", 8),
+        "…and both of that echo's doors go dark for good");
       ok(M.groundOpen("reach", 8), "…while the hunting ground stays open forever");
       ok(M.stageOf("t2", 12) === "available", "…and the next link opens");
       ok(M.stageOf("t2", 11) === "locked", "…for a character who has the level for it");
@@ -7854,6 +7897,17 @@ async function main(): Promise<void> {
     ok(/trapdoor west of here/.test(main), "upstairs he points WEST, which is where the trapdoor is");
     ok(!/trapdoor north of here/.test(main), "…and no longer north, which it never was");
     ok(/function talkToSage/.test(main), "…and downstairs he runs the mission state machine");
+    /* Every line he speaks has to survive `fitLine`, which cuts to the width
+     * available and ellipsises the rest. The first cut of the handover ran to
+     * 150 characters and arrived on screen as "…in iron boots t…". Fifty is the
+     * ceiling because the narrowest client is a phone in portrait, not the
+     * desktop window the lines were written in. */
+    const spoken = [...main.matchAll(/say\(\s*(?:`([^`]*)`|"((?:[^"\\]|\\.)*)")/g)]
+      .map((mm) => (mm[1] ?? mm[2]).replace(/\\u[0-9a-f]{4}/g, "-").replace(/\$\{[^}]*\}/g, "99"));
+    ok(spoken.length >= 8, `the sage has a script (${spoken.length} lines)`);
+    const tooLong = spoken.filter((l) => l.length > 55);
+    ok(tooLong.length === 0,
+      `no line of his is cut off on a phone${tooLong.length ? " — " + tooLong[0].slice(0, 40) + "…" : ""}`);
     /* The whole point: no mission is ever handed over on the plaza. If the
      * mission panel ever gets opened from the surface sage, this fails. */
     const upstairs = main.slice(main.indexOf('n.key === "timesage"'));
