@@ -54,6 +54,12 @@ type Bundle = Readonly<Record<Lang, string>>;
  *  He is laconic and a little archaic, and he never explains himself twice.
  *  The Polish keeps the clipped rhythm rather than the literal words: a
  *  word-for-word rendering of his English comes out oddly polite.
+ *
+ *  He speaks about DOORS, never about "pads". A pad is what the code calls a
+ *  portal tile and what a player calls the thing they stand on; in Polish it
+ *  is also the word for a gamepad, so "twój pad płonie" reads as a hardware
+ *  fault rather than as a rift in time. Chronos is a person and uses a
+ *  person's word: door, wrota, puerta.
  * ========================================================================== */
 
 const SAGE: Readonly<Record<string, Bundle>> = {
@@ -63,11 +69,14 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     pl: "Wróć na poziomie {lv}. Historia poczeka.",
     es: "Vuelve al nivel {lv}. La historia espera.",
   },
-  /* Nothing left in the catalogue. */
+  /* Nothing left in the catalogue — for now, which is the part that matters.
+   * The first draft of this read as a dead end ("every door I know is behind
+   * you"), and a chain of ten missions that says that after the first one has
+   * told the player the game is over when it is not. */
   "sage.cold": {
-    en: "The pads are cold. Every door I know is behind you.",
-    pl: "Pady są zimne. Każde drzwi, które znam, są już za tobą.",
-    es: "Las plataformas están frías. Todas las puertas que conozco quedan detrás de ti.",
+    en: "That is all I have opened so far. Come back later — I am still reading.",
+    pl: "To wszystko, co dotąd otworzyłem. Wróć później — wciąż czytam.",
+    es: "Eso es todo lo que he abierto hasta ahora. Vuelve más tarde: sigo leyendo.",
   },
 
   /* --- the answers the player picks ------------------------------------- */
@@ -89,37 +98,38 @@ const SAGE: Readonly<Record<string, Bundle>> = {
 
   /* --- TEMP-ETAP42: the testing reset ----------------------------------- */
   "sage.forgot": {
-    en: "…I have never seen you before. The pads are cold, and so am I.",
-    pl: "…nigdy cię nie widziałem. Pady są zimne, i ja też.",
-    es: "…no te he visto nunca. Las plataformas están frías, y yo también.",
+    en: "…I have never seen you before. Nothing of mine is open, and neither am I.",
+    pl: "…nigdy cię nie widziałem. Nic nie stoi otworem, ja także nie.",
+    es: "…no te he visto nunca. Nada mío está abierto, y yo tampoco.",
   },
 
   /* --- mission 1: the redcap -------------------------------------------- */
   "sage.offer.redcap": {
-    en: "The first pad. The Anglo-Scottish border, thirteen twenty — a wet "
-      + "valley with a castle in it that everyone wanted and nobody enjoyed.",
-    pl: "Pierwszy pad. Pogranicze angielsko-szkockie, rok tysiąc trzysta "
-      + "dwudziesty — mokra dolina z zamkiem, którego wszyscy chcieli i "
-      + "którego nikt nie znosił.",
-    es: "La primera plataforma. La frontera anglo-escocesa, mil trescientos "
-      + "veinte: un valle húmedo con un castillo que todos querían y que "
-      + "nadie disfrutó.",
+    en: "The first door I have opened for you. The Anglo-Scottish border, "
+      + "thirteen twenty — a wet valley with a castle in it that everyone "
+      + "wanted and nobody enjoyed.",
+    pl: "Pierwsze wrota, które dla ciebie otwieram. Pogranicze "
+      + "angielsko-szkockie, rok tysiąc trzysta dwudziesty — mokra dolina z "
+      + "zamkiem, którego wszyscy chcieli i którego nikt nie znosił.",
+    es: "La primera puerta que te abro. La frontera anglo-escocesa, mil "
+      + "trescientos veinte: un valle húmedo con un castillo que todos "
+      + "querían y que nadie disfrutó.",
   },
   "sage.accept.redcap": {
     en: "A lord about to be boiled, a great many furious farmers, and one "
       + "small thing in iron boots that outlived every one of them.\n\n"
-      + "Bring me its cap while the blood on it is still wet. Your pad is "
-      + "lit, and the echo behind it holds as long as you do.",
+      + "Bring me its cap while the blood on it is still wet. The door below "
+      + "is open, and the echo behind it holds as long as you do.",
     pl: "Pan na zamku, którego zaraz ugotują, bardzo wielu wściekłych chłopów "
       + "i jedna mała rzecz w żelaznych butach, która przeżyła ich "
       + "wszystkich.\n\n"
-      + "Przynieś mi jej czapkę, póki krew na niej jest jeszcze mokra. Twój "
-      + "pad płonie, a echo za nim trzyma się tak długo jak ty.",
+      + "Przynieś mi jej czapkę, póki krew na niej jest jeszcze mokra. Wrota "
+      + "na dole stoją otworem, a echo za nimi trzyma się tak długo jak ty.",
     es: "Un señor a punto de ser hervido, muchísimos campesinos furiosos y "
       + "una cosa pequeña con botas de hierro que los sobrevivió a "
       + "todos.\n\n"
-      + "Tráeme su gorro mientras la sangre siga húmeda. Tu plataforma está "
-      + "encendida, y el eco tras ella aguanta lo que aguantes tú.",
+      + "Tráeme su gorro mientras la sangre siga húmeda. La puerta de abajo "
+      + "está abierta, y el eco tras ella aguanta lo que aguantes tú.",
   },
   "sage.decline.redcap": {
     en: "Then it keeps. It has kept seven hundred years without you.",
@@ -127,12 +137,12 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     es: "Entonces esperará. Lleva setecientos años esperando sin ti.",
   },
   "sage.remind.redcap": {
-    en: "The cap, and while the blood on it is still wet. Down the pad, "
+    en: "The cap, and while the blood on it is still wet. Through the door, "
       + "across the valley, into the hole at the far end of it.",
-    pl: "Czapka, i to póki krew na niej mokra. Padem w dół, przez dolinę, do "
+    pl: "Czapka, i to póki krew na niej mokra. Przez wrota, przez dolinę, do "
       + "dziury na jej drugim końcu.",
-    es: "El gorro, y con la sangre aún húmeda. Baja por la plataforma, cruza "
-      + "el valle y entra en el agujero del otro extremo.",
+    es: "El gorro, y con la sangre aún húmeda. Cruza la puerta, cruza el "
+      + "valle y entra en el agujero del otro extremo.",
   },
   "sage.handIn.redcap": {
     en: "Still wet. Good — dry, it is only a hat.\n\n"

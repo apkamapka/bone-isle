@@ -287,7 +287,14 @@ export function drawDialogue(
   const last = b.page >= pages.length - 1;
   const total = pageChars(pages, b.page);
   const done = b.reveal >= total;
-  const bodyH = Math.max(rows * lineH, portrait ? pw : 0);
+  /* The box is as tall as the TALLEST PAGE of this speech, not as tall as the
+   * row budget allows. Fixed at the budget, a two-line answer came out with
+   * four empty rows under it and the choices marooned at the bottom of a lot
+   * of nothing. Measuring the whole speech rather than the current page keeps
+   * it from resizing under the finger as the pages turn, which is the reason
+   * the height was fixed in the first place. */
+  const tallest = pages.reduce((n, pg) => Math.max(n, pg.length), 1);
+  const bodyH = Math.max(Math.min(rows, tallest) * lineH, portrait ? pw : 0);
   const h = bar + pad + bodyH + choiceH + hint + 8 * S;
   let y = bottom - h - 8 * S;
   if (y < top + 4 * S) y = Math.max(4 * S, top + 4 * S);

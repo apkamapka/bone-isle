@@ -12466,6 +12466,28 @@ async function main(): Promise<void> {
     ok(/function acceptMission/.test(main42) && /setStage\(m\.id, "active"\)/.test(main42),
       "…the first answer does");
 
+    /* --- he never leaves the player at a dead end --------------------------
+     * Handing the relic over used to END the conversation, so the reward
+     * speech was followed by exactly one button — the testing reset — and the
+     * next errand could only be found by walking away and clicking him again.
+     * A chain of ten missions cannot afford to look finished after the first. */
+    ok(/sageSays\(`sage\.handIn\.\$\{cur\.id\}`, \{ then: talkToSage \}\)/.test(main42),
+      "handing in rolls straight on into whatever he has next");
+    ok(!/sageSays\(`sage\.handIn[^;]*forgetChoice/.test(main42),
+      "…and the reward speech is not left with the testing reset as its only answer");
+    /* Two exits from the chain, and both have to say something useful: the
+     * level to come back at, or that there is more coming later. */
+    ok(/sage\.locked", \{ choices: \[forgetChoice\(\)\], vars: \{ lv:/.test(main42),
+      "too low a level is answered with the level to come back at");
+    for (const lg of SP.LANGS) {
+      ok(SP.t("sage.locked", lg, { lv: 12 }).includes("12"),
+        `${lg}: …and the number really lands in the line`);
+      const spoken42 = SP.t("sage.cold", lg) + SP.t("sage.remind.redcap", lg)
+        + SP.t("sage.accept.redcap", lg) + SP.t("sage.offer.redcap", lg) + SP.t("sage.forgot", lg);
+      ok(!/\bpad(em|y|zie)?\b|plataforma/i.test(spoken42),
+        `${lg}: he talks about doors, not about "pads"`);
+    }
+
     /* --- TEMP-ETAP42: the reset that must not outlive the testing ----------
      * Same arrangement as the redcap's temporary post on the Gallows Coast:
      * the thing is tagged, and the test is both the reminder and the grep

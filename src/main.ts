@@ -2887,10 +2887,17 @@ function openTreasure(s: Structure): void {
  */
 function sageSays(
   key: string,
-  choices?: DialogueChoice[],
-  vars?: Record<string, string | number>,
+  opts: {
+    choices?: DialogueChoice[];
+    vars?: Record<string, string | number>;
+    /** What he says NEXT, once this speech is closed. */
+    then?: () => void;
+  } = {},
 ): void {
-  openDialogue({ speaker: "Chronos", bodyKey: key, vars, portrait: true, choices });
+  openDialogue({
+    speaker: "Chronos", bodyKey: key, portrait: true,
+    vars: opts.vars, choices: opts.choices, onClose: opts.then,
+  });
 }
 
 /**
@@ -2949,17 +2956,27 @@ function talkToSage(): void {
         beep(660, 0.2, "sine", 0.06, 220);
         saveGame(game);
         logServer(`${t(`mission.title.${cur.id}`, lang())}: ${cur.rewardExp} xp`, "#b9a6d8");
-        sageSays(`sage.handIn.${cur.id}`, [forgetChoice()]);
+        /* He thanks you and then, without being asked again, moves on to
+         * whatever he has next — the following errand if the chain has one and
+         * the player is high enough for it, the level to come back at if not.
+         *
+         * Handing in used to END the conversation, which meant the player was
+         * shown the reward speech and then a single button offering to wipe
+         * the chain, and had to walk away and click him a second time to find
+         * out there was more. Running `talkToSage` again is safe and finite:
+         * the mission is `closed` by now, so this pass falls through to the
+         * offer or to the level line and stops there. */
+        sageSays(`sage.handIn.${cur.id}`, { then: talkToSage });
         return;
       }
       // He wanted it and you have not got it. The echo reopens.
       relicLost(cur.id, P.level);
       applyMissionPads(game.worlds, P.level);
       saveGame(game);
-      sageSays(`sage.empty.${cur.id}`, [forgetChoice()]);
+      sageSays(`sage.empty.${cur.id}`, { choices: [forgetChoice()] });
       return;
     }
-    sageSays(`sage.remind.${cur.id}`, [forgetChoice()]);
+    sageSays(`sage.remind.${cur.id}`, { choices: [forgetChoice()] });
     return;
   }
 
@@ -2970,11 +2987,11 @@ function talkToSage(): void {
      * moved to `active` before he had said what the job was — which is a poor
      * bargain to strike on the player's behalf and made the offer speech read
      * as a briefing for something already agreed. */
-    sageSays(`sage.offer.${next.id}`, [
+    sageSays(`sage.offer.${next.id}`, { choices: [
       { key: "sage.choice.what", run: () => acceptMission(next) },
-      { key: "sage.choice.notYet", run: () => sageSays(`sage.decline.${next.id}`, [forgetChoice()]) },
+      { key: "sage.choice.notYet", run: () => sageSays(`sage.decline.${next.id}`, { choices: [forgetChoice()] }) },
       forgetChoice(),
-    ]);
+    ] });
     return;
   }
 
@@ -2982,8 +2999,8 @@ function talkToSage(): void {
   // player's level. Say which, because "not yet" with no reason was the whole
   // of what he used to say and it told nobody anything.
   const nextLocked = MISSIONS.find((m) => stageOf(m.id, P.level) === "locked");
-  if (nextLocked) sageSays("sage.locked", [forgetChoice()], { lv: nextLocked.reqLevel });
-  else sageSays("sage.cold", [forgetChoice()]);
+  if (nextLocked) sageSays("sage.locked", { choices: [forgetChoice()], vars: { lv: nextLocked.reqLevel } });
+  else sageSays("sage.cold", { choices: [forgetChoice()] });
 }
 
 function worldClick(w: Vec): void {
