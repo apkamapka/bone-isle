@@ -44,7 +44,8 @@ import { totalExpFor } from "./config.ts";
 import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import {
   MISSIONS, stageOf, setStage, offeredMission, currentMission,
-  missionHandedIn, relicLost,
+  missionHandedIn, relicLost, missionByGround, groundOpen,
+  loreSeen, markLoreSeen, resetMissions, type MissionDef,
 } from "./systems/missions.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
@@ -77,6 +78,12 @@ import {
   type DockLayout, type DockBlock,
 } from "./ui/dock.ts";
 import { drawPanels, isDocked, visibleRows, stripCandidate, STRIP_KINDS, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
+import {
+  openDialogue, closeDialogue, dialogueOpen, dialogueTap, advanceDialogue,
+  tickDialogue, drawDialogue, type DialogueChoice,
+} from "./ui/dialogue.ts";
+import { t } from "./text/speech.ts";
+import { lang } from "./systems/panelPrefs.ts";
 import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
@@ -761,6 +768,9 @@ const act: PanelActions = {
   navUp: (ref: ContainerRef) => { navUp(ref); },
   removePack: () => { dropWornPack(); },
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => { splitConfirm(mode); },
+  readLore: (id: string) => {
+    openDialogue({ titleKey: `lore.title.${id}`, bodyKey: `lore.${id}` });
+  },
   look: (kind: ItemKind) => { ui.inspect = kind; },
   toggleLook: () => { ui.lookMode = !ui.lookMode; if (!ui.lookMode) ui.inspect = null; },
   /* Opening the pack from the equipment slot asks for a VIEW of the backpack,
@@ -2068,6 +2078,10 @@ function walkToPoint(at: Vec): void {
  */
 function openContextMenu(sx: number, sy: number): void {
   if (P.dead || hudEditing()) return;
+  /* Not under a modal box. The box is drawn last and over everything, so a
+   * menu opened while it is up would be invisible AND would eat the next
+   * press, since the menu is asked before the box is. */
+  if (dialogueOpen()) return;
 
   /* AN INVENTORY SLOT, before anything else.
    *
@@ -2193,6 +2207,11 @@ function contextMenuTap(sx: number, sy: number): boolean {
 
 function handleWorldTap(sx: number, sy: number): void {
   unlockAudio();
+  /* The box eats every press it is given, and it is asked FIRST — ahead of the
+   * context menu and ahead of the hotspot sweep, because it is drawn last and
+   * over both. The thumb deck and the action bar are drawn after the panels,
+   * so their hotspots sit later in the array and would otherwise win. */
+  if (dialogueTap(sx, sy)) return;
   if (contextMenuTap(sx, sy)) return;
   // hotspots are collected during draw; the topmost window's are last, so
   // check them first (reverse) to respect z-order on overlapping panels.
@@ -2387,8 +2406,12 @@ initInput(screen, {
     const on = toggleChase();
     flash(on ? "chase opponent" : "stand while fighting", on ? "#e1483b" : "#5aa1e8");
   },
-  onAttackNearest: attackNearest,
+  // SPACE turns the page while the sage is talking, and goes back to being
+  // "attack nearest" the moment he stops.
+  onAttackNearest: () => { if (dialogueOpen()) advanceDialogue(); else attackNearest(); },
   onEscape: () => {
+    // The box is modal and is therefore always "the thing in my way".
+    if (dialogueOpen()) { closeDialogue(); return; }
     if (chatInput().isOpen()) { closeChat(); return; }
     /* The menu goes first. It is drawn on top of everything and opened by a
      * gesture, so it is what "the thing in my way" means while it is up. */
@@ -2852,16 +2875,69 @@ function openTreasure(s: Structure): void {
  * the answer matters: the man who wants the cap notices you do not have it,
  * and the door you need opens again.
  */
-function talkToSage(): void {
-  /* One line per call, and every line SHORT. `fitLine` cuts the log to the
-   * width available and puts an ellipsis on the rest, so a sentence that reads
-   * well in the source arrives on screen as "…one small thing in iron boots t…"
-   * — which is how the first draft of this shipped. A speech is therefore
-   * several flashes of about fifty characters rather than one long one, and
-   * the log stacks them in order. Fifty, not a hundred: the ceiling is set by
-   * a phone held in portrait, not by the desktop window it was written in. */
-  const say = (line: string) => flash(`Chronos: \u201c${line}\u201d`, "#b9a6d8");
+/**
+ * One speech from the sage, in the box, in the reader's language.
+ *
+ * `flash` used to be the whole of his voice, and `flash` is a LINE: the log
+ * cuts to the width available and ellipsises the rest, so every sentence he
+ * had was written to about fifty characters and still arrived clipped on a
+ * phone. The box wraps and paginates instead, which is why his speeches can
+ * now be paragraphs — and why the text lives in `speech.ts` keyed by language
+ * rather than inline in English.
+ */
+function sageSays(
+  key: string,
+  choices?: DialogueChoice[],
+  vars?: Record<string, string | number>,
+): void {
+  openDialogue({ speaker: "Chronos", bodyKey: key, vars, portrait: true, choices });
+}
 
+/**
+ * TEMP-ETAP42 — the testing reset, offered as the sage's last answer.
+ *
+ * The mission chain is one-shot per character by design, which makes the whole
+ * of it untestable a second time without rolling a new one. This puts the
+ * character back to "has never met him": stages and chronicles wiped, the
+ * relic taken out of the pack so a mission that no longer exists cannot leave
+ * its prize behind, and the lair's one-time chest un-opened so the pad, the
+ * boss, the purse and the way home can all be walked again.
+ *
+ * The chest is the part that pays out real coin every run, so a character used
+ * for this is not a character to read gold balance off. Grep TEMP-ETAP42 to
+ * pull the whole thing — this function, its entry in every choice list, and
+ * its two strings in speech.ts.
+ */
+function forgetEverything(): void {
+  resetMissions();
+  for (const m of MISSIONS) {
+    const held = countAcross([P.bag], m.relic);
+    if (held > 0) removeAcross([P.bag], m.relic, held);
+  }
+  game.opened = game.opened.filter((id) => !MISSIONS.some((m) => id.startsWith(`treasure:${m.echo}:`)));
+  applyMissionPads(game.worlds, P.level);
+  saveGame(game);
+  sageSays("sage.forgot");
+}
+
+/** TEMP-ETAP42. Appended to every one of his answers while testing. */
+function forgetChoice(): DialogueChoice {
+  return { key: "sage.choice.forget", run: forgetEverything };
+}
+
+function acceptMission(m: MissionDef): void {
+  setStage(m.id, "active");
+  beep(520, 0.22, "sine", 0.06, 300);
+  // The pad that lights is usually on a map the player is not standing on, so
+  // the sweep runs over every world rather than the current one.
+  applyMissionPads(game.worlds, P.level);
+  saveGame(game);
+  // The box holds the prose; the log holds the record. One line, the objective.
+  logServer(t(`mission.goal.${m.id}`, lang()), "#b9a6d8");
+  sageSays(`sage.accept.${m.id}`);
+}
+
+function talkToSage(): void {
   const cur = currentMission(P.level);
   if (cur) {
     const stage = stageOf(cur.id, P.level);
@@ -2870,31 +2946,35 @@ function talkToSage(): void {
         removeAcross([P.bag], cur.relic, 1);
         missionHandedIn(cur.id, P.level);
         grantExp(cw(), P, cur.rewardExp);
-        say("Still wet. Good \u2014 dry, it is only a hat.");
-        say("The chronicles named that castle. Not the thing in it.");
         beep(660, 0.2, "sine", 0.06, 220);
         saveGame(game);
+        logServer(`${t(`mission.title.${cur.id}`, lang())}: ${cur.rewardExp} xp`, "#b9a6d8");
+        sageSays(`sage.handIn.${cur.id}`, [forgetChoice()]);
         return;
       }
       // He wanted it and you have not got it. The echo reopens.
       relicLost(cur.id, P.level);
-      say("Empty hands. I have opened the hole again.");
-      say("Go back down and take it off him twice.");
+      applyMissionPads(game.worlds, P.level);
       saveGame(game);
+      sageSays(`sage.empty.${cur.id}`, [forgetChoice()]);
       return;
     }
-    say("The cap. While the blood on it is still wet.");
+    sageSays(`sage.remind.${cur.id}`, [forgetChoice()]);
     return;
   }
 
   const next = offeredMission(P.level);
   if (next) {
-    setStage(next.id, "active");
-    say("Liddesdale. Thirteen twenty. A wet valley, a bad lord.");
-    say("One small thing in iron boots outlived them all.");
-    say("Bring me its cap. Your pad is lit.");
-    beep(520, 0.22, "sine", 0.06, 300);
-    saveGame(game);
+    /* Two answers, and the errand is taken by the FIRST of them rather than by
+     * the act of talking. Walking up to him used to be consent — the stage
+     * moved to `active` before he had said what the job was — which is a poor
+     * bargain to strike on the player's behalf and made the offer speech read
+     * as a briefing for something already agreed. */
+    sageSays(`sage.offer.${next.id}`, [
+      { key: "sage.choice.what", run: () => acceptMission(next) },
+      { key: "sage.choice.notYet", run: () => sageSays(`sage.decline.${next.id}`, [forgetChoice()]) },
+      forgetChoice(),
+    ]);
     return;
   }
 
@@ -2902,11 +2982,8 @@ function talkToSage(): void {
   // player's level. Say which, because "not yet" with no reason was the whole
   // of what he used to say and it told nobody anything.
   const nextLocked = MISSIONS.find((m) => stageOf(m.id, P.level) === "locked");
-  if (nextLocked) {
-    say(`Come back at level ${nextLocked.reqLevel}. History keeps.`);
-  } else {
-    say("The pads are cold. Every door I know is behind you.");
-  }
+  if (nextLocked) sageSays("sage.locked", [forgetChoice()], { lv: nextLocked.reqLevel });
+  else sageSays("sage.cold", [forgetChoice()]);
 }
 
 function worldClick(w: Vec): void {
@@ -3430,6 +3507,11 @@ function tickCampfireBurn(world: World, dt: number): void {
 }
 
 function checkPortals(): void {
+  /* A box on screen holds the pad. The player is standing on it, the jump has
+   * not happened, and the moment the box closes this runs again and takes it —
+   * so the chronicle below needs no callback and no "already travelling" flag.
+   * It simply refuses to move anyone who is reading. */
+  if (dialogueOpen()) return;
   if (P.tpCd > 0) return;
   for (const pt of cw().portals) {
     if (portalCovers(pt, P.x, P.y)) {
@@ -3437,6 +3519,22 @@ function checkPortals(): void {
         // a dormant quest pad: hum, but do not travel (yet)
         flash("the portal is dormant… for now", "#b9a6d8");
         P.tpCd = 1.6; // don't spam the flash while standing on the pad
+        return;
+      }
+      /* THE CHRONICLE. Once per character, on the pad that opens a mission's
+       * hunting ground, BEFORE the jump rather than after it.
+       *
+       * Before, because this pad is in the sage's cellar and the cellar is a
+       * safe tile. The far side is not: the arrival pad on Liddesdale has
+       * smugglers inside the first fifth of the island, and a modal box that
+       * blocks input while one of them walks over is a page of folklore read
+       * at the cost of the health bar. The story is told where nothing can
+       * interrupt it, and the valley is entered with it already read. */
+      const m = missionByGround(pt.dest);
+      if (m && groundOpen(pt.dest, P.level) && !loreSeen(m.id)) {
+        markLoreSeen(m.id);
+        saveGame(game);
+        openDialogue({ titleKey: `lore.title.${m.id}`, bodyKey: `lore.${m.id}` });
         return;
       }
       travelTo(game, pt.dest);
@@ -3471,6 +3569,7 @@ function update(dt: number): void {
    * launder a frag, and neither does standing still. */
   tickChat(dt);
   tickSkull(dt);
+  tickDialogue(dt);
   // mid-fight loot walk: the corpse clicked during combat pops open the
   // moment we're in range (or is forgotten if it despawned / got looted away)
   if (pendingLoot) {
@@ -3516,7 +3615,12 @@ function update(dt: number): void {
   // walking now (Tibia-style): the player stands on ONE tile, glides toward
   // its centre, and only from the centre claims an adjacent square. Monsters
   // hard-block their tiles — a free square is always a real escape route.
-  const ax = moveAxis();
+  /* A box on screen stops the feet. Both the keys and any click-to-walk
+   * destination already in flight, because a player who tapped the far side of
+   * the room and then stepped on the pad would otherwise read the chronicle
+   * while sliding out from under it. */
+  if (dialogueOpen()) { P.dest = null; P.gather = null; }
+  const ax = dialogueOpen() ? { dx: 0, dy: 0 } : moveAxis();
   // Tibia-style grid walking: whatever state we're in, ALWAYS finish the
   // in-flight glide toward the current tile centre FIRST. A step, once begun,
   // always completes — so the player can never come to rest between tiles
@@ -4594,6 +4698,12 @@ function render(): void {
   if (touchUI) drawTouchControls();
   drawJoystick(sctx);
   drawAssignPicker();
+  /* Last of everything, deliberately. The thumb deck and the action bar are
+   * drawn above the panels, so a modal that went through `drawPanels` would
+   * come out underneath them — and its scrim, which is how the player is told
+   * those controls are dead, would dim nothing. On a phone it is pinned to the
+   * bottom of the map band so the deck stays visible under it. */
+  drawDialogue(hud, deck.on ? sheetBand(deck) : null, mouse);
 }
 
 /** On-screen buttons (panel toggles + action crystals) for touch. */
@@ -5966,6 +6076,7 @@ function drawAssignPicker(): void {
 
 /** True if a screen point lies on any on-screen button (blocks the joystick). */
 function overTouchButton(sx: number, sy: number): boolean {
+  if (dialogueOpen()) return true;      // modal box — nothing behind it steers
   if (assignSlot !== null) return true; // rebind picker open — absorb all touches
   if (hudEditing()) return true;        // edit mode — no walking while arranging
   if (throwPending) return true;        // aiming a throw — the tap must land, not steer

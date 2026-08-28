@@ -95,6 +95,8 @@ export interface PlayerState {
    * nothing — and a mission that has not been written yet costs no storage.
    */
   missions: MissionSave;
+  /** Mission ids whose chronicle this character has been shown (Etap 42). */
+  lore: Record<string, true>;
   outfit: OutfitSave;
   /**
    * Standing among other players: which skull is worn, how long it has left,
@@ -200,6 +202,7 @@ export function newPlayerState(): PlayerState {
     quests: defaultQuests(),
     tasks: { activeId: null, kills: 0, earned: 0 },
     missions: {},
+    lore: {},
     outfit: defaultOutfit(),
     pvp: defaultPvp(),
     research: new Set<string>(),

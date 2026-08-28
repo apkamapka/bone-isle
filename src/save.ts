@@ -10,7 +10,7 @@ import { applyStructureSolidity, canPlaceAt, STRUCTS, CHEST_SLOTS } from "./syst
 import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState, attunedState, loadAttunedState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
-import { missionState, loadMissionState } from "./systems/missions.ts";
+import { missionState, loadMissionState, loreState, loadLoreState } from "./systems/missions.ts";
 import { serializeSlots, loadSlots, actionSlotCount, setActionSlotCount, type SlotAction } from "./systems/actions.ts";
 import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./systems/outfit.ts";
 import { setActiveBonus } from "./systems/derived.ts";
@@ -75,11 +75,20 @@ const KEY = "bone-isle-save-v2";
  * name a `current` world, a structure list, a corpse or a dropped backpack on
  * a map this build cannot build. Every one of those is dropped on load rather
  * than crashing, and a player standing on a deleted map wakes on Home Isle.
+ *
+ * v13: the chronicles (Etap 42) — which mission histories this character has
+ * been shown. Additive, and an absent list reads as "has read none", which is
+ * the truthful answer for every character written before the box existed: they
+ * will be told the story the next time they step on the pad, which is exactly
+ * what should happen to someone who has never been told it.
+ *
+ * The LANGUAGE those histories are read in is deliberately NOT here. It is a
+ * device preference and lives with the panel zooms — see systems/panelPrefs.
  */
-const SAVE_V = 12;
+const SAVE_V = 13;
 
 interface SaveData {
-  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
   seed: number;
   current: WorldKey;
   player: {
@@ -111,6 +120,8 @@ interface SaveData {
   quests: { id: string; progress: number; done: boolean; claimed: boolean }[];
   /** The Time Sage's chain: mission id → stage. Absent before v12. */
   missions?: Record<string, string>;
+  /** Mission ids whose chronicle has been shown. Absent before v13. */
+  lore?: string[];
   structures: Record<WorldKey, Structure[]>;
   /** Items lying on the ground, per world (incl. a death-dropped backpack). */
   ground?: Partial<Record<WorldKey, GroundItem[]>>;
@@ -173,6 +184,7 @@ export function saveGame(g: Game): void {
     pvp: { ...active().pvp },
     quests: questList().map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
     missions: missionState(),
+    lore: loreState(),
     structures: structDump,
     ground: groundDump,
     corpses: corpseDump,
@@ -394,6 +406,7 @@ export function loadGame(): Game | null {
   }
 
   loadMissionState(data.missions);
+  loadLoreState(data.lore);
   loadResearchState(data.research);
   loadAttunedState(data.attuned);
   loadTaskState(data.tasks);

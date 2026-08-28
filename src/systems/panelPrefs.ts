@@ -7,6 +7,7 @@
  * as the HUD layout, shared across characters.
  */
 import { clamp } from "../util.ts";
+import { DEFAULT_LANG, isLang, type Lang } from "../text/speech.ts";
 
 export const PANEL_ZOOM_MIN = 0.5;
 export const PANEL_ZOOM_MAX = 1.5;
@@ -28,14 +29,46 @@ interface PanelPref {
 const KEY = "bone-isle-panels-v1";
 const prefs = new Map<string, PanelPref>();
 
+/**
+ * The narration language.
+ *
+ * It lives HERE, beside the panel zooms, rather than in the save — because it
+ * is a property of the person at the keyboard, not of the character. It has to
+ * work before a save exists, survive rolling a new character, and mean nothing
+ * at all to a server once there is one. What a character has READ is save
+ * state; which language they read it in is not.
+ */
+let chosenLang: Lang = DEFAULT_LANG;
+
+/**
+ * The stored blob is `{ panels, lang }` and USED to be a bare panel map. Both
+ * shapes load: an object with no `panels` key is the old one and is read whole
+ * as the panel table, so nobody loses their window sizes to this change.
+ */
+interface PrefFile {
+  panels?: Record<string, Partial<PanelPref>>;
+  lang?: string;
+}
+
 function persist(): void {
   try {
     const obj: Record<string, PanelPref> = {};
     for (const [k, v] of prefs) obj[k] = v;
-    localStorage.setItem(KEY, JSON.stringify(obj));
+    localStorage.setItem(KEY, JSON.stringify({ panels: obj, lang: chosenLang }));
   } catch {
     /* storage unavailable — ignore */
   }
+}
+
+/** The language narration is read in. */
+export function lang(): Lang {
+  return chosenLang;
+}
+
+export function setLang(next: Lang): void {
+  if (next === chosenLang) return;
+  chosenLang = next;
+  persist();
 }
 
 /** Load saved panel prefs (called once at boot). Corrupt data keeps defaults. */
@@ -48,9 +81,13 @@ export function loadPanelPrefs(): void {
   }
   if (!raw) return;
   try {
-    const data = JSON.parse(raw) as Record<string, Partial<PanelPref>>;
-    if (!data || typeof data !== "object") return;
+    const file = JSON.parse(raw) as PrefFile;
+    if (!file || typeof file !== "object") return;
+    if (isLang(file.lang)) chosenLang = file.lang;
+    const data: Record<string, Partial<PanelPref>> = file.panels
+      ?? (file as unknown as Record<string, Partial<PanelPref>>);
     for (const [k, v] of Object.entries(data)) {
+      if (k === "panels" || k === "lang") continue;
       if (!v || typeof v !== "object") continue;
       prefs.set(k, {
         zoom: typeof v.zoom === "number" ? clamp(v.zoom, PANEL_ZOOM_MIN, PANEL_ZOOM_MAX) : 1,
@@ -111,5 +148,6 @@ export function setPanelRows(kind: string, rows: number): void {
 /** Forget every stored zoom / collapse preference. */
 export function resetPanelPrefs(): void {
   prefs.clear();
+  chosenLang = DEFAULT_LANG;
   persist();
 }

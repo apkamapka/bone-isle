@@ -78,6 +78,24 @@ export interface MissionDef {
 }
 
 /**
+ * The text keys a mission owns, derived from its id rather than listed on it.
+ *
+ * Convention over configuration, so that adding the ninth mission is one entry
+ * in `MISSIONS` and eight entries in `speech.ts` — and so that a missing
+ * translation is a test failure rather than a blank box, because the smoke
+ * suite can enumerate exactly which keys must exist for every id in the
+ * catalogue without the catalogue having to name them.
+ */
+export function missionKeys(id: string): readonly string[] {
+  return [
+    `mission.title.${id}`, `mission.goal.${id}`,
+    `sage.offer.${id}`, `sage.accept.${id}`, `sage.decline.${id}`,
+    `sage.remind.${id}`, `sage.handIn.${id}`, `sage.empty.${id}`,
+    `lore.title.${id}`, `lore.${id}`,
+  ];
+}
+
+/**
  * The chain. One link so far.
  *
  * The redcap is the first, at level ten, and he has no `after`: nothing has to
@@ -117,6 +135,38 @@ export function missionById(id: string): MissionDef | undefined {
 /** This character's stage per mission id. Anything absent is `locked`. */
 function stages(): Record<string, MissionStage> {
   return active().missions;
+}
+
+/* ---------------- the chronicles ---------------- */
+
+/**
+ * Which mission's history this character has already been told.
+ *
+ * Stored per CHARACTER and not per device, because it is a thing that happened
+ * to this character on the way in — the same reason the mission stage is. A
+ * second character walks onto the same pad and gets the same page of history,
+ * which is right: they have not read it.
+ *
+ * Kept separate from the stage rather than folded into it as a sixth value,
+ * because it is orthogonal to all five. A player can read the history and
+ * decline the errand; a player who loses the relic drops from `complete` back
+ * to `active` and must not be told the story again on the way down.
+ */
+function loreBook(): Record<string, true> {
+  return active().lore;
+}
+
+export function loreSeen(id: string): boolean {
+  return loreBook()[id] === true;
+}
+
+export function markLoreSeen(id: string): void {
+  loreBook()[id] = true;
+}
+
+/** Every mission whose history this character has read, in catalogue order. */
+export function loreRead(): readonly MissionDef[] {
+  return MISSIONS.filter((m) => loreSeen(m.id));
 }
 
 /** The recorded stage — before the level and prerequisite gates are applied. */
@@ -238,6 +288,19 @@ export function missionHandedIn(id: string, level: number): void {
 
 export type MissionSave = Record<string, MissionStage>;
 
+/** The chronicles this character has read, as a plain id list. */
+export function loreState(): string[] {
+  return Object.keys(loreBook()).filter((id) => missionById(id));
+}
+
+/** Restore the read list, dropping ids this build no longer knows. */
+export function loadLoreState(s: unknown): void {
+  const to = loreBook();
+  for (const k of Object.keys(to)) delete to[k];
+  if (!Array.isArray(s)) return;
+  for (const id of s) if (typeof id === "string" && missionById(id)) to[id] = true;
+}
+
 /**
  * Snapshot for saving. Stages equal to `locked` are dropped: it is the
  * default, so storing it is noise, and a mission that has not shipped yet
@@ -268,7 +331,16 @@ export function loadMissionState(s: unknown): void {
   }
 }
 
+/**
+ * Back to a character who has never spoken to the sage.
+ *
+ * Wipes the chronicles as well as the stages: a reset that left the history
+ * marked as read would put the mission back at the start of the chain and skip
+ * the page of it that is the whole reason the pad stops you.
+ */
 export function resetMissions(): void {
   const to = stages();
   for (const k of Object.keys(to)) delete to[k];
+  const lr = loreBook();
+  for (const k of Object.keys(lr)) delete lr[k];
 }

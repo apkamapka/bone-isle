@@ -2978,7 +2978,7 @@ async function main(): Promise<void> {
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 12, "saving writes the current v12 format");
+    ok(stored.v === 13, "saving writes the current v13 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
@@ -7897,17 +7897,19 @@ async function main(): Promise<void> {
     ok(/trapdoor west of here/.test(main), "upstairs he points WEST, which is where the trapdoor is");
     ok(!/trapdoor north of here/.test(main), "…and no longer north, which it never was");
     ok(/function talkToSage/.test(main), "…and downstairs he runs the mission state machine");
-    /* Every line he speaks has to survive `fitLine`, which cuts to the width
-     * available and ellipsises the rest. The first cut of the handover ran to
-     * 150 characters and arrived on screen as "…in iron boots t…". Fifty is the
-     * ceiling because the narrowest client is a phone in portrait, not the
-     * desktop window the lines were written in. */
-    const spoken = [...main.matchAll(/say\(\s*(?:`([^`]*)`|"((?:[^"\\]|\\.)*)")/g)]
-      .map((mm) => (mm[1] ?? mm[2]).replace(/\\u[0-9a-f]{4}/g, "-").replace(/\$\{[^}]*\}/g, "99"));
-    ok(spoken.length >= 8, `the sage has a script (${spoken.length} lines)`);
-    const tooLong = spoken.filter((l) => l.length > 55);
-    ok(tooLong.length === 0,
-      `no line of his is cut off on a phone${tooLong.length ? " — " + tooLong[0].slice(0, 40) + "…" : ""}`);
+    /* The fifty-five-character ceiling is GONE, and this is the test that used
+     * to enforce it. Every line he spoke was written to fit `fitLine`, which
+     * cuts the log to the width available and ellipsises the rest — the first
+     * cut of the handover ran to 150 characters and arrived as "…in iron boots
+     * t…". His speech now goes through the dialogue box, which wraps and
+     * paginates at the width it actually has, so the replacement test is over
+     * in the Etap 42 block: it checks that every page FITS, in all three
+     * languages, at the narrowest width the game supports.
+     *
+     * What is still checked here is that he does not slip back: no `say(...)`
+     * helper, and nothing long left behind in a `flash`. */
+    ok(!/const say = /.test(main), "his lines no longer go out one at a time through the log");
+    ok(/sageSays\(/.test(main), "…they go through the box, keyed by language");
     /* The whole point: no mission is ever handed over on the plaza. If the
      * mission panel ever gets opened from the surface sage, this fails. */
     const upstairs = main.slice(main.indexOf('n.key === "timesage"'));
@@ -12000,8 +12002,9 @@ async function main(): Promise<void> {
     const SK = "bone-isle-save-v2";
     deleteSave();
 
-    ok(save.includes("const SAVE_V = 12;"), "the format carries the bar's length (bumped again at v12)");
+    ok(save.includes("const SAVE_V = 13;"), "the format carries the chronicles (bumped again at v13)");
     ok(save.includes("v11: the hotbar has a length"), "…and the bump is on the record");
+    ok(save.includes("v13: the chronicles"), "…and so is this one");
 
     const g = createGame();
     A.setActionSlotCount(18);
@@ -12268,6 +12271,214 @@ async function main(): Promise<void> {
       ok([...d6.tabs, d6.chat, d6.edit, d6.look].length === 8,
         `${w}x${h}@${dpr}: the drop-down keeps its last two cells free for later`);
     }
+  }
+
+  console.log("Etap 42 — the dialogue box, and the same story in three languages:");
+  {
+    const SP = await import("../src/text/speech.ts");
+    const DL = await import("../src/ui/dialogue.ts");
+    const M42 = await import("../src/systems/missions.ts");
+    const PP = await import("../src/systems/panelPrefs.ts");
+    const fs42 = await import("node:fs");
+
+    /* --- nothing may be missing in any of the three ------------------------
+     * The runtime falls back to English rather than throwing, which is the
+     * right behaviour on a player's screen and exactly the wrong behaviour in
+     * a test: a forgotten Spanish string would simply come out in English and
+     * nobody would notice for a year. So the fallback is asserted never to be
+     * reachable. */
+    const holes: string[] = [];
+    for (const key of SP.textKeys()) {
+      for (const lg of SP.LANGS) {
+        const v = SP.TEXT[key][lg];
+        if (typeof v !== "string" || v.trim().length === 0) holes.push(`${key}/${lg}`);
+      }
+    }
+    ok(holes.length === 0, `every string exists in all three languages${holes.length ? " — missing " + holes[0] : ""}`);
+
+    /* Every mission owns a fixed set of keys, derived from its id. This is
+     * what makes adding the ninth mission a checklist rather than a memory
+     * exercise: forget one of the ten and the suite names it. */
+    const missingKeys: string[] = [];
+    for (const m of M42.MISSIONS) {
+      for (const k of M42.missionKeys(m.id)) if (!SP.hasText(k)) missingKeys.push(k);
+    }
+    ok(missingKeys.length === 0,
+      `every mission has its ten keys${missingKeys.length ? " — missing " + missingKeys[0] : ""}`);
+
+    /* A copy-paste that left English sitting in the Polish column reads as a
+     * missing translation to a player and as nothing at all to the compiler.
+     * Proper-noun-only strings (a chronicle's dateline) are legitimately the
+     * same in all three and are the exception, not the rule. */
+    const untranslated = SP.textKeys().filter((k) =>
+      !k.startsWith("lore.title.") && SP.TEXT[k].pl === SP.TEXT[k].en);
+    ok(untranslated.length === 0,
+      `no Polish string is still its English original${untranslated.length ? " — " + untranslated[0] : ""}`);
+    const untranslatedEs = SP.textKeys().filter((k) =>
+      !k.startsWith("lore.title.") && SP.TEXT[k].es === SP.TEXT[k].en);
+    ok(untranslatedEs.length === 0,
+      `…nor is any Spanish one${untranslatedEs.length ? " — " + untranslatedEs[0] : ""}`);
+
+    /* --- it all FITS, which is the whole reason pagination is at draw time --
+     * The ruler is one unit per character at a width of forty, which is a
+     * deliberately pessimistic phone column — narrower than the box actually
+     * gets on any device the game runs on. Polish runs about 15% longer than
+     * English and Spanish about 25%, so a page cut by hand in English is the
+     * bug this is here to make impossible. */
+    const ruler = (str: string): number => str.length;
+    const COL = 40, ROWS42 = 6;
+    let worstPages = 0, worstKey = "";
+    const overflow: string[] = [];
+    const empty: string[] = [];
+    for (const key of SP.textKeys()) {
+      for (const lg of SP.LANGS) {
+        const pages = DL.paginate(SP.t(key, lg, { lv: 99 }), COL, ROWS42, ruler);
+        for (const page of pages) {
+          if (page.length > ROWS42) overflow.push(`${key}/${lg}`);
+          if (!page.length || page.every((l) => !l.trim())) empty.push(`${key}/${lg}`);
+          for (const line of page) if (line.length > COL && !line.includes(" ")) {
+            overflow.push(`${key}/${lg}:word`);
+          }
+        }
+        if (pages.length > worstPages) { worstPages = pages.length; worstKey = `${key}/${lg}`; }
+      }
+    }
+    ok(overflow.length === 0,
+      `no page overflows its row budget in any language${overflow.length ? " — " + overflow[0] : ""}`);
+    ok(empty.length === 0, `no page comes out blank${empty.length ? " — " + empty[0] : ""}`);
+    /* Six is a ceiling on the WRITING, not on the box: the box would page
+     * through twenty happily, but twenty pages is not a story beat, it is a
+     * wall, and the point of the chronicle is that it is read rather than
+     * skipped. */
+    ok(worstPages <= 6, `the longest text is still readable in one sitting (${worstPages} pages, ${worstKey})`);
+
+    /* A blank line is the one piece of layout the writer keeps. */
+    const forced = DL.paginate("one\n\ntwo", 40, 4, ruler);
+    ok(forced.length === 2 && forced[0][0] === "one" && forced[1][0] === "two",
+      "a blank line forces a page break, however short the paragraphs");
+    const long42 = DL.paginate("a b c d e f g h i j k l m n o p", 5, 2, ruler);
+    ok(long42.length === 3 && long42.every((pg) => pg.length <= 2)
+      && long42.flat().join(" ") === "a b c d e f g h i j k l m n o p",
+      "…and a long paragraph is cut into pages without losing or reordering a word");
+
+    /* --- read once, per CHARACTER ------------------------------------------
+     * Orthogonal to the stage on purpose: losing the relic drops a mission
+     * from `complete` back to `active`, and being told the story a second time
+     * on the way down would be the sage repeating himself to somebody who is
+     * mid-errand. */
+    M42.resetMissions();
+    ok(!M42.loreSeen("redcap"), "a fresh character has read nothing");
+    M42.markLoreSeen("redcap");
+    ok(M42.loreSeen("redcap"), "…and remembers what it has been told");
+    M42.setStage("redcap", "complete");
+    M42.relicLost("redcap", 10);
+    ok(M42.stageOf("redcap", 10) === "active" && M42.loreSeen("redcap"),
+      "losing the relic reopens the echo WITHOUT replaying the history");
+    ok(M42.loreRead().length === 1, "the chronicle shows up in the quest log's list");
+    ok(M42.loreState().includes("redcap"), "it survives into the save");
+    M42.loadLoreState(["redcap", "nosuchmission"]);
+    ok(M42.loreSeen("redcap") && M42.loreState().length === 1,
+      "…and a retired id in an old save is dropped rather than kept");
+    M42.loadLoreState(undefined);
+    ok(!M42.loreSeen("redcap"), "a pre-v13 save reads as 'has been told nothing', which is true");
+    M42.markLoreSeen("redcap");
+    M42.resetMissions();
+    ok(!M42.loreSeen("redcap") && M42.stageOf("redcap", 10) === "available",
+      "the reset wipes the history as well as the stage, or the pad stops stopping you");
+
+    /* --- the language is a DEVICE preference, not save state ---------------- */
+    ok(PP.lang() === SP.DEFAULT_LANG, "a player who has never touched the strip reads English");
+    PP.setLang("pl");
+    ok(PP.lang() === "pl", "the strip switches it");
+    ok(SP.t("sage.cold", "pl") !== SP.t("sage.cold", "en"), "…and the sage changes language with it");
+    const prefBlob = localStorage.getItem("bone-isle-panels-v1") ?? "";
+    ok(prefBlob.includes("\"lang\":\"pl\""), "it is written beside the panel zooms, not into the save");
+    const saveSrc42 = fs42.readFileSync(new URL("../src/save.ts", import.meta.url), "utf8");
+    ok(!/\blang\b/.test(saveSrc42.slice(saveSrc42.indexOf("interface SaveData"), saveSrc42.indexOf("export function hasSave"))),
+      "…and the save format has no opinion about which language you read in");
+    PP.setLang("en");
+
+    /* Old panel-preference files were a bare map of panel kinds; the shape
+     * grew a wrapper for the language. Both must load, or everybody's window
+     * sizes reset the day this ships. */
+    localStorage.setItem("bone-isle-panels-v1", JSON.stringify({ bag: { zoom: 1.3, collapsed: false, rows: 4 } }));
+    PP.loadPanelPrefs();
+    ok(Math.abs(PP.panelZoom("bag") - 1.3) < 1e-6, "a pre-Etap-42 prefs file still loads its zooms");
+    ok(PP.lang() === "en", "…and takes English, having never been asked");
+    localStorage.setItem("bone-isle-panels-v1", JSON.stringify({ panels: { bag: { zoom: 0.8, collapsed: false, rows: 0 } }, lang: "es" }));
+    PP.loadPanelPrefs();
+    ok(Math.abs(PP.panelZoom("bag") - 0.8) < 1e-6 && PP.lang() === "es", "…and the new shape loads both halves");
+    PP.resetPanelPrefs();
+
+    /* --- it draws, and what it draws can be pressed -------------------------
+     * The headless canvas reports every string as ten pixels wide, so this
+     * proves nothing about layout — it proves the thing does not throw on a
+     * null sprite, an absent band or a page with choices on it, which is the
+     * class of fault that only ever shows up on somebody's phone. */
+    {
+      const hud42 = {
+        ctx: (document.createElement("canvas") as HTMLCanvasElement).getContext("2d")!,
+        scale: 2, panelScale: 2, screenW: 720, screenH: 1560, touch: true, sidebarW: 0,
+      };
+      let picked = 0;
+      DL.openDialogue({
+        speaker: "Chronos", bodyKey: "sage.offer.redcap", portrait: true,
+        choices: [{ key: "sage.choice.what", run: () => { picked++; } }],
+      });
+      ok(DL.dialogueOpen() && DL.dialogueKey() === "sage.offer.redcap", "the box opens on the key it was given");
+      for (const band of [null, { top: 120, bottom: 1200 }, { top: 40, bottom: 260 }]) {
+        DL.drawDialogue(hud42, band, { sx: -1, sy: -1 });
+      }
+      ok(true, "…and draws in a tall band, a short one, and none at all");
+      DL.tickDialogue(9);          // let the typewriter finish
+      DL.drawDialogue(hud42, null, { sx: -1, sy: -1 });
+      ok(DL.dialogueTap(-50, -50), "every press is eaten while it is up, even one that misses");
+      /* A press that misses the answers must NOT close a box that is waiting
+       * for one — otherwise "tap to continue" quietly declines the mission. */
+      ok(DL.dialogueOpen(), "…and a stray press cannot dismiss a question");
+      DL.closeDialogue();
+      ok(!DL.dialogueOpen() && picked === 0, "closing it picks nothing on the player's behalf");
+      ok(!DL.dialogueTap(10, 10), "…and with nothing open the press falls through to the world");
+    }
+
+    /* --- the wiring, read off the source ------------------------------------ */
+    const main42 = fs42.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const portalFn = main42.slice(main42.indexOf("function checkPortals"),
+      main42.indexOf("function update("));
+    ok(/if \(dialogueOpen\(\)\) return;/.test(portalFn),
+      "a box on the pad holds the jump until it is closed");
+    ok(/markLoreSeen/.test(portalFn) && portalFn.indexOf("markLoreSeen") < portalFn.lastIndexOf("travelTo"),
+      "…and the chronicle is told BEFORE the jump, in the cellar, where it is safe to read");
+    ok(/dialogueOpen\(\) \? \{ dx: 0, dy: 0 \} : moveAxis\(\)/.test(main42),
+      "the feet stop while it is up");
+    ok(main42.indexOf("if (dialogueTap(sx, sy)) return;") < main42.indexOf("for (let i = hotspots.length - 1"),
+      "…and its taps are taken before the hotspot sweep, so the thumb deck cannot steal them");
+    ok(main42.indexOf("if (dialogueTap(sx, sy)) return;") < main42.indexOf("if (contextMenuTap(sx, sy)) return;"),
+      "…and before the context menu, which is drawn under it");
+    ok(/if \(dialogueOpen\(\)\) return;\n\}?/.test(main42.slice(main42.indexOf("function openContextMenu"), main42.indexOf("function openContextMenu") + 600)),
+      "…and no menu can open behind it in the first place");
+    ok(/onAttackNearest: \(\) => \{ if \(dialogueOpen\(\)\) advanceDialogue\(\)/.test(main42),
+      "SPACE turns the page instead of swinging");
+    /* The offer is now a QUESTION. Taking the errand is the answer to it, not
+     * the act of walking up to him. */
+    const talk = main42.slice(main42.indexOf("function talkToSage"), main42.indexOf("function worldClick"));
+    ok(!/setStage\(/.test(talk), "talking no longer takes the mission on the player's behalf");
+    ok(/function acceptMission/.test(main42) && /setStage\(m\.id, "active"\)/.test(main42),
+      "…the first answer does");
+
+    /* --- TEMP-ETAP42: the reset that must not outlive the testing ----------
+     * Same arrangement as the redcap's temporary post on the Gallows Coast:
+     * the thing is tagged, and the test is both the reminder and the grep
+     * handle. When the chain is done being walked twenty times, pull the tag
+     * and this block goes red until it is pulled too. */
+    ok(/TEMP-ETAP42/.test(main42), "the testing reset is tagged for removal");
+    ok(/function forgetEverything/.test(main42), "…it wipes the chain");
+    const forget = main42.slice(main42.indexOf("function forgetEverything"),
+      main42.indexOf("function acceptMission"));
+    ok(/resetMissions\(\)/.test(forget) && /removeAcross/.test(forget) && /game\.opened = /.test(forget),
+      "…the stages, the relic in the pack and the one-time chest, which is all three halves of a re-run");
+    ok(SP.hasText("sage.choice.forget") && SP.hasText("sage.forgot"),
+      "…and its two strings are keyed like everything else he says");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

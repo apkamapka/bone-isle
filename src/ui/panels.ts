@@ -13,6 +13,9 @@ import type { TaskReward } from "../systems/tasks.ts";
 import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed, walletAcross } from "../items.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { questList } from "../systems/quests.ts";
+import { loreRead, stageOf } from "../systems/missions.ts";
+import { t } from "../text/speech.ts";
+import { lang } from "../systems/panelPrefs.ts";
 import { SHOPS } from "../entities/npcs.ts";
 import { OUTFIT_COLORS, HUE_STEPS, SAT_ROWS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
 import { heroPreviewFrame } from "../gfx/heroSheet.ts";
@@ -681,6 +684,8 @@ export interface PanelActions {
   openBag: () => void;
   cycleAmmo: () => void;
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => void;
+  /** Put a mission's chronicle back on screen. */
+  readLore: (id: string) => void;
   close: (kind: PanelKind) => void;
 }
 
@@ -2128,14 +2133,41 @@ function drawShop(p: PanelInput): void {
 /* ---------------- Quests ---------------- */
 
 function drawQuests(p: PanelInput): void {
-  const { hud } = p;
+  const { hud, player } = p;
   const { ctx, scale: S } = hud;
   const w = 320 * S;
   const rowH = 40 * S;
-  const h = 20 * S + questList().length * rowH + 16 * S;
+  /* Chronicles first, quests under them.
+   *
+   * A mission's history is shown once, on the pad, and one page of folklore
+   * that can only ever be read at the moment it fires is a page most players
+   * will skim past a monster. Listing them here costs a row each and makes
+   * the sage's chain something you can go back and re-read. */
+  const chron = loreRead();
+  const lg = lang();
+  const chronH = chron.length ? 12 * S + chron.length * 20 * S + 6 * S : 0;
+  const h = 20 * S + chronH + questList().length * rowH + 16 * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "QUEST LOG")) return;
   let ry = y + 18 * S;
+  if (chron.length) {
+    hudText(hud, t("ui.chronicles", lg), x + 12 * S, ry + 3 * S, 7 * S, "rgba(202,162,58,.85)", "left", true);
+    ry += 12 * S;
+    for (const m of chron) {
+      const stage = stageOf(m.id, player.level);
+      const col = stage === "closed" ? "#7a8a7c" : "#b9a6d8";
+      hudText(hud, t(`mission.title.${m.id}`, lg), x + 12 * S, ry + 7 * S, 8 * S, col, "left", true,
+        w - 90 * S);
+      hudText(hud, t("ui.readAgain", lg), x + w - 12 * S, ry + 7 * S, 7 * S,
+        "rgba(220,214,190,.55)", "right");
+      const id = m.id;
+      p.hotspots.push({ x: x + 6 * S, y: ry, w: w - 12 * S, h: 18 * S, fn: () => p.act.readLore(id) });
+      ry += 20 * S;
+    }
+    ctx.fillStyle = "#3a3222";
+    ctx.fillRect(x + 12 * S, ry, w - 24 * S, 1 * S);
+    ry += 6 * S;
+  }
   for (const q of questList()) {
     const need = q.goal.kind === "build" ? 1 : q.goal.need;
     const prog = Math.min(q.progress, need);
