@@ -385,18 +385,16 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  is the exam. Melee sits deliberately low in the band because the stones
    *  are not counted in `dmg` and land on top of it.
    *
-   *  WHERE HE BELONGS: the one-time echo, and nowhere else. The post on the
-   *  Gallows Coast is TEMP-ETAP41 and exists only so he can be fought before
-   *  the echo map is drawn. He must not end up on a respawning hunting ground
-   *  while his purse is thirty platinum — see the loot note below.
+   *  WHERE HE LIVES: the lair under Liddesdale, on his own square at the far
+   *  end of it, and nowhere else in the game.
    * ================================================================== */
   redcap: {
     spr: SPR.humanFoe, hp: 300, dmg: [17, 44], speed: 66, atkRate: 2.0, exp: 300,
     // The purse stays on the curve — what he took off the road, no more than
-    // an orc warrior of the same exp carries. The thirty platinum is NOT here;
-    // it is an explicit hoard in the loot table below. Routing it through
-    // `gold` would have made him a 3000-coin creature sitting halfway up a
-    // ladder whose neighbours carry thirty, and the purse test says so.
+    // an orc warrior of the same exp carries. The thirty platinum is NOT on
+    // him at all: it is a one-time chest in `CHEST_PRIZES.hermitage`, three
+    // squares behind where he stands. He respawns and the chest does not, so
+    // the payday is paid once and the fight can be had again.
     gold: [25, 55], danger: 0.5, armor: 9,
     // Iron, and old. Fire barely notices him; the shadow he came out of does
     // not touch him at all; the storm that split the tower he lives in does.
@@ -411,11 +409,6 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "bloodCap", chance: 1.0, n: [1, 1] },
       // The tooth he leaves when he goes.
       { kind: "redcapTooth", chance: 1.0, n: [1, 1] },
-      // The hoard: everything he ever took, in one pile. Thirty platinum is
-      // three thousand gold and it is a ONE-TIME payment — it is the reason
-      // this creature may only ever stand in a one-time echo. Put him on a map
-      // that respawns him and this line becomes a gold press.
-      { kind: "platinumCoin", chance: 1.0, n: [25, 35] },
     ],
   },
 

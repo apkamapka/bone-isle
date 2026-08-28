@@ -518,8 +518,12 @@ export const CELLAR_SPEC: HandmadeSpec = {
     // the sage will speak to them about anything.
     c: { dest: "bandit", label: "to the Gallows Coast", span: 2, floor: Tile.Cave },
     d: { dest: "reach", label: "to the Bone Reach", span: 2, floor: Tile.Cave },
-    // and ten more the sage has not named yet
-    "1": sealed("Sealed Rift I"),
+    // The first rift the sage has actually opened. It is a MISSION door rather
+    // than a hunting ground — the island behind it exists to be walked once,
+    // for the cap at the bottom of it — which is why it is named after the
+    // place and not after what lives there.
+    "1": { dest: "liddesdale", label: "to Liddesdale — the Bloody Valley", span: 2, floor: Tile.Cave },
+    // and nine more the sage has not named yet
     "2": sealed("Sealed Rift II"),
     "3": sealed("Sealed Rift III"),
     "4": sealed("Sealed Rift IV"),

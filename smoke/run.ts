@@ -96,7 +96,7 @@ async function main(): Promise<void> {
         w.reach.mobPosts?.map((m) => [m.kind, m.tx, m.ty]),
       ]);
     ok(sig(w1) === sig(w2), "two builds → byte-identical maps");
-    ok(Object.keys(w1).length === 14, `fourteen maps, all hand-authored (${Object.keys(w1).length})`);
+    ok(Object.keys(w1).length === 16, `sixteen maps, all hand-authored (${Object.keys(w1).length})`);
     // …and nothing in here reads the seed any more, so a different one must
     // produce the same world rather than a new one.
     ok(sig(buildWorlds(WORLD_SEED + 1)) === sig(w1), "…and the seed no longer moves a tile");
@@ -1552,7 +1552,16 @@ async function main(): Promise<void> {
       if (!w.solid[chest.ty][chest.tx]) missing = `${key}'s chest tile is walkable`;
     }
     ok(missing === "", `every buried prize has a chest to be buried in${missing && " — " + missing}`);
-    ok(held === 4, `the Knight set, entire, one piece at a time (${held}/4)`);
+    /* Two of the five buried prizes are GEAR — one shield per floor, the Knight
+     * set one piece at a time. The other three are coin: two ten-platinum
+     * purses beside those shields, and the redcap's thirty. Counted apart
+     * because they answer different questions: the gear count is a statement
+     * about the set, the coin count is a statement about how much money the
+     * game hands out for free. */
+    const gear = Object.values(CHEST_PRIZES).flat().filter((pz) => !Array.isArray(pz));
+    ok(gear.length === 2 && new Set(gear).size === 2,
+      `the Knight set, entire, one piece at a time (${gear.length}/2)`);
+    ok(held === 5, `five buried prizes in all — two shields and three purses (${held}/5)`);
     // and nothing else in the game hides a chest that no prize is named for
     let orphan = "";
     for (const w of Object.values(worlds)) {
@@ -4978,10 +4987,8 @@ async function main(): Promise<void> {
       "…and the terrain grid matches it row for row");
 
     /* --- everything the author marked actually landed --- */
-    // 87 authored posts + TEMP-ETAP41, the redcap parked at (95,71) until his
-    // own echo map exists. Pull that glyph and both numbers go back to 87.
-    ok(b.mobPosts?.length === 88, "88 creature posts were written into the grid");
-    ok(b.monsters.length === 88, "…and every one of them spawned");
+    ok(b.mobPosts?.length === 87, "87 creature posts were written into the grid");
+    ok(b.monsters.length === 87, "…and every one of them spawned");
     ok(b.fires.length === 24, "all 24 campfires were placed");
     ok(b.scenery.filter((s) => s.kind === "tent").length === 24, "…and all 24 tents");
     ok(b.scenery.filter((s) => s.kind === "well").length === 8, "…one well per camp");
@@ -5414,19 +5421,20 @@ async function main(): Promise<void> {
     ok(d.loot.some((e) => e.kind === "redcapTooth"),
       "the tooth he leaves behind is the trophy the player keeps");
 
-    /* The hoard is thirty platinum and it is a ONE-TIME payment. Two things
-     * must hold or it becomes a press: it is not routed through `gold` (which
-     * would put a 3000-coin creature halfway up a curve whose neighbours carry
-     * thirty), and he does not stand on a map with a normal respawn clock as
-     * anything but the TEMP post. */
-    const hoard = d.loot.find((e) => e.kind === "platinumCoin");
-    ok(!!hoard && hoard.n[0] >= 20 && hoard.n[1] <= 40,
-      `the hoard is about thirty platinum (${hoard?.n[0]}-${hoard?.n[1]})`);
+    /* THE PRESS TEST. Thirty platinum is the biggest prize in the game and the
+     * redcap respawns like everything else, so the hoard must NOT be reachable
+     * twice. It is a one-time chest keyed to his lair, which `game.opened`
+     * hands out once per character; the creature itself carries a purse the
+     * size of an orc warrior's and not a coin more. If someone ever moves it
+     * onto him, these three fail together. */
+    ok(!d.loot.some((e) => e.kind === "platinumCoin" || e.kind === "goldCoin"),
+      "the hoard is NOT in his pocket — a respawning boss may not print money");
     ok((d.gold[0] + d.gold[1]) / 2 < 60,
-      "…and his PURSE stays on the bestiary's own gold curve, separately");
-    ok(!Object.keys(MONSTER_DEFS).some((k) => k !== "redcap"
-      && MONSTER_DEFS[k as never].loot.some((e: { kind: string }) => e.kind === "platinumCoin")),
-      "no other creature in the game drops coin as an item");
+      "…his purse stays on the bestiary's own gold curve");
+    const hoard = (await import("../src/game.ts")).CHEST_PRIZES.hermitage;
+    ok(!!hoard && hoard.length === 1 && Array.isArray(hoard[0])
+      && hoard[0][0] === "platinumCoin" && hoard[0][1] === 30,
+      "…and thirty platinum waits in a one-time chest in the lair instead");
 
     /* --- art ---------------------------------------------------------------
      * Same three checks the human ranks get: registered, shipped, credited. */
@@ -5450,24 +5458,146 @@ async function main(): Promise<void> {
     ok(mob41.mobFrame("redcap" as never, "down", true, 0) === null,
       "headless, he still falls back to the baked sprite");
 
-    /* --- TEMP-ETAP41: the post that must not outlive the echo --------------
-     * He is parked on the Gallows Coast only because the `homeless` test will
-     * not let a creature exist with nowhere to stand. This test is the reminder
-     * and the grep handle: when the echo map lands, the glyph comes out and
-     * BOTH of these flip. */
-    const specSrc = fs41.readFileSync(new URL("../src/world/banditSpec.ts", import.meta.url), "utf8");
-    ok(specSrc.includes("TEMP-ETAP41"), "the temporary post is tagged for removal");
-    const posts41 = (BANDIT_SPEC.rows.join("").match(/x/g) ?? []).length;
-    ok(posts41 === 1, `exactly one redcap stands on the island, and it is the temp one (${posts41})`);
-    // …and far from where a fresh character lands, because a level-25 tier
-    // creature two tiles off the pad would end the game for a level 1.
-    let rx = -1, ry = -1, sx = -1, sy = -1;
-    BANDIT_SPEC.rows.forEach((row, y) => {
-      if (row.includes("x")) { rx = row.indexOf("x"); ry = y; }
-      if (row.includes("@")) { sx = row.indexOf("@"); sy = y; }
-    });
-    ok(Math.max(Math.abs(rx - sx), Math.abs(ry - sy)) >= 30,
-      `the temp post is well clear of the landing pad (${Math.max(Math.abs(rx - sx), Math.abs(ry - sy))} tiles)`);
+    /* --- ONE redcap, in ONE place -----------------------------------------
+     * The temporary post on the Gallows Coast is gone (Etap 41 shipped his own
+     * map); he stands on exactly one square in the whole game, and it is in
+     * his lair. A second one anywhere would be a second hoard-guard on a map
+     * whose chest has already been opened. */
+    const worlds41 = buildWorlds(WORLD_SEED);
+    const redcaps = Object.entries(worlds41)
+      .flatMap(([k, w]) => (w.mobPosts ?? []).filter((pp) => pp.kind === "redcap").map(() => k));
+    ok(redcaps.length === 1 && redcaps[0] === "hermitage",
+      `exactly one redcap in the world, and he is in his lair (${redcaps.join(",") || "none"})`);
+    ok(!BANDIT_SPEC.rows.join("").includes("x"), "…and the temporary post on the Gallows Coast is gone");
+    ok(!fs41.readFileSync(new URL("../src/world/banditSpec.ts", import.meta.url), "utf8")
+        .includes("TEMP-ETAP41"), "…tag and all");
+  }
+
+  console.log("Etap 41 — Liddesdale and the lair under it:");
+  {
+    const cfg41 = await import("../src/config.ts");
+    const { LIDDESDALE_SPEC } = await import("../src/world/liddesdaleSpec.ts");
+    const { HERMITAGE_SPEC } = await import("../src/world/hermitageSpec.ts");
+    const ws = buildWorlds(WORLD_SEED);
+    const isle = ws.liddesdale, lair = ws.hermitage;
+
+    /* --- the trace is faithful -------------------------------------------
+     * Both grids came out of Tiled, and the one thing a trace can silently get
+     * wrong is the shape. Size and land area are the cheap proof. */
+    ok(isle.w === 80 && isle.h === 80, `Liddesdale is the 80x80 Tiled export (${isle.w}x${isle.h})`);
+    ok(lair.w === 30 && lair.h === 30, `the lair is the 30x30 export (${lair.w}x${lair.h})`);
+    ok(LIDDESDALE_SPEC.floor?.length === 80, "…and the island carries a floor grid");
+    const landTiles = LIDDESDALE_SPEC.rows.join("").split("").filter((c) => c !== "~").length;
+    ok(landTiles === 3923, `3923 land squares, exactly what the tileset drew (${landTiles})`);
+
+    /* Peat, not lawn. Every walkable square on the island is dirt — the art is
+     * bare bog and a green sward under it would be the only living thing on
+     * the map. */
+    const grassy = LIDDESDALE_SPEC.floor!.join("").split("").filter((c) => c === ".").length;
+    ok(grassy === 0, `not one square of grass on the bog (${grassy})`);
+
+    /* --- walkable, and walkable as ONE piece ------------------------------
+     * The scatter is placed by script and a boulder dropped in the wrong gap
+     * can cork a headland. Flood-fill from the pad has to reach every open
+     * square on both maps, or something is fenced off where nobody will look. */
+    const reachAll = (w: typeof isle, sx: number, sy: number) => {
+      const seen = new Set<number>(); const q = [[sx, sy]];
+      seen.add(sy * w.w + sx);
+      while (q.length) {
+        const [x, y] = q.pop()!;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+          if (w.solid[ny][nx] || seen.has(ny * w.w + nx)) continue;
+          seen.add(ny * w.w + nx); q.push([nx, ny]);
+        }
+      }
+      let open = 0;
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (!w.solid[y][x]) open++;
+      return [seen.size, open] as const;
+    };
+    const pad = isle.portals.find((pt) => pt.dest === "cellar")!;
+    const [got1, open1] = reachAll(isle, Math.floor(pad.x / TILE), Math.floor(pad.y / TILE));
+    ok(got1 === open1, `every open square on Liddesdale is walkable from the pad (${got1}/${open1})`);
+    const ladder = lair.portals.find((pt) => pt.dest === "liddesdale")!;
+    const [got2, open2] = reachAll(lair, Math.floor(ladder.x / TILE), Math.floor(ladder.y / TILE));
+    ok(got2 === open2, `…and every square of the lair from the ladder (${got2}/${open2})`);
+
+    /* --- the road in and the road out -------------------------------------
+     * Cellar → island → lair → island → cellar. Every hop needs the portal at
+     * BOTH ends or the player walks into a room with no way back. */
+    ok(ws.cellar.portals.some((pt) => pt.dest === "liddesdale" && !pt.inactive),
+      "the sage's first pad is live and points at Liddesdale");
+    ok(isle.portals.some((pt) => pt.dest === "cellar"), "…the island has a pad home");
+    ok(isle.portals.some((pt) => pt.dest === "hermitage"), "…a hole down to the lair");
+    ok(lair.portals.filter((pt) => pt.dest === "liddesdale").length === 1,
+      "…and the lair has exactly one ladder back up");
+
+    /* --- the gradient ------------------------------------------------------
+     * Weakest at the pad, heaviest over the hole, ranked by WALK distance and
+     * not by straight line. Asserted as an average because individual posts
+     * wobble: what must hold is the slope. */
+    const M41 = await import("../src/entities/monsters.ts");
+    const posts = isle.mobPosts!;
+    const tierAt = (p: { kind: string }) => M41.monsterTierOf(M41.MONSTER_DEFS[p.kind as never].hp);
+    const near = posts.filter((p) => Math.hypot(p.tx * TILE - pad.x, p.ty * TILE - pad.y) < 25 * TILE);
+    const hole = isle.portals.find((pt) => pt.dest === "hermitage")!;
+    const deep = posts.filter((p) => Math.hypot(p.tx * TILE - hole.x, p.ty * TILE - hole.y) < 25 * TILE);
+    const avg = (a: { kind: string }[]) => a.reduce((t, p) => t + tierAt(p), 0) / a.length;
+    ok(near.length >= 4 && deep.length >= 4, `both ends of the island are populated (${near.length}/${deep.length})`);
+    ok(avg(deep) > avg(near) + 2,
+      `the island hardens toward the hole (${avg(near).toFixed(1)} at the pad → ${avg(deep).toFixed(1)} over it)`);
+
+    /* --- no trains, anywhere ----------------------------------------------
+     * The same eight-tile rule the town is held to: aggro is six tiles, so
+     * eight leaves a tile of slack to back off with. Checked on BOTH maps
+     * because the lair is small and it would be easy to crowd. */
+    const need41 = cfg41.MONSTER_AGGRO_RANGE / TILE + 2;
+    for (const [name, w] of [["Liddesdale", isle], ["the lair", lair]] as const) {
+      const ps = w.mobPosts!;
+      let closest = 99, worst = "";
+      for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+        const dd = Math.max(Math.abs(ps[i].tx - ps[j].tx), Math.abs(ps[i].ty - ps[j].ty));
+        if (dd < closest) { closest = dd; worst = `${ps[i].kind}/${ps[j].kind}`; }
+      }
+      ok(closest >= need41, `no two creatures within ${need41} tiles on ${name} — closest ${closest} (${worst})`);
+    }
+
+    /* --- who lives where ---------------------------------------------------
+     * Border reivers above, the dead below, and the boss alone at the bottom.
+     * A rank leaking from one map to the other would blur the whole point of
+     * the descent. */
+    const kindsUp = new Set(isle.mobPosts!.map((p) => p.kind));
+    ok([...kindsUp].sort().join(" ") === "brigand cutthroat deserter highwayman smuggler",
+      `five reiver ranks on the island and nothing else (${[...kindsUp].sort().join(" ")})`);
+    const kindsDown = new Set(lair.mobPosts!.map((p) => p.kind));
+    ok([...kindsDown].sort().join(" ") === "redcap skeleton",
+      `the dead and their killer, and nobody else (${[...kindsDown].sort().join(" ")})`);
+    ok(isle.mobPosts!.length >= 30, `the island is properly populated (${isle.mobPosts!.length})`);
+
+    /* --- the boss stands at the far end -----------------------------------
+     * The lair is a flattened S and the whole of its level design is that you
+     * come down at one end of it and he is at the other. If a future edit
+     * moves either, the walk stops being a walk. */
+    const boss = lair.mobPosts!.find((p) => p.kind === "redcap")!;
+    const dl = Math.max(Math.abs(boss.tx - Math.floor(ladder.x / TILE)),
+                        Math.abs(boss.ty - Math.floor(ladder.y / TILE)));
+    ok(dl >= 14, `the redcap is the length of the cave from the ladder (${dl} tiles)`);
+    const chest41 = lair.structures.find((st) => st.key === "treasure")!;
+    ok(!!chest41, "his hoard is down there");
+    ok(Math.max(Math.abs(chest41.tx - boss.tx), Math.abs(chest41.ty - boss.ty)) <= 6,
+      "…behind him, so it is not reachable without the fight");
+
+    /* --- climate -----------------------------------------------------------
+     * Not one live tree on either map. It is the single scatter rule that
+     * separates this island from the Gallows Coast, and it is deliberate: the
+     * terrain is dying peat and a green canopy would contradict every other
+     * pixel on it. */
+    ok(isle.trees.length === 0, `nothing green grows on the bog (${isle.trees.length} trees)`);
+    ok(isle.scenery.filter((sc) => sc.kind === "deadTree").length >= 40,
+      `…the dead ones do (${isle.scenery.filter((sc) => sc.kind === "deadTree").length})`);
+    ok(isle.rocks.length >= 30, `and there is stone worth swinging at (${isle.rocks.length})`);
+    ok(HERMITAGE_SPEC.rows.join("").includes("#"), "the lair is walled in rock");
   }
 
   console.log("The whole road down and back walks end to end:");
@@ -7438,9 +7568,12 @@ async function main(): Promise<void> {
 
     /* --- the twelve, and only the twelve --- */
     const keys = Object.keys(worlds).sort();
+    // Fourteen after the cull, plus the two Etap 41 added: Liddesdale and the
+    // lair under it. They are the first keys in the game that exist because a
+    // MISSION needed them rather than because a level range did.
     ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 cellar deaddeep1 "
-      + "deaddeep2 home minodeep1 minodeep2 orcdeep1 orcdeep2 reach town",
-      `fourteen maps and no others (${keys.length}: ${keys.join(" ")})`);
+      + "deaddeep2 hermitage home liddesdale minodeep1 minodeep2 orcdeep1 orcdeep2 reach town",
+      `sixteen maps and no others (${keys.length}: ${keys.join(" ")})`);
     for (const dead of ["cave.ts", "deepwild.ts"]) {
       ok(!nfs.existsSync(new URL(`../src/world/${dead}`, import.meta.url)),
         `${dead} is gone, not merely unreferenced`);

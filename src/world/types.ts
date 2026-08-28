@@ -49,7 +49,11 @@ export type WorldKey =
   // Charnel Deep -1 — the maze under the Reach's northern descent, and the
   // Cinder Hollow below it. The dead hold the maze in equal thirds; the hollow
   // holds one dragon and nothing else.
-  | "deaddeep1" | "deaddeep2";
+  | "deaddeep1" | "deaddeep2"
+  // Liddesdale — the Bloody Valley, the Time Sage's first MISSION ground, and
+  // the redcap's lair cut into the bog under it. The first pair of keys that
+  // exist because a mission needed them rather than because a level range did.
+  | "liddesdale" | "hermitage";
 
 /** A point in world (pixel) space. */
 export interface Vec {

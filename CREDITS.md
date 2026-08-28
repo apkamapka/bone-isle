@@ -988,6 +988,16 @@ artwork and are themselves CC-BY-SA 3.0; anyone may take them from this
 repository under those terms. The per-layer CSV attribution still owed before
 release covers these layers too.
 
+## Liddesdale and the redcap's lair — map layouts
+
+No new asset files. Both maps were traced from Tiled exports authored by the
+project owner (`redcaplewyspa.tmx`, 80x80, and `redcapleboss.tmx`, 30x30) and
+are drawn in-engine from the existing terrain palette and the `prop-*` set
+already credited above — dead trees, felled wood, boulders, tents, skull poles.
+The Tiled tilesets used while authoring (`32x32_DEMO`, `MainLev2.0hhh`,
+`Water_tafle_4A`) served as the reference picture only; none of their pixels
+ship in this repository.
+
 ## Dragon — `public/mob-dragon-walk.png`, `public/mob-dragon-dead.png`
 
 Source: **CraftPix.net**, standard (non-Enterprise) licence —

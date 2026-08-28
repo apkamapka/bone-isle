@@ -8,6 +8,8 @@ import { ORCDEEP2_SPEC } from "./world/orcDeep2Spec.ts";
 import { BANDITDEEP2_SPEC } from "./world/banditDeep2Spec.ts";
 import { BANDITDEEP3_SPEC } from "./world/banditDeep3Spec.ts";
 import { BANDITDEEP_SPEC } from "./world/banditDeepSpec.ts";
+import { LIDDESDALE_SPEC } from "./world/liddesdaleSpec.ts";
+import { HERMITAGE_SPEC } from "./world/hermitageSpec.ts";
 import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
@@ -110,6 +112,12 @@ export type ChestPrize = ItemKind | readonly [ItemKind, number];
 export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize[]>>> = {
   minodeep2: ["minotaurShield", ["platinumCoin", 10]],
   orcdeep2: ["orcishShield", ["platinumCoin", 10]],
+  // The redcap's hoard: everything he ever took off the road, in one pile.
+  // Thirty platinum is three thousand gold and it is the biggest single prize
+  // in the game, which is exactly why it lives HERE and not in his loot table
+  // — `game.opened` gives it out once per character, and a respawning boss
+  // would have given it out forever.
+  hermitage: [["platinumCoin", 30]],
 };
 
 /**
@@ -137,6 +145,8 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     minodeep2: makeHandmadeWorld(MINODEEP2_SPEC),
     deaddeep1: makeHandmadeWorld(DEADDEEP_SPEC),
     deaddeep2: makeHandmadeWorld(DEADDEEP2_SPEC),
+    liddesdale: makeHandmadeWorld(LIDDESDALE_SPEC),
+    hermitage: makeHandmadeWorld(HERMITAGE_SPEC),
   };
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
