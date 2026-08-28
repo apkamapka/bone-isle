@@ -367,11 +367,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  Everything about him comes out of the Border sources rather than out of
    *  a stat block, and every line below is a sentence from one of them:
    *
-   *  "impossible to outrun, despite the iron boots"  → speed 66, the thief's
-   *      pace and two under the cutthroat's, up at the top of the roster where
-   *      the fast archetypes already live. He still does not literally outrun
-   *      a player (nothing in the bestiary does), but he is the fastest thing
-   *      anyone meets before level twenty and he closes the gap you open.
+   *  "impossible to outrun, despite the iron boots"  → speed 79, the fastest
+   *      thing in the bestiary, four clear of the orc berserker's 75 and a
+   *      fifth quicker than the cutthroat. He still does not literally outrun
+   *      a level-10 character, and he is not meant to: what he does is close
+   *      every gap you open, so backing off to drink costs ground every time.
    *  "flings huge stones at those who take refuge"   → a ranged attack that
    *      does NOT kite. `brute` is what makes him throw AND keep closing,
    *      exactly like the dragon, because a creature famous for running you
@@ -389,7 +389,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  end of it, and nowhere else in the game.
    * ================================================================== */
   redcap: {
-    spr: SPR.humanFoe, hp: 300, dmg: [17, 44], speed: 66, atkRate: 2.0, exp: 300,
+    spr: SPR.humanFoe, hp: 300, dmg: [17, 44], speed: 79, atkRate: 2.0, exp: 300,
     // The purse stays on the curve — what he took off the road, no more than
     // an orc warrior of the same exp carries. The thirty platinum is NOT on
     // him at all: it is a one-time chest in `CHEST_PRIZES.hermitage`, three
@@ -407,8 +407,6 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       // The relic. Flat 100%: the mission cannot be gated behind a dice roll,
       // and `wantsRelic` in missions.ts is what stops a second one existing.
       { kind: "bloodCap", chance: 1.0, n: [1, 1] },
-      // The tooth he leaves when he goes.
-      { kind: "redcapTooth", chance: 1.0, n: [1, 1] },
     ],
   },
 

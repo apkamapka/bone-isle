@@ -522,7 +522,13 @@ export const CELLAR_SPEC: HandmadeSpec = {
     // than a hunting ground — the island behind it exists to be walked once,
     // for the cap at the bottom of it — which is why it is named after the
     // place and not after what lives there.
-    "1": { dest: "liddesdale", label: "to Liddesdale — the Bloody Valley", span: 2, floor: Tile.Cave },
+    // A MISSION door. It ships dormant and `applyMissionPads` lights it the
+    // moment Chronos hands the errand over — the pad is not a place you find,
+    // it is a place he opens.
+    "1": {
+      dest: "liddesdale", label: "to Liddesdale — the Bloody Valley",
+      span: 2, floor: Tile.Cave, inactive: true,
+    },
     // and nine more the sage has not named yet
     "2": sealed("Sealed Rift II"),
     "3": sealed("Sealed Rift III"),

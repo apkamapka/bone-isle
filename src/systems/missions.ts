@@ -71,14 +71,44 @@ export interface MissionDef {
   echo: WorldKey;
   /** What the echo's boss leaves behind, and what the sage takes back. */
   relic: ItemKind;
+  /** Paid when the relic reaches the sage's table. Experience only: the coin
+   *  is already down in the echo, in a chest the player has to fight for, and
+   *  paying twice for one errand would make the ladder's own purses look silly. */
+  rewardExp: number;
 }
 
 /**
- * The fourteen missions, once they are designed. Empty on purpose: every pad
- * in the cellar stays dormant while this list is, which is exactly the
- * behaviour the game shipped with.
+ * The chain. One link so far.
+ *
+ * The redcap is the first, at level ten, and he has no `after`: nothing has to
+ * be closed before the sage will speak about him. Everything that follows will
+ * name him, so this entry's `id` is now permanent — it is written into every
+ * save that has ever started the mission.
  */
-export const MISSIONS: readonly MissionDef[] = [];
+export const MISSIONS: readonly MissionDef[] = [
+  {
+    id: "redcap",
+    title: "The Cap of Hermitage",
+    reqLevel: 10,
+    ground: "liddesdale",
+    echo: "hermitage",
+    relic: "bloodCap",
+    // Roughly a third of the level it is gated at (level 10 needs 3700), which
+    // is a real bite without being a shortcut past the ground it is set on.
+    rewardExp: 1200,
+  },
+];
+
+/** The mission whose echo this world is, if any. Used where a world key is all
+ *  the caller has: the loot roll, the pad sweep. */
+export function missionByEcho(key: WorldKey): MissionDef | undefined {
+  return MISSIONS.find((m) => m.echo === key);
+}
+
+/** The mission whose hunting ground this world is, if any. */
+export function missionByGround(key: WorldKey): MissionDef | undefined {
+  return MISSIONS.find((m) => m.ground === key);
+}
 
 export function missionById(id: string): MissionDef | undefined {
   return MISSIONS.find((m) => m.id === id);

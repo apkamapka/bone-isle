@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const items = await import("../src/items.ts");
   const tasks = await import("../src/systems/tasks.ts");
   const { skills, resetSkills, addSkillXp } = await import("../src/systems/skills.ts");
-  const { buildWorlds } = await import("../src/game.ts");
+  const { buildWorlds, applyMissionPads } = await import("../src/game.ts");
   const { WORLD_SEED, TILE, BAG_SIZE: cfgBagSize, CORPSE_SLOTS: cfgCorpseSlots } = await import("../src/config.ts");
   const { lineOfSight } = await import("../src/world/collision.ts");
   const { makeHandmadeWorld } = await import("../src/world/handmade.ts");
@@ -4056,7 +4056,7 @@ async function main(): Promise<void> {
   {
     const { makeHandmadeWorld, TOWN_SPEC, CELLAR_SPEC } = await import("../src/world/handmade.ts");
     const { updateNpcs } = await import("../src/entities/npcs.ts");
-    const { buildWorlds } = await import("../src/game.ts");
+    const { buildWorlds, applyMissionPads } = await import("../src/game.ts");
     const { WORLD_SEED, TILE: T } = await import("../src/config.ts");
 
     /* --- the sage in town: his own island, drifting around the trapdoor ---
@@ -4157,13 +4157,22 @@ async function main(): Promise<void> {
      * So: nothing below cares how many pads there are, where they sit, or
      * which of them lead anywhere. What it holds is that every pad the artwork
      * paints is a pad the player can actually use. */
+    const { missionByGround: missionByGroundT } = await import("../src/systems/missions.ts");
     const pads = cellar.portals.filter((p) => p.inactive);
     const live = cellar.portals.filter((p) => !p.inactive && p.dest !== "town");
     ok(pads.length + live.length >= 12,
       `the hall is a wall of doors (${live.length} open, ${pads.length} sealed)`);
     ok(live.length >= 2, `…at least two of which go somewhere today (${live.map((p) => p.dest).join(", ")})`);
-    ok(pads.every((p) => p.dest === "cellar"),
-      "a sealed pad points at its own room, so a stray travel is a no-op rather than a trip");
+    /* An UNNAMED sealed pad points at its own room, so a stray travel is a
+     * no-op rather than a trip. A pad the sage has actually named is different:
+     * it is dormant because the mission is not in hand, not because there is
+     * nothing behind it, and `applyMissionPads` lights it the moment there is.
+     * Both are dark today; only one of them leads anywhere. */
+    const named = pads.filter((p) => missionByGroundT(p.dest));
+    ok(pads.filter((p) => !missionByGroundT(p.dest)).every((p) => p.dest === "cellar"),
+      "an unnamed sealed pad points at its own room, so a stray travel is a no-op");
+    ok(named.length === 1 && named[0].dest === "liddesdale",
+      `…and the one named pad is dark until the mission is taken (${named.map((p) => p.dest).join(",")})`);
     ok(new Set(cellar.portals.map((p) => p.label)).size === cellar.portals.length,
       "every door is labelled, and no two share a label");
     ok(cellar.portals.some((p) => p.dest === "town" && !p.inactive), "…and the way up is open");
@@ -5418,8 +5427,7 @@ async function main(): Promise<void> {
       "the cap drops every time, exactly one");
     ok(items.ITEMS.bloodCap.stack === 1,
       "…and it does not stack, because there is one redcap and one cap");
-    ok(d.loot.some((e) => e.kind === "redcapTooth"),
-      "the tooth he leaves behind is the trophy the player keeps");
+    ok(d.loot.length === 1, `the cap is the ONLY thing he drops (${d.loot.map((e) => e.kind).join(",")})`);
 
     /* THE PRESS TEST. Thirty platinum is the biggest prize in the game and the
      * redcap respawns like everything else, so the hoard must NOT be reachable
@@ -5526,8 +5534,28 @@ async function main(): Promise<void> {
     /* --- the road in and the road out -------------------------------------
      * Cellar → island → lair → island → cellar. Every hop needs the portal at
      * BOTH ends or the player walks into a room with no way back. */
-    ok(ws.cellar.portals.some((pt) => pt.dest === "liddesdale" && !pt.inactive),
-      "the sage's first pad is live and points at Liddesdale");
+    /* The pad is a MISSION door: dark until Chronos hands the errand over, lit
+     * from then on and lit forever. Driven here the way the game drives it, by
+     * moving the chain and running the same sweep `update()` runs. */
+    const MM = await import("../src/systems/missions.ts");
+    const { resetPlayerState: rps41 } = await import("../src/systems/playerState.ts");
+    const padTo = (k: string) => ws.cellar.portals.find((pt) => pt.dest === k)!;
+    const holeTo = (k: string) => ws.liddesdale.portals.find((pt) => pt.dest === k)!;
+    rps41(); MM.resetMissions();
+    applyMissionPads(ws, 9);
+    ok(padTo("liddesdale").inactive === true, "at level nine the sage's first pad is dark");
+    applyMissionPads(ws, 10);
+    ok(padTo("liddesdale").inactive === true, "…and still dark at ten, until he actually hands it over");
+    MM.setStage("redcap", "active");
+    applyMissionPads(ws, 10);
+    ok(padTo("liddesdale").inactive === false, "taking the mission lights it");
+    ok(holeTo("hermitage").inactive === false, "…and opens the hole down to the lair");
+    MM.setStage("redcap", "closed");
+    applyMissionPads(ws, 10);
+    ok(padTo("liddesdale").inactive === false, "handing the cap in leaves the hunting ground open forever");
+    ok(holeTo("hermitage").inactive === true, "…and shuts the lair for good");
+    rps41(); MM.resetMissions();
+    applyMissionPads(ws, 10);
     ok(isle.portals.some((pt) => pt.dest === "cellar"), "…the island has a pad home");
     ok(isle.portals.some((pt) => pt.dest === "hermitage"), "…a hole down to the lair");
     ok(lair.portals.filter((pt) => pt.dest === "liddesdale").length === 1,
@@ -5598,6 +5626,93 @@ async function main(): Promise<void> {
       `…the dead ones do (${isle.scenery.filter((sc) => sc.kind === "deadTree").length})`);
     ok(isle.rocks.length >= 30, `and there is stone worth swinging at (${isle.rocks.length})`);
     ok(HERMITAGE_SPEC.rows.join("").includes("#"), "the lair is walled in rock");
+  }
+
+  console.log("Etap 41 — the terrain exports, and the relic gate:");
+  {
+    const nfs41 = await import("node:fs");
+    const M41b = await import("../src/systems/missions.ts");
+    const { resetPlayerState: rps } = await import("../src/systems/playerState.ts");
+
+    /* --- the picture IS the map -------------------------------------------
+     * Both new worlds are drawn from a Tiled image export, like every other
+     * hand-authored map in the game. Getting this wrong does not crash: the
+     * procedural bake sits underneath as a fallback, so the map simply renders
+     * in the wrong art style and nothing complains. Which is exactly what
+     * happened, so it is a test now.
+     *
+     * The size check is the one that matters — `terrainImage.ts` refuses a
+     * mismatched export at runtime and keeps the bake, silently. */
+    const tsrc = nfs41.readFileSync(new URL("../src/world/terrainImage.ts", import.meta.url), "utf8");
+    const pngSize = (f: string) => {
+      const b = nfs41.readFileSync(new URL(`../public/${f}`, import.meta.url));
+      return [b.readUInt32BE(16), b.readUInt32BE(20)] as const;
+    };
+    for (const [key, file, side] of [
+      ["liddesdale", "liddesdale-terrain.png", 80],
+      ["hermitage", "hermitage-terrain.png", 30],
+    ] as const) {
+      ok(tsrc.includes(`${key}: "./${file}"`), `${key} is registered in TERRAIN_SRC`);
+      ok(nfs41.existsSync(new URL(`../public/${file}`, import.meta.url)), `…and ${file} is shipped`);
+      const [pw, ph] = pngSize(file);
+      ok(pw === side * TILE && ph === side * TILE,
+        `…at native tile size, or the loader silently refuses it (${pw}x${ph} vs ${side * TILE})`);
+    }
+    /* EVERY authored map has one. A new map added without an export renders in
+     * the fallback bake and looks like a different game. */
+    const ws41 = buildWorlds(WORLD_SEED);
+    const noArt = Object.keys(ws41).filter((k) => !tsrc.includes(`${k}: "./`));
+    ok(noArt.length === 0, `no map is left drawing its own procedural bake${noArt.length ? " — " + noArt.join(", ") : ""}`);
+
+    /* --- the outcrops are collision, not props ----------------------------
+     * The export paints Radek's forty rocks. If the engine ALSO draws a
+     * boulder on them the player sees two rocks in two art styles on one
+     * square, which is what the first cut of this map did. */
+    const { LIDDESDALE_SPEC } = await import("../src/world/liddesdaleSpec.ts");
+    ok(LIDDESDALE_SPEC.solids === "%", "the painted outcrops are collision-only glyphs");
+    ok(!Object.values(LIDDESDALE_SPEC.scenery ?? {}).some((k) => k === "boulderA" || k === "boulderB"),
+      "…and the engine draws no boulder of its own over them");
+    const sealed41 = LIDDESDALE_SPEC.rows.join("").split("").filter((c) => c === "%").length;
+    ok(sealed41 === 244, `all 244 painted rock squares seal (${sealed41})`);
+    ok(ws41.liddesdale.scenery.every((sc) => sc.kind !== "boulderA" && sc.kind !== "boulderB"),
+      "…so not one engine boulder stands on the island");
+
+    /* No grass under the skulls. A feature glyph defaults to grass beneath, so
+     * a cave map without a floor grid grows a lawn wherever a bone pile sits. */
+    const { HERMITAGE_SPEC } = await import("../src/world/hermitageSpec.ts");
+    ok(HERMITAGE_SPEC.floor?.length === 30, "the lair carries a floor grid");
+    let lawn = 0;
+    for (let y = 0; y < ws41.hermitage.h; y++) for (let x = 0; x < ws41.hermitage.w; x++) {
+      if (ws41.hermitage.tile[y][x] === Tile.Grass) lawn++;
+    }
+    ok(lawn === 0, `not one square of grass underground (${lawn})`);
+
+    /* --- the relic gate ----------------------------------------------------
+     * The cap exists once per character. `wantsRelic` is the whole of the rule
+     * and `killMonster` is where it is applied, so the drop is asserted through
+     * the state machine rather than by reading the loot table. */
+    rps(); M41b.resetMissions();
+    ok(!M41b.wantsRelic("redcap", 10), "an untaken mission yields no relic");
+    M41b.setStage("redcap", "active");
+    ok(M41b.wantsRelic("redcap", 10), "…the taken one does");
+    M41b.relicTaken("redcap", 10);
+    ok(!M41b.wantsRelic("redcap", 10), "…and yields no SECOND cap to sell");
+    ok(M41b.echoOpen("hermitage", 10), "…while the lair stays open, so a lost cap is recoverable");
+    M41b.relicLost("redcap", 10);
+    ok(M41b.wantsRelic("redcap", 10), "losing it reopens the tap rather than bricking the character");
+    M41b.relicTaken("redcap", 10);
+    M41b.missionHandedIn("redcap", 10);
+    ok(!M41b.echoOpen("hermitage", 10) && M41b.groundOpen("liddesdale", 10),
+      "handing in shuts the lair and leaves the island open");
+    const src41 = nfs41.readFileSync(new URL("../src/systems/combat.ts", import.meta.url), "utf8");
+    ok(/wantsRelic/.test(src41), "…and killMonster is the code that applies it");
+    rps(); M41b.resetMissions();
+
+    /* --- the boss's own numbers -------------------------------------------- */
+    const dR = (await import("../src/entities/monsters.ts")).MONSTER_DEFS.redcap;
+    const fastest = Object.values((await import("../src/entities/monsters.ts")).MONSTER_DEFS)
+      .reduce((t, m) => Math.max(t, m.speed), 0);
+    ok(dR.speed === fastest, `nothing in the bestiary is quicker than the redcap (${dR.speed})`);
   }
 
   console.log("The whole road down and back walks end to end:");
@@ -7613,12 +7728,20 @@ async function main(): Promise<void> {
      * the one a cull creates silently: delete the island a stairway stood on
      * and the floor beneath it is still built, still populated, still
      * unreachable. The dormant pads are deliberately NOT traversed. */
+    const { missionByGround: missionByGroundR, missionByEcho: missionByEchoR } =
+      await import("../src/systems/missions.ts");
     const seen = new Set<string>(["home"]);
     const queue = ["home"];
     while (queue.length) {
       const w = worlds[queue.shift() as keyof typeof worlds];
       for (const pt of w.portals) {
-        if (pt.inactive || seen.has(pt.dest)) continue;
+        // Dormant pads are deliberately NOT traversed — EXCEPT the mission
+        // doors, which are dormant only because this test's imaginary walker
+        // has not spoken to Chronos. A mission map that no mission opens is
+        // still marooned and still has to fail here, so the exception is
+        // exactly "a door some mission in the catalogue lights", no wider.
+        const missionDoor = !!missionByGroundR(pt.dest) || !!missionByEchoR(pt.dest);
+        if ((pt.inactive && !missionDoor) || seen.has(pt.dest)) continue;
         seen.add(pt.dest);
         queue.push(pt.dest);
       }
@@ -7633,11 +7756,18 @@ async function main(): Promise<void> {
     const { resetPlayerState } = await import("../src/systems/playerState.ts");
     resetPlayerState();
 
-    /* The catalogue is empty on purpose, and every function has to be correct
-     * against that — this module ships BEFORE the missions do. */
-    ok(M.MISSIONS.length === 0, "no missions are written yet");
-    ok(M.offeredMission(99) === undefined, "…so the sage offers nothing at any level");
-    ok(M.currentMission(99) === undefined, "…and nothing is in hand");
+    /* One link, written in Etap 41. Everything below still has to be correct
+     * against a catalogue that will keep growing, so the assertions are about
+     * SHAPE — ids unique, the first link free of a prerequisite, every named
+     * world real — rather than about how many there happen to be. */
+    ok(M.MISSIONS.length === 1, `the chain has one link so far (${M.MISSIONS.length})`);
+    ok(new Set(M.MISSIONS.map((m) => m.id)).size === M.MISSIONS.length, "…with unique ids");
+    ok(M.MISSIONS[0].id === "redcap" && M.MISSIONS[0].after === undefined,
+      "the redcap is the first link and waits on nothing");
+    ok(M.MISSIONS.every((m) => m.ground !== m.echo), "…and no mission's ground is its own echo");
+    ok(M.offeredMission(9) === undefined, "below level ten the sage offers nothing");
+    ok(M.offeredMission(10)?.id === "redcap", "…and at ten he offers the cap");
+    ok(M.currentMission(99) === undefined, "…and nothing is in hand until it is taken");
     ok(M.stageOf("nope", 99) === "locked", "an unknown id reads as locked rather than throwing");
     M.setStage("nope", "closed");
     ok(M.stageOf("nope", 99) === "locked", "…and refuses to be moved off it");
@@ -7648,15 +7778,16 @@ async function main(): Promise<void> {
      * worth pinning now, while they are cheap to change. */
     const cat = M.MISSIONS as unknown as M.MissionDef[];
     cat.push(
-      { id: "t1", title: "first", reqLevel: 8, ground: "reach", echo: "deaddeep2", relic: "boneSword" },
-      { id: "t2", title: "second", reqLevel: 12, after: "t1", ground: "bandit", echo: "banditdeep3", relic: "ironSword" },
+      { id: "t1", title: "first", reqLevel: 8, ground: "reach", echo: "deaddeep2", relic: "boneSword", rewardExp: 1 },
+      { id: "t2", title: "second", reqLevel: 12, after: "t1", ground: "bandit", echo: "banditdeep3", relic: "ironSword", rewardExp: 1 },
     );
     try {
       M.resetMissions();
       ok(M.stageOf("t1", 7) === "locked", "below its level, the first mission is locked");
       ok(M.stageOf("t1", 8) === "available", "…and at its level it is offered");
       ok(M.stageOf("t2", 99) === "locked", "the second stays locked however high you level");
-      ok(M.offeredMission(99)?.id === "t1", "…so the sage offers the FIRST, not the one you outlevelled");
+      ok(M.MISSIONS.find((m) => M.stageOf(m.id, 99) === "available")?.id === "redcap",
+        "…so the sage offers the FIRST, not the one you outlevelled");
 
       // taking it opens the ground permanently and the echo conditionally
       M.setStage("t1", "active");
@@ -7693,6 +7824,7 @@ async function main(): Promise<void> {
       // round trip: only non-default stages are stored, and junk is discarded
       const dump = M.missionState();
       ok(Object.keys(dump).sort().join(",") === "t1,t2", `both stages saved (${JSON.stringify(dump)})`);
+      void 0;
       M.loadMissionState({ ...dump, ghost: "closed", t1: "banana" });
       ok(M.stageOf("t2", 99) === "active", "a round trip preserves what was set");
       ok(M.stageOf("t1", 99) === "available",
@@ -7701,7 +7833,10 @@ async function main(): Promise<void> {
       M.loadMissionState(null);
       ok(Object.keys(M.missionState()).length === 0, "a save with no chain in it loads as a fresh one");
     } finally {
-      cat.length = 0;
+      // The two test links were PUSHED onto the shipped catalogue, so the
+      // teardown removes exactly those two rather than emptying the array —
+      // truncating it would delete the redcap for every test that runs after.
+      for (let i = cat.length - 1; i >= 0; i--) if (cat[i].id === "t1" || cat[i].id === "t2") cat.splice(i, 1);
       M.resetMissions();
       resetPlayerState();
     }
@@ -7712,10 +7847,13 @@ async function main(): Promise<void> {
     const nfs = await import("node:fs");
     const main = nfs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
     ok(/n\.key === "timesage"/.test(main), "the sage has a click handler of his own");
-    ok(/cw\(\)\.key === "cellar"/.test(main),
+    ok(/cw\(\)\.key !== "cellar"/.test(main),
       "…which splits on the ROOM, not on a coordinate or a safe flag");
-    ok(/trapdoor north of here/.test(main), "upstairs he points at the trapdoor");
-    ok(/the pads are cold/.test(main), "…and downstairs he talks about the pads");
+    /* The trapdoor is at (18,46) and he stands at (25,46) — due WEST, same row.
+     * It said "north" from the day it was written until somebody walked it. */
+    ok(/trapdoor west of here/.test(main), "upstairs he points WEST, which is where the trapdoor is");
+    ok(!/trapdoor north of here/.test(main), "…and no longer north, which it never was");
+    ok(/function talkToSage/.test(main), "…and downstairs he runs the mission state machine");
     /* The whole point: no mission is ever handed over on the plaza. If the
      * mission panel ever gets opened from the surface sage, this fails. */
     const upstairs = main.slice(main.indexOf('n.key === "timesage"'));

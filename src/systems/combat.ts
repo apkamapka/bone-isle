@@ -10,6 +10,7 @@ import { addFloat } from "../fx.ts";
 import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
+import { missionByEcho, wantsRelic, relicTaken } from "./missions.ts";
 import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
 import { structCenter, tierOf, DUMMY_TIER_RATE, DUMMY_TIER_SHIELD } from "./building.ts";
@@ -173,6 +174,22 @@ export function killMonster(world: World, p: Player, m: Monster): void {
   grantExp(world, p, d.exp);
 
   const { items, gold } = rollLoot(m.kind);
+  /* THE RELIC GATE. A mission's relic is not ordinary loot: it exists once per
+   * character and the echo must not print a second one to be sold. `wantsRelic`
+   * is true only while the mission is `active` — that is, while the player has
+   * not taken one yet — so the first kill yields the cap and moves the mission
+   * to `complete`, and every kill after that yields the same corpse minus the
+   * cap. Losing the relic puts the mission back to `active` (Chronos notices
+   * the empty hands), and the door is still open, so a careless death costs a
+   * repeat run and not the character. */
+  const md = missionByEcho(world.key);
+  if (md) {
+    if (wantsRelic(md.id, p.level)) {
+      if (items.some((it) => it.kind === md.relic)) relicTaken(md.id, p.level);
+    } else {
+      for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === md.relic) items.splice(i, 1);
+    }
+  }
   world.corpses.push({
     id: nextEntityId(),
     name: m.kind,

@@ -12,11 +12,9 @@ export type ItemKind =
   | "venomGland" | "ghoulClaw" | "dragonScale"
   // creature trophies (Etap 24): 15% from their family, the feedstock of Essential Gems
   | "minotaurHorn" | "orcEar" | "goblinFang" | "cursedRib"
-  // The redcap's two leavings. The cap is the Time Sage's relic and the tooth
-  // is what the player keeps — folklore says a redcap driven off vanishes in
-  // flames and leaves a single large tooth behind, so the tooth is the one
-  // souvenir the story itself hands out.
-  | "bloodCap" | "redcapTooth"
+  // The redcap's cap. One creature, one drop, and it is a relic rather than a
+  // trophy: it goes on the Time Sage's table and does not come back.
+  | "bloodCap"
   // forge materials (Etap 24): smelted from looted gear, never bought
   | "iron" | "steel" | "essentialGem"
   // furnace fuel: dropped by anything that makes camp — people, orcs,
@@ -208,11 +206,6 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * Priced as a real sale so it can be bought off another player who died on
    * the way home, which `missions.ts` explicitly wants to be worth gold. */
   bloodCap:     { name: "Blood-Dyed Cap", stack: 1, value: 400, weight: 6 },
-  /* What is left when a redcap goes. Stacks like the other trophies although
-   * only one will ever be earned per character, because the trophy family is
-   * feedstock and a rule that holds for four of them should not have a fifth
-   * exception. */
-  redcapTooth:  { name: "Redcap's Tooth", stack: 9999, value: 120, weight: 2 },
   // ---- forge materials. Iron and steel are LIGHT on purpose: the Alchemy
   // ---- Tower wants 600 iron and 550 steel, and at a realistic weight the
   // ---- logistics of carrying them would be a bigger obstacle than earning

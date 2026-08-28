@@ -42,12 +42,16 @@ import { skills, type SkillKey } from "./systems/skills.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor } from "./config.ts";
 import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
+import {
+  MISSIONS, stageOf, setStage, offeredMission, currentMission,
+  missionHandedIn, relicLost,
+} from "./systems/missions.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
 import { nextEntityId, byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { TARGET_SEEK_PX } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
-import { addItem, addStack, removeItem, removeItemUnpacked, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
+import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
   SELF, activeChannel, bubbleFor, formatLine, lineAlpha, logServer,
@@ -60,7 +64,7 @@ import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
-import { createGame, travelTo, applyGates, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
+import { createGame, travelTo, applyGates, applyMissionPads, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
@@ -2832,6 +2836,69 @@ function openTreasure(s: Structure): void {
   saveGame(game);
 }
 
+/**
+ * Chronos, downstairs, in front of the pads.
+ *
+ * One line per click, because that is what `flash` is — a line, not a dialogue
+ * box. So the conversation is a state machine rather than a script: what he
+ * says is a pure function of where the chain stands, and clicking him again
+ * repeats the current state rather than advancing past it. The one click that
+ * DOES advance is the handover, and the one that pays is the hand-in.
+ *
+ * The lost-relic branch is the reconcile point for `relicLost`. Nothing else
+ * watches the pack — a cap can leave it by being dropped on death, sold, or
+ * traded away, and chasing every one of those from the inventory code would
+ * mean four hooks that must all agree. Here there is one, at the only place
+ * the answer matters: the man who wants the cap notices you do not have it,
+ * and the door you need opens again.
+ */
+function talkToSage(): void {
+  const say = (line: string) => flash(`Chronos: \u201c${line}\u201d`, "#b9a6d8");
+
+  const cur = currentMission(P.level);
+  if (cur) {
+    const stage = stageOf(cur.id, P.level);
+    if (stage === "complete") {
+      if (countAcross([P.bag], cur.relic) > 0) {
+        removeAcross([P.bag], cur.relic, 1);
+        missionHandedIn(cur.id, P.level);
+        grantExp(cw(), P, cur.rewardExp);
+        say("Still wet. Good \u2014 dry, it is only a hat.");
+        beep(660, 0.2, "sine", 0.06, 220);
+        saveGame(game);
+        return;
+      }
+      // He wanted it and you have not got it. The echo reopens.
+      relicLost(cur.id, P.level);
+      say("Empty hands. The door is still open \u2014 go back down and take it again.");
+      saveGame(game);
+      return;
+    }
+    say("The cap, while the blood on it is still wet. The echo holds as long as you do.");
+    return;
+  }
+
+  const next = offeredMission(P.level);
+  if (next) {
+    setStage(next.id, "active");
+    say("A lord about to be boiled, a great many furious farmers, and one small "
+      + "thing in iron boots that outlived every one of them. Bring me its cap.");
+    beep(520, 0.22, "sine", 0.06, 300);
+    saveGame(game);
+    return;
+  }
+
+  // Nothing to offer: either every link is closed, or the next one is above the
+  // player's level. Say which, because "not yet" with no reason was the whole
+  // of what he used to say and it told nobody anything.
+  const nextLocked = MISSIONS.find((m) => stageOf(m.id, P.level) === "locked");
+  if (nextLocked) {
+    say(`Come back at level ${nextLocked.reqLevel}. History does not keep for the unready.`);
+  } else {
+    say("The pads are cold. Every door I know is behind you.");
+  }
+}
+
 function worldClick(w: Vec): void {
   if (P.dead) return;
   const world = cw();
@@ -3372,6 +3439,11 @@ function update(dt: number): void {
   const world = cw();
   // level gates: seal/open against the current level (also right after level-ups)
   applyGates(world, P.level);
+  // …and the same for the sage's doors, against the mission chain. Swept over
+  // EVERY world rather than the current one because the pad that has to change
+  // is usually somewhere else: take the mission in the cellar and the door that
+  // lights is on the island you are not standing on yet.
+  applyMissionPads(game.worlds, P.level);
   waveT += dt;
   P.tpCd = Math.max(0, P.tpCd - dt);
   P.atkCd = Math.max(0, P.atkCd - dt);
@@ -3750,10 +3822,12 @@ function resolveTarget(): void {
      * sages with two different states. `cellar` is the check rather than
      * `!safe` or a coordinate: it is the room the pads are in. */
     else if (n.key === "timesage") {
-      flash(cw().key === "cellar"
-        ? "Chronos: \u201cthe pads are cold. Not yet.\u201d"
-        : "Chronos: \u201cthe trapdoor north of here. History is kept downstairs.\u201d",
-        "#b9a6d8");
+      if (cw().key !== "cellar") {
+        // The trapdoor is at (18,46) and he stands at (25,46): seven squares
+        // due WEST of him, on the same row. It said north for as long as
+        // nobody walked it.
+        flash("Chronos: \u201cthe trapdoor west of here. History is kept downstairs.\u201d", "#b9a6d8");
+      } else talkToSage();
     }
     // Someone with neither a shop nor a panel of their own has nothing to open
     // yet — say so rather than putting an empty window on screen.

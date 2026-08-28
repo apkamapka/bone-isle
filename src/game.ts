@@ -15,6 +15,7 @@ import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, CELLAR_SPEC } from "./world/handmade.ts";
 import { loadTerrainImages } from "./world/terrainImage.ts";
+import { missionByGround, missionByEcho, groundOpen, echoOpen } from "./systems/missions.ts";
 import { loadPropArt } from "./world/propArt.ts";
 import { loadMobSheets } from "./gfx/mobSheet.ts";
 import { loadFireSheet } from "./gfx/fireSheet.ts";
@@ -219,6 +220,32 @@ export function createGame(seed = WORLD_SEED): Game {
  */
 export function applyGates(w: World, level: number): void {
   for (const gt of w.gates) w.solid[gt.ty][gt.tx] = level < gt.lv;
+}
+
+/**
+ * Light or darken every mission door, everywhere, against the chain's state.
+ *
+ * The sibling of `applyGates` and called from the same place for the same
+ * reason: a pad's state is a FUNCTION of the character, not a property of the
+ * map, so it is recomputed rather than remembered. Two rules, and they are
+ * different on purpose:
+ *
+ *   a pad onto a hunting GROUND  — lit from the moment the sage hands the
+ *       mission over, and lit forever after. The ground is yours.
+ *   a mouth into an ECHO         — lit only while the mission is unfinished.
+ *       It goes dark for good when the relic reaches the sage, which is what
+ *       makes the boss a one-time fight and the hoard a one-time hoard.
+ *
+ * A portal pointing at a world no mission claims is left exactly as authored,
+ * so every pad that existed before missions did still behaves as it did.
+ */
+export function applyMissionPads(worlds: Record<WorldKey, World>, level: number): void {
+  for (const w of Object.values(worlds)) {
+    for (const pt of w.portals) {
+      if (missionByGround(pt.dest)) pt.inactive = !groundOpen(pt.dest, level);
+      else if (missionByEcho(pt.dest)) pt.inactive = !echoOpen(pt.dest, level);
+    }
+  }
 }
 
 export function travelTo(g: Game, dest: WorldKey): void {
