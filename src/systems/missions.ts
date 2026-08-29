@@ -2,11 +2,12 @@
  * The Time Sage's missions: the chain of one-time errands into history that
  * runs alongside the repeatable board tasks.
  *
- * THE CATALOGUE IS EMPTY. This module is the machinery only — the shape the
- * fourteen missions will be poured into, landed ahead of them so the save
- * format, the pad wiring and the tests settle once instead of fourteen times.
- * Every function below is correct against an empty `MISSIONS`, which is why it
- * can ship before a single mission exists.
+ * ONE LINK IS IN. The machinery landed empty and ahead of the catalogue on
+ * purpose, so the save format, the pad wiring and the tests settled once
+ * instead of once per mission; the redcap was poured into it in Etap 41-42 and
+ * the ladder above him is designed up to level 50. Every function below is
+ * still correct against an EMPTY `MISSIONS` as well as a full one, which is
+ * what lets a mission be added or retired without touching any of them.
  *
  * ---------------------------------------------------------------------------
  * WHY THIS IS NOT `quests.ts`

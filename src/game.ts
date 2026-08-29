@@ -122,8 +122,11 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize
 };
 
 /**
- * Build every map. Twelve hand-authored specs, parsed from their glyph grids —
- * no seed, no RNG, no procedural terrain anywhere in the game since Etap 40.
+ * Build every map. One hand-authored spec per world, parsed from its glyph
+ * grid — no seed, no RNG, no procedural terrain anywhere in the game since
+ * Etap 40. The count is deliberately not written down here: it moves every
+ * time an island lands, and a number in a comment that nothing checks is a
+ * number that goes stale. `WorldKey` is the list.
  *
  * `seed` is kept in the signature and on `Game` because the save carries it
  * and because a shard will want one, but nothing in here reads it any more:

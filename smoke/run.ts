@@ -12591,6 +12591,90 @@ async function main(): Promise<void> {
     }
   }
 
+  /* ======================================================================= *
+   *  HOUSEKEEPING — the things that rot quietly
+   *
+   *  None of this is a mechanic. It is the class of bug that never throws:
+   *  a file the build stopped looking at, a picture whose name puts it out of
+   *  reach of the loader that wants it, a comment that was true two etaps ago.
+   *  Each one below was found by reading rather than by playing, which is
+   *  exactly why each one needs a test — nobody reads twice.
+   * ======================================================================= */
+  console.log("Housekeeping — dead files, dead names, dead comments:");
+  {
+    const hk = await import("node:fs");
+    const at = (p: string): URL => new URL("../" + p, import.meta.url);
+    const read = (p: string): string => hk.readFileSync(at(p), "utf8");
+    const there = (p: string): boolean => hk.existsSync(at(p));
+
+    /* --- the testing reset does not ship ----------------------------------
+     * `/forget` un-opens the lair's chest, and that chest is thirty platinum —
+     * the biggest single purse in the game. Typed-not-pressed was the right
+     * bar while the only player was the man writing it; on a shard it is a
+     * mint that anyone who reads a changelog can run. The branch has to be
+     * compiled out, not merely undocumented. */
+    const mainHk = read("src/main.ts");
+    ok(/import\.meta\.env\.DEV\s*&&\s*text\.trim\(\)\.toLowerCase\(\) === "\/forget"/.test(mainHk),
+      "the testing reset is gated on the dev build, so `vite build` drops it");
+    ok(mainHk.includes("TEMP-ETAP42"), "…and it is still tagged for removal");
+
+    /* --- no picture is named out of the loader's reach --------------------
+     * Nine files arrived as `*.png.png` — a double extension from a save
+     * dialogue. Six were byte-identical twins of files already sitting beside
+     * them; three were the only copy of a storm nova, so `fxFile` asked for
+     * `fx-storm-1-nova.png`, got a 404, and fell back forever. Nothing broke
+     * and nothing said anything, which is the whole problem. */
+    const pub = hk.readdirSync(at("public"));
+    const doubled = pub.filter((f) => /\.(png|svg|jpg|jpeg|webp)\.(png|svg|jpg|jpeg|webp)$/i.test(f));
+    ok(doubled.length === 0,
+      `no asset is saved with a double extension (${doubled.join(", ") || "none"})`);
+
+    /* Every file in public/ that the game asks for by a DERIVED name has to
+     * be reachable under that derived name. This is the general form of the
+     * bug above: a picture can be present, correct and unreachable. */
+    const { fxFile: fxF, FX_SLOTS: slots } = await import("../src/gfx/spellArt.ts");
+    const { ELEMENTS: elsHk } = await import("../src/systems/elements.ts");
+    const present = new Set(pub);
+    const stranded = pub.filter((f) => /^fx-/.test(f)).filter((f) => {
+      for (const e of elsHk) for (const t of [0, 1, 2] as const)
+        for (const s of slots) if (fxF(e, t, s) === f) return false;
+      return true;
+    });
+    ok(stranded.length === 0,
+      `every fx picture answers to a name fxFile() can build (${stranded.join(", ") || "none"})`);
+
+    /* --- no second copy of a source file --------------------------------
+     * `main.ts`, `run.ts` and `save.ts` sat in the repo ROOT as well as under
+     * `src/` and `smoke/` — leftovers of a zip unpacked one directory too
+     * high. `tsconfig` only includes `src`, so they never compiled and never
+     * failed; they just waited for someone to edit the wrong one. */
+    for (const stray of ["main.ts", "run.ts", "save.ts"]) {
+      ok(!there(stray), `no stray ${stray} in the repo root shadowing the real one`);
+    }
+
+    /* --- no unreferenced picture in the shipped bundle -------------------
+     * `public/hero.png` predates the layered hero (`hero-base` + four dyed
+     * layers) and nothing had loaded it since. `src/assets/` was Vite's
+     * scaffold and was never touched at all. Both shipped on every deploy. */
+    ok(!there("public/hero.png"), "the pre-layer hero sheet is gone");
+    ok(!there("src/assets"), "…and so is the Vite scaffold folder");
+
+    /* --- comments that make a claim the code can check --------------------
+     * A prose comment cannot be tested in general. A comment that COUNTS
+     * something can, and those are the ones that go stale: the catalogue was
+     * described as empty for two etaps after the redcap went into it, and the
+     * world builder claimed twelve specs while building sixteen. */
+    const misHk = read("src/systems/missions.ts");
+    ok(!/CATALOGUE IS EMPTY/.test(misHk), "the mission catalogue is not still described as empty");
+    const { MISSIONS: missionsHk } = await import("../src/systems/missions.ts");
+    ok(missionsHk.length > 0, "…because it is not empty");
+    const gameHk = read("src/game.ts");
+    const claimed = /Build every map\.\s*\*?\s*(\w+) hand-authored specs/.exec(gameHk);
+    ok(claimed === null,
+      `buildWorlds does not hard-code a spec count that nothing checks (${claimed?.[1] ?? "none"})`);
+    void present;
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

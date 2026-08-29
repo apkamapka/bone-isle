@@ -2373,8 +2373,15 @@ function sendChat(text: string): void {
    * erasing the last one — and it put a debug tool in a character's mouth,
    * where a player who does not know what it is can press it and lose their
    * chain. A command has to be typed on purpose and nobody types it by
-   * accident. Grep TEMP-ETAP42 to pull the whole thing. */
-  if (text.trim().toLowerCase() === "/forget") {
+   * accident. Grep TEMP-ETAP42 to pull the whole thing.
+   *
+   * DEV ONLY. Typing it on purpose is the right bar for a testing tool on a
+   * machine that is testing; it is the wrong bar for a live shard, because the
+   * reset un-opens the lair's chest and that chest holds the biggest single
+   * purse in the game. A command anybody can discover and re-run is a mint.
+   * `import.meta.env.DEV` is false in `vite build`, so the branch is gone from
+   * the deployed bundle rather than merely hard to find in it. */
+  if (import.meta.env.DEV && text.trim().toLowerCase() === "/forget") {
     forgetEverything();
     closeChat();
     return;
@@ -2921,9 +2928,12 @@ function sageSays(
  * boss, the purse and the way home can all be walked again.
  *
  * The chest is the part that pays out real coin every run, so a character used
- * for this is not a character to read gold balance off. Grep TEMP-ETAP42 to
- * pull the whole thing — this function, its branch in `sendChat`, and its
- * string in speech.ts.
+ * for this is not a character to read gold balance off — and that same chest is
+ * why the branch in `sendChat` is gated on `import.meta.env.DEV`. Thirty
+ * platinum, given out again on every `/forget`, is a mint on a shared shard.
+ *
+ * Grep TEMP-ETAP42 to pull the whole thing — this function, its branch in
+ * `sendChat`, and its string in speech.ts.
  */
 function forgetEverything(): void {
   resetMissions();
