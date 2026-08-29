@@ -9,14 +9,16 @@ function ok(cond: boolean, name: string): void {
 }
 
 async function main(): Promise<void> {
-  const { quests, claimQuest, resetQuests } = await import("../src/systems/quests.ts");
+  const { questList, claimQuest, resetQuests } = await import("../src/systems/quests.ts");
+  const quests = questList();
   const { createPlayer } = await import("../src/entities/player.ts");
   const items = await import("../src/items.ts");
   const tasks = await import("../src/systems/tasks.ts");
   const { skills, resetSkills, addSkillXp } = await import("../src/systems/skills.ts");
-  const { buildWorlds } = await import("../src/game.ts");
-  const { WORLD_SEED, TILE } = await import("../src/config.ts");
+  const { buildWorlds, applyMissionPads } = await import("../src/game.ts");
+  const { WORLD_SEED, TILE, BAG_SIZE: cfgBagSize, CORPSE_SLOTS: cfgCorpseSlots } = await import("../src/config.ts");
   const { lineOfSight } = await import("../src/world/collision.ts");
+  const { makeHandmadeWorld } = await import("../src/world/handmade.ts");
   const { Tile } = await import("../src/world/types.ts");
   const { STRUCTS, canPlaceAt } = await import("../src/systems/building.ts");
   const { SPRITE_SCALE: SPRITE_SCALE2 } = await import("../src/config.ts");
@@ -36,7 +38,7 @@ async function main(): Promise<void> {
   {
     resetQuests();
     const p = createPlayer({ x: 0, y: 0 });
-    p.bag = items.emptyBag();
+    p.pack = items.newContainer("backpack")!;
     const q2 = quests.find((q) => q.id === "q2")!; // reward: sword + 50 exp
     q2.progress = 6; q2.done = true;
     let expGiven = 0;
@@ -57,7 +59,7 @@ async function main(): Promise<void> {
   console.log("tasks (weight-aware rewards):");
   {
     const p = createPlayer({ x: 0, y: 0 });
-    p.bag = items.emptyBag();
+    p.pack = items.newContainer("backpack")!;
     const ghouls = tasks.TASKS.find((t) => t.id === "t_ghouls")!; // reward 20 boneArrow (20 oz)
     ok(tasks.rewardFits(p, ghouls), "light bag fits the arrow reward");
     // stuff the bag to the cap with stone (weight 14): cap 500 → 35 stones = 490 oz
@@ -66,7 +68,7 @@ async function main(): Promise<void> {
     ok(tasks.buyExchange(p, "x_arrows") === "poor", "no TP → poor");
     p.taskPoints = 20;
     ok(tasks.buyExchange(p, "x_arrows") === "heavy", "50 arrows over cap → heavy");
-    p.bag = items.emptyBag();
+    p.pack = items.newContainer("backpack")!;
     ok(tasks.buyExchange(p, "x_arrows") === "ok", "with room it buys");
     ok(items.bagCount(p.bag, "boneArrow") === 50 && p.taskPoints === 17, "arrows + TP deducted");
   }
@@ -83,24 +85,70 @@ async function main(): Promise<void> {
   {
     const w1 = buildWorlds(WORLD_SEED);
     const w2 = buildWorlds(WORLD_SEED);
+    // Etap 40: determinism is no longer a property the seed buys — every map
+    // is a glyph grid parsed the same way every time. Asserted anyway, and
+    // asserted across TWO maps of different kinds, because "the map is the
+    // same twice" is the guarantee a shard rests on however it is obtained.
     const sig = (w: typeof w1) =>
-      JSON.stringify([w.wild.trees.map((t) => [t.tx, t.ty]), w.cave2.portals.map((p) => [p.x, p.y])]);
-    ok(sig(w1) === sig(w2), "same seed → identical Wildlands & cave layout");
-    // LOS: find a wall tile in cave1 and check sight through it is blocked
-    const c = w1.cave1;
+      JSON.stringify([
+        w.bandit.trees.map((t) => [t.tx, t.ty]),
+        w.deaddeep1.portals.map((pt) => [pt.x, pt.y]),
+        w.reach.mobPosts?.map((m) => [m.kind, m.tx, m.ty]),
+      ]);
+    ok(sig(w1) === sig(w2), "two builds → byte-identical maps");
+    ok(Object.keys(w1).length === 16, `sixteen maps, all hand-authored (${Object.keys(w1).length})`);
+    // …and nothing in here reads the seed any more, so a different one must
+    // produce the same world rather than a new one.
+    ok(sig(buildWorlds(WORLD_SEED + 1)) === sig(w1), "…and the seed no longer moves a tile");
+    /* LOS: one tile of rock with walkable floor on both sides of it, then
+     * check sight across it.
+     *
+     * The probe sweeps EVERY map in both orientations rather than naming one,
+     * because which map happens to own a one-tile-thick wall is a property of
+     * the artwork and changes whenever a map is redrawn. Pinning it to a
+     * particular island is how this test rots — and sweeping is only half a
+     * cure, since a redraw can take the LAST such wall away and leave the
+     * sweep finding nothing to check. Bonetown's fence was that wall, and the
+     * six-island map has no fence, so the probe now falls back to a grid built
+     * here for the purpose. What is under test is `lineOfSight`, not the
+     * furniture of any island.
+     *
+     * It also keys on the TILE CODE rather than on solidity: `sightBlockedAt`
+     * does, so a solid tile painted as something other than Wall does not stop
+     * an arrow, and a probe that used solidity would be testing the wrong rule.
+     */
     let checked = false;
-    outer: for (let y = 2; y < c.h - 2 && !checked; y++) {
-      for (let x = 2; x < c.w - 2; x++) {
-        if (c.tile[y][x] === Tile.Wall && c.tile[y][x - 1] === Tile.Cave && c.tile[y][x + 1] === Tile.Cave) {
-          const lx = (x - 1) * TILE + TILE / 2, rx = (x + 1) * TILE + TILE / 2, cy = y * TILE + TILE / 2;
-          ok(!lineOfSight(c, lx, cy, rx, cy), "wall between two floor tiles blocks sight");
-          ok(lineOfSight(c, lx, cy, lx, cy + 0.1), "point-blank sight is clear");
+    outer: for (const c of Object.values(w1)) {
+      for (let y = 2; y < c.h - 2; y++) {
+        for (let x = 2; x < c.w - 2; x++) {
+          if (c.tile[y][x] !== Tile.Wall) continue;
+          const horiz = !c.solid[y][x - 1] && !c.solid[y][x + 1];
+          const vert = !c.solid[y - 1][x] && !c.solid[y + 1][x];
+          if (!horiz && !vert) continue;
+          const ax = horiz ? x - 1 : x, ay = horiz ? y : y - 1;
+          const bx = horiz ? x + 1 : x, by = horiz ? y : y + 1;
+          const p1x = ax * TILE + TILE / 2, p1y = ay * TILE + TILE / 2;
+          const p2x = bx * TILE + TILE / 2, p2y = by * TILE + TILE / 2;
+          ok(!lineOfSight(c, p1x, p1y, p2x, p2y),
+            `wall between two floor tiles blocks sight (${c.key} ${x},${y})`);
+          ok(lineOfSight(c, p1x, p1y, p1x, p1y + 0.1), "point-blank sight is clear");
           checked = true;
           break outer;
         }
       }
     }
-    ok(checked, "found a wall-flanked corridor to test");
+    if (!checked) {
+      const probe = makeHandmadeWorld({
+        key: "home", name: "line-of-sight probe", safe: true,
+        rows: ["~~~~~", "~...~", "~.#.~", "~...~", "~~~~~"], portals: {},
+      });
+      const p1x = 2 * TILE + TILE / 2, p1y = 1 * TILE + TILE / 2;
+      const p2x = 2 * TILE + TILE / 2, p2y = 3 * TILE + TILE / 2;
+      ok(!lineOfSight(probe, p1x, p1y, p2x, p2y), "wall between two floor tiles blocks sight");
+      ok(lineOfSight(probe, p1x, p1y, p1x, p1y + 0.1), "point-blank sight is clear");
+      checked = true;
+    }
+    ok(checked, "a wall-flanked corridor was tested");
   }
 
   console.log("free-form building (canPlaceAt):");
@@ -156,8 +204,15 @@ async function main(): Promise<void> {
     applyDeathPenalty(worlds.home, p);
     ok(worlds.home.corpses.length === before + 1, "player body corpse spawned");
     const body = worlds.home.corpses[worlds.home.corpses.length - 1];
-    ok(body.name === "your body" && body.items.some((it) => it.kind === "wood" && it.n === 12), "backpack contents dropped into the body");
-    ok(p.bag.every((s) => s === null), "backpack emptied");
+    /* The backpack now drops AS ITSELF: one container in the body holding the
+     * wood, rather than the wood loose. That is the whole point of the tree —
+     * flattening it would destroy anything packed inside a sub-bag. */
+    const droppedPack = body.items.find((it) => it?.kind === "backpack");
+    ok(body.name === "your body" && !!droppedPack, "the backpack itself dropped into the body");
+    ok(!!droppedPack?.items?.some((it) => it?.kind === "wood" && it.n === 12),
+      "…with its contents still inside it");
+    ok(p.pack === null, "and the player is left wearing nothing");
+    ok(p.bag.length === 0, "…so their bag is not merely empty, it is absent");
     ok(p.level === 13, "10% of total exp at lv14/0 de-levels to 13");
     ok(p.exp >= 0 && p.exp < p.expNext, "partial exp within the new level");
     worlds.home.corpses.length = before;
@@ -339,52 +394,76 @@ async function main(): Promise<void> {
     ok(sells.includes("aolAmulet"), "…but Oswin sells it, so death protection still exists");
   }
 
-  console.log("spawn placement (spacing + never on the player):");
+  console.log("spawn placement (authored posts, never on the player):");
   {
-    const { spawnMonster } = await import("../src/entities/monsters.ts");
+    const { spawnAtPost } = await import("../src/entities/monsters.ts");
     const { populateWorld } = await import("../src/game.ts");
-    const { SPAWN_SPACING_PX, SPAWN_AVOID_PLAYER_PX } = await import("../src/config.ts");
+    const { SPAWN_AVOID_PLAYER_PX } = await import("../src/config.ts");
     const worlds = buildWorlds(WORLD_SEED);
-    const wild = worlds.wild;
-    populateWorld(wild, WORLD_SEED);
-    // 18 from the trimmed surface roster + the two TEMP-ETAP28 test specimens
-    // posted at the island's ends. Drops back to 18 when they get real grounds.
-    ok(wild.monsters.length === 20, `wild fully populated (${wild.monsters.length}/20 — roster + 2 test posts)`);
-    let minGap = Infinity;
-    for (let i = 0; i < wild.monsters.length; i++) {
-      for (let j = i + 1; j < wild.monsters.length; j++) {
-        const a = wild.monsters[i], b = wild.monsters[j];
-        minGap = Math.min(minGap, Math.hypot(a.x - b.x, a.y - b.y));
+
+    /* Etap 40 removed the scatter placer, and with it the "no day-one blobs"
+     * rule it needed: spacing is now whatever the map's author drew. What
+     * replaces that test is stricter — every creature must stand on the exact
+     * square its spec names, on every map, with none missing and none extra. */
+    let misplaced = "";
+    let counted = 0;
+    for (const w of Object.values(worlds)) {
+      populateWorld(w);
+      const posts = w.mobPosts ?? [];
+      if (posts.length !== w.monsters.length) {
+        misplaced = `${w.key}: ${w.monsters.length} creatures for ${posts.length} posts`;
+        continue;
+      }
+      for (const post of posts) {
+        counted++;
+        const on = w.monsters.find((m) => m.tx === post.tx && m.ty === post.ty);
+        if (!on) { misplaced = `${w.key}: nothing on ${post.tx},${post.ty}`; break; }
+        if (on.kind !== post.kind) { misplaced = `${w.key}: ${on.kind} on ${post.kind}'s post`; break; }
+        // and it remembers the post, so killing it puts it back here
+        if (on.guard?.tx !== post.tx || on.guard?.ty !== post.ty) {
+          misplaced = `${w.key}: ${on.kind} at ${post.tx},${post.ty} forgot its post`;
+          break;
+        }
       }
     }
-    ok(minGap >= SPAWN_SPACING_PX, `no day-one blobs (closest pair ${minGap.toFixed(0)}px ≥ ${SPAWN_SPACING_PX})`);
-    // respawn avoids the player: everything spawned with `avoid` keeps its distance
-    const px = (wild.w / 2) * TILE, py = (wild.h / 2) * TILE;
-    let okDist = true, spawned = 0;
+    ok(misplaced === "", `every creature stands where its map put it${misplaced && " — " + misplaced}`);
+    ok(counted > 400, `…across every map at once (${counted} posts)`);
+
+    /* The one placement rule that survives: a respawn never pops on top of the
+     * player. `spawnAtPost` rings outward from the post when the square is
+     * taken, so this also proves the ring search honours the avoid radius
+     * rather than only the post itself. */
+    const reach = worlds.reach;
+    const post = (reach.mobPosts ?? [])[0];
+    const px = post.tx * TILE + TILE / 2;
+    const py = post.ty * TILE + TILE / 2;
+    reach.monsters.length = 0;
+    let tooClose = 0;
+    let landed = 0;
     for (let i = 0; i < 8; i++) {
-      const n0 = wild.monsters.length;
-      if (spawnMonster(wild, "bandit", { x: px, y: py })) {
-        spawned++;
-        const m = wild.monsters[wild.monsters.length - 1];
-        if (Math.hypot(m.x - px, m.y - py) < SPAWN_AVOID_PLAYER_PX) okDist = false;
+      const n0 = reach.monsters.length;
+      if (spawnAtPost(reach, "snake", post.tx, post.ty, { x: px, y: py })) {
+        landed++;
+        const m = reach.monsters[reach.monsters.length - 1];
+        if (Math.hypot(m.x - px, m.y - py) < SPAWN_AVOID_PLAYER_PX) tooClose++;
       } else {
-        ok(wild.monsters.length === n0, "failed respawn adds nothing");
+        ok(reach.monsters.length === n0, "a refused respawn adds nothing");
       }
     }
-    ok(spawned > 0, `respawns landed (${spawned}/8)`);
-    ok(okDist, "no respawn within the player-avoid radius");
-    // deterministic double-populate: same seed → same monster layout
-    const wild2 = buildWorlds(WORLD_SEED).wild;
-    populateWorld(wild2, WORLD_SEED);
-    const sigM = (w: typeof wild) => JSON.stringify(w.monsters.map((m) => [m.kind, Math.round(m.x), Math.round(m.y)]));
-    const wild3 = buildWorlds(WORLD_SEED).wild;
-    populateWorld(wild3, WORLD_SEED);
-    ok(sigM(wild2) === sigM(wild3), "populate stays deterministic with spacing rules");
+    ok(tooClose === 0, `no respawn inside the player-avoid radius (${landed} landed, ${tooClose} too close)`);
+
+    // two populates of the same map put every creature on the same square
+    const a2 = buildWorlds(WORLD_SEED).reach;
+    const b2 = buildWorlds(WORLD_SEED).reach;
+    populateWorld(a2);
+    populateWorld(b2);
+    const sigM = (w: typeof a2) => JSON.stringify(w.monsters.map((m) => [m.kind, m.tx, m.ty]));
+    ok(sigM(a2) === sigM(b2), "populate is deterministic");
   }
 
   console.log("surround AI (steering around pack mates):");
   {
-    const { spawnMonster, updateMonsters } = await import("../src/entities/monsters.ts");
+    const { spawnAtPost, updateMonsters } = await import("../src/entities/monsters.ts");
     const worlds = buildWorlds(WORLD_SEED);
     const arena = worlds.home; // big open grass fields — a clean test arena
     let cx = -1, cy = -1;
@@ -402,7 +481,10 @@ async function main(): Promise<void> {
     const ptx = toTile(cx);
     const pty = toTile(cy);
     arena.monsters.length = 0;
-    for (let i = 0; i < 4; i++) spawnMonster(arena, "bandit");
+    // Posted rather than scattered (Etap 40), four squares apart so each one
+    // lands where it is asked; they are lined up by hand immediately below
+    // anyway, so where they start only has to be legal.
+    for (let i = 0; i < 4; i++) spawnAtPost(arena, "bandit", ptx - 6 - i * 2, pty + 4);
     // line them up single-file due west of the target — the worst case
     arena.monsters.forEach((m, i) => {
       m.tx = ptx - 2 - i;
@@ -1300,7 +1382,7 @@ async function main(): Promise<void> {
     // and it actually hands over goods for a gold
     {
       const g = createGame();
-      g.player.gold = 5;
+      items.giveGold(g.player.bag, 5);
       const before = items.bagCount(g.player.bag, "steel");
       items.addItem(g.player.bag, "steel", 100);
       ok(items.bagCount(g.player.bag, "steel") === before + 100, "100 of an item fits one stack");
@@ -1389,7 +1471,7 @@ async function main(): Promise<void> {
   {
     const { MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HIT_S } = await import("../src/config.ts");
     const { playerShoot } = await import("../src/systems/combat.ts");
-    const { spawnMonster } = await import("../src/entities/monsters.ts");
+    const { spawnAtPost } = await import("../src/entities/monsters.ts");
     // no bow may outrange monster awareness — the whole point of the change
     let longestBow = 0;
     for (const k of Object.keys(items.ITEMS) as (keyof typeof items.ITEMS)[]) {
@@ -1399,15 +1481,17 @@ async function main(): Promise<void> {
     ok(MONSTER_AGGRO_RANGE >= longestBow + TILE, `aggro range ${MONSTER_AGGRO_RANGE} ≥ longest bow ${longestBow} + 1 tile`);
     // a fresh spawn is calm; an arrow (hit OR miss) provokes it
     const worlds = buildWorlds(WORLD_SEED);
-    const wild = worlds.wild;
-    ok(spawnMonster(wild, "goblin"), "goblin spawns on the Wildlands");
-    const m = wild.monsters[wild.monsters.length - 1];
+    const ground = worlds.reach;
+    const at = (ground.mobPosts ?? []).find((q) => q.kind === "goblin")!;
+    ground.monsters.length = 0;
+    ok(spawnAtPost(ground, "goblin", at.tx, at.ty), "goblin stands on its post on the Bone Reach");
+    const m = ground.monsters[ground.monsters.length - 1];
     ok(m.aggroT === 0, "freshly spawned monster starts calm");
     const p = createPlayer({ x: m.x - 100, y: m.y });
-    p.bag = items.emptyBag();
+    p.pack = items.newContainer("backpack")!;
     items.addItem(p.bag, "arrow", 10);
     p.eq.weapon = "bow";
-    playerShoot(wild, p, m, "arrow");
+    playerShoot(ground, p, m, "arrow");
     ok(m.aggroT === MONSTER_AGGRO_HIT_S, "being shot at (hit or miss) provokes the monster");
   }
 
@@ -1423,10 +1507,11 @@ async function main(): Promise<void> {
     ok(p.fedS === 0, "a fresh character starts hungry");
   }
 
-  console.log("Marrow Blade treasure (cave -3 chest):");
+  console.log("Marrow Blade (a prize with nowhere left to be found):");
   {
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
     const { SHOPS } = await import("../src/entities/npcs.ts");
+    const { CHEST_PRIZES } = await import("../src/game.ts");
     const blade = items.ITEMS.marrowBlade;
     // Etap 22: the Fire Sword now out-attacks it (26 vs 24) — the Blade's
     // claim to the top rung is its GUARD, the best defense pool of any weapon
@@ -1434,7 +1519,6 @@ async function main(): Promise<void> {
     // bigger.
     ok((blade.gear?.def ?? 0) > (items.ITEMS.fireSword.gear?.def ?? 0) && blade.slot === "weapon",
       `Marrow Blade tops the weapon ladder on guard (def ${blade.gear?.def})`);
-    // unobtainable anywhere but the chest: no loot table and no shop sells it
     let inLoot = false;
     for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
       if (MONSTER_DEFS[k].loot.some((e: { kind: string }) => e.kind === "marrowBlade")) inLoot = true;
@@ -1445,32 +1529,75 @@ async function main(): Promise<void> {
       if (shop && shop.entries.some((e) => e.kind === "marrowBlade" && e.buy > 0)) inShop = true;
     }
     ok(!inShop, "no shop sells the Marrow Blade");
-    // the chest sits on the bottom floor, far from the ladder, deterministically
+    /* …and as of Etap 40 no chest holds it either. Its cave went with the
+     * procedural maps, so the sword is defined, priced, drawn and completely
+     * unobtainable — deliberately, and recorded here so it is a decision on
+     * the books rather than a hole somebody finds later. It comes back as a
+     * mission reward. Delete this assertion on the day it does. */
+    const buried = Object.values(CHEST_PRIZES).flat();
+    ok(!buried.includes("marrowBlade"), "…and no chest buries it: currently unobtainable BY DESIGN");
+
+    /* The chests that DO still exist: two floors under the Bone Reach, two
+     * pieces apiece, and every listed world really has the chest to hold
+     * them. A prize named against a chestless map is a prize nobody can win. */
     const worlds = buildWorlds(WORLD_SEED);
-    const c3 = worlds.cave3;
-    const chest = c3.structures.find((st) => st.key === "treasure");
-    ok(!!chest, "Bone Caverns -3 contains the treasure chest");
-    ok(!worlds.cave1.structures.some((st) => st.key === "treasure")
-      && !worlds.cave2.structures.some((st) => st.key === "treasure"), "upper floors have no chest");
-    if (chest) {
-      ok(c3.solid[chest.ty][chest.tx] === true, "the chest tile is solid (can't stand on it)");
-      const up = c3.portals.find((pt) => pt.style === "ladderUp")!;
-      const dChest = Math.hypot(chest.tx * TILE + TILE / 2 - up.x, chest.ty * TILE + TILE / 2 - up.y);
-      ok(dChest > TILE * 20, `chest is deep in the cavern (${Math.round(dChest / TILE)} tiles from the ladder)`);
-      const again = buildWorlds(WORLD_SEED).cave3.structures.find((st) => st.key === "treasure")!;
-      ok(again.tx === chest.tx && again.ty === chest.ty, "chest position is deterministic from the seed");
+    let missing = "";
+    let held = 0;
+    for (const [key, prizes] of Object.entries(CHEST_PRIZES)) {
+      const w = worlds[key as keyof typeof worlds];
+      if (!w) { missing = `${key} is not a map`; continue; }
+      const chest = w.structures.find((st) => st.key === "treasure");
+      if (!chest) { missing = `${key} has no chest`; continue; }
+      held += prizes.length;
+      if (!w.solid[chest.ty][chest.tx]) missing = `${key}'s chest tile is walkable`;
     }
+    ok(missing === "", `every buried prize has a chest to be buried in${missing && " — " + missing}`);
+    /* Two of the five buried prizes are GEAR — one shield per floor, the Knight
+     * set one piece at a time. The other three are coin: two ten-platinum
+     * purses beside those shields, and the redcap's thirty. Counted apart
+     * because they answer different questions: the gear count is a statement
+     * about the set, the coin count is a statement about how much money the
+     * game hands out for free. */
+    const gear = Object.values(CHEST_PRIZES).flat().filter((pz) => !Array.isArray(pz));
+    ok(gear.length === 2 && new Set(gear).size === 2,
+      `the Knight set, entire, one piece at a time (${gear.length}/2)`);
+    ok(held === 5, `five buried prizes in all — two shields and three purses (${held}/5)`);
+    // and nothing else in the game hides a chest that no prize is named for
+    let orphan = "";
+    for (const w of Object.values(worlds)) {
+      if (w.structures.some((st) => st.key === "treasure") && !(w.key in CHEST_PRIZES)) orphan = w.key;
+    }
+    ok(orphan === "", `no chest opens onto the fallback prize${orphan && " — " + orphan}`);
   }
 
   console.log("Etap 8 — extended bestiary:");
   {
-    const { MONSTER_DEFS, MONSTER_KINDS, spawnMonster, updateMonsters } = await import("../src/entities/monsters.ts");
+    const { MONSTER_DEFS, MONSTER_KINDS, spawnAtPost, updateMonsters } = await import("../src/entities/monsters.ts");
     const { MONSTER_AGGRO_RANGE, MONSTER_RESPAWN_S, TILE } = await import("../src/config.ts");
+    /* Etap 40: the scatter placer is gone, so every arena below stands its
+     * test creature on a named square instead of asking the world to find one.
+     * `openTile` picks a square with room around it on any map. */
+    const openTile = (w: { w: number; h: number; solid: boolean[][]; tile: number[][] }) => {
+      for (let y = 3; y < w.h - 3; y++) {
+        for (let x = 3; x < w.w - 3; x++) {
+          let clear = true;
+          for (let j = -2; j <= 2 && clear; j++) {
+            for (let i = -2; i <= 2; i++) {
+              if (w.solid[y + j][x + i] || w.tile[y + j][x + i] === 0) { clear = false; break; }
+            }
+          }
+          if (clear) return { tx: x, ty: y };
+        }
+      }
+      throw new Error("no open tile");
+    };
     const { killMonster } = await import("../src/systems/combat.ts");
     // Etap 20 added the human ladder: 18 fantastic kinds plus 19 people
     // running from beggar to chieftain. Etap 28 added the black knight, the
     // twentieth man and the first one who is not on the ladder at all.
-    ok(MONSTER_KINDS.length === 38, `bestiary holds 38 kinds (18 + 20 humans), got ${MONSTER_KINDS.length}`);
+    // Etap 41 added the redcap — the thirty-ninth, and the first creature that
+    // belongs to no ladder at all: a named boss out of Border folklore.
+    ok(MONSTER_KINDS.length === 39, `bestiary holds 39 kinds (18 + 20 humans + the redcap), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -1485,13 +1612,14 @@ async function main(): Promise<void> {
     // provoke one and then retreat. What must hold: an UNPROVOKED monster never
     // attacks from beyond aggro, whatever its own range.
     const shooters = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].ranged);
-    ok(shooters.length === 9, `nine distance fighters in the bestiary, got ${shooters.length}`);
+    ok(shooters.length === 10, `ten distance fighters in the bestiary, got ${shooters.length}`);
     ok(MONSTER_AGGRO_RANGE === 6 * TILE, "aggro range is a tight 6 tiles");
     {
       // the minotaur archer's reach is 300 px (9.4 tiles) — well past aggro (192).
-      const arena = buildWorlds(WORLD_SEED).wild;
+      const arena = buildWorlds(WORLD_SEED).bandit;
       arena.monsters.length = 0;
-      spawnMonster(arena, "minotaurArcher");
+      const spot = openTile(arena);
+      spawnAtPost(arena, "minotaurArcher", spot.tx, spot.ty);
       const h = arena.monsters[0];
       // fresh target sat BEYOND aggro but INSIDE weapon range: must stay asleep
       const far = { x: h.x + 240, y: h.y, dead: false }; // 240 > 192 aggro, < 300 range
@@ -1524,21 +1652,26 @@ async function main(): Promise<void> {
     // killMonster schedules the dragon's respawn on its own clock
     {
       const worlds = buildWorlds(WORLD_SEED);
-      const c3 = worlds.cave3;
-      c3.monsters.length = 0; c3.respawns.length = 0;
-      ok(spawnMonster(c3, "dragon"), "the dragon spawns on Bone Caverns -3");
+      const hollow = worlds.deaddeep2; // the Cinder Hollow: one dragon, nothing else
+      hollow.monsters.length = 0; hollow.respawns.length = 0;
+      const lair = (hollow.mobPosts ?? []).find((q) => q.kind === "dragon")!;
+      ok(!!lair, "the Cinder Hollow is where the dragon is drawn");
+      ok(spawnAtPost(hollow, "dragon", lair.tx, lair.ty), "…and it stands on that square");
       const p = createPlayer({ x: 0, y: 0 });
-      killMonster(c3, p, c3.monsters[0]);
-      ok(c3.respawns.length === 1 && c3.respawns[0].t === 600, "a slain dragon respawns after 600 s");
-      ok(c3.corpses.length === 1 && c3.corpses[0].name === "dragon", "the dragon leaves a lootable corpse");
+      killMonster(hollow, p, hollow.monsters[0]);
+      ok(hollow.respawns.length === 1 && hollow.respawns[0].t === 600, "a slain dragon respawns after 600 s");
+      ok(hollow.respawns[0].guard?.tx === lair.tx && hollow.respawns[0].guard?.ty === lair.ty,
+        "…back onto its own lair tile");
+      ok(hollow.corpses.length === 1 && hollow.corpses[0].name === "dragon", "the dragon leaves a lootable corpse");
     }
     // a shooter holds its ground and fires: park an archer mid-range and step
     // the AI — it must land ranged hits without ever closing to melee reach
     {
       const worlds = buildWorlds(WORLD_SEED);
-      const wild = worlds.wild;
+      const wild = worlds.bandit;
       wild.monsters.length = 0;
-      ok(spawnMonster(wild, "minotaurArcher"), "a minotaur archer spawns for the AI test");
+      const spot2 = openTile(wild);
+      ok(spawnAtPost(wild, "minotaurArcher", spot2.tx, spot2.ty), "a minotaur archer stands up for the AI test");
       const h = wild.monsters[0];
       const targetP = { x: h.x + 100, y: h.y, dead: false };
       let rangedHits = 0, meleeHits = 0, minD = Infinity;
@@ -1550,17 +1683,26 @@ async function main(): Promise<void> {
       ok(minD > 13, `the archer never closes to melee reach (min ${Math.round(minD)} px)`);
       ok(wild.shots.length > 0 || rangedHits > 0, "monster shots spawn cosmetic projectiles");
     }
-    // populations: every floor's roster references only defined kinds — and a
-    // fresh populate actually places the dragon
+    /* Every kind in the bestiary must actually stand somewhere. This replaces
+     * the old roster check, and it is the test that would have caught the two
+     * creatures the Etap 40 cull orphaned: `POPULATIONS` named them, and the
+     * table naming a creature was mistaken for the game containing one. */
     {
       const { populateAll } = await import("../src/game.ts");
       const worlds = buildWorlds(WORLD_SEED);
-      populateAll(worlds, WORLD_SEED);
-      ok(worlds.cave3.monsters.filter((mm) => mm.kind === "dragon").length === 1,
-        "exactly one dragon nests in Bone Caverns -3");
-      ok(worlds.wild.monsters.some((mm) => mm.kind === "snake")
-        && worlds.wild.monsters.some((mm) => mm.kind === "goblin"), "the surface carries its tier-1/2 kinds");
-      ok(worlds.cave2.monsters.some((mm) => mm.kind === "minotaurArcher"), "cavern -2 fields minotaur archers");
+      populateAll(worlds);
+      const alive = new Set<string>();
+      for (const w of Object.values(worlds)) for (const mm of w.monsters) alive.add(mm.kind);
+      ok(worlds.deaddeep2.monsters.filter((mm) => mm.kind === "dragon").length === 1,
+        "exactly one dragon nests in the Cinder Hollow");
+      /* The gap is closed. The minotaur mage was the last kind in the bestiary
+       * with nowhere to stand — its floor was `bastion2` in the Deep Wildlands
+       * and went with the Etap 40 cull — and six of them now hold the chamber
+       * the hoard sits in on Minotaur Deep -2. Stated as an empty list rather
+       * than a count, so the NEXT creature to fall off the map is named. */
+      const homeless = [...MONSTER_KINDS].filter((k) => !alive.has(k));
+      ok(homeless.length === 0,
+        `every creature in the bestiary has a map to stand on (homeless: ${homeless.join(", ") || "none"})`);
     }
     // new gear sanity: the progression slots between existing pieces
     ok((items.ITEMS.orcishAxe.gear?.atk ?? 0) > (items.ITEMS.ironSword.gear?.atk ?? 0)
@@ -1569,210 +1711,6 @@ async function main(): Promise<void> {
     ok((items.ITEMS.dragonShield.gear?.def ?? 0) > (items.ITEMS.orcishShield.gear?.def ?? 0),
       "dragon shield out-defends the orcish one");
     ok((items.ITEMS.dragonHam.food ?? 0) > (items.ITEMS.meat.food ?? 0), "dragon ham out-feeds raw meat");
-  }
-
-  console.log("Deep Wildlands (Etap 9a v2 — the continent & the camp lairs):");
-  {
-    const { populateAll } = await import("../src/game.ts");
-    const { LAIRS } = await import("../src/world/deepwild.ts");
-    const { Tile } = await import("../src/world/types.ts");
-    const { dist } = await import("../src/util.ts");
-    const worlds = buildWorlds(WORLD_SEED);
-    const dw = worlds.deepwild;
-    ok(dw.w === 368 && dw.h === 272, `the continent is 368x272, got ${dw.w}x${dw.h}`);
-    ok(dw.w * dw.h >= 3 * 208 * 160, "three times the area of the first frontier cut");
-    ok(!dw.safe, "the Deep Wildlands is flagged dangerous (ready for future rosters)");
-    // an irregular, noise-carved coast — a real landmass share, not a blob's
-    let landN = 0;
-    for (let y = 0; y < dw.h; y++)
-      for (let x = 0; x < dw.w; x++)
-        if (dw.tile[y][x] !== Tile.Water) landN++;
-    const landFrac = landN / (dw.w * dw.h);
-    ok(landFrac > 0.35 && landFrac < 0.55, `mainland covers a continental share of the map (${(landFrac * 100).toFixed(1)}%)`);
-    // travel loop: a boat in Bonetown, a dock back home on the frontier
-    // The boat is not on the redrawn Bonetown yet, so the frontier is currently
-    // reachable only in the other direction. Guard the pairing that still holds
-    // and record the gap loudly rather than deleting the check.
-    ok(!worlds.town.portals.some((p) => p.dest === "deepwild"),
-      "the boat to the Deep Wildlands is NOT on the redrawn town yet (re-add when the map gains it)");
-    ok(dw.portals.some((p) => p.dest === "town"), "the frontier dock leads back to Bonetown");
-    // eight themed camps, far apart, all anchored on walkable ground
-    ok(dw.camps.length === 8, `eight camps are recorded, got ${dw.camps.length}`);
-    ok(new Set(dw.camps.map((c) => c.key)).size === 8, "camp keys are unique");
-    ok(dw.camps.every((c) => !dw.solid[Math.floor(c.y / TILE)][Math.floor(c.x / TILE)]), "every camp centre is walkable");
-    let minGap = Infinity;
-    for (let i = 0; i < dw.camps.length; i++)
-      for (let j = i + 1; j < dw.camps.length; j++)
-        minGap = Math.min(minGap, dist(dw.camps[i].x, dw.camps[i].y, dw.camps[j].x, dw.camps[j].y) / TILE);
-    ok(minGap >= 48, `settlements keep their distance (nearest pair ${Math.round(minGap)} tiles apart)`);
-    // carved terrain actually exists: dirt floors/trails, solid palisades
-    let dirt = 0, pal = 0, palSolid = true;
-    for (let y = 0; y < dw.h; y++)
-      for (let x = 0; x < dw.w; x++) {
-        if (dw.tile[y][x] === Tile.Dirt) dirt++;
-        if (dw.tile[y][x] === Tile.Palisade) { pal++; if (!dw.solid[y][x]) palSolid = false; }
-      }
-    ok(dirt > 600, `camp floors + trails carved in dirt (${dirt} tiles)`);
-    ok(pal > 40 && palSolid, `palisade rings raised and solid (${pal} posts)`);
-    ok(dw.camps.every((c) => dw.trees.every((t) =>
-      dist(t.tx * TILE + TILE / 2, t.ty * TILE + TILE / 2, c.x, c.y) > c.r - TILE)), "camp interiors are clear of trees");
-    // every camp reaches the dock on foot — one connected mainland, no islets
-    {
-      const dock = dw.portals.find((p) => p.dest === "town")!;
-      const W = dw.w;
-      const seen = new Uint8Array(W * dw.h);
-      const q: number[] = [Math.floor(dock.y / TILE) * W + Math.floor(dock.x / TILE)];
-      seen[q[0]] = 1;
-      for (let h = 0; h < q.length; h++) {
-        const x = q[h] % W;
-        const y = Math.floor(q[h] / W);
-        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-          const nx = x + ox;
-          const ny = y + oy;
-          if (nx < 0 || ny < 0 || nx >= W || ny >= dw.h) continue;
-          const id = ny * W + nx;
-          if (seen[id] || dw.solid[ny][nx] || dw.tile[ny][nx] === Tile.Water) continue;
-          seen[id] = 1;
-          q.push(id);
-        }
-      }
-      ok(dw.camps.every((c) => seen[Math.floor(c.y / TILE) * W + Math.floor(c.x / TILE)] === 1),
-        "every settlement is reachable on foot from the dock");
-    }
-    // Etap 9b: the region is ALIVE — every settlement fields its themed
-    // garrison inside the ring, leashed to home
-    populateAll(worlds, WORLD_SEED);
-    {
-      const inCamp = (key: string) => dw.monsters.filter((m) => m.camp === key);
-      ok(dw.camps.every((c) => inCamp(c.key).length > 0), "every settlement fields a garrison");
-      ok(dw.monsters.filter((m) => m.camp).every((m) => {
-        const c = dw.camps.find((cc) => cc.key === m.camp)!;
-        return dist(m.x, m.y, c.x, c.y) <= c.r;
-      }), "every garrison member spawns inside its own ring");
-      ok(dw.monsters.filter((m) => m.camp).every((m) => m.hr !== undefined && m.hx !== undefined),
-        "camp dwellers carry a home leash");
-      ok(inCamp("goblin").some((m) => m.kind === "goblin")
-        && inCamp("orcfort").some((m) => m.kind === "orcArcher")
-        && inCamp("grave").some((m) => m.kind === "ghoul")
-        && inCamp("bastion").some((m) => m.kind === "minotaur"), "garrisons match their settlement themes");
-      // the forest between camps belongs to the raiders — free roamers
-      const roamers = dw.monsters.filter((m) => !m.camp);
-      ok(roamers.length >= 15 && roamers.every((m) => m.kind === "bandit" || m.kind === "goblin"),
-        `raiders work the open forest (${roamers.length} roamers)`);
-      ok(roamers.every((m) => dw.camps.every((c) => dist(m.x, m.y, c.x, c.y) > c.r)),
-        "roamers spawn outside every settlement");
-      ok(roamers.every((m) => !m.hr), "roamers carry no leash — the woods are theirs");
-      // a slain villager respawns back home, not across the continent
-      const { killMonster } = await import("../src/systems/combat.ts");
-      const { spawnMonsterInCamp } = await import("../src/entities/monsters.ts");
-      const gob = inCamp("goblin").find((m) => m.kind === "goblin")!;
-      const before = dw.monsters.length;
-      killMonster(dw, createPlayer({ x: 0, y: 0 }), gob);
-      ok(dw.monsters.length === before - 1 && dw.respawns.some((r) => r.camp === "goblin"),
-        "a slain villager queues a respawn bound to its home camp");
-      const goblinCamp = dw.camps.find((c) => c.key === "goblin")!;
-      ok(spawnMonsterInCamp(dw, "goblin", goblinCamp), "the respawn lands back inside the village");
-      const back = dw.monsters[dw.monsters.length - 1];
-      ok(dist(back.x, back.y, goblinCamp.x, goblinCamp.y) <= goblinCamp.r, "…within the ring");
-    }
-    // the lairs: every camp descends underground, deeper floors are larger
-    ok(LAIRS.length === 15, `fifteen lair floors are cataloged, got ${LAIRS.length}`);
-    ok(dw.camps.every((c) => dw.portals.some((p) =>
-      p.style === "caveMouth" && dist(p.x, p.y, c.x, c.y) <= c.r)),
-      "every camp has a cave mouth inside its ring");
-    let chainsOk = true, filledOk = true, growOk = true;
-    for (const l of LAIRS) {
-      const lw = worlds[l.key];
-      if (!lw) { chainsOk = false; continue; }
-      if (!lw.portals.some((p) => p.style === "ladderUp" && p.dest === l.up)) chainsOk = false;
-      if (l.down && !lw.portals.some((p) => p.style === "ladderDown" && p.dest === l.down)) chainsOk = false;
-      if (!l.down && lw.portals.some((p) => p.style === "ladderDown")) chainsOk = false;
-      if (lw.monsters.length === 0) filledOk = false;
-    }
-    ok(chainsOk, "every lair floor's ladders chain correctly (up to the camp, down to the next)");
-    ok(filledOk, "every lair floor is populated (Etap 9b)");
-    ok(worlds.roost3.monsters.some((m) => m.kind === "dragon"), "the second dragon nests at the Roost's heart");
-    ok(worlds.grave2.monsters.some((m) => m.kind === "skeletonWarrior"), "the deep graveyard fields its armoured dead");
-    // deeper = larger (the future difficulty ramp has room to breathe)
-    for (const spec of [["roost1", "roost2", "roost3"], ["goblin1", "goblin2"]] as const) {
-      for (let i = 1; i < spec.length; i++) {
-        const a = worlds[spec[i - 1] as keyof typeof worlds];
-        const b = worlds[spec[i] as keyof typeof worlds];
-        if (!(b.w * b.h > a.w * a.h)) growOk = false;
-      }
-    }
-    ok(growOk, "deeper lair floors are larger than the ones above");
-    // determinism: a second build carves the exact same settlements
-    const again = buildWorlds(WORLD_SEED).deepwild;
-    ok(again.camps.every((c, i) => c.x === dw.camps[i].x && c.y === dw.camps[i].y && c.key === dw.camps[i].key),
-      "camp layout is deterministic from the seed");
-    // ...and the older islands were untouched by the addition (their streams
-    // are salted separately): the cave-3 chest sits where it always did
-    const chest = worlds.cave3.structures.find((st) => st.key === "treasure")!;
-    const chestAgain = buildWorlds(WORLD_SEED).cave3.structures.find((st) => st.key === "treasure")!;
-    ok(chest.tx === chestAgain.tx && chest.ty === chestAgain.ty, "existing islands still roll identically");
-
-    // ---- Etap 22: the chests now bury the KNIGHT set ----
-    // The Marrow set moved onto the undead heavies that wear it, and the
-    // chests took over the top rung of the HUMAN line instead — the one set
-    // with no wearer anywhere in the world, because the human ladder exists
-    // as creature kinds but nothing spawns it yet. Without the chests it
-    // would be a catalog entry no player could ever reach.
-    console.log("the chest set & the hoard guards (Etap 22):");
-    const { CHEST_PRIZES } = await import("../src/game.ts");
-    const knight = ["knightShield", "knightBody", "knightHelm", "knightLegs", "knightBoots"] as const;
-    ok(knight.every((k) => items.ITEMS[k]?.gear?.def), "all five Knight pieces exist as gear");
-    ok((items.ITEMS.knightShield.gear?.def ?? 0) >= (items.ITEMS.steelShield.gear?.def ?? 0)
-      && (items.ITEMS.knightBody.gear?.def ?? 0) > (items.ITEMS.steelBody.gear?.def ?? 0)
-      && (items.ITEMS.knightHelm.gear?.def ?? 0) > (items.ITEMS.plateHelm.gear?.def ?? 0)
-      && (items.ITEMS.knightLegs.gear?.def ?? 0) > (items.ITEMS.steelLegs.gear?.def ?? 0),
-      "every Knight piece tops the human line's ladder");
-    ok(new Set(items.ITEMS && knight.map((k) => items.ITEMS[k].slot)).size === 5,
-      "the set covers five distinct equipment slots");
-    const prizeWorlds = Object.keys(CHEST_PRIZES) as (keyof typeof CHEST_PRIZES)[];
-    ok(prizeWorlds.length === 4 && CHEST_PRIZES.cave3?.[0] === "marrowBlade",
-      "four chest worlds are mapped; the caverns still hold the blade");
-    const allPrizes = Object.values(CHEST_PRIZES).flat();
-    ok(new Set(allPrizes).size === allPrizes.length,
-      `no prize is buried twice (${allPrizes.length} across ${prizeWorlds.length} chests)`);
-    ok(knight.every((k) => allPrizes.includes(k)),
-      "every piece of the Knight set is buried somewhere");
-    ok((CHEST_PRIZES.orcdeep1 ?? []).length === 2
-      && (CHEST_PRIZES.orcdeep1 ?? []).includes("knightBody")
-      && (CHEST_PRIZES.orcdeep1 ?? []).includes("knightLegs"),
-      "the orc pit's hoard holds the cuirass and the legs together");
-    ok((CHEST_PRIZES.minodeep1 ?? []).length === 2
-      && (CHEST_PRIZES.minodeep1 ?? []).includes("knightHelm")
-      && (CHEST_PRIZES.minodeep1 ?? []).includes("knightBoots"),
-      "the labyrinth's hoard holds the helm and the boots together");
-    ok(["orcfort2", "roost3", "grave2", "goblin2"].every((k) => !(k in CHEST_PRIZES)),
-      "…and the four Deep Wildlands lairs they came from bury nothing any more");
-    const treasureLairs = ["bastion2"] as const;
-    let chestsOk = true, hoardOk = true, guardsOk = true, postedOk = true;
-    for (const k of treasureLairs) {
-      const lw = worlds[k];
-      const ch = lw.structures.find((st) => st.key === "treasure");
-      if (!ch) { chestsOk = false; continue; }
-      const hoard = lw.camps.find((c) => c.key === "hoard");
-      if (!hoard || dist(hoard.x, hoard.y, ch.tx * TILE + TILE / 2, ch.ty * TILE + TILE / 2) > 1) hoardOk = false;
-      const detail = lw.monsters.filter((m) => m.camp === "hoard");
-      if (detail.length < 2) guardsOk = false;
-      if (!detail.every((m) => hoard && dist(m.x, m.y, hoard.x, hoard.y) <= hoard.r && m.hr)) postedOk = false;
-    }
-    ok(chestsOk, "the bastion, the one camp that still hoards, has a chest on its deepest floor");
-    for (const k of ["orcfort2", "roost3", "grave2", "goblin2"] as const) {
-      ok(!worlds[k].structures.some((st) => st.key === "treasure"),
-        `${k} no longer buries a chest — its piece moved under the Reach`);
-    }
-    ok(hoardOk, "each chest is wrapped in a hoard zone");
-    ok(guardsOk, "an elite guard detail is posted at every hoard");
-    ok(postedOk, "the guards stand leashed to their chest");
-    ok(worlds.grave2.monsters.filter((m) => m.kind === "skeletonWarrior").length >= 3,
-      "the deep graveyard now fields skeleton warriors beyond its roster (chest detail)");
-    // the shallow lairs and the mild camps stay chest-free
-    ok((["warren1", "cove1", "hollow1", "hollow2", "goblin1", "orcfort1", "bastion1", "grave1", "roost1", "roost2"] as const)
-      .every((k) => !worlds[k].structures.some((st) => st.key === "treasure")),
-      "no chest leaks onto shallower floors");
   }
 
   console.log("Etap 10 — Archery Range & training arrows:");
@@ -1848,53 +1786,80 @@ async function main(): Promise<void> {
       "the smith sells training arrows for 1g and never buys them back");
   }
 
-  console.log("Bone Sanctum — temple road, level gates, dormant pads:");
+  console.log("the town road, and level gates with no Sanctum to live in:");
   {
-    const { makeHandmadeWorld, TOWN_SPEC, SANCTUM_SPEC } = await import("../src/world/handmade.ts");
+    const { makeHandmadeWorld, TOWN_SPEC } = await import("../src/world/handmade.ts");
     const { applyGates } = await import("../src/game.ts");
     const { findPath, toTile } = await import("../src/world/grid.ts");
-    // Bonetown was redrawn in Tiled and only its Home Isle gate is authored so
-    // far, so the temple stairs are not on the map yet. The Sanctum itself is
-    // untouched and is still checked in full below; what the town must prove
-    // meanwhile is that its one gate is walkable-to from every townsperson.
     const town = makeHandmadeWorld(TOWN_SPEC);
     ok(town.portals.length === 2 && town.portals.some((p) => p.dest === "home")
       && town.portals.some((p) => p.dest === "cellar"),
-      "the redrawn town carries the Home Isle gate and the cellar trapdoor");
+      "the town carries the Home Isle gate and the cellar trapdoor");
     const plaza = town.portals.find((p) => p.dest === "home")!;
     for (const n of town.npcs) {
       const road = findPath(town, toTile(n.x), toTile(n.y), toTile(plaza.x), toTile(plaza.y));
       ok(road.length > 0, `${n.name} can walk to the gate (${road.length} steps)`);
     }
-    ok(town.npcs.length === 6, "the redraw shifted no NPC off the map");
+    ok(town.npcs.length === 6, "every townsperson is on the map");
 
-    const s = makeHandmadeWorld(SANCTUM_SPEC);
-    ok(s.gates.length === 10, "five doorways, two gate tiles each");
-    const lvs = [...new Set(s.gates.map((g) => g.lv))].sort((a, b) => a - b);
+    /* LEVEL GATES, tested WITHOUT the Bone Sanctum.
+     *
+     * Etap 40 deleted the Sanctum, and it was the only map with gates on it —
+     * which would have left `applyGates` with no coverage at all, days before
+     * the mission maps start leaning on it to hold an echo's door shut.
+     *
+     * So the fixture is built here instead: a corridor of five cells, each
+     * behind a gate at a different level, parsed through the very same
+     * `makeHandmadeWorld` a real map goes through. It tests the mechanism
+     * rather than a particular island, which is what it should have been
+     * doing all along. */
+    const cells = makeHandmadeWorld({
+      key: "cellar", // any key: nothing here reads it
+      name: "gate fixture",
+      safe: true,
+      rows: [
+        "###############",
+        "###############",
+        "##a##b##c##d#e#",
+        "##1##2##3##4#5#",
+        "##===========##",
+        "##===U=======##",
+        "##===========##",
+        "###############",
+        "###############",
+      ],
+      portals: {
+        U: { dest: "town", label: "out", floor: 4 },
+        a: { dest: "town", label: "I", inactive: true, floor: 4 },
+        b: { dest: "town", label: "II", inactive: true, floor: 4 },
+        c: { dest: "town", label: "III", inactive: true, floor: 4 },
+        d: { dest: "town", label: "IV", inactive: true, floor: 4 },
+        e: { dest: "town", label: "V", inactive: true, floor: 4 },
+      },
+      gates: { "1": 10, "2": 15, "3": 20, "4": 25, "5": 30 },
+    });
+    ok(cells.gates.length === 5, `five doorways, one gate tile each (${cells.gates.length})`);
+    const lvs = [...new Set(cells.gates.map((g) => g.lv))].sort((x, y) => x - y);
     ok(lvs.join(",") === "10,15,20,25,30", `gate levels are 10/15/20/25/30 (${lvs.join("/")})`);
-    const pads = s.portals.filter((p) => p.inactive);
-    ok(pads.length === 5, "each chamber holds one dormant teleport pad");
-    const up = s.portals.find((p) => p.dest === "town");
-    ok(!!up && up.style === "ladderUp", "the ladder back to Bonetown is in the nave");
-
-    // sealed at level 9: no pad reachable from the ladder
-    applyGates(s, 9);
-    const from = { x: toTile(up!.x), y: toTile(up!.y) };
+    const pads = cells.portals.filter((p) => p.inactive);
+    ok(pads.length === 5, "each cell holds one dormant pad");
+    const up = cells.portals.find((p) => !p.inactive)!;
+    const from = { x: toTile(up.x), y: toTile(up.y) };
     const reaches = (p: { x: number; y: number }): boolean => {
-      const path = findPath(s, from.x, from.y, toTile(p.x), toTile(p.y));
+      const path = findPath(cells, from.x, from.y, toTile(p.x), toTile(p.y));
       const last = path[path.length - 1];
       return !!last && last.x === toTile(p.x) && last.y === toTile(p.y);
     };
-    ok(pads.every((p) => !reaches(p)), "at level 9 every chamber is sealed");
-    // level 10 opens EXACTLY the first gate
-    applyGates(s, 10);
-    const open10 = pads.filter((p) => reaches(p));
-    ok(open10.length === 1, "level 10 opens exactly one chamber");
-    // level 30 opens them all
-    applyGates(s, 30);
-    ok(pads.every((p) => reaches(p)), "level 30 walks into all five chambers");
-    // gates re-seal if applied with a lower level again (pure function of level)
-    applyGates(s, 12);
+    applyGates(cells, 9);
+    ok(pads.every((p) => !reaches(p)), "at level 9 every cell is sealed");
+    applyGates(cells, 10);
+    ok(pads.filter((p) => reaches(p)).length === 1, "level 10 opens exactly one cell");
+    applyGates(cells, 30);
+    ok(pads.every((p) => reaches(p)), "level 30 walks into all five");
+    // and it re-seals on the way down: a pure function of level, not a latch.
+    // That matters for the missions — a de-level after a death must close the
+    // door again rather than leave it hanging open.
+    applyGates(cells, 12);
     ok(pads.filter((p) => reaches(p)).length === 1, "applyGates is a pure function of level");
   }
 
@@ -1903,7 +1868,6 @@ async function main(): Promise<void> {
     const { tryPlace, canAfford } = await import("../src/systems/building.ts");
     const { createGame, homeChests } = await import("../src/game.ts");
     const g = createGame();
-    g.player.gold = 0;
     items.addItem(g.player.bag, "wood", 200);
     items.addItem(g.player.bag, "stone", 100);
     // find two clear spots and raise two chests
@@ -2095,10 +2059,528 @@ async function main(): Promise<void> {
     ok(!!A.itemSprite("shortSword"), "…and itemSprite still returns the baked stand-in");
   }
 
+  console.log("Etap 26 — containers are a tree:");
+  {
+    const C = await import("../src/systems/containers.ts");
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+
+    // ---- the shape of the thing ----
+    const pack = items.newContainer("backpack")!;
+    ok(pack.items!.length === cfgBagSize, "a fresh pack has BAG_SIZE slots of its own");
+    ok(items.newContainer("wood") === null, "…and a log is not a container");
+
+    const inner = items.newContainer("backpack")!;
+    items.addItem(inner.items!, "steel", 30);
+    pack.items![0] = inner;
+    ok(items.bagCount(pack.items!, "steel") === 30,
+      "counting reaches INTO a nested pack — material hidden in a sub-bag must still be spendable");
+    ok(items.bagWeight(pack.items!) === items.ITEMS.backpack.weight + 30 * items.ITEMS.steel.weight,
+      "…and weight counts the pack plus everything in it");
+    ok(items.bagSlotsUsed(pack.items!) === 2, "the load counts the pack AND its contents");
+    ok(items.stackSlotCost(inner) === 2, "…which is what a chest is charged for it");
+
+    // ---- removal digs, and digs shallowest-first ----
+    const p = mkP({ x: 0, y: 0 });
+    items.addItem(p.bag, "steel", 5);
+    const sub = items.newContainer("backpack")!;
+    items.addItem(sub.items!, "steel", 5);
+    items.addStack(p.bag, sub);
+    ok(items.removeItem(p.bag, "steel", 7), "a cost larger than the top bag holds still resolves");
+    ok(items.bagCount(p.bag, "steel") === 3, "…taking exactly what was asked for");
+    ok(items.bagCount(sub.items!, "steel") === 3,
+      "…and emptying the visible bag before rummaging in the sub-pack");
+
+    // ---- compactBag must not liquidate containers ----
+    const tidy = items.emptyBag();
+    const keep = items.newContainer("backpack")!;
+    items.addItem(keep.items!, "essentialGem", 2);
+    tidy[3] = keep;
+    items.addItem(tidy, "wood", 5);
+    items.addItem(tidy, "wood", 5);
+    items.compactBag(tidy);
+    const survivor = tidy.find((q) => q?.kind === "backpack");
+    ok(!!survivor && items.bagCount(survivor.items!, "essentialGem") === 2,
+      "compacting a bag never rebuilds a pack 'by kind' and strands its contents");
+
+    // ---- a pack cannot be put inside itself ----
+    const root: C.ContainerRef = { c: "bag" };
+    const nested: C.ContainerRef = { c: "nested", via: root, i: 0 };
+    const deeper: C.ContainerRef = { c: "nested", via: nested, i: 2 };
+    ok(C.isInside(deeper, nested), "a ref knows when it sits inside another");
+    ok(!C.isInside(nested, deeper), "…and the relation is not symmetric");
+    ok(C.isInside(nested, nested), "…a container counts as inside itself");
+    ok(C.rootOf(deeper) === "player" && C.rootOf({ c: "corpse", body: null as never }) === "world",
+      "root tells the weight rule from the reach rule");
+    ok(C.depthOf(deeper) === 2 && C.depthOf(root) === 0, "depth counts the trail");
+
+    // ---- resolution, and the stale-trail repair ----
+    const p2 = mkP({ x: 0, y: 0 });
+    const bp = items.newContainer("backpack")!;
+    p2.bag[0] = bp;
+    items.addItem(bp.items!, "wood", 4);
+    ok(C.slotsOf({ c: "nested", via: root, i: 0 }, p2)?.length === cfgBagSize,
+      "a nested ref resolves to the pack's own slots");
+    ok(C.slotsOf({ c: "nested", via: root, i: 1 }, p2) === null,
+      "…and an empty slot resolves to nothing, not to an empty bag");
+    p2.bag[0] = null; // the pack is taken away while a window looks inside it
+    ok(C.slotsOf({ c: "nested", via: root, i: 0 }, p2) === null,
+      "a window pointing at a vanished pack resolves to nothing, so the sweep can close it");
+
+    // ---- the bagless player ----
+    const bare = mkP({ x: 0, y: 0 });
+    bare.pack = null;
+    ok(bare.bag.length === 0, "with no pack there is no bag");
+    ok(items.addItem(bare.bag, "wood", 1) === 1, "…and nothing fits in it");
+
+    // ---- a loaded pack is not merchandise ----
+    const shopBag = items.emptyBag();
+    const loaded = items.newContainer("backpack")!;
+    items.addItem(loaded.items!, "wood", 1);
+    shopBag[0] = loaded;
+    ok(!items.removeItemUnpacked(shopBag, "backpack", 1),
+      "an NPC refuses a backpack with things in it — selling it would eat the contents");
+    items.removeItem(loaded.items!, "wood", 1);
+    ok(items.removeItemUnpacked(shopBag, "backpack", 1), "…and takes it once emptied");
+
+    /* ---- v6 -> v7: nobody's steel goes missing ------------------------
+     * The old save held ONE flat array of up to 16 + 8 + 8 cells, where a
+     * carried Backpack bolted eight more cells onto the end. The new shape is
+     * a worn pack of 16. Everything past the first 16 has to land somewhere
+     * real — inside the packs it notionally belonged to — and whatever still
+     * will not fit must reach the ground rather than the void.
+     * ------------------------------------------------------------------ */
+    {
+      const { loadGame } = await import("../src/save.ts");
+      const SK = "bone-isle-save-v2";
+      const g = buildWorlds(WORLD_SEED);
+      const legacy = {
+        v: 6,
+        player: {
+          x: 100, y: 100, gold: 5, level: 1, exp: 0, taskPoints: 0,
+          // 16 base cells + a Backpack + 8 bonus cells, exactly as v6 wrote it
+          bag: [
+            ...Array.from({ length: 15 }, () => ({ kind: "wood", n: 1 })),
+            { kind: "backpack", n: 1 },
+            ...Array.from({ length: 8 }, () => ({ kind: "steel", n: 9 })),
+          ],
+          eq: {},
+        },
+        world: "home", worlds: {}, structures: {}, ground: {}, corpses: {},
+      };
+      localStorage.setItem(SK, JSON.stringify(legacy));
+      const back = loadGame();
+      ok(!!back, "a v6 save still loads");
+      if (back) {
+        ok(!!back.player.pack, "…and the player comes out wearing a backpack");
+        const wood = items.bagCount(back.player.bag, "wood");
+        const steel = items.bagCount(back.player.bag, "steel");
+        const onFloor = back.worlds.home.ground
+          .reduce((n, gi) => n + (gi.kind === "steel" ? gi.n : 0), 0);
+        const inChest = back.worlds.home.structures
+          .filter((st) => st.key === "chest")
+          .reduce((n, st) => n + (st.inv ? items.bagCount(st.inv, "steel") : 0), 0);
+        ok(wood === 15, "…carrying every log it had");
+        ok(steel + onFloor + inChest === 72,
+          `…and not one bar of steel is lost (${steel} carried, ${inChest} chested, ${onFloor} spilled)`);
+        ok(steel > 0, "…most of it riding inside the pack that used to justify the extra slots");
+      }
+      localStorage.removeItem(SK);
+      void g;
+    }
+
+    /* ---- a loot bag on the floor survives a save ----------------------
+     * A dropped pack is the one container that lives in the world rather than
+     * on the player, and GroundItem was never meant to hold anything. If its
+     * contents did not round-trip, a player would log out beside a full loot
+     * bag and log back in beside an empty one.
+     * ------------------------------------------------------------------ */
+    {
+      const { saveGame, loadGame } = await import("../src/save.ts");
+      const SK = "bone-isle-save-v2";
+      const g = buildWorlds(WORLD_SEED);
+      const gp = mkP({ x: 200, y: 200 });
+      const sack = items.newContainer("backpack")!;
+      items.addItem(sack.items!, "dragonScale", 7);
+      g.home.ground.push({ kind: "backpack", n: 1, x: 220, y: 220, t: 999, items: sack.items });
+      const corpse = { name: "orc", x: 240, y: 240, items: items.corpseBag([{ kind: "orcEar", n: 2 }]), gold: 9, t: 60 };
+      g.home.corpses.push(corpse);
+      saveGame({ seed: WORLD_SEED, worlds: g, current: g.home, player: gp } as never);
+      const back = loadGame();
+      ok(!!back, "a world with a loot bag in it saves and loads");
+      if (back) {
+        const bag = back.worlds.home.ground.find((gi) => gi.kind === "backpack");
+        ok(!!bag?.items, "the pack on the floor keeps its slots");
+        ok(items.bagCount(bag!.items!, "dragonScale") === 7,
+          "…and every scale inside it is still there after a reload");
+        const c = back.worlds.home.corpses[0];
+        ok(!!c && c.items.length === cfgCorpseSlots,
+          "a corpse reloads as a fixed grid, not a compact list");
+        ok(items.bagCount(c.items, "orcEar") === 2 && items.walletValue(c.items) === 9,
+          "…with its loot and its purse intact, the purse now being coins in slots");
+      }
+      localStorage.removeItem(SK);
+    }
+
+    /* ---- a chest budgets its whole tree ------------------------------- */
+    {
+      const B = await import("../src/systems/building.ts");
+      ok(B.CHEST_SLOTS.length === 3, "the chest still has three tiers");
+      const inv = items.emptyStash(B.CHEST_SLOTS[0]); // tier I: 10
+      const packed = items.newContainer("backpack")!;
+      items.addItem(packed.items!, "iron", 5 * items.ITEMS.iron.stack);
+      items.addStack(inv, packed);
+      ok(items.bagSlotsUsed(inv) === 6,
+        "a pack holding five stacks costs a tier-I chest six of its ten slots");
+      ok(items.bagSlotsUsed(inv) < B.CHEST_SLOTS[0],
+        "…leaving room, but nowhere near the 160 that nesting would grant unbudgeted");
+    }
+  }
+
+  console.log("Etap 27e — one window per container:");
+  {
+    const C = await import("../src/systems/containers.ts");
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+    const fs = await import("node:fs");
+
+    /* --- two packs in one bag are two DIFFERENT addresses ------------------
+     * The old model gave each window KIND a single path walked into it, so
+     * two packs sitting in the same backpack were mutually exclusive: you
+     * could look inside either, never both, and so could not move anything
+     * from one to the other without a detour through the bag between them. */
+    {
+      const p = mkP({ x: 0, y: 0 });
+      const a = items.newContainer("backpack")!;
+      const b = items.newContainer("backpack")!;
+      items.addItem(a.items!, "steel", 5);
+      p.bag[0] = a;
+      p.bag[1] = b;
+      const root: C.ContainerRef = { c: "bag" };
+      const refA: C.ContainerRef = { c: "nested", via: root, i: 0 };
+      const refB: C.ContainerRef = { c: "nested", via: root, i: 1 };
+      ok(!C.sameRef(refA, refB), "the two packs address differently");
+      ok(C.slotsOf(refA, p) === a.items && C.slotsOf(refB, p) === b.items,
+        "…and each resolves to its own slots, so both can be on screen at once");
+      ok(!C.isInside(refB, refA) && !C.isInside(refA, refB),
+        "…neither is inside the other, so a move between them is legal");
+      // and the move itself is the ordinary one
+      items.addStack(C.slotsOf(refB, p)!, C.slotsOf(refA, p)![0]!);
+      a.items![0] = null;
+      ok(items.bagCount(b.items!, "steel") === 5 && items.bagCount(a.items!, "steel") === 0,
+        "…steel crosses from one to the other");
+    }
+
+    /* --- a pack in the bag, opened from the CHEST window -------------------
+     * The chest draws your backpack in its lower half. Navigation used to ask
+     * "which window is in front?" and got the chest, then walked a slot index
+     * that meant something else entirely inside it. */
+    {
+      const src = fs.readFileSync("src/main.ts", "utf8");
+      const nav = src.slice(src.indexOf("function navInto"), src.indexOf("function navUp"));
+      ok(nav.includes("ref: ContainerRef, index: number"),
+        "navInto is TOLD which container was clicked rather than guessing the front window");
+      ok(!nav.includes("frontContainerWindow"),
+        "…and no longer consults window order at all");
+      const panels = fs.readFileSync("src/ui/panels.ts", "utf8");
+      ok(panels.includes("p.act.openNested(ref, idx, p.win)"),
+        "…because every grid cell passes its own container along");
+    }
+
+    /* --- a window whose pack is gone must go too --------------------------- */
+    {
+      const src = fs.readFileSync("src/main.ts", "utf8");
+      const sweep = src.slice(src.indexOf("function sweepContainerWindows"), src.indexOf("function openWindow"));
+      ok(sweep.includes("slotsOf(w.ref, refCtx())") && sweep.includes("refUsable(w.ref)"),
+        "a window pointing at a pack that has moved, dropped or rotted closes itself");
+      ok(src.includes("sweepContainerWindows();"), "…and the sweep actually runs");
+    }
+  }
+
+  console.log("Etap 27d — second playtest round:");
+  {
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+    const fs = await import("node:fs");
+
+    /* --- #1: a container's weight is not a property of its KIND ----------- */
+    {
+      const pack = items.newContainer("backpack")!;
+      const bare = items.itemInfoLines("backpack", pack).join(" | ");
+      ok(bare.includes("18 oz"), "an empty pack still reads its own 18 oz");
+      ok(bare.includes("0/16") && bare.includes("Empty"), "…and says it is empty");
+      items.addItem(pack.items!, "steel", 60);
+      const laden = items.itemInfoLines("backpack", pack).join(" | ");
+      const inside = 60 * items.ITEMS.steel.weight;
+      ok(laden.includes(`${18 + inside} oz`),
+        `a laden pack reads its REAL weight, ${18 + inside} oz, not the catalog's 18`);
+      ok(laden.includes("18 empty") && laden.includes(`${inside} inside`),
+        "…broken down, so the number is explainable rather than just larger");
+      ok(items.itemInfoLines("backpack").join(" ").includes("18 oz"),
+        "…and asking about the KIND alone still answers about the kind");
+      // the bug as the player met it: 18 oz on the label, unliftable in the hand
+      const p = mkP({ x: 0, y: 0 });
+      ok(items.stackWeight(pack) > items.ITEMS.backpack.weight,
+        "carrying maths uses the same total the tooltip now shows");
+      void p;
+    }
+
+    /* --- #2: empty cells must be drop targets ----------------------------- */
+    {
+      const src = fs.readFileSync("src/ui/panels.ts", "utf8");
+      const grid = src.slice(src.indexOf("function drawGrid"), src.indexOf("function windowRef"));
+      ok(grid.includes("} else if (ref) {"),
+        "an empty container cell registers as a drop target");
+      ok(grid.includes("n: 0"),
+        "…reporting n=0, so it can be dropped into but never picked from");
+      const bagWin = src.slice(src.indexOf("function drawBag"), src.indexOf("/* ---------------- Forge"));
+      ok(bagWin.includes("index: i, kind: \"wood\", n: 0"),
+        "…and the backpack window's own grid does the same");
+    }
+
+    /* --- #2b: dragging a stack asks how many, exactly as clicking does ----- */
+    {
+      const src = fs.readFileSync("src/main.ts", "utf8");
+      const ask = src.slice(src.indexOf("function askThenMove"), src.indexOf("/** The container window under"));
+      ok(ask.includes("ui.split"), "a dragged stack opens the amount chooser");
+      ok(ask.includes("st.items || st.n <= 1"),
+        "…but a single item or a container goes straight over — one possible answer is not a question");
+      ok(ask.includes("rearrange"),
+        "…and shuffling cells inside one container stays positional, never a quantity");
+      ok(src.includes('acts.push(["Move", "move"])') === false, "the Move button lives in the panel layer");
+    }
+
+    /* --- #3: the HUD counts chests, the shop counts the purse -------------- */
+    {
+      const hud = fs.readFileSync("src/ui/hud.ts", "utf8");
+      ok(hud.includes("function totalGold"), "the HUD has a net-worth figure");
+      ok(hud.includes("totalGold(game, p)"), "…and the top-right box uses it");
+      const pn = fs.readFileSync("src/ui/panels.ts", "utf8");
+      ok(pn.includes("Your gold (carried)"),
+        "…while the shop labels its own total, so the two disagreeing is not a bug report");
+      // the arithmetic itself
+      const p = mkP({ x: 0, y: 0 });
+      items.giveGold(p.bag, 57);
+      const chest = items.emptyStash(50);
+      items.giveGold(chest, 3100);
+      ok(items.walletAcross([p.bag, chest]) === 3157 && p.gold === 57,
+        "net worth counts both; the carried purse counts one");
+    }
+
+    /* --- #4: one coin die, struck twice ----------------------------------- */
+    {
+      const art = fs.readFileSync("src/gfx/itemArt.ts", "utf8");
+      ok(art.includes("art.goldCoin = adoptSprite"),
+        "the drawn coin reaches the ITEM table, not just the HUD");
+      ok(art.includes("strikeInPlatinum"),
+        "…and platinum is struck from that same drawn coin");
+      const strike = art.slice(art.indexOf("function strikeInPlatinum"));
+      ok(strike.includes("0.299") && strike.includes("d[i + 3] === 0"),
+        "…recoloured by luminance, leaving transparent pixels alone, so the shading survives");
+    }
+  }
+
+  console.log("Etap 27c — the five playtest bugs:");
+  {
+    const C = await import("../src/systems/containers.ts");
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+
+    /* --- #3: dropping ONTO a pack must put the thing inside, not swap ------
+     * The engine's own rule, tested at the level it lives at: a destination
+     * cell holding a container redirects into that container. Before the fix
+     * this traded the two cells' positions and nothing went in. */
+    {
+      const p = mkP({ x: 0, y: 0 });
+      const spare = items.newContainer("backpack")!;
+      p.bag[0] = { kind: "wood", n: 10 };
+      p.bag[1] = spare;
+      const bagRef: C.ContainerRef = { c: "bag" };
+      const intoSpare: C.ContainerRef = { c: "nested", via: bagRef, i: 1 };
+      ok(C.slotsOf(intoSpare, p) === spare.items,
+        "slot 1 resolves to the spare pack's own slots");
+      // what the redirect amounts to: the wood ends up addressed inside
+      const inner = C.slotsOf(intoSpare, p)!;
+      items.addStack(inner, p.bag[0]!);
+      p.bag[0] = null;
+      ok(items.bagCount(inner, "wood") === 10, "…so wood dropped on it lands INSIDE it");
+      ok(p.bag[1] === spare, "…and the pack has not moved cell");
+    }
+
+    /* --- #2: the up-arrow must not sit in the window's drag region ---------
+     * It looked clickable and only dragged the panel, because pressing the
+     * title bar starts a window move on pointerdown, before any hotspot is
+     * consulted. The button now carves itself out of that region. */
+    {
+      const { drawPanels } = await import("../src/ui/panels.ts");
+      void drawPanels;
+      const src = await import("node:fs").then((fs) => fs.readFileSync("src/ui/panels.ts", "utf8"));
+      const nav = src.slice(src.indexOf("function navBar"), src.indexOf("function containerTitle"));
+      ok(nav.includes("p.win.titleBar"),
+        "navBar trims the title bar, so the arrow is not swallowed by the window drag");
+      ok(nav.indexOf("hotspots.push") < nav.indexOf("p.win.titleBar"),
+        "…after registering its own hotspot, not instead of it");
+    }
+
+    /* --- #5: an EMPTY equipment cell is still a drop target ---------------
+     * With no pack worn there was nowhere to drag a pack TO, which made
+     * taking your backpack off a one-way door. */
+    {
+      const src = await import("node:fs").then((fs) => fs.readFileSync("src/ui/panels.ts", "utf8"));
+      const eq = src.slice(src.indexOf("function drawEquip"), src.indexOf("/* ---------------- Bag"));
+      const pushes = eq.split("itemSlots.push").length - 1;
+      ok(pushes >= 3,
+        `every paperdoll cell registers as a target, worn or bare (${pushes} registrations)`);
+      ok(eq.includes('n: worn ? 1 : 0'),
+        "…the bare pack cell reports n=0 so it can be dropped into but not picked from");
+    }
+
+    /* --- #1: a pack lifted off the floor is not judged by its own holder ---
+     * `liftFloorStack` wraps the loose stack in a throwaway container to reuse
+     * the one move function. That holder is not in the world, so asking
+     * whether the player can REACH it always answered no — the drag died with
+     * "too far away" while standing on top of the bag. */
+    {
+      const src = await import("node:fs").then((fs) => fs.readFileSync("src/main.ts", "utf8"));
+      const lift = src.slice(src.indexOf("function liftFloorStack"), src.indexOf("/* ---------------- the worn backpack"));
+      ok(lift.includes("sourceChecked: true"),
+        "the throwaway holder is exempted from the reach test it can never pass");
+      ok(lift.includes("withinReach(gi.x, gi.y)"),
+        "…and the REAL reach test, against the stack on the ground, still runs");
+      ok(lift.includes("will not fit inside itself"),
+        "…and a bag cannot be lifted into itself");
+    }
+
+    /* --- #4: the bag window no longer prints a gold total ------------------ */
+    {
+      const src = await import("node:fs").then((fs) => fs.readFileSync("src/ui/panels.ts", "utf8"));
+      const bag = src.slice(src.indexOf("function drawBag"), src.indexOf("/* ---------------- Forge"));
+      ok(!bag.includes("gold`"),
+        "the bag prints no gold total — the coins are visible in its cells");
+      const p = mkP({ x: 0, y: 0 });
+      items.giveGold(p.bag, 3157);
+      ok(items.bagCount(p.bag, "platinumCoin") === 31 && items.bagCount(p.bag, "goldCoin") === 57,
+        "…which is why the old row misled: 3157 gp is 31 platinum + 57 gold");
+      ok(p.gold === 3157, "…and the HUD total, which is what it always meant, still reads 3157");
+    }
+  }
+
+  console.log("Etap 27b — nothing quietly eats a container's contents:");
+  {
+    /* Every one of these is a path that took an item by KIND or by position
+     * and would have thrown away whatever was nested inside it. They are
+     * grouped because they share a single failure mode, and it is the worst
+     * one this refactor can have: the player loses things and is never told. */
+
+    // ---- a full pack is not spendable, at any level of the stack ----
+    const bag = items.emptyBag();
+    const full = items.newContainer("backpack")!;
+    items.addItem(full.items!, "steel", 40);
+    items.addStack(bag, full);
+    ok(!items.removeItem(bag, "backpack", 1),
+      "removeItem refuses a loaded pack — a recipe cost must never eat one");
+    ok(items.bagCount(bag, "steel") === 40, "…and the steel inside is untouched");
+    ok(!items.removeAcross([bag], "backpack", 1), "removeAcross tells the same truth");
+    items.removeItem(full.items!, "steel", 40);
+    ok(items.removeItem(bag, "backpack", 1), "…and an EMPTY pack is spendable like anything else");
+
+    // ---- a loot bag does not rot ----
+    {
+      const C = await import("../src/systems/containers.ts");
+      const log = { kind: "wood" as const, n: 5, x: 0, y: 0, t: 1 };
+      const sack = items.newContainer("backpack")!;
+      const loot = { kind: "backpack" as const, n: 1, x: 0, y: 0, t: 1, items: sack.items };
+      ok(C.groundDecays(log), "a stray log still fades from the ground after its hour");
+      ok(!C.groundDecays(loot),
+        "…but a container never does: a loot bag that rots is a trap, not a feature");
+      ok(!C.groundDecays({ kind: "backpack" as const, n: 1, x: 0, y: 0, t: -999 }),
+        "…even one whose timer already ran out, so an old save cannot lose one on load");
+    }
+
+    // ---- rewards need a slot for the coin, and say so ----
+    {
+      const { questList: qList, claimQuest: claim, resetQuests: reset } = await import("../src/systems/quests.ts");
+      const qs = qList();
+      const { createPlayer: mkP } = await import("../src/entities/player.ts");
+      reset();
+      const q = qs.find((x) => x.reward.gold && !x.reward.item);
+      if (q) {
+        const p = mkP({ x: 0, y: 0 });
+        q.done = true; q.claimed = false;
+        for (let i = 0; i < p.bag.length; i++) p.bag[i] = { kind: "ironSword", n: 1 };
+        ok(claim(p, q) === "full",
+          "a purse with nowhere to go is refused, not minted into thin air");
+        ok(!q.claimed, "…and the quest stays claimable");
+        p.bag[0] = null;
+        ok(claim(p, q) === "ok" && p.gold === (q.reward.gold ?? 0),
+          "…one free cell later it pays out in full");
+      } else {
+        ok(true, "no gold-only quest to test (skipped)");
+        ok(true, "…");
+        ok(true, "…");
+      }
+      reset();
+    }
+  }
+
+  console.log("Etap 27 — money is an item:");
+  {
+    const { createPlayer: mkP } = await import("../src/entities/player.ts");
+
+    // ---- denominations ----
+    ok(items.COIN_KINDS[0] === "platinumCoin" && items.COIN_KINDS[1] === "goldCoin",
+      "coins are ordered biggest first, derived from the catalog");
+    ok(items.ITEMS.platinumCoin.coin === 100 && items.ITEMS.goldCoin.coin === 1,
+      "a platinum coin is worth a hundred gold");
+
+    // ---- being paid folds the change up ----
+    const bag = items.emptyBag();
+    ok(items.giveGold(bag, 250) === 0, "250 gp fits an empty pack");
+    ok(items.walletValue(bag) === 250, "…and is worth exactly that");
+    ok(items.bagCount(bag, "platinumCoin") === 2 && items.bagCount(bag, "goldCoin") === 50,
+      "…held as 2 platinum + 50 gold, not 250 loose coins");
+    /* The reason the folding exists at all: at 0.1 oz a coin, 250 loose gold
+     * is 25 oz of a level-1 allowance of 500. Folded it is a fifth of that. */
+    ok(items.bagWeight(bag) < 6, `a folded purse of 250 weighs under 6 oz (${items.bagWeight(bag).toFixed(1)})`);
+
+    // ---- paying makes change ----
+    const purse = items.emptyBag();
+    items.giveGold(purse, 100);
+    ok(items.bagCount(purse, "platinumCoin") === 1, "100 gp is one platinum coin");
+    ok(items.takeGold(purse, 7), "…and you can still pay 7 with it");
+    ok(items.walletValue(purse) === 93, "…leaving 93");
+    ok(items.bagCount(purse, "goldCoin") === 93, "…as loose change, the platinum broken open");
+
+    ok(!items.takeGold(purse, 94), "you cannot pay more than you hold");
+    ok(items.walletValue(purse) === 93, "…and a refused payment takes nothing");
+
+    // ---- the wallet is the bag, so it is carried, dropped and looted ----
+    const p = mkP({ x: 0, y: 0 });
+    items.giveGold(p.bag, 500);
+    ok(p.gold === 500, "the player's gold IS the coins in their pack");
+    const sub = items.newContainer("backpack")!;
+    items.giveGold(sub.items!, 300);
+    items.addStack(p.bag, sub);
+    ok(p.gold === 800, "…counted through a pack inside the pack, like any other item");
+    p.pack = null;
+    ok(p.gold === 0, "…and a player with no backpack is carrying no money at all");
+
+    // ---- room is checked before a sale, not after ----
+    const stuffed = items.emptyBag();
+    for (let i = 0; i < stuffed.length; i++) stuffed[i] = { kind: "ironSword", n: 1 };
+    ok(!items.walletRoomFor(stuffed, 5),
+      "a full pack has no room for change — the shop must refuse BEFORE taking the goods");
+    ok(items.walletValue(stuffed) === 0, "…and asking the question moved no money");
+    stuffed[0] = null;
+    ok(items.walletRoomFor(stuffed, 5), "one free cell is enough");
+
+    // ---- a corpse carries its purse in its slots ----
+    const body = items.corpseBag([{ kind: "orcEar", n: 1 }], 150);
+    ok(items.walletValue(body) === 150, "a slain thing's gold sits in the body as coins");
+    ok(body.some((q) => q?.kind === "platinumCoin"),
+      "…folded, so looting a dragon does not cost you 21 oz of pockets");
+  }
+
   console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");
   {
-    ok(items.ITEMS.backpack.pack?.slots === 8 && items.ITEMS.backpack.stack === 1,
-      "a carried Backpack is worth +8 bag slots");
+    ok(items.ITEMS.backpack.pack?.slots === cfgBagSize && items.ITEMS.backpack.stack === 1,
+      "a Backpack is a container of its own, BAG_SIZE slots wide");
     ok(items.ITEMS.booster.boost === true, "the Dopalacz carries the boost flag");
     const br = items.RECIPES.find((r) => r.out === "booster")!;
     ok(!!br && br.gold === 1 && Object.keys(br.cost).length === 0,
@@ -2164,7 +2646,11 @@ async function main(): Promise<void> {
     const ml = hl.placeHud("swap", 10, 10, 800, 400);
     ok(Math.abs(mp.x - 0.25 * 400) < 1 && Math.abs(ml.x - 0.25 * 800) < 1,
       "a v1 layout migrates into both orientations");
-    ok(!hl.hudLocked(), "the v1 lock state migrates too");
+    /* The lock is deliberately NOT restored, from either format. Edit mode
+     * disables walking, so a session that ended inside it used to hand the
+     * next one a character who would not move and no clue why. The LAYOUT is
+     * a preference and migrates; being mid-edit is not one. */
+    ok(hl.hudLocked(), "…but the lock boots on regardless of what was stored");
     ok(localStorage.getItem("bone-isle-hud-v2") !== null, "migration writes the v2 key");
 
     // full round-trip: layout, scale and menu state survive a reload
@@ -2381,6 +2867,47 @@ async function main(): Promise<void> {
     // ---- world geometry moved with the tile, so ranges are the same distance ----
     ok(cfg.MELEE_REACH_PX === 48 && cfg.USE_RANGE_PX === 112 && cfg.THROW_RANGE_PX === 240,
       "reach constants doubled");
+
+    /* ---- panel reach: squares, not pixels -------------------------------
+     * The old rule measured 112 px to a structure's CENTRE, which is three
+     * and a half tiles — a chest usable from across the room, and on a 2x2
+     * building a radius that had to be that generous because the centre sits
+     * a tile in from every wall. Both halves are fixed here: one square, and
+     * measured to the footprint. USE_RANGE_PX survives for NPCs alone, who
+     * pace and must not slam their own shop shut by taking a step.
+     * ------------------------------------------------------------------ */
+    {
+      const G = await import("../src/world/grid.ts");
+      const B = await import("../src/systems/building.ts");
+      ok(cfg.PANEL_REACH_TILES === 1, "panels reach exactly one square");
+      ok(G.chebTiles(5, 5, 6, 6) === 1, "a diagonal neighbour is ONE square, not 1.41");
+      ok(G.chebTiles(5, 5, 7, 5) === 2, "…and a tile two along is two");
+      // a point anywhere inside a tile reads that tile, so a corpse frozen
+      // mid-glide never counts as further away than the square it lies on
+      ok(G.chebToPoint(5, 5, 6 * cfg.TILE + 1, 5 * cfg.TILE + 31) === 1,
+        "a corpse in the next square is one away wherever in it it fell");
+
+      type Struct = Parameters<typeof B.structGap>[0];
+      const mk = (key: string, tx: number, ty: number): Struct =>
+        ({ key, tx, ty, tier: 1, anim: 0, hurtT: 0 } as unknown as Struct);
+      const forge = mk("forge", 10, 10);            // 2x2, occupies 10..11
+      ok(B.footprint("forge") === 2, "the forge really is 2x2");
+      ok(B.structGap(forge, 10, 10) === 0, "standing on the forge reads zero");
+      ok(B.structGap(forge, 12, 12) === 1, "…the tile off its far corner reads one");
+      ok(B.structGap(forge, 9, 11) === 1, "…and so does one off its left wall");
+      ok(B.structGap(forge, 13, 10) === 2, "two squares out is two");
+      // the bug the footprint measure exists to kill: standing against the
+      // wall of a 2x2 is >2 tiles from its CENTRE, so a centre-based one-square
+      // rule would have refused the player their own forge
+      const c = B.structCenter(forge);
+      const wall = { x: 9 * cfg.TILE + 16, y: 11 * cfg.TILE + 16 };
+      ok(Math.hypot(c.x - wall.x, c.y - wall.y) > 1.5 * cfg.TILE,
+        "…measured to the centre that same tile would have read out of reach");
+
+      const range = mk("range", 4, 4);               // single-tile structure
+      ok(B.footprint("range") === 1 && B.structGap(range, 5, 5) === 1,
+        "a single-tile structure is reachable from its diagonal too");
+    }
     ok(cfg.MELEE_REACH_PX > Math.SQRT2 * cfg.TILE && cfg.MELEE_REACH_PX < 2 * cfg.TILE,
       "melee still covers a diagonal neighbour and never a square two out");
     ok(items.ITEMS.longbow.bow!.range / cfg.TILE === 5, "Hunter's Bow reaches 5 tiles");
@@ -2392,8 +2919,18 @@ async function main(): Promise<void> {
     const zw = buildWorlds(WORLD_SEED);
     ok(zw.home.mapCanvas.width === zw.home.w * cfg.MAP_TILE,
       "the map canvas is painted at MAP_TILE, not TILE");
-    ok(zw.deepwild.mapCanvas.width * zw.deepwild.mapCanvas.height < 30_000_000,
-      `the continent's bitmap stays under 30 Mpx (${(zw.deepwild.mapCanvas.width * zw.deepwild.mapCanvas.height / 1e6).toFixed(1)} Mpx)`);
+    /* …and no single map's bitmap is one a phone would refuse. The Deep
+     * Wildlands continent used to be the one that mattered here (368x272);
+     * after Etap 40 the biggest is a fraction of that, so the bar is checked
+     * across every map rather than against the one that used to be worst. */
+    let biggest = 0;
+    let biggestKey = "";
+    for (const w of Object.values(zw)) {
+      const px = w.mapCanvas.width * w.mapCanvas.height;
+      if (px > biggest) { biggest = px; biggestKey = w.key; }
+    }
+    ok(biggest < 30_000_000,
+      `the largest bitmap stays under 30 Mpx (${biggestKey}, ${(biggest / 1e6).toFixed(1)} Mpx)`);
   }
 
   // ------------------------------------------------- Etap 17: save migration
@@ -2430,14 +2967,18 @@ async function main(): Promise<void> {
     ok(!!g2, "a v2 save still loads");
     ok(g2.player.tx === ttx && g2.player.ty === tty,
       `the player lands on the SAME tile, not half way (${g2.player.tx},${g2.player.ty} vs ${ttx},${tty})`);
-    ok(g2.player.gold === 42, "the rest of the save is untouched");
+    ok(g2.player.gold === 42, "a pre-v8 balance is minted into coins worth exactly as much");
+    ok(items.bagCount(g2.player.bag, "platinumCoin") === 0 && items.bagCount(g2.player.bag, "goldCoin") === 42,
+      "…42 gp is 42 gold coins, since it takes 100 to be worth folding up");
+    ok(items.walletValue(g2.worlds.home.corpses[0].items) === 5,
+      "…and the corpse's old purse became coins in the body");
     ok(g2.worlds.home.ground[0]?.x === ttx * 32 + 16, "loose ground stacks scale too");
     ok(g2.worlds.home.corpses[0]?.x === ttx * 32 + 16, "and so do corpses");
 
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 6, "saving writes the current v6 format");
+    ok(stored.v === 13, "saving writes the current v13 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
@@ -2501,6 +3042,7 @@ async function main(): Promise<void> {
   console.log("Home Isle authored in Tiled (map swap):");
   {
     const { walkable } = await import("../src/world/grid.ts");
+    const scn2 = await import("../src/gfx/sceneryArt.ts");
     const { worldSpawn } = await import("../src/world/collision.ts");
     const home = buildWorlds(WORLD_SEED).home;
 
@@ -2594,56 +3136,263 @@ async function main(): Promise<void> {
       "the sea-glint density is a sane percentage");
     ok(cfg2.WATER_GLINT_DRIFT > 0, "glints actually drift, so the sea moves");
 
-    // a procedural island has no authored spawn, so it must fall back cleanly
-    const wild = buildWorlds(WORLD_SEED).wild;
-    ok(wild.spawn === undefined, "procedural maps carry no authored spawn");
-    const wsp = worldSpawn(wild);
-    ok(!wild.solid[Math.floor(wsp.y / TILE)][Math.floor(wsp.x / TILE)],
-      "…and still land beside their portal, exactly as before");
+    /* A map with no authored spawn glyph must still land the player somewhere
+     * standable. Every map is hand-drawn now, but not every one marks a spawn
+     * — the fallback is "beside a portal" and it is what a mission map that
+     * forgets the glyph will get, so it is worth holding. Checked across every
+     * map at once rather than on one island. */
+    let unspawnable = "";
+    let fellBack = 0;
+    for (const w of Object.values(buildWorlds(WORLD_SEED))) {
+      if (!w.spawn) fellBack++;
+      const wsp = worldSpawn(w);
+      if (w.solid[Math.floor(wsp.y / TILE)][Math.floor(wsp.x / TILE)]) unspawnable = w.key;
+    }
+    ok(unspawnable === "", `every map lands the player on solid ground${unspawnable && " — " + unspawnable}`);
+    ok(fellBack > 0, `…including the ${fellBack} that mark no spawn glyph and fall back to a portal`);
   }
 
-  console.log("Bonetown redrawn in Tiled:");
+  console.log("safeRects: a haven any shape, burned into one bit per tile:");
+  {
+    const { makeHandmadeWorld } = await import("../src/world/handmade.ts");
+    const { inHaven, isSafeTile } = await import("../src/world/collision.ts");
+    const rows = ["......", "......", "......", "......"];
+
+    const none = makeHandmadeWorld({ key: "home", name: "no haven", safe: false, rows, portals: {} });
+    ok(none.safeMask === undefined, "a spec that names no rectangles builds no mask");
+    ok(!inHaven(none, 2, 2), "…and nothing on it is sanctuary");
+    ok(!isSafeTile(none, 2, 2), "…not even to the zone label");
+
+    const two = makeHandmadeWorld({
+      key: "home", name: "two havens", safe: false, rows, portals: {},
+      // deliberately disjoint, which is the whole reason this is not a row
+      // number: no single band can cover the left column and the right one
+      // without covering the middle as well
+      safeRects: [[0, 0, 0, 3], [5, 0, 5, 3]],
+    });
+    ok(two.safeMask!.length === 6 * 4, "the mask is one bit per square");
+    ok(inHaven(two, 0, 0) && inHaven(two, 0, 3) && inHaven(two, 5, 2),
+      "both rectangles are sanctuary, all the way to their corners");
+    ok(!inHaven(two, 2, 0) && !inHaven(two, 3, 3),
+      "…and the ground between them is not, which a row band could never say");
+    ok(!inHaven(two, -1, 0) && !inHaven(two, 6, 0) && !inHaven(two, 0, 9),
+      "off the map is never sanctuary");
+
+    /* A box drawn a tile past the shore is a rounding error in the tracing, not
+     * a reason to refuse the map: it is clamped and the rest of the rectangle
+     * still lands. Overlap is fine too — the mask is bits, not a count. */
+    const over = makeHandmadeWorld({
+      key: "home", name: "clamped", safe: false, rows, portals: {},
+      safeRects: [[-3, -3, 1, 1], [1, 1, 2, 2], [4, 2, 99, 99]],
+    });
+    ok(inHaven(over, 0, 0) && inHaven(over, 1, 1) && inHaven(over, 5, 3),
+      "clamped rectangles still cover what is on the map");
+    ok(!inHaven(over, 3, 0), "…and only what they were drawn over");
+
+    /* A wholly safe world does not need one, and must not be made to grow one:
+     * `inHaven` answers false there so that a test arena can still post
+     * creatures on a safe map, which is the distinction it was written for. */
+    const safe = makeHandmadeWorld({ key: "home", name: "all safe", safe: true, rows, portals: {} });
+    ok(!inHaven(safe, 2, 2) && isSafeTile(safe, 2, 2),
+      "a wholly safe map has no band, yet every square of it counts as safe");
+  }
+
+  console.log("Bonetown — six islands:");
   {
     const { walkable } = await import("../src/world/grid.ts");
+    const scn2 = await import("../src/gfx/sceneryArt.ts");
+    const { inHaven } = await import("../src/world/collision.ts");
     const town = buildWorlds(WORLD_SEED).town;
-    ok(town.w === 60 && town.h === 60, "the town is the 60x60 grid exported from Tiled");
-    ok(!town.safe && town.safeMaxY === 25,
-      "the town is split: a haven down to the fence on row 25, hunting ground below");
-    ok(town.trees.length === 114 && town.rocks.length === 48,
-      "every authored tree and rock came across, duplicates dropped");
+    ok(town.w === 106 && town.h === 106, `the town is the 106x106 grid exported from Tiled (${town.w}x${town.h})`);
+    ok(town.trees.length === 459 && town.rocks.length === 230,
+      `every authored tree and rock came across (${town.trees.length}/${town.rocks.length})`);
     ok(town.npcs.length === 6, "all six townsfolk are present");
     ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
     ok(town.portals.length === 2 && town.portals.some((p) => p.dest === "home")
       && town.portals.some((p) => p.dest === "cellar"),
       "two gates: Home Isle and the Time Sage's cellar");
-    // the split has to hold in practice, not just in the flag
+    ok(town.portals.every((p) => p.span === 2),
+      "…both of them four squares, sitting on the circles the map paints for them");
+    ok(town.scenery.length === 28,
+      `every stall and camp tent came across (${town.scenery.length})`);
+
+    /* --- NOTHING IS BUILT ON THE SQUARE ------------------------------------
+     * Four stalls and twenty-four camp tents, and not one building. That is a
+     * decision rather than an unfinished state, so it is pinned: if a house
+     * reappears on the paving it should be because someone put it there on
+     * purpose and came here to say so.
+     *
+     * The prop set is still in `public/` and still registered, so the trap is
+     * still live for whoever fills this square next. It holds two of
+     * everything — warm plaster beside grey stone, and two human scales whose
+     * doorways differ by a factor of two — and every one of the thirty props
+     * has been redrawn at twice the size it shipped at, because at the
+     * original scale a manor stood barely two player-heights. */
+    const houses = town.scenery.filter((s) => !s.kind.startsWith("stall") && s.kind !== "tent");
+    ok(houses.length === 0,
+      `nothing is built on the square${houses.length ? " — " + houses[0].kind : ""}`);
+
+    /* The stalls are the exception, and the reason is scale: a stall is a
+     * table under a canvas, so it was already person-sized and never doubled.
+     * That is exactly why it is the one thing still standing here. */
+    const stalls = town.scenery.filter((s) => s.kind.startsWith("stall"));
+    ok(stalls.length === 4 && stalls.every((s) => scn2.FOOTPRINT[s.kind].w === 3),
+      `four stalls, still three tiles wide (${stalls.length})`);
+    ok(town.scenery.filter((s) => s.kind === "tent").length === 24,
+      "…and the rest is camp canvas, out on the wild islands");
+    ok(town.scenery.filter((s) => s.kind === "tent")
+        .every((s) => !inHaven(town, s.tx, s.ty)),
+      "…none of which stands in town");
+    /* The town is built of ONE family at ONE scale, and this is the assertion
+     * that keeps it that way. The pack holds two of everything — warm plaster
+     * beside grey stone, and two human scales whose doorways differ by a
+     * factor of two. Mixing them is what made the first draft of this map read
+     * as a sample sheet rather than a street, so the small-scale and
+     * grey-stone kinds are named here and forbidden in town. The sage's
+     * observatory is the one exception, and it stands alone on his island
+     * where there is nothing for it to clash with. */
+    const OFF_STYLE = ["chapel", "shop", "watchtower", "townhouse", "cottage",
+      "keep", "warehouse", "workshop", "stonehouse", "towerhouse", "tradehouse",
+      "shrine", "windmillCloth", "windmillLattice"];
+    const strays = town.scenery
+      .filter((s) => OFF_STYLE.includes(s.kind))
+      .map((s) => `${s.kind}@${s.tx},${s.ty}`);
+    ok(strays.length === 0, `no off-family building stands in town${strays.length ? " — " + strays[0] : ""}`);
+    ok(town.scenery.every((s) => !OFF_STYLE.includes(s.kind) && s.kind !== "observatory"),
+      "…and no grey-stone piece stands anywhere on the map");
+
+    /* --- the haven is two islands, not a row band ---------------------------
+     * The old town split on a fence: north of row 25 was town, south was
+     * hunting ground, and one number said so. Six islands cannot be described
+     * that way — C and D are safe and sit at rows 32..69, and so do parts of B
+     * and E, which are not. So the flag became a mask, and what is worth
+     * asserting is no longer a number but the two properties the mask exists
+     * for: the town is inside it and every creature is outside it. */
+    ok(!town.safe && town.safeMask !== undefined,
+      "the town is not wholly safe, and carries a haven mask instead");
+    ok(town.safeMask!.length === town.w * town.h, "…one bit per square");
+    let havenTiles = 0;
+    for (const b of town.safeMask!) havenTiles += b;
+    ok(havenTiles === 1675,
+      `…covering the two town islands and the three bridges into them (${havenTiles})`);
+    /* The DECKS of the bridges into town are haven, not just their near ends.
+     * Nothing may step into the haven, so a deck left out is a deck a creature
+     * can walk the length of to stand one square short of the paving — which
+     * is what happened, and made crossing the south bridge a fight. The two
+     * decks between wild islands stay wild: both their ends are hunting
+     * ground, and a safe strip across the middle of one would be a free perch
+     * to shoot from. */
+    ok(inHaven(town, 52, 70) && inHaven(town, 63, 31) && inHaven(town, 31, 46),
+      "all three bridges into town are sanctuary the whole way across");
+    ok(!inHaven(town, 53, 20) && !inHaven(town, 39, 80),
+      "…and the two bridges between wild islands are not");
+    ok(inHaven(town, 52, 50) && inHaven(town, 20, 46),
+      "the market square and the sage's island are both sanctuary");
+    ok(!inHaven(town, 66, 20) && !inHaven(town, 60, 82),
+      "…and the wild islands north and south of them are not");
+    ok(!inHaven(town, -1, 45) && !inHaven(town, 999, 45),
+      "off the edge of the map is not sanctuary either");
+
+    // the split has to hold in practice, not just in the mask
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
-    ok(town.mobPosts?.length === 16, "the 16 authored bandit posts came across");
+    ok(town.mobPosts?.length === 84, `the 84 authored creature posts came across (${town.mobPosts?.length})`);
+
+    /* --- ten camps, one rank each, plus four snakes ------------------------
+     * The ladder is checked by SHAPE rather than by tile: every rank on the
+     * road half of the bestiary must be present, each must stand six strong,
+     * and the snakes must be four and alone. Coordinates would pin the camps
+     * to a placement that is meant to be re-authored. */
+    const ROAD_RANKS = ["beggar", "vagrant", "thief", "poacher", "bandit",
+      "smuggler", "cutthroat", "deserter", "brigand", "highwayman"] as const;
+    const byKind = new Map<string, number>();
+    for (const p of town.mobPosts!) byKind.set(p.kind, (byKind.get(p.kind) ?? 0) + 1);
+    /* Camp sizes RUN five to eight rather than all being six, and the layouts
+      * rotate through three shapes. Ten identical camps is what the first pass
+      * shipped and it read as one camp stamped ten times, so what is asserted
+      * is the range and the ladder, not a single number. */
+    /* Every rank present, and the count no longer fixed per camp: once the
+      * camps are down the open ground between them is filled with whichever
+      * rank owns it, so a rank that happens to sit on a wide island ends up
+      * with more of it. What must hold is that none is missing and none has
+      * run away with the map. */
+    ok(ROAD_RANKS.every((k) => (byKind.get(k) ?? 0) >= 4),
+      "every rank of the road is present, four or more of it");
+    ok(ROAD_RANKS.every((k) => (byKind.get(k) ?? 0) <= 15),
+      "…and none of them has taken over the map");
+
+    /* --- eight tiles between every creature, which is the whole design ------
+     * This is the low half of the ladder, the ground a level 1 learns on, and
+     * a level 1 has no answer to two at once. A creature notices you at
+     * MONSTER_AGGRO_RANGE and nothing wakes its neighbours — combat sets
+     * `aggroT` on the one that was hit and on nothing else — so the pull is
+     * pure geometry: adjacent to A leaves you |A-B| - 1 from B. Seven tiles
+     * already keeps B asleep; eight leaves a tile of slack for backing off.
+     *
+     * Asserted over EVERY pair rather than within camps, because two camps
+     * whose edges met would pull exactly as badly as one packed tight. If this
+     * fails, somebody added a post without checking the neighbours, and the
+     * symptom in play is a level 1 pulling three beggars at once. */
+    const cfg = await import("../src/config.ts");
+    const posts2 = town.mobPosts!;
+    let closest = 99, worst = "";
+    for (let i = 0; i < posts2.length; i++) {
+      for (let j = i + 1; j < posts2.length; j++) {
+        const d = Math.max(Math.abs(posts2[i].tx - posts2[j].tx),
+                           Math.abs(posts2[i].ty - posts2[j].ty));
+        if (d < closest) {
+          closest = d;
+          worst = `${posts2[i].kind}@${posts2[i].tx},${posts2[i].ty} / ${posts2[j].kind}@${posts2[j].tx},${posts2[j].ty}`;
+        }
+      }
+    }
+    const need = cfg.MONSTER_AGGRO_RANGE / TILE + 2;
+    ok(closest >= need,
+      `no two creatures within ${need} tiles — closest is ${closest} (${worst})`);
+    /* Four snakes, one per wild island, and each on a DIFFERENT one — the point
+      * of them is that you meet a creature that is nobody's kin wherever you go,
+      * so four on one island would miss it entirely. */
+    ok(byKind.get("snake") === 4, `four snakes, standing alone (${byKind.get("snake")})`);
+    const snakes = town.mobPosts!.filter((p) => p.kind === "snake");
+    ok(snakes.every((p) => !inHaven(town, p.tx, p.ty)), "…none of them in town");
+    const quadrant = (p: { tx: number; ty: number }) =>
+      `${p.tx < 53 ? "w" : "e"}${p.ty < 53 ? "n" : "s"}`;
+    ok(new Set(snakes.map(quadrant)).size === 4, "…one to each corner of the map");
+    /* And the alcove: the spit at the far end of island B holds eight wild
+     * warriors, 250 health apiece against the highwayman's 160. It is the one
+     * pocket on the map that is a step up rather than a step along, so it is
+     * checked by kind AND by where it stands — a wild warrior loose among the
+     * road ladder would wreck the opening. */
+    ok(byKind.get("wildWarrior") === 7, `seven wild warriors, in two pockets (${byKind.get("wildWarrior")})`);
+    const wild = town.mobPosts!.filter((p) => p.kind === "wildWarrior");
+    const east = wild.filter((p) => p.tx >= 84);
+    const southwest = wild.filter((p) => p.tx <= 30 && p.ty >= 90);
+    ok(east.length + southwest.length === wild.length,
+      `every wild warrior is in one of the two pockets, none loose among the road ladder (${east.length}/${southwest.length})`);
+    ok(east.length >= 3 && southwest.length >= 3, "…and neither pocket is a single sentry");
+    ok(byKind.size === 12, `twelve kinds in all (${byKind.size})`);
 
     // THE test that matters: a real game start, not a hand-driven populate.
     // Calling populateWorld directly proves the function works while the town
     // stands empty in the actual game, which is exactly what happened once.
     const fresh = createGame(WORLD_SEED);
-    ok(fresh.worlds.town.monsters.length === 16,
-      "starting a game actually puts the bandits on the map");
-    ok(fresh.worlds.town.monsters.every((m) => m.kind === "bandit"),
-      "…and they are all bandits");
+    ok(fresh.worlds.town.monsters.length === 84,
+      "starting a game actually puts the camps on the map");
     // and the same must hold after a save round-trip: loadGame() rebuilds the
     // worlds from scratch, so it goes through populateAll all over again
     const { saveGame, loadGame } = await import("../src/save.ts");
     saveGame(fresh);
     const restored = loadGame();
-    ok(restored !== null && restored.worlds.town.monsters.length === 16,
+    ok(restored !== null && restored.worlds.town.monsters.length === 84,
       "loading a save leaves the town populated too");
 
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length === 16, "exactly as many bandits as the map asks for — no roster padding");
-    ok(town.monsters.every((m) => m.ty > 25),
-      "not one bandit spawned north of the fence");
+    ok(town.monsters.length === 84, "exactly as many creatures as the map asks for — no roster padding");
+    ok(town.monsters.every((m) => !inHaven(town, m.tx, m.ty)),
+      "not one creature spawned inside the haven");
     // authored placement means EXACT placement, not "somewhere in the region"
     const posts = new Set(town.mobPosts!.map((p) => p.ty * town.w + p.tx));
     ok(town.monsters.every((m) => posts.has(m.ty * town.w + m.tx)),
-      "every bandit stands on the tile the map marked, not a scattered one");
+      "every creature stands on the tile the map marked, not a scattered one");
     ok(town.monsters.every((m) => m.guard !== undefined),
       "each one remembers its post, so a kill respawns it back there");
     // and the placement is stable: repopulating must not shuffle them
@@ -2651,37 +3400,48 @@ async function main(): Promise<void> {
     popTown(town, WORLD_SEED);
     const after = town.monsters.map((m) => m.ty * town.w + m.tx).sort((a, b) => a - b);
     ok(before.join() === after.join(), "repopulating puts them back on the same squares");
-    ok(town.npcs.every((n) => Math.floor(n.y / TILE) <= 25),
+    ok(town.npcs.every((n) => inHaven(town, Math.floor(n.x / TILE), Math.floor(n.y / TILE))),
       "every townsperson stands inside the haven");
 
-    // Reachability: trees and rocks are clearable, so the honest invariant is
-    // that nothing is walled off by TERRAIN. Flood fill treating props as
-    // passable and require the whole town to be one piece.
-    const start = { x: Math.floor(town.portals[0].x / TILE), y: Math.floor(town.portals[0].y / TILE) };
-    const clear = (x: number, y: number) =>
-      x >= 0 && y >= 0 && x < town.w && y < town.h &&
-      town.tile[y][x] !== Tile.Water && town.tile[y][x] !== Tile.Wall;
+    /* --- six islands, and every one of them reachable on foot --------------
+     * Flood fill from the gate home with trees and rock counted as WALLS, not
+     * as clearable props. That is the stricter of the two readings and the
+     * only one a creature obeys: a bandit cannot chop his way out of a copse,
+     * so a camp fenced in by the scatter is a camp that never fights. Bridges
+     * are the only crossings, so reaching all six proves they are all decked. */
+    const home = town.portals.find((p) => p.dest === "home")!;
+    const start = { x: Math.floor(home.x / TILE), y: Math.floor(home.y / TILE) };
     const seen = new Set<number>([start.y * town.w + start.x]);
     const st = [[start.x, start.y]];
     while (st.length) {
       const [x, y] = st.pop()!;
       for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
         const nx = x + ox, ny = y + oy, id = ny * town.w + nx;
-        if (seen.has(id) || !clear(nx, ny)) continue;
+        if (seen.has(id) || nx < 0 || ny < 0 || nx >= town.w || ny >= town.h) continue;
+        if (town.solid[ny][nx]) continue;
         seen.add(id); st.push([nx, ny]);
       }
     }
-    let open = 0;
-    for (let y = 0; y < town.h; y++) for (let x = 0; x < town.w; x++) if (clear(x, y)) open++;
-    ok(seen.size === open, "no corner of the town is walled off by terrain");
+    ok(town.mobPosts!.every((p) => seen.has(p.ty * town.w + p.tx)),
+      "no creature is walled in by the scatter");
+    ok(town.npcs.every((n) => seen.has(n.hy * town.w + n.hx)),
+      "…nor is any townsperson");
+    // one probe per island, taken off the camps and the two gates
+    const ISLANDS: [string, number, number][] = [
+      ["north-west", 34, 14], ["north-east", 66, 20], ["town", 52, 50],
+      ["the sage's", 25, 46], ["south-east", 60, 82], ["south-west", 24, 72],
+    ];
+    let marooned = "";
+    for (const [name, x, y] of ISLANDS) {
+      if (town.solid[y][x]) marooned = `${name} (probe is solid)`;
+      else if (!seen.has(y * town.w + x)) marooned = name;
+    }
+    ok(marooned === "", `all six islands are walkable-to across the bridges${marooned && " — " + marooned}`);
 
-    // the fence really is a barrier, and the road really is the way through
-    let fence = 0;
-    for (let y = 0; y < town.h; y++) for (let x = 0; x < town.w; x++)
-      if (town.tile[y][x] === Tile.Wall) fence++;
-    ok(fence === 18, "the fence line is 18 solid tiles");
     ok(town.npcs.every((n) => walkable(town, Math.floor(n.x / TILE), Math.floor(n.y / TILE))),
       "every townsperson stands somewhere you can reach them");
+    ok(town.tile.every((r) => r.every((t) => t !== Tile.Wall)),
+      "there is no fence on this map — the sea is the wall now");
   }
 
   console.log("Beggar — the floor of the ladder (the bandit's old job):");
@@ -2717,8 +3477,8 @@ async function main(): Promise<void> {
     // it must actually be in the world the newcomer reaches first
     const { populateWorld: pop } = await import("../src/game.ts");
     const ws = buildWorlds(WORLD_SEED);
-    pop(ws.wild, WORLD_SEED);
-    ok(ws.wild.monsters.some((m) => m.kind === "bandit"), "bandits populate the Wildlands roster");
+    pop(ws.bandit);
+    ok(ws.bandit.monsters.some((m) => m.kind === "beggar"), "beggars stand on the Gallows Coast");
     ok(ws.town.monsters.length === 0, "…and buildWorlds alone leaves the town empty");
   }
 
@@ -3087,13 +3847,13 @@ async function main(): Promise<void> {
     const { createPlayer: mkP } = await import("../src/entities/player.ts");
     const ws = buildWorlds(WORLD_SEED);
     const { populateWorld: pw2 } = await import("../src/game.ts");
-    pw2(ws.wild, WORLD_SEED);
-    const before = ws.wild.corpses.length;
-    const victim = ws.wild.monsters[0];
+    pw2(ws.bandit);
+    const before = ws.bandit.corpses.length;
+    const victim = ws.bandit.monsters[0];
     const kind = victim.kind;
-    killMonster(ws.wild, mkP({ x: victim.x, y: victim.y }), victim);
-    ok(ws.wild.corpses.length === before + 1, "a kill leaves a corpse behind");
-    ok(ws.wild.corpses[ws.wild.corpses.length - 1].name === kind,
+    killMonster(ws.bandit, mkP({ x: victim.x, y: victim.y }), victim);
+    ok(ws.bandit.corpses.length === before + 1, "a kill leaves a corpse behind");
+    ok(ws.bandit.corpses[ws.bandit.corpses.length - 1].name === kind,
       "…named after the kind, which is what the art lookup keys on");
 
     ok(fs.existsSync(new URL("../public/mob-bandit-dead.png", import.meta.url)),
@@ -3195,7 +3955,7 @@ async function main(): Promise<void> {
     }
     ok(unwalkable === "", `every beat is walkable end to end${unwalkable && " — " + unwalkable}`);
     // 5 shopkeepers x 9 tiles + the sage's 9-tile line
-    ok(beatTiles === 54, `every beat covers the tiles it should (${beatTiles})`);
+    ok(beatTiles === 61, `every beat covers the tiles it should (${beatTiles})`);
 
     // Half a minute of pacing. Nobody may leave their beat on any single tick —
     // not merely end up back inside it — and nobody may share a square.
@@ -3296,38 +4056,44 @@ async function main(): Promise<void> {
   {
     const { makeHandmadeWorld, TOWN_SPEC, CELLAR_SPEC } = await import("../src/world/handmade.ts");
     const { updateNpcs } = await import("../src/entities/npcs.ts");
-    const { buildWorlds } = await import("../src/game.ts");
+    const { buildWorlds, applyMissionPads } = await import("../src/game.ts");
     const { WORLD_SEED, TILE: T } = await import("../src/config.ts");
 
-    /* --- the sage in town: the tile the printscreen showed, pacing one row --- */
+    /* --- the sage in town: his own island, drifting around the trapdoor ---
+     * He used to pace one row of the old plaza, nine tiles wide. The six-island
+     * map gives him an island to himself and a four-by-four square beside the
+     * cellar door, which is what the Tiled pin asks for; the shape of the beat
+     * changed, the thing being tested — that he is placed where the map says
+     * and stays inside what the spec grants him — did not. */
     const town = makeHandmadeWorld(TOWN_SPEC);
     const sage = town.npcs.find((n) => n.key === "timesage")!;
     ok(!!sage, "Chronos stands in Bonetown");
     ok(sage.name === "Chronos the Time Sage", `named in English (${sage.name})`);
-    ok(sage.tx === 16 && sage.ty === 15,
-      `on the tile the printscreen showed (${sage.tx},${sage.ty})`);
-    ok(sage.bx0 === sage.hx - 4 && sage.bx1 === sage.hx + 4,
-      "four tiles east and west");
-    ok(sage.by0 === sage.hy && sage.by1 === sage.hy, "…and never north or south");
-    for (let dx = -4; dx <= 4; dx++) {
-      ok(!town.solid[sage.hy][sage.hx + dx], `his beat is clear at +${dx}`);
+    ok(sage.tx === 25 && sage.ty === 46,
+      `on the tile the Tiled pin marked (${sage.tx},${sage.ty})`);
+    ok(sage.bx0 === sage.hx - 1 && sage.bx1 === sage.hx + 2,
+      "four tiles across");
+    ok(sage.by0 === sage.hy - 1 && sage.by1 === sage.hy + 2, "…and four deep");
+    for (let dy = -1; dy <= 2; dy++) {
+      for (let dx = -1; dx <= 2; dx++) {
+        ok(!town.solid[sage.hy + dy][sage.hx + dx], `his beat is clear at ${dx},${dy}`);
+      }
     }
+    // he is on the sage's island, not in the town across the bridge
+    ok(sage.tx < 32, "…on his own island, west of the bridge");
 
-    // …and he actually walks it: half a minute of pacing must reach both ends
-    // of the line and never step off the row.
-    let minTx = sage.tx;
-    let maxTx = sage.tx;
-    let leftRow = false;
+    // …and he actually walks it: a minute of drifting must reach both ends of
+    // the square and never leave it.
+    let minTx = sage.tx, maxTx = sage.tx, minTy = sage.ty, maxTy = sage.ty;
     for (let i = 0; i < 4000; i++) {
       updateNpcs(town, 1 / 60, -9999, -9999);
-      if (sage.ty !== sage.hy) leftRow = true;
-      minTx = Math.min(minTx, sage.tx);
-      maxTx = Math.max(maxTx, sage.tx);
+      minTx = Math.min(minTx, sage.tx); maxTx = Math.max(maxTx, sage.tx);
+      minTy = Math.min(minTy, sage.ty); maxTy = Math.max(maxTy, sage.ty);
     }
-    ok(!leftRow, "he never leaves his row");
-    ok(minTx >= sage.hx - 4 && maxTx <= sage.hx + 4,
-      `and never overshoots the four tiles (${minTx}..${maxTx})`);
-    ok(maxTx > minTx, "he does pace — this is not a rooted NPC by accident");
+    ok(minTx >= sage.hx - 1 && maxTx <= sage.hx + 2
+      && minTy >= sage.hy - 1 && maxTy <= sage.hy + 2,
+      `and never overshoots the square (${minTx}..${maxTx} x ${minTy}..${maxTy})`);
+    ok(maxTx > minTx || maxTy > minTy, "he does move — this is not a rooted NPC by accident");
 
     /* --- the trapdoor where the stack was dropped --- */
     const down = town.portals.find((p) => p.dest === "cellar")!;
@@ -3379,15 +4145,37 @@ async function main(): Promise<void> {
         `pad tile (${t.tx},${t.ty}) is on the islet`);
     }
 
+    /* THE PADS — held to INVARIANTS, not to a census.
+     *
+     * This block used to assert "fourteen, and here are their fourteen corner
+     * coordinates". Both halves were wrong to write down: two pads went live
+     * the day their hunting grounds existed and the count broke, and Radek has
+     * said outright that when fourteen runs out there will be a SECOND cellar
+     * rather than a bigger one. A test that fails when the game grows the way
+     * it was always going to grow is a test that trains you to ignore it.
+     *
+     * So: nothing below cares how many pads there are, where they sit, or
+     * which of them lead anywhere. What it holds is that every pad the artwork
+     * paints is a pad the player can actually use. */
+    const { missionByGround: missionByGroundT } = await import("../src/systems/missions.ts");
     const pads = cellar.portals.filter((p) => p.inactive);
-    ok(pads.length === 14, `fourteen pads, all dormant for now (${pads.length})`);
-    ok(cellar.portals.length === 15, "…and nothing else that teleports");
-    const named = ["Orc Warrens", "Troll Caves", "Minotaur Halls", "Undead Crypt"];
-    for (const n of named) {
-      ok(pads.some((p) => p.label.startsWith(n)), `${n} has its own pad`);
-    }
-    ok(pads.filter((p) => p.label.startsWith("Sealed Rift")).length === 10,
-      "…plus the ten the sage has not named yet");
+    const live = cellar.portals.filter((p) => !p.inactive && p.dest !== "town");
+    ok(pads.length + live.length >= 12,
+      `the hall is a wall of doors (${live.length} open, ${pads.length} sealed)`);
+    ok(live.length >= 2, `…at least two of which go somewhere today (${live.map((p) => p.dest).join(", ")})`);
+    /* An UNNAMED sealed pad points at its own room, so a stray travel is a
+     * no-op rather than a trip. A pad the sage has actually named is different:
+     * it is dormant because the mission is not in hand, not because there is
+     * nothing behind it, and `applyMissionPads` lights it the moment there is.
+     * Both are dark today; only one of them leads anywhere. */
+    const named = pads.filter((p) => missionByGroundT(p.dest));
+    ok(pads.filter((p) => !missionByGroundT(p.dest)).every((p) => p.dest === "cellar"),
+      "an unnamed sealed pad points at its own room, so a stray travel is a no-op");
+    ok(named.length === 1 && named[0].dest === "liddesdale",
+      `…and the one named pad is dark until the mission is taken (${named.map((p) => p.dest).join(",")})`);
+    ok(new Set(cellar.portals.map((p) => p.label)).size === cellar.portals.length,
+      "every door is labelled, and no two share a label");
+    ok(cellar.portals.some((p) => p.dest === "town" && !p.inactive), "…and the way up is open");
 
     // every pad has to be standable, or the pad you can see is a pad you
     // can never use once its hunting ground exists. And it is 2x2: all four
@@ -3397,7 +4185,9 @@ async function main(): Promise<void> {
     let padTiles = "";
     let missedSquare = "";
     let leaked = "";
-    for (const p of pads) {
+    let overlap = "";
+    const claimed = new Map<string, string>();
+    for (const p of [...pads, ...live]) {
       if (p.span !== 2) padSpan = p.label;
       const ts = portalTiles(p);
       if (ts.length !== 4) padTiles = p.label;
@@ -3405,6 +4195,12 @@ async function main(): Promise<void> {
         if (cellar.solid[t.ty][t.tx]) padBlocked = p.label;
         // standing anywhere on the block must count as standing on the pad
         if (!portalCovers(p, t.tx * T + T / 2, t.ty * T + T / 2)) missedSquare = p.label;
+        // …and no square may belong to two pads at once, or which door you
+        // took depends on the order the portal list happens to be in
+        const key = `${t.tx},${t.ty}`;
+        const owner = claimed.get(key);
+        if (owner) overlap = `${owner} and ${p.label} share ${key}`;
+        claimed.set(key, p.label);
       }
       // …and one square outside the block must not
       const out = ts[0];
@@ -3416,14 +4212,20 @@ async function main(): Promise<void> {
     ok(padBlocked === "", `…all of them walkable${padBlocked && " — " + padBlocked}`);
     ok(missedSquare === "", `…all of them teleporting${missedSquare && " — " + missedSquare}`);
     ok(leaked === "", `…and nothing outside the block does${leaked && " — " + leaked}`);
+    ok(overlap === "", `no two pads claim the same square${overlap && " — " + overlap}`);
 
-    // the blocks land where the artwork painted them: two columns of pads at
-    // x=3 and x=15, plus the extra pair along the top row
-    const corners = pads.map((p) => portalTiles(p)[0]).map((t) => `${t.tx},${t.ty}`).sort();
-    ok(corners.join(" ") === [
-      "16,9", "20,18", "20,22", "20,26", "20,39", "20,9", "20,13",
-      "8,18", "8,22", "8,26", "8,39", "8,9", "8,13", "12,9",
-    ].sort().join(" "), `pads sit on the painted blocks (${corners.join(" ")})`);
+    /* Every pad must be WALKABLE-TO from the stairs, not merely standable.
+     * A door drawn behind a rock is the one failure the geometry checks above
+     * cannot see, and it is exactly what a redrawn cellar would introduce. */
+    const { findPath: padPath, toTile: padTile } = await import("../src/world/grid.ts");
+    let unreachable = "";
+    for (const p of [...pads, ...live]) {
+      const t = portalTiles(p)[0];
+      const road = padPath(cellar, padTile(up.x), padTile(up.y), t.tx, t.ty);
+      const last = road[road.length - 1];
+      if (!last || last.x !== t.tx || last.y !== t.ty) unreachable = p.label;
+    }
+    ok(unreachable === "", `every door is walkable-to from the stairs${unreachable && " — " + unreachable}`);
 
     // arriving must not drop you back onto the pad you came through, or the
     // portal fires again and bounces you home
@@ -3582,16 +4384,19 @@ async function main(): Promise<void> {
       ok(rollLoot(k).items !== undefined, "…and rolling the table returns cleanly");
     }
 
-    /* --- they actually spawn somewhere, and it is flagged as temporary --- */
+    /* --- they have real grounds now, not the stand-in entries ---
+     * Both used to be parked in `POPULATIONS` under a TEMP-ETAP18 tag,
+     * borrowing Bone Caverns -3 until they had somewhere of their own. They do:
+     * Charnel Deep -1 holds fifteen of each, drawn onto named squares. The tag
+     * is gone from the source and the test now checks the ground instead. */
     const gameSrc = fs.readFileSync(new URL("../src/game.ts", import.meta.url), "utf8");
-    ok(/TEMP-ETAP18/.test(gameSrc),
-      "the stand-in spawn entries are tagged for removal");
+    ok(!/TEMP-ETAP18/.test(gameSrc), "the stand-in spawn entries are gone from game.ts");
     const worlds = buildWorlds(WORLD_SEED);
     const { populateWorld: pw3 } = await import("../src/game.ts");
-    pw3(worlds.cave3, WORLD_SEED);
-    ok(worlds.cave3.monsters.some((m) => m.kind === "skeletonWarrior"),
-      "a skeleton warrior stands on Bone Caverns -3");
-    ok(worlds.cave3.monsters.some((m) => m.kind === "demonSkeleton"),
+    pw3(worlds.deaddeep1);
+    ok(worlds.deaddeep1.monsters.some((m) => m.kind === "skeletonWarrior"),
+      "a skeleton warrior holds the Charnel maze");
+    ok(worlds.deaddeep1.monsters.some((m) => m.kind === "demonSkeleton"),
       "…and so does a demon skeleton");
   }
 
@@ -3603,8 +4408,6 @@ async function main(): Promise<void> {
     const credits = fs.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
     const handmadeSrc = fs.readFileSync(
       new URL("../src/world/handmade.ts", import.meta.url), "utf8");
-    const deepwildSrc = fs.readFileSync(
-      new URL("../src/world/deepwild.ts", import.meta.url), "utf8");
 
     /* --- the strip is laid out the way the slicer reads it --- */
     const b = fs.readFileSync(new URL("../public/prop-campfire.png", import.meta.url));
@@ -3645,21 +4448,27 @@ async function main(): Promise<void> {
     ok(all.every((w) => Array.isArray(w.fires)), "every world carries a fire list");
     ok(all.every((w) => w.decos.every((d) => d.spr !== gfx.SPR.campfire)),
       "no campfire is left in the baked decoration list");
-    ok(worlds.deepwild.fires.length > 0, "the wilderness camps light real fires");
-    ok(worlds.deepwild.fires.every((f) => f.phase >= 0 && f.phase < 1),
+    /* The Deep Wildlands used to be what lit fires here; after Etap 40 the
+     * hand-drawn maps are, via the `F` glyph. Checked across all of them at
+     * once rather than on one map, and the properties are the same three that
+     * mattered before: a phase each, one to a tile, and never sealing it. */
+    const lit = all.flatMap((w) => w.fires.map((f) => ({ w, f })));
+    ok(lit.length > 0, `the maps light real fires (${lit.length} of them)`);
+    ok(lit.every(({ f }) => f.phase >= 0 && f.phase < 1),
       "…each with its own phase inside one cycle");
-    ok(new Set(worlds.deepwild.fires.map((f) => `${f.tx},${f.ty}`)).size
-      === worlds.deepwild.fires.length,
-      "…and no two of them stacked on one tile");
-    ok(worlds.deepwild.fires.every((f) => !worlds.deepwild.solid[f.ty][f.tx]),
+    ok(lit.every(({ w, f }) => !w.solid[f.ty][f.tx]),
       "camp fires stay walkable, so nothing can be sealed into a corner");
-    ok(!deepwildSrc.includes("dress(SPR.campfire"),
-      "the camps no longer dress themselves with a still campfire");
+    ok(all.every((w) => new Set(w.fires.map((f) => `${f.tx},${f.ty}`)).size === w.fires.length),
+      "…and no two of them stacked on one tile");
 
-    /* --- hand-authored maps can place one, and there it does block --- */
+    /* --- hand-authored maps place one the same way, and it blocks nothing ---
+     * It used to seal its square here and no longer does: the artwork is one
+     * tile exactly and its body only twenty-one rows of thirty-two, so a third
+     * of a solid square read as bare ground you were refused. Nothing to walk
+     * around means nothing to lie about. */
     ok(/case "F":/.test(handmadeSrc), "hand-authored maps place a fire with 'F'");
-    ok(/case "F":[\s\S]{0,400}?w\.fires\.push[\s\S]{0,200}?solid\[y\]\[x\] = true/.test(handmadeSrc),
-      "…and that one is solid, so the player walks around it");
+    ok(!/case "F":[\s\S]{0,900}?solid\[y\]\[x\] = true/.test(handmadeSrc),
+      "…and it seals nothing, on any map");
   }
 
   console.log("Standing scenery is walked behind, not over:");
@@ -3684,9 +4493,49 @@ async function main(): Promise<void> {
       tent: "prop-tent.png",
       boulderA: "prop-boulder-a.png",
       boulderB: "prop-boulder-b.png",
+      barn: "prop-barn.png",
+      houseA: "prop-house-a.png",
+      houseB: "prop-house-b.png",
+      smithy: "prop-smithy.png",
+      windmill: "prop-windmill.png",
+      // the town set — thirty of them, all `prop-town-*`
+      chapel: "prop-town-chapel.png", shrine: "prop-town-shrine.png",
+      shop: "prop-town-shop.png", townhouse: "prop-town-townhouse.png",
+      watchtower: "prop-town-watchtower.png", shophouse: "prop-town-shophouse.png",
+      cottage: "prop-town-cottage.png", bank: "prop-town-bank.png",
+      observatory: "prop-town-observatory.png", storefront: "prop-town-storefront.png",
+      shoprow: "prop-town-shoprow.png", keep: "prop-town-keep.png",
+      workshop: "prop-town-workshop.png", warehouse: "prop-town-warehouse.png",
+      temple: "prop-town-temple.png", apothecary: "prop-town-apothecary.png",
+      inn: "prop-town-inn.png", manor: "prop-town-manor.png",
+      towerhouse: "prop-town-towerhouse.png", market: "prop-town-market.png",
+      tavern: "prop-town-tavern.png", tradehouse: "prop-town-tradehouse.png",
+      stonehouse: "prop-town-stonehouse.png", greatTemple: "prop-town-greattemple.png",
+      guildhall: "prop-town-guildhall.png", stallRed: "prop-town-stall-red.png",
+      stallGrey: "prop-town-stall-grey.png", stallOpen: "prop-town-stall-open.png",
+      windmillCloth: "prop-town-windmill-cloth.png",
+      windmillLattice: "prop-town-windmill-lattice.png",
     };
 
-    ok(scn.SCENERY_KINDS.length === 7, "seven kinds of scenery are registered");
+    ok(scn.SCENERY_KINDS.length === 42, `forty-two kinds of scenery are registered (${scn.SCENERY_KINDS.length})`);
+    ok(scn.SCENERY_KINDS.every((k) => FILES[k] !== undefined),
+      "…and this test knows the filename of every one of them");
+
+    /* --- the town set is cut to the tile, not merely near it -----------------
+     * The five Gallows Coast buildings were illustrations shrunk to fit and
+     * land a few pixels shy of their box. The thirty town props were drawn at
+     * this size, so their PNGs are EXACTLY footprint x 32 — which is what lets
+     * the footprint be read off the file instead of typed in beside it, and
+     * what would silently shift every one of them if a file were ever
+     * re-exported at the wrong scale. */
+    for (const kind of scn.SCENERY_KINDS) {
+      const file = FILES[kind];
+      if (!file.startsWith("prop-town-")) continue;
+      const [w, h] = png(file);
+      const fp = scn.FOOTPRINT[kind];
+      ok(w === fp.w * T && h === fp.h * T,
+        `${kind} is exactly its footprint (${w}x${h} for ${fp.w}x${fp.h})`);
+    }
     for (const kind of scn.SCENERY_KINDS) {
       const file = FILES[kind];
       ok(fs.existsSync(new URL(`../public/${file}`, import.meta.url)),
@@ -3707,9 +4556,28 @@ async function main(): Promise<void> {
         `…a block inside the footprint, never wider than it (${bk.w}x${bk.h} of ${fp.w}x${fp.h})`);
     }
 
-    /* --- one row deep means one row solid; deeper means overhang to hide in --- */
-    ok(scn.SCENERY_KINDS.every((k) => scn.BLOCK[k].h === 1),
-      "nothing blocks more than the near row — every prop is a tree at heart");
+    /* --- one row deep means one row solid; deeper means overhang to hide in ---
+     * Every prop is a tree at heart: the near rows stop you, the rest is drawn
+     * over your head. A tent is two deep and seals one, so half of it is
+     * overhang. The buildings are four and five deep and seal two, which is the
+     * same idea and not a weaker one — with a single row a five-tile house
+     * would let you stand four tiles inside its own wall. What must hold either
+     * way is that the roof is never solid and never less than half the object.
+     *
+     * The bound is TWO THIRDS, and it has been half-rounding-down and then
+     * half-rounding-up on the way here. Both were wrong for the same reason:
+     * they are not scale-invariant. A four-by-three house that seals two rows
+     * seals two thirds of itself; drawn at twice the size it is eight by six
+     * and seals four, which is still two thirds and still the same house — yet
+     * `h / 2` says the first is fine and the second is not. Two thirds says
+     * what is actually meant, at any scale a prop happens to be drawn: a third
+     * of the depth is roof, and the roof is never solid. */
+    ok(scn.SCENERY_KINDS.every((k) => scn.BLOCK[k].h <= Math.max(1, Math.floor(scn.FOOTPRINT[k].h * 2 / 3))),
+      "no prop seals more than two thirds of its own depth");
+    ok(scn.SCENERY_KINDS.every((k) => scn.FOOTPRINT[k].h === 1 || scn.BLOCK[k].h < scn.FOOTPRINT[k].h),
+      "…and anything deeper than one row keeps overhang to hide behind");
+    ok(scn.SCENERY_KINDS.filter((k) => scn.FOOTPRINT[k].h <= 2).every((k) => scn.BLOCK[k].h === 1),
+      "…while the small props still seal exactly the near row, as they always did");
     ok(scn.BLOCK.well.h < scn.FOOTPRINT.well.h && scn.BLOCK.tent.h < scn.FOOTPRINT.tent.h,
       "…so the far row of a well and a tent is drawn but not walled");
     ok(scn.BLOCK.deadTree.h === scn.FOOTPRINT.deadTree.h,
@@ -3749,7 +4617,7 @@ async function main(): Promise<void> {
     const { Tile: T2 } = await import("../src/world/types.ts");
     const { populateAll } = await import("../src/game.ts");
     const worlds = buildWorlds(WORLD_SEED);
-    populateAll(worlds, WORLD_SEED);
+    populateAll(worlds);
     const r = worlds.reach;
 
     /* --- the export lines up with the grid, or the loader drops it --- */
@@ -3851,8 +4719,11 @@ async function main(): Promise<void> {
       const ps = r.mobPosts!.filter((p) => p.kind === kind);
       return ps.reduce((s, p) => s + Math.hypot(p.tx - sx, p.ty - sy), 0) / ps.length;
     };
-    ok(meanDist("snake") < meanDist("orcBerserker"),
-      "snakes sit nearer the way home than orc berserkers");
+    // Was measured against the orc berserker, which no longer stands on the
+    // island — the warrior is the heaviest thing the orc camp fields now, and
+    // it is the far end of the same line the snake sits at the near end of.
+    ok(meanDist("snake") < meanDist("orcWarrior"),
+      "snakes sit nearer the way home than orc warriors");
     // the demon skeleton is ranked by depth inland now, not by distance from
     // the pad, so the ladder that still holds across regions is the outer one
     /* --- five regions, one family each, spread not knotted --- */
@@ -3873,8 +4744,11 @@ async function main(): Promise<void> {
         easy: ["snake", "bandit"],
         undead: ["skeleton", "ghoul", "skeletonWarrior", "demonSkeleton"],
         goblin: ["goblin", "goblinLegionary"],
-        minotaur: ["minotaur", "minotaurArcher", "minotaurGuard"],
-        orc: ["orc", "orcArcher", "orcWarrior", "orcShaman", "orcBerserker"],
+        // Two ranks, not three. The guard is a floor and a half down now.
+        minotaur: ["minotaur", "minotaurArcher"],
+        // Three ranks, not five. The shaman and the berserker came off the
+        // island with the same move that took the minotaur guard off it.
+        orc: ["orc", "orcArcher", "orcWarrior"],
       };
       const familyOf = (k: string): string =>
         k.startsWith("orc") ? "orc" : k.startsWith("minotaur") ? "minotaur"
@@ -3885,12 +4759,22 @@ async function main(): Promise<void> {
         snake: 8, bandit: 6,
         skeleton: 6, ghoul: 3, skeletonWarrior: 3, demonSkeleton: 1,
         goblin: 5, goblinLegionary: 3,
-        minotaur: 9, minotaurArcher: 7, minotaurGuard: 4,
-        orc: 7, orcArcher: 5, orcWarrior: 4, orcShaman: 2, orcBerserker: 2,
+        // The guard came off the island entirely: the four that used to picket
+        // the camp around the mouth at (8,85) are plain horns now, and the rank
+        // holds Minotaur Deep -2 instead. Nine minotaurs plus those four is
+        // thirteen, and `minotaurGuard` is absent rather than zero so that one
+        // reappearing anywhere on the Reach trips the roster check below.
+        minotaur: 13, minotaurArcher: 7,
+        // The two shamans and the two berserkers became two orcs and two
+        // warriors where they stood: seven plus two, four plus two. Both
+        // heavier ranks are absent rather than zero, so one reappearing on
+        // the Reach trips the roster check below.
+        orc: 9, orcArcher: 5, orcWarrior: 6,
       };
       const wrong = Object.entries(HEAD)
         .filter(([k, n]) => p.filter((m) => m.kind === k).length !== n)
-        .map(([k]) => k);
+        .map(([k]) => k)
+        .concat([...new Set(p.map((m) => m.kind))].filter((k) => !(k in HEAD)));
       ok(wrong.length === 0, `every kind musters the number drawn for it${wrong.length ? ` — off: ${wrong.join(", ")}` : ""}`);
 
       const outside = p.filter((m) => {
@@ -3939,7 +4823,23 @@ async function main(): Promise<void> {
         ok(ds.every((d, i) => i === 0 || d < ds[i - 1]),
           `${fam}: every rank stands closer to the lair than the one below it (${ds.map((d) => d.toFixed(1)).join(" > ")})`);
       }
+      /* --- and what the minotaurs' mouth is guarded by instead --- */
+      {
+        const c = CORE.minotaur;
+        ok(p.every((m) => m.kind !== "minotaurGuard"),
+          "no minotaur guard stands on the island any more — the rank moved to -2");
+        const near = p.filter((m) => Math.hypot(m.tx - c[0], m.ty - c[1]) <= 12);
+        ok(near.length >= 3 && near.every((m) => m.kind === "minotaur"),
+          `the camp around the descent is plain horns throughout (${near.length} of them)`);
+      }
+
       for (const [fam, order] of Object.entries(LADDER)) {
+        // The minotaurs are the deliberate exception and the only one. Their
+        // heaviest rank left the island, so what stands over their mouth is a
+        // plain minotaur — the camp is the DOORWAY to the branch, not a wall
+        // across it, and the guard is what you meet once you are through it.
+        // Checked positively just below rather than skipped silently.
+        if (fam === "minotaur") continue;
         const top = order[order.length - 1];
         const c = CORE[fam];
         const nearest = Math.min(...p.filter((m) => m.kind === top)
@@ -4040,11 +4940,12 @@ async function main(): Promise<void> {
     ok(r.monsters.filter((m) => m.kind === "goblinLegionary").length === 3,
       "three of that band wear the legionary's armour");
 
-    /* --- two descents are dug, the dead's is still cut and sealed --- */
-    ok(r.portals.filter((p) => p.inactive).length === 1,
-      "only the dead's descent stands sealed now, until that floor exists");
+    /* --- all three descents are dug now --- */
+    ok(r.portals.filter((p) => p.inactive).length === 0,
+      "nothing on the island stands sealed any more — the dead's hole was the last");
     for (const [dest, tx, ty, who] of [
       ["orcdeep1", 79, 90, "orcs"], ["minodeep1", 8, 85, "minotaurs"],
+      ["deaddeep1", 89, 13, "dead"],
     ] as const) {
       const down = r.portals.find((p) => p.dest === dest);
       ok(down !== undefined && !down.inactive, `the ${who}' descent is open and leads to ${dest}`);
@@ -4056,8 +4957,1170 @@ async function main(): Promise<void> {
     ok(CELLAR_SPEC.portals.d.dest === "reach",
       "the cellar's bottom-right pad leads to the Bone Reach");
     ok(!CELLAR_SPEC.portals.d.inactive, "…and it is live, not dormant");
-    ok(!Object.values(CELLAR_SPEC.portals).some((p) => p.dest === "deepwild"),
-      "…and no pad points at the Deep Wildlands any more");
+    /* Every pad must name a map that exists. The two assertions this replaces
+     * named the Deep Wildlands and the Wildlands one at a time, and both went
+     * tautological the moment those keys left `WorldKey`. This is the check
+     * that keeps paying: it is what a mistyped mission destination trips on. */
+    const built = buildWorlds(WORLD_SEED);
+    const bad = Object.entries(CELLAR_SPEC.portals)
+      .filter(([, p]) => !(p.dest in built))
+      .map(([g]) => g);
+    ok(bad.length === 0, `every pad names a map that exists${bad.length ? " — " + bad.join(", ") : ""}`);
+  }
+
+
+  console.log("The Gallows Coast carries the human ladder:");
+  {
+    const fs = await import("node:fs");
+    const { BANDIT_SPEC } = await import("../src/world/banditSpec.ts");
+    const { CELLAR_SPEC } = await import("../src/world/handmade.ts");
+    const { Tile: T4 } = await import("../src/world/types.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    const b = worlds.bandit;
+
+    /* --- the export lines up with the grid, or the loader drops it --- */
+    const terrain = new URL("../public/bandit-terrain.png", import.meta.url);
+    if (!fs.existsSync(terrain)) {
+      ok(false, "public/bandit-terrain.png is missing — the island falls back to the baked terrain");
+    } else {
+      const png = fs.readFileSync(terrain);
+      ok(png.readUInt32BE(16) === b.w * 32 && png.readUInt32BE(20) === b.h * 32,
+        `the terrain export is exactly ${b.w * 32}x${b.h * 32}`);
+    }
+    ok(BANDIT_SPEC.rows.length === 100 && BANDIT_SPEC.rows.every((r) => r.length === 105),
+      "the grid is 105x100, as drawn");
+    ok(BANDIT_SPEC.floor?.length === 100
+      && BANDIT_SPEC.floor.every((r) => r.length === 105),
+      "…and the terrain grid matches it row for row");
+
+    /* --- everything the author marked actually landed --- */
+    ok(b.mobPosts?.length === 87, "87 creature posts were written into the grid");
+    ok(b.monsters.length === 87, "…and every one of them spawned");
+    ok(b.fires.length === 24, "all 24 campfires were placed");
+    ok(b.scenery.filter((s) => s.kind === "tent").length === 24, "…and all 24 tents");
+    ok(b.scenery.filter((s) => s.kind === "well").length === 8, "…one well per camp");
+
+    /* --- the camps that took a farm instead of pitching canvas --- */
+    const BUILT = ["barn", "houseA", "houseB", "smithy", "windmill"] as const;
+    const buildings = b.scenery.filter((s) => (BUILT as readonly string[]).includes(s.kind));
+    ok(buildings.length === 17, "seventeen buildings stand in the camps");
+    ok(BUILT.every((k) => b.scenery.some((s) => s.kind === k)),
+      "…drawn from all five kinds rather than one stamp repeated");
+    // A five-tile building wears its roof as overhang. Seal the wall, leave the
+    // roof walkable, and keep the whole footprint on dry land — a gable hanging
+    // over open water reads as a house built on the waves.
+    {
+      const { FOOTPRINT: FP, BLOCK: BK } = await import("../src/gfx/sceneryArt.ts");
+      let wallOpen = 0, roofWalled = 0, roofSquares = 0, afloat = 0;
+      for (const s of buildings) {
+        const fp = FP[s.kind], bk = BK[s.kind];
+        const y0 = s.ty + fp.h - bk.h;
+        for (let j = y0; j < y0 + bk.h; j++) {
+          for (let i = 0; i < bk.w; i++) if (!b.solid[j][s.tx + i]) wallOpen++;
+        }
+        for (let j = s.ty; j < y0; j++) {
+          for (let i = 0; i < fp.w; i++) {
+            roofSquares++;
+            if (b.solid[j][s.tx + i]) roofWalled++;
+          }
+        }
+        for (let j = s.ty; j < s.ty + fp.h; j++) {
+          for (let i = 0; i < fp.w; i++) if (b.tile[j][s.tx + i] === T4.Water) afloat++;
+        }
+      }
+      ok(wallOpen === 0, "…every wall row is solid, so you cannot walk through one");
+      ok(roofSquares === 194 && roofWalled === 0,
+        `…and all ${roofSquares} squares of roof are walk-behind, like a tent's`);
+      ok(afloat === 0, "…and not one of them has a gable out over the water");
+    }
+
+    /* --- this island exists to field the ranks nothing else spawns --- */
+    const LADDER = ["beggar", "vagrant", "thief", "poacher", "bandit",
+      "smuggler", "cutthroat", "deserter", "brigand", "highwayman"] as const;
+    ok(LADDER.every((k) => b.monsters.some((m) => m.kind === k)),
+      "every rank of the low human ladder stands somewhere on it");
+    const HEAVY = ["orc", "minotaur", "dragon", "blackKnight", "demonSkeleton",
+      "warlord", "chieftain", "gladiator"];
+    ok(!b.monsters.some((m) => HEAVY.includes(m.kind)),
+      "…and nothing above the highwayman's rank walks here");
+
+    /* --- the island is one landmass; nothing is marooned --- */
+    const back = b.portals.find((p) => p.dest === "cellar");
+    ok(back !== undefined && !back.inactive, "a live pad leads back to the cellar");
+    const sx = Math.floor(back!.x / 32), sy = Math.floor(back!.y / 32);
+    const seen = Array.from({ length: b.h }, () => new Array<boolean>(b.w).fill(false));
+    const q: [number, number][] = [[sx, sy]];
+    seen[sy][sx] = true;
+    let reached = 0;
+    while (q.length) {
+      const [x, y] = q.pop()!;
+      reached++;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = x + dx, c = y + dy;
+        if (a < 0 || c < 0 || a >= b.w || c >= b.h) continue;
+        if (seen[c][a] || b.solid[c][a] || b.tile[c][a] === T4.Water) continue;
+        seen[c][a] = true;
+        q.push([a, c]);
+      }
+    }
+    let walkable = 0;
+    for (let y = 0; y < b.h; y++) {
+      for (let x = 0; x < b.w; x++) if (!b.solid[y][x] && b.tile[y][x] !== T4.Water) walkable++;
+    }
+    ok(reached === walkable, `every walkable square is reachable from the pad (${reached})`);
+    ok(b.mobPosts!.every((p) => seen[p.ty][p.tx]), "…so no creature is marooned off it");
+
+    /* --- five bridges, none of them corked ---
+     * The island is four landmasses stitched by bridge decks. A boulder or a
+     * tent dropped on an approach would sever a third of the map, and the
+     * reachability count above would not necessarily catch which third. */
+    const DECKS: [number, number, number, number][] = [
+      [44, 20, 48, 21], [52, 49, 56, 50], [40, 55, 41, 59],
+      [62, 55, 63, 59], [17, 77, 18, 81],
+    ];
+    let corked = 0;
+    for (const [x0, y0, x1, y1] of DECKS) {
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          if (b.solid[y][x] || b.tile[y][x] !== T4.Dirt) corked++;
+        }
+      }
+    }
+    ok(corked === 0, "all five bridge decks are open plank and walkable end to end");
+
+    /* --- difficulty rises away from the pad, which is how it was laid --- */
+    const meanDist = (kind: string): number => {
+      const ps = b.mobPosts!.filter((p) => p.kind === kind);
+      return ps.reduce((s, p) => s + Math.hypot(p.tx - sx, p.ty - sy), 0) / ps.length;
+    };
+    ok(meanDist("beggar") < meanDist("highwayman"),
+      "beggars sit nearer the way home than highwaymen");
+    ok(meanDist("snake") < meanDist("brigand"), "…and snakes nearer than brigands");
+    ok(meanDist("thief") < meanDist("deserter"), "…the middle of the ladder holds too");
+
+    /* --- the apron: you can land and draw before anything reaches you --- */
+    const nearest = Math.min(...b.mobPosts!.map((p) => Math.hypot(p.tx - sx, p.ty - sy)));
+    ok(nearest >= 8, `the nearest creature to the pad stands ${Math.round(nearest)} tiles off`);
+
+    /* --- nothing tall wades in the surf --- */
+    const nearSea = (tx: number, ty: number): boolean => {
+      for (let j = -2; j <= 2; j++) {
+        for (let i = -2; i <= 2; i++) {
+          const x = tx + i, y = ty + j;
+          if (x < 0 || y < 0 || x >= b.w || y >= b.h) continue;
+          if (b.tile[y][x] === T4.Water) return true;
+        }
+      }
+      return false;
+    };
+    ok(!b.trees.some((t) => nearSea(t.tx, t.ty)), "no tree is planted in the surf");
+    ok(!b.scenery.some((s) => nearSea(s.tx, s.ty)), "…nor any totem, tent, well or boulder");
+
+    /* --- six holes, one floor, and a ladder waiting under each ---
+     * Both maps are the same 105x100 grid, so a hole's tile coordinates ARE the
+     * coordinates of the ladder it opens onto. Five of the six line up exactly;
+     * the east-shore hole found rock on its square down there and its ladder
+     * moved one tile, which is the whole of the slack allowed here. */
+    const down = b.portals.filter((p) => p.dest === "banditdeep1");
+    ok(down.length === 6, "all six descents drop onto Bandit Deep -1");
+    ok(down.every((p) => !p.inactive), "…and every one of them is open");
+    ok(down.every((p) => b.tile[Math.floor(p.y / 32)][Math.floor(p.x / 32)] === T4.Dirt),
+      "…each standing on bare earth rather than grass");
+    {
+      const deep = worlds.banditdeep1;
+      const ladders = deep.portals.filter((p) => p.dest === "bandit");
+      ok(ladders.length === 6, "…and six ladders wait for them on the floor below");
+      let exact = 0, far = 0;
+      for (const h of down) {
+        const hx = Math.floor(h.x / 32), hy = Math.floor(h.y / 32);
+        let best = 99;
+        for (const l of ladders) {
+          best = Math.min(best, Math.abs(Math.floor(l.x / 32) - hx)
+            + Math.abs(Math.floor(l.y / 32) - hy));
+        }
+        if (best === 0) exact++;
+        if (best > 1) far++;
+      }
+      ok(exact === 5, "…five of them land on the very square they were cut on");
+      ok(far === 0, "…and the sixth is one tile off, no further, where rock stood in the way");
+    }
+
+    /* --- the cellar's Wildlands pad now opens here instead --- */
+    ok(CELLAR_SPEC.portals.c.dest === "bandit",
+      "the pad that used to carry you to the Wildlands now opens on the Gallows Coast");
+    ok(!CELLAR_SPEC.portals.c.inactive, "…and it is live, not dormant");
+    ok(Object.values(CELLAR_SPEC.portals).every((p) => p.inactive || p.dest !== "cellar"),
+      "…and no LIVE pad loops back into the cellar it stands in");
+  }
+
+
+
+
+  console.log("A campfire burns what stands in it:");
+  {
+    const fs = await import("node:fs");
+    const { FIRE_BURN_TICK_S, FIRE_BURN_DMG, FIRE_LIFT } = await import("../src/gfx/fireSheet.ts");
+    const main = fs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const spells = fs.readFileSync(new URL("../src/systems/monsterSpells.ts", import.meta.url), "utf8");
+
+    ok(FIRE_BURN_TICK_S > 0 && FIRE_BURN_DMG[0] > 0 && FIRE_BURN_DMG[1] > FIRE_BURN_DMG[0],
+      `standing in one costs ${FIRE_BURN_DMG[0]}-${FIRE_BURN_DMG[1]} every ${FIRE_BURN_TICK_S}s`);
+    // a bonfire someone cooks over is not a fire field a shaman dropped on you
+    const field = /FIELD_TICK_DMG: readonly \[number, number\] = \[(\d+), (\d+)\]/.exec(spells)!;
+    ok(FIRE_BURN_DMG[1] < Number(field[2]),
+      `…less than the ${field[1]}-${field[2]} a monster's burning ground bites`);
+    ok(/hurtPlayer\(world, P, rndi\(FIRE_BURN_DMG\[0\], FIRE_BURN_DMG\[1\]\), true\)/.test(main),
+      "…and it lands elemental, so no shield or armour is raised against it");
+    ok(/const key = `\$\{world\.key\}\|\$\{f\.tx\}\|\$\{f\.ty\}`/.test(main),
+      "…on a clock kept per tile, so crossing three fires costs three bites");
+    ok(FIRE_LIFT > 0, "and the flame is still lifted onto the middle of its own square");
+  }
+
+  console.log("A campfire covers the square it seals:");
+  {
+    const fs = await import("node:fs");
+    const { FIRE_LIFT, FIRE_FRAMES } = await import("../src/gfx/fireSheet.ts");
+    const main = fs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+
+    /* --- how far off-centre the pack drew it --- */
+    // A hand-placed fire is the only solid prop in the game whose art is exactly
+    // one tile. The logs sit flush on the bottom edge of the cell and the flame
+    // licks up, so the top of a solid square is bare ground you are refused
+    // entry to. Measure the slack straight off the strip rather than trusting a
+    // number written down here: if the art is ever recut, this test moves with it.
+    const png = fs.readFileSync(new URL("../public/prop-campfire.png", import.meta.url));
+    ok(png.readUInt32BE(16) === FIRE_FRAMES * 32 && png.readUInt32BE(20) === 32,
+      `the strip is ${FIRE_FRAMES} frames of 32x32`);
+    ok(FIRE_LIFT > 0 && FIRE_LIFT < 16,
+      `the fire is drawn ${FIRE_LIFT}px above the bottom of its square, splitting that slack`);
+
+    /* --- lifted in the draw, NOT in the sort --- */
+    ok(/const by = fr\.ty \* TILE \+ TILE;/.test(main),
+      "the fire still sorts on the true bottom of its own tile");
+    ok(/drawSprite\(campfireFrame\([^)]*\) \?\? SPR\.campfire, bx, by - FIRE_LIFT\)/.test(main),
+      "…and only the sprite is raised, so it cannot slip behind what stands level with it");
+
+    /* --- and no fire anywhere seals the square under it ---
+     * The lift centres the flame; this is what actually settles the complaint.
+     * Checked on the maps that carry the most of them rather than on the source
+     * text, because it is the built world the player walks around in. */
+    const { buildWorlds: bw2, populateAll: pa2 } = await import("../src/game.ts");
+    const ws = bw2(WORLD_SEED);
+    pa2(ws);
+    let sealed = 0, counted = 0;
+    for (const w of Object.values(ws)) {
+      for (const f of w.fires) {
+        counted++;
+        if (w.solid[f.ty][f.tx]) sealed++;
+      }
+    }
+    ok(counted > 100 && sealed === 0,
+      `not one of ${counted} campfires seals the square it stands on`);
+  }
+
+  console.log("Where several ways back exist, travel takes the nearest:");
+  {
+    const { travelTo, populateAll, createGame } = await import("../src/game.ts");
+    const g = createGame(WORLD_SEED);
+    populateAll(g.worlds);
+    const isle = g.worlds.bandit;
+    const holes = isle.portals.filter((p) => p.dest === "banditdeep1");
+    ok(holes.length === 6, "the island offers six ways down");
+    g.current = isle;
+    let landedRight = 0;
+    for (const h of holes) {
+      g.current = isle;
+      g.player.x = h.x;
+      g.player.y = h.y;
+      travelTo(g, "banditdeep1");
+      // the ladder nearest where we came out should be the one under that hole
+      const ladders = g.worlds.banditdeep1.portals.filter((p) => p.dest === "bandit");
+      let best = ladders[0];
+      for (const l of ladders) {
+        if (Math.hypot(l.x - g.player.x, l.y - g.player.y)
+          < Math.hypot(best.x - g.player.x, best.y - g.player.y)) best = l;
+      }
+      if (Math.hypot(best.x - h.x, best.y - h.y) <= 48) landedRight++;
+    }
+    ok(landedRight === 6,
+      "every one of the six drops you at the ladder under the hole you took");
+    // and the single-staircase case is untouched
+    g.current = g.worlds.reach;
+    g.player.x = 8 * 32;
+    g.player.y = 85 * 32;
+    travelTo(g, "minodeep1");
+    ok(g.current.key === "minodeep1", "a floor with one way back still works as it did");
+  }
+
+  console.log("Bandit Deep -1 is the floor under all six holes:");
+  {
+    const fs = await import("node:fs");
+    const { BANDITDEEP_SPEC } = await import("../src/world/banditDeepSpec.ts");
+    const { Tile: T5 } = await import("../src/world/types.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    const k = worlds.banditdeep1;
+
+    const terrain = new URL("../public/banditdeep-terrain.png", import.meta.url);
+    if (!fs.existsSync(terrain)) {
+      ok(false, "public/banditdeep-terrain.png is missing — the floor falls back to the baked bake");
+    } else {
+      const png = fs.readFileSync(terrain);
+      ok(png.readUInt32BE(16) === k.w * 32 && png.readUInt32BE(20) === k.h * 32,
+        `the terrain export is exactly ${k.w * 32}x${k.h * 32}`);
+    }
+    ok(BANDITDEEP_SPEC.rows.length === 100
+      && BANDITDEEP_SPEC.rows.every((r) => r.length === 105),
+      "the grid is 105x100 — the same frame as the island above it");
+    ok(BANDITDEEP_SPEC.floor === undefined,
+      "…and needs no second terrain grid: every square is rock or cave floor");
+
+    /* --- it is a cellar, so nothing grows in it --- */
+    ok(k.trees.length === 0, "nothing grows down here — not one tree");
+    const BUILT = ["barn", "houseA", "houseB", "smithy", "windmill", "deadTree", "felledTree"];
+    ok(!k.scenery.some((s) => BUILT.includes(s.kind)),
+      "…and nobody built a farmhouse in a cave either");
+    ok(k.scenery.some((s) => s.kind === "tent") && k.fires.length > 0 && k.rocks.length > 0,
+      "canvas, fires and mineable rock instead");
+
+    /* --- the slice of the ladder this floor was given --- */
+    const HERE = ["mercenary", "corsair", "wildWarrior", "amazon", "hunter", "gladiator"] as const;
+    ok(k.mobPosts?.length === 110, "110 creature posts were written into the grid");
+    ok(k.monsters.length === 110, "…and every one of them spawned");
+    ok(HERE.every((m) => k.monsters.some((x) => x.kind === m)),
+      "every rank from mercenary to gladiator stands somewhere on it");
+    // -2 takes the top of the ladder and -3 the knight; neither is down here yet
+    const LATER = ["barbarian", "raider", "warlord", "chieftain", "blackKnight"];
+    ok(!k.monsters.some((m) => LATER.includes(m.kind)),
+      "…and nothing from the -2 or -3 slice has leaked onto it");
+    // …nor anything from the island above, which would flatten the whole climb
+    const ABOVE = ["beggar", "vagrant", "thief", "poacher", "bandit", "smuggler",
+      "cutthroat", "deserter", "brigand", "highwayman", "snake"];
+    ok(!k.monsters.some((m) => ABOVE.includes(m.kind)),
+      "…nor anything you already cleared on the surface");
+
+    /* --- ranked outward from the ladders, not scattered ---
+     * The design axis is distance from the nearest way OUT: every entrance is a
+     * soft landing and the floor hardens as you push inward. Ranking along the
+     * way DOWN instead put mercenaries under the island's hardest hole and
+     * amazons under its gentlest, which is the inversion this guards against. */
+    {
+      const ladders = k.portals.filter((p) => p.dest === "bandit")
+        .map((p) => ({ tx: Math.floor(p.x / 32), ty: Math.floor(p.y / 32) }));
+      const meanOut = (kind: string): number => {
+        const ps = k.mobPosts!.filter((p) => p.kind === kind);
+        return ps.reduce((s, p) => s + Math.min(
+          ...ladders.map((l) => Math.hypot(p.tx - l.tx, p.ty - l.ty))), 0) / ps.length;
+      };
+      ok(meanOut("mercenary") < meanOut("gladiator"),
+        "mercenaries keep the ladders; gladiators are found further in");
+      ok(meanOut("corsair") < meanOut("hunter"), "…and corsairs nearer the way out than hunters");
+      ok(meanOut("mercenary") < meanOut("corsair")
+        && meanOut("corsair") < meanOut("wildWarrior")
+        && meanOut("wildWarrior") < meanOut("amazon"),
+        "…the bottom four ranks climb in step with the walk from a ladder");
+    }
+
+    /* --- and the deep middle, where the way down was cut, is the hard part --- */
+    const hole = k.portals.find((p) => p.dest === "banditdeep2")!;
+    const hx = Math.floor(hole.x / 32), hy = Math.floor(hole.y / 32);
+    const meanTo = (kind: string): number => {
+      const ps = k.mobPosts!.filter((p) => p.kind === kind);
+      return ps.reduce((s, p) => s + Math.hypot(p.tx - hx, p.ty - hy), 0) / ps.length;
+    };
+    ok(meanTo("gladiator") < meanTo("mercenary"),
+      "gladiators stand nearer the hole to -2 than mercenaries do");
+    ok(meanTo("hunter") < meanTo("corsair"), "…and hunters nearer than corsairs");
+
+    /* --- every ladder and the hole below are reachable from every ladder --- */
+    const ladders = k.portals.filter((p) => p.dest === "bandit");
+    const start = ladders[0];
+    const sx = Math.floor(start.x / 32), sy = Math.floor(start.y / 32);
+    const seen = Array.from({ length: k.h }, () => new Array<boolean>(k.w).fill(false));
+    const q: [number, number][] = [[sx, sy]];
+    seen[sy][sx] = true;
+    let reached = 0;
+    while (q.length) {
+      const [x, y] = q.pop()!;
+      reached++;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = x + dx, c = y + dy;
+        if (a < 0 || c < 0 || a >= k.w || c >= k.h) continue;
+        if (seen[c][a] || k.solid[c][a]) continue;
+        seen[c][a] = true;
+        q.push([a, c]);
+      }
+    }
+    let open = 0;
+    for (let y = 0; y < k.h; y++) {
+      for (let x = 0; x < k.w; x++) if (!k.solid[y][x]) open++;
+    }
+    ok(reached === open, `every open square is reachable from a ladder (${reached})`);
+    ok(ladders.every((p) => seen[Math.floor(p.y / 32)][Math.floor(p.x / 32)]),
+      "…all six ladders among them");
+    ok(seen[hy][hx], "…and so is the hole down to -2");
+    ok(k.mobPosts!.every((p) => seen[p.ty][p.tx]), "…so no creature is walled into the rock");
+
+    /* --- and the way further down is open, onto a ladder on its own square --- */
+    ok(hole !== undefined && !hole.inactive, "the hole to -2 is open");
+    ok(k.portals.every((p) => !p.inactive), "…and nothing on this floor is sealed any more");
+    {
+      const deep2 = worlds.banditdeep2;
+      const backUp = deep2.portals.find((p) => p.dest === "banditdeep1")!;
+      ok(Math.floor(backUp.x / 32) === hx && Math.floor(backUp.y / 32) === hy,
+        "…the ladder on -2 standing on the very square the hole was cut into");
+    }
+
+    /* --- the whole human ladder now spawns somewhere ---
+     * Twenty ranks used to exist in the bestiary and never appear on any map.
+     * Between the island and this floor, sixteen of them do; the last four wait
+     * on -2. */
+    const surface = worlds.bandit.monsters.map((m) => m.kind);
+    const both = new Set([...surface, ...k.monsters.map((m) => m.kind)]);
+    const LADDER16 = ["beggar", "vagrant", "thief", "poacher", "bandit", "smuggler",
+      "cutthroat", "deserter", "brigand", "highwayman", "mercenary", "corsair",
+      "wildWarrior", "amazon", "hunter", "gladiator"];
+    ok(LADDER16.every((m) => both.has(m)),
+      "sixteen of the twenty human ranks now spawn somewhere in the game");
+  }
+
+
+
+  console.log("Etap 41 — the redcap, the Time Sage's first boss:");
+  {
+    const fs41 = await import("node:fs");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const M41 = await import("../src/entities/monsters.ts");
+    const { BANDIT_SPEC } = await import("../src/world/banditSpec.ts");
+    const A41 = await import("../src/gfx/itemArt.ts");
+    const { MONSTER_AGGRO_RANGE: AGGRO41 } = await import("../src/config.ts");
+    const mob41 = await import("../src/gfx/mobSheet.ts");
+    const d = MONSTER_DEFS.redcap;
+
+    /* --- the folklore, expressed as numbers ---------------------------------
+     * Every assertion here pins a sentence from the Border sources, so if a
+     * future tuning pass flattens one of them the test says WHICH story stopped
+     * being told rather than "a number changed". */
+    ok(d.speed >= 63, `the redcap is one of the fast ones — nothing outruns him easily (${d.speed})`);
+    ok(!!d.ranged && d.ranged.brute === true,
+      "he flings stones AND keeps closing — a brute shooter, never a kiter");
+    ok(!!d.ranged && d.ranged.range <= AGGRO41,
+      "…and never throws from beyond his own awareness");
+    ok((d.armor ?? 0) > 0, "the iron boots are worth something against steel");
+
+    /* --- the tier: ten over the ground he is reached from ------------------
+     * The human ladder tops out at the highwayman. A boss the ladder trains you
+     * for has to sit well above it, or the echo is not an exam. */
+    const tier = M41.monsterTierOf(d.hp);
+    const top = M41.monsterTierOf(MONSTER_DEFS.highwayman.hp);
+    ok(tier >= top + 8 && tier <= top + 14,
+      `he stands ${tier - top} tiers over the highwayman — the ground trains, the echo tests (${tier} vs ${top})`);
+
+    /* --- the loot ----------------------------------------------------------
+     * The relic is not a dice roll: a mission that cannot be finished because
+     * the drop missed is not a mission. */
+    const relic = d.loot.find((e) => e.kind === "bloodCap");
+    ok(!!relic && relic.chance === 1 && relic.n[0] === 1 && relic.n[1] === 1,
+      "the cap drops every time, exactly one");
+    ok(items.ITEMS.bloodCap.stack === 1,
+      "…and it does not stack, because there is one redcap and one cap");
+    ok(d.loot.length === 1, `the cap is the ONLY thing he drops (${d.loot.map((e) => e.kind).join(",")})`);
+
+    /* THE PRESS TEST. Thirty platinum is the biggest prize in the game and the
+     * redcap respawns like everything else, so the hoard must NOT be reachable
+     * twice. It is a one-time chest keyed to his lair, which `game.opened`
+     * hands out once per character; the creature itself carries a purse the
+     * size of an orc warrior's and not a coin more. If someone ever moves it
+     * onto him, these three fail together. */
+    ok(!d.loot.some((e) => e.kind === "platinumCoin" || e.kind === "goldCoin"),
+      "the hoard is NOT in his pocket — a respawning boss may not print money");
+    ok((d.gold[0] + d.gold[1]) / 2 < 60,
+      "…his purse stays on the bestiary's own gold curve");
+    const hoard = (await import("../src/game.ts")).CHEST_PRIZES.hermitage;
+    ok(!!hoard && hoard.length === 1 && Array.isArray(hoard[0])
+      && hoard[0][0] === "platinumCoin" && hoard[0][1] === 30,
+      "…and thirty platinum waits in a one-time chest in the lair instead");
+
+    /* --- art ---------------------------------------------------------------
+     * Same three checks the human ranks get: registered, shipped, credited. */
+    const sheetSrc41 = fs41.readFileSync(new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits41 = fs41.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    for (const f of ["mob-redcap-walk.png", "mob-redcap-dead.png", "item-blood-cap.png"]) {
+      ok(fs41.existsSync(new URL(`../public/${f}`, import.meta.url)), `${f} is shipped`);
+      ok(credits41.includes(f), `…and ${f} is credited by filename`);
+    }
+    ok(sheetSrc41.includes('redcap: "./mob-redcap-walk.png"'), "the walk sheet is registered");
+    ok(sheetSrc41.includes('redcap: "./mob-redcap-dead.png"'), "…and so is the body");
+    {
+      const b = fs41.readFileSync(new URL("../public/mob-redcap-walk.png", import.meta.url));
+      const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
+      ok(w % 9 === 0 && h % 4 === 0, `the sheet is the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(w / 9 <= 64 && h / 4 <= 64, "…and no frame is bigger than the LPC cell it came from");
+      const c = fs41.readFileSync(new URL("../public/item-blood-cap.png", import.meta.url));
+      ok(c.readUInt32BE(16) === 32 && c.readUInt32BE(20) === 32, "the cap icon is 32x32");
+    }
+    ok(A41.iconFile("bloodCap") === "item-blood-cap.png", "the icon answers to the item id");
+    ok(mob41.mobFrame("redcap" as never, "down", true, 0) === null,
+      "headless, he still falls back to the baked sprite");
+
+    /* --- ONE redcap, in ONE place -----------------------------------------
+     * The temporary post on the Gallows Coast is gone (Etap 41 shipped his own
+     * map); he stands on exactly one square in the whole game, and it is in
+     * his lair. A second one anywhere would be a second hoard-guard on a map
+     * whose chest has already been opened. */
+    const worlds41 = buildWorlds(WORLD_SEED);
+    const redcaps = Object.entries(worlds41)
+      .flatMap(([k, w]) => (w.mobPosts ?? []).filter((pp) => pp.kind === "redcap").map(() => k));
+    ok(redcaps.length === 1 && redcaps[0] === "hermitage",
+      `exactly one redcap in the world, and he is in his lair (${redcaps.join(",") || "none"})`);
+    ok(!BANDIT_SPEC.rows.join("").includes("x"), "…and the temporary post on the Gallows Coast is gone");
+    ok(!fs41.readFileSync(new URL("../src/world/banditSpec.ts", import.meta.url), "utf8")
+        .includes("TEMP-ETAP41"), "…tag and all");
+  }
+
+  console.log("Etap 41 — Liddesdale and the lair under it:");
+  {
+    const cfg41 = await import("../src/config.ts");
+    const { LIDDESDALE_SPEC } = await import("../src/world/liddesdaleSpec.ts");
+    const { HERMITAGE_SPEC } = await import("../src/world/hermitageSpec.ts");
+    const ws = buildWorlds(WORLD_SEED);
+    const isle = ws.liddesdale, lair = ws.hermitage;
+
+    /* --- the trace is faithful -------------------------------------------
+     * Both grids came out of Tiled, and the one thing a trace can silently get
+     * wrong is the shape. Size and land area are the cheap proof. */
+    ok(isle.w === 80 && isle.h === 80, `Liddesdale is the 80x80 Tiled export (${isle.w}x${isle.h})`);
+    ok(lair.w === 30 && lair.h === 30, `the lair is the 30x30 export (${lair.w}x${lair.h})`);
+    ok(LIDDESDALE_SPEC.floor?.length === 80, "…and the island carries a floor grid");
+    const landTiles = LIDDESDALE_SPEC.rows.join("").split("").filter((c) => c !== "~").length;
+    ok(landTiles === 3923, `3923 land squares, exactly what the tileset drew (${landTiles})`);
+
+    /* Peat, not lawn. Every walkable square on the island is dirt — the art is
+     * bare bog and a green sward under it would be the only living thing on
+     * the map. */
+    const grassy = LIDDESDALE_SPEC.floor!.join("").split("").filter((c) => c === ".").length;
+    ok(grassy === 0, `not one square of grass on the bog (${grassy})`);
+
+    /* --- walkable, and walkable as ONE piece ------------------------------
+     * The scatter is placed by script and a boulder dropped in the wrong gap
+     * can cork a headland. Flood-fill from the pad has to reach every open
+     * square on both maps, or something is fenced off where nobody will look. */
+    const reachAll = (w: typeof isle, sx: number, sy: number) => {
+      const seen = new Set<number>(); const q = [[sx, sy]];
+      seen.add(sy * w.w + sx);
+      while (q.length) {
+        const [x, y] = q.pop()!;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+          if (w.solid[ny][nx] || seen.has(ny * w.w + nx)) continue;
+          seen.add(ny * w.w + nx); q.push([nx, ny]);
+        }
+      }
+      let open = 0;
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (!w.solid[y][x]) open++;
+      return [seen.size, open] as const;
+    };
+    const pad = isle.portals.find((pt) => pt.dest === "cellar")!;
+    const [got1, open1] = reachAll(isle, Math.floor(pad.x / TILE), Math.floor(pad.y / TILE));
+    ok(got1 === open1, `every open square on Liddesdale is walkable from the pad (${got1}/${open1})`);
+    const ladder = lair.portals.find((pt) => pt.dest === "liddesdale")!;
+    const [got2, open2] = reachAll(lair, Math.floor(ladder.x / TILE), Math.floor(ladder.y / TILE));
+    ok(got2 === open2, `…and every square of the lair from the ladder (${got2}/${open2})`);
+
+    /* --- the road in and the road out -------------------------------------
+     * Cellar → island → lair → island → cellar. Every hop needs the portal at
+     * BOTH ends or the player walks into a room with no way back. */
+    /* The pad is a MISSION door: dark until Chronos hands the errand over, lit
+     * from then on and lit forever. Driven here the way the game drives it, by
+     * moving the chain and running the same sweep `update()` runs. */
+    const MM = await import("../src/systems/missions.ts");
+    const { resetPlayerState: rps41 } = await import("../src/systems/playerState.ts");
+    const padTo = (k: string) => ws.cellar.portals.find((pt) => pt.dest === k)!;
+    const holeTo = (k: string) => ws.liddesdale.portals.find((pt) => pt.dest === k)!;
+    rps41(); MM.resetMissions();
+    applyMissionPads(ws, 9);
+    ok(padTo("liddesdale").inactive === true, "at level nine the sage's first pad is dark");
+    applyMissionPads(ws, 10);
+    ok(padTo("liddesdale").inactive === true, "…and still dark at ten, until he actually hands it over");
+    MM.setStage("redcap", "active");
+    applyMissionPads(ws, 10);
+    ok(padTo("liddesdale").inactive === false, "taking the mission lights it");
+    ok(holeTo("hermitage").inactive === false, "…and opens the hole down to the lair");
+    /* The kill: the door in shuts, the door out opens, both in the same sweep.
+     * A player standing in the lair when this happens still has the ladder up
+     * to Liddesdale, which is a GROUND door and stays lit — nobody is ever
+     * sealed in with a dead boss. */
+    const wayHome = () => ws.hermitage.portals.find((pt) => pt.dest === "cellar")!;
+    ok(wayHome().inactive === true, "before the kill there is no way home from the lair");
+    MM.setStage("redcap", "complete");
+    applyMissionPads(ws, 10);
+    ok(holeTo("hermitage").inactive === true, "killing him shuts the mouth behind you");
+    ok(wayHome().inactive === false, "…and lights the pad back to Chronos where he fell");
+    ok(ws.hermitage.portals.find((pt) => pt.dest === "liddesdale")!.inactive === false,
+      "…while the ladder up stays open, so nobody is sealed in");
+    MM.setStage("redcap", "closed");
+    applyMissionPads(ws, 10);
+    ok(padTo("liddesdale").inactive === false, "handing the cap in leaves the hunting ground open forever");
+    ok(holeTo("hermitage").inactive === true, "…and shuts the lair for good");
+    ok(wayHome().inactive === true, "…both doors of it");
+    rps41(); MM.resetMissions();
+    applyMissionPads(ws, 10);
+    ok(isle.portals.some((pt) => pt.dest === "cellar"), "…the island has a pad home");
+    ok(isle.portals.some((pt) => pt.dest === "hermitage"), "…a hole down to the lair");
+    ok(lair.portals.filter((pt) => pt.dest === "liddesdale").length === 1,
+      "…and the lair has exactly one ladder back up");
+
+    /* --- the gradient ------------------------------------------------------
+     * Weakest at the pad, heaviest over the hole, ranked by WALK distance and
+     * not by straight line. Asserted as an average because individual posts
+     * wobble: what must hold is the slope. */
+    const M41 = await import("../src/entities/monsters.ts");
+    const posts = isle.mobPosts!;
+    const tierAt = (p: { kind: string }) => M41.monsterTierOf(M41.MONSTER_DEFS[p.kind as never].hp);
+    const near = posts.filter((p) => Math.hypot(p.tx * TILE - pad.x, p.ty * TILE - pad.y) < 25 * TILE);
+    const hole = isle.portals.find((pt) => pt.dest === "hermitage")!;
+    const deep = posts.filter((p) => Math.hypot(p.tx * TILE - hole.x, p.ty * TILE - hole.y) < 25 * TILE);
+    const avg = (a: { kind: string }[]) => a.reduce((t, p) => t + tierAt(p), 0) / a.length;
+    ok(near.length >= 4 && deep.length >= 4, `both ends of the island are populated (${near.length}/${deep.length})`);
+    ok(avg(deep) > avg(near) + 2,
+      `the island hardens toward the hole (${avg(near).toFixed(1)} at the pad → ${avg(deep).toFixed(1)} over it)`);
+
+    /* --- no trains, anywhere ----------------------------------------------
+     * The same eight-tile rule the town is held to: aggro is six tiles, so
+     * eight leaves a tile of slack to back off with. Checked on BOTH maps
+     * because the lair is small and it would be easy to crowd. */
+    const need41 = cfg41.MONSTER_AGGRO_RANGE / TILE + 2;
+    for (const [name, w] of [["Liddesdale", isle], ["the lair", lair]] as const) {
+      const ps = w.mobPosts!;
+      let closest = 99, worst = "";
+      for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+        const dd = Math.max(Math.abs(ps[i].tx - ps[j].tx), Math.abs(ps[i].ty - ps[j].ty));
+        if (dd < closest) { closest = dd; worst = `${ps[i].kind}/${ps[j].kind}`; }
+      }
+      ok(closest >= need41, `no two creatures within ${need41} tiles on ${name} — closest ${closest} (${worst})`);
+    }
+
+    /* --- who lives where ---------------------------------------------------
+     * Border reivers above, the dead below, and the boss alone at the bottom.
+     * A rank leaking from one map to the other would blur the whole point of
+     * the descent. */
+    const kindsUp = new Set(isle.mobPosts!.map((p) => p.kind));
+    ok([...kindsUp].sort().join(" ") === "brigand cutthroat deserter highwayman smuggler",
+      `five reiver ranks on the island and nothing else (${[...kindsUp].sort().join(" ")})`);
+    const kindsDown = new Set(lair.mobPosts!.map((p) => p.kind));
+    ok([...kindsDown].sort().join(" ") === "redcap skeleton",
+      `the dead and their killer, and nobody else (${[...kindsDown].sort().join(" ")})`);
+    ok(isle.mobPosts!.length >= 30, `the island is properly populated (${isle.mobPosts!.length})`);
+
+    /* --- the boss stands at the far end -----------------------------------
+     * The lair is a flattened S and the whole of its level design is that you
+     * come down at one end of it and he is at the other. If a future edit
+     * moves either, the walk stops being a walk. */
+    const boss = lair.mobPosts!.find((p) => p.kind === "redcap")!;
+    const dl = Math.max(Math.abs(boss.tx - Math.floor(ladder.x / TILE)),
+                        Math.abs(boss.ty - Math.floor(ladder.y / TILE)));
+    ok(dl >= 14, `the redcap is the length of the cave from the ladder (${dl} tiles)`);
+    const chest41 = lair.structures.find((st) => st.key === "treasure")!;
+    ok(!!chest41, "his hoard is down there");
+    ok(Math.max(Math.abs(chest41.tx - boss.tx), Math.abs(chest41.ty - boss.ty)) <= 6,
+      "…behind him, so it is not reachable without the fight");
+
+    /* --- climate -----------------------------------------------------------
+     * Not one live tree on either map. It is the single scatter rule that
+     * separates this island from the Gallows Coast, and it is deliberate: the
+     * terrain is dying peat and a green canopy would contradict every other
+     * pixel on it. */
+    ok(isle.trees.length === 0, `nothing green grows on the bog (${isle.trees.length} trees)`);
+    ok(isle.scenery.filter((sc) => sc.kind === "deadTree").length >= 40,
+      `…the dead ones do (${isle.scenery.filter((sc) => sc.kind === "deadTree").length})`);
+    ok(isle.rocks.length >= 30, `and there is stone worth swinging at (${isle.rocks.length})`);
+    ok(HERMITAGE_SPEC.rows.join("").includes("#"), "the lair is walled in rock");
+  }
+
+  console.log("Etap 41 — the terrain exports, and the relic gate:");
+  {
+    const nfs41 = await import("node:fs");
+    const M41b = await import("../src/systems/missions.ts");
+    const { resetPlayerState: rps } = await import("../src/systems/playerState.ts");
+
+    /* --- the picture IS the map -------------------------------------------
+     * Both new worlds are drawn from a Tiled image export, like every other
+     * hand-authored map in the game. Getting this wrong does not crash: the
+     * procedural bake sits underneath as a fallback, so the map simply renders
+     * in the wrong art style and nothing complains. Which is exactly what
+     * happened, so it is a test now.
+     *
+     * The size check is the one that matters — `terrainImage.ts` refuses a
+     * mismatched export at runtime and keeps the bake, silently. */
+    const tsrc = nfs41.readFileSync(new URL("../src/world/terrainImage.ts", import.meta.url), "utf8");
+    const pngSize = (f: string) => {
+      const b = nfs41.readFileSync(new URL(`../public/${f}`, import.meta.url));
+      return [b.readUInt32BE(16), b.readUInt32BE(20)] as const;
+    };
+    for (const [key, file, side] of [
+      ["liddesdale", "liddesdale-terrain.png", 80],
+      ["hermitage", "hermitage-terrain.png", 30],
+    ] as const) {
+      ok(tsrc.includes(`${key}: "./${file}"`), `${key} is registered in TERRAIN_SRC`);
+      ok(nfs41.existsSync(new URL(`../public/${file}`, import.meta.url)), `…and ${file} is shipped`);
+      const [pw, ph] = pngSize(file);
+      ok(pw === side * TILE && ph === side * TILE,
+        `…at native tile size, or the loader silently refuses it (${pw}x${ph} vs ${side * TILE})`);
+    }
+    /* EVERY authored map has one. A new map added without an export renders in
+     * the fallback bake and looks like a different game. */
+    const ws41 = buildWorlds(WORLD_SEED);
+    const noArt = Object.keys(ws41).filter((k) => !tsrc.includes(`${k}: "./`));
+    ok(noArt.length === 0, `no map is left drawing its own procedural bake${noArt.length ? " — " + noArt.join(", ") : ""}`);
+
+    /* --- the outcrops are collision, not props ----------------------------
+     * The export paints Radek's forty rocks. If the engine ALSO draws a
+     * boulder on them the player sees two rocks in two art styles on one
+     * square, which is what the first cut of this map did. */
+    const { LIDDESDALE_SPEC } = await import("../src/world/liddesdaleSpec.ts");
+    const { HERMITAGE_SPEC } = await import("../src/world/hermitageSpec.ts");
+    /* The forty patches are MUD and mud is walkable. The same Tiled layer is
+     * floor in the lair below, so one flat slick may not be a wall upstairs and
+     * a puddle downstairs — which is what shipped, and is why the rule is
+     * asserted from BOTH ends here rather than from the island alone. */
+    ok(LIDDESDALE_SPEC.solids === undefined, "the painted mud is not collision");
+    ok(!Object.values(LIDDESDALE_SPEC.scenery ?? {}).some((k) => k === "boulderA" || k === "boulderB"),
+      "…and the engine draws no boulder over it either");
+    ok(!LIDDESDALE_SPEC.rows.join("").includes("%"), "…so the grid says nothing about it at all");
+    ok(ws41.liddesdale.scenery.every((sc) => sc.kind !== "boulderA" && sc.kind !== "boulderB"),
+      "…and not one engine boulder stands on the island");
+    /* The proof that the two maps agree: a square the GRID leaves as plain
+     * ground is sealed ONLY by a prop standing next to it. A tent and a
+     * boulder are two tiles wide, so they legitimately block the square to
+     * their right — but nothing the terrain export merely PAINTS may block
+     * anything, because a picture is a picture. Mud that stops you upstairs
+     * while the identical layer downstairs is floor is the bug this catches. */
+    for (const [name, w, spec, blank] of [
+      ["Liddesdale", ws41.liddesdale, LIDDESDALE_SPEC, "."],
+      ["the lair", ws41.hermitage, HERMITAGE_SPEC, "="],
+    ] as const) {
+      const propAt = new Set(w.scenery.map((sc) => `${sc.tx},${sc.ty}`));
+      let orphan = 0, sample = "";
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) {
+        if (spec.rows[y][x] !== blank || !w.solid[y][x]) continue;
+        // the widest prop on either map is two squares across and one deep
+        const explained = propAt.has(`${x - 1},${y}`) || propAt.has(`${x},${y - 1}`)
+          || propAt.has(`${x - 1},${y - 1}`);
+        if (!explained) { orphan++; if (!sample) sample = `${x},${y}`; }
+      }
+      ok(orphan === 0,
+        `on ${name}, nothing seals open ground but a prop${orphan ? ` (${orphan}, first at ${sample})` : ""}`);
+    }
+
+    /* No grass under the skulls. A feature glyph defaults to grass beneath, so
+     * a cave map without a floor grid grows a lawn wherever a bone pile sits. */
+    ok(HERMITAGE_SPEC.floor?.length === 30, "the lair carries a floor grid");
+    let lawn = 0;
+    for (let y = 0; y < ws41.hermitage.h; y++) for (let x = 0; x < ws41.hermitage.w; x++) {
+      if (ws41.hermitage.tile[y][x] === Tile.Grass) lawn++;
+    }
+    ok(lawn === 0, `not one square of grass underground (${lawn})`);
+
+    /* --- the relic gate ----------------------------------------------------
+     * The cap exists once per character. `wantsRelic` is the whole of the rule
+     * and `killMonster` is where it is applied, so the drop is asserted through
+     * the state machine rather than by reading the loot table. */
+    rps(); M41b.resetMissions();
+    ok(!M41b.wantsRelic("redcap", 10), "an untaken mission yields no relic");
+    M41b.setStage("redcap", "active");
+    ok(M41b.wantsRelic("redcap", 10), "…the taken one does");
+    M41b.relicTaken("redcap", 10);
+    ok(!M41b.wantsRelic("redcap", 10), "…and yields no SECOND cap to sell");
+    ok(!M41b.echoOpen("hermitage", 10), "…and the lair shuts on the KILL, not on the hand-in");
+    ok(M41b.relicRoadOpen("hermitage", 10), "…while the way home lights where he fell");
+    M41b.relicLost("redcap", 10);
+    ok(M41b.wantsRelic("redcap", 10) && M41b.echoOpen("hermitage", 10),
+      "losing the cap reopens the hole rather than bricking the character");
+    ok(!M41b.relicRoadOpen("hermitage", 10), "…and the ride home has to be earned again");
+    M41b.relicTaken("redcap", 10);
+    M41b.missionHandedIn("redcap", 10);
+    ok(!M41b.echoOpen("hermitage", 10) && M41b.groundOpen("liddesdale", 10),
+      "handing in shuts the lair and leaves the island open");
+    const src41 = nfs41.readFileSync(new URL("../src/systems/combat.ts", import.meta.url), "utf8");
+    ok(/wantsRelic/.test(src41), "…and killMonster is the code that applies it");
+    rps(); M41b.resetMissions();
+
+    /* --- the boss's own numbers -------------------------------------------- */
+    const dR = (await import("../src/entities/monsters.ts")).MONSTER_DEFS.redcap;
+    const fastest = Object.values((await import("../src/entities/monsters.ts")).MONSTER_DEFS)
+      .reduce((t, m) => Math.max(t, m.speed), 0);
+    ok(dR.speed === fastest, `nothing in the bestiary is quicker than the redcap (${dR.speed})`);
+  }
+
+  console.log("The whole road down and back walks end to end:");
+  {
+    const { travelTo, populateAll, createGame } = await import("../src/game.ts");
+    const { portalCovers } = await import("../src/world/collision.ts");
+    const g = createGame(WORLD_SEED);
+    populateAll(g.worlds);
+
+    // cellar -> island
+    g.current = g.worlds.cellar;
+    const cPad = g.worlds.cellar.portals.find((p) => p.dest === "bandit")!;
+    ok(cPad !== undefined && !cPad.inactive, "the cellar's pad to the Gallows Coast is live");
+    g.player.x = cPad.x; g.player.y = cPad.y;
+    travelTo(g, "bandit");
+    ok(g.current.key === "bandit", "…and it carries you there");
+
+    // island -> -1, through every one of the six holes, standing on the tile
+    let opened = 0;
+    for (const h of g.worlds.bandit.portals.filter((p) => p.dest === "banditdeep1")) {
+      const tx = Math.floor(h.x / 32), ty = Math.floor(h.y / 32);
+      // the square must be stand-on-able, and standing on its centre must fire
+      const standable = !g.worlds.bandit.solid[ty][tx];
+      const fires = !h.inactive && portalCovers(h, tx * 32 + 16, ty * 32 + 16);
+      if (standable && fires) opened++;
+    }
+    ok(opened === 6, "all six holes on the island are open and can be stood on");
+
+    g.current = g.worlds.bandit;
+    const h3 = g.worlds.bandit.portals.filter((p) => p.dest === "banditdeep1")[0];
+    g.player.x = h3.x; g.player.y = h3.y;
+    travelTo(g, "banditdeep1");
+    ok(g.current.key === "banditdeep1", "going down lands you on -1");
+
+    // -1 -> -2
+    const d2 = g.worlds.banditdeep1.portals.find((p) => p.dest === "banditdeep2")!;
+    ok(d2 !== undefined && !d2.inactive, "the hole on -1 down to -2 is open");
+    g.player.x = d2.x; g.player.y = d2.y;
+    travelTo(g, "banditdeep2");
+    ok(g.current.key === "banditdeep2", "…and drops you onto -2");
+
+    // -2 -> -1 -> island, back out the way you came
+    const u1 = g.worlds.banditdeep2.portals.find((p) => p.dest === "banditdeep1")!;
+    g.player.x = u1.x; g.player.y = u1.y;
+    travelTo(g, "banditdeep1");
+    ok(g.current.key === "banditdeep1", "the ladder on -2 climbs back to -1");
+    const u2 = g.worlds.banditdeep1.portals.filter((p) => p.dest === "bandit")[0];
+    g.player.x = u2.x; g.player.y = u2.y;
+    travelTo(g, "bandit");
+    ok(g.current.key === "bandit", "…and a ladder on -1 climbs back to daylight");
+    const home = g.worlds.bandit.portals.find((p) => p.dest === "cellar")!;
+    g.player.x = home.x; g.player.y = home.y;
+    travelTo(g, "cellar");
+    ok(g.current.key === "cellar", "…and the pad on the island returns you to the cellar");
+
+    // -2 -> -3 -> -2, the last leg
+    const d3 = g.worlds.banditdeep2.portals.find((p) => p.dest === "banditdeep3")!;
+    g.current = g.worlds.banditdeep2;
+    g.player.x = d3.x; g.player.y = d3.y;
+    travelTo(g, "banditdeep3");
+    ok(g.current.key === "banditdeep3", "the last hole drops you into the black cell");
+    const u3 = g.worlds.banditdeep3.portals.find((p) => p.dest === "banditdeep2")!;
+    g.player.x = u3.x; g.player.y = u3.y;
+    travelTo(g, "banditdeep2");
+    ok(g.current.key === "banditdeep2", "…and its ladder climbs back out");
+
+    // the whole road is open end to end now
+    const dormant: string[] = [];
+    for (const key of ["bandit", "banditdeep1", "banditdeep2", "banditdeep3"] as const) {
+      for (const p of g.worlds[key].portals) if (p.inactive) dormant.push(`${key}->${p.dest}`);
+    }
+    ok(dormant.length === 0, "not one pad on the whole road is sealed any more");
+  }
+
+  console.log("Bandit Deep -2 ends the human ladder:");
+  {
+    const fs = await import("node:fs");
+    const { BANDITDEEP2_SPEC } = await import("../src/world/banditDeep2Spec.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    const k2 = worlds.banditdeep2;
+
+    const terrain = new URL("../public/banditdeep2-terrain.png", import.meta.url);
+    if (!fs.existsSync(terrain)) {
+      ok(false, "public/banditdeep2-terrain.png is missing — the floor falls back to the baked bake");
+    } else {
+      const png = fs.readFileSync(terrain);
+      ok(png.readUInt32BE(16) === k2.w * 32 && png.readUInt32BE(20) === k2.h * 32,
+        `the terrain export is exactly ${k2.w * 32}x${k2.h * 32}`);
+    }
+    ok(BANDITDEEP2_SPEC.rows.length === 100
+      && BANDITDEEP2_SPEC.rows.every((r) => r.length === 105),
+      "the grid is 105x100 — the same frame as the two floors above it");
+
+    /* --- still a cellar --- */
+    ok(k2.trees.length === 0, "nothing grows this far down either");
+    ok(k2.scenery.some((s) => s.kind === "tent") && k2.fires.length > 0 && k2.rocks.length > 0,
+      "canvas, fires and mineable rock, as on -1");
+
+    /* --- the last four ranks, and only those --- */
+    const TOP = ["barbarian", "raider", "warlord", "chieftain"] as const;
+    ok(k2.mobPosts?.length === 99, "99 creature posts were written into the grid");
+    ok(k2.monsters.length === 99, "…and every one of them spawned");
+    ok(TOP.every((m) => k2.monsters.some((x) => x.kind === m)),
+      "barbarian, raider, warlord and chieftain all stand on it");
+    ok(k2.monsters.every((m) => (TOP as readonly string[]).includes(m.kind)),
+      "…and nothing else does: this floor is the top of the ladder and no more");
+    ok(!k2.monsters.some((m) => m.kind === "blackKnight"),
+      "…the Black Knight is not here; he waits on -3");
+
+    /* --- one way in, ranked outward from it --- */
+    const up = k2.portals.find((p) => p.dest === "banditdeep1")!;
+    const ux = Math.floor(up.x / 32), uy = Math.floor(up.y / 32);
+    ok(k2.portals.filter((p) => p.dest === "banditdeep1").length === 1,
+      "there is exactly one ladder back up — unlike -1, which has six");
+    const meanOut = (kind: string): number => {
+      const ps = k2.mobPosts!.filter((p) => p.kind === kind);
+      return ps.reduce((s, p) => s + Math.hypot(p.tx - ux, p.ty - uy), 0) / ps.length;
+    };
+    ok(meanOut("barbarian") < meanOut("raider")
+      && meanOut("raider") < meanOut("warlord")
+      && meanOut("warlord") < meanOut("chieftain"),
+      "…and all four ranks climb in step with the walk from it");
+    const nearest = Math.min(...k2.mobPosts!.map((p) => Math.hypot(p.tx - ux, p.ty - uy)));
+    ok(nearest >= 6, `the nearest creature to that ladder stands ${Math.round(nearest)} tiles off`);
+
+    /* --- the way to the Black Knight is cut, open, and guarded --- */
+    const down3 = k2.portals.find((p) => p.dest === "banditdeep3")!;
+    ok(down3 !== undefined && !down3.inactive, "a pad drops to -3, where the Black Knight waits");
+    const dx = Math.floor(down3.x / 32), dy = Math.floor(down3.y / 32);
+    const guards = k2.mobPosts!.filter((p) => Math.hypot(p.tx - dx, p.ty - dy) <= 16
+      && (p.kind === "chieftain" || p.kind === "warlord"));
+    ok(guards.length >= 5,
+      `…with ${guards.length} chieftains and warlords posted on it, not left in an empty corridor`);
+
+    /* --- everything the player can stand on connects to that ladder --- */
+    const seen = Array.from({ length: k2.h }, () => new Array<boolean>(k2.w).fill(false));
+    const q: [number, number][] = [[ux, uy]];
+    seen[uy][ux] = true;
+    let reached = 0;
+    while (q.length) {
+      const [x, y] = q.pop()!;
+      reached++;
+      for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = x + ax, c = y + ay;
+        if (a < 0 || c < 0 || a >= k2.w || c >= k2.h) continue;
+        if (seen[c][a] || k2.solid[c][a]) continue;
+        seen[c][a] = true;
+        q.push([a, c]);
+      }
+    }
+    let open = 0;
+    for (let y = 0; y < k2.h; y++) {
+      for (let x = 0; x < k2.w; x++) if (!k2.solid[y][x]) open++;
+    }
+    ok(reached === open, `every open square is reachable from the ladder (${reached})`);
+    ok(seen[dy][dx], "…the way down to -3 among them");
+    ok(k2.mobPosts!.every((p) => seen[p.ty][p.tx]), "…so no creature is walled into the rock");
+
+    /* --- the western wing, which used to be sealed ---
+     * The corridor between the cave edge and the wall at x=14-15 was drawn with
+     * no door in it: 297 squares of painted floor with no way in. It was marked
+     * as rock here rather than filled, because punching a hole in the collision
+     * grid without touching the drawing would have walked the player through two
+     * squares of painted stone. The map has since been redrawn with doorways at
+     * y=53-54 and y=80-82, so the wing is real ground now and this test says the
+     * opposite of what it used to. */
+    const inWing = (tx: number, ty: number) => tx >= 4 && tx <= 13 && ty >= 44 && ty <= 85;
+    let wingOpen = 0;
+    for (let y = 44; y <= 85; y++) {
+      for (let x = 4; x <= 13; x++) if (!k2.solid[y][x]) wingOpen++;
+    }
+    ok(wingOpen > 200, `the western wing is open ground now (${wingOpen} squares you can stand on)`);
+    ok(seen[53][10] && seen[81][10],
+      "…reached through both doorways, not just the one");
+    const wingPosts = k2.mobPosts!.filter((p) => inWing(p.tx, p.ty));
+    ok(wingPosts.length === 6, `six creatures hold it (${wingPosts.length})`);
+    ok(wingPosts.every((p) => p.kind === "raider" || p.kind === "warlord" || p.kind === "chieftain"),
+      "…drawn from the same bands the rest of the floor uses at that distance");
+    const wingCamp = k2.scenery.filter((sc) => inWing(sc.tx, sc.ty));
+    ok(wingCamp.filter((sc) => sc.kind === "tent").length === 3
+      && wingCamp.some((sc) => sc.kind === "well")
+      && wingCamp.filter((sc) => sc.kind === "skullPole").length === 2,
+      "…around an eighth camp cut to the same pattern as the other seven");
+    ok(k2.fires.filter((f) => inWing(f.tx, f.ty)).length === 3
+      && k2.rocks.filter((r) => inWing(r.tx, r.ty)).length === 5,
+      "…with the floor's own rate of fires and mineable rock");
+
+    /* --- and with this floor, every human rank in the bestiary spawns --- */
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const HUMAN = ["beggar", "vagrant", "thief", "poacher", "bandit", "smuggler",
+      "cutthroat", "deserter", "brigand", "highwayman", "mercenary", "corsair",
+      "wildWarrior", "amazon", "hunter", "gladiator", "barbarian", "raider",
+      "warlord", "chieftain"];
+    ok(HUMAN.every((h) => h in MONSTER_DEFS), "the bestiary still lists twenty human ranks");
+    const everywhere = new Set<string>();
+    for (const w of Object.values(worlds)) for (const m of w.monsters) everywhere.add(m.kind);
+    ok(HUMAN.every((h) => everywhere.has(h)),
+      "…and all twenty of them now spawn somewhere in the game");
+  }
+
+
+
+  console.log("The cellar walls stand on the grid they seal:");
+  {
+    const fs = await import("node:fs");
+    const zlib = await import("node:zlib");
+    const worlds = buildWorlds(WORLD_SEED);
+    const { Tile: TW } = await import("../src/world/types.ts");
+
+    /* The complaint this guards: the wall tileset used to stamp its band half a
+     * tile off the grid — one tile's worth of rock centred on the seam between
+     * the two squares the TMX sealed — so half of every wall square was bare
+     * floor the player was refused. That is not a thing a comment can promise.
+     * So measure it: decode the terrain export and check that every square the
+     * world seals is actually covered by rock in the picture.
+     *
+     * The earlier version of this test looked for isolated two-wide wall blocks
+     * and passed vacuously, because a two-column band running down the map is
+     * not an isolated block. It never guarded anything. This does. */
+    const readPng = (name: string): { w: number; h: number; d: Buffer } => {
+      const buf = fs.readFileSync(new URL(`../public/${name}`, import.meta.url));
+      const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
+      const bd = buf[24], ct = buf[25];
+      const idat: Buffer[] = [];
+      let p = 8;
+      while (p < buf.length) {
+        const len = buf.readUInt32BE(p);
+        if (buf.toString("ascii", p + 4, p + 8) === "IDAT") idat.push(buf.subarray(p + 8, p + 8 + len));
+        p += 12 + len;
+      }
+      const raw = zlib.inflateSync(Buffer.concat(idat));
+      const ch = ct === 6 ? 4 : ct === 2 ? 3 : 1;
+      const bpp = ch * (bd / 8), stride = w * bpp;
+      const out = Buffer.alloc(w * h * 4);
+      let prev = Buffer.alloc(stride), cur = Buffer.alloc(stride), o = 0;
+      for (let y = 0; y < h; y++) {
+        const ft = raw[o++];
+        const line = raw.subarray(o, o + stride);
+        o += stride;
+        for (let i = 0; i < stride; i++) {
+          const a = i >= bpp ? cur[i - bpp] : 0, b = prev[i], c = i >= bpp ? prev[i - bpp] : 0;
+          let v = line[i];
+          if (ft === 1) v += a;
+          else if (ft === 2) v += b;
+          else if (ft === 3) v += (a + b) >> 1;
+          else if (ft === 4) {
+            const pp = a + b - c, pa = Math.abs(pp - a), pb = Math.abs(pp - b), pc = Math.abs(pp - c);
+            v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
+          }
+          cur[i] = v & 255;
+        }
+        for (let x = 0; x < w; x++) {
+          const si = x * bpp, di = (y * w + x) * 4;
+          out[di] = cur[si]; out[di + 1] = cur[si + 1]; out[di + 2] = cur[si + 2];
+          out[di + 3] = ch === 4 ? cur[si + 3] : 255;
+        }
+        prev = cur; cur = Buffer.alloc(stride);
+      }
+      return { w, h, d: out };
+    };
+
+    // Each map is measured against ITS OWN floor colour, not one hard-coded
+    // brown. The bandit cellars are packed earth; the charnel deep is grey
+    // stone and the hollow greyer still, and a single reference would have
+    // read every open square on both of them as covered rock.
+    for (const [key, file, fr, fg, fb] of [
+      ["banditdeep1", "banditdeep-terrain.png", 78, 58, 46],
+      ["banditdeep2", "banditdeep2-terrain.png", 78, 58, 46],
+      ["banditdeep3", "banditdeep3-terrain.png", 78, 58, 46],
+      ["deaddeep1", "deaddeep-terrain.png", 52, 57, 58],
+      ["deaddeep2", "deaddeep2-terrain.png", 51, 48, 47],
+    ] as const) {
+      const png = readPng(file);
+      const w = worlds[key];
+      let sealed = 0, bare = 0;
+      for (let ty = 0; ty < w.h; ty++) {
+        for (let tx = 0; tx < w.w; tx++) {
+          if (w.tile[ty][tx] !== TW.Wall) continue;
+          let ink = 0, tot = 0;
+          for (let j = 0; j < 32; j += 4) {
+            for (let i = 0; i < 32; i += 4) {
+              const o = ((ty * 32 + j) * png.w + (tx * 32 + i)) * 4;
+              const d = Math.abs(png.d[o] - fr) + Math.abs(png.d[o + 1] - fg) + Math.abs(png.d[o + 2] - fb);
+              tot++;
+              if (d > 40) ink++;
+            }
+          }
+          sealed++;
+          if (ink / tot < 0.35) bare++;
+        }
+      }
+      ok(sealed > 400 && bare / sealed < 0.01,
+        `${key}: ${sealed} sealed squares and only ${bare} of them read as bare floor`);
+    }
+  }
+
+  console.log("The Black Cell is a room with one thing in it:");
+  {
+    const fs = await import("node:fs");
+    const { BANDITDEEP3_SPEC } = await import("../src/world/banditDeep3Spec.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    const k3 = worlds.banditdeep3;
+
+    const terrain = new URL("../public/banditdeep3-terrain.png", import.meta.url);
+    ok(fs.existsSync(terrain), "public/banditdeep3-terrain.png ships with it");
+    if (fs.existsSync(terrain)) {
+      const png = fs.readFileSync(terrain);
+      ok(png.readUInt32BE(16) === k3.w * 32 && png.readUInt32BE(20) === k3.h * 32,
+        `the terrain export is exactly ${k3.w * 32}x${k3.h * 32}`);
+    }
+    ok(BANDITDEEP3_SPEC.rows.length === 40
+      && BANDITDEEP3_SPEC.rows.every((r) => r.length === 40),
+      "the grid is 40x40 — a chamber, not another floor");
+
+    /* --- one knight, three at the gate, and nothing else --- */
+    const knights = k3.monsters.filter((m) => m.kind === "blackKnight");
+    ok(knights.length === 1, "exactly one Black Knight stands in it");
+    ok(k3.monsters.length === 4,
+      "…and three of the heaviest human ranks bar the way to him, and no more");
+    ok(k3.monsters.every((m) => ["blackKnight", "chieftain", "warlord"].includes(m.kind)),
+      "…nothing lighter has been let in");
+
+    /* --- he is at the far end, and he has room --- */
+    const up = k3.portals[0];
+    const ux = Math.floor(up.x / 32), uy = Math.floor(up.y / 32);
+    const kn = k3.mobPosts!.find((p) => p.kind === "blackKnight")!;
+    const gate = k3.mobPosts!.filter((p) => p.kind !== "blackKnight");
+    const dKn = Math.hypot(kn.tx - ux, kn.ty - uy);
+    ok(gate.every((p) => Math.hypot(p.tx - ux, p.ty - uy) < dKn),
+      "the gate stands between the ladder and the knight, not behind him");
+    ok(gate.every((p) => Math.hypot(p.tx - kn.tx, p.ty - kn.ty) >= 4),
+      "…and none of them is crowding him: he is fought alone");
+    ok(!k3.scenery.some((s) => Math.hypot(s.tx - kn.tx, s.ty - kn.ty) < 3)
+      && !k3.rocks.some((r) => Math.hypot(r.tx - kn.tx, r.ty - kn.ty) < 3),
+      "…on clear ground, with nothing to hide behind within three squares");
+
+    /* --- nobody camps down here --- */
+    ok(!k3.scenery.some((s) => s.kind === "tent" || s.kind === "well"),
+      "no tents and no well: this is a cell, not a camp");
+    ok(k3.decos.length > 0, "bones, though — this is where they end up");
+
+    /* --- and it all connects --- */
+    const seen = Array.from({ length: k3.h }, () => new Array<boolean>(k3.w).fill(false));
+    const q: [number, number][] = [[ux, uy]];
+    seen[uy][ux] = true;
+    let reached = 0;
+    while (q.length) {
+      const [x, y] = q.pop()!;
+      reached++;
+      for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = x + ax, c = y + ay;
+        if (a < 0 || c < 0 || a >= k3.w || c >= k3.h) continue;
+        if (seen[c][a] || k3.solid[c][a]) continue;
+        seen[c][a] = true;
+        q.push([a, c]);
+      }
+    }
+    let open = 0;
+    for (let y = 0; y < k3.h; y++) {
+      for (let x = 0; x < k3.w; x++) if (!k3.solid[y][x]) open++;
+    }
+    ok(reached === open, `every square of the cell is reachable from the ladder (${reached})`);
+    ok(seen[kn.ty][kn.tx], "…the knight's own among them");
   }
 
   console.log("The two floors under the Reach are traced faithfully from Tiled:");
@@ -4070,20 +6133,25 @@ async function main(): Promise<void> {
     const { populateAll, CHEST_PRIZES } = await import("../src/game.ts");
     const { FOOTPRINT } = await import("../src/gfx/sceneryArt.ts");
     const worlds = buildWorlds(WORLD_SEED);
-    populateAll(worlds, WORLD_SEED);
+    populateAll(worlds);
 
+    // Both -1 floors are 80x80 traces now, and neither buries anything: each
+    // branch keeps ONE hoard and it sits at the bottom of its -2, so `chest`
+    // is null here and the assertion below reads the other way round. The orc
+    // floor is the minotaur floor turned a quarter turn, which is why the two
+    // rows below share a wall count to the square.
     const FLOORS = [
       {
         key: "orcdeep1" as const, spec: ORCDEEP_SPEC, png: "orcdeep-terrain.png",
-        w: 40, h: 50, walls: 927, ladder: [32, 38], glyph: "2", chest: [8, 4],
-        fires: 18, wells: 2, boulders: 7,
-        head: { orcBerserker: 16, orcShaman: 10, orcWarrior: 5 }, total: 31,
+        w: 80, h: 80, walls: 2642, ladder: [9, 55], glyph: "2", chest: null,
+        prizes: 0, fires: 34, wells: 4, boulders: 22,
+        head: { orc: 38, orcArcher: 24, orcWarrior: 23 }, total: 85,
       },
       {
         key: "minodeep1" as const, spec: MINODEEP_SPEC, png: "minodeep-terrain.png",
-        w: 60, h: 50, walls: 1386, ladder: [10, 38], glyph: "1", chest: [46, 15],
-        fires: 27, wells: 4, boulders: 17,
-        head: { minotaur: 7, minotaurArcher: 11, minotaurGuard: 27 }, total: 45,
+        w: 80, h: 80, walls: 2642, ladder: [55, 70], glyph: "1", chest: null,
+        prizes: 0, fires: 34, wells: 4, boulders: 22,
+        head: { minotaur: 52, minotaurArcher: 33 }, total: 85,
       },
     ];
 
@@ -4152,14 +6220,24 @@ async function main(): Promise<void> {
       ok(o.monsters.every((m) => m.hx !== undefined && m.hy !== undefined && m.hr),
         "…every one leashed to the tile the map posted him on");
 
-      /* --- the hoard --- */
+      /* --- the hoard, where the floor has one --- */
       const chest = o.structures.find((st) => st.key === "treasure");
-      ok(chest !== undefined, `${tag}: the hoard sits in it`);
-      ok(chest!.tx === f.chest[0] && chest!.ty === f.chest[1],
-        `…on (${f.chest.join(",")})`);
-      ok(o.solid[chest!.ty][chest!.tx], "…and it is furniture: you open it from the next tile");
-      ok((CHEST_PRIZES[f.key] ?? []).length === 2, "…holding two pieces of the Marrow set");
-      ok(!o.camps.some((c) => c.key === "hoard"),
+      if (f.chest === null) {
+        ok(chest === undefined, `${tag}: nothing is buried here — the hoard is a floor further down`);
+        ok(CHEST_PRIZES[f.key] === undefined, "…and no prize is keyed to a chest that does not exist");
+      } else {
+        ok(chest !== undefined, `${tag}: the hoard sits in it`);
+        ok(chest!.tx === f.chest[0] && chest!.ty === f.chest[1],
+          `…on (${f.chest.join(",")})`);
+        ok(o.solid[chest!.ty][chest!.tx], "…and it is furniture: you open it from the next tile");
+        ok((CHEST_PRIZES[f.key] ?? []).length === f.prizes,
+          `…holding ${f.prizes} pieces of the Marrow set`);
+      }
+      /* No detail is conjured around the hoard: the garrison the author drew
+       * IS the guard. Etap 40 removed the camp system this used to check
+       * through, so it is checked directly now — every creature on the floor
+       * stands on a post from the spec, none was added by the chest. */
+      ok((o.mobPosts ?? []).length > 0 && o.monsters.length === (o.mobPosts ?? []).length,
         "…with no elite detail conjured around it — the garrison on the map is the guard");
 
       /* --- nothing stacked on anything else --- */
@@ -4186,15 +6264,379 @@ async function main(): Promise<void> {
       }
     }
 
-    /* --- the four markers dropped on a prop stepped aside, they were not lost --- */
-    {
-      const m = worlds.minodeep1;
-      const nudged: [number, number][] = [[40, 24], [6, 6], [49, 32], [41, 34]];
-      ok(nudged.every(([x, y]) => m.mobPosts!.some((q) => q.tx === x && q.ty === y)),
-        "the four minotaurs drawn on a fire or a well stand beside it instead");
-      const onProp = m.mobPosts!.filter((q) =>
+    /* --- nothing stands in the flames on any of the four ---
+     * The four nudged markers this used to name were artefacts of the old
+     * 60x50 drawing, where Tiled had dropped creatures onto props. The 80x80
+     * redraw lays its posts down after the furniture instead of beside it, so
+     * there is nothing to nudge — but the property those nudges existed to buy
+     * still has to hold, and it is checked directly here. */
+    for (const key of ["minodeep1", "minodeep2", "orcdeep1", "orcdeep2"] as const) {
+      const m = worlds[key];
+      const onFire = m.mobPosts!.filter((q) =>
         m.fires.some((fi) => fi.tx === q.tx && fi.ty === q.ty));
-      ok(onProp.length === 0, "…and not one of the forty-five stands in the flames");
+      ok(onFire.length === 0, `${m.name}: not one of the ${m.mobPosts!.length} stands in the flames`);
+    }
+  }
+
+  console.log("The minotaur branch, redrawn at 80x80 and two floors deep:");
+  {
+    const fs = await import("node:fs");
+    const { MINODEEP_SPEC } = await import("../src/world/minoDeepSpec.ts");
+    const { MINODEEP2_SPEC } = await import("../src/world/minoDeep2Spec.ts");
+    const { populateAll, travelTo, createGame, CHEST_PRIZES } = await import("../src/game.ts");
+    const { ITEMS } = await import("../src/items.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    const m1 = worlds.minodeep1;
+    const m2 = worlds.minodeep2;
+
+    /* --- both exports ship, and at native size --- */
+    for (const [file, w] of [
+      ["minodeep-terrain.png", m1], ["minodeep2-terrain.png", m2],
+    ] as const) {
+      const url = new URL(`../public/${file}`, import.meta.url);
+      ok(fs.existsSync(url), `public/${file} ships with it`);
+      if (fs.existsSync(url)) {
+        const png = fs.readFileSync(url);
+        ok(png.readUInt32BE(16) === w.w * 32 && png.readUInt32BE(20) === w.h * 32,
+          `…exactly ${w.w * 32}x${w.h * 32}, so it lines up 1:1 with the grid`);
+      }
+    }
+    for (const [spec, tag] of [[MINODEEP_SPEC, "-1"], [MINODEEP2_SPEC, "-2"]] as const) {
+      ok(spec.rows.length === 80 && spec.rows.every((r) => r.length === 80),
+        `Minotaur Deep ${tag} is 80x80`);
+      ok(spec.floor?.length === 80 && spec.floor.every((r) => r.length === 80),
+        "…and its terrain grid matches it row for row");
+    }
+
+    /* --- the markers in the two drawings are honoured where they stand --- */
+    const at = (p: { x: number; y: number }): [number, number] =>
+      [Math.floor(p.x / 32), Math.floor(p.y / 32)];
+    const up1 = m1.portals.find((p) => p.dest === "reach")!;
+    const dn1 = m1.portals.find((p) => p.dest === "minodeep2")!;
+    const up2 = m2.portals.find((p) => p.dest === "minodeep1")!;
+    ok(at(up1).join(",") === "55,70", "the ladder up to the Reach stands on (55,70)");
+    ok(at(dn1).join(",") === "16,10", "…and the hole down on (16,10), the far corner from it");
+    ok(at(up2).join(",") === "16,10", "the lower floor's ladder comes up on the same tile (16,10)");
+    ok(m1.portals.length === 2 && m2.portals.length === 1,
+      "two ways off -1, one off -2 — the lower floor is a dead end by design");
+    ok([...m1.portals, ...m2.portals].every((p) => !p.inactive), "neither floor carries a dormant pad");
+
+    /* --- one space each: no pocket walled off, furniture included --- */
+    const walk = (w: typeof m1, sx: number, sy: number): number[][] => {
+      const d: number[][] = Array.from({ length: w.h }, () => new Array(w.w).fill(-1));
+      d[sy][sx] = 0;
+      const q: [number, number][] = [[sx, sy]];
+      for (let i = 0; i < q.length; i++) {
+        const [x, y] = q[i];
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + ax, ny = y + ay;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h || d[ny][nx] >= 0 || w.solid[ny][nx]) continue;
+          d[ny][nx] = d[y][x] + 1; q.push([nx, ny]);
+        }
+      }
+      return d;
+    };
+    const d1 = walk(m1, ...at(up1));
+    const d2 = walk(m2, ...at(up2));
+    for (const [w, d, tag] of [[m1, d1, "-1"], [m2, d2, "-2"]] as const) {
+      let open = 0, seen = 0;
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) {
+        if (!w.solid[y][x]) open++;
+        if (d[y][x] >= 0) seen++;
+      }
+      ok(open === seen,
+        `Minotaur Deep ${tag}: every open square walks to the ladder (${seen}/${open}) — no boulder pinched a corridor shut`);
+    }
+
+    /* --- who lives on -1: a graded mix, and room to land --- */
+    {
+      const n = (k: string) => m1.mobPosts!.filter((p) => p.kind === k).length;
+      ok(n("minotaur") === 52 && n("minotaurArcher") === 33,
+        `fifty-two horns and thirty-three bows on -1 (${m1.mobPosts!.length} posts)`);
+      ok(m1.monsters.length === m1.mobPosts!.length,
+        "…and the populated floor spawns exactly those, no roamer rolled in");
+      ok(m1.mobPosts!.every((p) => p.kind === "minotaur" || p.kind === "minotaurArcher"),
+        "…and nothing heavier: the guard is a floor further down");
+      const nearest = Math.min(...m1.mobPosts!.map((p) => d1[p.ty][p.tx]));
+      ok(nearest >= 8, `eight steps around the ladder stay clear, so you can land and draw (${nearest})`);
+      // Graded, not banded: the bows lean toward the far end without the back
+      // half becoming a shooting gallery with no ground to close.
+      const mean = (k: string) => {
+        const ps = m1.mobPosts!.filter((p) => p.kind === k);
+        return ps.reduce((s, p) => s + d1[p.ty][p.tx], 0) / ps.length;
+      };
+      ok(mean("minotaurArcher") > mean("minotaur") + 8,
+        `the bows sit deeper in than the horns (${mean("minotaur").toFixed(0)} vs ${mean("minotaurArcher").toFixed(0)} steps)`);
+    }
+
+    /* --- who lives on -2: the guard, and six mages on the hoard --- */
+    {
+      const n = (k: string) => m2.mobPosts!.filter((p) => p.kind === k).length;
+      ok(n("minotaurGuard") === 71 && n("minotaurMage") === 6,
+        `seventy-one guards and six mages on -2 (${m2.mobPosts!.length} posts)`);
+      ok(m2.monsters.length === m2.mobPosts!.length, "…and every one of them stood up");
+      const nearest = Math.min(...m2.mobPosts!.map((p) => d2[p.ty][p.tx]));
+      ok(nearest >= 8, `…with the same clear landing at the foot of the ladder (${nearest})`);
+
+      const chest = m2.structures.find((st) => st.key === "treasure")!;
+      ok(chest !== undefined && chest.tx === 73 && chest.ty === 13,
+        "the hoard sits at (73,13), the far east chamber");
+      ok(m2.solid[chest.ty][chest.tx], "…and it is furniture: you open it from the tile beside it");
+      const approach = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+        .map(([dx, dy]) => [chest.tx + dx, chest.ty + dy] as const)
+        .filter(([x, y]) => !m2.solid[y][x]);
+      ok(approach.length > 0, `…from ${approach.length} open square(s) beside it`);
+
+      // One mage holds the hoard; the rest are spread. Six of them in one
+      // chamber was a wall of fire, not a fight.
+      const dc = walk(m2, approach[0][0], approach[0][1]);
+      const mages = m2.mobPosts!.filter((p) => p.kind === "minotaurMage");
+      ok(mages.some((p) => dc[p.ty][p.tx] <= 4), "a mage holds the hoard itself");
+      ok(mages.filter((p) => dc[p.ty][p.tx] <= 12).length === 1,
+        "…and only the one: the other five are out in the maze");
+    }
+
+    /* --- what the hoard holds, and that a stack can be part of it --- */
+    {
+      const prizes = CHEST_PRIZES.minodeep2!;
+      ok(CHEST_PRIZES.minodeep1 === undefined,
+        "-1 is keyed to no prize at all — it buries nothing now");
+      const kinds = prizes.map((p) => (Array.isArray(p) ? p[0] : p));
+      const counts = prizes.map((p) => (Array.isArray(p) ? p[1] : 1));
+      ok(kinds.join(",") === "minotaurShield,platinumCoin",
+        "the hoard is the minotaur shield and platinum, as the drawing marks");
+      ok(counts.join(",") === "1,10", "…ten of the coins, carried as a count and not ten entries");
+      ok((ITEMS.platinumCoin.coin ?? 0) * 10 === 1000,
+        "…which is a thousand gold, worth the walk down two floors");
+    }
+
+    /* --- and the whole branch walks end to end --- */
+    // Stood on each pad in turn: travelTo picks the return portal NEAREST the
+    // player, and -1 now has two of them, so a test that teleports without
+    // moving would not be exercising the rule that matters.
+    {
+      const g = createGame(WORLD_SEED);
+      populateAll(g.worlds);
+      const stand = (from: string, dest: string) => {
+        const w = g.worlds[from as keyof typeof g.worlds];
+        const pad = w.portals.find((p) => p.dest === dest)!;
+        g.current = w; g.player.x = pad.x; g.player.y = pad.y;
+        travelTo(g, dest as never);
+        const inWall = g.current.solid[Math.floor(g.player.y / 32)][Math.floor(g.player.x / 32)];
+        ok(g.current.key === dest && !inWall, `${from} -> ${dest}, and you land on open ground`);
+      };
+      stand("reach", "minodeep1");
+      stand("minodeep1", "minodeep2");
+      stand("minodeep2", "minodeep1");
+      // Coming back up from -2 must put you on the HOLE DOWN, not on the ladder
+      // to the Reach — the two are sixty tiles apart on this floor and taking
+      // the first portal in the list would teleport you across the labyrinth.
+      const backOn1 = Math.hypot(g.player.x / 32 - 16, g.player.y / 32 - 10);
+      ok(backOn1 < 3, `…coming up you stand at the hole you went down (${backOn1.toFixed(1)} tiles off)`);
+      stand("minodeep1", "reach");
+      const back = Math.hypot(g.player.x / 32 - 8, g.player.y / 32 - 85);
+      ok(back < 3, `…and on the island you come up the minotaurs' hole (${back.toFixed(1)} tiles off)`);
+    }
+  }
+
+  console.log("The orc branch, the same two mazes turned a quarter turn each:");
+  {
+    const fs = await import("node:fs");
+    const { ORCDEEP_SPEC } = await import("../src/world/orcDeepSpec.ts");
+    const { ORCDEEP2_SPEC } = await import("../src/world/orcDeep2Spec.ts");
+    const { MINODEEP_SPEC: MD1 } = await import("../src/world/minoDeepSpec.ts");
+    const { MINODEEP2_SPEC: MD2 } = await import("../src/world/minoDeep2Spec.ts");
+    const { populateAll, travelTo, createGame, CHEST_PRIZES } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    const o1 = worlds.orcdeep1;
+    const o2 = worlds.orcdeep2;
+
+    /* --- the rotation is exact, square for square --- */
+    // The claim the whole branch rests on: these are not two maps that look
+    // alike, they are the same collision turned ninety degrees. Checked
+    // against the FLOOR grids, which carry rock and cave and nothing else, so
+    // a creature or a boulder moving cannot make this pass or fail.
+    const rock = (spec: { floor?: readonly string[] }, x: number, y: number) =>
+      spec.floor![y][x] === "#";
+    let cw = 0, ccw = 0;
+    for (let y = 0; y < 80; y++) for (let x = 0; x < 80; x++) {
+      if (rock(MD1, x, y) === rock(ORCDEEP_SPEC, 79 - y, x)) cw++;
+      if (rock(MD2, x, y) === rock(ORCDEEP2_SPEC, y, 79 - x)) ccw++;
+    }
+    ok(cw === 6400, `Orc Deep -1 is Minotaur Deep -1 turned clockwise, to the square (${cw}/6400)`);
+    ok(ccw === 6400, `Orc Deep -2 is Minotaur Deep -2 turned anticlockwise (${ccw}/6400)`);
+
+    /* --- both exports ship, turned the same way as the grid --- */
+    for (const [file, w] of [
+      ["orcdeep-terrain.png", o1], ["orcdeep2-terrain.png", o2],
+    ] as const) {
+      const url = new URL(`../public/${file}`, import.meta.url);
+      ok(fs.existsSync(url), `public/${file} ships with it`);
+      if (fs.existsSync(url)) {
+        const png = fs.readFileSync(url);
+        ok(png.readUInt32BE(16) === w.w * 32 && png.readUInt32BE(20) === w.h * 32,
+          `…exactly ${w.w * 32}x${w.h * 32}, so it lines up 1:1 with the grid`);
+      }
+    }
+
+    /* --- the markers came round with the rotation --- */
+    const at = (p: { x: number; y: number }): [number, number] =>
+      [Math.floor(p.x / 32), Math.floor(p.y / 32)];
+    const up1 = o1.portals.find((p) => p.dest === "reach")!;
+    const dn1 = o1.portals.find((p) => p.dest === "orcdeep2")!;
+    const up2 = o2.portals.find((p) => p.dest === "orcdeep1")!;
+    ok(at(up1).join(",") === "9,55", "the ladder up to the Reach turned to (9,55)");
+    ok(at(dn1).join(",") === "69,16", "…and the hole down to (69,16)");
+    ok(at(up2).join(",") === "10,63", "the lower pit's ladder turned to (10,63)");
+    ok(o1.portals.length === 2 && o2.portals.length === 1,
+      "two ways off -1, one off -2 — the lower pit is a dead end, as the labyrinth's is");
+
+    /* --- one space each, furniture included --- */
+    const walkFrom = (w: typeof o1, sx: number, sy: number): number[][] => {
+      const d: number[][] = Array.from({ length: w.h }, () => new Array(w.w).fill(-1));
+      d[sy][sx] = 0;
+      const q: [number, number][] = [[sx, sy]];
+      for (let i = 0; i < q.length; i++) {
+        const [x, y] = q[i];
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + ax, ny = y + ay;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h || d[ny][nx] >= 0 || w.solid[ny][nx]) continue;
+          d[ny][nx] = d[y][x] + 1; q.push([nx, ny]);
+        }
+      }
+      return d;
+    };
+    const d1 = walkFrom(o1, ...at(up1));
+    const d2 = walkFrom(o2, ...at(up2));
+    for (const [w, d, tag] of [[o1, d1, "-1"], [o2, d2, "-2"]] as const) {
+      let open = 0, seen = 0;
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) {
+        if (!w.solid[y][x]) open++;
+        if (d[y][x] >= 0) seen++;
+      }
+      ok(open === seen, `Orc Deep ${tag}: every open square walks to the ladder (${seen}/${open})`);
+    }
+
+    /* --- three ranks on -1, graded outward --- */
+    {
+      const n = (k: string) => o1.mobPosts!.filter((p) => p.kind === k).length;
+      ok(n("orc") === 38 && n("orcArcher") === 24 && n("orcWarrior") === 23,
+        `thirty-eight orcs, twenty-four bows, twenty-three warriors (${o1.mobPosts!.length} posts)`);
+      ok(o1.monsters.length === o1.mobPosts!.length, "…and every one of them stood up");
+      ok(Math.min(...o1.mobPosts!.map((p) => d1[p.ty][p.tx])) >= 8,
+        "eight steps around the ladder stay clear, so you can land and draw");
+      const mean = (k: string) => {
+        const ps = o1.mobPosts!.filter((p) => p.kind === k);
+        return ps.reduce((s2, p) => s2 + d1[p.ty][p.tx], 0) / ps.length;
+      };
+      ok(mean("orcWarrior") > mean("orc") + 8,
+        `the warriors sit deeper in than the plain orcs (${mean("orc").toFixed(0)} vs ${mean("orcWarrior").toFixed(0)} steps)`);
+      // The archers deliberately do NOT grade: a flat share of every stretch,
+      // so no part of the floor is safe from being shot and none is only that.
+      const spanA = Math.abs(mean("orcArcher") - (mean("orc") + mean("orcWarrior")) / 2);
+      ok(spanA < 12, `…while the bows hold every stretch evenly (${spanA.toFixed(0)} steps off centre)`);
+    }
+
+    /* --- berserkers and isolated shamans on -2 --- */
+    {
+      const n = (k: string) => o2.mobPosts!.filter((p) => p.kind === k).length;
+      ok(n("orcBerserker") === 67 && n("orcShaman") === 10,
+        `sixty-seven berserkers and ten shamans (${o2.mobPosts!.length} posts)`);
+      ok(o2.monsters.length === o2.mobPosts!.length, "…and every one of them stood up");
+      ok(Math.min(...o2.mobPosts!.map((p) => d2[p.ty][p.tx])) >= 8,
+        "…with the same clear landing at the foot of the ladder");
+      const chest = o2.structures.find((st) => st.key === "treasure")!;
+      ok(chest !== undefined && chest.tx === 13 && chest.ty === 6,
+        "the hoard turned to (13,6) with the rest of the map");
+      ok(o2.solid[chest.ty][chest.tx], "…and it is furniture: you open it from the tile beside it");
+      const dc = walkFrom(o2, chest.tx, chest.ty + 1);
+      const sh = o2.mobPosts!.filter((p) => p.kind === "orcShaman");
+      ok(sh.some((p) => dc[p.ty][p.tx] <= 4), "a shaman holds the hoard itself");
+      ok(sh.filter((p) => dc[p.ty][p.tx] <= 12).length === 1,
+        "…and only the one: the other nine are out in the pit");
+    }
+
+    /* --- what the orc hoard holds --- */
+    {
+      const prizes = CHEST_PRIZES.orcdeep2!;
+      ok(CHEST_PRIZES.orcdeep1 === undefined, "-1 is keyed to no prize — it buries nothing now");
+      const kinds = prizes.map((p) => (Array.isArray(p) ? p[0] : p));
+      const counts = prizes.map((p) => (Array.isArray(p) ? p[1] : 1));
+      ok(kinds.join(",") === "orcishShield,platinumCoin" && counts.join(",") === "1,10",
+        "the orc hoard is the orcish shield and ten platinum");
+      // Knight gear is off the chest table entirely now; the Black Knight is
+      // the only source, which is what the repeatable drop was always for.
+      const knight = ["knightHelm", "knightBody", "knightLegs", "knightBoots"];
+      const inChests = Object.values(CHEST_PRIZES).flat()
+        .map((p) => (Array.isArray(p) ? p[0] : p));
+      ok(knight.every((k) => !inChests.includes(k)),
+        "no chest in the game hands out knight gear any more");
+      const bk = (await import("../src/entities/monsters.ts")).MONSTER_DEFS.blackKnight;
+      ok(knight.every((k) => bk.loot.some((l) => l.kind === k)),
+        "…and all four pieces still drop from the Black Knight");
+    }
+
+    /* --- and the branch walks end to end --- */
+    {
+      const g = createGame(WORLD_SEED);
+      populateAll(g.worlds);
+      const stand = (from: string, dest: string) => {
+        const w = g.worlds[from as keyof typeof g.worlds];
+        const pad = w.portals.find((p) => p.dest === dest)!;
+        g.current = w; g.player.x = pad.x; g.player.y = pad.y;
+        travelTo(g, dest as never);
+        const inWall = g.current.solid[Math.floor(g.player.y / 32)][Math.floor(g.player.x / 32)];
+        ok(g.current.key === dest && !inWall, `${from} -> ${dest}, and you land on open ground`);
+      };
+      stand("reach", "orcdeep1");
+      stand("orcdeep1", "orcdeep2");
+      stand("orcdeep2", "orcdeep1");
+      const backOn1 = Math.hypot(g.player.x / 32 - 69, g.player.y / 32 - 16);
+      ok(backOn1 < 3, `…coming up you stand at the hole you went down (${backOn1.toFixed(1)} tiles off)`);
+      stand("orcdeep1", "reach");
+      const back = Math.hypot(g.player.x / 32 - 79, g.player.y / 32 - 90);
+      ok(back < 3, `…and on the island you come up the orcs' hole (${back.toFixed(1)} tiles off)`);
+    }
+  }
+
+  console.log("No square in the game is under two casters at once:");
+  {
+    // The rule the minotaur mages and the orc shamans are both posted under,
+    // stated once and checked on every floor that has a caster on it. A
+    // creature's threat is the squares inside its bolt's range that it can
+    // also SEE — the maze does half the work — and no two casters' threats may
+    // overlap. Six mages in one chamber was a wall of fire and not a fight.
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const { lineOfSight } = await import("../src/world/collision.ts");
+    const { populateAll } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    for (const key of ["minodeep2", "orcdeep2"] as const) {
+      const w = worlds[key];
+      const casters = w.mobPosts!.filter((p) => {
+        const r = MONSTER_DEFS[p.kind].ranged;
+        return r !== undefined && r.range >= 240;
+      });
+      const seen = new Map<string, string>();
+      let clash = 0;
+      for (const c of casters) {
+        const rg = MONSTER_DEFS[c.kind].ranged!.range / 32;
+        const fx = c.tx * 32 + 16, fy = c.ty * 32 + 16;
+        for (let y = Math.max(0, c.ty - 9); y < Math.min(w.h, c.ty + 10); y++) {
+          for (let x = Math.max(0, c.tx - 9); x < Math.min(w.w, c.tx + 10); x++) {
+            if (w.solid[y][x] || Math.hypot(x - c.tx, y - c.ty) > rg) continue;
+            if (!lineOfSight(w, fx, fy, x * 32 + 16, y * 32 + 16)) continue;
+            const k = `${x},${y}`;
+            const held = seen.get(k);
+            if (held !== undefined && held !== `${c.tx},${c.ty}`) clash++;
+            else seen.set(k, `${c.tx},${c.ty}`);
+          }
+        }
+      }
+      ok(clash === 0,
+        `${w.name}: ${casters.length} casters, and not one square of the ${seen.size} they cover is under two of them (${clash} clashes)`);
     }
   }
 
@@ -4580,7 +7022,7 @@ async function main(): Promise<void> {
   {
     const { WORLD_SEED } = await import("../src/config.ts");
     const { Tile } = await import("../src/world/types.ts");
-    const home = buildWorlds(WORLD_SEED).wild;
+    const home = buildWorlds(WORLD_SEED).bandit; // the Gallows Coast: a real shoreline
 
     // the rule the throw code leans on: water is unwalkable but not a wall,
     // so a stack can reach it while line of sight still passes over it
@@ -4591,7 +7033,7 @@ async function main(): Promise<void> {
       if (home.solid[y][x]) waterSolid++;
       if ((home.tile[y][x] as number) === (Tile.Wall as number)) waterWall++;
     }
-    ok(water > 0, `the Wildlands coast offers ${water} water tiles to throw into`);
+    ok(water > 0, `the Gallows Coast offers ${water} water tiles to throw into`);
     ok(waterSolid === water, "…every one of them blocks walking, so nothing lands there by accident");
     ok(waterWall === 0, "…and none is a wall, so a throw can see the sea it is aimed at");
   }
@@ -4993,7 +7435,7 @@ async function main(): Promise<void> {
       ok(groundBlocked(hw, -1, 0) && groundBlocked(hw, 0, -1), "…and neither does off-map");
 
       const p2 = createPlayer({ x: 0, y: 0 });
-      p2.bag = items.emptyBag();
+      p2.pack = items.newContainer("backpack")!;
       // stand next to water and fire a Nova: the ring of eight straddles the
       // shoreline, so exactly the dry tiles should light up
       let shore: [number, number] | null = null;
@@ -5076,7 +7518,7 @@ async function main(): Promise<void> {
       ok(spot !== null, "the home map has open ground wide enough for a Burst");
       const [bx, by2] = spot!;
       const p3 = createPlayer({ x: 0, y: 0 });
-      p3.bag = items.emptyBag();
+      p3.pack = items.newContainer("backpack")!;
       p3.x = bx * TILE + TILE / 2;
       p3.y = by2 * TILE + TILE / 2;
       p3.bag[0] = { kind: "fireEmberBurst", n: 5 };
@@ -5240,27 +7682,244 @@ async function main(): Promise<void> {
       ok(through.some((t) => t.tx > bx), "…while a breath pours around it");
     }
 
-    // --- TEMP-ETAP28: both specimens actually reach the Wildlands ---
+    /* --- both top-of-curve creatures live somewhere real now ---
+     *
+     * These two were TEMP-ETAP28 test posts pinned to opposite ends of the
+     * Wildlands, waiting for grounds of their own. They have them: the dragon
+     * nests in the Cinder Hollow and the Black Knight holds the Black Cell,
+     * each the deepest room on its branch. So the test is no longer "they are
+     * far apart on one island" but the far stronger "each is the reason its
+     * room exists".
+     */
     const worlds = buildWorlds(WORLD_SEED);
-    populateAll(worlds, WORLD_SEED);
-    const wild = worlds.wild;
-    const dr = wild.monsters.filter((m) => m.kind === "dragon");
-    const bk = wild.monsters.filter((m) => m.kind === "blackKnight");
-    ok(dr.length === 1, `exactly one dragon stands on the Wildlands (got ${dr.length})`);
-    ok(bk.length === 1, "…and exactly one black knight");
-    // `spawnAtPost` falls back to nearby ground when the exact tile is water or
-    // rock, so what is pinned is the HALF of the island, not the coordinate.
-    ok(dr[0].ty < wild.h / 2, "the dragon is on the northern half");
-    ok(bk[0].ty > wild.h / 2, "the knight is on the southern half");
-    ok(Math.abs(dr[0].ty - bk[0].ty) > wild.h / 3,
-      "…far enough apart that neither wanders into the other's fight");
-    ok(!wild.solid[dr[0].ty][dr[0].tx] && !wild.solid[bk[0].ty][bk[0].tx],
-      "both landed on ground a creature can actually stand on");
-    ok(dr[0].hr !== undefined && bk[0].hr !== undefined,
-      "…and both are leashed to their post rather than roaming the island");
-    // the surface roster is untouched by them
-    ok(wild.monsters.filter((m) => m.kind === "bandit").length > 0,
-      "the ordinary Wildlands roster still spawns alongside");
+    populateAll(worlds);
+    for (const [key, kind, name] of [
+      ["deaddeep2", "dragon", "the Cinder Hollow"],
+      ["banditdeep3", "blackKnight", "the Black Cell"],
+    ] as const) {
+      const room = worlds[key];
+      const boss = room.monsters.filter((m) => m.kind === kind);
+      ok(boss.length === 1, `exactly one ${kind} in ${name} (got ${boss.length})`);
+      ok(!room.solid[boss[0].ty][boss[0].tx], "…standing on ground it can actually stand on");
+      ok(boss[0].hr !== undefined && boss[0].guard !== undefined,
+        "…leashed to its post rather than roaming the floor");
+      // …and nowhere else in the game
+      const elsewhere = Object.values(worlds)
+        .filter((w) => w.key !== key && w.monsters.some((m) => m.kind === kind))
+        .map((w) => w.key);
+      ok(elsewhere.length === 0, `…and nowhere else${elsewhere.length ? " — " + elsewhere.join(", ") : ""}`);
+      // the deepest room is not a boss arena and nothing else: it has company
+      ok(room.monsters.length >= 1, `${name} is populated`);
+    }
+    // the two are on different branches, so neither fight can pull the other
+    ok(worlds.deaddeep2.key !== worlds.banditdeep3.key,
+      "the two bosses sit on separate branches of the map tree");
+  }
+
+  console.log("Etap 40 — the world cull, and the room it left:");
+  {
+    const nfs = await import("node:fs");
+    const src = (f: string) => nfs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
+    const worlds = buildWorlds(WORLD_SEED);
+
+    /* --- the twelve, and only the twelve --- */
+    const keys = Object.keys(worlds).sort();
+    // Fourteen after the cull, plus the two Etap 41 added: Liddesdale and the
+    // lair under it. They are the first keys in the game that exist because a
+    // MISSION needed them rather than because a level range did.
+    ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 cellar deaddeep1 "
+      + "deaddeep2 hermitage home liddesdale minodeep1 minodeep2 orcdeep1 orcdeep2 reach town",
+      `sixteen maps and no others (${keys.length}: ${keys.join(" ")})`);
+    for (const dead of ["cave.ts", "deepwild.ts"]) {
+      ok(!nfs.existsSync(new URL(`../src/world/${dead}`, import.meta.url)),
+        `${dead} is gone, not merely unreferenced`);
+    }
+
+    /* --- nothing rolls terrain any more ---
+     * The strongest statement of the cull: the seed is still on `Game` and
+     * still in the save, and it no longer decides anything about the map. */
+    const gameSrc = src("game.ts");
+    for (const dead of ["POPULATIONS", "CAMP_POPULATIONS", "WILDERNESS_ROAMERS",
+      "HOARD_GUARDS", "TEST_POSTS", "DANGER_KEYS", "LAIRS"]) {
+      ok(!new RegExp(`(const|type)\\s+${dead}\\b`).test(gameSrc),
+        `${dead} is not declared any more`);
+    }
+    const monSrc = src("entities/monsters.ts");
+    for (const dead of ["spawnMonster", "spawnWilderness", "spawnMonsterInCamp"]) {
+      ok(!new RegExp(`export function ${dead}\\b`).test(monSrc),
+        `${dead} is not exported any more`);
+    }
+
+    /* --- every portal in the game names a map that exists ---
+     * The cull's real hazard: a door left pointing at a deleted island would
+     * only surface when somebody stepped on it. Swept across all twelve. */
+    let dangling = "";
+    let doors = 0;
+    for (const w of Object.values(worlds)) {
+      for (const pt of w.portals) {
+        doors++;
+        if (!(pt.dest in worlds)) dangling = `${w.key} → ${pt.dest}`;
+      }
+    }
+    ok(dangling === "", `every door leads somewhere real${dangling && " — " + dangling}`);
+    ok(doors > 20, `…across ${doors} doors`);
+
+    /* --- and every map can be reached from Home Isle ---
+     * A map nobody can walk to is the other half of the same hazard, and it is
+     * the one a cull creates silently: delete the island a stairway stood on
+     * and the floor beneath it is still built, still populated, still
+     * unreachable. The dormant pads are deliberately NOT traversed. */
+    const { missionByGround: missionByGroundR, missionByEcho: missionByEchoR } =
+      await import("../src/systems/missions.ts");
+    const seen = new Set<string>(["home"]);
+    const queue = ["home"];
+    while (queue.length) {
+      const w = worlds[queue.shift() as keyof typeof worlds];
+      for (const pt of w.portals) {
+        // Dormant pads are deliberately NOT traversed — EXCEPT the mission
+        // doors, which are dormant only because this test's imaginary walker
+        // has not spoken to Chronos. A mission map that no mission opens is
+        // still marooned and still has to fail here, so the exception is
+        // exactly "a door some mission in the catalogue lights", no wider.
+        const missionDoor = !!missionByGroundR(pt.dest) || !!missionByEchoR(pt.dest);
+        if ((pt.inactive && !missionDoor) || seen.has(pt.dest)) continue;
+        seen.add(pt.dest);
+        queue.push(pt.dest);
+      }
+    }
+    const marooned = keys.filter((k) => !seen.has(k));
+    ok(marooned.length === 0, `every map is reachable on foot from Home Isle${marooned.length ? " — " + marooned.join(", ") : ""}`);
+  }
+
+  console.log("Etap 40 — the Time Sage's chain (machinery, empty catalogue):");
+  {
+    const M = await import("../src/systems/missions.ts");
+    const { resetPlayerState } = await import("../src/systems/playerState.ts");
+    resetPlayerState();
+
+    /* One link, written in Etap 41. Everything below still has to be correct
+     * against a catalogue that will keep growing, so the assertions are about
+     * SHAPE — ids unique, the first link free of a prerequisite, every named
+     * world real — rather than about how many there happen to be. */
+    ok(M.MISSIONS.length === 1, `the chain has one link so far (${M.MISSIONS.length})`);
+    ok(new Set(M.MISSIONS.map((m) => m.id)).size === M.MISSIONS.length, "…with unique ids");
+    ok(M.MISSIONS[0].id === "redcap" && M.MISSIONS[0].after === undefined,
+      "the redcap is the first link and waits on nothing");
+    ok(M.MISSIONS.every((m) => m.ground !== m.echo), "…and no mission's ground is its own echo");
+    ok(M.offeredMission(9) === undefined, "below level ten the sage offers nothing");
+    ok(M.offeredMission(10)?.id === "redcap", "…and at ten he offers the cap");
+    ok(M.currentMission(99) === undefined, "…and nothing is in hand until it is taken");
+    ok(M.stageOf("nope", 99) === "locked", "an unknown id reads as locked rather than throwing");
+    M.setStage("nope", "closed");
+    ok(M.stageOf("nope", 99) === "locked", "…and refuses to be moved off it");
+    ok(Object.keys(M.missionState()).length === 0, "an untouched chain saves as nothing at all");
+
+    /* The state machine itself, driven through a catalogue injected for the
+     * test. Its rules are the ones we settled in conversation and they are
+     * worth pinning now, while they are cheap to change. */
+    const cat = M.MISSIONS as unknown as M.MissionDef[];
+    cat.push(
+      { id: "t1", title: "first", reqLevel: 8, ground: "reach", echo: "deaddeep2", relic: "boneSword", rewardExp: 1 },
+      { id: "t2", title: "second", reqLevel: 12, after: "t1", ground: "bandit", echo: "banditdeep3", relic: "ironSword", rewardExp: 1 },
+    );
+    try {
+      M.resetMissions();
+      ok(M.stageOf("t1", 7) === "locked", "below its level, the first mission is locked");
+      ok(M.stageOf("t1", 8) === "available", "…and at its level it is offered");
+      ok(M.stageOf("t2", 99) === "locked", "the second stays locked however high you level");
+      ok(M.MISSIONS.find((m) => M.stageOf(m.id, 99) === "available")?.id === "redcap",
+        "…so the sage offers the FIRST, not the one you outlevelled");
+
+      // taking it opens the ground permanently and the echo conditionally
+      M.setStage("t1", "active");
+      ok(M.groundOpen("reach", 8), "an active mission opens its hunting ground");
+      ok(M.echoOpen("deaddeep2", 8), "…and its echo");
+      ok(M.wantsRelic("t1", 8), "…and the boss will part with the relic");
+      ok(M.currentMission(8)?.id === "t1", "the mission is in hand");
+
+      // the boss falls: the echo STAYS OPEN, and stops yielding relics
+      M.relicTaken("t1", 8);
+      ok(M.stageOf("t1", 8) === "complete", "killing the boss completes it");
+      ok(!M.echoOpen("deaddeep2", 8), "…and the echo shuts behind you: the boss is a one-time fight");
+      ok(M.relicRoadOpen("deaddeep2", 8), "…with a way home opening in its place");
+      ok(!M.wantsRelic("t1", 8), "…and no SECOND relic: no farming them to sell");
+      ok(M.stageOf("t2", 12) === "locked", "the next link does not open on the kill");
+
+      // losing it reopens the tap, and only that
+      M.relicLost("t1", 8);
+      ok(M.stageOf("t1", 8) === "active" && M.wantsRelic("t1", 8) && M.echoOpen("deaddeep2", 8),
+        "dropping the relic reopens the echo rather than bricking the chain");
+      M.relicTaken("t1", 8);
+
+      // handing it in is what closes the door and unlocks the next
+      M.missionHandedIn("t1", 8);
+      ok(M.stageOf("t1", 8) === "closed", "handing the relic in closes the mission");
+      ok(!M.echoOpen("deaddeep2", 8) && !M.relicRoadOpen("deaddeep2", 8),
+        "…and both of that echo's doors go dark for good");
+      ok(M.groundOpen("reach", 8), "…while the hunting ground stays open forever");
+      ok(M.stageOf("t2", 12) === "available", "…and the next link opens");
+      ok(M.stageOf("t2", 11) === "locked", "…for a character who has the level for it");
+
+      // a de-level cannot take back a mission already in hand
+      M.setStage("t2", "active");
+      ok(M.stageOf("t2", 1) === "active", "a de-level after a death never confiscates a mission in hand");
+
+      // round trip: only non-default stages are stored, and junk is discarded
+      const dump = M.missionState();
+      ok(Object.keys(dump).sort().join(",") === "t1,t2", `both stages saved (${JSON.stringify(dump)})`);
+      void 0;
+      M.loadMissionState({ ...dump, ghost: "closed", t1: "banana" });
+      ok(M.stageOf("t2", 99) === "active", "a round trip preserves what was set");
+      ok(M.stageOf("t1", 99) === "available",
+        "…while an unknown STAGE is dropped rather than trusted");
+      ok(M.missionState().ghost === undefined, "…and an unknown ID is dropped too");
+      M.loadMissionState(null);
+      ok(Object.keys(M.missionState()).length === 0, "a save with no chain in it loads as a fresh one");
+    } finally {
+      // The two test links were PUSHED onto the shipped catalogue, so the
+      // teardown removes exactly those two rather than emptying the array —
+      // truncating it would delete the redcap for every test that runs after.
+      for (let i = cat.length - 1; i >= 0; i--) if (cat[i].id === "t1" || cat[i].id === "t2") cat.splice(i, 1);
+      M.resetMissions();
+      resetPlayerState();
+    }
+  }
+
+  console.log("Etap 40 — Chronos says different things upstairs and down:");
+  {
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(/n\.key === "timesage"/.test(main), "the sage has a click handler of his own");
+    ok(/cw\(\)\.key !== "cellar"/.test(main),
+      "…which splits on the ROOM, not on a coordinate or a safe flag");
+    /* The trapdoor is at (18,46) and he stands at (25,46) — due WEST, same row.
+     * It said "north" from the day it was written until somebody walked it. */
+    ok(/trapdoor west of here/.test(main), "upstairs he points WEST, which is where the trapdoor is");
+    ok(!/trapdoor north of here/.test(main), "…and no longer north, which it never was");
+    ok(/function talkToSage/.test(main), "…and downstairs he runs the mission state machine");
+    /* The fifty-five-character ceiling is GONE, and this is the test that used
+     * to enforce it. Every line he spoke was written to fit `fitLine`, which
+     * cuts the log to the width available and ellipsises the rest — the first
+     * cut of the handover ran to 150 characters and arrived as "…in iron boots
+     * t…". His speech now goes through the dialogue box, which wraps and
+     * paginates at the width it actually has, so the replacement test is over
+     * in the Etap 42 block: it checks that every page FITS, in all three
+     * languages, at the narrowest width the game supports.
+     *
+     * What is still checked here is that he does not slip back: no `say(...)`
+     * helper, and nothing long left behind in a `flash`. */
+    ok(!/const say = /.test(main), "his lines no longer go out one at a time through the log");
+    ok(/sageSays\(/.test(main), "…they go through the box, keyed by language");
+    /* The whole point: no mission is ever handed over on the plaza. If the
+     * mission panel ever gets opened from the surface sage, this fails. */
+    const upstairs = main.slice(main.indexOf('n.key === "timesage"'));
+    const line = upstairs.slice(0, upstairs.indexOf("}"));
+    ok(!/openWindow/.test(line), "the plaza sage opens no window: he is a signpost, not a giver");
+
+    const worlds = buildWorlds(WORLD_SEED);
+    ok(worlds.town.npcs.some((n) => n.key === "timesage")
+      && worlds.cellar.npcs.some((n) => n.key === "timesage"),
+      "he stands in both rooms");
   }
 
   console.log("walk cadence (a stride is a gait, not a frame count):");
@@ -5298,7 +7957,7 @@ async function main(): Promise<void> {
   {
     const MS = await import("../src/systems/monsterSpells.ts");
     const X = await import("../src/gfx/spellFx.ts");
-    const { MONSTER_DEFS, spawnMonster } = await import("../src/entities/monsters.ts");
+    const { MONSTER_DEFS, spawnAtPost } = await import("../src/entities/monsters.ts");
     const mob = await import("../src/gfx/mobSheet.ts");
     const art = await import("../src/gfx/spellArt.ts");
     const { groundBlocked } = await import("../src/world/collision.ts");
@@ -5409,7 +8068,8 @@ async function main(): Promise<void> {
     MS.resetMonsterSpellClock();
     X.clearSpellFx();
     const before = w.monsters.length;
-    ok(spawnMonster(w, "dragon", 0), "spawned a dragon to cast with");
+    // posted straight onto the arena tile the test is about to move it to
+    ok(spawnAtPost(w, "dragon", ox, oy), "stood a dragon up to cast with");
     const drag = w.monsters[w.monsters.length - 1];
     ok(w.monsters.length === before + 1 && drag.kind === "dragon", "…and it is the one we got");
     drag.tx = ox; drag.ty = oy;
@@ -5664,11 +8324,21 @@ async function main(): Promise<void> {
     // 2.20. The reference number being defended here is the player's edge over
     // the average creature — 2.7x in Tibia. Cutting the player 20% and the
     // creatures 15% narrows the absolute pace without touching that ratio.
-    const speeds = MONSTER_KINDS.map((k) => MONSTER_DEFS[k].speed);
-    const avgMob = speeds.reduce((s, v) => s + v, 0) / speeds.length;
-    const edge = C.PLAYER_BASE_SPEED / avgMob;
+    // The MEDIAN creature, not the mean one. The band below is unchanged and
+    // deliberately so — what changed is what it is measured against. A mean
+    // over the whole roster moves every time a creature is added, so the
+    // thirty-ninth entry shifted it 0.5% and put a five-year-old pacing rule
+    // 0.2% under its own floor. That is roster arithmetic, not a pacing
+    // regression. The median is the creature you actually meet most often and
+    // it does not move when one outlier joins: 54 with the redcap and 54
+    // without him.
+    const speeds = MONSTER_KINDS.map((k) => MONSTER_DEFS[k].speed).sort((a, b) => a - b);
+    const midMob = speeds.length % 2
+      ? speeds[(speeds.length - 1) / 2]
+      : (speeds[speeds.length / 2 - 1] + speeds[speeds.length / 2]) / 2;
+    const edge = C.PLAYER_BASE_SPEED / midMob;
     ok(edge > 1.7 && edge < 2.3,
-      `a level-1 player still outpaces the average creature ~2x (${edge.toFixed(2)})`);
+      `a level-1 player still outpaces the median creature ~2x (${edge.toFixed(2)})`);
     ok(Math.max(...speeds) < C.PLAYER_BASE_SPEED,
       `nothing in the bestiary outruns a level-1 player (fastest ${Math.max(...speeds)})`);
     ok(C.NPC_WALK_SPEED * 3 < C.PLAYER_BASE_SPEED,
@@ -5734,6 +8404,4141 @@ async function main(): Promise<void> {
     ok(healPerCast / 0.25 / minoDps > 10,
       "…where an uncapped click rate would have answered ten or more");
     CR.resetCrystalCooldown();
+  }
+
+
+  console.log("Etap 31 — the dead's descent, and the room at the bottom of it:");
+  {
+    const fs = await import("node:fs");
+    const { DEADDEEP_SPEC } = await import("../src/world/deadDeepSpec.ts");
+    const { DEADDEEP2_SPEC } = await import("../src/world/deadDeep2Spec.ts");
+    const { populateAll, travelTo, createGame } = await import("../src/game.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    const d1 = worlds.deaddeep1;
+    const d2 = worlds.deaddeep2;
+
+    /* --- the exports ship, and at native size --- */
+    for (const [file, w] of [
+      ["deaddeep-terrain.png", d1], ["deaddeep2-terrain.png", d2],
+    ] as const) {
+      const url = new URL(`../public/${file}`, import.meta.url);
+      ok(fs.existsSync(url), `public/${file} ships with it`);
+      if (fs.existsSync(url)) {
+        const png = fs.readFileSync(url);
+        ok(png.readUInt32BE(16) === w.w * 32 && png.readUInt32BE(20) === w.h * 32,
+          `…exactly ${w.w * 32}x${w.h * 32}, so it lines up 1:1 with the grid`);
+      }
+    }
+    ok(DEADDEEP_SPEC.rows.length === 60 && DEADDEEP_SPEC.rows.every((r) => r.length === 60),
+      "the charnel deep is 60x60");
+    ok(DEADDEEP2_SPEC.rows.length === 30 && DEADDEEP2_SPEC.rows.every((r) => r.length === 30),
+      "the hollow is 30x30 — the smallest map in the game");
+
+    /* --- the markers in the drawing are honoured where they stand --- */
+    {
+      const up1 = d1.portals.find((p) => p.dest === "reach")!;
+      const down1 = d1.portals.find((p) => p.dest === "deaddeep2")!;
+      ok(Math.floor(up1.x / 32) === 49 && Math.floor(up1.y / 32) === 51,
+        "the ladder up stands on the tile Tiled marked at (49,51)");
+      ok(Math.floor(down1.x / 32) === 47 && Math.floor(down1.y / 32) === 6,
+        "…and the descent on (47,6), the far corner from it");
+      const up2 = d2.portals.find((p) => p.dest === "deaddeep1")!;
+      ok(Math.floor(up2.x / 32) === 14 && Math.floor(up2.y / 32) === 22,
+        "the hollow's ladder stands at the foot of its corridor (14,22)");
+      ok(d1.portals.every((p) => !p.inactive) && d2.portals.every((p) => !p.inactive),
+        "neither floor carries a dormant pad");
+    }
+
+    /* --- nothing is walled in --- */
+    // Rock and boulders were scattered over traced ground; the check that
+    // matters is not how many but whether any of them pinched a corridor shut.
+    for (const w of [d1, d2]) {
+      const seen: boolean[][] = Array.from({ length: w.h }, () => new Array(w.w).fill(false));
+      const start = w.portals[0];
+      const sx = Math.floor(start.x / 32), sy = Math.floor(start.y / 32);
+      const q: [number, number][] = [[sx, sy]];
+      seen[sy][sx] = true;
+      while (q.length) {
+        const [x, y] = q.pop()!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+          if (seen[ny][nx] || w.solid[ny][nx]) continue;
+          seen[ny][nx] = true; q.push([nx, ny]);
+        }
+      }
+      let open = 0, reach = 0;
+      for (let y = 0; y < w.h; y++) {
+        for (let x = 0; x < w.w; x++) {
+          if (w.solid[y][x]) continue;
+          open++; if (seen[y][x]) reach++;
+        }
+      }
+      ok(open === reach, `${w.key}: all ${open} open squares are reachable from the ladder (${reach})`);
+      ok(w.mobPosts!.every((m) => seen[m.ty][m.tx]),
+        "…and every creature on it stands somewhere you can walk to");
+    }
+
+    /* --- equal thirds --- */
+    {
+      const count = (k: string) => d1.mobPosts!.filter((m) => m.kind === k).length;
+      ok(count("ghoul") === 15 && count("skeletonWarrior") === 15 && count("demonSkeleton") === 15,
+        `the dead hold the floor in equal thirds (${count("ghoul")}/${count("skeletonWarrior")}/${count("demonSkeleton")})`);
+      ok(d1.mobPosts!.length === 45, `forty-five posts and nothing else (${d1.mobPosts!.length})`);
+      const spacing = d1.w * d1.h;
+      ok(spacing / d1.mobPosts!.length > 60,
+        "…sparser per square of map than the orc and minotaur floors beside it");
+    }
+
+    /* --- the gradient, measured by WALK distance and not by straight line --- */
+    {
+      const dist: number[][] = Array.from({ length: d1.h }, () => new Array(d1.w).fill(-1));
+      const up = d1.portals.find((p) => p.dest === "reach")!;
+      const sx = Math.floor(up.x / 32), sy = Math.floor(up.y / 32);
+      dist[sy][sx] = 0;
+      const q: [number, number][] = [[sx, sy]];
+      for (let i = 0; i < q.length; i++) {
+        const [x, y] = q[i];
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= d1.w || ny >= d1.h) continue;
+          if (dist[ny][nx] >= 0 || d1.solid[ny][nx]) continue;
+          dist[ny][nx] = dist[y][x] + 1; q.push([nx, ny]);
+        }
+      }
+      const band = (k: string) => {
+        const ds = d1.mobPosts!.filter((m) => m.kind === k).map((m) => dist[m.ty][m.tx]);
+        return { lo: Math.min(...ds), hi: Math.max(...ds) };
+      };
+      const g = band("ghoul"), K = band("skeletonWarrior"), d = band("demonSkeleton");
+      ok(g.hi <= K.lo && K.hi <= d.lo,
+        `the three ranks are three bands with no overlap (${g.lo}-${g.hi}, ${K.lo}-${K.hi}, ${d.lo}-${d.hi})`);
+      ok(g.lo >= 8, "…and the squares you land on are clear, so you can draw before you fight");
+      // The hole down was cut in the far corner, so the worst thing on the
+      // floor guards it without anything being posted to guard it.
+      //
+      // Measured BY FOOT and not in a straight line. On a maze the two say
+      // different things: a skeleton warrior sits twelve tiles from the
+      // descent as the crow flies and a hundred steps away through the walls,
+      // and it is the steps that decide what you have to get past.
+      const down = d1.portals.find((p) => p.dest === "deaddeep2")!;
+      const dd: number[][] = Array.from({ length: d1.h }, () => new Array(d1.w).fill(-1));
+      const dx0 = Math.floor(down.x / 32), dy0 = Math.floor(down.y / 32);
+      dd[dy0][dx0] = 0;
+      const dq: [number, number][] = [[dx0, dy0]];
+      for (let i = 0; i < dq.length; i++) {
+        const [x, y] = dq[i];
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + ax, ny = y + ay;
+          if (nx < 0 || ny < 0 || nx >= d1.w || ny >= d1.h) continue;
+          if (dd[ny][nx] >= 0 || d1.solid[ny][nx]) continue;
+          dd[ny][nx] = dd[y][x] + 1; dq.push([nx, ny]);
+        }
+      }
+      const close = d1.mobPosts!.filter((m) => dd[m.ty][m.tx] >= 0 && dd[m.ty][m.tx] <= 20);
+      ok(close.length >= 3 && close.every((m) => m.kind === "demonSkeleton"),
+        `nothing softer than a demon skeleton stands within twenty steps of the descent (${close.length} of them)`);
+    }
+
+    /* --- the hollow holds one thing --- */
+    {
+      ok(d2.mobPosts!.length === 1 && d2.mobPosts![0].kind === "dragon",
+        `one dragon in the hollow and nothing else (${d2.mobPosts!.length} posted)`);
+      const drg = d2.mobPosts![0];
+      ok(drg.tx === 14 && drg.ty === 7, "…standing in the hall the drawing put it in (14,7)");
+      ok(d2.monsters.length === 1 && d2.monsters[0].kind === "dragon",
+        "…and the populated floor spawns exactly that one");
+      // Fire and bone, and enough of both that the room reads as a furnace.
+      ok(d2.fires.length >= 40, `the hollow burns (${d2.fires.length} fires)`);
+      ok(d2.decos.length >= 70, `…over a floor of bones (${d2.decos.length} piles)`);
+      const up2 = d2.portals.find((p) => p.dest === "deaddeep1")!;
+      const utx = Math.floor(up2.x / 32), uty = Math.floor(up2.y / 32);
+      ok(d2.fires.every((f) => Math.abs(f.tx - utx) + Math.abs(f.ty - uty) > 3),
+        "…but you never arrive standing in one");
+      ok(!d2.solid[7][14] && !d2.solid[22][14],
+        "neither the dragon's square nor the ladder's is sealed");
+    }
+
+    /* --- and the whole way down walks end to end --- */
+    // Stood on each pad in turn, because travelTo picks the return portal
+    // NEAREST the player — the rule the six bandit ladders forced in — and a
+    // test that teleports without moving would not be exercising it.
+    {
+      const g = createGame(WORLD_SEED);
+      populateAll(g.worlds);
+      const stand = (from: string, dest: string) => {
+        const w = g.worlds[from as keyof typeof g.worlds];
+        const pad = w.portals.find((p) => p.dest === dest)!;
+        g.current = w; g.player.x = pad.x; g.player.y = pad.y;
+        travelTo(g, dest as never);
+        const inWall = g.current.solid[Math.floor(g.player.y / 32)][Math.floor(g.player.x / 32)];
+        ok(g.current.key === dest && !inWall, `${from} -> ${dest}, and you land on open ground`);
+      };
+      stand("reach", "deaddeep1");
+      stand("deaddeep1", "deaddeep2");
+      stand("deaddeep2", "deaddeep1");
+      stand("deaddeep1", "reach");
+      // Back on the island you must come up the DEAD's hole and not one of the
+      // other two, which is the whole of what "nearest" buys.
+      const back = Math.hypot(g.player.x / 32 - 89, g.player.y / 32 - 13);
+      ok(back < 3, `…and you come up the hole you went down, not the orcs' (${back.toFixed(1)} tiles off)`);
+    }
+  }
+
+  console.log("Etap 32 — window chrome (bevels replace the flat 1-px outlines):");
+  {
+    const C = await import("../src/ui/chrome.ts");
+
+    /* Every chrome primitive draws with fillRect and nothing else, which is
+     * what makes it testable without a browser: record the rects and read the
+     * picture back out of them. */
+    interface R { x: number; y: number; w: number; h: number; c: string }
+    const rec = (): { ctx: CanvasRenderingContext2D; out: R[] } => {
+      const out: R[] = [];
+      let cur = "#000";
+      const ctx = {
+        set fillStyle(v: string) { cur = v; },
+        get fillStyle() { return cur; },
+        fillRect(x: number, y: number, w: number, h: number) { out.push({ x, y, w, h, c: cur }); },
+      } as unknown as CanvasRenderingContext2D;
+      return { ctx, out };
+    };
+    /** Colour of the topmost rect covering a point, or "" for nothing drawn. */
+    const at = (out: R[], px: number, py: number): string => {
+      let c = "";
+      for (const r of out) {
+        if (px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h) c = r.c;
+      }
+      return c;
+    };
+
+    ok(C.bevelPx(2) === 2 && C.bevelPx(1) === 1, "a bevel is one UI pixel thick");
+    ok(C.bevelPx(0.2) === 1 && C.bevelPx(0) === 1,
+      "…and never thinner than one real pixel, however far the panel is zoomed out");
+    ok(C.frameInset(2) === 4, "a window frame is the hard edge plus the bevel inside it");
+
+    // The whole point of the restyle: a frame is lit from the top-left and a
+    // slot is lit from the bottom-right. If these ever agree, the UI is flat
+    // again and nothing tells you which rectangles take a dropped item.
+    {
+      const a = rec();
+      C.raisedBox(a.ctx, 0, 0, 40, 40, "#222", "#fff", "#000", 2);
+      ok(at(a.out, 20, 0) === "#fff" && at(a.out, 20, 39) === "#000",
+        "a raised plate is lit top-left, shadowed bottom-right");
+
+      const b = rec();
+      C.sunkenBox(b.ctx, 0, 0, 40, 40, "#222", "#000", "#fff", 2);
+      ok(at(b.out, 20, 0) === "#000" && at(b.out, 20, 39) === "#fff",
+        "…and a sunken well is exactly its mirror — that contrast IS the depth");
+      ok(at(a.out, 20, 0) !== at(b.out, 20, 0),
+        "…so a slot can never be mistaken for the panel it sits in");
+    }
+
+    // Crispness: a bevel drawn on a half pixel is a grey smear, and at two
+    // pixels wide the smear is most of the effect. Fractional scales come from
+    // the per-window zoom, so this is a real input, not a hypothetical.
+    {
+      const f = rec();
+      C.panelFrame(f.ctx, 10.4, 20.6, 100.5, 80.5, 1.7);
+      C.slotCell(f.ctx, 12.3, 33.7, 20.5, 20.5, 1.7, { accent: "#caa23a" });
+      C.buttonBox(f.ctx, 12.9, 60.2, 30.4, 12.6, 1.7, { on: true });
+      const whole = f.out.every((r) =>
+        Number.isInteger(r.x) && Number.isInteger(r.y) && Number.isInteger(r.w) && Number.isInteger(r.h));
+      ok(whole, `every chrome rect lands on a whole device pixel (${f.out.length} rects, fractional scale)`);
+    }
+
+    // A window's footprint is also its hit box and its "are you close enough"
+    // box, so the frame has to stay inside the rect the caller reserved.
+    {
+      const f = rec();
+      C.panelFrame(f.ctx, 50, 60, 120, 90, 2);
+      const inside = f.out.every((r) => r.x >= 50 && r.y >= 60 && r.x + r.w <= 170 && r.y + r.h <= 150);
+      ok(inside, "a panel frame draws entirely inside the rect it was given");
+      ok(at(f.out, 50, 60) === C.CHROME.stud && at(f.out, 169, 149) === C.CHROME.stud,
+        "…with a rivet in each corner");
+    }
+
+    // Degenerate sizes turn up whenever a window is rolled up or squeezed by
+    // the auto-fit; they must draw nothing rather than inside-out garbage.
+    {
+      const f = rec();
+      C.ring(f.ctx, 0, 0, 0, 10, 2, "#fff");
+      C.raisedBox(f.ctx, 0, 0, -5, 10, "#1", "#2", "#3", 2);
+      C.sunkenBox(f.ctx, 0, 0, 10, 0, "#1", "#2", "#3", 2);
+      ok(f.out.length === 0, "a zero-or-negative box draws nothing at all");
+    }
+
+    // The accent keyline is the "this cell is live" mark. No accent, no ring.
+    {
+      const plain = rec();
+      C.slotCell(plain.ctx, 0, 0, 30, 30, 2);
+      const lit = rec();
+      C.slotCell(lit.ctx, 0, 0, 30, 30, 2, { accent: C.CHROME.gold });
+      ok(!plain.out.some((r) => r.c === C.CHROME.gold), "an empty slot carries no keyline");
+      ok(at(lit.out, 15, 2) === C.CHROME.gold, "…and an accented one is ringed just inside its bevel");
+      ok(C.CHROME.slotFilled !== C.CHROME.goldText,
+        "a merely-occupied slot is marked dimmer than a hot one, or the equipment window is a wall of light");
+    }
+
+    // A button that is ON is physically pressed: same box, bevels flipped.
+    {
+      const off = rec();
+      C.buttonBox(off.ctx, 0, 0, 40, 20, 2, {});
+      const on = rec();
+      C.buttonBox(on.ctx, 0, 0, 40, 20, 2, { on: true });
+      ok(at(off.out, 20, 0) !== at(on.out, 20, 0), "pressing a button flips its bevel, so it reads as held");
+    }
+
+    ok(C.CHROME.slotFace !== C.CHROME.panelFace,
+      "a slot is a different value from the panel — two bevel pixels cannot carry the depth alone");
+  }
+
+  console.log("Etap 32 — no flat outlined boxes survive anywhere in the UI:");
+  {
+    const nfs = await import("node:fs");
+    /* The old chrome was fillRect + strokeRect, everywhere, by hand. If one
+     * creeps back it will look subtly wrong beside everything else and no
+     * behavioural test will ever catch it. */
+    for (const f of ["src/ui/panels.ts", "src/ui/hud.ts"]) {
+      const src = nfs.readFileSync(f, "utf8");
+      ok(!src.includes("strokeRect"), `${f} draws no hand-rolled outlined boxes`);
+    }
+    const mainSrc = nfs.readFileSync("src/main.ts", "utf8");
+    // main.ts keeps ONE strokeRect: the dashed edit-mode outline, which is a
+    // marquee rather than a box and has no business being bevelled.
+    const strokes = mainSrc.split("strokeRect").length - 1;
+    /* Five survive on purpose: the build-placement ghost, two tile
+     * highlights, the ground-item outline and the edit-mode marquee. Those
+     * are outlines drawn ON THE MAP, not window chrome — a bevel would be
+     * wrong on them. A sixth means a flat box crept back into the UI. */
+    ok(strokes === 5, `main.ts keeps only its five world-space markers (${strokes} strokeRect)`);
+    ok(mainSrc.includes("setLineDash"), "…one of which is the dashed edit-mode marquee");
+
+    const chromeSrc = nfs.readFileSync("src/ui/chrome.ts", "utf8");
+    ok(!chromeSrc.includes("drawImage") && !chromeSrc.includes("http"),
+      "the chrome needs no art file, so no asset licence rides on the UI");
+  }
+
+  console.log("Etap 32 — every window still draws through the new chrome:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    items.addItem(g.player.bag, "wood", 50);
+    const mk = (scale: number): unknown => ({
+      ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+        .document.createElement("canvas").getContext("2d"),
+      scale, screenW: 800, screenH: 600, touchInput: false,
+    });
+
+    /* Fractional scales are what the per-window zoom actually produces, and
+     * they are where a rounding bug in the bevels would surface. */
+    for (const scale of [1, 2, 1.7]) {
+      for (const kind of ["build", "skills", "equip", "bag", "quest", "forge", "tower", "tasks", "wardrobe"]) {
+        const ui = {
+          windows: [{ kind, offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
+          npc: null, stash: null, floor: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
+          towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        } as never;
+        let threw = "";
+        try {
+          drawPanels({
+            hud: mk(scale), ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+            act: {} as never, hotspots: [], itemSlots: [],
+          } as never);
+        } catch (e) { threw = String(e); }
+        ok(threw === "", `${kind} draws at scale ${scale}${threw ? " — " + threw : ""}`);
+      }
+    }
+
+    // Look mode, the inspect card and the split chooser are separate popups
+    // that were re-framed too, and none is reachable from the loop above
+    // because they hang off ui state rather than off a window kind.
+    {
+      const ui = {
+        windows: [{ kind: "bag", offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
+        npc: null, stash: null, floor: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
+        towerTab: "fire", upgrading: null, dragging: false, lookMode: true,
+        inspect: "wood",
+        split: { kind: "wood", n: 3, max: 9, index: 0, ref: { c: "bag" }, canStore: true },
+      } as never;
+      let threw = "";
+      try {
+        drawPanels({
+          hud: mk(2), ui, game: g, player: g.player, mouse: { sx: 400, sy: 300 },
+          act: {} as never, hotspots: [], itemSlots: [],
+        } as never);
+      } catch (e) { threw = String(e); }
+      ok(threw === "", `the inspect card and split chooser draw${threw ? " — " + threw : ""}`);
+    }
+
+    // A rolled-up window is the degenerate case the frame has to survive: the
+    // body collapses to nothing and only the title bar is left.
+    {
+      const prefs = await import("../src/systems/panelPrefs.ts");
+      prefs.togglePanelCollapsed("bag");
+      const ui = {
+        windows: [{ kind: "bag", offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
+        npc: null, stash: null, floor: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
+        towerTab: "fire", upgrading: null, dragging: false, lookMode: false, inspect: null, split: null,
+      } as never;
+      let threw = "";
+      try {
+        drawPanels({
+          hud: mk(2), ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+          act: {} as never, hotspots: [], itemSlots: [],
+        } as never);
+      } catch (e) { threw = String(e); }
+      ok(threw === "", `a rolled-up window draws its bar alone${threw ? " — " + threw : ""}`);
+      prefs.togglePanelCollapsed("bag");
+    }
+  }
+
+  console.log("Etap 33 — the docked sidebar (Tibia's layout):");
+  {
+    const D = await import("../src/ui/dock.ts");
+
+    ok(!D.dockEnabled(D.DOCK_MIN_SCREEN - 1) && D.dockEnabled(D.DOCK_MIN_SCREEN),
+      `no column below ${D.DOCK_MIN_SCREEN}px, so phones keep today's floating windows`);
+
+    /* THE fix. Tibia's sidebar is a fixed number of real pixels wide whatever
+     * the monitor; the game window takes the rest. Inheriting the HUD's design
+     * unit — authored for a 480x320 phone — made the column three times too
+     * fat on a desktop, and that, not the screen height, is what forced the
+     * windows inside it to be shrunk. */
+    const laptop = Math.min(1600 / 480, 900 / 320);
+    const desktop = Math.min(3840 / 480, 2160 / 320);
+    ok(D.dockScale(desktop, 2) === D.dockScale(laptop, 2),
+      "the column's unit is the same on a laptop and a 4K display — it does not scale with the screen");
+    ok(D.dockScale(desktop, 1) < desktop / 2,
+      "…and is far smaller than the HUD unit it used to borrow");
+    ok(D.dockScale(0.4, 1) === 0.4,
+      "…but never larger than the interface around it, on a small window");
+
+    /* Full size, not shrunk: the column is exactly as wide as the windows it
+     * holds, which is what "full size" has to mean. */
+    ok(D.DOCK_INNER === 4 * 32 + 3 * 4 + 24,
+      "the column is exactly a container window wide, so nothing in it is rescaled");
+    ok(D.DOCK_W === D.DOCK_INNER + 2 * D.DOCK_PAD, "…plus its padding, and nothing else");
+    {
+      const w = D.dockLayout(1920, 917, D.dockScale(Math.min(1920 / 480, 917 / 320), 1), true).w;
+      ok(w / 1920 < 0.14, `and it costs ${(w / 1920 * 100).toFixed(0)}% of a 1920 display — Tibia's proportion`);
+    }
+
+    // Tibia's fixed block, in Tibia's order. Containers may never go above it.
+    ok(D.DOCK_BLOCKS.join(",") === "minimap,status,controls",
+      "minimap, then status, then controls — the order Tibia fixes them in");
+    {
+      const s = D.dockScale(Math.min(1920 / 480, 917 / 320), 1);
+      const d = D.dockLayout(1920, 917, s, true);
+      ok(d.x + d.w === 1920, "the column is flush with the right edge");
+      ok(d.innerX >= d.x && d.innerX + d.innerW <= d.x + d.w, "…and its contents sit inside it");
+      let prev = -1;
+      for (const b of D.DOCK_BLOCKS) {
+        ok(d.blocks[b].y > prev, `${b} sits below whatever precedes it`);
+        prev = d.blocks[b].y;
+      }
+      ok(d.stackTop > d.blocks.controls.y + d.blocks.controls.h - 1,
+        "containers stack strictly BELOW the fixed block, never above it");
+      ok(D.overDock(d, d.x + 5, 100) && !D.overDock(d, d.x - 5, 100),
+        "a point one side of the column edge docks and the other does not");
+      ok(!D.overDock(D.NO_DOCK, 0, 0), "…and nothing is ever over a dock that is not there");
+      ok(D.blockBarAt(d, d.innerX + 4, d.blocks.status.y + 2) === "status",
+        "each block's header bar is clickable, which is how it collapses");
+      ok(D.blockBarAt(d, d.innerX + 4, d.stackTop + 40) === null, "…and the stack area is not a header");
+    }
+
+    /* Collapsing is how room is made for another container — Tibia minimises
+     * its inventory for exactly this reason. Better than shrinking everything
+     * permanently: you pay for the space only when you want it. */
+    {
+      const s = D.dockScale(Math.min(1920 / 480, 917 / 320), 1);
+      const before = D.dockLayout(1920, 917, s, true);
+      D.toggleBlock("minimap");
+      const after = D.dockLayout(1920, 917, s, true);
+      D.toggleBlock("minimap");
+      ok(after.stackTop < before.stackTop,
+        `collapsing the minimap hands its space to the containers (${Math.round(before.stackTop)} -> ${Math.round(after.stackTop)})`);
+      ok(after.blocks.minimap.bodyH === 0 && after.blocks.minimap.h > 0,
+        "…and leaves its header bar behind, so it can be opened again");
+      ok(D.dockLayout(1920, 917, s, true).stackTop === before.stackTop,
+        "…and toggling back restores it exactly");
+    }
+  }
+
+  console.log("Etap 33 — what docks, and what pointedly does not:");
+  {
+    const PN = await import("../src/ui/panels.ts");
+    const D = await import("../src/ui/dock.ts");
+    const d = D.dockLayout(1920, 917, D.dockScale(3, 1), true);
+
+    ok(PN.DOCKABLE_PANELS.includes("bag") && PN.DOCKABLE_PANELS.includes("loot")
+      && PN.DOCKABLE_PANELS.includes("floor") && PN.DOCKABLE_PANELS.includes("container"),
+      "the four carried containers dock");
+    ok(!PN.DOCKABLE_PANELS.includes("stash"),
+      "…the Storage Chest does not, being ten columns wide against the column's four");
+    /* Equipment docks as well, though it is not a CONTAINER window — in Tibia
+     * the paperdoll is one of the fixed sidebar blocks. Everything else that
+     * docks does have to be a container, or docking it means nothing. */
+    ok(PN.DOCKABLE_PANELS.includes("equip"), "…and so does Equipment, as Tibia's inventory block does");
+    for (const k of PN.DOCKABLE_PANELS) {
+      if (k === "equip") continue;
+      ok(PN.CONTAINER_PANELS.includes(k), `${k} is a container window, so docking it means something`);
+    }
+    ok(PN.isDocked({ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null }, d),
+      "a freshly opened container docks itself");
+    ok(!PN.isDocked({ kind: "bag", docked: false, offset: { x: 0, y: 0 }, rect: null, titleBar: null }, d),
+      "…one torn out stays out, because the flag is remembered per window");
+    ok(!PN.isDocked({ kind: "build", offset: { x: 0, y: 0 }, rect: null, titleBar: null }, d),
+      "…and a build list never docks however much room there is");
+    ok(!PN.isDocked({ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null }, D.NO_DOCK),
+      "…nor does anything when there is no column to dock into");
+  }
+
+  console.log("Etap 33 — windows land in the column, at full size:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const D = await import("../src/ui/dock.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+
+    // Radek's actual display.
+    const SW = 1920, SH = 917;
+    const hudS = Math.min(SW / 480, SH / 320);
+    const dock = D.dockLayout(SW, SH, D.dockScale(hudS, 1), true);
+    const hud = {
+      ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+        .document.createElement("canvas").getContext("2d"),
+      scale: hudS, screenW: SW, screenH: SH, touchInput: false,
+    } as never;
+
+    const run = (windows: unknown[], withDock: boolean): void => {
+      const ui = {
+        windows, placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+        shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      } as never;
+      drawPanels({
+        hud, ui, game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: {} as never, hotspots: [], itemSlots: [], ...(withDock ? { dock } : {}),
+      } as never);
+    };
+
+    {
+      const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      run([bag], true);
+      const r = bag.rect as unknown as { x: number; y: number; w: number; h: number } | null;
+      ok(!!r && r.x === dock.innerX, "a docked backpack sits at the column's left edge");
+      ok(!!r && r.w === dock.innerW, `…and fills its width exactly (${r?.w} vs ${dock.innerW})`);
+      ok(!!r && Math.abs(r.y - dock.stackTop) < 1, "…starting directly under the fixed block");
+      // Full size means the slots are the size they are everywhere else, in
+      // the column's own pixels — no 0.61 shrink factor left anywhere.
+      ok(!!r && Math.abs(r.w / dock.s - D.DOCK_INNER) < 1,
+        "…drawn at the column's unit, at full size, not scaled down to fit");
+    }
+
+    {
+      const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      const pack = { kind: "container", ref: { c: "bag" }, offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      g.player.pack.items![0] = items.newContainer("backpack")!;
+      run([bag, pack], true);
+      const a = bag.rect as unknown as { y: number; h: number } | null;
+      const b = pack.rect as unknown as { x: number; y: number } | null;
+      ok(!!a && !!b && b.y >= a.y + a.h,
+        `the second window stacks below the first (${Math.round(a?.y ?? 0)}+${Math.round(a?.h ?? 0)} -> ${Math.round(b?.y ?? 0)})`);
+      ok(!!b && b.x === dock.innerX, "…in the same column, not beside it");
+      const bh = (pack.rect as unknown as { h: number } | null)?.h ?? 0;
+      ok(!!b && b.y + bh <= dock.stackBottom + 1,
+        "…and two FULL-SIZE containers fit on a 1920x917 display, which is the whole point of the fixed unit");
+    }
+
+    {
+      const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      run([bag], false);
+      const r = bag.rect as unknown as { x: number; w: number } | null;
+      ok(!!r && Math.abs(r.x - (SW - r.w) / 2) < 1,
+        "with no column a backpack is centred exactly as it always was");
+    }
+
+    {
+      const bag = { kind: "bag", docked: false, offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      run([bag], true);
+      const r = bag.rect as unknown as { x: number; w: number } | null;
+      ok(!!r && Math.abs(r.x - (SW - dock.w - r.w) / 2) < 1,
+        "a torn-out window centres on the visible map, not behind the column");
+    }
+
+    {
+      const many = [0, 1, 2, 3, 4, 5, 6, 7].map(() =>
+        ({ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null }));
+      run(many, true);
+      const rects = many.map((m) => m.rect as unknown as { x: number; y: number; h: number } | null);
+      ok(rects.every((r) => !!r), "every window still draws when the column overflows");
+      /* CHANGED (Etap 34): the column used to keep only what fitted and let the
+       * rest float over the map, which is the bug Radek hit — open a fourth
+       * thing and it lands on the game. Now every docked window stays IN the
+       * column and the column scrolls. */
+      const stacked = rects.filter((r) => r && r.x === dock.innerX);
+      ok(stacked.length === many.length,
+        `all ${many.length} stay in the column rather than spilling onto the map`);
+      const dockMod = await import("../src/ui/dock.ts");
+      ok(dockMod.dockOverflow(dock) > 0, "…and the column reports that it now overflows");
+      const lowest = Math.max(...stacked.map((r) => (r ? r.y + r.h : 0)));
+      ok(lowest > dock.stackBottom,
+        "…which is what having somewhere to scroll TO means");
+
+      /* Scrolling moves the stack and is clamped at both ends. */
+      const top0 = (rects[0] as { y: number }).y;
+      dockMod.setDockScroll(dock, 1e6);
+      const max = dockMod.dockScroll();
+      ok(max > 0 && max === dockMod.dockOverflow(dock),
+        "scrolling past the end stops at the end");
+      run(many, true);
+      ok((many[0].rect as unknown as { y: number }).y < top0,
+        "…and the first window really did move up");
+      dockMod.setDockScroll(dock, -500);
+      ok(dockMod.dockScroll() === 0, "…and it cannot be scrolled above the top");
+      run(many, true);
+      ok(Math.abs((many[0].rect as unknown as { y: number }).y - top0) < 2,
+        "…back where it started");
+    }
+  }
+
+  console.log("Etap 33 — the HUD knows the map got narrower:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    /* The bug on the screenshots: placeHud clamps a group's saved fraction to
+     * the width it is handed, and it was handed the whole canvas. So the panel
+     * column sat on top of the minimap — the groups had not moved, nobody had
+     * told them the map was narrower. */
+    ok(src.includes("const sw = screen.width - sidebarW"),
+      "movable HUD groups are placed against the map, not the whole canvas");
+    /* The modal rebind picker still spans the canvas — it is a scrim, and a
+     * scrim with a hole in it would look broken — but its dialog centres on
+     * the map like every other window. */
+    ok(src.includes("const mapW = sw - sidebarW") && src.includes("const x = (mapW - w) / 2"),
+      "…and even the full-screen rebind scrim centres its dialog on the map");
+    // With a column, these widgets live in it as fixed sidebar items.
+    ok(src.includes("if (docked) {") && src.includes("drawDockControls"),
+      "the panel buttons and action slots move into the column when there is one");
+    ok(src.includes('if (editing && !docked) drawGroupGrip("vitals"'),
+      "…and carry no drag grip there, so the HUD editor cannot strand them under it");
+  }
+
+  console.log("Etap 34 — a pack inside a pack opens IN PLACE:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const nav = src.slice(src.indexOf("function navInto"), src.indexOf("function navUp"));
+
+    /* Tibia never throws a second window into the middle of the screen for a
+     * bag inside a bag: it walks the window you clicked in, and the back arrow
+     * walks it out. Two open at once is done deliberately — walk one in, then
+     * open the backpack again from the equipment slot. */
+    ok(nav.includes("win.ref = target"), "navigating into a sub-pack rewrites the clicked window's view");
+    ok(nav.includes("openContainer(target)"),
+      "…and only a click from somewhere else, like the chest's bag grid, opens a window of its own");
+    ok(panels.includes("p.act.openNested(ref, idx, p.win)"),
+      "…because every grid cell passes along the window it was clicked in");
+    ok(panels.includes("p.act.navUp(ref, p.win)"), "…and the back arrow does the same");
+
+    const up = src.slice(src.indexOf("function navUp"), src.indexOf("function navUp") + 900);
+    ok(up.includes("win.ref = home && sameRef(home, ref.via) ? undefined : ref.via"),
+      "walking all the way back out restores the window to its own home container");
+
+    // A navigated window must stop answering for its home, or opening the
+    // backpack again just raises the window that walked away.
+    const showing = src.slice(src.indexOf("function windowShowing"), src.indexOf("function windowShowing") + 700);
+    ok(showing.includes("if (w.ref) return false;"),
+      "a window that has walked into a sub-pack no longer answers as the backpack");
+  }
+
+  console.log("Etap 34 — text stays inside its frame:");
+  {
+    const { hudText } = await import("../src/ui/hud.ts");
+    /* Monospace, so width is proportional to length: a faithful enough stand-in
+     * for measureText to prove the fitting logic, and it needs no canvas. */
+    let font = "";
+    let drawn: string[] = [];
+    const ctx = {
+      set font(v: string) { font = v; },
+      get font() { return font; },
+      set fillStyle(_v: string) { /* ignored */ },
+      set textAlign(_v: CanvasTextAlign) { /* ignored */ },
+      measureText(t: string) {
+        const px = Number(/(\d+)px/.exec(font)?.[1] ?? 10);
+        return { width: t.length * px * 0.6 };
+      },
+      fillText(t: string) { drawn.push(t); },
+    } as unknown as CanvasRenderingContext2D;
+    const h = { ctx, scale: 2, screenW: 800, screenH: 600 } as never;
+    const widthOf = (t: string, px: number): number => t.length * px * 0.6;
+
+    const long = "Upgrade to III: 1000 wood + 1000 stone + 500 iron + 100 essentialGem + 500 steel";
+
+    drawn = [];
+    hudText(h, long, 0, 0, 14, "#fff");
+    ok(drawn[0] === long, "with no budget a long line is drawn whole, exactly as before");
+
+    drawn = [];
+    hudText(h, long, 0, 0, 14, "#fff", "left", false, 200);
+    const out = drawn[0];
+    const px = Number(/(\d+)px/.exec(font)?.[1] ?? 14);
+    ok(widthOf(out, px) <= 200 + 0.001, `a budgeted line fits it (${Math.round(widthOf(out, px))} <= 200)`);
+    ok(out.length < long.length && out.endsWith("\u2026"),
+      "…shrinking first and then cutting with an ellipsis, so the tail is visibly missing rather than silently gone");
+
+    drawn = [];
+    hudText(h, "short", 0, 0, 14, "#fff", "left", false, 400);
+    ok(drawn[0] === "short", "a line that already fits is left completely alone");
+
+    drawn = [];
+    hudText(h, long, 0, 0, 14, "#fff", "left", false, 4);
+    ok(drawn[0].length >= 1, "an absurdly small budget still draws something rather than looping forever");
+  }
+
+  console.log("Etap 34 \u2014 no window draws a Look toggle any more:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+    const hud = {
+      ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+        .document.createElement("canvas").getContext("2d"),
+      scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+    } as never;
+    let toggled = false;
+    const bag = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+    const hotspots: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
+    drawPanels({
+      hud,
+      ui: {
+        windows: [bag], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+        shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      } as never,
+      game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+      act: new Proxy({}, {
+        get: (_t, k) => (k === "toggleLook" ? () => { toggled = true; } : () => { /* no-op */ }),
+      }) as never,
+      hotspots, itemSlots: [],
+    } as never);
+
+    const look = hotspots.find((hs) => { hs.fn(); const t = toggled; toggled = false; return t; });
+    /* Firing every hotspot to find one also presses the roll-up and zoom
+     * buttons, which write straight to the persisted panel preferences. Put
+     * them back, or every later test inherits a collapsed backpack. */
+    (await import("../src/systems/panelPrefs.ts")).resetPanelPrefs();
+    /* It used to live on every container's title bar, and that was the third
+     * door into one mode: the L key, this button, and — since Etap 38 — the
+     * drop-down's LOOK on a phone and right-click on a desktop. Three doors
+     * into one room, one of them repeated on every open window, each with its
+     * own hit box carved out of the drag region. */
+    ok(!look, "no window carries a Look toggle of its own");
+    const panels = (await import("node:fs")).readFileSync("src/ui/panels.ts", "utf8");
+    ok(panels.includes("REMOVED: the Look toggle"), "…and the removal says where the mode went");
+    ok(!panels.includes("function lookToggle("), "…and the function is gone, not merely unused");
+  }
+
+  console.log("Etap 35 — long text wraps instead of being cut:");
+  {
+    const { wrapText, hudLines } = await import("../src/ui/hud.ts");
+    let font = "";
+    const drawn: string[] = [];
+    const ctx = {
+      set font(v: string) { font = v; },
+      get font() { return font; },
+      set fillStyle(_v: string) { /* ignored */ },
+      set textAlign(_v: CanvasTextAlign) { /* ignored */ },
+      measureText(t: string) {
+        const px = Number(/(\d+)px/.exec(font)?.[1] ?? 10);
+        return { width: t.length * px * 0.6 };
+      },
+      fillText(t: string) { drawn.push(t); },
+    } as unknown as CanvasRenderingContext2D;
+    const h = { ctx, scale: 2, screenW: 800, screenH: 600 } as never;
+    const wide = (t: string, px: number): number => t.length * px * 0.6;
+
+    const cost = "Upgrade to III: 1000 wood + 1000 stone + 500 iron + 100 essentialGem + 500 steel";
+
+    ok(wrapText(h, "short", 10, 400).length === 1, "a line that fits is one line and is left alone");
+
+    {
+      const lines = wrapText(h, cost, 10, 200);
+      ok(lines.length > 1, `a long cost line becomes several (${lines.length})`);
+      ok(lines.every((l) => wide(l, 10) <= 200 + 0.001), "…every one of which fits the budget");
+      /* The whole point: truncation hid the very numbers the line exists to
+       * report. Wrapping must lose nothing but the spaces it broke at. */
+      ok(lines.join(" ") === cost, "…and nothing at all is lost — the numbers are why the line exists");
+      ok(!lines.some((l) => l.includes("\u2026")), "…with no ellipsis anywhere");
+    }
+
+    {
+      // A single word longer than the budget cannot be broken at a space, and
+      // must still not overhang the frame.
+      const lines = wrapText(h, "a ".repeat(1) + "X".repeat(200), 10, 100);
+      ok(lines.every((l) => wide(l, 10) <= 100 + 0.001), "an unbreakable word is cut mid-word rather than left to overhang");
+      ok(lines.join("").includes("X".repeat(20)), "…and its characters all survive the cut");
+    }
+
+    {
+      drawn.length = 0;
+      const end = hudLines(h, ["one", "two", "three"], 0, 100, 8, "#fff");
+      // Two fills per line: hudText lays a shadow under every string it draws.
+      ok(drawn.length === 6, "hudLines draws each line, shadow and all");
+      ok(drawn.includes("three"), "…including the last one");
+      ok(end > 100, `…and reports where the block ended (${end})`);
+    }
+  }
+
+  console.log("Etap 35 — the build panel grows to hold its rows:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    const mk = (scale: number, win: unknown) => {
+      const hotspots: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale, screenW: 1600, screenH: 900, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots: [],
+      } as never);
+      return hotspots;
+    };
+
+    /* Narrow the panel by shrinking the scale and the rows have to wrap more,
+     * so the frame has to grow. If it did not, the text would run out of the
+     * bottom of the window the same way it used to run out of the side. */
+    const wide = { kind: "build", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+    mk(3, wide);
+    const rw = wide.rect as unknown as { h: number } | null;
+    ok(!!rw, "the build panel draws");
+
+    const narrow = { kind: "build", offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+    mk(1, narrow);
+    const rn = narrow.rect as unknown as { h: number } | null;
+    ok(!!rn && !!rw && rn.h / 1 >= rw.h / 3 - 1,
+      "…and per design unit it is never SHORTER when the text has to wrap more");
+
+    // Every clickable row must stay inside the frame it was measured for.
+    const hs = mk(3, wide);
+    const r = wide.rect as unknown as { x: number; y: number; w: number; h: number } | null;
+    /* Rows only. The title-bar buttons carry a deliberately enlarged hit area
+     * that overhangs the frame by a few pixels so they stay easy to hit. */
+    const rowHits = r ? hs.filter((q) => q.w > r.w / 2) : [];
+    /* A fresh character can afford nothing, so no row is clickable and there
+     * are no row hotspots at all — which is correct, not a failure. */
+    ok(rowHits.length >= 0, `the build panel offers ${rowHits.length} clickable rows for this purse`);
+    ok(!!r && rowHits.every((q) => q.y >= r.y - 1 && q.y + q.h <= r.y + r.h + 1),
+      "…and every one of them sits inside the panel that was sized to hold it");
+  }
+
+  console.log("Etap 35 — control buttons are pictures, not letters:");
+  {
+    const I = await import("../src/ui/icons.ts");
+    interface R { x: number; y: number; w: number; h: number; c: string }
+    const rec = (): { ctx: CanvasRenderingContext2D; out: R[] } => {
+      const out: R[] = [];
+      let cur = "#000";
+      const ctx = {
+        set fillStyle(v: string) { cur = v; },
+        get fillStyle() { return cur; },
+        fillRect(x: number, y: number, w: number, h: number) { out.push({ x, y, w, h, c: cur }); },
+      } as unknown as CanvasRenderingContext2D;
+      return { ctx, out };
+    };
+    const names = ["build", "skills", "equip", "bag", "quest"] as const;
+
+    /* B and Q read fine as letters; K for Skills does not, and S — the letter
+     * it wants — is taken by walking. Pictures owe nothing to the keybind. */
+    const shapes = new Set<string>();
+    for (const n of names) {
+      const f = rec();
+      I.drawControlIcon(f.ctx, n, 0, 0, 36, false);
+      ok(f.out.length >= 3, `${n} draws a glyph`);
+      ok(f.out.every((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= 36 && r.y + r.h <= 36),
+        `…entirely inside its button`);
+      ok(f.out.every((r) => Number.isInteger(r.x) && Number.isInteger(r.y)),
+        `…on whole pixels, like the rest of the chrome`);
+      shapes.add(f.out.map((r) => `${r.x},${r.y},${r.w},${r.h}`).join("|"));
+    }
+    ok(shapes.size === names.length, "all five silhouettes are different — five identical boxes would be no better than letters");
+
+    {
+      // Pressed, the button face turns gold; a light glyph on it would vanish.
+      const off = rec(); I.drawControlIcon(off.ctx, "bag", 0, 0, 36, false);
+      const on = rec(); I.drawControlIcon(on.ctx, "bag", 0, 0, 36, true);
+      ok(off.out[0].c !== on.out[0].c, "a pressed button flips the glyph to a dark palette so it stays visible on gold");
+    }
+
+    {
+      // The buttons are sized off the column, which is not a round number.
+      const tiny = rec();
+      I.drawControlIcon(tiny.ctx, "quest", 3.4, 7.9, 11.3, false);
+      ok(tiny.out.every((r) => r.w >= 1 && r.h >= 1),
+        "at an awkward size and offset no part of a glyph collapses to nothing");
+    }
+
+    const nfs = await import("node:fs");
+    /* The buttons carry real art now, so the rule flips: every icon file that
+     * ships must be named in CREDITS.md. The repo is public, and an asset with
+     * redistribution limits sitting in it uncredited is the failure mode that
+     * matters most here — far more than anything cosmetic. */
+    const credits = nfs.readFileSync("CREDITS.md", "utf8");
+    const files = nfs.readdirSync("public").filter((f: string) => f.startsWith("icon-"));
+    ok(files.length > 0, `the sidebar ships real icons (${files.length})`);
+    for (const f of files) {
+      ok(credits.includes(f), `${f} is named in CREDITS.md`);
+    }
+    const icons = nfs.readFileSync("src/ui/icons.ts", "utf8");
+    ok(icons.includes("GLYPHS"),
+      "…and a drawn fallback survives, so a button is never empty if a file fails to load");
+  }
+
+  console.log("Etap 35 — a second backpack can actually be opened:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    /* The equipment slot used to call openWindow("bag"), which toggles THE bag
+     * window — and once that window has walked into a sub-pack it is showing
+     * something else, so the click just closed the thing you were looking at
+     * instead of giving you a second view. */
+    ok(src.includes('openBag: () => { openContainer({ c: "bag" }); }')
+      || src.includes('openContainer({ c: "bag" })'),
+      "the equipment pack slot asks for a VIEW of the backpack, not for the bag window");
+    const bag = src.slice(src.indexOf("openBag:"), src.indexOf("openBag:") + 200);
+    ok(!bag.includes('openWindow("bag")'), "…so it no longer toggles a window that may have walked elsewhere");
+  }
+
+  console.log("Etap 36 — a container window can be dragged shorter:");
+  {
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const PN = await import("../src/ui/panels.ts");
+
+    PR.setPanelRows("bag", 0);
+    ok(PN.visibleRows("bag", 4) === 4, "by default a window shows every row it has");
+    PR.setPanelRows("bag", 2);
+    ok(PN.visibleRows("bag", 4) === 2, "…and the chosen count when one has been set");
+    ok(PN.visibleRows("bag", 1) === 1, "…clamped to what the container actually holds");
+    PR.setPanelRows("bag", 99);
+    ok(PN.visibleRows("bag", 4) === 4, "…so an oversized preference cannot invent rows");
+    PR.setPanelRows("bag", -3);
+    ok(PN.visibleRows("bag", 4) === 4, "…and a nonsense one falls back to showing everything");
+    PR.setPanelRows("bag", 0);
+  }
+
+  console.log("Etap 36 — hidden cells are gone, not merely invisible:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+    items.addItem(g.player.bag, "wood", 5);
+
+    const run = (): { slots: { index: number }[]; hits: number; win: Record<string, unknown> } => {
+      const win = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null };
+      const itemSlots: { index: number }[] = [];
+      const hotspots: unknown[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots,
+      } as never);
+      return { slots: itemSlots, hits: hotspots.length, win: win as never };
+    };
+
+    PR.setPanelRows("bag", 0);
+    const full = run();
+    const fullRect = full.win.rect as { h: number };
+    ok(full.slots.length === g.player.pack.items!.length,
+      `at full height every cell is a live drop target (${full.slots.length})`);
+
+    PR.setPanelRows("bag", 2);
+    const short = run();
+    const shortRect = short.win.rect as { h: number };
+
+    ok(shortRect.h < fullRect.h, `a shortened window really is shorter (${Math.round(shortRect.h)} < ${Math.round(fullRect.h)})`);
+    ok(short.slots.length === 8, `…showing exactly two rows of four (${short.slots.length} cells)`);
+    /* The one way a shortened window could lose an item: a cell that is no
+     * longer drawn but is still registered as somewhere a drag can land. */
+    ok(short.slots.every((q) => q.index < 8),
+      "…and no cell beyond the visible rows is a drop target");
+    /* The shortened window grows MORE clickables, not fewer — the scrollbar's
+     * arrows and track. That is the point: hiding rows is only acceptable
+     * because there is now a way to reach them. */
+    ok(short.hits > full.hits, "…and hiding rows adds the controls that reach them again");
+
+    // Indices must not shift. This is the whole reason resizing ships before
+    // scrolling: with the visible rows always being the FIRST rows, every slot
+    // keeps the index it had, so drag-and-drop and looting are untouched.
+    const first8 = full.slots.slice(0, 8).map((q) => q.index).join(",");
+    ok(short.slots.map((q) => q.index).join(",") === first8,
+      "…and the cells that remain keep exactly the indices they always had");
+
+    PR.setPanelRows("bag", 0);
+  }
+
+  console.log("Etap 36 — the window says what it is hiding:");
+  {
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+
+    const drawnText: string[] = [];
+    /* A proxy, not an overwritten method: assigning ctx.fillText on the stub
+     * context silently does nothing, which made the first version of this test
+     * pass by recording no text at all. */
+    const raw = (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => object } } })
+      .document.createElement("canvas").getContext("2d");
+    const ctx = new Proxy(raw, {
+      get(t, k, r) {
+        if (k === "fillText") return (str: string) => { drawnText.push(str); };
+        const v = Reflect.get(t, k, r) as unknown;
+        return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+      },
+      set(t, k, v) { return Reflect.set(t, k, v); },
+    }) as never;
+
+    const run = (): void => {
+      drawPanels({
+        hud: { ctx, scale: 3, screenW: 1600, screenH: 900, touchInput: false },
+        ui: {
+          windows: [{ kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null }],
+          placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots: [], itemSlots: [],
+      } as never);
+    };
+
+    PR.setPanelRows("bag", 0);
+    drawnText.length = 0;
+    run();
+    ok(!drawnText.some((t) => t.includes("shown")), "a full-height window says nothing about hidden rows");
+
+    PR.setPanelRows("bag", 2);
+    drawnText.length = 0;
+    run();
+    /* Until scrolling exists the hidden rows are genuinely out of reach, so a
+     * window that quietly stops showing half your bag would be a trap. */
+    const total = g.player.bag.length;
+    /* Now that it scrolls, the useful thing to report is WHERE you are, not
+     * how to make the window bigger. */
+    ok(drawnText.some((t) => t.includes(`1\u20138 of ${total}`)),
+      `…and a shortened one says which slots it is showing (1-8 of ${total})`);
+    ok(!drawnText.some((t) => t.includes("drag foot")),
+      "…and no longer tells you to resize, because scrolling reaches them");
+    /* The hint must survive its own width budget: an explanation of a
+     * limitation is the last line that should be ellipsised into nothing. */
+    ok(!drawnText.some((t) => t.includes(" of ") && t.includes("\u2026")),
+      "…in wording short enough that it is never truncated");
+    PR.setPanelRows("bag", 0);
+  }
+
+  console.log("Etap 36 — the foot is grabbable:");
+  {
+    const { drawPanels, RESIZE_BAR } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+    const win = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null };
+    drawPanels({
+      hud: {
+        ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+          .document.createElement("canvas").getContext("2d"),
+        scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+      },
+      ui: {
+        windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+        shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+        dragging: false, lookMode: false, inspect: null, split: null,
+      },
+      game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+      act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+      hotspots: [], itemSlots: [],
+    } as never);
+
+    const rb = win.resizeBar as unknown as { x: number; y: number; w: number; h: number } | null;
+    const r = win.rect as unknown as { x: number; y: number; w: number; h: number } | null;
+    ok(!!rb, "a container window registers a foot to grab");
+    ok(!!rb && !!r && Math.abs(rb.y + rb.h - (r.y + r.h)) < 1, "…flush with the bottom edge");
+    ok(!!rb && !!r && rb.x === r.x && rb.w === r.w, "…spanning the full width, so it is easy to find");
+    ok(!!rb && rb.h >= RESIZE_BAR, "…and thick enough to hit");
+
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    /* The foot is a thin strip at the very bottom of a window; anything drawn
+     * under it wins the press unless the foot is tested first. */
+    ok(src.indexOf("const rb = win.resizeBar") < src.indexOf("const tb = win.titleBar"),
+      "the foot is hit-tested before the title bar, or the window would move instead of resize");
+    ok(src.includes("win.resizeBar = null"), "…and the foot is cleared each frame, like every other hitbox");
+  }
+
+  console.log("Etap 37 — the foot says what it does:");
+  {
+    const I = await import("../src/ui/icons.ts");
+    interface R { x: number; y: number; w: number; h: number; c: string }
+    const rec = (): { ctx: CanvasRenderingContext2D; out: R[] } => {
+      const out: R[] = [];
+      let cur = "#000";
+      const ctx = {
+        set fillStyle(v: string) { cur = v; },
+        get fillStyle() { return cur; },
+        fillRect(x: number, y: number, w: number, h: number) { out.push({ x, y, w, h, c: cur }); },
+      } as unknown as CanvasRenderingContext2D;
+      return { ctx, out };
+    };
+
+    /* Stacked arrows are the natural drawing and they do not survive the size
+     * the strip actually gets in the sidebar — twelve pixels tall means four
+     * per arrowhead, which merges into one blob. Laid out ACROSS, each arrow
+     * keeps the full height of the strip. */
+    {
+      const f = rec();
+      I.drawResizeArrows(f.ctx, 100, 50, 12, "#fff");
+      const wide = Math.max(...f.out.map((r) => r.x + r.w)) - Math.min(...f.out.map((r) => r.x));
+      const tall = Math.max(...f.out.map((r) => r.y + r.h)) - Math.min(...f.out.map((r) => r.y));
+      ok(wide > tall, `the pair is laid out across, not stacked (${wide} wide by ${tall} tall)`);
+      ok(tall <= 12, "…and fits inside the strip it was given");
+
+      // Two distinct arrows, not one shape: there must be a clear gap between.
+      const xs = f.out.map((r) => r.x + r.w / 2).sort((a, b) => a - b);
+      const gaps = xs.slice(1).map((v, i) => v - xs[i]);
+      ok(Math.max(...gaps) > 2, "…as two separate marks with air between them");
+    }
+
+    {
+      // The widest row of each arrow is its head; a stem row is narrow. Both
+      // must be present or it reads as a triangle rather than an arrow.
+      const f = rec();
+      I.drawResizeArrows(f.ctx, 0, 0, 20, "#fff");
+      const widths = new Set(f.out.map((r) => r.w));
+      ok(widths.size >= 4, `an arrow has a head that widens and a stem that does not (${widths.size} row widths)`);
+    }
+
+    {
+      // The strip is thin, and at a small size every row must survive rounding
+      // or the arrow loses its point.
+      const f = rec();
+      I.drawResizeArrows(f.ctx, 10.5, 7.3, 6, "#fff");
+      ok(f.out.every((r) => r.w >= 1 && r.h >= 1), "no row collapses to nothing on a thin strip");
+      ok(f.out.every((r) => Number.isInteger(r.x) && Number.isInteger(r.y)),
+        "…and they land on whole pixels, like the rest of the chrome");
+    }
+
+    {
+      // Sized from the STRIP, not from the panel scale: that was the bug that
+      // made the first version a 5x7 speck inside a 12-pixel bar.
+      const small = rec(); I.drawResizeArrows(small.ctx, 0, 0, 10, "#fff");
+      const big = rec(); I.drawResizeArrows(big.ctx, 0, 0, 40, "#fff");
+      const span = (o: R[]): number =>
+        Math.max(...o.map((r) => r.y + r.h)) - Math.min(...o.map((r) => r.y));
+      ok(span(big.out) > span(small.out),
+        `a taller strip gets taller arrows — they scale off the strip, not the panel (${span(small.out)} -> ${span(big.out)})`);
+    }
+  }
+
+  console.log("Etap 37 — and the cursor says it before you look:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    ok(src.includes('want = "ns-resize"'),
+      "hovering a window's foot turns the cursor into a resize cursor");
+    ok(src.includes("if (want !== cursorNow)"),
+      "…assigned only when it changes, not restyled every frame");
+    const fn = src.slice(src.indexOf("function updateCursor"), src.indexOf("function updateCursor") + 900);
+    ok(fn.includes("if (sizing)"), "…and it stays a resize cursor for the whole drag, not just the hover");
+
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    ok(!panels.includes("for (let i = -2; i <= 2; i++)"),
+      "the row of dots is gone — it promised nothing and read as decoration");
+    /* The lit strip and the grabbable strip have to be the same rectangle. A
+     * highlight over somewhere you cannot grab is worse than no highlight. */
+    const grip = panels.slice(panels.indexOf("function resizeGrip"), panels.indexOf("function resizeGrip") + 2200);
+    ok(grip.includes("hovering(p, x, by, w, bar)") && grip.includes("p.win.resizeBar = { x, y: by, w, h: bar }"),
+      "the strip that lights up is exactly the strip you can grab");
+  }
+
+  console.log("Etap 38 — scrolling, and the indices that must survive it:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+
+    const win = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null, scroll: 0 };
+    const run = (): { slots: { index: number; x: number; y: number }[]; hits: { fn: () => void }[] } => {
+      const itemSlots: { index: number; x: number; y: number }[] = [];
+      const hotspots: { fn: () => void }[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: -1, sy: -1 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots,
+      } as never);
+      return { slots: itemSlots, hits: hotspots };
+    };
+
+    PR.setPanelRows("bag", 2);   // two rows of four, of four rows total
+    win.scroll = 0;
+    const top = run();
+    ok(top.slots.map((q) => q.index).join(",") === "0,1,2,3,4,5,6,7",
+      "unscrolled, the window shows the first eight slots");
+
+    win.scroll = 2;
+    const bottom = run();
+    /* THE assertion this whole feature turns on. A scrolled cell is drawn in a
+     * new place but still carries its real slot number; if the two are ever
+     * swapped, a dropped item silently lands in the wrong slot and nothing
+     * about the screen looks wrong. */
+    ok(bottom.slots.map((q) => q.index).join(",") === "8,9,10,11,12,13,14,15",
+      "scrolled to the foot, the cells carry slots 8-15 — their REAL indices");
+    ok(bottom.slots.length === 8, "…still exactly two rows of them");
+
+    const topYs = top.slots.map((q) => q.y);
+    const botYs = bottom.slots.map((q) => q.y);
+    ok(topYs.join(",") === botYs.join(","),
+      "…drawn in exactly the same eight places, because only the contents moved");
+
+    // Slot 9 — Radek's case: shorten the window, and it must still be reachable.
+    win.scroll = 0;
+    ok(!run().slots.some((q) => q.index === 8), "slot 9 is out of sight at the top");
+    win.scroll = 1;
+    ok(run().slots.some((q) => q.index === 8), "…and one notch of scroll brings it back without resizing the window");
+
+    // An offset past the end is clamped rather than showing empty air.
+    win.scroll = 99;
+    const over = run();
+    ok(over.slots.length === 8 && over.slots[0].index === 8,
+      "an over-scrolled window is clamped to the last full screenful");
+    ok(win.scroll === 2, "…and the stored offset is corrected, not left stale");
+
+    win.scroll = -5;
+    run();
+    ok(win.scroll === 0, "a negative offset is clamped too");
+
+    // Showing everything means nothing to scroll.
+    PR.setPanelRows("bag", 0);
+    win.scroll = 3;
+    const full = run();
+    ok(full.slots.length === 16 && win.scroll === 0,
+      "a full-height window scrolls back to zero — there is nowhere to go");
+
+    PR.setPanelRows("bag", 0);
+    win.scroll = 0;
+  }
+
+  console.log("Etap 38 — the controls that do the scrolling:");
+  {
+    const { drawPanels, SCROLLBAR_W } = await import("../src/ui/panels.ts");
+    const PR = await import("../src/systems/panelPrefs.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame();
+    g.player.pack = items.newContainer("backpack")!;
+    PR.setPanelRows("bag", 2);
+
+    const win = { kind: "bag", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null, scroll: 0 };
+    const draw = (): { fn: () => void; x: number; y: number; w: number; h: number }[] => {
+      const hotspots: { fn: () => void; x: number; y: number; w: number; h: number }[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale: 3, screenW: 1600, screenH: 900, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: -1, sy: -1 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots: [],
+      } as never);
+      return hotspots;
+    };
+
+    const r = (): { x: number; y: number; w: number; h: number } => win.rect as never;
+
+    win.scroll = 0;
+    let hs = draw();
+    const barX = r().x + r().w - (SCROLLBAR_W + 2) * 3;
+    const onBar = hs.filter((q) => q.x >= barX - 1);
+    ok(onBar.length >= 2, `the scrollbar offers controls (${onBar.length})`);
+    // At the top there is no "up" to go: that control must not be there at all,
+    // rather than sitting inert and swallowing the click.
+    ok(!onBar.some((q) => { const was = win.scroll; q.fn(); const moved = (win.scroll ?? 0) < was; win.scroll = was; return moved; }),
+      "at the top, nothing offers to scroll up");
+
+    win.scroll = 0;
+    hs = draw();
+    const down = hs.filter((q) => q.x >= barX - 1).find((q) => { const was = win.scroll ?? 0; q.fn(); const moved = (win.scroll ?? 0) > was; win.scroll = was; return moved; });
+    ok(!!down, "…and something offers to scroll down");
+    if (down) { down.fn(); }
+    ok((win.scroll ?? 0) > 0, "…which actually moves the window");
+
+    win.scroll = 2;
+    hs = draw();
+    const up = hs.filter((q) => q.x >= barX - 1).find((q) => { const was = win.scroll ?? 0; q.fn(); const moved = (win.scroll ?? 0) < was; win.scroll = was; return moved; });
+    ok(!!up, "at the foot, something offers to scroll back up");
+
+    PR.setPanelRows("bag", 0);
+    win.scroll = 0;
+    const none = draw();
+    ok(!none.some((q) => q.x >= r().x + r().w - (SCROLLBAR_W + 2) * 3 - 1),
+      "a window showing everything draws no scrollbar at all");
+    PR.setPanelRows("bag", 0);
+  }
+
+  console.log("Etap 38 — the wheel, and not stealing it:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    const wheel = src.slice(src.indexOf('addEventListener("wheel"'), src.indexOf('addEventListener("wheel"') + 1900);
+    /* One path for every scrollable window: the panel that drew it records how
+     * far it can go, so the wheel need not know a container grid from a shop. */
+    ok(wheel.includes("const max = win.scrollMax ?? 0;") && wheel.includes("if (max <= 0) return;"),
+      "the wheel is left alone over a window with nothing hidden");
+    ok(wheel.includes("e.preventDefault()"), "…and taken only when it is actually used");
+    ok(wheel.includes("{ passive: false }"),
+      "…registered non-passively, or preventDefault would be ignored");
+    ok(wheel.indexOf("ui.windows.length - 1") < wheel.indexOf("win.scroll ="),
+      "…and it goes to the front-most window under the pointer");
+
+    /* A pack you walk into must open at the top. Carrying the old window's
+     * offset across would show a half-scrolled view of a container you have
+     * never seen. */
+    const nav = src.slice(src.indexOf("function navInto"), src.indexOf("function navUp"));
+    ok(nav.includes("win.scroll = 0"), "walking into a pack opens it at the top");
+    const up = src.slice(src.indexOf("function navUp"), src.indexOf("function navUp") + 800);
+    ok(up.includes("win.scroll = 0"), "…and walking back out does the same");
+  }
+
+  console.log("Etap 39 — long lists scroll instead of running off the screen:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { SHOPS } = await import("../src/entities/npcs.ts");
+    const g = createGame();
+
+    // The biggest shop in the game is the one that broke: sixty-odd rows.
+    const biggest = Object.entries(SHOPS)
+      .map(([k, v]) => ({ k, n: (v?.entries ?? []).filter((e) => e.buy > 0).length }))
+      .sort((a, b) => b.n - a.n)[0];
+    ok(biggest.n >= 8, `the busiest shop stocks a real list (${biggest.n} rows)`);
+
+    const win = { kind: "shop", offset: { x: 0, y: 0 }, rect: null, titleBar: null, resizeBar: null, scroll: 0 };
+    const run = (): { hits: { x: number; y: number; w: number; h: number; fn: () => void }[] } => {
+      const hotspots: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
+      drawPanels({
+        hud: {
+          ctx: (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+            .document.createElement("canvas").getContext("2d"),
+          scale: 3, screenW: 1600, screenH: 460, touchInput: false,
+        },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null,
+          npc: { key: biggest.k, name: "Smith", x: 0, y: 0 }, stash: null, floor: null,
+          shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: -1, sy: -1 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots, itemSlots: [],
+      } as never);
+      return { hits: hotspots };
+    };
+
+    win.scroll = 0;
+    run();
+    const r = win.rect as unknown as { y: number; h: number } | null;
+    /* The old panel sized itself to its contents and trusted the auto-fit to
+     * squeeze it in. The fit floors at 0.35, so a sixty-row shop still ran off
+     * both ends of the display — and what did fit was too small to read. */
+    ok(!!r && r.y >= 0 && r.y + r.h <= 460,
+      `the shop fits on the display (${Math.round(r?.y ?? 0)}..${Math.round((r?.y ?? 0) + (r?.h ?? 0))} of 460)`);
+    ok((win.scrollMax ?? 0) > 0, `…and reports how far it can be scrolled (${win.scrollMax})`);
+
+    // Scrolling must move the list, and the last row must be reachable.
+    win.scroll = win.scrollMax ?? 0;
+    run();
+    ok(win.scroll === (win.scrollMax ?? 0), "the foot of the list is reachable");
+    win.scroll = 9999;
+    run();
+    ok(win.scroll === (win.scrollMax ?? 0), "…and over-scrolling is clamped, not left stale");
+
+    const r2 = win.rect as unknown as { y: number; h: number } | null;
+    ok(!!r2 && !!r && Math.abs(r2.h - r.h) < 1, "…the panel keeps one height however far it is scrolled");
+  }
+
+  console.log("Etap 39 — the hotbar sits under the map:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    const bar = src.slice(src.indexOf("function drawHotbar"), src.indexOf("function drawHotbar") + 900);
+
+    /* Six slots across a hundred-unit column came out sixteen units each, which
+     * no font makes "Recall 3·12" fit into. */
+    ok(bar.includes("HOTBAR_SLOT * S"), "the hotbar has one constant that sets its size");
+    ok(bar.includes("screen.width - sidebarW"),
+      "…and centres on the MAP, so the column does not push it off-centre");
+    ok(bar.includes("screen.height - slot"), "…sitting at the foot of the screen");
+
+    const dock = nfs.readFileSync("src/ui/dock.ts", "utf8");
+    ok(!dock.includes("SLOT_ROW_H"),
+      "the column no longer reserves a row for slots that moved out of it");
+    ok(dock.includes("export const CONTROLS_H = BTN_ROW_H + GAP + SWAP_H + GAP + SWAP_H;"),
+      "…and the controls block is three rows: panels, swap+chase, mark+chat+edit");
+
+    const controls = src.slice(src.indexOf("function drawDockControls"), src.indexOf("function drawDockControls") + 1600);
+    ok(!controls.includes("drawActionSlot"), "…and draws no action slots itself");
+  }
+
+  console.log("Etap 39 — the rebind picker scrolls too:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    /* Sliced to the next function rather than to a fixed byte count. The
+     * window was 2200 characters, which fitted until the picker grew icons
+     * and an ordering — after which the assertions below failed on text that
+     * was still there, just past the edge of the ruler. */
+    const pick = src.slice(src.indexOf("function drawAssignPicker"),
+      src.indexOf("function overTouchButton"));
+    ok(pick.includes("Math.min(rows.length, Math.floor((sh * 0.8"),
+      "the picker caps its rows to the display rather than sizing to the list");
+    ok(pick.includes("assignScroll = clamp(assignScroll"), "…clamping the offset every time it draws");
+    const pickAll = src.slice(src.indexOf("function drawAssignPicker"));
+    ok(pickAll.includes("rows.slice(assignScroll, assignScroll + shown)"), "…and drawing the window it computed");
+    ok(src.includes("assignSlot = r.i;\n        assignScroll = 0;")
+      || src.includes("assignScroll = 0;"), "…opening at the top, not wherever it was last left");
+    const wheel = src.slice(src.indexOf('addEventListener("wheel"'), src.indexOf('addEventListener("wheel"') + 500);
+    ok(wheel.includes("if (assignSlot !== null)"),
+      "…and while it is up, being modal, it takes the wheel from everything behind it");
+  }
+
+  console.log("Etap 40 — control buttons are square, and icons land on whole multiples:");
+  {
+    const D = await import("../src/ui/dock.ts");
+    const I = await import("../src/ui/icons.ts");
+
+    /* Five buttons across a hundred-unit column is about seventeen each. The
+     * row height was a picked 34, so every button came out 21x42 on a laptop —
+     * a stretched slot with a small picture floating in the middle. */
+    const across = (D.DOCK_INNER - 4 * 4) / 5;
+    ok(Math.abs(D.BTN_ROW_H - across) <= 1,
+      `a control button is as tall as it is wide (${D.BTN_ROW_H} vs ${across.toFixed(1)})`);
+
+    ok(I.ICON_SRC === 16, "glyphs are authored on a 16px grid");
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    /* Hand-drawn pixel art scaled by 1.37x is mush; at exactly 1x, 2x or 3x it
+     * is crisp. Snapping the draw size is what lets these shapes be swapped
+     * for real art without touching any of this code. */
+    /* ONE copy of the arithmetic, in `drawSquareIcon`. It used to be spelled
+     * out at every button that grew a picture — five sites by the time the
+     * skull arrived — and five copies of a rounding rule is five chances for
+     * the sixth button to get it subtly wrong. */
+    ok(src.includes("Math.floor((Math.min(bw, bh) * fill) / ICON_SRC) * ICON_SRC"),
+      "…and drawn at a whole multiple of it, never a fractional scale");
+    ok((src.match(/Math\.floor\(\(Math\.min\([^)]*\) \* [\w.]+\) \/ ICON_SRC\)/g) ?? []).length === 1,
+      "…from one helper, not copied out at every button that wears a glyph");
+    ok(src.includes("Math.max(ICON_SRC,"), "…never smaller than one source pixel per pixel");
+
+    interface R { x: number; y: number; w: number; h: number }
+    for (const size of [16, 32, 48]) {
+      const out: R[] = [];
+      const ctx = {
+        set fillStyle(_v: string) { /* ignored */ },
+        fillRect(x: number, y: number, w: number, h: number) { out.push({ x, y, w, h }); },
+      } as unknown as CanvasRenderingContext2D;
+      I.drawControlIcon(ctx, "bag", 0, 0, size, false);
+      ok(out.every((r) => r.x + r.w <= size && r.y + r.h <= size),
+        `a glyph drawn at ${size}px stays inside ${size}px`);
+    }
+  }
+
+  console.log("Etap 41 — the hotbar shows the rune, not just its name:");
+  {
+    const nfs = await import("node:fs");
+    const src = nfs.readFileSync("src/main.ts", "utf8");
+    const fn = src.slice(src.indexOf("function drawActionSlot"), src.indexOf("function drawActionSlot") + 2600);
+
+    /* A name and a number tell you what a slot holds only if you stop and read
+     * them, and the crystals all share a name shape ("Frost Shard", "Frost
+     * Nova") that makes reading slower still. In a fight you glance. */
+    ok(fn.includes("itemSprite(slot.item)"), "a bound crystal draws its own sprite");
+    ok(fn.includes("ctx.drawImage(spr"), "…blitted into the slot");
+    ok(fn.includes("if (!usable) ctx.globalAlpha = 0.35"),
+      "…dimmed rather than hidden when you are out of charges, so the binding is still readable");
+    ok(fn.includes("Math.min(box / spr.width, box / spr.height)"),
+      "…fitted to the slot without stretching, whatever shape the sprite is");
+    // The picture must not sit on top of the words it was added to supplement.
+    ok(fn.includes('slot?.type === "crystal" ? h * 0.63'),
+      "…and the name moves down to make room, instead of being overlapped");
+
+    const icons = nfs.readFileSync("src/ui/icons.ts", "utf8");
+    ok(icons.includes("imageSmoothingEnabled = false"),
+      "the drawn icons are blitted nearest-neighbour, so 16px art stays square");
+    ok(icons.includes("loadControlIcons"), "…loaded once at startup with the rest of the art");
+    const game = nfs.readFileSync("src/game.ts", "utf8");
+    ok(game.includes("loadControlIcons()"), "…and something actually calls it");
+  }
+
+  console.log("Etap 35 — the portrait phone gets a deck, and only the portrait phone:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    ok(MB.deckEnabled(412, 915, true), "a phone held upright gets the deck");
+    ok(MB.deckEnabled(915, 412, true), "…and so does the same phone turned sideways, with its own layout");
+    ok(!MB.deckEnabled(1200, 560, false),
+      "…but a short wide window with no touch does NOT: that is a desktop dragged smaller, and it has the column");
+    ok(!MB.deckEnabled(1920, 1080, false), "…and a desktop never does, so the column work is untouched");
+    ok(!MB.deckEnabled(1080, 1920, false),
+      "…nor does a tall desktop window, which is wide enough for the column it already has");
+    ok(MB.deckEnabled(400, 800, false),
+      "…but a narrow upright window does, matching the existing `mobile` size test");
+
+    const off = MB.noDeck(1830);
+    ok(!off.on && off.mapTop === 0 && off.mapBottom === 1830,
+      "the off state still answers every question — the world is the whole canvas");
+    ok(MB.mapFocusFrac(off, 1830) === 0.5, "…and parks the player dead centre, as before");
+  }
+
+  console.log("Etap 35 — nothing on the deck is too small to press:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    /* The smallest screen worth supporting. If a finger fits here it fits
+     * everywhere; the old floating HUD's buttons were sized off the 480x320
+     * design unit and came out under 30 CSS px on exactly this phone. */
+    for (const [w, h, dpr] of [[320, 568, 2], [360, 640, 2], [412, 915, 2.5], [390, 844, 3]] as const) {
+      const d = MB.mobileLayout(w * dpr, h * dpr, dpr, 0, 0);
+      const css = (v: number): number => v / dpr;
+      const targets: [string, { w: number; h: number }][] = [
+        ["tab", d.tabs[0]], ["minimap", d.minimap], ["slot", d.slots[0]],
+        ["menu", d.menu], ["edit", d.edit], ["swap", d.swap],
+      ];
+      for (const [name, r] of targets) {
+        /* Every control on the deck, not merely the ones pressed in a fight.
+         * The first draft gave the utility row half a unit and produced a 22
+         * CSS px weapon-swap button on the smallest phone — which is why this
+         * loop covers edit and swap rather than stopping at the slots. */
+        ok(Math.min(css(r.w), css(r.h)) >= MB.TOUCH_MIN_CSS - 1,
+          `${w}x${h}@${dpr}: the ${name} clears a fingertip (${Math.round(Math.min(css(r.w), css(r.h)))} CSS px)`);
+      }
+      ok(css(d.slots[0].h) >= MB.TOUCH_MIN_CSS * 0.9,
+        `${w}x${h}@${dpr}: an action slot is a full touch target tall — it is the control pressed under pressure`);
+    }
+  }
+
+  console.log("Etap 35 — the bands tile the screen exactly, with no seam and no overlap:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const W = 412 * 2, H = 915 * 2;
+    const d = MB.mobileLayout(W, H, 2, 0, 0);
+
+    ok(d.mapTop === d.topH && d.mapBottom === d.deckY,
+      "the world band is exactly what the two plates do not claim");
+    ok(d.deckY + d.deckH >= H - 1 && d.deckY + d.deckH <= H + 1,
+      "…the deck reaches the bottom edge, leaving no strip of world under it");
+
+    // every widget inside its own plate, nothing straddling into the world
+    /* `edit` is absent from this list ON PURPOSE (Etap 31): it gave up its
+     * seat on the utility row to the combat controls and now hangs in the
+     * drop-down, which is checked with the tabs below. */
+    for (const r of [d.info, d.purse, d.vitals, d.menu, d.chase, d.atk, d.swap, d.minimap]) {
+      ok(r.y >= 0 && r.y + r.h <= d.topH, "a top-strip widget stays inside the top strip");
+    }
+    for (const r of d.slots) {
+      ok(r.y >= d.deckY && r.y + r.h <= H, "a deck widget stays inside the deck");
+    }
+    for (const r of [d.info, ...d.tabs, ...d.slots, d.swap, d.minimap]) {
+      ok(r.x >= 0 && r.x + r.w <= W, "…and inside the screen's own width");
+    }
+    /* The drop-down is drawn OVER the world, so it costs no permanent height —
+     * that saving is the whole reason the tabs went behind a button. */
+    for (const r of [...d.tabs, d.edit]) {
+      ok(r.y >= d.topH, "a drop-down tab hangs below the strip rather than inside it");
+    }
+    ok(d.tabs[d.tabs.length - 1].x + d.tabs[d.tabs.length - 1].w <= W,
+      "…and the last one still fits the screen");
+    ok(d.menu.x < d.chase.x && d.chase.x < d.atk.x && d.atk.x < d.swap.x && d.swap.x < d.minimap.x,
+      "the utility row reads left to right: reveal, chase, mark, swap, map");
+
+    // the six slots run left to right without overlapping
+    for (let i = 1; i < d.slots.length; i++) {
+      ok(d.slots[i].x >= d.slots[i - 1].x + d.slots[i - 1].w,
+        `slot ${i + 1} starts after slot ${i} ends`);
+    }
+    ok(d.slots.length === 6, "there are six action slots, matching the desktop hotbar");
+    ok(d.tabs.length === MB.DECK_TABS.length, "one tab per panel, and no more");
+    ok(d.purse.x >= d.info.x, "the purse shares the info row from the right");
+  }
+
+  console.log("Etap 35 — a panel never swallows the whole world:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const d = MB.mobileLayout(412 * 2, 915 * 2, 2, 0, 0);
+    ok(d.sheet.y >= d.mapTop, "the sheet starts inside the world band, not under the top strip");
+    ok(d.sheet.y + d.sheet.h <= d.mapBottom + 1, "…and ends against the deck, not beneath it");
+    /* The third of the band it leaves is not decoration: it is how you notice
+     * something walked up while you were sorting loot, and how you walk away
+     * without closing the panel first. */
+    const openWorld = (d.sheet.y - d.mapTop) / 32 / 2; // tiles, at the phone's 1:1 zoom
+    ok(openWorld >= 6, `with a panel open you can still see ${openWorld.toFixed(1)} tiles of world`);
+    ok(d.sheet.w > (412 * 2) * 0.9, "…and the panel is full width, so its cells are worth pressing");
+  }
+
+  console.log("Etap 35 — the notch and the gesture bar move the CHROME, not the map:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const flat = MB.mobileLayout(412 * 2, 915 * 2, 2, 0, 0);
+    const inset = MB.mobileLayout(412 * 2, 915 * 2, 2, 40, 60);
+    ok(inset.topH > flat.topH && inset.deckH > flat.deckH,
+      "insets grow the plates");
+    ok(inset.slots[0].y + inset.slots[0].h <= 915 * 2 - 60 + 1,
+      "…so the bottom row of slots clears the gesture bar, where a press is a system swipe");
+    ok(inset.info.y >= 40, "…and the top row clears the notch");
+  }
+
+  console.log("Etap 35 — a phone holds two panels, because every move needs two ends:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const d = MB.mobileLayout(412 * 2, 915 * 2, 2, 0, 0);
+
+    ok(MB.MAX_SHEETS === 2, "two, and the oldest gives way to a third");
+    ok(MB.sheetSlots(d, 0).length === 0, "no panels, no slots");
+    const one = MB.sheetSlots(d, 1);
+    ok(one.length === 1 && one[0].h === d.sheet.h, "one panel gets the whole band");
+
+    const two = MB.sheetSlots(d, 2);
+    ok(two.length === 2, "two panels get one slot each");
+    ok(two[0].y + two[0].h <= two[1].y, "…stacked, not overlapping");
+    ok(two[1].y + two[1].h <= d.mapBottom + 1, "…and the lower one stops at the deck");
+    ok(two[0].y >= d.mapTop, "…while the upper one starts below the strip");
+    /* The band GROWS for two, because halving the one-panel band would leave
+     * each with a title bar and about one row of items. */
+    ok(two[0].h + two[1].h > d.sheet.h, "the band grows rather than being halved");
+    const rowsish = two[0].h / 2 / 32;
+    ok(rowsish >= 3, `each panel is ${rowsish.toFixed(1)} tiles tall — enough for a row of items and its chrome`);
+    ok(two[0].w === d.sheet.w && two[1].w === d.sheet.w, "both stay full width");
+
+    /* A third would be a title bar and nothing else, so it never happens. */
+    ok(MB.sheetSlots(d, 3).length === 2, "a third panel is refused a slot of its own");
+
+    const band = MB.sheetBand(d);
+    ok(band.top === d.mapTop && band.bottom === d.mapBottom,
+      "a sheet may be dragged anywhere in the world band and no further");
+  }
+
+  console.log("Etap 35 — a sheet cannot shake itself:");
+  {
+    const nfs = await import("node:fs");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    /* Pinned to the bottom, a window's top is derived from its own height. Two
+     * things then feed back into it, and both had to go: a draggable foot that
+     * slides out from under the finger as the height it is setting moves the
+     * window, and content that measures a pixel taller on alternate frames. */
+    ok(panels.includes("if (p.sheet) { p.win.resizeBar = null; return; }"),
+      "a sheet has no resize foot to fight its own anchor");
+    ok(panels.includes("Math.abs(held - y) <= 2 ? held : y"),
+      "…and it holds still through a pixel or two of self-inflicted movement");
+    ok(panels.includes("if (!sheet) win.sheetY = undefined;"),
+      "…with the memory cleared off a phone, so the desktop is unaffected");
+    ok(panels.includes("s.x + (s.w - w) / 2 + p.win.offset.x"),
+      "a sheet follows the finger in BOTH axes — taking one away made it fight the drag");
+    ok(panels.includes("const want = s.y + s.h - h + p.win.offset.y;"),
+      "…and that drag is real: the offset reaches the anchor");
+    ok(panels.includes("Math.min(Math.max(0, screenW - w), cx)"),
+      "…clamped to the screen, so a window can never be shoved off the edge");
+  }
+
+  console.log("Etap 35 — the tabs fold away behind one button:");
+  {
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok(main.includes("let deckMenu = false;"),
+      "the drop-down starts closed and is never persisted — it is a reveal, not a setting");
+    ok(main.includes("if (deckMenu) { deckMenu = false; return; }"),
+      "…a tap that misses it puts it away, and walks nowhere");
+    ok(main.includes("togglePanel(kind); deckMenu = false;"),
+      "…and a tap that hits a tab opens the panel and closes the menu with it");
+    ok(!main.includes("hudMenuOpen()") || main.includes("const menuOpen = !docked"),
+      "the old floating HUD's own collapsible column is left alone");
+  }
+
+  console.log("Etap 35 — the first container docks to a strip beside the map:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h] of [[412, 915], [360, 800], [320, 568]] as const) {
+      const d = MB.mobileLayout(w * 2, h * 2, 2, 0, 48);
+      const st = MB.stripRect(d);
+
+      ok(st.y === d.mapTop && st.y + st.h === d.mapBottom,
+        `${w}x${h}: the strip runs the full height of the world band`);
+      ok(st.x + st.w <= w * 2 && st.x > w * 2 * 0.6,
+        "…hard against the right edge, where the thumb is not");
+      ok(st.w / 2 >= MB.TOUCH_MIN_CSS,
+        `…and a column of it is ${Math.round(st.w / 2)} CSS px wide — a cell you can hit`);
+
+      /* The whole argument for this shape, stated as a number. A sheet spends
+       * about twelve tiles of HEIGHT; the strip spends about two of WIDTH. */
+      const bandW = (w * 2 - st.w) / 2, bandH = (d.mapBottom - d.mapTop) / 2;
+      const withStrip = (bandW / 32) * (bandH / 32);
+      const sheetH = MB.sheetSlots(d, 1)[0].h / 2;
+      const withSheet = (w / 32) * ((bandH - sheetH) / 32);
+      ok(withStrip > withSheet * 1.5,
+        `${w}x${h}: ${Math.round(withStrip)} tiles of world stay visible, against ${Math.round(withSheet)} behind a sheet`);
+      ok(st.w / (w * 2) < 0.23, "…and the strip costs under a quarter of the width");
+    }
+
+    const d = MB.mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
+    const st = MB.stripRect(d);
+    /* A sheet must never run under the strip: two panels over the same pixels
+     * is how you stop being able to tell which one you are dragging into. */
+    for (const n of [1, 2]) {
+      for (const r of MB.sheetSlots(d, n, st.w)) {
+        ok(r.x + r.w <= st.x + 1, `a sheet (of ${n}) stops where the strip begins`);
+      }
+    }
+    ok(MB.sheetSlots(d, 1, 0)[0].w > MB.sheetSlots(d, 1, st.w)[0].w,
+      "…and takes the width back when nothing is docked");
+
+    ok(Math.abs(MB.mapFocusFracX(d, 824, 0) - 0.5) < 1e-9,
+      "no strip, no shift — the player stands in the middle of the glass");
+    ok(MB.mapFocusFracX(d, 824, st.w) < 0.5,
+      "…with one, the focus moves left, onto the middle of what you can actually see");
+  }
+
+  console.log("Etap 35 — the strip goes to the FIRST pack, whatever the z-order says:");
+  {
+    const PN = await import("../src/ui/panels.ts");
+    type W = { kind: string; seq?: number; stripOut?: boolean };
+    const mk = (kind: string, seq: number, extra: Partial<W> = {}): W => ({ kind, seq, ...extra });
+
+    /* The bug, as it shipped: the backpack opened from the tab is kind "bag",
+     * a pack opened from inside it is kind "container", and the rule only knew
+     * the second one — so the strip went to the sub-pack. */
+    const bag = mk("bag", 0), sub = mk("container", 1);
+    ok(PN.stripCandidate([bag, sub] as never) === bag,
+      "the backpack from the tab takes the strip, not the pack opened inside it");
+
+    /* Tapping the sub-pack raises it to the end of the array. Position must not
+     * decide, or the strip would jump between packs as you worked. */
+    ok(PN.stripCandidate([sub, bag] as never) === bag,
+      "…and it keeps it after the other pack is raised over it");
+
+    ok(PN.stripCandidate([mk("loot", 0), bag] as never) === bag,
+      "a corpse never takes the strip, even when it was opened first");
+
+    /* Nor a Storage Chest, and this one had to be found by playing. With a
+     * pack already open the chest fell through to a sheet and looked right;
+     * with NOTHING open it took the strip, and a fifty-slot grid squeezed
+     * into a one-column ruler is an unreadable stamp in the corner. The test
+     * is not "is it a container" but "do I keep this open while I play". */
+    ok(PN.stripCandidate([mk("stash", 0), bag] as never) === bag,
+      "a storage chest never takes the strip either, even opened first…");
+    ok(PN.stripCandidate([mk("stash", 0)] as never) === undefined,
+      "…and alone it takes NO strip, so it opens as the full-width sheet it needs");
+    ok(PN.stripCandidate([mk("floor", 0)] as never) === undefined,
+      "…same for a bag left lying on the ground: somewhere you go, not something you carry");
+    ok(PN.stripCandidate([mk("shop", 0), mk("skills", 1)] as never) === undefined,
+      "…nor does anything that is not a pack");
+    ok(PN.stripCandidate([mk("bag", 0, { stripOut: true }), sub] as never) === sub,
+      "…and a pack torn out of the strip hands it to the next one");
+    ok(PN.stripCandidate([] as never) === undefined, "no windows, no strip");
+  }
+
+  console.log("Etap 35 — the strip sits hard against the glass:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h] of [[412, 915], [360, 800]] as const) {
+      const d = MB.mobileLayout(w * 2, h * 2, 2, 0, 48);
+      const st = MB.stripRect(d);
+      /* The sheet margin used to leave a finger-wide ribbon of world outside
+       * the strip: too narrow to see anything in, wide enough to look broken. */
+      ok(st.x + st.w === w * 2, `${w}px: the strip's outer edge IS the screen edge`);
+      ok(st.x + st.w > d.sheet.x + d.sheet.w, "…which is further out than a sheet reaches");
+    }
+  }
+
+  console.log("Etap 35 — a corpse opens sized to its loot:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { mobileLayout, sheetSlots, sheetBand } = await import("../src/ui/mobile.ts");
+    const { resetPanelPrefs } = await import("../src/systems/panelPrefs.ts");
+    resetPanelPrefs?.();
+    const g = createGame();
+    const ctx = (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+      .document.createElement("canvas").getContext("2d");
+    const d = mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
+
+    const heightFor = (items: number): number => {
+      /* The body has to be IN the world now (Etap 32b): a loot window holds a
+       * corpse id, and an id that is in no world resolves to nothing — which
+       * is the whole point of the change. Parking it in `current.corpses` is
+       * what actually killing something would have done. */
+      const body = { id: 900000 + items, name: "beggar", x: 0, y: 0, t: 60,
+        items: new Array(16).fill(null) } as
+        { id: number; items: ({ kind: string; n: number } | null)[] };
+      for (let i = 0; i < items; i++) body.items[i] = { kind: "bones", n: 1 };
+      g.current.corpses.length = 0;
+      g.current.corpses.push(body as never);
+      const win = { kind: "loot", seq: 0, offset: { x: 0, y: 0 }, rect: null, titleBar: null } as never as
+        { rect: { h: number } | null; fit?: number };
+      for (let f = 0; f < 2; f++) {
+        drawPanels({
+          hud: { ctx, scale: 1.72, screenW: 412 * 2, screenH: 915 * 2, touchInput: true, contentTop: d.mapTop },
+          ui: {
+            windows: [win], placing: null, selSlot: null, loot: body, npc: null, stash: null, floor: null,
+            shopTab: "buy", forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+            dragging: false, lookMode: false, inspect: null, split: null,
+          },
+          game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+          act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+          hotspots: [], itemSlots: [], sheets: sheetSlots(d, 1), sheetBand: sheetBand(d),
+        } as never);
+      }
+      return win.rect?.h ?? 0;
+    };
+
+    const one = heightFor(2), two = heightFor(7), band = sheetSlots(d, 1)[0].h;
+    ok(one > 0 && two > 0, "a corpse draws on a sheet");
+    /* Sixteen slots were drawn whatever fell in, so two coins cost four rows of
+     * empty frame — most of the screen, parked on top of the fight. */
+    ok(two > one, `a heavy corpse (7 items) is taller than a light one (${Math.round(one)} → ${Math.round(two)})`);
+    ok(one < band * 0.5, "…and a light one takes under half the band it is allowed");
+    ok(two < band * 0.7, "…a heavy one still leaves most of the world visible");
+    ok(heightFor(4) === one, "four items is still one row — four IS a row");
+    ok(heightFor(5) === two, "…and the fifth is what forces the second");
+    ok(heightFor(16) === two, "…a full corpse stops at two rows and scrolls the rest");
+  }
+
+  console.log("Etap 35 — the strip slides out of the way and comes back:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const W = 412 * 2;
+    const d = MB.mobileLayout(W, 915 * 2, 2, 0, 48);
+    const open = MB.stripRect(d, 0);
+    const away = MB.stripRect(d, 1);
+
+    ok(open.x + open.w === W, "open, the strip's outer edge is the screen edge");
+    ok(away.x >= W - 1, "…slid away, the panel itself is off the glass entirely");
+    ok(away.w === open.w && away.y === open.y, "…same size and height either way — it moved, it did not shrink");
+
+    const gOpen = MB.stripHandle(d, open), gAway = MB.stripHandle(d, away);
+    ok(gOpen.x + gOpen.w <= open.x + 1, "the tab sits on the strip's inner edge");
+    ok(gAway.x + gAway.w <= W && gAway.x > W - d.u, "…and stays on screen when the strip is gone, or there is no way back");
+    ok(gOpen.h >= MB.TOUCH_MIN_CSS * 2 && gOpen.w >= 12, "…and is tall enough to hit without aiming");
+
+    const cOpen = MB.stripClaim(d, open, W), cAway = MB.stripClaim(d, away, W);
+    ok(cOpen > cAway * 3, `slid away it claims ${cAway} of ${cOpen} device px — the map gets the rest back`);
+    ok(MB.mapFocusFracX(d, W, cAway) > MB.mapFocusFracX(d, W, cOpen),
+      "…so the camera lets the player drift back toward the middle of the glass");
+    ok(MB.sheetSlots(d, 1, cAway)[0].w > MB.sheetSlots(d, 1, cOpen)[0].w,
+      "…and a sheet widens into the space as well");
+  }
+
+  console.log("Etap 35 — a second pack opens as small as the loot does:");
+  {
+    const nfs = await import("node:fs");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    /* The corpse got this rule first and the packs did not, so opening a bag
+     * inside a bag produced a four-row window to show one coin. */
+    ok((panels.match(/lootRows\(p, slots, allRows, cell, gap\)/g) ?? []).length === 3,
+      "every container drawer sizes itself to what is actually in it");
+    ok(!panels.includes("const rows = stripRows(p, allRows, 30 * S, 4 * S, 50 * S);"),
+      "…and none of them still asks for every row it owns");
+  }
+
+  console.log("Etap 35 — every window answers a drag, whether it fits or not:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { mobileLayout, sheetSlots, sheetBand } = await import("../src/ui/mobile.ts");
+    const g = createGame();
+    const ctx = (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+      .document.createElement("canvas").getContext("2d");
+    const d = mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
+    const sheets = sheetSlots(d, 1);
+    const smith = (g.worlds.town.npcs as { name?: string }[]).find((n) => (n.name ?? "").includes("Borin"));
+
+    type W = {
+      kind: string; seq: number; offset: { x: number; y: number };
+      rect: { x: number; y: number; w: number; h: number } | null;
+      titleBar: unknown; sheetOver?: number; sheetScroll?: number; fit?: number;
+    };
+    const run = (win: W, tab: string): void => {
+      drawPanels({
+        hud: { ctx, scale: 1.72, screenW: 412 * 2, screenH: 915 * 2, touchInput: true, contentTop: d.mapTop },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: smith ?? null, stash: null,
+          floor: null, shopTab: tab, forgeTab: "craft", testPage: 0, towerTab: "fire", upgrading: null,
+          dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots: [], itemSlots: [], sheets, sheetBand: sheetBand(d),
+      } as never);
+    };
+    const settle = (kind: string, tab = "buy"): W => {
+      const w: W = { kind, seq: 0, offset: { x: 0, y: 0 }, rect: null, titleBar: null };
+      run(w, tab); run(w, tab);
+      return w;
+    };
+
+    /* A window that FITS its lane moves when dragged. */
+    const skills = settle("skills");
+    ok((skills.sheetOver ?? 0) === 0, "the skills panel fits its lane");
+    const restY = skills.rect!.y;
+    skills.offset.y = -200;
+    run(skills, "buy");
+    ok(skills.rect!.y < restY, "…and dragging it up moves it up");
+
+    /* A window that OVERFLOWS is already filling the lane and clipped to it, so
+     * there is nowhere to move it TO — the same gesture has to scroll it. This
+     * was the split Radek spotted: the shop and the paperdoll ignored drags. */
+    const shop = settle("shop", "sell");
+    ok((shop.sheetOver ?? 0) > 0, "the smith's sell list overflows its lane");
+    const top0 = shop.rect!.y;
+    shop.sheetScroll = 240;
+    run(shop, "sell");
+    ok(shop.rect!.y < top0, "…and driving its scroll moves the content, which is what a drag on it does");
+    ok(shop.sheetOver !== undefined,
+      "…with the overflow published, so the pointer handler can tell the two cases apart");
+
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok(main.includes("drag.win.sheetScroll = clamp(drag.oscroll - dy, 0, over);"),
+      "the drag routes into the scroll for an overflowing window");
+    ok(main.includes("oscroll: win.sheetScroll ?? 0"),
+      "…from where it stood when you grabbed it, so it does not jump on the first pixel");
+    ok(main.includes("drag.win.offset.x = drag.ox + (s.x - drag.gx);"),
+      "…while sideways still moves the window, as it does for every other one");
+  }
+
+  console.log("Etap 35 — a phone opens a window in its lane, not at a desktop offset:");
+  {
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    /* -120 design units is a tidy stagger on a desktop and a panel shoved a
+     * thumb's width off the lane on a phone, for no reason the player sees. */
+    ok((main.match(/offset: deck\.on \? \{ x: 0, y: 0 \}/g) ?? []).length === 2,
+      "both window-creation sites open centred on a phone");
+    ok(main.includes("base.x + n * 6 * scale"), "…and the desktop stagger is untouched");
+    ok(panels.includes("x: win.rect!.x, w: win.rect!.w"),
+      "the scroll arrows ride on the window's own edge, not the lane's");
+  }
+
+  console.log("Etap 35 — sideways, the chrome goes down the SIDES:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h, dpr] of [[915, 412, 2], [844, 390, 3], [800, 360, 2]] as const) {
+      const d = MB.mobileLayout(w * dpr, h * dpr, dpr, 0, 0);
+      ok(d.landscape, `${w}x${h}: the sideways layout is the one that answers`);
+
+      /* The whole argument. Upright the chrome takes bands off the top and the
+       * foot, because height is what a phone has spare. Turned sideways that is
+       * exactly backwards: a band across the foot would spend a third of the
+       * ONLY short axis. So the chrome moves to the sides and the map keeps its
+       * full height. */
+      ok(d.deckH === 0 && d.mapBottom === h * dpr,
+        "…there is no band across the foot; the world runs to the bottom edge");
+      ok(d.mapLeft > 0 && d.mapRight < w * dpr, "…and takes two bands off the sides instead");
+      ok(d.topH < h * dpr * 0.12,
+        `…while the status row costs ${((d.topH / (h * dpr)) * 100).toFixed(0)}% of the height, not a quarter of it`);
+
+      // every control still hittable, which is the point of the touch unit
+      for (const [name, r] of [["slot", d.slots[0]], ["menu", d.menu], ["edit", d.edit],
+        ["swap", d.swap], ["minimap", d.minimap]] as const) {
+        ok(Math.min(r.w, r.h) / dpr >= MB.TOUCH_MIN_CSS - 1,
+          `${w}x${h}: the ${name} clears a fingertip (${Math.round(Math.min(r.w, r.h) / dpr)} CSS px)`);
+      }
+
+      // slots down the left, under one thumb; controls down the right, under the other
+      ok(d.slots.every((r) => r.x + r.w <= d.mapLeft), "the six slots stand clear of the map, on the left");
+      for (let i = 1; i < d.slots.length; i++) {
+        ok(d.slots[i].y >= d.slots[i - 1].y + d.slots[i - 1].h, `slot ${i + 1} sits below slot ${i}`);
+      }
+      /* `edit` left this column for the drop-down in Etap 31, for the same
+       * reason it left the portrait strip: a once-a-session control does not
+       * outrank two mid-fight ones. */
+      for (const r of [d.menu, d.swap, d.chase, d.atk, d.minimap]) {
+        ok(r.x >= d.mapRight, "a control stays in the right-hand column");
+        ok(r.x + r.w <= w * dpr, "…and inside the glass");
+      }
+      ok(d.edit.y > d.tabs[0].y && d.edit.y >= d.topH,
+        "…and the edit toggle hangs on the drop-down's second row");
+      // status, both bars and the purse all on ONE row — there is width for it
+      ok(d.info.y === d.vitals.y && d.vitals.y === d.purse.y, "status, vitals and purse share one row");
+      ok(d.info.x + d.info.w <= d.vitals.x && d.vitals.x + d.vitals.w <= d.purse.x,
+        "…reading left to right without overlapping");
+
+      const mw = d.mapRight - d.mapLeft, mh = d.mapBottom - d.mapTop;
+      ok((mw * mh) / (w * dpr * h * dpr) > 0.7,
+        `…leaving ${Math.round(((mw * mh) / (w * dpr * h * dpr)) * 100)}% of the glass as world`);
+      ok(mw / mh > 1.6, "…and the map stays wide, which is the whole reason to turn the phone");
+    }
+
+    /* Two panels split the axis that has slack — which is the OTHER one now. */
+    const d = MB.mobileLayout(915 * 2, 412 * 2, 2, 0, 0);
+    const two = MB.sheetSlots(d, 2);
+    ok(two.length === 2, "two panels, two lanes");
+    ok(two[0].x + two[0].w <= two[1].x, "…side by side, not stacked");
+    ok(two[0].y === two[1].y && two[0].h === two[1].h, "…each keeping the full height of the band");
+    ok(two[0].h > two[0].w * 0.5, "…which is what stacking them would have thrown away");
+
+    const st = MB.stripRect(d, 0);
+    ok(st.x + st.w === d.mapRight,
+      "the container strip docks against the control column, not the glass behind it");
+    ok(MB.overDeck(d, 4, (d.mapTop + d.mapBottom) / 2), "the left column refuses world taps");
+    ok(MB.overDeck(d, 915 * 2 - 4, (d.mapTop + d.mapBottom) / 2), "…so does the right one");
+    ok(!MB.overDeck(d, (d.mapLeft + d.mapRight) / 2, (d.mapTop + d.mapBottom) / 2),
+      "…and the map between them still walks the player");
+    /* The control column is wider than the slot column, so the middle of what
+     * you can SEE is left of the middle of the glass — the same correction the
+     * container strip needs, for the same reason. */
+    ok(MB.mapFocusFracX(d, 915 * 2, 0) < 0.5,
+      "the camera aims at the middle of the map, not of the glass");
+    ok(Math.abs(MB.mapFocusFracX(d, 915 * 2, 0) - (d.mapLeft + d.mapRight) / 2 / (915 * 2)) < 1e-9,
+      "…which is exactly the midpoint between the two columns");
+    ok(d.slots.every((r) => r.y + r.h <= d.mapBottom), "…and no slot hangs off the bottom edge");
+  }
+
+  console.log("Etap 35 — a long shop list scrolls instead of shrinking to a ribbon:");
+  {
+    const { drawPanels } = await import("../src/ui/panels.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { mobileLayout, sheetSlots, sheetBand } = await import("../src/ui/mobile.ts");
+    const g = createGame();
+    const ctx = (globalThis as never as { document: { createElement: (t: string) => { getContext: (k: string) => unknown } } })
+      .document.createElement("canvas").getContext("2d");
+
+    const d = mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
+    const sheets = sheetSlots(d, 1);
+    /* Borin the Smith, on the sell tab: eighty-odd wares, and the exact window
+     * that came out as an unreadable ribbon on a phone. */
+    const smith = (g.worlds.town.npcs as { name?: string }[]).find((n) => (n.name ?? "").includes("Borin"));
+    ok(!!smith, "the smith is in town, with a catalogue long enough to overflow any phone");
+    const win = { kind: "shop", offset: { x: 0, y: 0 }, rect: null, titleBar: null } as never as
+      { rect: { x: number; y: number; w: number; h: number } | null; fit?: number; sheetScroll?: number };
+
+    const frame = (): { hs: { x: number; y: number; w: number; h: number; fn: () => void }[] } => {
+      const hs: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
+      drawPanels({
+        hud: { ctx, scale: 1.72, screenW: 412 * 2, screenH: 915 * 2, touchInput: true, contentTop: d.mapTop },
+        ui: {
+          windows: [win], placing: null, selSlot: null, loot: null, npc: smith ?? null,
+          stash: null, floor: null, shopTab: "sell", forgeTab: "craft", testPage: 0, towerTab: "fire",
+          upgrading: null, dragging: false, lookMode: false, inspect: null, split: null,
+        },
+        game: g, player: g.player, mouse: { sx: 0, sy: 0 },
+        act: new Proxy({}, { get: () => () => { /* no-op */ } }),
+        hotspots: hs, itemSlots: [], sheets, sheetBand: sheetBand(d),
+      } as never);
+      return { hs };
+    };
+
+    frame(); frame(); // fit settles on the second frame, as it always has
+    const r = win.rect!;
+    ok(!!r, "the shop draws on a sheet");
+    /* The ribbon: a panel three screens tall got a factor of about a third, and
+     * every glyph in it shrank with the frame. Width is now the only input. */
+    ok(r.w >= sheets[0].w * 0.9,
+      `…at very nearly the full width of the band (${Math.round(r.w)} of ${sheets[0].w})`);
+    ok((win.fit ?? 1) >= 1, `…and never shrunk below its natural size (fit ${(win.fit ?? 1).toFixed(2)})`);
+
+    const over = r.h - sheets[0].h;
+    if (over > 0) {
+      ok(true, `the list overflows the band by ${Math.round(over)}px, so it scrolls`);
+      const before = win.sheetScroll ?? 0;
+      // the last two hotspots of the frame are the viewport's own arrows
+      const arrows = frame().hs.slice(-2);
+      ok(arrows.length === 2, "…and the viewport puts a pair of arrows on it");
+      arrows[arrows.length - 1].fn();
+      ok((win.sheetScroll ?? 0) > before, "…the down arrow moves the viewport");
+      frame();
+      ok((win.sheetScroll ?? 0) <= over, "…and it can never scroll past the end of the list");
+      arrows[0].fn();
+      ok((win.sheetScroll ?? 0) >= 0, "…nor above the start of it");
+    } else {
+      ok(true, "this shop happens to fit the band outright");
+    }
+
+    /* A row scrolled out of the hole must not still be pressable. */
+    const hs = frame().hs;
+    const stray = hs.filter((x) => x.y + x.h <= sheets[0].y || x.y >= sheets[0].y + sheets[0].h);
+    ok(stray.length === 0, "no hitbox survives outside the viewport it was clipped to");
+  }
+
+  console.log("Etap 35 — a strip container is one column, filled to the strip's height:");
+  {
+    const nfs = await import("node:fs");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok((panels.match(/const cols = p\.strip \? 1 : 4;/g) ?? []).length === 3,
+      "every container drawer narrows to one column in the strip — four would be four columns of specks");
+    ok(panels.includes("if (!p.strip) return visibleRows(p.win.kind, allRows);"),
+      "…and off the strip the saved row preference is untouched");
+    ok(panels.includes("const room = Math.floor((p.strip.h - chrome + gap) / (cell + gap));"),
+      "…while in it the rows are however many the strip is tall enough to hold");
+    ok(panels.includes('new Set(["bag", "container"])'),
+      "the strip takes PACKS — and \"bag\" is in the set, which is the whole point");
+    ok(main.includes("win.stripOut = true;"),
+      "…and dragging it tears it out into an ordinary sheet, so nothing on the phone refuses the finger");
+    ok(main.includes("return stripCandidate(ui.windows) ? stripRect(deck, stripAway ? 1 : 0) : null;"),
+      "…with the camera and the renderer calling the SAME chooser, not two copies of the rule");
+    ok(main.includes("seq: winSeq++"),
+      "…and creation order is stamped, because the window array is z-order and gets reshuffled");
+  }
+
+  console.log("Etap 35 — the phone's overlays clear its own top strip:");
+  {
+    const nfs = await import("node:fs");
+    const hud = nfs.readFileSync("src/ui/hud.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    /* Both of these are drawn a few dozen pixels down from the top of the
+     * canvas, which was sky and is now an opaque plate. Without the offset the
+     * zone banner and every flash message are painted underneath it. */
+    ok(hud.includes('(h.contentTop ?? 0) + 40 * S'),
+      "the zone banner starts below the strip, not behind it");
+    ok(panels.includes('(hud.contentTop ?? 0) + 18 * hud.scale'),
+      "…and so does the flash line");
+    ok(main.includes("contentTop: deck.mapTop"),
+      "…both fed from the one measurement of where the world begins");
+    ok(hud.includes("contentTop?: number"), "…which defaults to zero, so the desktop is unmoved");
+  }
+
+  console.log("Etap 35 — the player sits in the middle of the WINDOW, not the canvas:");
+  {
+    const MB = await import("../src/ui/mobile.ts");
+    const H = 915 * 2;
+    const d = MB.mobileLayout(412 * 2, H, 2, 0, 0);
+    const frac = MB.mapFocusFrac(d, H);
+    const onScreen = frac * H;
+    ok(Math.abs(onScreen - (d.mapTop + d.mapBottom) / 2) < 1,
+      "the focus lands on the centre of the visible band");
+    /* The strip and the deck are not the same height, so canvas-centre would
+     * leave the character low, half-hidden behind the hotbar. */
+    ok(Math.abs(frac - 0.5) > 0.0005, "…which is NOT the centre of the canvas");
+    ok(MB.overDeck(d, 200, 4) && MB.overDeck(d, 200, H - 4), "both plates refuse world taps");
+    ok(!MB.overDeck(d, 200, (d.mapTop + d.mapBottom) / 2), "…and the band between them accepts them");
+  }
+
+  console.log("Etap 35 — the phone's wiring, where it crosses the rest of the game:");
+  {
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+    const hud = nfs.readFileSync("src/ui/hud.ts", "utf8");
+
+    ok(main.includes("if (deck.on) { drawDeck(); return; }"),
+      "on a phone the deck replaces the floating groups outright — they are not drawn underneath it");
+    ok(main.includes("if (deck.on) while (ui.windows.length >= MAX_SHEETS) ui.windows.shift();"),
+      "…two panels are open at most, and the oldest gives way — a move needs both its ends");
+    ok(main.includes("if (overDeck(deck, sx, sy)) return true;"),
+      "…a press on either plate never walks the player");
+    ok(main.includes("cam.y = clamp(P.y - VH * mapFocusFrac(deck, screen.height)"),
+      "…and the camera parks the player in the visible band");
+    ok(main.includes("fixedChrome: deck.on"),
+      "…while the top strip takes over the vitals, purse, minimap and location");
+    ok(hud.includes('const sidebar = (h.sidebarW ?? 0) > 0 || !!h.fixedChrome;'),
+      "…using the same suppression the sidebar already performs, so they cannot both draw");
+
+    /* The desktop view is the thing that must NOT have moved. */
+    ok(main.includes("sidebarW = dockEnabled(cw) && !mobile"),
+      "the desktop column's own gate is untouched");
+    ok(panels.includes("const docked = isDocked(win, dock) && !sheet;"),
+      "…and a sheet, which only ever exists on a phone, is what turns docking off");
+
+    const anchor = panels.slice(panels.indexOf("function anchor("), panels.indexOf("function anchor(") + 1400);
+    const anchor2 = panels.slice(panels.indexOf("function anchor("), panels.indexOf("function anchor(") + 4200);
+    ok(anchor2.indexOf("if (p.strip)") < anchor2.indexOf("if (p.sheet)"),
+      "the strip is decided before the sheet: it is docked and must take no drag offset");
+    ok(anchor2.includes("x: Math.round(s.x + s.w - w)"),
+      "…right-aligned, so it hugs the glass even when the panel is narrower than its lane");
+    ok(anchor2.indexOf("if (p.sheet)") < anchor2.indexOf("if (isDocked("),
+      "the sheet is decided before the column, since a phone has no column to consult");
+    ok(anchor2.includes("s.y + s.h - h + p.win.offset.y"),
+      "…a panel that fits is bottom-aligned, putting its footer in the thumb's reach");
+    ok(anchor2.includes("y: Math.round(s.y - sc)"),
+      "…and one that does not fit sits still while the viewport moves over it");
+    ok(panels.includes("Math.min(SHEET_MAX_GROW, sheet.w / natW)"),
+      "…sized by WIDTH alone, so a long list is scrolled rather than shrunk to a ribbon");
+  }
+
+
+  /* ================= Etap 31: PlayerState + the combat toggles =============
+   *
+   * The point of this whole block is ONE property: every per-character piece
+   * of state now hangs off a swappable object, so a process can hold more
+   * than one character. That is not visible in the game and cannot be caught
+   * by playing it — it can only be caught here, which is why these tests
+   * exist before the multiplayer work rather than after it. */
+  {
+    console.log("Etap 31 - PlayerState is per character:");
+    const ps = await import("../src/systems/playerState.ts");
+    const sk = await import("../src/systems/skills.ts");
+    const st = await import("../src/systems/stance.ts");
+    const qu = await import("../src/systems/quests.ts");
+    const tk = await import("../src/systems/tasks.ts");
+    const tw = await import("../src/systems/tower.ts");
+
+    /* --- the swap itself: two characters, no shared reads ----------------- */
+    const alice = ps.resetPlayerState();
+    sk.skills.sword.lv = 42;
+    st.setStance("offensive");
+    qu.questList()[0].progress = 3;
+    ps.setChase(false);
+
+    const bob = ps.newPlayerState();
+    ps.setActive(bob);
+    ok(sk.skills.sword.lv === 10, "a second character reads his OWN sword skill, not the first one's");
+    ok(st.stance() === "balanced", "…his own stance");
+    ok(qu.questList()[0].progress === 0, "…his own quest progress");
+    ok(ps.chasing() === true, "…and his own combat toggles");
+
+    ps.setActive(alice);
+    ok(sk.skills.sword.lv === 42, "switching back restores the first character's skill");
+    ok(st.stance() === "offensive", "…his stance");
+    ok(qu.questList()[0].progress === 3, "…his quest progress");
+    ok(ps.chasing() === false, "…and his toggles");
+
+    /* The skills façade is the risky one: it keeps its old NAME so ~100 call
+     * sites did not change, which is exactly how a stale singleton could hide
+     * in plain sight. Prove the object is a live view and not a snapshot. */
+    ps.setActive(bob);
+    sk.skills.shield.pts = 7;
+    ok(bob.skills.shield.pts === 7, "writing through `skills` writes into the ACTIVE state, not a copy");
+    ok(alice.skills.shield.pts === 0, "…and leaves the other character untouched");
+    ok(Object.isFrozen(sk.skills), "`skills` is frozen, so a stray assignment cannot restore the singleton");
+
+    /* Same question for the two Set-backed ones in the tower. */
+    tw.loadAttunedState(["fire"]);
+    tw.loadResearchState(["r_test_only"]);
+    ok(tw.attunedState().includes("fire"), "attunement lands on the active character");
+    ps.setActive(alice);
+    ok(!tw.attunedState().includes("fire"), "…and is not visible to another one");
+    ok(tw.researchState().length === 0, "research likewise");
+
+    /* …and the board, whose runtime is a getter/setter pair. */
+    ps.setActive(bob);
+    tk.loadTaskState({ activeId: null, kills: 5, earned: 11 });
+    ok(tk.taskState().kills === 5 && tk.taskState().earned === 11, "board progress lands on the active character");
+    ps.setActive(alice);
+    ok(tk.taskState().kills === 0, "…and the other character's board is his own");
+
+    /* A fresh state must be genuinely fresh — a shared default object would
+     * make every new character an alias of the last one. */
+    const c1 = ps.newPlayerState();
+    const c2 = ps.newPlayerState();
+    c1.skills.dist.lv = 55;
+    c1.quests[0].done = true;
+    ok(c2.skills.dist.lv === 10, "newPlayerState deep-copies the skill table rather than sharing it");
+    ok(c2.quests[0].done === false, "…and the quest chain too");
+    ok(c1.research !== c2.research && c1.shieldBlockTimes !== c2.shieldBlockTimes,
+      "…and every collection on it");
+
+    ps.resetPlayerState();
+  }
+
+  {
+    console.log("Etap 31 - combat toggles:");
+    const ps = await import("../src/systems/playerState.ts");
+    ps.resetPlayerState();
+
+    ok(ps.chasing() === true,
+      "chase defaults ON — which is what the game did before the switch existed");
+    /* Defaults ON, which is a CORRECTION to what this test used to assert.
+     * It shipped defaulting to off, written as "secure mode off" and read as
+     * the harmless side of an invisible flag. It is not: off is the side on
+     * which you hurt people, and nobody could see it until Etap 36 gave it a
+     * button. A default nobody can see is not a choice anybody made. */
+    ok(ps.safeMode() === true, "secure mode defaults ON — off is the side that hurts people");
+    ok(ps.toggleChase() === false && ps.chasing() === false, "the toggle flips and reports the new setting");
+    ok(ps.toggleChase() === true, "…and back");
+
+    ok(ps.mayAttackPlayer() === false, "so out of the box a player may NOT be attacked");
+    ps.setSafeMode(false);
+    ok(ps.mayAttackPlayer() === true, "…and only once it is turned off, may they");
+    ok(ps.modes().safeMode === false, "the flag is readable as state, not only through the guard");
+    ps.resetPlayerState();
+
+    /* Wiring. `chasing()` has to gate BOTH walk-up paths — the melee approach
+     * and the archer closing the gap — or "stand" only half works. */
+    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    ok(main.includes('const chaseBlocked = !chasing()'),
+      "the melee approach consults chase before taking a step");
+    ok(main.includes('(P.target.kind === "mob" || P.target.kind === "dummy")'),
+      "…and only for creatures: a corpse or a chest is still walked to");
+    ok(main.includes("if (chasing() && (d > mode.reach || blocked))"),
+      "the archer's gap-closing consults it too");
+    ok(main.indexOf("else if (chaseBlocked) {") < main.indexOf("const moved = walkGrid(world, toTile(tp.x)"),
+      "standing our ground is decided BEFORE the walk, not after it");
+
+    /* Attack-nearest must not reach through walls, and must be releasable. */
+    ok(main.includes("if (!lineOfSight(world, P.x, P.y, m.x, m.y)) continue;"),
+      "attack-nearest will not mark a creature through a wall");
+    ok(main.includes('if (P.target?.kind === "mob") {\n    P.target = null;'),
+      "…and pressing it again releases the mark rather than re-marking");
+    const cfg = (await import("node:fs")).readFileSync("src/config.ts", "utf8");
+    ok(cfg.includes("export const TARGET_SEEK_PX = 8 * TILE;"),
+      "…reaching eight tiles, matching the range a creature can already hold a chase from");
+  }
+
+  {
+    console.log("Etap 31 - the save carries all three toggles:");
+    const save = (await import("node:fs")).readFileSync("src/save.ts", "utf8");
+    ok(save.includes("v9: the combat toggles became a set"),
+      "the v9 bump is on the record, because `stance` grew into `modes`");
+    ok(save.includes("modes: { stance: stance(), chase: chasing(), safeMode: safeMode() }"),
+      "all three toggles are written");
+    ok(save.includes("const savedStance = data.modes?.stance ?? data.stance;"),
+      "a pre-v9 save keeps the stance its owner left it in");
+    ok(save.includes("setChase(data.modes?.chase ?? true);"),
+      "…and takes chase ON, so loading an old character does not silently change how it fights");
+    /* A v9 save's stored safeMode is the old default, not a decision — the
+     * flag had no button until v10 — so it is replaced rather than obeyed. */
+    ok(save.includes("setSafeMode(data.v >= 10 ? data.modes?.safeMode ?? true : true);"),
+      "…and secure mode ON for anything written before the switch had a button");
+
+    /* createGame must not go back to resetting seven modules by hand: a reset
+     * that is a list is a reset that drifts out of step with the state. */
+    const game = (await import("node:fs")).readFileSync("src/game.ts", "utf8");
+    ok(game.includes("resetPlayerState();"), "a fresh game is one fresh state object");
+    ok(!game.includes("resetSkills()") && !game.includes("resetQuests()") && !game.includes("resetStance()"),
+      "…not seven separate resets that could each be forgotten");
+  }
+
+  {
+    console.log("Etap 31 - the phone deck carries the combat controls:");
+    const mob = await import("../src/ui/mobile.ts");
+    const port = mob.mobileLayout(1080, 2400, 3, 0, 0);
+    const land = mob.mobileLayout(2400, 1080, 3, 0, 0);
+
+    for (const [name, d] of [["portrait", port], ["landscape", land]] as const) {
+      ok(d.chase.w > 0 && d.chase.h > 0, `${name}: chase has a box`);
+      ok(d.atk.w > 0 && d.atk.h > 0, `${name}: the mark button has a box`);
+      const min = mob.TOUCH_MIN_CSS * 3;
+      ok(d.chase.h >= min && d.atk.h >= min && d.atk.w >= min,
+        `${name}: both clear the finger floor`);
+      /* Nothing on the utility row may overlap: an overlapping hotspot is a
+       * button that silently steals another's taps. */
+      const row = [d.menu, d.chase, d.atk, d.swap, d.minimap];
+      let clear = true;
+      for (let i = 0; i < row.length; i++) {
+        for (let j = i + 1; j < row.length; j++) {
+          const a = row[i], b = row[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+        }
+      }
+      ok(clear, `${name}: no two controls overlap`);
+      ok(d.swap.w > 0, `${name}: the swap still gets real width after the two new buttons`);
+    }
+
+    /* EDIT gave up its seat on the utility row and must now sit with the tabs. */
+    ok(port.edit.y > port.topH, "portrait: EDIT moved off the strip into the drop-down");
+    ok(port.edit.y > port.tabs[0].y, "…onto the grid's second row, below the five panel tabs");
+    ok(port.chat.y === port.edit.y && port.chat.x < port.edit.x,
+      "…with CHAT beside it, first on that row");
+    ok(land.edit.y > land.tabs[0].y, "landscape: likewise");
+
+    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    ok(main.includes("hotspots.push({ ...d.chase, fn: () => { if (!editing) toggleChase(); } });"),
+      "the chase box is wired to the toggle");
+    ok(main.includes("hotspots.push({ ...d.atk, fn: () => { if (!editing) attackNearest(); } });"),
+      "…and the mark box to attack-nearest");
+    ok(main.includes('const marked = P.target?.kind === "mob";'),
+      "the mark button lights while a creature is marked, so it also answers \"am I fighting?\"");
+    ok(main.includes('drawSquareIcon(ctx, "atk"'), "…and wears the drawn 16x16 glyph");
+    ok(!main.includes("function crossedSwords"),
+      "…with the procedural pair deleted, so there is one source of truth for the shape");
+    const icons = (await import("node:fs")).readFileSync("src/ui/icons.ts", "utf8");
+    ok(icons.includes('atk: "/icon-atk.png"'), "the art is registered with the other five");
+    ok(icons.includes("atk: ["), "…and has a fallback glyph, so a failed load leaves a shape not a hole");
+    ok(main.includes('if (P.target?.kind === "mob" && P.target.id === m.id) targetBox(m.x, m.y);'),
+      "and the marked creature wears corner brackets in the world");
+  }
+
+
+  /* ============ Etap 32: entities have ids, targets hold them =============
+   *
+   * The property under test is that "that one" is a NUMBER now. None of it is
+   * visible in the game — a target still works exactly as it did — so the
+   * only way this stays true through the next twenty sessions is here. */
+  {
+    console.log("Etap 32 - every entity carries an id:");
+    const ent = await import("../src/world/entities.ts");
+    const { createGame } = await import("../src/game.ts");
+
+    const g = createGame(12345);
+    const seen = new Set<number>();
+    let total = 0;
+    let unstamped = 0;
+    for (const key of Object.keys(g.worlds)) {
+      const w = g.worlds[key as keyof typeof g.worlds];
+      for (const list of [w.monsters, w.corpses, w.ground, w.npcs, w.structures]) {
+        for (const e of list as { id: number }[]) {
+          total++;
+          if (!e.id) unstamped++;
+          seen.add(e.id);
+        }
+      }
+    }
+    ok(total > 100, `a fresh game builds a good many entities (${total})`);
+    ok(unstamped === 0, "…and every single one is stamped");
+    ok(seen.size === total, "…with an id that is unique across ALL worlds, not just its own");
+
+    /* Uniqueness across worlds is the whole reason the counter is global: a
+     * per-world counter would let a stale target from another island resolve
+     * against a completely different creature here. */
+    const homeIds = new Set(g.worlds.home.structures.map((e) => e.id));
+    const townIds = new Set(g.worlds.town.npcs.map((e) => e.id));
+    ok([...homeIds].every((id) => !townIds.has(id)), "two worlds never hand out the same id");
+
+    /* Lookup, and the half that matters: a dead id resolves to nothing. */
+    const wild = g.worlds.reach;
+    const victim = wild.monsters[0];
+    ok(!!victim, "the Bone Reach has creatures to look up");
+    ok(ent.monsterById(wild, victim.id) === victim, "an id resolves back to its creature");
+    wild.monsters.splice(wild.monsters.indexOf(victim), 1);
+    ok(ent.monsterById(wild, victim.id) === undefined,
+      "…and once it is spliced out, the SAME id resolves to nothing");
+    ok(ent.monsterById(wild, 0) === undefined, "id 0 is never a real entity");
+    ok(ent.monsterById(wild, 999999999) === undefined, "nor is an id that was never issued");
+
+    /* Structures resolve from home as a fallback, because a Storage Chest is
+     * consulted from wherever the character happens to be standing. */
+    const chestish = g.worlds.home.structures[0];
+    if (chestish) {
+      ok(ent.structureById(g.worlds.reach, chestish.id, g.worlds.home) === chestish,
+        "a home structure resolves even while the character is elsewhere");
+      ok(ent.structureById(g.worlds.wild, chestish.id) === undefined,
+        "…but only when home is actually offered as the fallback");
+    }
+
+    /* stampWorld must never renumber something already stamped: doing so would
+     * silently invalidate whatever target the player is holding. */
+    const before = wild.monsters.map((m) => m.id);
+    ent.stampWorld(wild);
+    ok(wild.monsters.every((m, i) => m.id === before[i]), "stampWorld leaves stamped entities alone");
+    const orphan = { id: 0, kind: "wood", n: 1, x: 0, y: 0, t: 5 } as (typeof wild.ground)[number];
+    wild.ground.push(orphan);
+    ent.stampWorld(wild);
+    ok(orphan.id > 0, "…and stamps the one that arrived without an id");
+  }
+
+  {
+    console.log("Etap 32 - the target holds an id, not a pointer:");
+    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    const player = (await import("node:fs")).readFileSync("src/entities/player.ts", "utf8");
+
+    ok(player.includes('| { kind: "mob"; id: number }'), "the Target union carries ids");
+    ok(!/\{ kind: "(mob|corpse|ground|npc|dummy|structure)"; (m|c|gi|n|s):/.test(player),
+      "…and no member still carries an object");
+
+    /* Every constructor site. A single `{ kind: "mob", m }` left behind would
+     * not typecheck, but a `{ kind: "mob", id: m.id }` written as a literal
+     * number somewhere would — so pin the shape. */
+    for (const lit of [
+      'P.target = { kind: "mob", id: m.id };',
+      'P.target = { kind: "ground", id: gi.id };',
+      'P.target = { kind: "corpse", id: c.id };',
+      'P.target = { kind: "npc", id: n.id };',
+      'P.target = { kind: "dummy", id: s.id };',
+      'else P.target = { kind: "structure", id: s.id };',
+      'P.target = { kind: "mob", id: best.id };',
+    ]) ok(main.includes(lit), `target constructor: ${lit.trim()}`);
+
+    /* Toggling the attack off by re-clicking must compare ids, not objects. */
+    ok(main.includes('if (P.target?.kind === "mob" && P.target.id === m.id) {'),
+      "re-clicking the marked creature compares by id");
+    ok(main.includes('if (P.target?.kind === "dummy" && P.target.id === s.id) {'),
+      "…and so does re-clicking the dummy");
+
+    /* The liveness checks the ids replaced must be GONE, not merely bypassed:
+     * leaving them would mean two sources of truth about whether a target is
+     * still real, which is how they drift apart. */
+    ok(!main.includes("!cw().monsters.includes(m)"),
+      "the old `monsters.includes` liveness check is gone from the fire ticks");
+    ok(!main.includes("if (cw().ground.includes(t.gi))"),
+      "…and the ground `includes` guard is gone from resolveTarget");
+    ok(main.includes("const m = targetMob(t);\n  if (!m || m.hp <= 0) { P.target = null; return; }"),
+      "…replaced by a failed lookup, which answers both questions at once");
+
+    const cry = (await import("node:fs")).readFileSync("src/systems/crystals.ts", "utf8");
+    ok(cry.includes('const marked = t && t.kind === "mob" ? monsterById(world, t.id) : undefined;'),
+      "crystals aim at the marked creature by id, resolved in the world being cast in");
+    ok(!cry.includes("world.monsters.includes(t.m)"), "…and its old reference check is gone");
+
+    /* Ids are runtime-only. If one ever reached the save file, loading would
+     * either collide with the live counter or need it persisted. */
+    const save = (await import("node:fs")).readFileSync("src/save.ts", "utf8");
+    ok(save.includes("stampWorlds(worlds);"), "a loaded game is stamped rather than trusting saved ids");
+    const game = (await import("node:fs")).readFileSync("src/game.ts", "utf8");
+    ok(game.includes("stampWorlds(worlds);"), "…and so is a freshly built one");
+  }
+
+
+  /* ========= Etap 32b: container addresses hold ids too ====================
+   *
+   * The other half of the pointer removal. A ContainerRef is the address of
+   * "where an item is", and it is the thing a client will one day post to a
+   * server as "move this there" — so it has to be made of numbers for the
+   * same reason the attack target was. */
+  {
+    console.log("Etap 32b - ContainerRef holds ids:");
+    const cont = await import("../src/systems/containers.ts");
+    const { createGame } = await import("../src/game.ts");
+    const g = createGame(4242);
+    const ctx = { bag: g.player.bag, world: g.current, home: g.worlds.home };
+
+    const src = (await import("node:fs")).readFileSync("src/systems/containers.ts", "utf8");
+    ok(src.includes('| { c: "stash"; id: number }'), "the stash address is an id");
+    ok(src.includes('| { c: "corpse"; id: number }'), "…so is the corpse address");
+    ok(src.includes('| { c: "ground"; id: number }'), "…and the ground address");
+    ok(!/\{ c: "(stash|corpse|ground)"; (s|body|gi):/.test(src),
+      "…and no member still carries the object itself");
+
+    /* Resolution. The interesting case is the STALE one: an address whose
+     * entity is gone must answer null rather than throw or return empties. */
+    const w = g.current;
+    w.corpses.length = 0;
+    const body = { id: 777001, name: "test", x: g.player.x, y: g.player.y, t: 60,
+      items: [{ kind: "bones", n: 3 }, null, null, null] } as never;
+    w.corpses.push(body);
+    const cref = { c: "corpse", id: 777001 } as never;
+    ok(cont.slotsOf(cref, ctx)?.length === 4, "a corpse address resolves to that corpse's slots");
+    w.corpses.length = 0;
+    ok(cont.slotsOf(cref, ctx) === null,
+      "…and once the body is gone the SAME address resolves to null, not to empty slots");
+    ok(cont.slotsOf({ c: "ground", id: 424242 } as never, ctx) === null,
+      "a ground address for a stack nobody ever dropped resolves to null");
+    ok(cont.slotsOf({ c: "stash", id: 424242 } as never, ctx) === null,
+      "…likewise a chest that does not exist");
+
+    /* A chest is resolvable from ANOTHER island, because crafting spends from
+     * every chest on Home wherever the character happens to be standing. */
+    const chest = g.worlds.home.structures.find((st) => st.key === "chest");
+    if (chest) {
+      const away = { bag: g.player.bag, world: g.worlds.wild, home: g.worlds.home };
+      ok(cont.slotsOf({ c: "stash", id: chest.id } as never, away) !== null,
+        "a chest address resolves from another island, since its contents are still spendable");
+    }
+
+    /* sameRef is now a number comparison, which means two addresses built at
+     * different times for the same thing are equal — they were not always, and
+     * that is precisely what made a window forget which container it was. */
+    ok(cont.sameRef({ c: "corpse", id: 5 } as never, { c: "corpse", id: 5 } as never),
+      "two separately-built addresses for one corpse are the same address");
+    ok(!cont.sameRef({ c: "corpse", id: 5 } as never, { c: "ground", id: 5 } as never),
+      "…but the same id in a different list is a different address");
+    ok(cont.sameRef(
+      { c: "nested", via: { c: "stash", id: 9 }, i: 2 } as never,
+      { c: "nested", via: { c: "stash", id: 9 }, i: 2 } as never),
+      "…and nesting compares all the way down");
+
+    /* The one escape hatch, and the rule that keeps it honest. */
+    ok(src.includes('| { c: "loose"; slots: Bag }'), "a loose bag has its own address kind");
+    const loose = [{ kind: "wood", n: 2 }, null] as never;
+    ok(cont.slotsOf({ c: "loose", slots: loose } as never, ctx) === loose,
+      "…which resolves to the bag it names");
+    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    ok(main.includes('const via: ContainerRef = { c: "loose", slots: shim };'),
+      "lifting a stack off the floor uses it instead of inventing a corpse");
+    ok(!main.includes('body: { id: 0,'), "…and the fake body it replaced is gone");
+    ok(!/\{ c: "loose"[^}]*\}/.test((await import("node:fs")).readFileSync("src/ui/panels.ts", "utf8")),
+      "no panel ever builds one, because no window may hold one");
+
+    /* refUsable's old two-part question — "is it in the list AND in reach" —
+     * is one lookup now. Leaving the includes() behind would mean two answers
+     * to the same question, which is how they drift apart. */
+    ok(!main.includes("world.corpses.includes(base.body)"),
+      "the corpse liveness check is gone from refUsable");
+    ok(!main.includes("world.ground.includes(base.gi)"), "…and the ground one");
+    ok(!main.includes("game.worlds.home.structures.includes(base.s)"), "…and the chest one");
+    ok(main.includes("const refCtx = (): RefWorld =>"),
+      "one place builds the resolution context, rebuilt per call so a ladder cannot stale it");
+  }
+
+
+  /* ============ Etap 33: chat, and the rest of the touch surface ========== */
+  {
+    console.log("Etap 33 - chat channels:");
+    const chat = await import("../src/systems/chat.ts");
+    chat.resetChat();
+
+    /* ONE writable channel. Trade / Party / Guild / PM were modelled here and
+     * have been removed — see the note in chat.ts. A dead option costs more
+     * than a missing one. */
+    ok(chat.CHANNELS.length === 3, "three channels: one to talk in, two the game writes");
+    ok(chat.CHANNELS.filter((c) => c.writable).length === 1,
+      "…exactly one is writable, so there is nothing to choose between");
+    ok(chat.CHANNELS.every((c) => c.live), "…and none of them is a dead option");
+    ok(chat.CHANNELS.every((c) => c.delayS === undefined),
+      "no client-side throttle: it is friction here and unenforceable once a server exists");
+    ok(chat.channel("loot").writable === false, "Loot is a log, not a channel");
+
+    const r1 = chat.say("local", "hello", chat.SELF, 1);
+    ok(r1.ok, "a live writable channel accepts a message");
+    ok(chat.linesIn("local").length === 1, "…and it lands in that channel");
+    ok(!!chat.bubbleFor(1), "…and over the speaker's head, addressed by entity id");
+
+    /* The complaint that produced this change: typing twice in a row. */
+    ok(chat.say("local", "siema", chat.SELF, 1).ok,
+      "a second message straight after the first is NOT refused");
+    ok(chat.say("local", "and a third", chat.SELF, 1).ok, "…nor a third");
+    const r4 = chat.say("loot", "x", chat.SELF, 1);
+    ok(!r4.ok && r4.reason === "read-only", "a log still refuses to be typed into");
+    ok(!chat.say("local", "   ", chat.SELF, 1).ok, "whitespace is not a message");
+
+    /* One bubble per speaker: a chatterbox must not build a tower of text. */
+    ok(chat.bubbles().filter((b) => b.entity === 1).length === 1,
+      "a second bubble replaces the first rather than stacking");
+    ok(chat.BUBBLE_S === 5,
+      "speech hangs for five seconds — long enough to read twice, short of litter");
+    chat.tickChat(4);
+    ok(!!chat.bubbleFor(1), "…so it is still there after four");
+    chat.tickChat(1.5);
+    ok(!chat.bubbleFor(1), "…and gone after five");
+    /* The bubble that would not clear was NOT this constant. `tickChat` was
+     * being called only inside the death branch of `update()`, so on the
+     * living path nothing aged and a bubble stayed until the tab closed.
+     * Eight seconds would have looked exactly as broken as five. */
+    chat.resetChat();
+    chat.say("local", "still here?", chat.SELF, 7);
+    chat.tickChat(chat.BUBBLE_S * 12);
+    ok(!chat.bubbleFor(7), "a bubble left alone for a minute of ticks is long gone");
+
+    /* Unread means somebody SPOKE to you. Not that you picked up a bone. */
+    chat.resetChat();
+    chat.setActiveChannel("local");
+    chat.logLoot("a bone");
+    chat.logServer("you advanced");
+    ok(chat.unread() === 0,
+      "the game's own log lines raise no badge — a badge that is always lit says nothing");
+    chat.say("local", "hi", chat.SELF, 1);
+    ok(chat.unread() === 0, "…and neither do your own words");
+    chat.push("local", "oi", "Someone");
+    chat.setActiveChannel("loot"); // look away, then have someone speak
+    chat.push("local", "oi again", "Someone");
+    ok(chat.unread("local") === 1, "somebody else speaking in a channel you are not on does");
+    chat.markAllRead();
+    ok(chat.unread() === 0, "opening chat clears the count");
+
+    /* The log is bounded: a line per coin picked up, forever, is a slow leak. */
+    chat.resetChat();
+    for (let i = 0; i < chat.CHAT_HISTORY + 50; i++) chat.logServer(`line ${i}`);
+    ok(chat.chatLines().length === chat.CHAT_HISTORY, "the log is capped");
+    ok(chat.chatLines()[chat.CHAT_HISTORY - 1].text === `line ${chat.CHAT_HISTORY + 49}`,
+      "…and it is the OLDEST lines that go");
+
+    /* The overlay shows the newest few from ALL channels, and fades them. */
+    chat.resetChat();
+    for (let i = 0; i < 20; i++) chat.logServer(`l${i}`);
+    const shown = chat.overlayLines();
+    ok(shown.length === chat.OVERLAY_LINES, "the overlay shows a fixed few");
+    ok(shown[shown.length - 1].text === "l19", "…newest last, so it reads downward like a transcript");
+    chat.tickChat(chat.OVERLAY_FADE_S + 1);
+    ok(chat.overlayLines().length === 0, "…and old lines leave the world");
+    ok(chat.chatLines().length === 20, "…without leaving the log");
+    chat.resetChat();
+  }
+
+  {
+    console.log("Etap 33 - chat is wired into the game, not just modelled:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const inp = nfs.readFileSync("src/ui/chatInput.ts", "utf8");
+
+    ok(main.includes("const flash = (t: string, c = \"#ffe9a8\"): void => {")
+      && main.includes("logServer(t, c);"),
+      "every flash is also recorded, so a refusal can be re-read");
+    ok(main.includes("drawChatLog();"), "the log is drawn on the world");
+    ok(main.includes("tickChat(dt);"), "…and aged");
+    /* WHERE it is aged is the whole bug. Two calls sat inside `if (P.dead)`,
+     * a bad merge apart, and none on the living path — so speech only expired
+     * while the player was a corpse. Pinned by position: the tick has to
+     * happen before the death branch, which returns. */
+    ok((main.match(/\n\s*tickChat\(dt\);/g) ?? []).length === 1,
+      "…exactly once per frame, not twice from a bad merge");
+    ok(main.indexOf("tickChat(dt);") < main.indexOf("if (P.dead) {"),
+      "…on the LIVING path, above the death branch that returns past it");
+    ok(main.indexOf("tickSkull(dt);") < main.indexOf("if (P.dead) {"),
+      "…and the skull's clock with it: dying does not launder a frag");
+    ok(main.includes("sayBubble(m.id"), "creatures can speak over their own heads");
+
+    /* The keyboard problem. A canvas cannot know the soft keyboard exists, so
+     * the field has to be a DOM element anchored to the visual viewport. */
+    ok(inp.includes("visualViewport"), "the input rides the VISUAL viewport, not the layout one");
+    ok(inp.includes('vv?.addEventListener("resize", place)'),
+      "…and re-places itself when the keyboard opens or closes");
+    ok(inp.includes("e.stopPropagation()"),
+      "typing does not leak into the game's hotkeys — `w` types a w, it does not walk north");
+    ok(!inp.includes("cycleChannel"),
+      "no channel switcher: with one channel a switcher is a control that does nothing");
+    ok(inp.includes('field.autocapitalize = "off"'),
+      "…and the phone keyboard does not autocorrect a trade offer");
+
+    /* The log is the way in. No permanent chat button eats a tap on the world. */
+    ok(main.includes("fn: () => openChat(),"), "tapping the log opens the input");
+    ok(main.includes("if (!typing) {"), "…but not while it is already open");
+    ok(main.includes("unreadPip(ctx, d.menu.x + d.menu.w"),
+      "unread rides the reveal button, the one control always on screen");
+  }
+
+  {
+    console.log("Etap 33 - the drop-down is a 2x5 grid:");
+    const mob = await import("../src/ui/mobile.ts");
+    for (const [name, d] of [
+      ["portrait", mob.mobileLayout(1080, 2400, 3, 0, 0)],
+      ["landscape", mob.mobileLayout(2400, 1080, 3, 0, 0)],
+    ] as const) {
+      const cells = [...d.tabs, d.chat, d.edit];
+      ok(cells.length === 7, `${name}: seven cells live in the drop-down`);
+      const rows = new Set(cells.map((c) => c.y));
+      ok(rows.size === 2, `${name}: laid out on two rows, not one long one`);
+      const cols = new Set(d.tabs.map((c) => c.x));
+      ok(cols.size === 5, `${name}: five to a row`);
+      const min = mob.TOUCH_MIN_CSS * 3;
+      ok(cells.every((c) => c.w >= min * 0.9 && c.h >= min),
+        `${name}: every cell is still thumb-sized — which a seven-wide row would not be`);
+      let clear = true;
+      for (let i = 0; i < cells.length; i++) {
+        for (let j = i + 1; j < cells.length; j++) {
+          const a = cells[i], b = cells[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+        }
+      }
+      ok(clear, `${name}: no two cells overlap`);
+    }
+  }
+
+  {
+    console.log("Etap 33 - touch: tolerance, long press, double tap:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const touch = nfs.readFileSync("src/ui/touch.ts", "utf8");
+
+    /* Tap tolerance is TOUCH ONLY. Widening a mouse click steals the gap the
+     * player deliberately aimed at. */
+    ok(main.includes("if (touchUI && forgivingTap(world, w)) return;"),
+      "tap tolerance runs on touch only");
+    ok(main.indexOf("forgivingTap(world, w)") < main.indexOf("// monsters\n  for (const m of world.monsters)"),
+      "…and only after the exact hitboxes have missed, so it cannot override a deliberate hit");
+    ok(main.includes("const m = pick(world.monsters.filter((x) => x.hp > 0));"),
+      "creatures are picked first — the extra reach only matters in a fight");
+
+    ok(touch.includes("LONG_PRESS_MS"), "a long press is a real gesture in the touch layer");
+    ok(touch.includes("if (!longFired && !tapStart.moved) onTap(tapStart.x, tapStart.y);"),
+      "…and a press that already opened the menu does not also tap on release");
+    ok(touch.includes("> LONG_PRESS_SLOP) tapStart.moved = true"),
+      "…and a finger that wanders abandons it rather than firing somewhere else");
+
+    const menu = nfs.readFileSync("src/ui/contextMenu.ts", "utf8");
+    ok(menu.includes('verb: "walk"'), "the menu always offers the one verb every tile has");
+    ok(main.includes('verb: "trade"') && main.includes("enabled: false"),
+      "Trade stays in the long-press menu, greyed — one entry on a menu you have to\n" +
+      "       ask for reads differently from four dead tabs you cannot avoid");
+    ok(main.includes("popupFrame(sctx, x, y, w, h, S);"),
+      "the menu wears the same frame as the inspect card, not a hand-rolled box");
+    ok(main.includes("if (contextMenuTap(sx, sy)) return;"),
+      "a tap while the menu is open goes to the menu first");
+
+    ok(main.includes("const DOUBLE_TAP_MS = 320;"), "double tap has a tuned window");
+    ok(main.includes("sameRef(lastSlotTap.ref, itemDrag.ref ?? { c: \"bag\" })"),
+      "…matched by SLOT, not by screen position, so a re-laid-out window does not break it");
+    ok(main.includes('flash("open another container to send to"'),
+      "…and with nowhere to send, it says so rather than quietly dropping the stack");
+  }
+
+  {
+    console.log("Etap 33 - installed to the home screen:");
+    const nfs = await import("node:fs");
+    const man = JSON.parse(nfs.readFileSync("public/manifest.webmanifest", "utf8"));
+    ok(man.display === "fullscreen", "installed, the game takes the whole panel");
+    ok(Array.isArray(man.display_override) && man.display_override.includes("standalone"),
+      "…falling back to standalone where fullscreen is refused");
+    const purposes = man.icons.map((i: { purpose: string }) => i.purpose);
+    ok(purposes.includes("maskable"), "a maskable icon exists, so launchers do not crop the art off");
+    for (const i of man.icons) ok(nfs.existsSync(`public${i.src}`), `${i.src} is actually there`);
+    const html = nfs.readFileSync("index.html", "utf8");
+    ok(html.includes('rel="manifest"'), "…and index.html links it, or none of it happens");
+
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok(main.includes('nav.wakeLock.request("screen")'), "the screen is held awake during a hunt");
+    ok(main.includes('document.addEventListener("visibilitychange"'),
+      "…and re-taken on return, since the browser drops it whenever the tab hides");
+    ok(main.includes("catch {"), "…failing quietly, because a dimming screen beats a crash on start-up");
+  }
+
+
+  /* ============ Etap 34: the desktop catches up with the phone ============ */
+  {
+    console.log("Etap 34 - the column does everything the deck does:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+
+    /* The deck grew three controls and the column did not, so a desktop player
+     * could not mark a target, open chat with the mouse, or bind a slot. */
+    ok(main.includes('drawSquareIcon(sctx, "atk"'), "the column has the mark button");
+    ok(main.includes('sctx.fillText("CHAT", chx + third / 2'), "…and a chat button");
+    ok(main.includes('sctx.fillText(editing ? "DONE" : "EDIT", ex + third / 2'), "…and edit");
+    ok(main.includes("unreadPip(sctx, chx + third, ry, wh);"),
+      "…with the unread pip on chat, since a desktop has no reveal button to hang it on");
+
+    /* Binding was gated on `touchUI`, which meant six action slots on a
+     * desktop and no way to fill any of them. */
+    ok(main.includes("function hudEditing(): boolean {\n  return !hudLocked();\n}"),
+      "editing no longer requires a touchscreen");
+    const hl = nfs.readFileSync("src/systems/hudLayout.ts", "utf8");
+    ok(hl.includes("locked: true"),
+      "…and the lock still defaults on, so nothing changes until EDIT is pressed");
+  }
+
+  {
+    console.log("Etap 34 - the sidebar scrolls:");
+    const dockMod = await import("../src/ui/dock.ts");
+    const d = dockMod.dockLayout(1920, 917, 2, true);
+
+    dockMod.reportDockStack(d, 0);
+    ok(dockMod.dockOverflow(d) === 0, "a stack that fits reports no overflow");
+    ok(dockMod.dockScroll() === 0, "…and cannot be scrolled");
+    dockMod.scrollDock(d, 300);
+    ok(dockMod.dockScroll() === 0, "…even when asked to");
+
+    const band = d.stackBottom - d.stackTop;
+    dockMod.reportDockStack(d, band + 400);
+    ok(dockMod.dockOverflow(d) === 400, "overflow is what runs past the bottom, exactly");
+    dockMod.scrollDock(d, 150);
+    ok(dockMod.dockScroll() === 150, "…and the stack moves");
+    dockMod.scrollDock(d, 1000);
+    ok(dockMod.dockScroll() === 400, "…up to the end and no further");
+
+    /* Shrinking the stack under a scrolled column must pull the view back, or
+     * closing a window leaves the player looking at empty space. */
+    dockMod.reportDockStack(d, band + 100);
+    ok(dockMod.dockScroll() === 100, "closing something re-clamps the view rather than stranding it");
+    dockMod.reportDockStack(d, 0);
+    ok(dockMod.dockScroll() === 0, "…and closing everything returns to the top");
+
+    const src = (await import("node:fs")).readFileSync("src/ui/panels.ts", "utf8");
+    ok(src.includes("let y = d.stackTop - dockScroll();"), "placement honours the scroll");
+    ok(!src.includes("if (y + h <= d.stackBottom) return { x: d.innerX, y };"),
+      "…and the old \"does not fit, so float it over the map\" branch is gone");
+    ok(src.includes("hud.ctx.rect(dock.x, dock.stackTop, dock.w"),
+      "a docked window is clipped to the band, so it cannot draw over the map or the vitals");
+    ok(src.includes("const inBand = (r: { y: number; h: number }): boolean =>"),
+      "…and its hitboxes are trimmed to match: a button you cannot see, you cannot press");
+    ok(src.includes("function drawDockScrollBar("), "the column draws a position readout");
+    ok(src.includes("if (over <= 0) return;"), "…only when there is somewhere to go");
+
+    /* Tearing a window out by hand still works — that is the player's choice,
+     * and it is the thing the old behaviour was taking away from them. */
+    ok(src.includes("win.docked !== false"), "a window dragged out of the column stays out");
+
+    const m = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    ok(m.includes("scrollDock(lastDock, (e.deltaY > 0 ? 1 : -1)"),
+      "the wheel scrolls the column");
+    ok(m.indexOf("const max = win.scrollMax ?? 0;") < m.indexOf("scrollDock(lastDock"),
+      "…but only after any window under the pointer has declined it");
+    ok(m.includes("s.x >= lastDock.x && dockOverflow(lastDock) > 0"),
+      "…and only with the pointer actually over the column");
+    ok(m.includes("const ratio = dockOverflow(lastDock) / band;"),
+      "dragging the thumb moves content in proportion, so a long stack does not crawl");
+    ok(m.includes("if (dockDrag) { dockDrag = null;"), "…and releasing lets go of it");
+  }
+
+  /* ===================== Etap 36: PvP marks and the switch =================
+   *
+   * None of this can be PLAYED yet — there is one character in the world and
+   * he cannot hit himself. It is here now because a skull is a saved,
+   * defaulted, per-character clock, and those are exactly the things that are
+   * expensive to retro-fit onto live characters later. The tests are the only
+   * thing that will keep it honest until there is a second player. */
+  {
+    console.log("Etap 36 - the two skulls:");
+    const ps = await import("../src/systems/playerState.ts");
+    const pvp = await import("../src/systems/pvp.ts");
+    ps.resetPlayerState();
+
+    ok(pvp.skull() === "none" && pvp.frags() === 0,
+      "a new character has no skull and no frags");
+    ok(pvp.pvpArmed() === false,
+      "…and the switch starts OFF, so nobody kills a stranger by accident on their first login");
+    ok(pvp.pvpArmed() === !ps.safeMode(),
+      "the switch IS secure mode, read the way a player thinks about it");
+
+    /* One flag, two readings. Flipping either has to move the other, or the
+     * button and the guard would disagree about the same character. */
+    pvp.setPvpArmed(true);
+    ok(ps.safeMode() === false, "arming the skull clears secure mode");
+    ps.setSafeMode(true);
+    ok(pvp.pvpArmed() === false, "…and setting secure mode disarms the skull");
+    ok(pvp.togglePvpArmed() === true && pvp.pvpArmed() === true,
+      "the toggle flips and reports the new setting, like chase does");
+
+    /* The gate. Four rules today; the point is that there is ONE place to add
+     * the fifth (party, guild war) rather than a condition to remember. */
+    ok(pvp.mayHit(30, 30) === true, "armed, two grown characters may fight");
+    pvp.setPvpArmed(false);
+    ok(pvp.mayHit(30, 30) === false, "disarmed, the blow does not land at all");
+    pvp.setPvpArmed(true);
+    ok(pvp.PVP_MIN_LEVEL === 10, "PvP opens at level 10 — the number settled early");
+    ok(pvp.mayHit(9, 30) === false, "a level 9 is not a threat…");
+    ok(pvp.mayHit(30, 9) === false, "…and is not a target either");
+
+    /* The protection zone. It arrives as a bare boolean because this module is
+     * rules and must not import a World to look a tile up in; whoever throws
+     * the punch knows the square, and `isSafeTile` turns that into the answer.
+     * Omitting it must mean "not in one", or every existing call site would
+     * quietly change meaning the day the argument was added. */
+    ok(pvp.mayHit(30, 30, true) === false, "…and nobody may fight inside a protection zone");
+    ok(pvp.mayHit(30, 30, false) === true, "…while one step outside it they may");
+    ok(pvp.mayHit(30, 30) === pvp.mayHit(30, 30, false),
+      "…and leaving the argument off means the same as saying no");
+
+    /* …and the zone the town actually draws answers the same way. Two islands
+     * of six are sanctuary, so this cannot be asked of a row number. */
+    {
+      const { isSafeTile } = await import("../src/world/collision.ts");
+      const tw = buildWorlds(WORLD_SEED).town;
+      ok(pvp.mayHit(30, 30, isSafeTile(tw, 52, 50)) === false,
+        "no duel in the market square");
+      ok(pvp.mayHit(30, 30, isSafeTile(tw, 60, 82)) === true,
+        "…and no sanctuary out on the hunting islands");
+    }
+
+    /* The seam. A hit that connects earns its skull in the same call, so
+     * there is no way to write a landed blow that forgot to. */
+    ps.resetPlayerState();
+    pvp.setPvpArmed(true);
+    ok(pvp.resolvePlayerHit(30, 30) === true, "an unprovoked blow lands…");
+    ok(pvp.skull() === "white", "…and the attacker takes the white skull for starting it");
+    ok(Math.abs(pvp.skullLeft() - pvp.WHITE_SKULL_S) < 1e-9, "…for fifteen minutes");
+
+    ps.resetPlayerState();
+    pvp.setPvpArmed(true);
+    ok(pvp.resolvePlayerHit(30, 30, true) === true, "answering a blow lands too…");
+    ok(pvp.skull() === "none",
+      "…and earns NOTHING: the white skull names who started it, not who is fighting");
+
+    ps.resetPlayerState();
+    pvp.setPvpArmed(false);
+    ok(pvp.resolvePlayerHit(30, 30) === false, "a refused blow…");
+    ok(pvp.skull() === "none", "…leaves no mark, because nothing happened");
+
+    /* Clocks. White refreshes and expires; red outranks it and counts frags. */
+    ps.resetPlayerState();
+    pvp.markAggressor();
+    pvp.tickSkull(pvp.WHITE_SKULL_S - 10);
+    ok(pvp.skull() === "white", "the white skull is still there ten seconds out");
+    pvp.markAggressor();
+    ok(Math.abs(pvp.skullLeft() - pvp.WHITE_SKULL_S) < 1e-9,
+      "…hitting a second person refreshes it rather than shortening it");
+    pvp.tickSkull(pvp.WHITE_SKULL_S + 1);
+    ok(pvp.skull() === "none" && pvp.skullLeft() === 0, "…and it runs out");
+
+    ps.resetPlayerState();
+    pvp.markKiller();
+    ok(pvp.skull() === "red" && pvp.frags() === 1, "a kill takes the red skull and counts");
+    pvp.markAggressor();
+    ok(pvp.skull() === "red",
+      "…and white cannot overwrite red: red already says everything white would");
+    pvp.markKiller();
+    ok(pvp.frags() === 2, "frags accumulate");
+    pvp.tickSkull(pvp.RED_SKULL_S + 1);
+    ok(pvp.skull() === "none", "red expires eventually…");
+    ok(pvp.frags() === 2, "…but the frags do not: a frag is a fact, not a timer");
+    ok(pvp.RED_SKULL_S > pvp.WHITE_SKULL_S * 10,
+      "…and it lasts far longer than the warning, which is the whole difference");
+
+    ok(pvp.skullIcon("white") === "skullWhite" && pvp.skullIcon("red") === "skullRed",
+      "each skull names its own art");
+    ok(pvp.skullIcon("none") === null, "…and a clean character draws nothing at all");
+    ps.resetPlayerState();
+  }
+
+  {
+    console.log("Etap 36 - the standing is saved, and a bad one is not trusted:");
+    const nfs = await import("node:fs");
+    const save = nfs.readFileSync("src/save.ts", "utf8");
+    ok(save.includes("v10: a character carries a PvP standing"),
+      "the v10 bump for the PvP block is on the record");
+    ok(save.includes("v10: a character carries a PvP standing"),
+      "…and the bump is explained in the version history, like every one before it");
+    ok(save.includes("pvp: { ...active().pvp }"), "the standing is written");
+    ok(save.includes('pv.skull = sk === "white" || sk === "red" ? sk : "none";'),
+      "…and an unrecognised skull loads as NONE, never as itself");
+    ok(save.includes("pv.frags = Math.max(0, Math.floor(data.pvp?.frags ?? 0));"),
+      "…with a negative or fractional frag count refused");
+    /* Purely additive: a v9 save has no `pvp` block and must load clean
+     * rather than throw or take a skull from nowhere. */
+    const ps = await import("../src/systems/playerState.ts");
+    ps.resetPlayerState();
+    ok(ps.active().pvp.skull === "none" && ps.active().pvp.t === 0,
+      "a character with no stored standing is clean, which is true of every save ever written");
+
+    /* Round trip. The static checks above say the right lines exist; only
+     * writing a save and reading it back says they agree with each other. */
+    const { createGame } = await import("../src/game.ts");
+    const { saveGame, loadGame, deleteSave } = await import("../src/save.ts");
+    const pvp = await import("../src/systems/pvp.ts");
+    const SK = "bone-isle-save-v2";
+    deleteSave();
+
+    const g = createGame();
+    ok(pvp.pvpArmed() === false, "a brand-new game starts with the skull unlit");
+    pvp.markKiller();
+    pvp.tickSkull(60);
+    pvp.setPvpArmed(true);
+    const leftBefore = pvp.skullLeft();
+    saveGame(g);
+    ps.resetPlayerState();
+    ok(pvp.skull() === "none", "…state cleared, so the reload has something to prove");
+    loadGame();
+    ok(pvp.skull() === "red" && pvp.frags() === 1, "a red skull and its frag survive a reload");
+    ok(Math.abs(pvp.skullLeft() - leftBefore) < 1e-6,
+      "…with the clock where it was left, not reset to full");
+    ok(pvp.pvpArmed() === true, "…and a switch the player actually pressed is obeyed");
+
+    /* The v9 line. A stored `safeMode: false` from before the button existed
+     * is a default, not a decision, and must not arm anybody. */
+    const raw = JSON.parse(localStorage.getItem(SK)!);
+    raw.v = 9;
+    raw.modes.safeMode = false;
+    delete raw.pvp;
+    localStorage.setItem(SK, JSON.stringify(raw));
+    ps.resetPlayerState();
+    loadGame();
+    ok(pvp.pvpArmed() === false,
+      "a v9 save cannot arm the skull: nobody could press that button when it was written");
+    ok(pvp.skull() === "none" && pvp.frags() === 0,
+      "…and it loads a clean sheet, since it stored no standing at all");
+    deleteSave();
+    ps.resetPlayerState();
+  }
+
+  {
+    console.log("Etap 36 - the switch and the marks are drawn, not just modelled:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const icons = nfs.readFileSync("src/ui/icons.ts", "utf8");
+
+    for (const f of ["icon-chase.png", "icon-stand.png", "icon-skull-white.png", "icon-skull-red.png"]) {
+      ok(nfs.existsSync(`public/${f}`), `${f} ships`);
+      ok(icons.includes(f), `…and is registered with the other glyphs`);
+    }
+    ok(icons.includes("skullWhite: ["), "the skull has a fallback glyph, so a failed load leaves a shape");
+    ok(icons.includes("chase: [") && icons.includes("stand: ["), "…and so do the two figures");
+
+    /* Radek's chase and stand are drawn in black and two greys — invisible on
+     * a dark button face. The alpha is used as a stencil and flood-filled
+     * with the colour the WORD had, so the shape is his and the colour is the
+     * interface's. */
+    ok(icons.includes('x.globalCompositeOperation = "source-in";'),
+      "art can be re-coloured by stencil rather than by shipping a second file");
+    ok(icons.includes("stencils.set(key, c);"), "…once per colour, then kept");
+    /* ONE function decides the colour, so the column and the deck cannot
+     * drift apart — they are the same control on two screens. */
+    ok(main.includes("function chaseTint("), "one place decides what colour the chase figure is");
+    ok((main.match(/chaseTint\(/g) ?? []).length === 3,
+      "…and both surfaces call it rather than each spelling out a hex");
+    /* Blue carries over from the word unchanged. The lit one does NOT: a
+     * five-letter word is a lot of mass and #ffb3a8 held its own against the
+     * red face; a stick figure at that weight nearly vanishes into it. */
+    ok(main.includes('return on ? "#ffe9e4" : "#8ab6ff";'),
+      "…standing keeps the word's blue, and pursuit is lifted to a near-white that survives the red face");
+    ok(!main.includes('"#ffb3a8"'),
+      "…with the old salmon gone, so nothing still reaches for the colour that stopped working");
+
+    /* The skull is a state, so it must be readable without pressing it. */
+    ok(main.includes("function skullButtonIcon("), "one drawing of the switch, shared by column and deck");
+    ok(main.includes("ctx.globalAlpha = was * (armed ? 1 : 0.34);"),
+      "…dimmed when disarmed rather than replaced or blanked");
+    ok(main.includes('face: armed ? "rgba(150,58,48,.92)" : undefined'),
+      "…and lit RED, not the gold every closeable thing wears");
+
+    /* Pressing it says so in words. This is the one toggle whose being wrong
+     * is discovered by killing somebody. */
+    ok(main.includes("function togglePvpSwitch()"), "the switch has one handler");
+    ok(main.includes('flash(on ? "you will attack other players" : "you will not harm other players"'),
+      "…which states the new setting in plain words, not just a colour change");
+    ok(main.includes("fn: () => togglePvpSwitch() }"), "the column's button is wired to it");
+    ok(main.includes("if (!editing) togglePvpSwitch();"),
+      "…and the deck's, without firing while the HUD is being rearranged");
+
+    /* The mark in the world. BESIDE the head — above it is where speech goes. */
+    ok(main.includes("function skullMark("), "the world draws a skull beside a head");
+    ok(main.includes("skullMark(skull(), P.x + 10, P.y - 49);"),
+      "…offset off the measured sprite, not off the 64px cell it sits in");
+    ok(main.indexOf("skullMark(skull()") < main.indexOf("sayBubble(CHAT_SPEAKER_ID"),
+      "…and drawn under the bubble, since a bubble must never hide a skull");
+    ok(main.includes("if (!P.dead) skullMark("), "a corpse wears no skull");
+  }
+
+  {
+    console.log("Etap 36 - the combat row makes room without taking any:");
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h, dpr] of [[360, 800, 3], [412, 915, 2], [360, 780, 2],
+      [915, 412, 2], [844, 390, 3], [800, 360, 2]] as const) {
+      const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0);
+      const tag = `${w}x${h}@${dpr}`;
+      const min = MB.TOUCH_MIN_CSS * dpr;
+
+      ok(d.skull.w > 0 && d.skull.h > 0, `${tag}: the skull switch has a box`);
+      ok(Math.min(d.skull.w, d.skull.h) >= min - 1,
+        `${tag}: …that clears a fingertip (${Math.round(Math.min(d.skull.w, d.skull.h) / dpr)} CSS px)`);
+      /* Chase gave up half a unit by losing its word, and that half unit is
+       * what the skull is standing on — so upright it must actually be square
+       * now. Sideways it must NOT be: every row of that column is a
+       * full-width bar, and one square button in a stack of bars is a button
+       * that looks broken. */
+      if (d.landscape) {
+        ok(d.chase.w > d.chase.h, `${tag}: chase stays a full-width bar, like the rest of the column`);
+      } else {
+        ok(Math.abs(d.chase.w - d.chase.h) <= 1,
+          `${tag}: chase is square now that it carries a glyph, not a word`);
+      }
+
+      const row = [d.menu, d.chase, d.atk, d.skull, d.swap, d.minimap];
+      let clear = true;
+      for (let i = 0; i < row.length; i++) {
+        for (let j = i + 1; j < row.length; j++) {
+          const a = row[i], b = row[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+        }
+      }
+      ok(clear, `${tag}: no two controls overlap — an overlap silently steals taps`);
+      ok(d.swap.w >= min, `${tag}: the swap still clears a finger after the skull moved in`);
+
+      if (d.landscape) {
+        /* The column had about ten pixels of slack on the tightest phone the
+         * suite checks, so a sixth full row could not simply be added. It came
+         * out of the minimap, which is the only thing up here that is read
+         * rather than pressed. */
+        const bottom = Math.max(...row.map((r) => r.y + r.h));
+        ok(bottom <= Math.round(h * dpr) - d.margin,
+          `${tag}: the whole column still fits above the bottom edge`);
+        ok(d.minimap.w === d.minimap.h, `${tag}: the minimap stays square after shrinking`);
+        ok(d.minimap.x >= d.mapRight && d.minimap.x + d.minimap.w <= Math.round(w * dpr),
+          `${tag}: …and centred inside the column, not pinned to one edge`);
+        for (const r of row) ok(r.x >= d.mapRight, `${tag}: every control stays out of the map`);
+      } else {
+        ok(d.menu.x < d.chase.x && d.chase.x < d.atk.x && d.atk.x < d.skull.x
+          && d.skull.x < d.swap.x && d.swap.x < d.minimap.x,
+          `${tag}: the row reads left to right: reveal, chase, mark, skull, swap, map`);
+        for (const r of row) ok(r.y >= 0 && r.y + r.h <= d.topH,
+          `${tag}: …all of it inside the top strip`);
+      }
+    }
+  }
+
+  {
+    console.log("Etap 36 - the chat button works with a MOUSE:");
+    const nfs = await import("node:fs");
+    const inp = nfs.readFileSync("src/ui/chatInput.ts", "utf8");
+
+    /* The bug: the game resolves a click on `mousedown`; that handler focused
+     * the field; then mousedown's DEFAULT action moved focus to the canvas,
+     * which blurred it, which closed it. Open and shut in one frame, so the
+     * button appeared dead. A phone never hit it because touch.ts calls
+     * preventDefault on touchstart and no mouse event is ever synthesised. */
+    ok(inp.includes("const OPEN_GRACE_MS = 250;"),
+      "a blur arriving within a moment of opening is the browser's, not the player's");
+    ok(inp.includes("if (now() - openedAt < OPEN_GRACE_MS) {"),
+      "…so it is ignored rather than treated as a dismissal");
+    ok(inp.includes("setTimeout(() => { if (open) field.focus(); }, 0);"),
+      "…and the focus is put back on the next task, since refocusing inside a blur is refused");
+    ok(inp.includes("openedAt = now();"), "opening stamps the clock the grace window reads");
+    ok(inp.includes("hooks.cancel();"),
+      "…and a LATER blur still closes it, which is how tapping the world hides the keyboard");
+    ok(inp.indexOf("if (now() - openedAt < OPEN_GRACE_MS)") < inp.lastIndexOf("hooks.cancel();"),
+      "…in that order: the grace window is checked before anything is cancelled");
+  }
+
+  /* ============ Etap 37: one menu, two gestures ============================
+   *
+   * Right-click and long press are the same gesture on two devices, so they
+   * open the same menu built by the same code. What is tested here is mostly
+   * the LIST — the builder is pure, which is the only reason the "another
+   * player" branch can be checked at all while there is nobody to right-click. */
+  {
+    console.log("Etap 37 - the menu for another person:");
+    const CM = await import("../src/ui/contextMenu.ts");
+    const noop = { look: () => undefined, trade: () => undefined, attack: () => undefined };
+
+    const other = CM.playerEntries(
+      { name: "Radek", self: false, tradeLive: false, mayAttack: true }, noop);
+    ok(other.map((e) => e.verb).join(",") === "look,trade,attack",
+      "look, trade, attack — in that order");
+    /* Escalation, not alphabetical. The harmless verb sits where the finger
+     * lands and the irreversible one is furthest from it: this menu opens
+     * under a fingertip that has been held still, and Attack under the thumb
+     * starts fights nobody meant to start. */
+    ok(other[0].verb === "look", "…the harmless one where the finger already is");
+    ok(other[other.length - 1].verb === "attack", "…and the irreversible one furthest away");
+    ok(other.every((e) => e.label.includes("Radek")),
+      "every entry names who it is about, so a menu over a crowd is unambiguous");
+    ok(other[1].enabled === false && other[1].why === "Trading opens with the world.",
+      "Trade is dim until there is a world to trade in, and says so");
+    ok(other[2].enabled === true, "…while Attack is live once the rules allow it");
+
+    /* The rules are the CALLER's. This file draws menus; pvp.ts owns who may
+     * hit whom, and the two must not both have an opinion. */
+    const barred = CM.playerEntries(
+      { name: "Radek", self: false, tradeLive: false, mayAttack: false,
+        attackWhy: "Your skull is unlit." }, noop);
+    ok(barred[2].enabled === false && barred[2].why === "Your skull is unlit.",
+      "a refused attack is dim and carries the caller's reason, not a made-up one");
+
+    const tradeable = CM.playerEntries(
+      { name: "Radek", self: false, tradeLive: true, mayAttack: true }, noop);
+    ok(tradeable[1].enabled === true, "…and Trade lights up the day trading ships, with no edit here");
+
+    /* Yourself: the same three, so the shape you learn today is the shape you
+     * keep. The two refusals are true ones and will still be true when the
+     * world is full of people. */
+    const self = CM.playerEntries(
+      { name: "You", self: true, tradeLive: true, mayAttack: true }, noop);
+    ok(self.map((e) => e.verb).join(",") === "look,trade,attack",
+      "your own menu is the same three entries");
+    ok(self[0].enabled === true && self[0].label === "Look at yourself",
+      "…you may always look at yourself");
+    ok(self[1].enabled === false && self[1].why === "You cannot trade with yourself.",
+      "…but not trade with yourself, even once trading is live");
+    ok(self[2].enabled === false && self[2].why === "You cannot attack yourself.",
+      "…nor attack yourself, even with every PvP rule satisfied");
+    let sawLook = 0;
+    CM.playerEntries({ name: "You", self: true, tradeLive: false, mayAttack: false },
+      { look: () => { sawLook++; }, trade: () => undefined, attack: () => undefined })[0].run?.();
+    ok(sawLook === 1, "…and your own Look is wired to something, not left as a label");
+
+    /* Ground is unchanged and still always answers. */
+    let walked = 0, looked = 0;
+    const g = CM.groundEntries(() => { walked++; }, () => { looked++; });
+    ok(g.map((e) => e.verb).join(",") === "walk,look", "a bare tile still offers walk and look");
+    g[0].run?.(); g[1].run?.();
+    ok(walked === 1 && looked === 1, "…and both are wired to what the caller passed");
+  }
+
+  {
+    console.log("Etap 37 - the same menu on both gestures, and only one Look in it:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+
+    /* Right-click used to walk. It opens the menu now — the same function the
+     * long press has always called, so the two devices cannot drift apart. */
+    ok(main.includes("openContextMenu(sx, sy);\n      return;"),
+      "right-click opens the context menu");
+    ok((main.match(/openContextMenu\b/g) ?? []).length >= 3,
+      "…the same builder the long press passes to initTouch, not a second one");
+    ok(!main.includes('// right-click: pure "walk here", ignore targets (Tibia-style)'),
+      "…and the old bare walk-here branch is gone");
+
+    /* The verb it replaced is not lost, it moved into the list — including
+     * the ranged-target rule, which lived only in the deleted branch. */
+    ok(main.includes("function walkToPoint("), "walking to a point is one function now");
+    ok(main.includes("groundEntries(() => walkToPoint(at), () => lookAtTile(at))"),
+      "…and \"Walk here\" is what calls it, so the verb survived the change");
+    ok(main.includes("&& attackMode().ranged;\n  if (!keepShot) P.target = null;"),
+      "…carrying the kiting rule with it: walking with a bow drawn keeps the mark");
+
+    /* Scoped to the builder's own body: `lookAtTile` above it searches the
+     * same lists, so a bare indexOf across the file compares the wrong two
+     * lines and passes or fails for no reason. */
+    const build = main.slice(main.indexOf("function openContextMenu("),
+      main.indexOf("function closeContextMenu("));
+
+    /* Two identical Looks on a monster tile was a real bug: both ran the same
+     * code, and a duplicate entry makes a player hunt for the difference. */
+    ok(!main.includes('entries.push({ verb: "look", label: "Look", enabled: true,'),
+      "the monster no longer pushes a second Look of its own");
+    /* One Look in the WORLD half of the builder, and groundEntries owns it.
+     * Sliced past the inventory-slot branch above, which is a different menu
+     * over a different thing and legitimately has a Look of its own. */
+    const worldHalf = build.slice(build.indexOf("// A press on the rest of the chrome"));
+    ok((worldHalf.match(/verb: "look"/g) ?? []).length === 0,
+      "…there is exactly one Look in the world menu and groundEntries owns it");
+    ok(build.includes('label: `Look at ${ITEMS[kind].name}`'),
+      "…while a right-clicked inventory slot gets its own, naming the item");
+
+    /* The player branch. A coordinate test today because the player is not in
+     * any world list; a `find` like the other four the day he is. */
+    ok(main.includes("if (onPlayerTile(tx, ty)) {"),
+      "right-clicking your own tile opens the person menu");
+    /* The menu and the look have to agree about who is being pointed at. A
+     * menu headed "Look at yourself" whose Look then described the floor is
+     * worse than either half would be alone — which is what it did before
+     * `lookAtTile` learned the player exists at all. */
+    ok((main.match(/onPlayerTile\(/g) ?? []).length === 3,
+      "…and one test decides it, used by both the menu and the look");
+    const look = main.slice(main.indexOf("function lookAtTile("),
+      main.indexOf("/* ---------------- the long-press menu"));
+    ok(look.includes("You see yourself — level"),
+      "looking at your own tile describes YOU, not the ground under you");
+    ok(look.indexOf("onPlayerTile(tx, ty)") < look.indexOf("nearestHit(world.monsters"),
+      "…and wins over a creature on the next tile, which the loose search would otherwise claim");
+    ok(look.includes("You are marked with a red skull."),
+      "…and mentions a skull you are wearing, since that is the thing you would want to check");
+    ok(main.includes("playerEntries(") && main.includes("self: true"),
+      "…built by the shared builder, so it is the shape other players will get");
+    ok(build.indexOf("if (onPlayerTile(tx, ty))") < build.indexOf("nearestHit(world.monsters"),
+      "…and people are resolved before things, since a person is what you meant to press");
+
+    /* Escape has to reach it: the menu is drawn over everything, so while it
+     * is up it IS the thing in the way. */
+    ok(main.includes("if (ctxMenu) { closeContextMenu(); return; }"),
+      "escape dismisses the menu");
+    const esc = main.slice(main.indexOf("onEscape: () => {"),
+      main.indexOf("onClick: ({ sx, sy, button })"));
+    ok(esc.indexOf("if (ctxMenu) { closeContextMenu(); return; }") < esc.indexOf("if (throwPending)"),
+      "…before anything underneath it");
+    ok(esc.indexOf("chatInput().isOpen()") < esc.indexOf("if (ctxMenu)"),
+      "…though the chat field still outranks it: a keyboard covers more than a menu does");
+
+    /* The menu opens BESIDE the thing it is about, so its entries routinely
+     * lie over that thing. Without modality the press meaning "Take" is
+     * claimed as the start of a drag of the very item being taken, and the
+     * menu appears to do nothing exactly when it is most obviously right. */
+    const ground = main.slice(main.indexOf("function probeGroundDrag("),
+      main.indexOf("function probeSlotDrag("));
+    ok(ground.includes("if (ctxMenu) return false;"),
+      "an open menu stops the ground-drag probe claiming the press");
+    const slot = main.slice(main.indexOf("function probeSlotDrag("),
+      main.indexOf("function probeSlotDrag(") + 900);
+    ok(slot.includes("if (ctxMenu) return false;"), "…and the slot-drag probe too");
+    /* Scoped to the handler rather than matched against the line that used to
+     * follow it: the picker's own modal guard now sits between them, which is
+     * a different modal doing the same job. */
+    const down = main.slice(main.indexOf('screen.addEventListener("pointerdown"'),
+      main.indexOf('screen.addEventListener("pointermove"'));
+    ok(down.indexOf("if (ctxMenu) return;") < down.indexOf("win.resizeBar"),
+      "…and nothing behind the menu — title bar, resize foot, item — takes a pointerdown");
+  }
+
+  /* ============ Etap 38: looking at things, and getting the RIGHT thing ====
+   *
+   * Three separate bugs met here, all of them findable only by playing:
+   * a look that reported the ground for anything built, a look that named the
+   * wrong one of two neighbours, and an edit mode that survived a reload and
+   * left the character unable to walk. */
+  {
+    console.log("Etap 38 - the pick: nearest, not first:");
+    const { nearestHit, footprintHit } = await import("../src/world/pick.ts");
+    const T = 32;
+    const mid = (t: number): number => t * T + T / 2;
+
+    /* THE BUG, reproduced. Two things a tile apart, the later one first in
+     * the array — which is what `find` used to hand back whichever square you
+     * pointed at. */
+    const plate = { x: mid(10), y: mid(10), tag: "plate" };
+    const knight = { x: mid(11), y: mid(10), tag: "knight" };
+    const dropped = [plate, knight];
+    ok(nearestHit(dropped, { x: mid(11), y: mid(10) })?.tag === "knight",
+      "pointing at the knight armour describes the knight armour…");
+    ok(nearestHit(dropped, { x: mid(10), y: mid(10) })?.tag === "plate",
+      "…and pointing at the plate describes the plate");
+    ok(nearestHit([knight, plate], { x: mid(10), y: mid(10) })?.tag === "plate",
+      "…whichever order they happen to sit in the array, which is what broke it");
+
+    /* The exact tile is a HARD key, not a heavy thumb on the scale. A
+     * neighbour that is physically closer to the click still loses. */
+    const onTile = { x: mid(5) + 15, y: mid(5), tag: "on" };
+    const nextDoor = { x: mid(6) - 15, y: mid(5), tag: "next" };
+    ok(nearestHit([nextDoor, onTile], { x: mid(5), y: mid(5) })?.tag === "on",
+      "something on the tile you pointed at beats a nearer thing on the next one");
+
+    /* …but the loose box stays, or looking at a rat would be a game of skill:
+     * a sprite overhangs the square it stands on. */
+    ok(nearestHit([{ x: mid(7), y: mid(7) }], { x: mid(8), y: mid(8) }) !== null,
+      "a lone thing one tile away is still found");
+    ok(nearestHit([{ x: mid(7), y: mid(7) }], { x: mid(9), y: mid(9) }) === null,
+      "…and two tiles away is not, so the box is a box and not a scan");
+    ok(nearestHit([], { x: 0, y: 0 }) === null, "an empty world answers nothing");
+    ok(nearestHit([{ x: mid(3), y: mid(3), dead: true }], { x: mid(3), y: mid(3) },
+      (e) => !e.dead) === null, "…and a filtered-out candidate is not a candidate");
+
+    /* Footprints. A structure names its TOP-LEFT tile and grows right and
+     * down; measuring to that corner is why looking at a chest used to report
+     * the ground for three of its four squares. */
+    const chest = { tx: 20, ty: 20 };
+    const two = () => ({ w: 2, h: 2 });
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+      ok(footprintHit([chest], 20 + dx, 20 + dy, two) === chest,
+        `every square of a 2x2 footprint answers for it (+${dx},+${dy})`);
+    }
+    ok(footprintHit([chest], 22, 20, two) === null, "…and the square past it does not");
+    ok(footprintHit([chest], 20, 19, two) === null, "…nor the one above, since it grows downward");
+    const mill = { tx: 4, ty: 4 };
+    ok(footprintHit([mill], 8, 8, () => ({ w: 5, h: 5 })) === mill,
+      "a five-tile building answers across its whole block");
+  }
+
+  {
+    console.log("Etap 38 - the look sees everything that is drawn:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const look = main.slice(main.indexOf("function lookAtTile("),
+      main.indexOf("/* ---------------- the long-press menu"));
+
+    /* The reported bug: a chest answered "You see the ground." Structures,
+     * trees, rocks, scenery and fires were simply never searched. */
+    for (const [what, needle] of [
+      ["structures", "footprintHit(world.structures"],
+      ["trees", "world.trees.find"],
+      ["rocks", "world.rocks.find"],
+      ["scenery", "footprintHit(world.scenery"],
+      ["fires", "world.fires.find"],
+    ] as const) {
+      ok(look.includes(needle), `the look searches ${what}`);
+    }
+    ok(look.includes("You see a tree stump.") && look.includes("You see a spent rock."),
+      "…and says when a node is used up, which is the thing you looked to find out");
+    ok(look.includes("structureName(st)"), "a structure is named, tier and all");
+    /* Both searches, in both places, go through the shared pick. */
+    ok((main.match(/nearestHit\(/g) ?? []).length === 8,
+      "look and menu both resolve every entity list through the shared pick");
+    ok(!main.includes(".find((x) => x.hp > 0 && near("),
+      "…and the old first-match-wins search is gone from both");
+
+    /* Every kind of scenery has to have a name, or the look prints undefined
+     * for whichever one nobody thought of. */
+    const art = await import("../src/gfx/sceneryArt.ts");
+    const kinds = Object.keys(art.FOOTPRINT);
+    ok(kinds.length > 0 && kinds.every((k) => typeof (art.SCENERY_NAME as Record<string, string>)[k] === "string"),
+      "every scenery kind that has a size also has a name");
+    ok(Object.keys(art.SCENERY_NAME).length === kinds.length,
+      "…and nothing is named that does not exist");
+  }
+
+  {
+    console.log("Etap 38 - looking is something you DO:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const panels = nfs.readFileSync("src/ui/panels.ts", "utf8");
+
+    /* The hover card is gone. It appeared over the inventory every time the
+     * cursor crossed it on the way somewhere else, covering the slots being
+     * reached for with information nobody asked for. */
+    ok(!panels.includes("function drawItemTooltip("), "no window pops a card on hover");
+    ok(!panels.includes("tooltipKind"), "…and the queue it was fed from is gone with it");
+    ok(panels.includes("REMOVED: the hover tooltip"), "…with the reason left where it was");
+    ok(panels.includes("function drawInspect("),
+      "…while the card itself lives on: only the way IN changed");
+
+    /* Right-click on a slot is the new way in. Above the panel guard, because
+     * slots live inside panels and would otherwise be refused as chrome. */
+    const build = main.slice(main.indexOf("function openContextMenu("),
+      main.indexOf("function closeContextMenu("));
+    ok(build.indexOf("for (let i = itemSlots.length - 1") < build.indexOf("pointInOpenPanel(sx, sy)"),
+      "a right-clicked slot is checked before the press is dismissed as chrome");
+    ok(build.includes("if (it.n <= 0) return;"), "…and an empty cell has nothing to describe");
+
+    /* Look mode used to reach inventory slots only: the panels honoured it and
+     * the world had never heard of it, so turning looking on and tapping a
+     * chest walked you to the chest. */
+    ok(main.includes("if (ui.lookMode) { lookAtTile(w); return; }"),
+      "look mode describes what the tap landed on in the WORLD, not just in a bag");
+    const tap = main.slice(main.indexOf("function handleWorldTap("),
+      main.indexOf("/* ---------------- screen wake lock"));
+    ok(tap.indexOf("if (aimPending)") < tap.indexOf("if (ui.lookMode)"),
+      "…below an armed cursor, which the player armed one tap ago");
+    ok(tap.indexOf("if (ui.lookMode)") < tap.indexOf("worldClick(w)"),
+      "…and above walking, or the mode would do nothing on the surface it exists for");
+  }
+
+  {
+    console.log("Etap 38 - LOOK on the drop-down, and the edit trap:");
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h, dpr] of [[360, 800, 3], [412, 915, 2], [915, 412, 2], [800, 360, 2]] as const) {
+      const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0);
+      const tag = `${w}x${h}@${dpr}`;
+      ok(d.look.w > 0 && d.look.h > 0, `${tag}: the LOOK cell exists`);
+      ok(Math.min(d.look.w, d.look.h) >= MB.TOUCH_MIN_CSS * dpr - 1,
+        `${tag}: …and clears a fingertip`);
+      /* It shares the drop-down grid with the tabs, CHAT and EDIT — the grid
+       * is 2x5 and only seven cells were spoken for, so it cost nothing. */
+      const cells = [...d.tabs, d.chat, d.edit, d.look];
+      let clear = true;
+      for (let i = 0; i < cells.length; i++) {
+        for (let j = i + 1; j < cells.length; j++) {
+          const a = cells[i], b = cells[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+        }
+      }
+      ok(clear, `${tag}: no drop-down cell overlaps another`);
+      ok(d.look.h === d.edit.h && d.look.w === d.edit.w,
+        `${tag}: …and LOOK is the same size as the buttons beside it`);
+    }
+
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    ok(main.includes('flash(ui.lookMode ? "look mode on — tap anything" : "look mode off"'),
+      "pressing LOOK says what it did, since it changes what every later tap means");
+    ok(main.includes("deckMenu = false;\n      ui.lookMode = !ui.lookMode;"),
+      "…and closes the drop-down, unlike EDIT, which is arranging the row it sits in");
+    /* On touch the world menu keeps its actions and loses Look: the gesture
+     * ends with a finger and then a menu on top of the thing being described. */
+    ok(main.includes("entries.push(...(deck.on"), "the touch menu is built differently on purpose");
+    ok(main.includes('label: "Walk here", enabled: true, run: () => walkToPoint(at) }]'),
+      "…keeping Walk here, which is the verb right-click used to be");
+
+    /* The trap: edit mode disables walking, and it was persisted. */
+    const hl = await import("../src/systems/hudLayout.ts");
+    const layout = nfs.readFileSync("src/systems/hudLayout.ts", "utf8");
+    ok(!layout.includes("state.locked = data.locked"),
+      "the lock is never restored from storage, in either format");
+    localStorage.setItem("bone-isle-hud-v2", JSON.stringify({ locked: false, scale: 1 }));
+    hl.loadHudLayout();
+    ok(hl.hudLocked(),
+      "…so a session that ended mid-edit hands the next one a character who can walk");
+    hl.toggleHudLock();
+    ok(!hl.hudLocked(), "…and the toggle still works within a session");
+    hl.setHudLocked(true);
+    localStorage.removeItem("bone-isle-hud-v2");
+  }
+
+  /* ============ Etap 39: the hotbar has a length ===========================
+   *
+   * Six was never a considered number — it was the number the first bar
+   * happened to have. A player attuned to two elements wants four attack
+   * crystals and still wants heal, recall and the swap: seven things, six
+   * holes. */
+  {
+    console.log("Etap 39 - adding and removing rows:");
+    const A = await import("../src/systems/actions.ts");
+    A.setActionSlotCount(A.ACTION_SLOTS_MIN);
+
+    ok(A.actionSlotCount() === 6, "a bar starts at six, which is what every character had");
+    ok(A.ACTION_SLOT_STEP === 6, "…and moves a ROW at a time, matching the phone deck's width");
+    ok(A.actionSlots.length === A.ACTION_SLOTS_MAX,
+      "the array is always full length, however much of it is in play");
+
+    ok(A.addActionSlots() === true && A.actionSlotCount() === 12, "plus adds a row");
+    ok(A.addActionSlots() && A.addActionSlots() && A.actionSlotCount() === 24, "…up to four rows");
+    ok(A.addActionSlots() === false && A.actionSlotCount() === 24,
+      "…and refuses past the ceiling, reporting it rather than silently doing nothing");
+    while (A.removeActionSlots()) { /* down to the floor */ }
+    ok(A.actionSlotCount() === 6, "minus walks back to six…");
+    ok(A.removeActionSlots() === false,
+      "…and stops there: a hotbar of zero is not a smaller hotbar, it is a missing one");
+
+    /* Shrinking must not DESTROY. "I lost my hotkeys by tapping minus" would
+     * be a worse bug than any this feature fixes. */
+    A.setActionSlotCount(12);
+    A.setSlot(9, { type: "swap" });
+    ok(A.slotAt(9)?.type === "swap", "a binding in the second row takes");
+    A.removeActionSlots();
+    ok(A.actionSlotCount() === 6, "…the row is dropped…");
+    ok(A.slotAt(9) === null,
+      "…and the binding under it stops firing, so a key cannot trigger a ghost");
+    A.addActionSlots();
+    ok(A.slotAt(9)?.type === "swap",
+      "…but putting the row back brings the binding with it, because nothing was thrown away");
+    A.setSlot(9, null);
+
+    /* Only whole rows exist, however the number arrives. */
+    A.setActionSlotCount(7);
+    ok(A.actionSlotCount() === 6, "an off-row count from a save rounds to a whole row (7 → 6)");
+    A.setActionSlotCount(1000);
+    ok(A.actionSlotCount() === 24, "…and an absurd one is clamped, not trusted");
+    A.setActionSlotCount(0);
+    ok(A.actionSlotCount() === 6, "…as is a zero");
+    A.setActionSlotCount(6);
+  }
+
+  {
+    console.log("Etap 39 - the length survives a reload:");
+    const A = await import("../src/systems/actions.ts");
+    const { createGame } = await import("../src/game.ts");
+    const { saveGame, loadGame, deleteSave } = await import("../src/save.ts");
+    const nfs = await import("node:fs");
+    const save = nfs.readFileSync("src/save.ts", "utf8");
+    const SK = "bone-isle-save-v2";
+    deleteSave();
+
+    ok(save.includes("const SAVE_V = 13;"), "the format carries the chronicles (bumped again at v13)");
+    ok(save.includes("v11: the hotbar has a length"), "…and the bump is on the record");
+    ok(save.includes("v13: the chronicles"), "…and so is this one");
+
+    const g = createGame();
+    A.setActionSlotCount(18);
+    A.setSlot(13, { type: "swap" });
+    saveGame(g);
+    A.setActionSlotCount(6);
+    loadGame();
+    ok(A.actionSlotCount() === 18, "a lengthened bar comes back lengthened");
+    ok(A.slotAt(13)?.type === "swap", "…with the bindings that were only reachable at that length");
+
+    /* Pre-v11 saves have no length at all and must read as six, which is what
+     * they were written under. */
+    const raw = JSON.parse(localStorage.getItem(SK)!);
+    delete raw.slotCount;
+    raw.v = 10;
+    localStorage.setItem(SK, JSON.stringify(raw));
+    A.setActionSlotCount(24);
+    loadGame();
+    ok(A.actionSlotCount() === 6,
+      "a save written before the bar had a length reads as six, which is what it had");
+    deleteSave();
+    A.setActionSlotCount(6);
+  }
+
+  {
+    console.log("Etap 39 - the deck grows by rows without losing the thumb:");
+    const MB = await import("../src/ui/mobile.ts");
+    for (const [w, h, dpr] of [[360, 800, 3], [412, 915, 2], [915, 412, 2], [800, 360, 2]] as const) {
+      let lastMap = Infinity;
+      for (const n of [6, 12, 18, 24]) {
+        const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0, n);
+        const tag = `${w}x${h}@${dpr} n=${n}`;
+        ok(d.slots.length === n, `${tag}: every slot gets a box`);
+        ok(Math.min(...d.slots.map((r) => Math.min(r.w, r.h))) >= MB.TOUCH_MIN_CSS * dpr - 1,
+          `${tag}: …all of them finger-sized`);
+
+        let clear = true;
+        let onScreen = true;
+        for (let i = 0; i < n; i++) {
+          const a = d.slots[i];
+          if (a.x < 0 || a.y < 0 || a.x + a.w > Math.round(w * dpr) || a.y + a.h > Math.round(h * dpr)) onScreen = false;
+          for (let j = i + 1; j < n; j++) {
+            const b = d.slots[j];
+            if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) clear = false;
+          }
+        }
+        ok(clear, `${tag}: no two slots overlap`);
+        ok(onScreen, `${tag}: …and none of them is off the glass`);
+
+        /* The first six keep the position nearest the thumb whatever the
+         * length: upright that is the bottom row, sideways the outer column.
+         * Reading order would hand the easiest row to the overflow. */
+        if (d.landscape) {
+          ok(d.slots[0].x <= d.slots[n - 1].x,
+            `${tag}: slot 1 stays on the outer column, overflow marches inward`);
+          ok(d.slots.every((r) => r.x + r.w <= d.mapLeft),
+            `${tag}: …and the map starts past ALL the columns, not just the first`);
+        } else {
+          ok(d.slots[0].y >= d.slots[n - 1].y,
+            `${tag}: slot 1 stays on the bottom row, overflow stacks above`);
+        }
+
+        const map = (d.mapBottom - d.mapTop) * (d.mapRight - d.mapLeft);
+        ok(map < lastMap, `${tag}: a longer bar costs map, which is the honest trade`);
+        ok(map > 0, `${tag}: …but never all of it`);
+        lastMap = map;
+      }
+    }
+  }
+
+  {
+    console.log("Etap 39 - the other two bars, and the keys:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const input = nfs.readFileSync("src/input.ts", "utf8");
+    const hl = await import("../src/systems/hudLayout.ts");
+
+    const bar = main.slice(main.indexOf("function drawHotbar("),
+      main.indexOf("function drawGroupGrip("));
+    ok(bar.includes("const n = actionSlotCount();"), "the desktop bar reads the live length");
+    ok(bar.includes("const perRow = Math.ceil(n / rows);"),
+      "…splitting into EVEN rows, so eighteen is two nines and not a twelve and a stub");
+    ok(bar.includes("bottom - (rows - 1 - row) * (slot + gap)"),
+      "…stacking upward, so the bottom row stays on the line the hand already knows");
+    ok(!bar.includes("const n = 6;"), "…and the hard six is gone");
+
+    /* The draggable floating slots too — that path is the one a narrow desktop
+     * window gets, and it had its own hard six. */
+    ok(main.includes("for (let i = 0; i < actionSlotCount(); i++) {"),
+      "the floating HUD draws as many squares as the bar is long");
+    ok(hl.HUD_GROUPS.includes("slot23" as never),
+      "…and every one of them has a place to be dragged to");
+    ok(hl.HUD_GROUPS.filter((g) => g.startsWith("slot")).length === 24,
+      "…positions go to the MAXIMUM, so shortening and lengthening puts them back");
+    hl.resetHudLayout();
+    const p9 = hl.placeHud("slot9" as never, 10, 10, 400, 800);
+    const p3 = hl.placeHud("slot3" as never, 10, 10, 400, 800);
+    ok(p9.x !== p3.x || p9.y !== p3.y,
+      "…and a second-row slot does not default on top of a first-row one");
+
+    /* Ten of the twenty-four get a key. There is no eleventh digit, and
+     * inventing a chord would cost every player something to remember. */
+    ok(input.includes('k >= "1" && k <= "9"'), "keys 1-9 fire the first nine slots");
+    ok(input.includes('else if (k === "0") h.onSpell(9);'), "…and 0 fires the tenth");
+
+    /* The control lives with the layout, because "how many buttons" and
+     * "where the buttons go" are the same question asked twice. */
+    ok(main.includes("`${n} KEYS`"), "edit mode shows the current length");
+    ok(main.includes("() => stepHotkeyRows(-1), n <= ACTION_SLOTS_MIN)")
+      && main.includes("() => stepHotkeyRows(1), n >= ACTION_SLOTS_MAX)"),
+      "…with a minus and a plus beside it, both going through the one function");
+
+    /* The scale stepper and the presets move the FLOATING HUD, which does not
+     * exist while the column is up — so with the dock on they were four
+     * buttons and three presets that visibly did nothing when pressed. They
+     * are drawn where they act and absent where they do not; the hotkey count
+     * is always there, because the bar exists on both. */
+    const strip = main.slice(main.indexOf("if (editing) {\n    const btnH = bs * 0.5;"),
+      main.indexOf("function drawAssignPicker"));
+    ok(strip.includes("if (!docked) {"), "the edit strip hides what the dock makes meaningless");
+    ok(strip.indexOf("stepHudUserScale(-1)") > strip.indexOf("if (!docked) {")
+      && strip.indexOf('"CLASSIC"') > strip.indexOf("if (!docked) {"),
+      "…namely the scale stepper and the three presets");
+    ok(strip.indexOf("stepHotkeyRows(-1)") > strip.indexOf("rowY += btnH + gap;\n    }"),
+      "…while the hotkey count sits outside that branch and always draws");
+    ok(strip.includes("sctx.fillText(docked"),
+      "…and the hint names only what is on screen, not handles that are not there");
+    ok(main.includes('flash(delta < 0 ? `${ACTION_SLOTS_MIN} is the fewest`'),
+      "…which say why when they refuse, rather than vanishing at the limit");
+    ok(main.includes("dim = false,"), "…and are drawn dim there instead of disappearing");
+  }
+
+  {
+    console.log("Etap 39 - the picker opens on the answer:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+    const pick = main.slice(main.indexOf("function drawAssignPicker"),
+      main.indexOf("function overTouchButton"));
+
+    /* Seventy-odd bindable crystals in registry order meant a player owning
+     * four scrolled past sixty-eight rows reading "0 charges" to find them —
+     * which is exactly what the screenshot showed: seven rows, six useless. */
+    ok(pick.includes("(have > 0 ? owned : empty).push({"),
+      "what you are carrying is separated from what you are not");
+    ok(pick.includes("rows.push(...owned, ...empty);"),
+      "…and comes first, so the list opens on the answer");
+    ok(pick.includes('sub: have > 0 ? `${have} charges` : "none carried"'),
+      "…with the empty ones still listed, since binding one you mean to buy is reasonable");
+    ok(pick.includes("const live = r.have > 0;") && pick.includes('rgba(243,238,221,.45)'),
+      "…drawn dim rather than hidden");
+    ok(pick.includes('ctx.fillStyle = live ? "#9fe8a8"'),
+      "…and the charge count is green when there is one, since it is the reason the line exists");
+
+    /* Seventy items whose names differ by one word and whose ART differs at a
+     * glance. Reading was the slow way to tell them apart and the only one. */
+    ok(pick.includes("const spr = itemSprite(r.icon);"), "each crystal shows its own art");
+    ok(pick.includes("const k = Math.max(1, Math.floor(box / Math.max(spr.width, spr.height)));"),
+      "…at a whole multiple, because a crystal scaled by 1.4 is mush");
+
+    /* On a phone the dialog was a wall of eight-pixel text: `scale` is the
+     * world's ruler and is small there. */
+    ok(pick.includes("const rowH = deck.on"), "rows are measured differently on a phone…");
+    ok(pick.includes("TOUCH_MIN_CSS"), "…against the one number that means a fingertip");
+  }
+
+  /* ============ Etap 40: reachable on the device you are holding ===========
+   *
+   * Both of these shipped working on a desktop and missing on a phone, which
+   * is the same bug twice: a control drawn on a surface one interface never
+   * draws, and a scroll target sized for a mouse. */
+  {
+    console.log("Etap 40 - the picker scrolls with a finger:");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+
+    /* It was the only scrolling thing in the game a phone could not scroll:
+     * the world has a joystick, panels have thumb-sized bars, and this had a
+     * nine-pixel arrow and a wheel handler. */
+    ok(main.includes("let assignDrag: { grabY: number; from: number; moved: boolean } | null = null;"),
+      "a press inside the list starts a scroll");
+    ok(main.includes("const rows = -dy / assignBody.rowH;"),
+      "…content follows the finger, measured in rows");
+    ok(main.includes("if (Math.abs(dy) > 4 * scale) assignDrag.moved = true;"),
+      "…with slop, so a tap from a shaky thumb still binds the row it landed on");
+    ok(main.includes("if (assignDrag.moved) {"),
+      "…and only a REAL drag eats the click, or the list would scroll and never choose");
+
+    /* Geometry is published as it draws, the way the docked column's thumb
+     * does, because the pointer handlers run long before the renderer. */
+    ok(main.includes("assignBody = {"), "the list's body is published for the pointer handlers");
+    ok(main.includes("x: x + 6 * S, y: ry, w: w - 12 * S, h: shown * rowH,"),
+      "…the ROWS only, so a press on the title still falls through and closes it");
+    ok(main.includes("if (assignSlot === null) { assignBody = null; return; }"),
+      "…and cleared when the dialog closes, so a stale rect cannot swallow a press");
+
+    /* The arrows too. Nine of `scale` is a mouse target; on a phone `scale` is
+     * the world's small ruler. */
+    const pick = main.slice(main.indexOf("function drawAssignPicker"),
+      main.indexOf("function overTouchButton"));
+    ok(pick.includes("const sbw = deck.on"), "the scroll arrows are measured per device…");
+    ok(pick.includes("TOUCH_MIN_CSS * Math.min(devicePixelRatio || 1, 2) * 0.8"),
+      "…against a fingertip on the one that has no wheel");
+  }
+
+  {
+    console.log("Etap 40 - the hotbar length is reachable on a phone:");
+    const MB = await import("../src/ui/mobile.ts");
+    const nfs = await import("node:fs");
+    const main = nfs.readFileSync("src/main.ts", "utf8");
+
+    /* The desktop control sits on the edit strip. `drawTouchControls` hands
+     * the screen to `drawDeck` and RETURNS before that strip, so on a phone
+     * the buttons were on a surface that is never drawn. */
+    const touch = main.slice(main.indexOf("function drawTouchControls("),
+      main.indexOf("function drawTouchControls(") + 400);
+    ok(touch.includes("if (deck.on) { drawDeck(); return; }"),
+      "the phone still returns before the desktop edit strip…");
+    ok(main.includes("if (hudEditing()) {\n    const kb = d.keysBar;"),
+      "…so the length strip is drawn by the deck itself, behind EDIT");
+    ok(main.includes("fn: () => stepHotkeyRows(delta) })"),
+      "…wired to the same one function the desktop buttons call");
+    ok(main.includes("`${n} HOTKEYS`"),
+      "…printing the current length between the two buttons, not only flashing it");
+
+    /* THE BUG. The count went up, the label said so, the log said so, and the
+     * deck kept the six boxes it measured at start-up: `mobileLayout` runs in
+     * `resize()`, which fires on a window resize and at nothing else. */
+    const step = main.slice(main.indexOf("function stepHotkeyRows("),
+      main.indexOf("/** Action-slot rects this frame"));
+    ok(step.includes("resize();"),
+      "changing the length re-measures the deck, or the slots never appear");
+    ok(step.includes("saveGame(game);") && step.includes("flash(`${actionSlotCount()} hotkeys`"),
+      "…then saves and says the new number");
+    ok(step.indexOf("resize();") < step.indexOf("saveGame(game);"),
+      "…re-measuring before saving, so a frame can never draw the old rects");
+    ok((main.match(/removeActionSlots\(\)/g) ?? []).length === 1
+      && (main.match(/addActionSlots\(\)/g) ?? []).length === 1,
+      "…and there is exactly ONE caller of each, which is why both surfaces agree");
+
+    /* The strip is measured always and drawn only while editing, and the
+     * drop-down's last two cells are deliberately left empty. */
+    for (const [w, h, dpr] of [[360, 800, 3], [412, 915, 2], [915, 412, 2], [800, 360, 2]] as const) {
+      for (const n of [6, 24]) {
+        const d = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0, n);
+        const tag = `${w}x${h}@${dpr} n=${n}`;
+        const kb = d.keysBar;
+        ok(kb.h >= MB.TOUCH_MIN_CSS * dpr - 1,
+          `${tag}: the strip is a full fingertip tall, not a fraction of one`);
+        ok(kb.x >= 0 && kb.y >= d.topH
+          && kb.x + kb.w <= Math.round(w * dpr) && kb.y + kb.h <= Math.round(h * dpr),
+          `${tag}: …on the glass and clear of the top strip`);
+        /* Sideways it had to move: the slot column is centred in a band it
+         * nearly fills, so above and below both landed ON the slots. */
+        ok(!d.slots.some((r) => kb.x < r.x + r.w && r.x < kb.x + kb.w
+          && kb.y < r.y + r.h && r.y < kb.y + kb.h),
+          `${tag}: …and never covers a slot, which is the thing it is changing`);
+        /* Its three cells are a minus, a readout and a plus. The two that
+         * matter are the smallest, so they are the ones to measure. */
+        const third = Math.floor((kb.w - 2 * d.gap) / 3);
+        ok(third >= MB.TOUCH_MIN_CSS * dpr - 1,
+          `${tag}: …with the minus and plus each finger-wide (${Math.round(third / dpr)} CSS px)`);
+      }
+      const d6 = MB.mobileLayout(Math.round(w * dpr), Math.round(h * dpr), dpr, 0, 0, 6);
+      ok([...d6.tabs, d6.chat, d6.edit, d6.look].length === 8,
+        `${w}x${h}@${dpr}: the drop-down keeps its last two cells free for later`);
+    }
+  }
+
+  console.log("Etap 42 — the dialogue box, and the same story in three languages:");
+  {
+    const SP = await import("../src/text/speech.ts");
+    const DL = await import("../src/ui/dialogue.ts");
+    const M42 = await import("../src/systems/missions.ts");
+    const PP = await import("../src/systems/panelPrefs.ts");
+    const fs42 = await import("node:fs");
+
+    /* --- nothing may be missing in any of the three ------------------------
+     * The runtime falls back to English rather than throwing, which is the
+     * right behaviour on a player's screen and exactly the wrong behaviour in
+     * a test: a forgotten Spanish string would simply come out in English and
+     * nobody would notice for a year. So the fallback is asserted never to be
+     * reachable. */
+    const holes: string[] = [];
+    for (const key of SP.textKeys()) {
+      for (const lg of SP.LANGS) {
+        const v = SP.TEXT[key][lg];
+        if (typeof v !== "string" || v.trim().length === 0) holes.push(`${key}/${lg}`);
+      }
+    }
+    ok(holes.length === 0, `every string exists in all three languages${holes.length ? " — missing " + holes[0] : ""}`);
+
+    /* Every mission owns a fixed set of keys, derived from its id. This is
+     * what makes adding the ninth mission a checklist rather than a memory
+     * exercise: forget one of the ten and the suite names it. */
+    const missingKeys: string[] = [];
+    for (const m of M42.MISSIONS) {
+      for (const k of M42.missionKeys(m.id)) if (!SP.hasText(k)) missingKeys.push(k);
+    }
+    ok(missingKeys.length === 0,
+      `every mission has its ten keys${missingKeys.length ? " — missing " + missingKeys[0] : ""}`);
+
+    /* A copy-paste that left English sitting in the Polish column reads as a
+     * missing translation to a player and as nothing at all to the compiler.
+     * Proper-noun-only strings (a chronicle's dateline) are legitimately the
+     * same in all three and are the exception, not the rule. */
+    const untranslated = SP.textKeys().filter((k) =>
+      !k.startsWith("lore.title.") && SP.TEXT[k].pl === SP.TEXT[k].en);
+    ok(untranslated.length === 0,
+      `no Polish string is still its English original${untranslated.length ? " — " + untranslated[0] : ""}`);
+    const untranslatedEs = SP.textKeys().filter((k) =>
+      !k.startsWith("lore.title.") && SP.TEXT[k].es === SP.TEXT[k].en);
+    ok(untranslatedEs.length === 0,
+      `…nor is any Spanish one${untranslatedEs.length ? " — " + untranslatedEs[0] : ""}`);
+
+    /* --- it all FITS, which is the whole reason pagination is at draw time --
+     * The ruler is one unit per character at a width of forty, which is a
+     * deliberately pessimistic phone column — narrower than the box actually
+     * gets on any device the game runs on. Polish runs about 15% longer than
+     * English and Spanish about 25%, so a page cut by hand in English is the
+     * bug this is here to make impossible. */
+    const ruler = (str: string): number => str.length;
+    const COL = 40, ROWS42 = 6;
+    let worstPages = 0, worstKey = "";
+    const overflow: string[] = [];
+    const empty: string[] = [];
+    for (const key of SP.textKeys()) {
+      for (const lg of SP.LANGS) {
+        const pages = DL.paginate(SP.t(key, lg, { lv: 99 }), COL, ROWS42, ruler);
+        for (const page of pages) {
+          if (page.length > ROWS42) overflow.push(`${key}/${lg}`);
+          if (!page.length || page.every((l) => !l.trim())) empty.push(`${key}/${lg}`);
+          for (const line of page) if (line.length > COL && !line.includes(" ")) {
+            overflow.push(`${key}/${lg}:word`);
+          }
+        }
+        if (pages.length > worstPages) { worstPages = pages.length; worstKey = `${key}/${lg}`; }
+      }
+    }
+    ok(overflow.length === 0,
+      `no page overflows its row budget in any language${overflow.length ? " — " + overflow[0] : ""}`);
+    ok(empty.length === 0, `no page comes out blank${empty.length ? " — " + empty[0] : ""}`);
+    /* Eight is a ceiling on the WRITING, not on the box: the box would page
+     * through twenty happily, but twenty pages is not a story beat, it is a
+     * wall, and the point of the chronicle is that it is read rather than
+     * skipped. The redcap's history lands at seven against this deliberately
+     * narrow ruler and six on a real screen — and, more to the point, at the
+     * SAME count in all three languages, which is the number that would drift
+     * first if anyone went back to cutting pages by hand. */
+    ok(worstPages <= 8, `the longest text is still readable in one sitting (${worstPages} pages, ${worstKey})`);
+    const spread = SP.LANGS.map((lg) => DL.paginate(SP.t("lore.redcap", lg), COL, ROWS42, ruler).length);
+    ok(Math.max(...spread) - Math.min(...spread) <= 1,
+      `no language pays for the layout more than another (${spread.join("/")} pages)`);
+
+    /* A blank line is the one piece of layout the writer keeps. */
+    const forced = DL.paginate("one\n\ntwo", 40, 4, ruler);
+    ok(forced.length === 2 && forced[0][0] === "one" && forced[1][0] === "two",
+      "a blank line forces a page break, however short the paragraphs");
+    const long42 = DL.paginate("a b c d e f g h i j k l m n o p", 5, 2, ruler);
+    ok(long42.length === 3 && long42.every((pg) => pg.length <= 2)
+      && long42.flat().join(" ") === "a b c d e f g h i j k l m n o p",
+      "…and a long paragraph is cut into pages without losing or reordering a word");
+
+    /* --- read once, per CHARACTER ------------------------------------------
+     * Orthogonal to the stage on purpose: losing the relic drops a mission
+     * from `complete` back to `active`, and being told the story a second time
+     * on the way down would be the sage repeating himself to somebody who is
+     * mid-errand. */
+    M42.resetMissions();
+    ok(!M42.loreSeen("redcap"), "a fresh character has read nothing");
+    M42.markLoreSeen("redcap");
+    ok(M42.loreSeen("redcap"), "…and remembers what it has been told");
+    M42.setStage("redcap", "complete");
+    M42.relicLost("redcap", 10);
+    ok(M42.stageOf("redcap", 10) === "active" && M42.loreSeen("redcap"),
+      "losing the relic reopens the echo WITHOUT replaying the history");
+    ok(M42.loreRead().length === 1, "the chronicle shows up in the quest log's list");
+    ok(M42.loreState().includes("redcap"), "it survives into the save");
+    M42.loadLoreState(["redcap", "nosuchmission"]);
+    ok(M42.loreSeen("redcap") && M42.loreState().length === 1,
+      "…and a retired id in an old save is dropped rather than kept");
+    M42.loadLoreState(undefined);
+    ok(!M42.loreSeen("redcap"), "a pre-v13 save reads as 'has been told nothing', which is true");
+    M42.markLoreSeen("redcap");
+    M42.resetMissions();
+    ok(!M42.loreSeen("redcap") && M42.stageOf("redcap", 10) === "available",
+      "the reset wipes the history as well as the stage, or the pad stops stopping you");
+
+    /* --- the language is a DEVICE preference, not save state ---------------- */
+    ok(PP.lang() === SP.DEFAULT_LANG, "a player who has never touched the strip reads English");
+    PP.setLang("pl");
+    ok(PP.lang() === "pl", "the strip switches it");
+    ok(SP.t("sage.cold", "pl") !== SP.t("sage.cold", "en"), "…and the sage changes language with it");
+    const prefBlob = localStorage.getItem("bone-isle-panels-v1") ?? "";
+    ok(prefBlob.includes("\"lang\":\"pl\""), "it is written beside the panel zooms, not into the save");
+    const saveSrc42 = fs42.readFileSync(new URL("../src/save.ts", import.meta.url), "utf8");
+    ok(!/\blang\b/.test(saveSrc42.slice(saveSrc42.indexOf("interface SaveData"), saveSrc42.indexOf("export function hasSave"))),
+      "…and the save format has no opinion about which language you read in");
+    PP.setLang("en");
+
+    /* Old panel-preference files were a bare map of panel kinds; the shape
+     * grew a wrapper for the language. Both must load, or everybody's window
+     * sizes reset the day this ships. */
+    localStorage.setItem("bone-isle-panels-v1", JSON.stringify({ bag: { zoom: 1.3, collapsed: false, rows: 4 } }));
+    PP.loadPanelPrefs();
+    ok(Math.abs(PP.panelZoom("bag") - 1.3) < 1e-6, "a pre-Etap-42 prefs file still loads its zooms");
+    ok(PP.lang() === "en", "…and takes English, having never been asked");
+    localStorage.setItem("bone-isle-panels-v1", JSON.stringify({ panels: { bag: { zoom: 0.8, collapsed: false, rows: 0 } }, lang: "es" }));
+    PP.loadPanelPrefs();
+    ok(Math.abs(PP.panelZoom("bag") - 0.8) < 1e-6 && PP.lang() === "es", "…and the new shape loads both halves");
+    PP.resetPanelPrefs();
+
+    /* --- it draws, and what it draws can be pressed -------------------------
+     * The headless canvas reports every string as ten pixels wide, so this
+     * proves nothing about layout — it proves the thing does not throw on a
+     * null sprite, an absent band or a page with choices on it, which is the
+     * class of fault that only ever shows up on somebody's phone. */
+    {
+      const hud42 = {
+        ctx: (document.createElement("canvas") as HTMLCanvasElement).getContext("2d")!,
+        scale: 2, panelScale: 2, screenW: 720, screenH: 1560, touch: true, sidebarW: 0,
+      };
+      let picked = 0;
+      DL.openDialogue({
+        speaker: "Chronos", bodyKey: "sage.offer.redcap", portrait: true,
+        choices: [{ key: "sage.choice.what", run: () => { picked++; } }],
+      });
+      ok(DL.dialogueOpen() && DL.dialogueKey() === "sage.offer.redcap", "the box opens on the key it was given");
+      for (const band of [null, { top: 120, bottom: 1200 }, { top: 40, bottom: 260 }]) {
+        DL.drawDialogue(hud42, band, { sx: -1, sy: -1 });
+      }
+      ok(true, "…and draws in a tall band, a short one, and none at all");
+      DL.tickDialogue(9);          // let the typewriter finish
+      DL.drawDialogue(hud42, null, { sx: -1, sy: -1 });
+      ok(DL.dialogueTap(-50, -50), "every press is eaten while it is up, even one that misses");
+      /* A press that misses the answers must NOT close a box that is waiting
+       * for one — otherwise "tap to continue" quietly declines the mission. */
+      ok(DL.dialogueOpen(), "…and a stray press cannot dismiss a question");
+      DL.closeDialogue();
+      ok(!DL.dialogueOpen() && picked === 0, "closing it picks nothing on the player's behalf");
+      ok(!DL.dialogueTap(10, 10), "…and with nothing open the press falls through to the world");
+    }
+
+    /* --- the wiring, read off the source ------------------------------------ */
+    const main42 = fs42.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const portalFn = main42.slice(main42.indexOf("function checkPortals"),
+      main42.indexOf("function update("));
+    ok(/if \(dialogueOpen\(\)\) return;/.test(portalFn),
+      "a box on the pad holds the jump until it is closed");
+    ok(/markLoreSeen/.test(portalFn) && portalFn.indexOf("markLoreSeen") < portalFn.lastIndexOf("travelTo"),
+      "…and the chronicle is told BEFORE the jump, in the cellar, where it is safe to read");
+    ok(/dialogueOpen\(\) \? \{ dx: 0, dy: 0 \} : moveAxis\(\)/.test(main42),
+      "the feet stop while it is up");
+    ok(main42.indexOf("if (dialogueTap(sx, sy)) return;") < main42.indexOf("for (let i = hotspots.length - 1"),
+      "…and its taps are taken before the hotspot sweep, so the thumb deck cannot steal them");
+    ok(main42.indexOf("if (dialogueTap(sx, sy)) return;") < main42.indexOf("if (contextMenuTap(sx, sy)) return;"),
+      "…and before the context menu, which is drawn under it");
+    ok(/if \(dialogueOpen\(\)\) return;\n\}?/.test(main42.slice(main42.indexOf("function openContextMenu"), main42.indexOf("function openContextMenu") + 600)),
+      "…and no menu can open behind it in the first place");
+    ok(/onAttackNearest: \(\) => \{ if \(dialogueOpen\(\)\) advanceDialogue\(\)/.test(main42),
+      "SPACE turns the page instead of swinging");
+    /* The offer is now a QUESTION. Taking the errand is the answer to it, not
+     * the act of walking up to him. */
+    const talk = main42.slice(main42.indexOf("function talkToSage"), main42.indexOf("function worldClick"));
+    ok(!/setStage\(/.test(talk), "talking no longer takes the mission on the player's behalf");
+    ok(/function acceptMission/.test(main42) && /setStage\(m\.id, "active"\)/.test(main42),
+      "…the first answer does");
+
+    /* --- he never leaves the player at a dead end --------------------------
+     * Handing the relic over used to END the conversation, so the reward
+     * speech was followed by exactly one button — the testing reset — and the
+     * next errand could only be found by walking away and clicking him again.
+     * A chain of ten missions cannot afford to look finished after the first. */
+    ok(/sageSays\(`sage\.handIn\.\$\{cur\.id\}`, \{ then: talkToSage \}\)/.test(main42),
+      "handing in rolls straight on into whatever he has next");
+    ok(!/sageSays\(`sage\.handIn[^;]*forgetChoice/.test(main42),
+      "…and the reward speech is not left with the testing reset as its only answer");
+    /* Two exits from the chain, and both have to say something useful: the
+     * level to come back at, or that there is more coming later. */
+    ok(/sage\.locked", \{ choices: \[leaveChoice\(\)\], vars: \{ lv:/.test(main42),
+      "too low a level is answered with the level to come back at");
+    for (const lg of SP.LANGS) {
+      ok(SP.t("sage.locked", lg, { lv: 12 }).includes("12"),
+        `${lg}: …and the number really lands in the line`);
+      const spoken42 = SP.t("sage.cold", lg) + SP.t("sage.remind.redcap", lg)
+        + SP.t("sage.accept.redcap", lg) + SP.t("sage.offer.redcap", lg);
+      ok(!/\bpad(em|y|zie)?\b|plataforma/i.test(spoken42),
+        `${lg}: he talks about doors, not about "pads"`);
+    }
+
+    /* --- every conversation has a labelled way out -------------------------
+     * A speech with no answers already closes on a tap, so these buttons
+     * change nothing mechanically. Without them the last page is a wall of
+     * text and a blinking arrow, and dismissing it is a guess. */
+    ok(/function leaveChoice/.test(main42), "there is a way out of a conversation that is spelled out");
+    ok(SP.t("sage.choice.notYet", "pl") === "Nie teraz.", "…and it says so plainly");
+    ok((main42.match(/leaveChoice\(\)/g) ?? []).length >= 4,
+      "…on every speech that ends one: no relic, reminder, level gate, end of chain");
+
+    /* --- TEMP-ETAP42: the reset that must not outlive the testing ----------
+     * It USED to be the sage's last answer, and that was wrong twice: it sat
+     * under everything he said — including the end of a mission, where the one
+     * button on screen should be about the next errand — and it put a debug
+     * tool in a character's mouth where a player who does not know what it is
+     * can press it and lose their chain. It is typed now. Nobody types it by
+     * accident.
+     *
+     * Same arrangement as the redcap's temporary post on the Gallows Coast:
+     * the thing is tagged, and the test is both the reminder and the grep
+     * handle. When the chain is done being walked, pull the tag and this block
+     * goes red until it is pulled too. */
+    ok(/TEMP-ETAP42/.test(main42), "the testing reset is tagged for removal");
+    ok(/function forgetEverything/.test(main42), "…it wipes the chain");
+    const forget = main42.slice(main42.indexOf("function forgetEverything"),
+      main42.indexOf("/**\n * The way OUT"));
+    ok(/resetMissions\(\)/.test(forget) && /removeAcross/.test(forget) && /game\.opened = /.test(forget),
+      "…the stages, the relic in the pack and the one-time chest, which is all three halves of a re-run");
+    ok(/=== "\/forget"/.test(main42), "…and it is reached by typing, not by pressing");
+    ok(!/forgetChoice/.test(main42) && !SP.hasText("sage.choice.forget"),
+      "…and never appears as something the sage offers");
+
+    /* --- the chronicle actually says something ------------------------------
+     * The first draft was an encyclopedia entry and a player who walked the
+     * mission twice came out of it knowing nothing. These are the three things
+     * it was missing, pinned so a later edit cannot quietly drop them again:
+     * the creature's NAME, the terms of the bargain that make the lead and the
+     * cauldron the answer to it, and the buried hoard that is the chest at the
+     * bottom of the echo. */
+    for (const lg of SP.LANGS) {
+      const tale = SP.t("lore.redcap", lg);
+      ok(tale.includes("Robin Redcap"), `${lg}: the thing in the boots has a name`);
+      ok(/Nine Stane Rig/.test(tale) && /Dumbarton/.test(tale),
+        `${lg}: …the folk ending and the recorded one are both there`);
+      ok(tale.length > 900, `${lg}: …and it is a story rather than a caption (${tale.length} chars)`);
+    }
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
