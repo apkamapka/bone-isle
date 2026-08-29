@@ -85,22 +85,12 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     pl: "Co tam jest?",
     es: "¿Qué hay ahí dentro?",
   },
+  /* Two jobs: declining the errand, and the labelled way out of any other
+   * conversation. Both are "I am done here", and one word covers both. */
   "sage.choice.notYet": {
-    en: "Not yet.",
-    pl: "Jeszcze nie.",
-    es: "Todavía no.",
-  },
-  "sage.choice.forget": {
-    en: "Forget it all.",
-    pl: "Zapomnij o wszystkim.",
-    es: "Olvídalo todo.",
-  },
-
-  /* --- TEMP-ETAP42: the testing reset ----------------------------------- */
-  "sage.forgot": {
-    en: "…I have never seen you before. Nothing of mine is open, and neither am I.",
-    pl: "…nigdy cię nie widziałem. Nic nie stoi otworem, ja także nie.",
-    es: "…no te he visto nunca. Nada mío está abierto, y yo tampoco.",
+    en: "Not now.",
+    pl: "Nie teraz.",
+    es: "Ahora no.",
   },
 
   /* --- mission 1: the redcap -------------------------------------------- */
@@ -187,49 +177,89 @@ const LORE: Readonly<Record<string, Bundle>> = {
     pl: "Hermitage, Liddesdale — 1320",
     es: "Hermitage, Liddesdale — 1320",
   },
+  /*
+   * REWRITTEN. The first version was an encyclopedia entry — castle, date,
+   * owner, mob, shrug — and Radek walked the mission twice and came out
+   * knowing nothing he wanted to know. Three things were wrong with it.
+   *
+   * It never gave the creature its NAME. The folklore calls him Robin Redcap
+   * (Henderson has him as Redcap Sly), and a boss with a name is a character
+   * while a boss with a species is a spawn.
+   *
+   * It skipped the BARGAIN, which is the whole engine of the story: no blade,
+   * no lance, no arrow and no rope that would hold him — a list that exists so
+   * that the lead and the cauldron can be the answer to it. Scott's Minstrelsy
+   * has the king snapping "boil him, if you please, but let me hear no more of
+   * him", and messengers arriving in time to watch. That is the beat the first
+   * draft replaced with the word "boiled".
+   *
+   * And it ended on a shrug instead of on the HOARD. Robin is said to have
+   * buried what he took and never come back for it, and people kept claiming
+   * to see him at the ruin at dusk turning stones over — which is, to the
+   * letter, the one-time chest at the bottom of the echo. The chronicle now
+   * tells the player about a thing they will then find.
+   */
   "lore.redcap": {
-    en: "Hermitage Castle was raised in Liddesdale around 1240, on ground so "
-      + "marshy that the bog was its only defence. The Borderers called it "
-      + "the guardhouse of the bloodiest valley in Britain.\n\n"
-      + "By 1320 it belonged to William de Soulis, accused of witchcraft and "
-      + "of plotting the death of Robert the Bruce. His tenants swore that no "
-      + "weapon of human making could touch him, and they blamed the thing "
-      + "that lived with him: a short, thickset old creature in iron boots, a "
-      + "pike in its left hand, and a cap it dyed in the blood of travellers, "
-      + "because a redcap whose cap dries out dies.\n\n"
-      + "The tenants took de Soulis up to Nine Stane Rig, a circle of "
-      + "standing stones above the castle, wrapped him in lead and boiled him "
-      + "alive in it. The records say something duller: that he died a "
-      + "prisoner at Dumbarton, of nothing in particular. No record anywhere "
-      + "says what became of the creature.",
-    pl: "Zamek Hermitage wzniesiono w Liddesdale około 1240 roku, na gruncie "
-      + "tak grząskim, że bagno było jego jedyną obroną. Ludzie pogranicza "
-      + "nazywali go strażnicą najkrwawszej doliny Brytanii.\n\n"
-      + "W 1320 roku należał do Williama de Soulis, oskarżonego o czary i o "
-      + "spisek na życie Roberta Bruce'a. Jego poddani przysięgali, że żadna "
-      + "broń ludzkiej roboty nie może go tknąć, i winili to, co z nim "
-      + "mieszkało: niskiego, krępego starca w żelaznych butach, z piką w "
-      + "lewej dłoni i w czapce, którą barwił krwią podróżnych, bo redcap, "
-      + "któremu czapka wyschnie, umiera.\n\n"
-      + "Poddani zabrali de Soulisa na Nine Stane Rig, krąg kamiennych słupów "
-      + "nad zamkiem, owinęli go w ołów i ugotowali w nim żywcem. Zapiski "
-      + "mówią coś nudniejszego: że umarł jako więzień w Dumbarton, ot tak. "
-      + "Żaden zapis nigdzie nie mówi, co stało się ze stworem.",
-    es: "El castillo de Hermitage se levantó en Liddesdale hacia 1240, sobre "
-      + "un terreno tan pantanoso que la ciénaga era su única defensa. La "
-      + "gente de la frontera lo llamaba la casa de guardia del valle más "
-      + "sangriento de Gran Bretaña.\n\n"
-      + "En 1320 pertenecía a William de Soulis, acusado de brujería y de "
-      + "conspirar contra la vida de Robert the Bruce. Sus arrendatarios "
-      + "juraban que ningún arma de factura humana podía tocarlo, y culpaban "
-      + "a lo que vivía con él: un viejo bajo y recio con botas de hierro, "
-      + "una pica en la mano izquierda y un gorro que teñía con la sangre de "
-      + "los viajeros, porque un redcap al que se le seca el gorro muere.\n\n"
-      + "Los arrendatarios llevaron a de Soulis a Nine Stane Rig, un círculo "
-      + "de piedras erguidas sobre el castillo, lo envolvieron en plomo y lo "
-      + "hirvieron vivo dentro. Los registros dicen algo más aburrido: que "
-      + "murió preso en Dumbarton, sin más. Ningún registro dice en ninguna "
-      + "parte qué fue de la criatura.",
+    en: "Robin Redcap. The chronicles record his master to the day and the "
+      + "hour, and him not at all. A redcap is a squat old man with a pike in his fist and iron on his "
+      + "feet, and nothing on two legs outruns him. The cap is dyed in the "
+      + "blood of whoever he catches, and it has to stay wet: a redcap whose "
+      + "cap dries out dies with it.\n\n"
+      + "He came to Hermitage and offered William de Soulis a bargain — free "
+      + "run of Liddesdale, and a charmed life in exchange. No blade, no "
+      + "lance, no arrow, and no rope that would hold him. De Soulis spent it "
+      + "on the valley, and on the valley's children, until his tenants "
+      + "walked to Robert the Bruce and would not stop asking. The king, worn out by them, said: boil him then, and let me hear no "
+      + "more of him. They took him at his word. Rope would not bind de "
+      + "Soulis, so they wrapped him in lead and set a cauldron inside the "
+      + "stone circle above the castle, at Nine Stane Rig. The king's "
+      + "messengers followed to say he had not meant it, and arrived in time "
+      + "to watch. The record is shorter and duller: condemned by parliament, died a "
+      + "prisoner at Dumbarton, of nothing in particular.\n\n"
+      + "Robin was not at the cauldron. Nobody saw him again — except the "
+      + "people who kept insisting they had, at the ruin, at dusk, turning "
+      + "stones over. He is said to have buried what he took from that valley "
+      + "and never come back for it.",
+    pl: "Robin Redcap. Kroniki zapisują jego pana co do dnia i godziny, a "
+      + "jego nie zapisują wcale. Redcap to przysadzisty starzec z piką w garści i żelazem na stopach, "
+      + "i nic na dwóch nogach mu nie ucieknie. Czapkę barwi krwią tego, kogo "
+      + "dopadnie, i musi ona zostać mokra: redcap, któremu czapka wyschnie, "
+      + "umiera razem z nią.\n\n"
+      + "Przyszedł do Hermitage i złożył Williamowi de Soulis ofertę — wolna "
+      + "ręka w Liddesdale, a w zamian życie zaklęte. Żadne ostrze, żadna "
+      + "włócznia, żadna strzała i żaden sznur, który by go utrzymał. De "
+      + "Soulis wydał to na dolinę, i na dzieci z tej doliny, aż jego poddani "
+      + "poszli do Roberta Bruce'a i nie przestawali prosić. Król, zmęczony nimi, powiedział: to go ugotujcie, byle więcej o nim "
+      + "nie słyszałem. Wzięli go za słowo. Sznur de Soulisa nie wiązał, więc "
+      + "owinęli go w ołów i postawili kocioł w kamiennym kręgu nad zamkiem, "
+      + "na Nine Stane Rig. Posłańcy króla ruszyli za nimi powiedzieć, że nie "
+      + "tak to miało brzmieć, i zdążyli akurat popatrzeć. Zapis jest krótszy i nudniejszy: skazany przez parlament, umarł jako "
+      + "więzień w Dumbarton, ot tak.\n\n"
+      + "Robina przy kotle nie było. Nikt go już nie zobaczył — poza tymi, "
+      + "którzy uparcie twierdzili, że owszem: przy ruinie, o zmierzchu, "
+      + "przewracając kamienie. Podobno zakopał to, co zabrał tej dolinie, i "
+      + "nigdy po to nie wrócił.",
+    es: "Robin Redcap. Las crónicas anotan a su señor al día y a la hora, y a "
+      + "él no lo anotan en absoluto. Un redcap es un viejo rechoncho con una pica en el puño y hierro en "
+      + "los pies, y nada que ande a dos piernas le gana en carrera. Tiñe su "
+      + "gorro con la sangre de quien atrapa, y tiene que seguir húmedo: al "
+      + "redcap cuyo gorro se seca, se le seca la vida.\n\n"
+      + "Llegó a Hermitage y le hizo una oferta a William de Soulis: mano "
+      + "libre en Liddesdale y, a cambio, una vida encantada. Ninguna hoja, "
+      + "ninguna lanza, ninguna flecha y ninguna cuerda capaz de sujetarlo. "
+      + "De Soulis lo gastó en el valle, y en los niños del valle, hasta que "
+      + "sus arrendatarios fueron a ver a Robert the Bruce y no dejaron de "
+      + "pedir. El rey, harto de ellos, dijo: pues hervidlo, y que no vuelva a oír "
+      + "hablar de él. Lo tomaron al pie de la letra. La cuerda no ataba a de "
+      + "Soulis, así que lo envolvieron en plomo y pusieron un caldero dentro "
+      + "del círculo de piedras que hay sobre el castillo, en Nine Stane Rig. "
+      + "Los mensajeros del rey salieron detrás a decir que no lo había dicho "
+      + "en serio, y llegaron a tiempo de mirar. El registro es más corto y más aburrido: condenado por el "
+      + "parlamento, murió preso en Dumbarton, sin más.\n\n"
+      + "Robin no estaba junto al caldero. Nadie volvió a verlo, salvo los "
+      + "que insistían en que sí: junto a la ruina, al anochecer, levantando "
+      + "piedras. Dicen que enterró lo que le quitó a aquel valle y que nunca "
+      + "volvió a por ello.",
   },
 };
 
