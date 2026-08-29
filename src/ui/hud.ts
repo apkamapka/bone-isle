@@ -65,6 +65,19 @@ function bar(h: HudCtx, x: number, y: number, w: number, ph: number, frac: numbe
   ctx.fillRect(x, y, Math.round(w * clamp(frac, 0, 1)), Math.ceil(ph / 3));
 }
 
+/**
+ * The font `hudText` draws with — exported because MEASURING with a different
+ * one is a bug that looks like a layout bug.
+ *
+ * The Look card sized itself with plain `monospace` and was then painted in
+ * `'Courier New'`, which is wider. Every line came out a few pixels longer
+ * than the box that had just been built to hold it, so the longest one ran out
+ * through the frame. One string, one source, and the two can no longer differ.
+ */
+export function hudFont(size: number, bold = false): string {
+  return `${bold ? "bold " : ""}${Math.round(size)}px 'Courier New',monospace`;
+}
+
 export function hudText(
   h: HudCtx,
   str: string,
@@ -87,7 +100,7 @@ export function hudText(
   maxW?: number,
 ): void {
   const { ctx, scale: S } = h;
-  const font = (px: number): string => `${bold ? "bold " : ""}${Math.round(px)}px 'Courier New',monospace`;
+  const font = (px: number): string => hudFont(px, bold);
   let shown = str;
   let px = size;
   ctx.font = font(px);
@@ -248,7 +261,7 @@ export function totalGold(game: Game, p: Player): number {
  */
 export function wrapText(h: HudCtx, str: string, size: number, maxW: number, bold = false): string[] {
   const { ctx } = h;
-  ctx.font = `${bold ? "bold " : ""}${Math.round(size)}px 'Courier New',monospace`;
+  ctx.font = hudFont(size, bold);
   if (maxW <= 0 || ctx.measureText(str).width <= maxW) return [str];
   const lines: string[] = [];
   let line = "";

@@ -19,7 +19,7 @@ import { lang } from "../systems/panelPrefs.ts";
 import { SHOPS } from "../entities/npcs.ts";
 import { OUTFIT_COLORS, HUE_STEPS, SAT_ROWS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
 import { heroPreviewFrame } from "../gfx/heroSheet.ts";
-import { hudText, wrapText, hudLines, type HudCtx } from "./hud.ts";
+import { hudText, wrapText, hudLines, hudFont, type HudCtx } from "./hud.ts";
 import type { Player } from "../entities/player.ts";
 import type { StructKey } from "../systems/building.ts";
 import { bestTier } from "../systems/building.ts";
@@ -493,6 +493,18 @@ export interface Hotspot {
    * desktop scrollbar does.
    */
   dockTrack?: boolean;
+  /**
+   * A control on the HUD EDIT toolbar.
+   *
+   * The rebind picker is modal and lays a full-screen scrim over everything,
+   * pushed after the toolbar — and the click sweep runs backwards, so the
+   * scrim was winning: pressing + while the picker was open closed the picker
+   * instead of adding a row of hotkeys. The toolbar is the one surface that
+   * must stay live underneath, because it is where the picker was opened FROM
+   * and where the bar's length is set. Marked rather than positioned, so the
+   * next button added to that row inherits the rule for free.
+   */
+  editBar?: boolean;
 }
 
 /** A draggable inventory cell recorded during draw. */
@@ -639,7 +651,7 @@ export interface UiState {
 
 export interface PanelActions {
   startPlacing: (key: StructKey) => void;
-  useItem: (kind: ItemKind, slotIndex: number) => void;
+  useItem: (kind: ItemKind, slotIndex: number, ref: ContainerRef) => void;
   equipItem: (kind: ItemKind, slotIndex: number) => void;
   unequip: (slot: EqSlot) => void;
   craft: (r: Recipe) => void;
@@ -869,21 +881,46 @@ function drawInspect(base: Omit<PanelInput, "win">): void {
   const { ctx, scale: S, screenW, screenH } = base.hud;
   // full-screen backdrop: any tap off the popup dismisses it (and is consumed)
   base.hotspots.push({ x: 0, y: 0, w: screenW, h: screenH, fn: () => { base.ui.inspect = null; } });
-  const lines = itemInfoLines(kind);
   const title = ITEMS[kind].name;
   const fs = 9 * S;
-  ctx.font = `${fs}px monospace`;
-  let tw = ctx.measureText(title).width;
-  for (const l of lines) tw = Math.max(tw, ctx.measureText(l).width);
   const pad = 10 * S;
-  const w = Math.max(140 * S, tw + pad * 2);
-  const h = pad * 2 + 16 * S + (lines.length) * (fs + 3 * S) + 14 * S;
+  const spr = itemSprite(kind);
+  const iw = iconW(spr, 2 * S);
+
+  /* THE CARD IS SIZED FROM WHAT IT WILL ACTUALLY DRAW.
+   *
+   * Two things used to be wrong and both showed up as the same symptom — a
+   * line running out through the right-hand border:
+   *
+   *   the width was measured in plain `monospace` and painted in
+   *   `'Courier New'`, which is wider, so every box was a little too small;
+   *
+   *   and the TITLE was measured as if it started at the left padding when it
+   *   is actually drawn past the icon, so a long name overran by the width of
+   *   its own picture.
+   *
+   * Beyond that the card now has a CEILING. "Defense 17 (higher of shield /
+   * weapon counts)" is a sentence, and a sentence has no natural maximum — on
+   * a phone the box would simply grow wider than the screen. So the text wraps
+   * and the card grows DOWNWARDS, which it has room to do. */
+  const roomW = screenW - pad * 4;
+  const titleIndent = iw + 8 * S;
+  const budget = Math.max(80 * S, Math.min(360 * S, roomW) - pad * 2);
+  const lines: string[] = [];
+  for (const l of itemInfoLines(kind)) lines.push(...wrapText(base.hud, l, fs, budget));
+
+  ctx.font = hudFont(fs, true);
+  let tw = titleIndent + ctx.measureText(title).width;
+  ctx.font = hudFont(fs);
+  for (const l of lines) tw = Math.max(tw, ctx.measureText(l).width);
+
+  const w = Math.min(roomW, Math.max(140 * S, tw + pad * 2));
+  const h = pad * 2 + 16 * S + lines.length * (fs + 3 * S) + 14 * S;
   const x = (screenW - w) / 2;
   const y = (screenH - h) / 2;
   popupFrame(ctx, x, y, w, h, S, "rgba(22,17,10,.97)");
-  const spr = itemSprite(kind);
   icon(base as PanelInput, spr, x + pad, y + pad, 2 * S);
-  hudText(base.hud, title, x + pad + iconW(spr, 2 * S) + 8 * S, y + pad + 8 * S, fs, "#ffe9a8", "left", true);
+  hudText(base.hud, title, x + pad + titleIndent, y + pad + 8 * S, fs, "#ffe9a8", "left", true);
   let ly = y + pad + 26 * S;
   for (const l of lines) {
     hudText(base.hud, l, x + pad, ly, fs, "#d7d2c0", "left");
@@ -1534,7 +1571,7 @@ function drawBag(p: PanelInput): void {
       } else if (def.slot) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.equipItem(k, idx) });
       } else if (def.heal || def.food || def.crystal || def.boost) {
-        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.useItem(k, idx) });
+        p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.useItem(k, idx, ref) });
       } else {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.moveStack(ref, idx) });
       }

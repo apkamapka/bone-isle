@@ -25,6 +25,20 @@ export function moveAxis(): { dx: number; dy: number } {
 
 export type PanelName = "build" | "skills" | "equip" | "bag" | "quest";
 
+/**
+ * How many slots one row of function keys reaches, and therefore what Shift
+ * adds. Twelve because that is how many F-keys a keyboard has; the hotbar's
+ * own ceiling (24) is exactly two rows of them, which is not a coincidence —
+ * it is why the shift row is enough and no third modifier is needed.
+ */
+export const SPELL_KEY_ROW = 12;
+
+/** The label for action slot `i`, as the keyboard reaches it. */
+export function spellKeyLabel(i: number): string {
+  if (i < 0 || i >= SPELL_KEY_ROW * 2) return "";
+  return (i >= SPELL_KEY_ROW ? "\u21e7F" : "F") + ((i % SPELL_KEY_ROW) + 1);
+}
+
 export interface InputHandlers {
   toWorld: (sx: number, sy: number) => Vec;
   onClick: (screen: { sx: number; sy: number; button: number }, world: Vec) => void;
@@ -73,11 +87,30 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     // itself swallows keydown while focused, so `w` types a w rather than
     // walking north — see ui/chatInput.ts.
     else if (k === "enter") h.onChat();
-    /* Hotkeys 1-9 then 0, which is ten of the twenty-four slots the bar can
-     * now hold. The rest are mouse-only and that is not a gap to fill: a
-     * keyboard has no eleventh digit, and inventing a modifier for rows most
-     * players will never add would cost every player a chord to remember. */
-    else if (k >= "1" && k <= "9") h.onSpell(k.charCodeAt(0) - 49);
+    /* THE HOTBAR LIVES ON THE FUNCTION KEYS.
+     *
+     * The bar holds twenty-four slots and the digit row holds ten, so under
+     * the old scheme fourteen of them were mouse-only — and worse, there was
+     * no key that could MEAN twelve: pressing 1 then 2 fires slot one twice.
+     * A number that cannot be typed is not a shortcut, it is a label.
+     *
+     * F1-F12 covers the first twelve and Shift+F1-F12 the rest, which is the
+     * whole bar with one modifier and no ambiguity. The digits stay wired to
+     * the first ten underneath, because a hand that already knows them should
+     * not have to relearn anything to keep playing.
+     *
+     * `preventDefault` is not optional here: F1 is the browser's help, F3 its
+     * find bar, F5 a reload and F11 fullscreen. Firing a spell and reloading
+     * the page on the same press is the worst version of this feature. */
+    const fn = /^f([1-9]|1[0-2])$/.exec(k);
+    if (fn) {
+      e.preventDefault();
+      const row = e.shiftKey ? SPELL_KEY_ROW : 0;
+      h.onSpell(row + Number(fn[1]) - 1);
+      keys[k] = true;
+      return;
+    }
+    if (k >= "1" && k <= "9") h.onSpell(k.charCodeAt(0) - 49);
     else if (k === "0") h.onSpell(9);
     else if (k === "escape") h.onEscape();
     keys[k] = true;

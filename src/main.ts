@@ -63,8 +63,9 @@ import { groundEntries, playerEntries, type ContextMenu, type MenuEntry } from "
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
-import { initInput, moveAxis } from "./input.ts";
+import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
+import { planSwap, refused, freeSlots } from "./systems/loadout.ts";
 import { createGame, travelTo, applyGates, applyMissionPads, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
@@ -642,14 +643,40 @@ function togglePanel(which: PanelKind): void {
 
 const act: PanelActions = {
   startPlacing: (key: StructKey) => { ui.placing = key; placeGhost = null; closeWindow("build"); },
-  useItem: (kind: ItemKind) => {
+  useItem: (kind: ItemKind, _slotIndex: number, from?: ContainerRef) => {
     const def = ITEMS[kind];
+    /* WHERE IT IS BEING EATEN FROM.
+     *
+     * This used to assume the pack, unconditionally — `removeItem(P.bag, …)` —
+     * so clicking the meat inside a corpse found nothing to remove and
+     * returned in silence. The click landed, the handler ran, and nothing
+     * happened, which reads as a dead button rather than as a rule.
+     *
+     * Tibia's rule is the right one and it is the one Radek asked for: food
+     * and drink are USED where they lie. You do not carry a ham home to eat
+     * it, and in a fight against four things at once the two seconds spent
+     * moving it into the pack are the two seconds you did not have.
+     *
+     * Only food and potions, though. A crystal is bound to a hotbar slot and
+     * counted out of the pack, and a corpse is not a quiver — those still have
+     * to be picked up, and fall through to the ordinary take below. */
+    const inPlace = from && from.c !== "bag" && (def.food || def.heal);
+    const spend = (): boolean => {
+      if (!inPlace) return removeItem(P.bag, kind, 1);
+      const slots = refSlots(from);
+      if (!slots) return false;
+      if (!removeItem(slots, kind, 1)) return false;
+      closeIfEmpty(from);
+      return true;
+    };
+    if (from && from.c !== "bag" && !inPlace) { openMoveChooser(from, _slotIndex); return; }
+
     if (def.crystal) { useCrystalItem(kind); return; }
     if (def.food) {
       // Tibia rule: you can bank at most 20 minutes of fed time — eating past
       // it is refused (and the food is NOT consumed)
       if (P.fedS + def.food > FED_MAX_S) { flash("you are full", "#e0a06a"); return; }
-      if (!removeItem(P.bag, kind, 1)) return;
+      if (!spend()) return;
       P.fedS += def.food;
       flash(["Munch.", "Gulp.", "Mmmh."][rndi(0, 2)], "#e8dcc0");
       beep(360, 0.08, "sine", 0.05, 60);
@@ -675,7 +702,7 @@ const act: PanelActions = {
     }
     // don't waste a potion charge when already at full health
     if (def.heal && P.hp >= P.maxhp) { flash("full hp", "#7dff9e"); return; }
-    if (!removeItem(P.bag, kind, 1)) return;
+    if (!spend()) return;
     if (def.heal) { P.hp = Math.min(P.maxhp, P.hp + def.heal); flash(`+${def.heal} hp`, "#7dff9e"); }
     beep(500, 0.12, "sine", 0.05, 180);
   },
@@ -683,13 +710,32 @@ const act: PanelActions = {
     const def = ITEMS[kind];
     const slot = def.slot;
     if (!slot) return;
+    /* WHAT COMES OFF, decided before anything moves.
+     *
+     * Equipping displaces up to two pieces: whatever is in the slot, and — for
+     * a bow — the shield the second hand was holding. Both used to be handed
+     * to a `stowOrDrop` that put them on the FLOOR when the bag was full, and
+     * a bow swap in a full pack therefore left a shield lying in a dungeon
+     * with nothing said about it. Gear does not fall out of a character.
+     *
+     * So the room is checked first and the whole equip is refused if it is not
+     * there. The incoming item vacates its own slot on the way out, which is
+     * why one displaced piece always fits and only the SECOND needs room. */
+    const displaced: ItemKind[] = [];
+    const prev = P.eq[slot];
+    if (prev) displaced.push(prev);
+    if (def.bow && P.eq.shield) displaced.push(P.eq.shield);
+    if (slot === "shield" && P.eq.weapon && ITEMS[P.eq.weapon].bow) displaced.push(P.eq.weapon);
+    if (displaced.length > 1 && freeSlots(P.bag) < displaced.length - 1) {
+      flash("no room to stow what comes off", "#d96a5a");
+      return;
+    }
     if (!removeItem(P.bag, kind, 1)) return;
-    // stow a displaced piece into the bag; if the bag is somehow full, drop it
-    // at the player's feet instead of silently destroying it
+    // stow a displaced piece into the bag; the room for it was checked above,
+    // and the floor stays a last resort for the impossible case
     const stowOrDrop = (k: ItemKind): void => {
       if (addItem(P.bag, k, 1) > 0) dropToGround(k, 1);
     };
-    const prev = P.eq[slot];
     P.eq[slot] = kind;
     if (prev) stowOrDrop(prev);
     // Two-handed rule: a bow occupies both hands, so it can't share with a shield.
@@ -1789,35 +1835,27 @@ function useAction(index: number): void {
 
 /**
  * Quick weapon swap: toggles the equipped weapon between a bow and a melee
- * weapon, pulling the best matching spare from the backpack. Reuses the normal
+ * weapon, pulling the best matching spare from the pack. Reuses the normal
  * equip path so the two-handed bow↔shield rule and bag stow-away still apply.
+ *
+ * The CHOICE is made in `systems/loadout.ts` and only carried out here — see
+ * that file for the two bugs that split it in half, both of which were about
+ * what the search could see rather than about what the button does.
  */
 function swapWeapon(): void {
   if (P.dead) return;
-  const cur = P.eq.weapon;
-  const curIsBow = cur ? !!ITEMS[cur].bow : false;
-  const wantBow = !curIsBow; // if a bow is on, swap to melee; otherwise swap to a bow
-  let pick: ItemKind | null = null;
-  for (const s of P.bag) {
-    if (!s) continue;
-    const d = ITEMS[s.kind];
-    if (d.slot !== "weapon") continue;
-    if (!!d.bow === wantBow && (!pick || d.value > ITEMS[pick].value)) pick = s.kind;
-  }
-  if (!pick) { flash(wantBow ? "no bow in bag" : "no melee weapon in bag", "#e0a06a"); return; }
-  act.equipItem(pick, 0); // removes from bag, equips, stows the previous weapon
-  // switching back to melee also restores a shield: the bow forced it into the
-  // bag, so a full swap means weapon AND shield come back together
-  if (!wantBow && !P.eq.shield) {
-    let sh: ItemKind | null = null;
-    for (const s of P.bag) {
-      if (!s) continue;
-      const d = ITEMS[s.kind];
-      if (d.slot === "shield" && (!sh || d.value > ITEMS[sh].value)) sh = s.kind;
+  const plan = planSwap(P.bag, P.eq.weapon, P.eq.shield);
+  if (refused(plan)) {
+    if (plan.no === "room") {
+      flash("no room to stow the shield", "#e0a06a");
+    } else {
+      flash(plan.toBow ? "no bow in your pack" : "no melee weapon in your pack", "#e0a06a");
     }
-    if (sh) act.equipItem(sh, 0);
+    return;
   }
-  flash(`equipped ${ITEMS[pick].name}`, "#b9e07f");
+  act.equipItem(plan.weapon, 0); // removes from the tree, equips, stows the previous
+  if (plan.shield) act.equipItem(plan.shield, 0);
+  flash(`equipped ${ITEMS[plan.weapon].name}`, "#b9e07f");
 }
 
 /** Apply a crystal by kind: Recall travels home, others hit self/target. */
@@ -2232,6 +2270,25 @@ function handleWorldTap(sx: number, sy: number): void {
    * so their hotspots sit later in the array and would otherwise win. */
   if (dialogueTap(sx, sy)) return;
   if (contextMenuTap(sx, sy)) return;
+  /* THE EDIT TOOLBAR OUTRANKS THE PICKER'S SCRIM.
+   *
+   * The picker is drawn after the toolbar and lays a full-screen scrim, so on
+   * the reverse sweep below the scrim reached the press first and every
+   * toolbar button became "close the picker". On a desktop that is the whole
+   * of the ± row — which is why the hotbar could not be lengthened there while
+   * the phone, whose ± lives in a drop-down that is shut at the time, was
+   * fine. Asked here, ahead of the sweep, so the order the two were DRAWN in
+   * stops deciding which one is clickable. */
+  if (assignSlot !== null) {
+    for (let i = hotspots.length - 1; i >= 0; i--) {
+      const hsp = hotspots[i];
+      if (!hsp.editBar) continue;
+      if (sx >= hsp.x && sx < hsp.x + hsp.w && sy >= hsp.y && sy < hsp.y + hsp.h) {
+        hsp.fn();
+        return;
+      }
+    }
+  }
   // hotspots are collected during draw; the topmost window's are last, so
   // check them first (reverse) to respect z-order on overlapping panels.
   for (let i = hotspots.length - 1; i >= 0; i--) {
@@ -3060,6 +3117,39 @@ function worldClick(w: Vec): void {
   // exact hitboxes below are what a mouse deserves and what a thumb cannot
   // hit. See `forgivingTap`.
   if (touchUI && forgivingTap(world, w)) return;
+
+  /* CORPSES FIRST, BUT ONLY WHILE YOU ARE ALREADY FIGHTING.
+   *
+   * A corpse lies exactly where its owner died, which is where its friends
+   * are still standing. With monsters tested first, the click that means
+   * "open that body" landed on whatever was standing over it and RE-TARGETED
+   * — so with four things on you, looting between blows switched your attack
+   * to a fresh one every time you tried it. That is the opposite of the Tibia
+   * habit this is meant to support.
+   *
+   * Gated on already holding a mob, and that gate is the whole design. With no
+   * target, a click on a pile of bodies should still find the living thing on
+   * top of them, because that click means "fight". With a target, it cannot
+   * mean that — you are already fighting, the marked creature stays marked,
+   * and the only new thing the click can be asking for is the loot. */
+  if (P.target?.kind === "mob") {
+    for (const c of world.corpses) {
+      if (Math.abs(w.x - c.x) < 20 && Math.abs(w.y - c.y) < 16) {
+        if (withinReach(c.x, c.y)) {
+          ui.loot = c; openWindow("loot");
+        } else {
+          // out of reach: walk over, and `pendingLoot` pops it on arrival.
+          // The mark is untouched, so tickMeleeFire / tickRangedFire keep the
+          // blows coming the whole way there.
+          pendingLoot = c;
+          P.dest = { x: c.x, y: c.y };
+        }
+        moveMarker = null;
+        return;
+      }
+    }
+  }
+
   // monsters
   for (const m of world.monsters) {
     if (Math.abs(w.x - m.x) < m.spr.width / 2 && w.y > m.y - m.spr.height && w.y < m.y + 10) {
@@ -3082,22 +3172,10 @@ function worldClick(w: Vec): void {
       return;
     }
   }
-  // corpses. While an ATTACK is held (melee or bow), looting must not break
-  // it: in range the loot window opens straight away, out of range we walk
-  // over (pendingLoot pops it on arrival) — the marked monster stays marked
-  // and tickMeleeFire / tickRangedFire keep the blows coming the whole time.
+  // corpses, for a player who is NOT mid-fight: marked and walked to like
+  // anything else, which is what opens the window on arrival.
   for (const c of world.corpses) {
     if (Math.abs(w.x - c.x) < 20 && Math.abs(w.y - c.y) < 16) {
-      if (P.target?.kind === "mob") {
-        if (withinReach(c.x, c.y)) {
-          ui.loot = c; openWindow("loot");
-        } else {
-          pendingLoot = c;
-          P.dest = { x: c.x, y: c.y };
-        }
-        moveMarker = null;
-        return;
-      }
       P.target = { kind: "corpse", id: c.id };
       P.dest = null; P.gather = null; moveMarker = null;
       return;
@@ -4782,7 +4860,20 @@ function render(): void {
       sctx.fillText(`${dn}`, Math.round(mouse.sx + gw / 2), Math.round(mouse.sy + gh / 2));
     }
   }
-  if (touchUI) drawTouchControls();
+  /* Everything the toolbar registers while the HUD is unlocked is marked, so
+   * the rebind picker's scrim cannot swallow it — see `Hotspot.editBar` and
+   * the sweep in `handleWorldTap`. Marked by WHEN it was pushed rather than
+   * one call at a time, which means the ± row, the lock, the slots and
+   * whatever is added to that strip next inherit the rule for free. Done here
+   * rather than inside, because the phone returns early and would otherwise
+   * need its own copy of this. */
+  if (touchUI) {
+    const firstHudSpot = hotspots.length;
+    drawTouchControls();
+    if (hudEditing()) {
+      for (let i = firstHudSpot; i < hotspots.length; i++) hotspots[i].editBar = true;
+    }
+  }
   drawJoystick(sctx);
   drawAssignPicker();
   /* Last of everything, deliberately. The thumb deck and the action bar are
@@ -4853,19 +4944,27 @@ function hudBtn(
 function drawActionSlot(i: number, x: number, y: number, w: number, h: number): void {
   const slot = actionSlots[i];
   const ctx = sctx;
+  /* The slot is captioned with the KEY that fires it, not its ordinal.
+   *
+   * They used to be the same thing and the twelfth slot is where that stopped
+   * being true — there is no way to type "12", so a bar that numbered its
+   * cells 1..24 was telling the player about a shortcut that did not exist.
+   * `spellKeyLabel` is the one place the mapping is written down, so the
+   * caption and the keydown handler cannot disagree. */
+  const key = spellKeyLabel(i);
   let label = "", sub = "", usable = false;
   if (slot?.type === "crystal") {
     const charges = bagCount(P.bag, slot.item);
     usable = charges > 0;
     label = ITEMS[slot.item].name.split(" ")[0];
-    sub = `${i + 1}·${charges}`;
+    sub = `${key}·${charges}`;
   } else if (slot?.type === "swap") {
     usable = true;
     label = "SWAP";
-    sub = `${i + 1}`;
+    sub = key;
   } else {
     label = hudEditing() ? "+" : "";
-    sub = hudEditing() ? "bind" : `${i + 1}`;
+    sub = hudEditing() ? "bind" : key;
   }
   /* An UNBOUND slot is drawn down to a shadow, not merely darker.
    *

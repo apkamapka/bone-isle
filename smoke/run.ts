@@ -9927,7 +9927,14 @@ async function main(): Promise<void> {
   {
     const nfs = await import("node:fs");
     const src = nfs.readFileSync("src/main.ts", "utf8");
-    const fn = src.slice(src.indexOf("function drawActionSlot"), src.indexOf("function drawActionSlot") + 2600);
+    /* The WHOLE function, found by its own boundaries rather than by a magic
+     * character count. The count was 2600 and it broke the moment a comment
+     * was added near the top: the assertions below started reading the empty
+     * space past the end of the slice and failing on code that had not moved.
+     * A test that measures in characters is measuring the wrong thing. */
+    const fnAt = src.indexOf("function drawActionSlot");
+    const fnEnd = src.indexOf("\nfunction ", fnAt + 1);
+    const fn = src.slice(fnAt, fnEnd < 0 ? src.length : fnEnd);
 
     /* A name and a number tell you what a slot holds only if you stop and read
      * them, and the crystals all share a name shape ("Frost Shard", "Frost
@@ -12613,6 +12620,158 @@ async function main(): Promise<void> {
    *  test below is not a unit test of a predicate — it WALKS the exploit, step
    *  for step, and asserts it comes out with one cap instead of two.
    * ======================================================================= */
+  /* ======================================================================= *
+   *  RADEK'S SIX — the bugs found by playing rather than by reading
+   * ======================================================================= */
+  console.log("The bow swap can see the whole pack, and drops nothing:");
+  {
+    const LD = await import("../src/systems/loadout.ts");
+    const IL = await import("../src/items.ts");
+    const { createPlayer } = await import("../src/entities/player.ts");
+    const bag = (): IL.Bag => new Array(20).fill(null);
+
+    /* --- 1. the search was shallow ---------------------------------------
+     * A shield in the spare pack inside the pack is spendable, sellable and
+     * countable — `bagCount` and `removeItem` both recurse. The swap was the
+     * one caller that did not, so it said "no melee weapon in bag" while
+     * standing on one. */
+    {
+      const b = bag();
+      IL.addItem(b, "backpack", 1);
+      const inner = b.find((x) => x && x.kind === "backpack");
+      if (inner) { inner.items = bag(); IL.addItem(inner.items, "dragonShield", 1); }
+      IL.addItem(b, "ironSword", 1);
+      ok(LD.bestInTree(b, (k) => IL.ITEMS[k].slot === "shield") === "dragonShield",
+        "a shield inside a pack inside the pack is found");
+      const plan = LD.planSwap(b, "longbow", null);
+      ok(!LD.refused(plan) && plan.weapon === "ironSword" && plan.shield === "dragonShield",
+        "…so swapping off the bow brings back the weapon AND the buried shield");
+    }
+
+    /* --- 2. the best of several, not the first ---------------------------- */
+    {
+      const b = bag();
+      IL.addItem(b, "shortSword", 1);
+      IL.addItem(b, "knightSword", 1);
+      const plan = LD.planSwap(b, "longbow", null);
+      ok(!LD.refused(plan) && plan.weapon === "knightSword",
+        "the best melee weapon wins, not whichever slot came first");
+    }
+
+    /* --- 3. gear does not fall on the floor -------------------------------
+     * Going to a bow displaces the shield, and the old code put it on the
+     * GROUND when the bag was full. Swap back and there is no shield to
+     * restore, because it is lying wherever you last pressed the button. */
+    {
+      const b = bag();
+      IL.addItem(b, "longbow", 1);
+      for (let i = 0; i < b.length; i++) if (!b[i]) b[i] = { kind: "stone", n: 100 };
+      ok(LD.freeSlots(b) === 0, "the pack is genuinely full");
+      const plan = LD.planSwap(b, "ironSword", "dragonShield");
+      ok(LD.refused(plan) && plan.no === "room",
+        "…so the bow is refused rather than tipping the shield onto the floor");
+    }
+    {
+      // …and with one slot spare it goes through, because the shield fits
+      const b = bag();
+      IL.addItem(b, "longbow", 1);
+      for (let i = 0; i < b.length - 1; i++) if (!b[i]) b[i] = { kind: "stone", n: 100 };
+      const plan = LD.planSwap(b, "ironSword", "dragonShield");
+      ok(!LD.refused(plan) && plan.toBow, "one free slot is enough and the swap runs");
+    }
+
+    /* --- 4. an empty pack still refuses politely --------------------------- */
+    {
+      const plan = LD.planSwap(bag(), "ironSword", null);
+      ok(LD.refused(plan) && plan.no === "weapon" && plan.toBow,
+        "no bow to swap to is a refusal that knows which way it was going");
+    }
+  }
+
+  console.log("The keyboard reaches every hotkey:");
+  {
+    const IN = await import("../src/input.ts");
+    const A = await import("../src/systems/actions.ts");
+
+    /* Twenty-four slots and ten digits: fourteen of them had no key at all,
+     * and there is no way to type "12" — pressing 1 then 2 fires slot one
+     * twice. Two rows of function keys is exactly the bar. */
+    ok(IN.SPELL_KEY_ROW * 2 === A.ACTION_SLOTS_MAX,
+      `two rows of F-keys is the whole bar (${IN.SPELL_KEY_ROW} x 2 = ${A.ACTION_SLOTS_MAX})`);
+    ok(IN.spellKeyLabel(0) === "F1" && IN.spellKeyLabel(11) === "F12",
+      "the first twelve are plain F-keys");
+    ok(IN.spellKeyLabel(12) === "\u21e7F1" && IN.spellKeyLabel(23) === "\u21e7F12",
+      "…and the rest are the same twelve with shift");
+    const labels = new Set<string>();
+    for (let i = 0; i < A.ACTION_SLOTS_MAX; i++) labels.add(IN.spellKeyLabel(i));
+    ok(labels.size === A.ACTION_SLOTS_MAX, "every slot has its own key, none shared");
+    ok(!labels.has(""), "…and none is left without one");
+
+    const isrc = (await import("node:fs"))
+      .readFileSync(new URL("../src/input.ts", import.meta.url), "utf8");
+    /* F1 is the browser's help, F3 its find bar, F5 a reload, F11 fullscreen.
+     * Casting a spell and reloading the page on one press is worse than
+     * having no key at all. */
+    ok(/fn\) \{\s*e\.preventDefault\(\)/.test(isrc),
+      "the function keys are taken from the browser before they are used");
+    ok(/e\.shiftKey \? SPELL_KEY_ROW : 0/.test(isrc), "…and shift is what picks the second row");
+    const msrc = (await import("node:fs"))
+      .readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(msrc.includes("spellKeyLabel(i)"),
+      "the slot is captioned with the key that fires it, from the same one function");
+  }
+
+  console.log("Radek's six — the wiring the fixes hang on:");
+  {
+    const rfs = await import("node:fs");
+    const rd = (f: string): string => rfs.readFileSync(new URL("../" + f, import.meta.url), "utf8");
+    const rmain = rd("src/main.ts");
+    const rpan = rd("src/ui/panels.ts");
+    const rhud = rd("src/ui/hud.ts");
+
+    /* #1 — the Look card measured in one font and painted in another, so
+     * every box came out a few pixels narrower than the text inside it. */
+    ok(!/ctx\.font = `\$\{fs\}px monospace`/.test(rpan),
+      "the Look card no longer measures in a font it does not draw with");
+    ok(/hudFont\(fs, true\)/.test(rpan) && /hudFont\(fs\)/.test(rpan),
+      "…it measures with hudFont, the same string hudText paints with");
+    ok((rhud.match(/'Courier New',monospace/g) ?? []).length === 1,
+      "…and that string is written down exactly once in the whole HUD");
+    ok(/wrapText\(base\.hud, l, fs, budget\)/.test(rpan),
+      "…a line too long for the card wraps onto the next instead of leaving it");
+    ok(/const titleIndent = iw \+ 8 \* S;/.test(rpan),
+      "…and the title is measured from where it is actually drawn, past the icon");
+
+    /* #2 — the meat in a corpse. `removeItem(P.bag, …)` found nothing and
+     * returned in silence, so the click landed and did nothing at all. */
+    ok(/const inPlace = from && from\.c !== "bag" && \(def\.food \|\| def\.heal\)/.test(rmain),
+      "food and potions are used where they lie, not only out of the pack");
+    ok(/p\.act\.useItem\(k, idx, ref\)/.test(rpan),
+      "…because the panel now tells useItem which container was clicked");
+    ok(/if \(!spend\(\)\) return;/.test(rmain) && !/if \(!removeItem\(P\.bag, kind, 1\)\) return;\n      P\.fedS/.test(rmain),
+      "…and both the eating and the drinking spend from that same place");
+
+    /* #3 — a corpse lies where its owner died, which is where its friends are
+     * standing, so the loot click was re-targeting onto whatever stood on it. */
+    const wc = rmain.slice(rmain.indexOf("function worldClick("),
+      rmain.indexOf("\nfunction ", rmain.indexOf("function worldClick(") + 1));
+    const corpseAt = wc.indexOf("world.corpses");
+    const mobAt = wc.indexOf("world.monsters");
+    ok(corpseAt > 0 && mobAt > 0 && corpseAt < mobAt,
+      "with a target held, a click asks the corpses before the living");
+    ok(/if \(P\.target\?\.kind === "mob"\) \{\s*\n\s*for \(const c of world\.corpses\)/.test(wc),
+      "…and only with one held: an unengaged click still finds the creature on top");
+    ok(wc.indexOf("world.corpses", corpseAt + 1) > mobAt,
+      "…the plain corpse walk-to is still there for everyone else");
+
+    /* #5 — the picker is drawn after the toolbar and scrims the screen, so on
+     * the reverse sweep the scrim was eating every button on that strip. */
+    ok(/editBar\?: boolean;/.test(rpan), "a hotspot can declare itself part of the edit strip");
+    ok(/hotspots\[i\]\.editBar = true;/.test(rmain), "…the strip marks its own, in one place");
+    ok(/if \(assignSlot !== null\) \{[\s\S]{0,320}?if \(!hsp\.editBar\) continue;/.test(rmain),
+      "…and while the rebind picker is up the strip is asked before the scrim");
+  }
+
   console.log("The relic cannot be printed:");
   {
     const MR = await import("../src/systems/missions.ts");
