@@ -40,11 +40,27 @@
  * Only `closed` retires the echo — NOT killing the boss. That one choice is
  * what stops a lost relic from bricking a character: die on the way back, and
  * the door you need is still standing open. It costs a repeat run, which is a
- * real loss, and it is why buying a relic off another player is worth gold.
+ * real loss, and not the character.
  *
- * The other half of that bargain is `wantsRelic` below: the echo yields its
- * relic only while you are carrying none. Without it the same open door that
- * saves a careless player becomes a relic printing press for a patient one.
+ * ONE RELIC PER HEAD. That is the rule, and it is worth being exact about how
+ * it is held, because the open door above is also the way to abuse it: reopen
+ * the echo with a relic hidden somewhere the sage cannot see, and the same
+ * mercy that saves a careless player becomes a printing press for a patient
+ * one. Three things close it, and all three are needed:
+ *
+ *   1. `wantsRelic` asks how many the character is HOLDING, not only what the
+ *      stage says. A character with a cap is never handed a second.
+ *   2. the kill puts the relic straight into the pack rather than into the
+ *      corpse (`killMonster`), so there is no moment where the mission reads
+ *      `complete` and the cap is lying on the floor of a room the player can
+ *      walk back into.
+ *   3. `boundRelic` refuses to let it out of the pack at all while the sage
+ *      still wants it — not to the ground, not into a chest, not into a body.
+ *      Death does not take it either; the bag survives dying.
+ *
+ * Together those mean `complete` and "the cap is in the pack" are the same
+ * statement, which is what makes the count honest. `relicLost` survives as the
+ * reconcile point but is now a road almost nothing travels — see its comment.
  */
 import type { ItemKind } from "../items.ts";
 import type { WorldKey } from "../world/types.ts";
@@ -253,16 +269,44 @@ export function relicRoadOpen(key: WorldKey, level: number): boolean {
 }
 
 /**
- * Should this echo's boss drop its relic right now?
+ * Should this echo's boss part with its relic right now?
  *
- * Only while the mission is `active` — that is, the relic has not been taken
- * yet. Re-entering after a death to replace a lost one works, because losing
- * the relic is what puts the mission back to `active` (see `relicLost`);
- * farming a second one to sell does not, because the first kill moved the
- * mission to `complete` and it stays there until the sage is paid.
+ * TWO questions, not one, and the second is the one that matters. The stage
+ * must be `active` — the relic has not been taken yet — AND the character must
+ * be holding none.
+ *
+ * The stage alone used to be the whole rule, and the stage alone can be walked
+ * backwards on purpose: park the cap somewhere the sage cannot see it, let him
+ * find your hands empty, and the echo reopens with the cap still yours. Asking
+ * `held` as well means the reopened door is worth nothing to anyone who has
+ * not genuinely lost it. It is the same question `talkToSage` asks before
+ * reopening, put to the boss instead of to the man.
+ *
+ * `held` is passed in rather than read here because this module knows nothing
+ * about bags and should not start to: it is the caller who has the pack.
  */
-export function wantsRelic(id: string, level: number): boolean {
-  return stageOf(id, level) === "active";
+export function wantsRelic(id: string, level: number, held: number): boolean {
+  return stageOf(id, level) === "active" && held <= 0;
+}
+
+/**
+ * Is this item nailed to the character who carries it?
+ *
+ * True while a mission that wants this relic is in hand — `active` or
+ * `complete`, which is exactly `currentMission`. A bound item cannot be
+ * dropped, chested, put in a body or otherwise moved out of the pack, so the
+ * only two places a live relic can be is the pack or the sage's table.
+ *
+ * This is what makes the count in `wantsRelic` mean anything. Without it the
+ * question "are you holding one?" is answered by where the player chose to
+ * leave it thirty seconds ago, which is not a question, it is a suggestion.
+ *
+ * It costs the player the ability to make room by dropping the cap. That is a
+ * real cost and it is the price of the rule: six weight, and the errand ends
+ * with it leaving the pack anyway.
+ */
+export function boundRelic(kind: ItemKind, level: number): boolean {
+  return currentMission(level)?.relic === kind;
 }
 
 /** The boss is down and the relic is in the pack. */
@@ -271,10 +315,16 @@ export function relicTaken(id: string, level: number): void {
 }
 
 /**
- * The relic left the player's hands without reaching the sage — dropped on
- * death, sold, or handed to another player. The echo reopens; nothing else
- * changes. Called from wherever inventory is reconciled, not from the mission
- * flow itself, because the mission flow is not what loses it.
+ * The relic left the player's hands without reaching the sage. The echo
+ * reopens; nothing else changes.
+ *
+ * `boundRelic` has since closed every road that led here for a live character:
+ * it cannot be dropped, chested, bodied or sold, and dying does not cost the
+ * bag. So this is no longer the routine mercy it was written as — it is the
+ * catch for the cases the rule cannot reach. A save written before the bind
+ * landed, with a cap already sitting in a home chest. A trade, when there is
+ * trading. It stays because those are real and because the alternative to
+ * catching them is a character that can never finish the errand.
  */
 export function relicLost(id: string, level: number): void {
   if (stageOf(id, level) === "complete") setStage(id, "active");

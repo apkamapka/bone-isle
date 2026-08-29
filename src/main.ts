@@ -44,7 +44,7 @@ import { totalExpFor } from "./config.ts";
 import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import {
   MISSIONS, stageOf, setStage, offeredMission, currentMission,
-  missionHandedIn, relicLost, missionByGround, groundOpen,
+  missionHandedIn, relicLost, missionByGround, groundOpen, boundRelic,
   loreSeen, markLoreSeen, resetMissions, type MissionDef,
 } from "./systems/missions.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
@@ -918,6 +918,21 @@ function moveItems(
     return true;
   }
 
+  /* THE BOUND RELIC. A mission relic the sage is still waiting for does not
+   * leave the player — not into a chest, not into a body, not into a bag on
+   * the floor. The rule is one relic per head, and a relic parked out of sight
+   * is how one head comes to hold two: the sage finds empty hands, reopens the
+   * echo, and the boss is standing there again with the same cap on.
+   *
+   * Checked HERE because this is the one funnel every move goes through, which
+   * is the same reason weight and the chest budget are checked two lines down.
+   * Moving it about inside the player's own pack is untouched — the rule is
+   * about leaving, not about tidiness. */
+  if (rootOf(from) === "player" && rootOf(to) === "world" && boundRelic(st.kind, P.level)) {
+    flash("the sage is waiting for that — it stays with you", "#e0a06a");
+    return false;
+  }
+
   /* A container may not be put inside itself, at any depth. Without this the
    * tree becomes a cycle: the pack still renders, but its contents are now
    * unreachable from any root and every recursive walk runs forever. */
@@ -1386,6 +1401,14 @@ function dropFromContainer(ref: ContainerRef, index: number, n: number, tx?: num
   const slots = refSlots(ref);
   const st = slots ? slots[index] : null;
   if (!slots || !st) return;
+  /* The other door out of the pack, and the same rule as in `moveItems`: a
+   * relic the sage is still waiting for cannot be put down. The ground is the
+   * easiest hiding place of the lot — it is one drag and the cap is still four
+   * tiles away when Chronos looks at your hands. */
+  if (rootOf(ref) === "player" && boundRelic(st.kind, P.level)) {
+    flash("the sage is waiting for that — it stays with you", "#e0a06a");
+    return;
+  }
   if (st.items) {
     // a pack goes down whole, contents and all — that IS the loot bag
     slots[index] = null;

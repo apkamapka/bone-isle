@@ -5746,19 +5746,23 @@ async function main(): Promise<void> {
     ok(lawn === 0, `not one square of grass underground (${lawn})`);
 
     /* --- the relic gate ----------------------------------------------------
-     * The cap exists once per character. `wantsRelic` is the whole of the rule
-     * and `killMonster` is where it is applied, so the drop is asserted through
-     * the state machine rather than by reading the loot table. */
+     * The cap exists once per character. `wantsRelic` now asks TWO questions —
+     * the stage, and how many the character is holding — so every call below
+     * passes the count it is standing on. `killMonster` is where it is applied,
+     * so the drop is asserted through the state machine rather than by reading
+     * the loot table. */
     rps(); M41b.resetMissions();
-    ok(!M41b.wantsRelic("redcap", 10), "an untaken mission yields no relic");
+    ok(!M41b.wantsRelic("redcap", 10, 0), "an untaken mission yields no relic");
     M41b.setStage("redcap", "active");
-    ok(M41b.wantsRelic("redcap", 10), "…the taken one does");
+    ok(M41b.wantsRelic("redcap", 10, 0), "…the taken one does");
+    ok(!M41b.wantsRelic("redcap", 10, 1),
+      "…but never to a pair of hands that already holds one");
     M41b.relicTaken("redcap", 10);
-    ok(!M41b.wantsRelic("redcap", 10), "…and yields no SECOND cap to sell");
+    ok(!M41b.wantsRelic("redcap", 10, 0), "…and yields no SECOND cap to sell");
     ok(!M41b.echoOpen("hermitage", 10), "…and the lair shuts on the KILL, not on the hand-in");
     ok(M41b.relicRoadOpen("hermitage", 10), "…while the way home lights where he fell");
     M41b.relicLost("redcap", 10);
-    ok(M41b.wantsRelic("redcap", 10) && M41b.echoOpen("hermitage", 10),
+    ok(M41b.wantsRelic("redcap", 10, 0) && M41b.echoOpen("hermitage", 10),
       "losing the cap reopens the hole rather than bricking the character");
     ok(!M41b.relicRoadOpen("hermitage", 10), "…and the ride home has to be earned again");
     M41b.relicTaken("redcap", 10);
@@ -7854,7 +7858,7 @@ async function main(): Promise<void> {
       M.setStage("t1", "active");
       ok(M.groundOpen("reach", 8), "an active mission opens its hunting ground");
       ok(M.echoOpen("deaddeep2", 8), "…and its echo");
-      ok(M.wantsRelic("t1", 8), "…and the boss will part with the relic");
+      ok(M.wantsRelic("t1", 8, 0), "…and the boss will part with the relic");
       ok(M.currentMission(8)?.id === "t1", "the mission is in hand");
 
       // the boss falls: the echo STAYS OPEN, and stops yielding relics
@@ -7862,12 +7866,12 @@ async function main(): Promise<void> {
       ok(M.stageOf("t1", 8) === "complete", "killing the boss completes it");
       ok(!M.echoOpen("deaddeep2", 8), "…and the echo shuts behind you: the boss is a one-time fight");
       ok(M.relicRoadOpen("deaddeep2", 8), "…with a way home opening in its place");
-      ok(!M.wantsRelic("t1", 8), "…and no SECOND relic: no farming them to sell");
+      ok(!M.wantsRelic("t1", 8, 0), "…and no SECOND relic: no farming them to sell");
       ok(M.stageOf("t2", 12) === "locked", "the next link does not open on the kill");
 
       // losing it reopens the tap, and only that
       M.relicLost("t1", 8);
-      ok(M.stageOf("t1", 8) === "active" && M.wantsRelic("t1", 8) && M.echoOpen("deaddeep2", 8),
+      ok(M.stageOf("t1", 8) === "active" && M.wantsRelic("t1", 8, 0) && M.echoOpen("deaddeep2", 8),
         "dropping the relic reopens the echo rather than bricking the chain");
       M.relicTaken("t1", 8);
 
@@ -12600,6 +12604,83 @@ async function main(): Promise<void> {
    *  Each one below was found by reading rather than by playing, which is
    *  exactly why each one needs a test — nobody reads twice.
    * ======================================================================= */
+  /* ======================================================================= *
+   *  ONE RELIC PER HEAD
+   *
+   *  The rule had a hole in it and the hole was not in any one function: the
+   *  stage said `complete`, the cap was in a home chest, Chronos looked at
+   *  empty hands and reopened the door. Every part behaved as written. So the
+   *  test below is not a unit test of a predicate — it WALKS the exploit, step
+   *  for step, and asserts it comes out with one cap instead of two.
+   * ======================================================================= */
+  console.log("The relic cannot be printed:");
+  {
+    const MR = await import("../src/systems/missions.ts");
+    const IT = await import("../src/items.ts");
+    const { createPlayer } = await import("../src/entities/player.ts");
+    const { resetPlayerState: rpsR } = await import("../src/systems/playerState.ts");
+    const rfs = await import("node:fs");
+
+    const held = (p: { bag: Parameters<typeof IT.bagCount>[0] }): number =>
+      IT.bagCount(p.bag, "bloodCap");
+
+    /* --- the loop, played out -------------------------------------------- */
+    rpsR();
+    MR.resetMissions();
+    const pr = createPlayer(0, 0);
+    pr.level = 12;
+
+    MR.setStage("redcap", "active");
+    // kill #1: the boss parts with it, and it goes into the PACK, not a corpse
+    ok(MR.wantsRelic("redcap", pr.level, held(pr)), "the first kill is owed a cap");
+    IT.addItem(pr.bag, "bloodCap", 1);
+    MR.relicTaken("redcap", pr.level);
+    ok(held(pr) === 1 && MR.stageOf("redcap", pr.level) === "complete",
+      "…and after it, one cap and a completed errand");
+
+    /* Step two of the exploit: park the cap somewhere the sage cannot see.
+     * A chest, the floor, a body — all of them are `rootOf === "world"`, and
+     * all of them are now refused, so the only way to model the old bug is to
+     * do what the game will not let the player do. */
+    ok(MR.boundRelic("bloodCap", pr.level), "the cap is bound while he waits for it");
+    const stash: typeof pr.bag = new Array(20).fill(null);
+    IT.removeAcross([pr.bag], "bloodCap", 1);
+    IT.addItem(stash, "bloodCap", 1);
+
+    // step three: Chronos finds empty hands and reopens the door
+    if (IT.countAcross([pr.bag], "bloodCap") === 0) MR.relicLost("redcap", pr.level);
+    ok(MR.echoOpen("hermitage", pr.level), "an empty-handed player does get the door back");
+
+    // step four: take the stashed cap and go kill him again
+    IT.removeAcross([stash], "bloodCap", 1);
+    IT.addItem(pr.bag, "bloodCap", 1);
+    ok(!MR.wantsRelic("redcap", pr.level, held(pr)),
+      "…but the boss will not hand a second to a man already wearing one");
+    ok(held(pr) === 1, "…so the loop comes out where it started: ONE cap");
+
+    /* --- and both doors out of the pack are shut ------------------------- */
+    const mainR = rfs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(/rootOf\(from\) === "player" && rootOf\(to\) === "world" && boundRelic\(/.test(mainR),
+      "moveItems refuses to send a bound relic out of the player");
+    ok(/function dropFromContainer[\s\S]{0,700}?boundRelic\(/.test(mainR),
+      "…and dropFromContainer refuses to put it on the ground");
+    /* Both gates ask `boundRelic`, and `boundRelic` is the ONLY thing either
+     * asks — a second, differently-worded rule in one of them is how the two
+     * drift apart, which is the bug this whole section exists to prevent. */
+    ok((mainR.match(/boundRelic\(/g) ?? []).length === 2,
+      "…and there are exactly two gates, both asking the same question");
+
+    /* --- the kill hands it over rather than dropping it ------------------ */
+    const cmb = rfs.readFileSync(new URL("../src/systems/combat.ts", import.meta.url), "utf8");
+    ok(/items\.splice\(i, 1\)/.test(cmb) && /addItem\(p\.bag, md\.relic, 1\)/.test(cmb),
+      "killMonster takes the relic off the corpse and puts it in the pack");
+    ok(/freeCap\(p\)/.test(cmb),
+      "…and a pack with no room leaves the mission where it was, rather than dropping it");
+
+    rpsR();
+    MR.resetMissions();
+  }
+
   console.log("Housekeeping — dead files, dead names, dead comments:");
   {
     const hk = await import("node:fs");

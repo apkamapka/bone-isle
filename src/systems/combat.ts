@@ -11,8 +11,8 @@ import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
 import { missionByEcho, wantsRelic, relicTaken } from "./missions.ts";
-import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag } from "../items.ts";
-import { refreshDerived } from "../entities/player.ts";
+import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, addItem, bagCount, itemWeight } from "../items.ts";
+import { refreshDerived, freeCap } from "../entities/player.ts";
 import { structCenter, tierOf, DUMMY_TIER_RATE, DUMMY_TIER_SHIELD } from "./building.ts";
 import {
   addSkillXp, addShieldXp, markBloodHit, applySkillDeathLoss, attackPower, defenseArmor, distancePower,
@@ -174,20 +174,33 @@ export function killMonster(world: World, p: Player, m: Monster): void {
   grantExp(world, p, d.exp);
 
   const { items, gold } = rollLoot(m.kind);
-  /* THE RELIC GATE. A mission's relic is not ordinary loot: it exists once per
-   * character and the echo must not print a second one to be sold. `wantsRelic`
-   * is true only while the mission is `active` — that is, while the player has
-   * not taken one yet — so the first kill yields the cap and moves the mission
-   * to `complete`, and every kill after that yields the same corpse minus the
-   * cap. Losing the relic puts the mission back to `active` (Chronos notices
-   * the empty hands), and the door is still open, so a careless death costs a
-   * repeat run and not the character. */
+  /* THE RELIC GATE. A mission's relic is not ordinary loot: it exists ONCE per
+   * character, and everything here is in service of keeping that true.
+   *
+   * It never reaches the corpse. It used to, and a corpse is a place — one the
+   * player can walk away from, leave the cap in, let the sage find empty hands,
+   * and come back to with the echo reopened behind them. Two caps, no cheating
+   * required, just patience. So the relic is taken OFF the loot roll and put
+   * straight into the pack, and `relicTaken` fires on the same line: from the
+   * kill onward, `complete` and "it is in the bag" are one statement.
+   *
+   * `wantsRelic` asks how many are already held, so a character who has one is
+   * simply not given another — the fallback below strips the cap out of the
+   * roll and the corpse is the same corpse minus the thing that is not his to
+   * take twice.
+   *
+   * A pack with no room for six weight is the one case that refuses the grant.
+   * The mission does NOT advance: he respawns, the cap is still his to take,
+   * and the player is told to make room. Better than the old answer, which
+   * would have been to put a bound item on the floor. */
   const md = missionByEcho(world.key);
-  if (md) {
-    if (wantsRelic(md.id, p.level)) {
-      if (items.some((it) => it.kind === md.relic)) relicTaken(md.id, p.level);
+  for (let i = items.length - 1; i >= 0; i--) if (md && items[i].kind === md.relic) items.splice(i, 1);
+  if (md && wantsRelic(md.id, p.level, bagCount(p.bag, md.relic))) {
+    if (itemWeight(md.relic, 1) <= freeCap(p) && addItem(p.bag, md.relic, 1) === 0) {
+      relicTaken(md.id, p.level);
+      addFloat(world, p.x, p.y - 64, ITEMS[md.relic].name, "#b9a6d8");
     } else {
-      for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === md.relic) items.splice(i, 1);
+      addFloat(world, p.x, p.y - 64, "no room for it — make space", "#d96a5a");
     }
   }
   world.corpses.push({
