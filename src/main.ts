@@ -14,7 +14,7 @@ import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
-import { updateMonsters, MONSTER_DEFS, spawnAtPost } from "./entities/monsters.ts";
+import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
@@ -1951,10 +1951,6 @@ function pointInOpenPanel(sx: number, sy: number): boolean {
 }
 
 /** "snake" -> "Snake"; monster kinds are stored as their lowercase key. */
-function titleCase(k: string): string {
-  return k.charAt(0).toUpperCase() + k.slice(1);
-}
-
 /**
  * Describe what is on a tile, into the log.
  *
@@ -2012,13 +2008,13 @@ function lookAtTile(at: Vec): void {
    * meant", and it matters: a coin lying at the foot of a chest should be
    * the coin, and a rat standing in front of the chest should be the rat. */
   const m = nearestHit(world.monsters, at, (x) => x.hp > 0);
-  if (m) { logServer(`You see ${titleCase(m.kind)} — ${Math.ceil(m.hp)}/${m.maxhp} hp.`); return; }
+  if (m) { logServer(`You see ${mobName(m.kind)} — ${Math.ceil(m.hp)}/${m.maxhp} hp.`); return; }
   const n = nearestHit(world.npcs, at);
   if (n) { logServer(`You see ${n.name}.`); return; }
   const gi = nearestHit(world.ground, at);
   if (gi) { logServer(`You see ${gi.n > 1 ? `${gi.n} ` : ""}${ITEMS[gi.kind].name}.`); return; }
   const c = nearestHit(world.corpses, at);
-  if (c) { logServer(`You see the remains of ${titleCase(c.name)}.`); return; }
+  if (c) { logServer(`You see the remains of ${mobName(c.name)}.`); return; }
 
   /* Everything below is addressed by TILE rather than by pixel, and each one
    * has a footprint bigger than the square that names it — which is why
@@ -2140,7 +2136,7 @@ function openContextMenu(sx: number, sy: number): void {
    * and the menu acts. */
   const m = nearestHit(world.monsters, at, (x) => x.hp > 0);
   if (m) {
-    entries.push({ verb: "attack", label: `Attack ${titleCase(m.kind)}`, enabled: true,
+    entries.push({ verb: "attack", label: `Attack ${mobName(m.kind)}`, enabled: true,
       run: () => { P.target = { kind: "mob", id: m.id }; P.dest = null; P.gather = null; } });
   }
   const c = nearestHit(world.corpses, at);
@@ -2369,6 +2365,20 @@ function closeChat(): void {
  * carry went with the channels they were apologising for.
  */
 function sendChat(text: string): void {
+  /* TEMP-ETAP42 — the testing reset, typed rather than offered.
+   *
+   * It used to be the sage's last answer, which was wrong twice over: it sat
+   * under every single thing he said, including the end of a mission, where
+   * the one option on screen should be about the NEXT errand and not about
+   * erasing the last one — and it put a debug tool in a character's mouth,
+   * where a player who does not know what it is can press it and lose their
+   * chain. A command has to be typed on purpose and nobody types it by
+   * accident. Grep TEMP-ETAP42 to pull the whole thing. */
+  if (text.trim().toLowerCase() === "/forget") {
+    forgetEverything();
+    closeChat();
+    return;
+  }
   say(activeChannel(), text, SELF, CHAT_SPEAKER_ID);
   closeChat();
 }
@@ -2901,7 +2911,7 @@ function sageSays(
 }
 
 /**
- * TEMP-ETAP42 — the testing reset, offered as the sage's last answer.
+ * TEMP-ETAP42 — the testing reset, reached by typing `/forget` into the chat.
  *
  * The mission chain is one-shot per character by design, which makes the whole
  * of it untestable a second time without rolling a new one. This puts the
@@ -2912,8 +2922,8 @@ function sageSays(
  *
  * The chest is the part that pays out real coin every run, so a character used
  * for this is not a character to read gold balance off. Grep TEMP-ETAP42 to
- * pull the whole thing — this function, its entry in every choice list, and
- * its two strings in speech.ts.
+ * pull the whole thing — this function, its branch in `sendChat`, and its
+ * string in speech.ts.
  */
 function forgetEverything(): void {
   resetMissions();
@@ -2924,12 +2934,20 @@ function forgetEverything(): void {
   game.opened = game.opened.filter((id) => !MISSIONS.some((m) => id.startsWith(`treasure:${m.echo}:`)));
   applyMissionPads(game.worlds, P.level);
   saveGame(game);
-  sageSays("sage.forgot");
+  flash("Chronos has forgotten you", "#b9a6d8");
 }
 
-/** TEMP-ETAP42. Appended to every one of his answers while testing. */
-function forgetChoice(): DialogueChoice {
-  return { key: "sage.choice.forget", run: forgetEverything };
+/**
+ * The way OUT of a conversation, on every speech that ends one.
+ *
+ * A speech with no answers already closes on a tap, so this button changes
+ * nothing mechanically — and that is the point. Without it the last page of a
+ * conversation is a wall of text with a blinking arrow, and the player has to
+ * guess that tapping the world dismisses it. A labelled door is not a feature,
+ * it is the absence of a small puzzle nobody asked for.
+ */
+function leaveChoice(): DialogueChoice {
+  return { key: "sage.choice.notYet", run: () => { /* the box is already closed */ } };
 }
 
 function acceptMission(m: MissionDef): void {
@@ -2973,10 +2991,10 @@ function talkToSage(): void {
       relicLost(cur.id, P.level);
       applyMissionPads(game.worlds, P.level);
       saveGame(game);
-      sageSays(`sage.empty.${cur.id}`, { choices: [forgetChoice()] });
+      sageSays(`sage.empty.${cur.id}`, { choices: [leaveChoice()] });
       return;
     }
-    sageSays(`sage.remind.${cur.id}`, { choices: [forgetChoice()] });
+    sageSays(`sage.remind.${cur.id}`, { choices: [leaveChoice()] });
     return;
   }
 
@@ -2989,8 +3007,7 @@ function talkToSage(): void {
      * as a briefing for something already agreed. */
     sageSays(`sage.offer.${next.id}`, { choices: [
       { key: "sage.choice.what", run: () => acceptMission(next) },
-      { key: "sage.choice.notYet", run: () => sageSays(`sage.decline.${next.id}`, { choices: [forgetChoice()] }) },
-      forgetChoice(),
+      { key: "sage.choice.notYet", run: () => sageSays(`sage.decline.${next.id}`) },
     ] });
     return;
   }
@@ -2999,8 +3016,8 @@ function talkToSage(): void {
   // player's level. Say which, because "not yet" with no reason was the whole
   // of what he used to say and it told nobody anything.
   const nextLocked = MISSIONS.find((m) => stageOf(m.id, P.level) === "locked");
-  if (nextLocked) sageSays("sage.locked", { choices: [forgetChoice()], vars: { lv: nextLocked.reqLevel } });
-  else sageSays("sage.cold", { choices: [forgetChoice()] });
+  if (nextLocked) sageSays("sage.locked", { choices: [leaveChoice()], vars: { lv: nextLocked.reqLevel } });
+  else sageSays("sage.cold", { choices: [leaveChoice()] });
 }
 
 function worldClick(w: Vec): void {
@@ -4133,21 +4150,36 @@ function hpBar(x: number, y: number, frac: number, w = 28): void {
 
 function render(): void {
   const world = cw();
-  // camera follows player, clamped to island
-  /* The strip covers the right edge, so the middle of what you can SEE is left
-   * of the middle of the glass. Without this the character stands two tiles off
-   * centre and anything walking in from the right is on him before it appears. */
-  cam.x = clamp(P.x - VW * mapFocusFracX(deck, screen.width, stripWidth()), 0, Math.max(0, world.w * TILE - VW));
-  /* The world is still rendered across the whole canvas and the two plates are
-   * drawn over its ends, so every screen->world conversion in this file keeps
-   * working untouched. What DOES change is where the player is parked: the
-   * middle of the visible BAND, not the middle of the canvas. The strip and the
-   * deck are not the same height, so centring on the canvas would leave the
-   * character sitting low, half-buried behind the hotbar. */
-  cam.y = clamp(P.y - VH * mapFocusFrac(deck, screen.height), 0, Math.max(0, world.h * TILE - VH));
+  /* THE CAMERA IS NO LONGER CLAMPED TO THE MAP.
+   *
+   * It used to stop at the edges, which meant that on any map smaller than the
+   * viewport — the sage's cellar most of all — the player was shoved off
+   * centre and stood in the bottom third of a phone screen with the ceiling
+   * pinned to the top of the glass. The fix is not to author padding tiles
+   * onto twelve maps: a phone in portrait shows more than twenty tiles top to
+   * bottom, so centring a player standing on row two needs about ten blank
+   * rows above him, on every map, on all four sides, and every one of them
+   * would shift the coordinates of every portal, post and chest already
+   * placed.
+   *
+   * So the player is simply always in the middle and the world runs out. That
+   * is what Tibia does — its viewport is centred on the character full stop,
+   * and at the edge of the world you see black. The black is drawn below.
+   *
+   * The strip covers the right edge, so the middle of what you can SEE is left
+   * of the middle of the glass; and the deck and the strip are different
+   * heights, so the vertical middle is the middle of the visible BAND rather
+   * than of the canvas. Both fractions are unchanged — only the clamp is gone. */
+  cam.x = P.x - VW * mapFocusFracX(deck, screen.width, stripWidth());
+  cam.y = P.y - VH * mapFocusFrac(deck, screen.height);
 
-  vctx.fillStyle = "#1c6060";
+  /* Void first, then the map's own footprint in the old sea colour. Painting
+   * the whole canvas teal would put sea outside a cellar; painting it all
+   * black would drop the backing that unbaked water sits on. */
+  vctx.fillStyle = "#000";
   vctx.fillRect(0, 0, VW, VH);
+  vctx.fillStyle = "#1c6060";
+  vctx.fillRect(Math.round(-cam.x), Math.round(-cam.y), world.w * TILE, world.h * TILE);
   // baked terrain — blit ONLY the visible source rect. Drawing the whole
   // canvas with an offset made the browser shuffle the full baked bitmap
   // every frame; on the 368x272-tile continent that's a ~5900x4350 px image
@@ -4169,8 +4201,13 @@ function render(): void {
   const artW = art ? art.naturalWidth : world.mapCanvas.width;
   const artH = art ? art.naturalHeight : world.mapCanvas.height;
   const K = art ? 1 : SPRITE_SCALE;
-  const sx0 = Math.floor(camX / K);
-  const sy0 = Math.floor(camY / K);
+  /* Floored at zero now that the camera can sit outside the map: a negative
+   * source rect draws nothing at all, which is how the whole map would vanish
+   * the moment the player stood near the top-left corner. The remainder is
+   * paid back on the destination below exactly as before — `offX` simply goes
+   * negative there and shifts the map right instead of left. */
+  const sx0 = Math.max(0, Math.floor(camX / K));
+  const sy0 = Math.max(0, Math.floor(camY / K));
   const offX = camX - sx0 * K;
   const offY = camY - sy0 * K;
   const srcW = Math.min(Math.ceil(VW / K) + 1, artW - sx0);

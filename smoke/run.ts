@@ -912,7 +912,14 @@ async function main(): Promise<void> {
       const tier = M.monsterTierOf(d.hp);
       const eR = d.exp / M.monsterExpBudget(tier);
       const dR = dpsOf(d) / M.monsterDpsBudget(tier);
-      if (eR < 0.5 || eR > 1.6) bad.push(`${k} exp ${eR.toFixed(2)}×`);
+      /* A NAMED creature is a mission boss and its economics are not on the
+       * creature. The redcap carries 300 exp against a 600 hp body, which
+       * reads as half a wage here — and would, if his body were the payout.
+       * It is not: the errand pays `rewardExp` when the relic reaches the
+       * sage's table, and the thirty platinum is in a one-time chest three
+       * squares behind him. Holding a boss to the grind curve would price the
+       * same reward twice. Damage and armour stay in band for all of them. */
+      if (!d.name && (eR < 0.5 || eR > 1.6)) bad.push(`${k} exp ${eR.toFixed(2)}×`);
       // casters read low here because their ranged damage is not in `dmg`
       if (dR < 0.35 || dR > 2.0) bad.push(`${k} dps ${dR.toFixed(2)}×`);
       if ((d.armor ?? 0) > M.monsterArmorBudget(tier) + 6) bad.push(`${k} armor ${d.armor}`);
@@ -5411,13 +5418,26 @@ async function main(): Promise<void> {
       "…and never throws from beyond his own awareness");
     ok((d.armor ?? 0) > 0, "the iron boots are worth something against steel");
 
-    /* --- the tier: ten over the ground he is reached from ------------------
-     * The human ladder tops out at the highwayman. A boss the ladder trains you
-     * for has to sit well above it, or the echo is not an exam. */
-    const tier = M41.monsterTierOf(d.hp);
-    const top = M41.monsterTierOf(MONSTER_DEFS.highwayman.hp);
-    ok(tier >= top + 8 && tier <= top + 14,
-      `he stands ${tier - top} tiers over the highwayman — the ground trains, the echo tests (${tier} vs ${top})`);
+    /* --- a wall, not a sharper knife ---------------------------------------
+     * The human ladder tops out at the highwayman, and the boss has to stand
+     * well over it or the echo is not an exam. This used to be measured as a
+     * TIER gap, and tier is derived from hp alone — which stopped being the
+     * right ruler the moment his hp was doubled and nothing else moved. By
+     * that measure he leapt twenty-seven tiers while getting no more
+     * dangerous per second than he was.
+     *
+     * So it is measured on both axes now, which is the shape the doubling
+     * actually has: roughly four times the body, and a hit rate only a little
+     * over the top of the ground ladder. That is what makes six hundred hp a
+     * LONG fight at level ten rather than an unwinnable one — more windows to
+     * misplay, more potions spent, and time enough for the stones to matter. */
+    const dpsOf41 = (x: { dmg: readonly [number, number]; atkRate: number }): number =>
+      (x.dmg[0] + x.dmg[1]) / 2 / x.atkRate;
+    const hpR = d.hp / MONSTER_DEFS.highwayman.hp;
+    const dpsR = dpsOf41(d) / dpsOf41(MONSTER_DEFS.highwayman);
+    ok(hpR >= 3 && hpR <= 5, `he is ${hpR.toFixed(1)}× the body of the ladder's best — a wall`);
+    ok(dpsR >= 1.05 && dpsR <= 1.8,
+      `…and only ${dpsR.toFixed(2)}× its bite, so the length is the difficulty (not a spike)`);
 
     /* --- the loot ----------------------------------------------------------
      * The relic is not a dice roll: a mission that cannot be finished because
@@ -10582,8 +10602,18 @@ async function main(): Promise<void> {
       "…two panels are open at most, and the oldest gives way — a move needs both its ends");
     ok(main.includes("if (overDeck(deck, sx, sy)) return true;"),
       "…a press on either plate never walks the player");
-    ok(main.includes("cam.y = clamp(P.y - VH * mapFocusFrac(deck, screen.height)"),
+    ok(main.includes("cam.y = P.y - VH * mapFocusFrac(deck, screen.height);"),
       "…and the camera parks the player in the visible band");
+    /* The clamp is GONE, and that is the fix for a cellar smaller than a phone
+     * screen: it used to stop at the map edge, which pinned the ceiling to the
+     * top of the glass and shoved the player into the bottom third. Authoring
+     * padding tiles instead would have meant about ten blank rows on every
+     * side of every map, each one shifting every portal and post already
+     * placed. Tibia centres the character and shows black past the edge; so
+     * does this now. */
+    ok(!/cam\.[xy] = clamp\(/.test(main), "…and is not clamped to the map, so small maps still centre him");
+    ok(main.includes("const sx0 = Math.max(0, Math.floor(camX / K));"),
+      "…while the terrain blit refuses a negative source rect, which would draw nothing at all");
     ok(main.includes("fixedChrome: deck.on"),
       "…while the top strip takes over the vitals, purse, minimap and location");
     ok(hud.includes('const sidebar = (h.sidebarW ?? 0) > 0 || !!h.fixedChrome;'),
@@ -12278,6 +12308,8 @@ async function main(): Promise<void> {
     const SP = await import("../src/text/speech.ts");
     const DL = await import("../src/ui/dialogue.ts");
     const M42 = await import("../src/systems/missions.ts");
+    const { MISSIONS: MISSIONS42 } = M42;
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
     const PP = await import("../src/systems/panelPrefs.ts");
     const fs42 = await import("node:fs");
 
@@ -12346,11 +12378,17 @@ async function main(): Promise<void> {
     ok(overflow.length === 0,
       `no page overflows its row budget in any language${overflow.length ? " — " + overflow[0] : ""}`);
     ok(empty.length === 0, `no page comes out blank${empty.length ? " — " + empty[0] : ""}`);
-    /* Six is a ceiling on the WRITING, not on the box: the box would page
+    /* Eight is a ceiling on the WRITING, not on the box: the box would page
      * through twenty happily, but twenty pages is not a story beat, it is a
      * wall, and the point of the chronicle is that it is read rather than
-     * skipped. */
-    ok(worstPages <= 6, `the longest text is still readable in one sitting (${worstPages} pages, ${worstKey})`);
+     * skipped. The redcap's history lands at seven against this deliberately
+     * narrow ruler and six on a real screen — and, more to the point, at the
+     * SAME count in all three languages, which is the number that would drift
+     * first if anyone went back to cutting pages by hand. */
+    ok(worstPages <= 8, `the longest text is still readable in one sitting (${worstPages} pages, ${worstKey})`);
+    const spread = SP.LANGS.map((lg) => DL.paginate(SP.t("lore.redcap", lg), COL, ROWS42, ruler).length);
+    ok(Math.max(...spread) - Math.min(...spread) <= 1,
+      `no language pays for the layout more than another (${spread.join("/")} pages)`);
 
     /* A blank line is the one piece of layout the writer keeps. */
     const forced = DL.paginate("one\n\ntwo", 40, 4, ruler);
@@ -12477,30 +12515,80 @@ async function main(): Promise<void> {
       "…and the reward speech is not left with the testing reset as its only answer");
     /* Two exits from the chain, and both have to say something useful: the
      * level to come back at, or that there is more coming later. */
-    ok(/sage\.locked", \{ choices: \[forgetChoice\(\)\], vars: \{ lv:/.test(main42),
+    ok(/sage\.locked", \{ choices: \[leaveChoice\(\)\], vars: \{ lv:/.test(main42),
       "too low a level is answered with the level to come back at");
     for (const lg of SP.LANGS) {
       ok(SP.t("sage.locked", lg, { lv: 12 }).includes("12"),
         `${lg}: …and the number really lands in the line`);
       const spoken42 = SP.t("sage.cold", lg) + SP.t("sage.remind.redcap", lg)
-        + SP.t("sage.accept.redcap", lg) + SP.t("sage.offer.redcap", lg) + SP.t("sage.forgot", lg);
+        + SP.t("sage.accept.redcap", lg) + SP.t("sage.offer.redcap", lg);
       ok(!/\bpad(em|y|zie)?\b|plataforma/i.test(spoken42),
         `${lg}: he talks about doors, not about "pads"`);
     }
 
+    /* --- every conversation has a labelled way out -------------------------
+     * A speech with no answers already closes on a tap, so these buttons
+     * change nothing mechanically. Without them the last page is a wall of
+     * text and a blinking arrow, and dismissing it is a guess. */
+    ok(/function leaveChoice/.test(main42), "there is a way out of a conversation that is spelled out");
+    ok(SP.t("sage.choice.notYet", "pl") === "Nie teraz.", "…and it says so plainly");
+    ok((main42.match(/leaveChoice\(\)/g) ?? []).length >= 4,
+      "…on every speech that ends one: no relic, reminder, level gate, end of chain");
+
     /* --- TEMP-ETAP42: the reset that must not outlive the testing ----------
+     * It USED to be the sage's last answer, and that was wrong twice: it sat
+     * under everything he said — including the end of a mission, where the one
+     * button on screen should be about the next errand — and it put a debug
+     * tool in a character's mouth where a player who does not know what it is
+     * can press it and lose their chain. It is typed now. Nobody types it by
+     * accident.
+     *
      * Same arrangement as the redcap's temporary post on the Gallows Coast:
      * the thing is tagged, and the test is both the reminder and the grep
-     * handle. When the chain is done being walked twenty times, pull the tag
-     * and this block goes red until it is pulled too. */
+     * handle. When the chain is done being walked, pull the tag and this block
+     * goes red until it is pulled too. */
     ok(/TEMP-ETAP42/.test(main42), "the testing reset is tagged for removal");
     ok(/function forgetEverything/.test(main42), "…it wipes the chain");
     const forget = main42.slice(main42.indexOf("function forgetEverything"),
-      main42.indexOf("function acceptMission"));
+      main42.indexOf("/**\n * The way OUT"));
     ok(/resetMissions\(\)/.test(forget) && /removeAcross/.test(forget) && /game\.opened = /.test(forget),
       "…the stages, the relic in the pack and the one-time chest, which is all three halves of a re-run");
-    ok(SP.hasText("sage.choice.forget") && SP.hasText("sage.forgot"),
-      "…and its two strings are keyed like everything else he says");
+    ok(/=== "\/forget"/.test(main42), "…and it is reached by typing, not by pressing");
+    ok(!/forgetChoice/.test(main42) && !SP.hasText("sage.choice.forget"),
+      "…and never appears as something the sage offers");
+
+    /* --- the chronicle actually says something ------------------------------
+     * The first draft was an encyclopedia entry and a player who walked the
+     * mission twice came out of it knowing nothing. These are the three things
+     * it was missing, pinned so a later edit cannot quietly drop them again:
+     * the creature's NAME, the terms of the bargain that make the lead and the
+     * cauldron the answer to it, and the buried hoard that is the chest at the
+     * bottom of the echo. */
+    for (const lg of SP.LANGS) {
+      const tale = SP.t("lore.redcap", lg);
+      ok(tale.includes("Robin Redcap"), `${lg}: the thing in the boots has a name`);
+      ok(tale.includes("de Soulis"), `${lg}: …and the lord who bought him is named too`);
+      /* Six paragraphs, and the SAME six in every language: the opening, the
+       * "three things", then one page each for the cap, the iron and the
+       * speed, then the hoard. That shape is the whole difference between the
+       * page that bored Radek twice and this one — it is a briefing, and a
+       * briefing that loses a beat in translation has lost the beat. */
+      const beats = tale.split(/\n\s*\n/).length;
+      ok(beats === 6, `${lg}: …told in six beats, not as a lecture (${beats})`);
+      ok(tale.length > 800, `${lg}: …and it is a story rather than a caption (${tale.length} chars)`);
+    }
+    /* The page promises the player three things about the fight. All three
+     * have to be true of the creature they are about to meet, or the chronicle
+     * is decoration — and these are exactly the numbers a later balance pass
+     * would move without thinking to re-read a story file. */
+    {
+      const rc = MONSTER_DEFS.redcap;
+      const fastest = Object.values(MONSTER_DEFS).every((m) => m.speed <= rc.speed);
+      ok(fastest, `nothing in the bestiary outruns him, as the page says (${rc.speed})`);
+      ok((rc.armor ?? 0) > 0, "…the iron on him is worth something, as the page says");
+      ok(MISSIONS42.find((m) => m.id === "redcap")?.relic === "bloodCap",
+        "…and the errand really is the cap, which is where his life is kept");
+    }
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

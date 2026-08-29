@@ -178,88 +178,88 @@ const LORE: Readonly<Record<string, Bundle>> = {
     es: "Hermitage, Liddesdale — 1320",
   },
   /*
-   * REWRITTEN. The first version was an encyclopedia entry — castle, date,
-   * owner, mob, shrug — and Radek walked the mission twice and came out
-   * knowing nothing he wanted to know. Three things were wrong with it.
+   * REWRITTEN TWICE, and the second rewrite is the one that matters.
    *
-   * It never gave the creature its NAME. The folklore calls him Robin Redcap
-   * (Henderson has him as Redcap Sly), and a boss with a name is a character
-   * while a boss with a species is a spawn.
+   * Draft one was an encyclopedia entry: castle, date, owner, mob, shrug.
+   * Draft two put the folklore back — the name, the bargain, the lead — and
+   * was still a HISTORY LESSON. Radek walked the mission twice and came out
+   * bored both times, which is the only review that counts.
    *
-   * It skipped the BARGAIN, which is the whole engine of the story: no blade,
-   * no lance, no arrow and no rope that would hold him — a list that exists so
-   * that the lead and the cauldron can be the answer to it. Scott's Minstrelsy
-   * has the king snapping "boil him, if you please, but let me hear no more of
-   * him", and messengers arriving in time to watch. That is the beat the first
-   * draft replaced with the word "boiled".
+   * The fault was the register, not the facts. A chronicle read on the way
+   * into a fight should tell the player what is about to try to kill them, and
+   * every line of it should be something they will recognise ten minutes later
+   * with a pike in their face. So it is a BRIEFING now: one paragraph of who
+   * he is, then three things, each of which is true in the folklore AND true
+   * in this build.
    *
-   * And it ended on a shrug instead of on the HOARD. Robin is said to have
-   * buried what he took and never come back for it, and people kept claiming
-   * to see him at the ruin at dusk turning stones over — which is, to the
-   * letter, the one-time chest at the bottom of the echo. The chronicle now
-   * tells the player about a thing they will then find.
+   *   the cap    his life is in it and only while the blood is wet — which is
+   *              why the errand is "bring it wet" and not "bring it"
+   *   the iron   every other thing of that kind flees cold iron; he wears it,
+   *              boots and pike, and you hear him coming
+   *   the speed  the iron does not slow him — `speed: 79`, the fastest thing
+   *              in the bestiary, and a smoke test pins it there
+   *
+   * The hoard closes it, because the hoard is the one-time chest at the bottom
+   * of the echo. Every promise the page makes is one the map keeps.
    */
   "lore.redcap": {
-    en: "Robin Redcap. The chronicles record his master to the day and the "
-      + "hour, and him not at all. A redcap is a squat old man with a pike in his fist and iron on his "
-      + "feet, and nothing on two legs outruns him. The cap is dyed in the "
-      + "blood of whoever he catches, and it has to stay wet: a redcap whose "
-      + "cap dries out dies with it.\n\n"
-      + "He came to Hermitage and offered William de Soulis a bargain — free "
-      + "run of Liddesdale, and a charmed life in exchange. No blade, no "
-      + "lance, no arrow, and no rope that would hold him. De Soulis spent it "
-      + "on the valley, and on the valley's children, until his tenants "
-      + "walked to Robert the Bruce and would not stop asking. The king, worn out by them, said: boil him then, and let me hear no "
-      + "more of him. They took him at his word. Rope would not bind de "
-      + "Soulis, so they wrapped him in lead and set a cauldron inside the "
-      + "stone circle above the castle, at Nine Stane Rig. The king's "
-      + "messengers followed to say he had not meant it, and arrived in time "
-      + "to watch. The record is shorter and duller: condemned by parliament, died a "
-      + "prisoner at Dumbarton, of nothing in particular.\n\n"
-      + "Robin was not at the cauldron. Nobody saw him again — except the "
-      + "people who kept insisting they had, at the ruin, at dusk, turning "
-      + "stones over. He is said to have buried what he took from that valley "
-      + "and never come back for it.",
-    pl: "Robin Redcap. Kroniki zapisują jego pana co do dnia i godziny, a "
-      + "jego nie zapisują wcale. Redcap to przysadzisty starzec z piką w garści i żelazem na stopach, "
-      + "i nic na dwóch nogach mu nie ucieknie. Czapkę barwi krwią tego, kogo "
-      + "dopadnie, i musi ona zostać mokra: redcap, któremu czapka wyschnie, "
-      + "umiera razem z nią.\n\n"
-      + "Przyszedł do Hermitage i złożył Williamowi de Soulis ofertę — wolna "
-      + "ręka w Liddesdale, a w zamian życie zaklęte. Żadne ostrze, żadna "
-      + "włócznia, żadna strzała i żaden sznur, który by go utrzymał. De "
-      + "Soulis wydał to na dolinę, i na dzieci z tej doliny, aż jego poddani "
-      + "poszli do Roberta Bruce'a i nie przestawali prosić. Król, zmęczony nimi, powiedział: to go ugotujcie, byle więcej o nim "
-      + "nie słyszałem. Wzięli go za słowo. Sznur de Soulisa nie wiązał, więc "
-      + "owinęli go w ołów i postawili kocioł w kamiennym kręgu nad zamkiem, "
-      + "na Nine Stane Rig. Posłańcy króla ruszyli za nimi powiedzieć, że nie "
-      + "tak to miało brzmieć, i zdążyli akurat popatrzeć. Zapis jest krótszy i nudniejszy: skazany przez parlament, umarł jako "
-      + "więzień w Dumbarton, ot tak.\n\n"
-      + "Robina przy kotle nie było. Nikt go już nie zobaczył — poza tymi, "
-      + "którzy uparcie twierdzili, że owszem: przy ruinie, o zmierzchu, "
-      + "przewracając kamienie. Podobno zakopał to, co zabrał tej dolinie, i "
-      + "nigdy po to nie wrócił.",
-    es: "Robin Redcap. Las crónicas anotan a su señor al día y a la hora, y a "
-      + "él no lo anotan en absoluto. Un redcap es un viejo rechoncho con una pica en el puño y hierro en "
-      + "los pies, y nada que ande a dos piernas le gana en carrera. Tiñe su "
-      + "gorro con la sangre de quien atrapa, y tiene que seguir húmedo: al "
-      + "redcap cuyo gorro se seca, se le seca la vida.\n\n"
-      + "Llegó a Hermitage y le hizo una oferta a William de Soulis: mano "
-      + "libre en Liddesdale y, a cambio, una vida encantada. Ninguna hoja, "
-      + "ninguna lanza, ninguna flecha y ninguna cuerda capaz de sujetarlo. "
-      + "De Soulis lo gastó en el valle, y en los niños del valle, hasta que "
-      + "sus arrendatarios fueron a ver a Robert the Bruce y no dejaron de "
-      + "pedir. El rey, harto de ellos, dijo: pues hervidlo, y que no vuelva a oír "
-      + "hablar de él. Lo tomaron al pie de la letra. La cuerda no ataba a de "
-      + "Soulis, así que lo envolvieron en plomo y pusieron un caldero dentro "
-      + "del círculo de piedras que hay sobre el castillo, en Nine Stane Rig. "
-      + "Los mensajeros del rey salieron detrás a decir que no lo había dicho "
-      + "en serio, y llegaron a tiempo de mirar. El registro es más corto y más aburrido: condenado por el "
-      + "parlamento, murió preso en Dumbarton, sin más.\n\n"
-      + "Robin no estaba junto al caldero. Nadie volvió a verlo, salvo los "
-      + "que insistían en que sí: junto a la ruina, al anochecer, levantando "
-      + "piedras. Dicen que enterró lo que le quitó a aquel valle y que nunca "
-      + "volvió a por ello.",
+    en: "Robin Redcap. He kept a lord once — William de Soulis of Hermitage, "
+      + "who sold what was left of himself for a life no blade could end. His "
+      + "tenants found the hole in it: no rope would bind him, so they used "
+      + "lead, and boiled him in it inside the stone ring above his own "
+      + "castle. The lord has been cold seven hundred years. The thing he "
+      + "bought is still down there.\n\n"
+      + "Three things, and I will not repeat them.\n\n"
+      + "The cap. It is not a hat, it is where he keeps his life, and it holds "
+      + "only while the blood on it is wet. Let it dry and he dies and it goes "
+      + "to dust in your hand. You take it wet or you take nothing.\n\n"
+      + "The iron. Everything else of that kind runs from cold iron. He wears "
+      + "it — boots shod in it, a pike made of it — and you will hear him "
+      + "coming across stone long before the dark gives him up.\n\n"
+      + "The speed. The iron does not slow him. Nothing on two legs has ever "
+      + "outrun a redcap, so do not plan on it: stand, or do not go down at "
+      + "all.\n\n"
+      + "One more thing. He buried what he took from that valley and never "
+      + "came back for it. That part I would like tested.",
+    pl: "Robin Redcap. Miał kiedyś pana — Williama de Soulis z Hermitage, "
+      + "który sprzedał resztki siebie za życie, którego nie kończy żadne "
+      + "ostrze. Jego poddani znaleźli w tym dziurę: skoro sznur go nie "
+      + "wiązał, wzięli ołów i ugotowali go w nim w kamiennym kręgu nad jego "
+      + "własnym zamkiem. Pan stygnie od siedmiuset lat. To, co kupił, wciąż "
+      + "tam siedzi.\n\n"
+      + "Trzy rzeczy, i nie będę ich powtarzał.\n\n"
+      + "Czapka. To nie nakrycie głowy, tylko miejsce, w którym trzyma życie, "
+      + "i trzyma tylko póki krew na niej jest mokra. Pozwolisz jej wyschnąć — "
+      + "on umiera, a ona rozsypuje ci się w dłoni w proch. Bierzesz ją mokrą "
+      + "albo nie bierzesz nic.\n\n"
+      + "Żelazo. Wszystko inne tego rodzaju ucieka od zimnego żelaza. On je "
+      + "nosi — buty nim okute, pika z niego kuta — i usłyszysz go po kamieniu "
+      + "na długo przedtem, nim ciemność ci go odda.\n\n"
+      + "Szybkość. Żelazo go nie spowalnia. Nic na dwóch nogach nigdy nie "
+      + "uciekło redcapowi, więc na to nie licz: stań, albo w ogóle tam nie "
+      + "schodź.\n\n"
+      + "Jeszcze jedno. Zakopał to, co zabrał tamtej dolinie, i nigdy po to "
+      + "nie wrócił. Tę część chciałbym sprawdzić.",
+    es: "Robin Redcap. Tuvo un señor una vez: William de Soulis de Hermitage, "
+      + "que vendió lo que le quedaba de sí mismo por una vida que ninguna "
+      + "hoja pudiera terminar. Sus arrendatarios le encontraron el agujero: "
+      + "si la cuerda no lo ataba, usaron plomo, y lo hirvieron dentro del "
+      + "círculo de piedras que hay sobre su propio castillo. El señor lleva "
+      + "setecientos años frío. Lo que compró sigue ahí abajo.\n\n"
+      + "Tres cosas, y no las repetiré.\n\n"
+      + "El gorro. No es un sombrero, es donde guarda la vida, y sólo aguanta "
+      + "mientras la sangre siga húmeda. Deja que se seque y él muere y el "
+      + "gorro se te deshace en polvo en la mano. Lo tomas húmedo o no tomas "
+      + "nada.\n\n"
+      + "El hierro. Todo lo demás de esa clase huye del hierro frío. Él lo "
+      + "lleva encima — botas herradas con él, una pica hecha de él — y lo "
+      + "oirás venir sobre la piedra mucho antes de que la oscuridad te lo "
+      + "entregue.\n\n"
+      + "La velocidad. El hierro no lo frena. Nada que ande a dos piernas le "
+      + "ha ganado nunca en carrera a un redcap, así que no cuentes con ello: "
+      + "planta cara, o no bajes siquiera.\n\n"
+      + "Una cosa más. Enterró lo que le quitó a aquel valle y nunca volvió a "
+      + "por ello. Esa es la parte que me gustaría comprobar.",
   },
 };
 

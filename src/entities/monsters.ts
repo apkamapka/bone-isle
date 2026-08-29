@@ -51,8 +51,33 @@ export interface RangedDef {
   brute?: boolean;
 }
 
+/**
+ * The name to print. The def's own if it has one, else the kind title-cased.
+ *
+ * Corpses store the kind as their `name`, so this is also what the remains of
+ * a named boss read as.
+ */
+export function mobName(kind: string): string {
+  const named = (MONSTER_DEFS as Record<string, { name?: string } | undefined>)[kind]?.name;
+  return named ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
 export interface MonsterDef {
   spr: HTMLCanvasElement;
+  /**
+   * What the player is told this thing is called.
+   *
+   * Absent for almost everything, because "orcWarrior" title-cased is already
+   * the answer. It exists for the named ones — the bosses the folklore gives a
+   * NAME rather than a species, where "Redcap" is a kind of creature and
+   * "Robin Redcap" is a person who did specific things to specific people.
+   *
+   * Deliberately separate from the KIND, which stays as it is: the kind keys
+   * the sprite sheets in `mobSheet.ts`, the corpse lookup, the world specs and
+   * the mission's `boss` field, and renaming it would mean renaming PNGs in
+   * `public/` for a string nobody but the engine reads.
+   */
+  name?: string;
   hp: number;
   /** MELEE damage roll (shooters stab weakly when cornered). */
   dmg: readonly [number, number];
@@ -389,7 +414,16 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  end of it, and nowhere else in the game.
    * ================================================================== */
   redcap: {
-    spr: SPR.humanFoe, hp: 300, dmg: [17, 44], speed: 79, atkRate: 2.0, exp: 300,
+    // Named, because the folklore names him: Robin Redcap, familiar to William
+    // de Soulis of Hermitage. Henderson has him as Redcap Sly.
+    spr: SPR.humanFoe,
+    name: "Robin Redcap",
+    /* HP DOUBLED, 300 -> 600, on Radek's call after walking the fight twice.
+     * Nothing else moves with it: his damage, his speed and his stones are all
+     * still on the level-10 budget, so the fight gets LONGER rather than
+     * sharper — more windows to misplay, more potions spent, and the ranged
+     * stones matter because there is now time to be caught by them. */
+    hp: 600, dmg: [17, 44], speed: 79, atkRate: 2.0, exp: 300,
     // The purse stays on the curve — what he took off the road, no more than
     // an orc warrior of the same exp carries. The thirty platinum is NOT on
     // him at all: it is a one-time chest in `CHEST_PRIZES.hermitage`, three
