@@ -310,6 +310,53 @@ export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level*3
  */
 export const CRYSTAL_COOLDOWN_S = 3.0;
 
+/* ------------------------------------------------------------------ *
+ *  CRYSTAL COOLDOWNS, per crystal and per group (Etap 46)
+ *
+ *  The single timer above described the whole bar, which meant the bar was
+ *  one button drawn many times. These three replace it. See
+ *  systems/cooldowns.ts for the model; what follows is why the numbers are
+ *  these numbers.
+ * ------------------------------------------------------------------ */
+
+/**
+ * A crystal's own lockout, by tier.
+ *
+ * Rising, because Tibia charges more for a bigger spell — Exori is four
+ * seconds and Exori Gran is six — and because a flat number would collapse the
+ * whole bar onto four t3 Shards. The tier ladder has to cost something other
+ * than gold or it is not a ladder, it is a price list.
+ */
+export const CRYSTAL_CD_TIER: readonly number[] = [3.0, 4.0, 6.0];
+
+/**
+ * Between two DIFFERENT attack crystals. One second, as in Tibia.
+ *
+ * This one number is the whole of the rebalance. At level 36 the old shared
+ * timer left crystals at 50 dps against a sword's 158; chaining four distinct
+ * ones on a one-second wheel reaches ~149 single-target and roughly doubles a
+ * sword against a pack — without a single damage constant moving. What was a
+ * demand for bigger numbers becomes a reason to carry a varied set.
+ */
+export const CRYSTAL_GCD_S = 1.0;
+
+/**
+ * The Life Crystal, on a clock of its own.
+ *
+ * Healing used to share the attack timer, and the reasoning was sound: with no
+ * mana in the game, the TURN was the only price a heal could pay. The cost was
+ * that every top-up stopped the fight dead, which Tibia never does — Exura
+ * Vita runs on one second and you keep swinging.
+ *
+ * Two seconds rather than one because a heal here is 30 + 3·level with no mana
+ * behind it: at level 36 that is 138 HP, and on a one-second clock it would be
+ * 138 HP/s of sustain bought with nothing but coin. Two seconds halves that
+ * and leaves room for the better heal runes to sit UNDER it later, which is
+ * the shape you want — a new rune should buy you something, and there is
+ * nothing to buy if the first one is already at the ceiling.
+ */
+export const HEAL_CRYSTAL_CD_S = 2.0;
+
 /**
  * Ranged combat. A bow is a two-handed weapon (locks out the shield) that
  * fires arrows — real ammo consumed one per shot. A shot's damage is the

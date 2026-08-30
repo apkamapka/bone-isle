@@ -110,9 +110,12 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
       keys[k] = true;
       return;
     }
-    if (k >= "1" && k <= "9") h.onSpell(k.charCodeAt(0) - 49);
-    else if (k === "0") h.onSpell(9);
-    else if (k === "escape") h.onEscape();
+    /* THE DIGITS ARE GONE. They reached ten of the twenty-four slots and were
+     * printed on none of them — the same fault as the numbering they replaced,
+     * only inverted: before, a slot showed a key that could not be pressed;
+     * after, a key worked that no slot showed. One scheme, written on the
+     * bar. */
+    if (k === "escape") h.onEscape();
     keys[k] = true;
   });
 

@@ -23,7 +23,8 @@ import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
-import { useCrystal, tickCrystalCooldown, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
+import { useCrystal, tickCrystalCooldown, crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
+import { cooldownFrac } from "./systems/cooldowns.ts";
 import {
   actionSlots, setSlot, BINDABLE_CRYSTALS,
   actionSlotCount, addActionSlots, removeActionSlots,
@@ -1887,6 +1888,7 @@ function useCrystalItem(kind: ItemKind): void {
     flash(`${ITEMS[kind].name}: click a target`, "#ffce4a");
     return;
   }
+  if (refuseFromProtection()) return;
   useCrystal(cw(), P, kind);
 }
 
@@ -2339,6 +2341,7 @@ function handleWorldTap(sx: number, sy: number): void {
   if (aimPending) {
     const kind = aimPending;
     aimPending = null;
+    if (refuseFromProtection()) return;
     useCrystal(cw(), P, kind, { x: w.x, y: w.y });
     return;
   }
@@ -3165,6 +3168,41 @@ function lootKeepingAttack(c: Corpse): void {
   moveMarker = null;
 }
 
+/**
+ * Is the player standing somewhere they may not fight from?
+ *
+ * A protection zone is a protection zone: you cannot strike out of one and
+ * nothing can reach you inside it. Half of that was already true — a creature
+ * cannot walk into a haven (`occOf` refuses the tile, `pushMonster` refuses
+ * the spawn) — and the missing half is what made it an exploit rather than a
+ * refuge. From a safe tile you could shell a pack that had no way to answer:
+ * crystals, arrows, and a sword swung across the boundary all landed.
+ *
+ * `mayHit` in pvp.ts has always said this about PLAYERS and its comment notes
+ * that monsters never come through it. This is the same sentence about
+ * everything else, so the zone finally means one thing rather than two.
+ */
+function inProtection(): boolean {
+  return isSafeTile(cw(), P.tx, P.ty);
+}
+
+/**
+ * Refuse an attack made from a protection zone, and say so once.
+ *
+ * Once is the whole reason this is a function. Auto-attack asks twice a
+ * second, so a refusal that flashed every time it was asked would bury the
+ * screen; the mark is dropped instead, which is what Tibia does when you step
+ * into a temple and is a thing the player can actually see happen.
+ */
+function refuseFromProtection(): boolean {
+  if (!inProtection()) return false;
+  if (P.target) {
+    P.target = null;
+    flash("no fighting from a protected zone", "#8ab6ff");
+  }
+  return true;
+}
+
 function worldClick(w: Vec): void {
   if (P.dead) return;
   const world = cw();
@@ -3478,6 +3516,7 @@ function warnNoArrows(): void {
  * can walk away and still loose arrows. Faces the target and drops it on death.
  */
 function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind | null }): void {
+  if (refuseFromProtection()) return;
   const t = P.target;
   if (!t || !mode.arrow) return;
   if (t.kind === "mob") {
@@ -3513,6 +3552,7 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
  * stutter in and out of range.
  */
 function tickMeleeFire(): void {
+  if (refuseFromProtection()) return;
   const t = P.target;
   if (!t || t.kind !== "mob") return;
   const m = targetMob(t);
@@ -3933,6 +3973,13 @@ function update(dt: number): void {
   // monsters attack the player (only on dangerous islands)
   if (!world.safe) {
     updateMonsters(world, dt, { x: P.x, y: P.y, tx: P.tx, ty: P.ty, dead: P.dead }, (m, ranged) => {
+      /* THE OTHER HALF OF THE ZONE. A creature cannot WALK into a haven, and
+       * that was taken for a sanctuary — but a crossbowman reaches three
+       * hundred pixels and a sword reaches across the boundary tile, so the
+       * haven only ever stopped the ones that had to come to you. Asked on
+       * the tile the player is standing on RIGHT NOW, so stepping in cuts a
+       * bolt already loosed rather than letting it land a beat later. */
+      if (isSafeTile(world, P.tx, P.ty)) return;
       const d = MONSTER_DEFS[m.kind];
       const roll = ranged && d.ranged ? d.ranged.dmg : d.dmg;
       hurtPlayer(world, P, rndi(roll[0], roll[1]));
@@ -5078,6 +5125,30 @@ function drawActionSlot(i: number, x: number, y: number, w: number, h: number): 
   ctx.font = `${Math.round(h * 0.17)}px 'Courier New',monospace`;
   ctx.fillStyle = usable ? "#ffe9a8" : "#7a808a";
   ctx.fillText(sub, x + w / 2, y + subY);
+  /* THE COOLDOWN SWEEP.
+   *
+   * Every crystal now runs its own clock and shares a shorter one with its
+   * group, which is the point — but it is also twenty-four clocks where there
+   * used to be one number nobody had to look at. A bar whose slots are ready
+   * at different moments is only playable if you can SEE which ones are, so
+   * the shading is not decoration here, it is the feature.
+   *
+   * Drawn from the bottom up, the way a rune refills in Tibia rather than
+   * sweeping round like a clock hand: the eye reads a rising level far faster
+   * than an angle, and at this size an angle is four pixels of arc. */
+  if (slot?.type === "crystal") {
+    const frac = cooldownFrac(slot.item);
+    if (frac > 0) {
+      ctx.fillStyle = "rgba(10,14,22,.62)";
+      ctx.fillRect(x + 1, y + 1, w - 2, Math.round((h - 2) * frac));
+      const left = crystalCooldownLeft(slot.item);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#cfe8d2";
+      ctx.font = `bold ${Math.round(h * 0.26)}px 'Courier New',monospace`;
+      ctx.fillText(left >= 1 ? `${Math.ceil(left)}` : left.toFixed(1), x + w / 2, y + h * 0.42);
+    }
+  }
   ctx.globalAlpha = was; // …but the HOTSPOT is full strength: an empty slot is
   const idx = i;         // still bindable, it just does not shout about it
   hotspots.push({ x, y, w, h, fn: () => slotTap(idx) });
