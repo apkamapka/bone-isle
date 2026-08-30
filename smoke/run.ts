@@ -96,7 +96,15 @@ async function main(): Promise<void> {
         w.reach.mobPosts?.map((m) => [m.kind, m.tx, m.ty]),
       ]);
     ok(sig(w1) === sig(w2), "two builds → byte-identical maps");
-    ok(Object.keys(w1).length === 16, `sixteen maps, all hand-authored (${Object.keys(w1).length})`);
+    /* NOT a count. `buildWorlds` returns a record keyed by WorldKey, and the
+     * only thing worth asserting here is that every entry reports the key it
+     * is filed under — a copy-paste in the builder (two entries pointing at
+     * one spec) is the real bug this catches, and it catches it whether there
+     * are sixteen maps or sixty. The exhaustive list lives in Etap 40, once. */
+    const misfiled = Object.entries(w1).filter(([k, w]) => w.key !== k).map(([k]) => k);
+    ok(misfiled.length === 0,
+      `every map is filed under its own key${misfiled.length ? " — " + misfiled.join(",") : ""}`);
+    ok(Object.keys(w1).length >= 16, `every hand-authored map is built (${Object.keys(w1).length})`);
     // …and nothing in here reads the seed any more, so a different one must
     // produce the same world rather than a new one.
     ok(sig(buildWorlds(WORLD_SEED + 1)) === sig(w1), "…and the seed no longer moves a tile");
@@ -1559,16 +1567,29 @@ async function main(): Promise<void> {
       if (!w.solid[chest.ty][chest.tx]) missing = `${key}'s chest tile is walkable`;
     }
     ok(missing === "", `every buried prize has a chest to be buried in${missing && " — " + missing}`);
-    /* Two of the five buried prizes are GEAR — one shield per floor, the Knight
-     * set one piece at a time. The other three are coin: two ten-platinum
-     * purses beside those shields, and the redcap's thirty. Counted apart
-     * because they answer different questions: the gear count is a statement
-     * about the set, the coin count is a statement about how much money the
-     * game hands out for free. */
+    /* Buried prizes split into GEAR and COIN, counted apart because they
+     * answer different questions: the gear list is a statement about what can
+     * only be dug up, the coin total is a statement about how much money the
+     * game hands out for free.
+     *
+     * THE GEAR IS UNIQUE, and that is the rule rather than the number. Three
+     * pieces today — the minotaur and orcish shields, one per floor, and the
+     * Power Ring at the bottom of Kárr's howe. The ring joined them in Etap 43
+     * and the elder stopped selling it the same day, which is the whole point:
+     * a prize you can also buy for a hundred and eighty gold is not a prize.
+     * Two chests handing out the same item would quietly undo that, so what is
+     * pinned is that no gear prize repeats. */
     const gear = Object.values(CHEST_PRIZES).flat().filter((pz) => !Array.isArray(pz));
-    ok(gear.length === 2 && new Set(gear).size === 2,
-      `the Knight set, entire, one piece at a time (${gear.length}/2)`);
-    ok(held === 5, `five buried prizes in all — two shields and three purses (${held}/5)`);
+    ok(gear.length >= 3 && new Set(gear).size === gear.length,
+      `no two chests bury the same piece of gear (${gear.join(",")})`);
+    const { SHOPS: SHOPS8 } = await import("../src/entities/npcs.ts");
+    const onSale = new Set(Object.values(SHOPS8)
+      .flatMap((sh) => (sh?.entries ?? []).filter((e) => e.buy > 0).map((e) => e.kind)));
+    const alsoSold = gear.filter((k) => onSale.has(k as never));
+    ok(alsoSold.length === 0,
+      `…and nothing buried is also on a shelf${alsoSold.length ? " — " + alsoSold.join(",") : ""}`);
+    ok(held === gear.length + 4,
+      `every hoard is gear plus a purse, and four purses in all (${held})`);
     // and nothing else in the game hides a chest that no prize is named for
     let orphan = "";
     for (const w of Object.values(worlds)) {
@@ -1604,7 +1625,11 @@ async function main(): Promise<void> {
     // twentieth man and the first one who is not on the ladder at all.
     // Etap 41 added the redcap — the thirty-ninth, and the first creature that
     // belongs to no ladder at all: a named boss out of Border folklore.
-    ok(MONSTER_KINDS.length === 39, `bestiary holds 39 kinds (18 + 20 humans + the redcap), got ${MONSTER_KINDS.length}`);
+    // Etap 43 added the draugr — the fortieth, and the sage's second named
+    // boss. Like the redcap he belongs to no ladder: one creature out of the
+    // Icelandic sagas that stands in one room and is killed once.
+    ok(MONSTER_KINDS.length === 40,
+      `bestiary holds 40 kinds (18 + 20 humans + redcap + draugr), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -4178,8 +4203,20 @@ async function main(): Promise<void> {
     const named = pads.filter((p) => missionByGroundT(p.dest));
     ok(pads.filter((p) => !missionByGroundT(p.dest)).every((p) => p.dest === "cellar"),
       "an unnamed sealed pad points at its own room, so a stray travel is a no-op");
-    ok(named.length === 1 && named[0].dest === "liddesdale",
-      `…and the one named pad is dark until the mission is taken (${named.map((p) => p.dest).join(",")})`);
+    /* NOT a count, for the reason above. What holds is the CORRESPONDENCE:
+     * every mission in the catalogue has exactly one pad in this hall, and
+     * every named pad has a mission behind it. Two named pads today
+     * (Liddesdale and Haramsey) and there will be more; a mission with no door
+     * is unreachable and a door with no mission never lights, and both of
+     * those are caught here however long the chain gets. */
+    const { MISSIONS: MISSIONS_PADS } = await import("../src/systems/missions.ts");
+    const namedDests = named.map((p) => p.dest);
+    ok(new Set(namedDests).size === namedDests.length,
+      `no two named pads lead to the same ground (${namedDests.join(",")})`);
+    ok(MISSIONS_PADS.every((m) => namedDests.includes(m.ground)),
+      `every mission's ground has a door in the hall (${namedDests.join(",")})`);
+    ok(named.every((p) => !!missionByGroundT(p.dest)),
+      "…and every named pad is dark until its mission is taken");
     ok(new Set(cellar.portals.map((p) => p.label)).size === cellar.portals.length,
       "every door is labelled, and no two share a label");
     ok(cellar.portals.some((p) => p.dest === "town" && !p.inactive), "…and the way up is open");
@@ -7748,12 +7785,15 @@ async function main(): Promise<void> {
 
     /* --- the twelve, and only the twelve --- */
     const keys = Object.keys(worlds).sort();
-    // Fourteen after the cull, plus the two Etap 41 added: Liddesdale and the
-    // lair under it. They are the first keys in the game that exist because a
-    // MISSION needed them rather than because a level range did.
+    // Fourteen after the cull, plus the two Etap 41 added (Liddesdale and the
+    // lair under it) and the two Etap 43 added (Haramsey and Kárr's howe).
+    // Those four are the only keys in the game that exist because a MISSION
+    // needed them rather than because a level range did, and they arrive in
+    // pairs by construction: a ground to walk and one room at the end of it.
     ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 cellar deaddeep1 "
-      + "deaddeep2 hermitage home liddesdale minodeep1 minodeep2 orcdeep1 orcdeep2 reach town",
-      `sixteen maps and no others (${keys.length}: ${keys.join(" ")})`);
+      + "deaddeep2 haramsey haugr hermitage home liddesdale minodeep1 minodeep2 "
+      + "orcdeep1 orcdeep2 reach town",
+      `eighteen maps and no others (${keys.length}: ${keys.join(" ")})`);
     for (const dead of ["cave.ts", "deepwild.ts"]) {
       ok(!nfs.existsSync(new URL(`../src/world/${dead}`, import.meta.url)),
         `${dead} is gone, not merely unreferenced`);
@@ -7821,15 +7861,41 @@ async function main(): Promise<void> {
     const { resetPlayerState } = await import("../src/systems/playerState.ts");
     resetPlayerState();
 
-    /* One link, written in Etap 41. Everything below still has to be correct
-     * against a catalogue that will keep growing, so the assertions are about
-     * SHAPE — ids unique, the first link free of a prerequisite, every named
-     * world real — rather than about how many there happen to be. */
-    ok(M.MISSIONS.length === 1, `the chain has one link so far (${M.MISSIONS.length})`);
+    /* Two links, written in Etap 41 and Etap 43. Everything below has to be
+     * correct against a catalogue that will keep growing AND shrinking — the
+     * ten-mission ladder sketched above the redcap was scrapped wholesale in
+     * Etap 43 when the creature balance moved — so the assertions are about
+     * SHAPE rather than about how many links there happen to be today.
+     *
+     * THE CHAIN IS A CHAIN, and that is the one structural claim: exactly one
+     * link starts it, every other link names a prerequisite that exists and
+     * comes BEFORE it in the catalogue, and levels never go backwards along
+     * it. A cycle or a forward reference would leave a mission that can never
+     * become available, and neither is visible from any single entry. */
+    ok(M.MISSIONS.length >= 1, `the chain has ${M.MISSIONS.length} link(s)`);
     ok(new Set(M.MISSIONS.map((m) => m.id)).size === M.MISSIONS.length, "…with unique ids");
-    ok(M.MISSIONS[0].id === "redcap" && M.MISSIONS[0].after === undefined,
-      "the redcap is the first link and waits on nothing");
+    const roots = M.MISSIONS.filter((m) => m.after === undefined);
+    ok(roots.length === 1 && roots[0].id === "redcap",
+      `exactly one link starts the chain, and it is the redcap (${roots.map((m) => m.id).join(",")})`);
+    let chainBad = "";
+    M.MISSIONS.forEach((m, i) => {
+      if (m.after === undefined) return;
+      const at = M.MISSIONS.findIndex((o) => o.id === m.after);
+      if (at < 0) chainBad = `${m.id} waits on ${m.after}, which is not in the catalogue`;
+      else if (at >= i) chainBad = `${m.id} waits on ${m.after}, which comes after it`;
+      else if (M.MISSIONS[at].reqLevel > m.reqLevel) chainBad = `${m.id} is gated below its own prerequisite`;
+    });
+    ok(chainBad === "", `every other link waits on one before it${chainBad && " — " + chainBad}`);
     ok(M.MISSIONS.every((m) => m.ground !== m.echo), "…and no mission's ground is its own echo");
+    // No two missions share a ground, an echo or a relic. Sharing any of the
+    // three would make `missionByGround`, `missionByEcho` and `boundRelic`
+    // answer for the wrong errand, and all three are `find`, so the wrong
+    // answer would be silent.
+    for (const [what, of] of [["ground", (m: M.MissionDef) => m.ground],
+      ["echo", (m: M.MissionDef) => m.echo], ["relic", (m: M.MissionDef) => m.relic]] as const) {
+      const all = M.MISSIONS.map(of);
+      ok(new Set(all).size === all.length, `no two missions share a ${what} (${all.join(",")})`);
+    }
     ok(M.offeredMission(9) === undefined, "below level ten the sage offers nothing");
     ok(M.offeredMission(10)?.id === "redcap", "…and at ten he offers the cap");
     ok(M.currentMission(99) === undefined, "…and nothing is in hand until it is taken");
@@ -13044,6 +13110,304 @@ async function main(): Promise<void> {
 
     rpsR();
     MR.resetMissions();
+  }
+
+  console.log("Etap 43 — Haramsey, Kárr's howe, and the draugr in it:");
+  {
+    const fs43 = await import("node:fs");
+    const { HARAMSEY_SPEC } = await import("../src/world/haramseySpec.ts");
+    const { HAUGR_SPEC } = await import("../src/world/haugrSpec.ts");
+    const M43 = await import("../src/entities/monsters.ts");
+    const MM43 = await import("../src/systems/missions.ts");
+    const A43 = await import("../src/gfx/itemArt.ts");
+    const { resetPlayerState: rps43 } = await import("../src/systems/playerState.ts");
+    const ws43 = buildWorlds(WORLD_SEED);
+    const isle = ws43.haramsey, howe = ws43.haugr;
+    const d43 = M43.MONSTER_DEFS.draugr;
+
+    /* --- the trace is faithful --------------------------------------------
+     * Both grids came out of Tiled and the one thing a trace can silently get
+     * wrong is the shape, so size and area are the cheap proof. The howe is
+     * the odd one: 30x40 on paper but a single 19x31 rectangle of floor, the
+     * rest solid margin, and that ratio is the trace's whole content. */
+    ok(isle.w === 80 && isle.h === 80, `Haramsey is the 80x80 Tiled export (${isle.w}x${isle.h})`);
+    ok(howe.w === 30 && howe.h === 40, `the howe is the 30x40 export (${howe.w}x${howe.h})`);
+    const landTiles = HARAMSEY_SPEC.rows.join("").split("").filter((c) => c !== "~").length;
+    ok(landTiles === 3832, `3832 land squares, exactly what the tileset drew (${landTiles})`);
+    ok(HARAMSEY_SPEC.floor?.length === 80, "…and the island carries a floor grid");
+    ok(HAUGR_SPEC.floor?.length === 40, "…as does the howe");
+    /* No lawn anywhere. A feature glyph defaults to grass beneath it, so a
+     * missing floor grid shows as a green square under a grave on the minimap
+     * and in the fallback bake — which is the exact bug Liddesdale caught. */
+    let lawn = 0;
+    for (const w of [isle, howe]) {
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) {
+        if (w.tile[y][x] === Tile.Grass) lawn++;
+      }
+    }
+    ok(lawn === 0, `not one square of lawn on either map (${lawn})`);
+
+    /* --- the howe is one room ---------------------------------------------
+     * Not a maze and not a corridor: the export leaves a single rectangle and
+     * nothing was added to it. Asserted as a rectangle rather than as an area,
+     * because a hole punched in the middle by a stray solid prop would keep
+     * the area plausible and break the room. */
+    let x0 = 99, y0 = 99, x1 = -1, y1 = -1, floorN = 0;
+    for (let y = 0; y < howe.h; y++) for (let x = 0; x < howe.w; x++) {
+      if (HAUGR_SPEC.rows[y][x] === "#") continue;
+      floorN++; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    }
+    ok(x0 === 6 && x1 === 24 && y0 === 4 && y1 === 34,
+      `the hall is the rectangle the rock layers left (x ${x0}..${x1}, y ${y0}..${y1})`);
+    ok(floorN === (x1 - x0 + 1) * (y1 - y0 + 1),
+      `…solid all the way round it and nowhere inside (${floorN})`);
+
+    /* --- everything is walkable from where you arrive ---------------------- */
+    const reach43 = (w: typeof isle, sx: number, sy: number) => {
+      const seen = new Set<number>();
+      const q: [number, number][] = [[sx, sy]];
+      seen.add(sy * w.w + sx);
+      while (q.length) {
+        const [x, y] = q.pop()!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+          if (w.solid[ny][nx] || seen.has(ny * w.w + nx)) continue;
+          seen.add(ny * w.w + nx); q.push([nx, ny]);
+        }
+      }
+      let open = 0;
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (!w.solid[y][x]) open++;
+      return [seen.size, open] as const;
+    };
+    const pad43 = isle.portals.find((pt) => pt.dest === "cellar")!;
+    const [gotI, openI] = reach43(isle, Math.floor(pad43.x / TILE), Math.floor(pad43.y / TILE));
+    ok(gotI === openI, `every open square on Haramsey is walkable from the pad (${gotI}/${openI})`);
+    const lad43 = howe.portals.find((pt) => pt.dest === "haramsey")!;
+    const [gotH, openH] = reach43(howe, Math.floor(lad43.x / TILE), Math.floor(lad43.y / TILE));
+    ok(gotH === openH, `…and every square of the howe from the ladder (${gotH}/${openH})`);
+
+    /* --- the two ends -----------------------------------------------------
+     * The hole is not "somewhere far", it is the FARTHEST square by walking.
+     * Straight-line distance disagrees on an island with two bays in it, and
+     * the difference is what stops the mission being a thirty-second walk. */
+    const walkFrom = (w: typeof isle, sx: number, sy: number) => {
+      const d = new Int32Array(w.w * w.h).fill(-1);
+      const q: number[] = [sy * w.w + sx];
+      d[sy * w.w + sx] = 0;
+      for (let h = 0; h < q.length; h++) {
+        const i = q[h], x = i % w.w, y = (i / w.w) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+          const j = ny * w.w + nx;
+          if (w.solid[ny][nx] || d[j] >= 0) continue;
+          d[j] = d[i] + 1; q.push(j);
+        }
+      }
+      return d;
+    };
+    const dIsle = walkFrom(isle, Math.floor(pad43.x / TILE), Math.floor(pad43.y / TILE));
+    const hole = isle.portals.find((pt) => pt.dest === "haugr")!;
+    const holeD = dIsle[Math.floor(hole.y / TILE) * isle.w + Math.floor(hole.x / TILE)];
+    let farthest = 0;
+    for (let i = 0; i < dIsle.length; i++) if (dIsle[i] > farthest) farthest = dIsle[i];
+    ok(holeD >= farthest - 6,
+      `the howe's mouth is as far from the pad as the island gets (${holeD} of ${farthest})`);
+    ok(holeD > 90, `…which is a real crossing and not a stroll (${holeD} tiles)`);
+
+    /* --- the posts --------------------------------------------------------
+     * Two ranks, no more, spaced so every pull is a single one, and ranked by
+     * WALK distance so the barbarians hold the landing and the raiders hold
+     * the hole. Asserted as an average because individual posts wobble; what
+     * has to hold is the slope. */
+    const posts43 = isle.mobPosts!;
+    ok(new Set(posts43.map((p) => p.kind)).size === 2
+      && posts43.every((p) => p.kind === "barbarian" || p.kind === "raider"),
+      `only barbarians and raiders live on the moor (${[...new Set(posts43.map((p) => p.kind))].join(",")})`);
+    let tooClose = "";
+    for (let i = 0; i < posts43.length; i++) for (let j = i + 1; j < posts43.length; j++) {
+      const a = posts43[i], b = posts43[j];
+      if (Math.max(Math.abs(a.tx - b.tx), Math.abs(a.ty - b.ty)) < 8) tooClose = `${a.tx},${a.ty} and ${b.tx},${b.ty}`;
+    }
+    ok(tooClose === "", `no two posts within eight tiles${tooClose && " — " + tooClose}`);
+    const meanD = (kind: string) => {
+      const of = posts43.filter((p) => p.kind === kind);
+      return of.reduce((s, p) => s + dIsle[p.ty * isle.w + p.tx], 0) / of.length;
+    };
+    ok(meanD("raider") > meanD("barbarian"),
+      `raiders stand deeper than barbarians (${meanD("barbarian") | 0} → ${meanD("raider") | 0})`);
+    ok(posts43.every((p) => dIsle[p.ty * isle.w + p.tx] >= 0), "…and every post can be walked to");
+
+    /* --- who is in the howe -----------------------------------------------
+     * Eight ghouls and one draugr, and the ghouls are LIGHTER than the moor
+     * above them. That inversion is deliberate and the header says so: the
+     * corridor is not the exam, he is. If someone ever swaps the ghouls for
+     * something heavier than a raider this fails, which is the point. */
+    const inHowe = howe.mobPosts!;
+    ok(inHowe.filter((p) => p.kind === "draugr").length === 1, "one draugr, in the deepest room");
+    const ghouls = inHowe.filter((p) => p.kind === "ghoul");
+    ok(ghouls.length === 8 && ghouls.length + 1 === inHowe.length,
+      `…and eight of his victims, and nothing else (${inHowe.length})`);
+    ok(M43.MONSTER_DEFS.ghoul.hp < M43.MONSTER_DEFS.raider.hp,
+      "the escort below is lighter than the moor above it");
+    let howeClose = "";
+    for (let i = 0; i < inHowe.length; i++) for (let j = i + 1; j < inHowe.length; j++) {
+      const a = inHowe[i], b = inHowe[j];
+      if (Math.max(Math.abs(a.tx - b.tx), Math.abs(a.ty - b.ty)) < 8) howeClose = `${a.tx},${a.ty} and ${b.tx},${b.ty}`;
+    }
+    ok(howeClose === "", `nothing down there stands within eight tiles of its neighbour${howeClose && " — " + howeClose}`);
+    const ladT = { x: Math.floor(lad43.x / TILE), y: Math.floor(lad43.y / TILE) };
+    ok(inHowe.every((p) => Math.max(Math.abs(p.tx - ladT.x), Math.abs(p.ty - ladT.y)) >= 8),
+      "…and eight tiles of clear floor around the ladder, so you land and draw");
+    const dHowe = walkFrom(howe, ladT.x, ladT.y);
+    const boss = inHowe.find((p) => p.kind === "draugr")!;
+    ok(dHowe[boss.ty * howe.w + boss.tx] > 20,
+      `you come down at one end of his house and he is at the other (${dHowe[boss.ty * howe.w + boss.tx]})`);
+
+    /* --- TWENTY FIRES, and they seal nothing ------------------------------
+     * The hall is unlit stone and the export paints it black, so the lamps ARE
+     * the lighting. They are only affordable because a campfire is not solid
+     * on any map (see `handmade.ts`); the day that changes, twenty of them
+     * would be twenty holes in a room 19 wide, so it is pinned here. */
+    ok(howe.fires.length === 20, `twenty grave-lamps light the hall (${howe.fires.length})`);
+    ok(howe.fires.every((f) => !howe.solid[f.ty][f.tx]), "…and not one of them seals its square");
+
+    /* --- THE THREE THINGS THE CHRONICLE PROMISES --------------------------
+     * `lore.draugr` names three facts and the map has to keep all three. Each
+     * is checked against the creature's OWN numbers rather than against a
+     * constant, so re-tuning him fails the page instead of quietly making it
+     * a lie. */
+    const slowest = Math.min(...M43.MONSTER_KINDS.map((k) => M43.MONSTER_DEFS[k].speed));
+    ok(d43.speed === slowest,
+      `THE WEIGHT: nothing in the bestiary is slower than he is (${d43.speed})`);
+    ok(d43.speed < M43.MONSTER_DEFS.redcap.speed,
+      "…and the page's claim that this one is the opposite of the last one holds");
+    const armours = M43.MONSTER_KINDS.map((k) => M43.MONSTER_DEFS[k].armor ?? 0);
+    ok((d43.armor ?? 0) >= Math.max(...armours) - 2,
+      `THE IRON: his armour is at the top of the bestiary (${d43.armor})`);
+    ok((d43.armor ?? 0) > (M43.MONSTER_DEFS.raider.armor ?? 0) * 1.5,
+      "…and well past anything on the moor above him");
+    ok((d43.resist?.fire ?? 1) > 1,
+      `THE FIRE: burning gets there sooner, exactly as the sagas say (${d43.resist?.fire})`);
+    ok((d43.resist?.shadow ?? 1) < 1, "…while the dark he came out of does not touch him");
+    /* PASSIVE, and that is a promise too. Radek's call: no pyre to light, no
+     * second phase, no interaction of any kind — you kill him the ordinary
+     * way. A `spells` list or a ranged attack would both be a mechanic the
+     * page does not warn about. */
+    ok(d43.spells === undefined && d43.ranged === undefined,
+      "he has no shapes to dodge and nothing to throw — you kill him the ordinary way");
+
+    /* --- the press test ---------------------------------------------------
+     * Same three checks the redcap gets. He respawns; the hoard must not. */
+    ok(d43.loot.length === 1 && d43.loot[0].kind === "graveHelm" && d43.loot[0].chance === 1,
+      `the helm is the ONLY thing he drops, and never on a dice roll (${d43.loot.map((e) => e.kind).join(",")})`);
+    ok(!d43.loot.some((e) => e.kind === "platinumCoin" || e.kind === "goldCoin"),
+      "the hoard is NOT in his pocket — a respawning boss may not print money");
+    ok((d43.gold[0] + d43.gold[1]) / 2 < 60, "…his purse stays on the bestiary's own gold curve");
+    const hoard43 = (await import("../src/game.ts")).CHEST_PRIZES.haugr;
+    ok(!!hoard43 && hoard43.includes("ring"), "…and the Power Ring waits in a one-time chest instead");
+    ok(!!hoard43 && hoard43.some((pz) => Array.isArray(pz) && pz[0] === "platinumCoin" && pz[1] === 20),
+      "…with twenty platinum beside it");
+    const { SHOPS: SHOPS43 } = await import("../src/entities/npcs.ts");
+    ok(!Object.values(SHOPS43).some((sh) => (sh?.entries ?? []).some((e) => e.kind === "ring" && e.buy > 0)),
+      "…and nobody sells one any more, which is what makes it a prize");
+    ok(Object.values(SHOPS43).some((sh) => (sh?.entries ?? []).some((e) => e.kind === "ring" && e.sell > 0)),
+      "…though the elder still buys them back");
+
+    /* --- ONE draugr, in ONE place ----------------------------------------- */
+    const draugrs = Object.entries(ws43)
+      .flatMap(([k, w]) => (w.mobPosts ?? []).filter((pp) => pp.kind === "draugr").map(() => k));
+    ok(draugrs.length === 1 && draugrs[0] === "haugr",
+      `exactly one draugr in the world, and he is in his howe (${draugrs.join(",") || "none"})`);
+
+    /* --- art: registered, shipped, credited -------------------------------- */
+    const sheetSrc43 = fs43.readFileSync(new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits43 = fs43.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    for (const f of ["mob-draugr-walk.png", "mob-draugr-dead.png", "item-grave-helm.png",
+      "haramsey-terrain.png", "haugr-terrain.png"]) {
+      ok(fs43.existsSync(new URL(`../public/${f}`, import.meta.url)), `${f} is shipped`);
+      ok(credits43.includes(f), `…and ${f} is credited by filename`);
+    }
+    ok(sheetSrc43.includes('draugr: "./mob-draugr-walk.png"'), "the walk sheet is registered");
+    ok(sheetSrc43.includes('draugr: "./mob-draugr-dead.png"'), "…and so is the body");
+    {
+      const b = fs43.readFileSync(new URL("../public/mob-draugr-walk.png", import.meta.url));
+      const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
+      ok(w % 9 === 0 && h % 4 === 0, `the sheet is the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(w / 9 <= 64 && h / 4 <= 64, "…and no frame is bigger than the LPC cell it came from");
+      const c = fs43.readFileSync(new URL("../public/item-grave-helm.png", import.meta.url));
+      ok(c.readUInt32BE(16) === 32 && c.readUInt32BE(20) === 32, "the helm icon is 32x32");
+    }
+    ok(A43.iconFile("graveHelm") === "item-grave-helm.png", "the icon answers to the item id");
+    /* The terrain exports have to line up 1:1 with the collision grids or the
+     * whole map slides against what you can walk on. `terrainImage.ts` refuses
+     * a mismatch at runtime; this catches it before anyone loads the page. */
+    for (const [key, file, w, h] of [
+      ["haramsey", "haramsey-terrain.png", 80, 80],
+      ["haugr", "haugr-terrain.png", 30, 40],
+    ] as const) {
+      const b = fs43.readFileSync(new URL(`../public/${file}`, import.meta.url));
+      ok(b.readUInt32BE(16) === w * TILE && b.readUInt32BE(20) === h * TILE,
+        `${key}'s export is ${w * TILE}x${h * TILE} (${b.readUInt32BE(16)}x${b.readUInt32BE(20)})`);
+      const ti = fs43.readFileSync(new URL("../src/world/terrainImage.ts", import.meta.url), "utf8");
+      ok(ti.includes(`${key}: "./${file}"`), `…and ${key} is registered, so it never falls back`);
+    }
+
+    /* --- the relic --------------------------------------------------------
+     * It is EVIDENCE, not equipment. A `slot` would put it in the paper-doll
+     * and let a player wear the thing the sage is waiting for. */
+    ok(items.ITEMS.graveHelm.slot === undefined, "the helm cannot be worn — it is evidence, not armour");
+    ok(items.ITEMS.graveHelm.stack === 1, "…and it does not stack, because there is one of him");
+
+    /* --- the doors, driven the way the game drives them -------------------- */
+    const padTo43 = (k: string) => ws43.cellar.portals.find((pt) => pt.dest === k)!;
+    const holeTo43 = (k: string) => ws43.haramsey.portals.find((pt) => pt.dest === k)!;
+    const home43 = () => ws43.haugr.portals.find((pt) => pt.dest === "cellar")!;
+    rps43(); MM43.resetMissions();
+    applyMissionPads(ws43, 20);
+    ok(padTo43("haramsey").inactive === true,
+      "level twenty is not enough — the redcap has to be closed first");
+    MM43.setStage("redcap", "closed");
+    ok(MM43.offeredMission(14) === undefined, "at fourteen the sage still says nothing about Haramsey");
+    ok(MM43.offeredMission(15)?.id === "draugr", "…and at fifteen he offers it");
+    applyMissionPads(ws43, 15);
+    ok(padTo43("haramsey").inactive === true, "…but the door stays dark until he hands it over");
+    MM43.setStage("draugr", "active");
+    applyMissionPads(ws43, 15);
+    ok(padTo43("haramsey").inactive === false, "taking the mission lights it");
+    ok(holeTo43("haugr").inactive === false, "…and opens the mouth of the howe");
+    ok(home43().inactive === true, "before the kill there is no way home from the howe");
+    MM43.setStage("draugr", "complete");
+    applyMissionPads(ws43, 15);
+    ok(holeTo43("haugr").inactive === true, "killing him shuts the mouth behind you");
+    ok(home43().inactive === false, "…and lights the pad back to Chronos where he fell");
+    ok(ws43.haugr.portals.find((pt) => pt.dest === "haramsey")!.inactive === false,
+      "…while the ladder up stays open, so nobody is sealed in with a dead boss");
+    MM43.setStage("draugr", "closed");
+    applyMissionPads(ws43, 15);
+    ok(padTo43("haramsey").inactive === false, "handing the helm in leaves the moor open forever");
+    ok(holeTo43("haugr").inactive === true, "…and shuts the howe for good");
+    /* The two errands do not interfere. Liddesdale stays open while Haramsey
+     * runs, because a hunting ground is permanent once its mission is taken —
+     * that is the whole reason ground and echo are separate maps. */
+    ok(padTo43("liddesdale").inactive === false, "…and Liddesdale is still open behind you");
+    rps43(); MM43.resetMissions();
+
+    /* --- the story is complete in all three languages ---------------------- */
+    const T43 = await import("../src/text/speech.ts");
+    let missing43 = "";
+    for (const key of MM43.missionKeys("draugr")) {
+      if (!T43.hasText(key)) { missing43 = key; continue; }
+      for (const lg of T43.LANGS) {
+        if (!T43.t(key, lg) || T43.t(key, lg) === key) missing43 = `${key}/${lg}`;
+      }
+    }
+    ok(missing43 === "", `every string the mission owns exists in all three languages${missing43 && " — " + missing43}`);
+    /* Chronos speaks about DOORS. "pad" is a gamepad in Polish and a hardware
+     * fault in a sentence about time — the rule from Etap 42, held here. */
+    const pl43 = MM43.missionKeys("draugr").map((k) => T43.t(k, "pl")).join(" ");
+    ok(!/\bpad\w*/i.test(pl43), "…and not one of them calls a door a pad");
   }
 
   console.log("Housekeeping — dead files, dead names, dead comments:");

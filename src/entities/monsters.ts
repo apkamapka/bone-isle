@@ -445,6 +445,58 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
 
   /* ================================================================== *
+   *  KÁRR THE OLD — the Time Sage's SECOND boss, level 15
+   *
+   *  A draugr: not a ghost and not a skeleton, but the corpse itself, up
+   *  and walking and still holding what it was buried with. The sagas are
+   *  consistent about three things and all three are stats here, which is
+   *  the point — the chronicle the player reads on the way in promises
+   *  exactly what this table delivers, and the smoke suite pins each one:
+   *
+   *    THE WEIGHT   `speed: 40`, the slowest creature in the game, under
+   *                 the skeleton's 41. Þórólfr swelled to the size of an ox
+   *                 and could not be lifted without levers. You CAN walk
+   *                 away from him — that is the fact, and it is the exact
+   *                 inverse of the redcap, whom nothing outruns.
+   *    THE ARMOUR   `armor: 26`. Flat reduction is rolled per hit, so a
+   *                 hail of weak blows is worth almost nothing against him
+   *                 and heavy ones are the whole answer. Grave-iron and
+   *                 dead meat swollen tight.
+   *    THE FIRE     `resist.fire: 1.5`. Iron wounds a draugr and does not
+   *                 finish it; burning is what the sagas do about one. The
+   *                 multiplier is PASSIVE — there is no pyre to light and
+   *                 no second phase. You kill him the ordinary way; fire
+   *                 simply gets there sooner.
+   *
+   *  He is slow and enormously hard, which is a deliberate shape: the fight
+   *  is a standing exchange you choose to have, in a room with eight of his
+   *  victims already in it.
+   *
+   *  The purse stays on the bestiary's own gold curve. The payday — a Power
+   *  Ring and twenty platinum — is a one-time chest in `CHEST_PRIZES.haugr`,
+   *  because he respawns and the chest does not.
+   *
+   *  WHERE HE LIVES: the howe under Haramsey, and nowhere else in the game.
+   * ================================================================== */
+  draugr: {
+    // Named, because Grettis saga names him: Kárr inn gamli, buried on
+    // Haramsey, who drove every farmer off the island except the one he liked.
+    spr: SPR.humanFoe,
+    name: "Kárr the Old",
+    hp: 900, dmg: [34, 90], speed: 40, atkRate: 2.0, exp: 750,
+    gold: [30, 60], danger: 0.5, armor: 26,
+    // Fire is the saga's answer to him and the only thing here that is.
+    // Shadow is what he is made of; ice is weather, and he has been dead
+    // through eight hundred winters of it.
+    resist: { fire: 1.5, shadow: 0.5, ice: 0.6 },
+    loot: [
+      // The relic. Flat 100%, same reason as the cap: a mission cannot be
+      // gated behind a dice roll, and `wantsRelic` is what stops a second one.
+      { kind: "graveHelm", chance: 1.0, n: [1, 1] },
+    ],
+  },
+
+  /* ================================================================== *
    *  THE FANTASTIC BESTIARY, lower rungs — levels 15-22
    *
    *  Re-tiered wholesale (Etap 20). In Tibia these are level-8 fodder; here

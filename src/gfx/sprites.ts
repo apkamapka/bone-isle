@@ -1192,6 +1192,8 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   minotaurHorn: SPR.minotaurHorn, orcEar: SPR.orcEar, goblinFang: SPR.goblinFang, cursedRib: SPR.cursedRib,
   // The cap ships with its own PNG and never shows this bake.
   bloodCap: SPR.cursedRib,
+  // …and so does the helm.
+  graveHelm: SPR.cursedRib,
   iron: SPR.ironIngot, steel: SPR.steelIngot, essentialGem: SPR.essentialGem, coal: SPR.coalLump,
   mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed, dragonHam: SPR.dragonHam,
   // Etap 22: every piece of the new catalog draws with ONE shared stub until

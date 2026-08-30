@@ -1003,6 +1003,82 @@ the `.tsx` files and source sheets are NOT in this repository, only the
 flattened picture. Everything standing on top — dead trees, felled wood,
 tents, skull poles — is the `prop-*` set already credited above.
 
+## Draugr — `public/mob-draugr-walk.png`, `public/mob-draugr-dead.png`, `public/item-grave-helm.png`
+
+Source: **Universal LPC Spritesheet Character Generator**, CC-BY-SA 3.0 — the
+same terms and the same ShareAlike obligation as every other LPC creature here.
+See the LPC section above for the full attribution list and the per-layer note.
+
+Reproducible generator URL (paste it in and the exact character loads):
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Zombie_zombie&wound_brain=Brain_red&wound_mouth=Mouth_brown&wound_eye_left=Left_Eye_purple&wound_arm=Arm_brown&wound_ribs=Ribs_leather&head=Zombie_all.lpcr.heather&weapon=Axe_iron&shoes=Basic_Boots_walnut&legs=Shorts_walnut&jacket=Frock_coat_brown&hat=Barbarian_iron&eyebrows=Thick_Eyebrows_redhead>
+
+Layers used: zombie body, zombie head (all.lpcr heather), red brain wound,
+brown mouth wound, purple left-eye wound, brown arm wound, leather rib wound,
+redhead thick eyebrows, brown frock coat, walnut shorts, walnut basic boots,
+iron barbarian helmet, iron axe.
+
+### Cutting method
+
+The standard recipe, unchanged: rows 8-11 of the full export are the walk (up,
+left, down, right, nine frames each) and row 20 is the death sequence, whose
+last frame is the corpse. One crop rectangle is shared by all thirty-six walk
+frames and kept symmetric about the source cell's centre line, x=32, so the body
+cannot drift as the cycle plays or as it turns. The axe swings clear of the body
+on both sides, so the crop comes out at 56 x 50 per frame; the corpse is 34 x 35,
+cropped to the body. Nothing was recoloured, rescaled or redrawn.
+
+### The helm icon
+
+`item-grave-helm.png` is **not** a crop of the composed character — cutting the
+head off a finished sprite takes face and hair pixels with it, which is the same
+problem the redcap's cap had. It is lifted by MASK instead:
+
+- the helmet layer's own file,
+  `spritesheets/hat/helmet/barbarian/adult/walk.png`, is taken from the
+  generator's repository and its alpha channel used as a stencil;
+- the pixels are then copied out of the composed export through that stencil,
+  front-facing standing frame (row 2, column 0).
+
+The helmet sits at zPos 130, above the head and hair, so every pixel inside its
+own silhouette is the helmet and nothing else — the result is the layer exactly
+as the generator recoloured it to iron, with no repainting and no neighbouring
+layer bleeding in. Cropped to its own bounds (24 x 21) and centred in a 32 x 32
+icon.
+
+That layer is credited by the generator as *hat/helmet/barbarian*, "original
+version by bluecarrot16, color reduction by Napsio (Vitruvian Studio)", authors
+bluecarrot16, JaidynReiman and Napsio (Vitruvian Studio), offered under CC-BY
+3.0 / CC-BY 4.0 / OGA-BY 3.0 / GPL 2.0 / GPL 3.0, from
+<https://opengameart.org/content/lpc-helmets> and
+<https://opengameart.org/content/lpc-expanded-hats-facial-helmets>. Those are
+narrower terms than the sheet as a whole, but the icon is distributed as part of
+the same CC-BY-SA 3.0 set and nothing here relies on the difference.
+
+**ShareAlike applies.** These three files are adaptations of CC-BY-SA 3.0
+artwork and are themselves CC-BY-SA 3.0; anyone may take them from this
+repository under those terms. The per-layer CSV attribution still owed before
+release covers these layers too.
+
+## Haramsey and Kárr's howe — map layouts
+
+Two files: `public/haramsey-terrain.png` (2560x2560) and
+`public/haugr-terrain.png` (960x1280). Both are Tiled "Export as Image" of maps
+authored by the project owner (`Draugr0.tmx`, 80x80, and `Draugr-1.tmx`, 30x40),
+at native tile size with object layers hidden, and they are blitted straight
+into the world exactly like the sixteen terrain exports above.
+
+Same tilesets as Liddesdale (`MainLev2.0hhh`, `Water_tafle_4A`), the same
+commercial licences, and the same rule: the `.tsx` files and source sheets are
+NOT in this repository, only the flattened picture.
+
+Worth writing down because it changed how the map was authored: unlike
+Liddesdale's export, which carries mud, tracks and stonework, `Draugr0` has two
+layers and nothing else — sea and land. Everything readable on that island is
+therefore a `prop-*` object the glyph grid plants, already credited above, and
+the scatter is correspondingly heavier: 3832 land squares carrying roughly two
+hundred objects against Liddesdale's hundred and eighty-seven over 3923.
+
 ## Dragon — `public/mob-dragon-walk.png`, `public/mob-dragon-dead.png`
 
 Source: **CraftPix.net**, standard (non-Enterprise) licence —

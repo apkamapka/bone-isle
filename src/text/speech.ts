@@ -158,6 +158,74 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "veces.\n\n"
       + "No lo pierdas una segunda vez. Soy paciente, no infinito.",
   },
+
+  /* --- mission 2: Kárr the Old ------------------------------------------
+   * He is warmer here than he was about the redcap, and only by a degree: the
+   * cap was a curiosity and this is a NAME, which is the thing he actually
+   * collects. Everything he asks for in these six strings is the helm, and
+   * every time he says why, he says the same thing — the man is on it. */
+  "sage.offer.draugr": {
+    en: "The second door. An island off the Norwegian coast, about the year "
+      + "one thousand — a green hump of a place with one farm on it and one "
+      + "grave.",
+    pl: "Drugie wrota. Wyspa u wybrzeży Norwegii, około roku tysięcznego — "
+      + "zielony garb z jednym gospodarstwem i jednym grobem.",
+    es: "La segunda puerta. Una isla frente a la costa noruega, hacia el año "
+      + "mil: un promontorio verde con una sola granja y una sola tumba.",
+  },
+  "sage.accept.draugr": {
+    en: "They buried a man there with his gold and his helm, and he has been "
+      + "getting up ever since. The farm is empty. The grave is not.\n\n"
+      + "Bring me the helm off his head. There is a name cut inside the brow "
+      + "band, and a name is a record, and records are my business.",
+    pl: "Pochowali tam człowieka ze złotem i hełmem, a on od tamtej pory "
+      + "wstaje. Gospodarstwo jest puste. Grób nie.\n\n"
+      + "Przynieś mi hełm z jego głowy. W otoku jest wycięte imię, a imię to "
+      + "zapis, a zapisy to moja robota.",
+    es: "Allí enterraron a un hombre con su oro y su yelmo, y desde entonces "
+      + "se levanta. La granja está vacía. La tumba no.\n\n"
+      + "Tráeme el yelmo de su cabeza. Hay un nombre grabado por dentro de la "
+      + "banda, y un nombre es un registro, y los registros son lo mío.",
+  },
+  "sage.decline.draugr": {
+    en: "Then he keeps getting up, and I keep not knowing who he was.",
+    pl: "To będzie wstawał dalej, a ja dalej nie będę wiedział, kim był.",
+    es: "Entonces seguirá levantándose, y yo seguiré sin saber quién fue.",
+  },
+  "sage.remind.draugr": {
+    en: "The helm, off his head, out of the mound. Through the door, across "
+      + "the moor, down the hole at the far end of it.",
+    pl: "Hełm, z jego głowy, z kurhanu. Przez wrota, przez wrzosowisko, w "
+      + "dziurę na jego drugim końcu.",
+    es: "El yelmo, de su cabeza, fuera del túmulo. Cruza la puerta, cruza el "
+      + "páramo y baja por el agujero del otro extremo.",
+  },
+  "sage.handIn.draugr": {
+    en: "Kárr. Kárr inn gamli — Kárr the Old.\n\n"
+      + "The saga gives him nine words and then goes back to the man who "
+      + "robbed him. He held that island alone for eighty years and nobody "
+      + "wrote down a thing he said. Now I have his name, and he can stop.",
+    pl: "Kárr. Kárr inn gamli — Kárr Stary.\n\n"
+      + "Saga daje mu dziewięć słów i wraca do człowieka, który go okradł. "
+      + "Trzymał tę wyspę sam przez osiemdziesiąt lat i nikt nie zapisał ani "
+      + "jednego jego słowa. Teraz mam jego imię, a on może przestać.",
+    es: "Kárr. Kárr inn gamli: Kárr el Viejo.\n\n"
+      + "La saga le dedica nueve palabras y vuelve al hombre que lo robó. "
+      + "Guardó esa isla solo durante ochenta años y nadie anotó nada de lo "
+      + "que dijo. Ahora tengo su nombre, y puede parar.",
+  },
+  "sage.empty.draugr": {
+    en: "Empty hands, and he has it back on. I have opened the mound again.\n\n"
+      + "He does not tire and he does not wander. He will be exactly where "
+      + "you left him.",
+    pl: "Puste ręce, a on ma go z powrotem na głowie. Otworzyłem kurhan na "
+      + "nowo.\n\n"
+      + "On się nie męczy i nie chodzi po świecie. Będzie dokładnie tam, "
+      + "gdzie go zostawiłeś.",
+    es: "Manos vacías, y él vuelve a llevarlo puesto. He abierto el túmulo de "
+      + "nuevo.\n\n"
+      + "No se cansa y no vaga. Estará exactamente donde lo dejaste.",
+  },
 };
 
 /* ==========================================================================
@@ -261,6 +329,103 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Una cosa más. Enterró lo que le quitó a aquel valle y nunca volvió a "
       + "por ello. Esa es la parte que me gustaría comprobar.",
   },
+
+  "lore.title.draugr": {
+    en: "Haramsey — c. 1000",
+    pl: "Haramsey — ok. 1000",
+    es: "Haramsey — h. 1000",
+  },
+  /*
+   * WRITTEN TO THE REDCAP'S SHAPE, because that shape was the one that
+   * worked: a paragraph of who he is, then THREE THINGS, each of which is
+   * true in the sagas AND true in this build, and each pinned by a smoke
+   * test against the creature's own stats.
+   *
+   *   the weight  Þórólfr swelled to the size of an ox and could not be
+   *               lifted without levers — `speed: 40`, the slowest thing in
+   *               the game. You can walk away from him. That is the exact
+   *               inverse of the redcap and the page says so out loud,
+   *               because a player who learned "stand or do not go" last
+   *               mission needs telling that this one is different.
+   *   the armour  grave-iron on dead meat swollen tight — `armor: 26`.
+   *               Flat reduction is rolled per hit, so twenty light blows
+   *               are worth less than four heavy ones. This is the fact
+   *               that decides whether the fight is winnable.
+   *   the fire    iron wounds a draugr and does not finish it; burning is
+   *               what the sagas do about one — `resist.fire: 1.5`. PASSIVE.
+   *               There is no pyre and no second phase; the multiplier is
+   *               the whole of it, which is why the page promises a shorter
+   *               fight and not a puzzle.
+   *
+   * The dead close it, because eight ghouls are standing in that room and
+   * the sagas say exactly where a draugr's victims go.
+   */
+  "lore.draugr": {
+    en: "Kárr the Old. He owned Haramsey and he owned everything on it, and "
+      + "when they put him in the mound they put his gold in with him, "
+      + "because that is what you did for a man of his standing. He got up "
+      + "the first time somebody reached for it. Every farmer on the island "
+      + "left except one he happened to like. That was eighty years ago and "
+      + "he is still down there, still holding it.\n\n"
+      + "Three things, and I will not repeat them.\n\n"
+      + "The weight. The dead of that country swell — one of them came out "
+      + "of the ground the size of an ox and took levers to lift. Kárr is "
+      + "slower than anything alive on that island. You CAN walk away from "
+      + "him, which you could not do from the last one. What you cannot do "
+      + "is wait him out. He has had eight hundred years of practice.\n\n"
+      + "The iron. He is wearing his, and there is more of it than there is "
+      + "of you. Light blows will not get through — a rain of them is worth "
+      + "less than four honest ones, so hit him properly or do not hit him.\n\n"
+      + "The fire. Iron opens a draugr and does not finish it; the sagas "
+      + "burn them, and they burn them because nothing else works quickly. "
+      + "If you have fire, bring it. It will not do the job for you. It will "
+      + "make the job shorter.\n\n"
+      + "One more thing. Whatever a draugr kills gets up after it. There is "
+      + "no farm left on Haramsey and there are a great many of them in that "
+      + "room, so do not assume the last thing between you and him is him.",
+    pl: "Kárr Stary. Był właścicielem Haramsey i wszystkiego, co na niej "
+      + "stało, a kiedy kładli go w kurhanie, włożyli mu złoto do środka, bo "
+      + "tak się chowa człowieka jego stanu. Wstał, kiedy pierwszy raz ktoś "
+      + "po nie sięgnął. Wszyscy gospodarze z wyspy uciekli poza jednym, "
+      + "którego akurat lubił. To było osiemdziesiąt lat temu i on wciąż tam "
+      + "siedzi, wciąż tego pilnuje.\n\n"
+      + "Trzy rzeczy, i nie będę ich powtarzał.\n\n"
+      + "Ciężar. Tamtejsi umarli puchną — jeden wyszedł z ziemi wielkości "
+      + "wołu i podnosili go na dźwigniach. Kárr jest wolniejszy od "
+      + "wszystkiego żywego na tej wyspie. MOŻESZ od niego odejść, czego "
+      + "przy poprzednim nie mogłeś. Czego nie możesz, to go przeczekać. Miał "
+      + "na to osiemset lat wprawy.\n\n"
+      + "Żelazo. On swoje ma na sobie i jest go więcej niż ciebie. Lekkie "
+      + "ciosy przez to nie przejdą — grad takich jest wart mniej niż cztery "
+      + "uczciwe, więc bij go porządnie albo nie bij wcale.\n\n"
+      + "Ogień. Żelazo draugra otwiera, ale go nie kończy; sagi je palą, i "
+      + "palą dlatego, że nic innego nie działa szybko. Jeśli masz ogień, "
+      + "weź go. Nie zrobi roboty za ciebie. Skróci ją.\n\n"
+      + "Jeszcze jedno. To, co draugr zabije, wstaje po nim. Na Haramsey nie "
+      + "został ani jeden gospodarz, a w tamtej komorze jest ich sporo — więc "
+      + "nie zakładaj, że ostatnią rzeczą między tobą a nim jest on.",
+    es: "Kárr el Viejo. Era dueño de Haramsey y de todo lo que había en ella, "
+      + "y cuando lo metieron en el túmulo le metieron el oro dentro, porque "
+      + "eso es lo que se hacía con un hombre de su rango. Se levantó la "
+      + "primera vez que alguien fue a por él. Todos los granjeros de la isla "
+      + "se marcharon salvo uno que le caía bien. De eso hace ochenta años y "
+      + "sigue ahí abajo, sigue guardándolo.\n\n"
+      + "Tres cosas, y no las repetiré.\n\n"
+      + "El peso. Los muertos de aquella tierra se hinchan: uno salió del "
+      + "suelo del tamaño de un buey y hubo que levantarlo con palancas. Kárr "
+      + "es más lento que cualquier cosa viva de esa isla. PUEDES alejarte de "
+      + "él, cosa que no podías con el anterior. Lo que no puedes es "
+      + "esperarlo. Lleva ochocientos años practicando.\n\n"
+      + "El hierro. Lo lleva puesto, y hay más de él que de ti. Los golpes "
+      + "flojos no pasarán: una lluvia de ellos vale menos que cuatro "
+      + "honrados, así que pégale en serio o no le pegues.\n\n"
+      + "El fuego. El hierro abre a un draugr y no lo termina; las sagas los "
+      + "queman, y los queman porque nada más funciona deprisa. Si tienes "
+      + "fuego, tráelo. No hará el trabajo por ti. Lo hará más corto.\n\n"
+      + "Una cosa más. Lo que un draugr mata se levanta después de él. En "
+      + "Haramsey no queda ni una granja y en esa cámara hay unos cuantos, "
+      + "así que no des por hecho que lo último entre tú y él es él.",
+  },
 };
 
 /* ==========================================================================
@@ -297,6 +462,19 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Chronos.",
     pl: "Zabij redcapa w echu Hermitage i przynieś jego czapkę Chronosowi.",
     es: "Mata al redcap en el eco de Hermitage y lleva su gorro a Chronos.",
+  },
+  "mission.title.draugr": {
+    en: "The Helm in the Howe",
+    pl: "Hełm w kurhanie",
+    es: "El yelmo en el túmulo",
+  },
+  "mission.goal.draugr": {
+    en: "Kill Kárr the Old in the howe under Haramsey and carry his helm back "
+      + "to Chronos.",
+    pl: "Zabij Kárra Starego w kurhanie pod Haramsey i przynieś jego hełm "
+      + "Chronosowi.",
+    es: "Mata a Kárr el Viejo en el túmulo bajo Haramsey y lleva su yelmo a "
+      + "Chronos.",
   },
 };
 

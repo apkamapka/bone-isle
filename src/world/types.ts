@@ -53,7 +53,11 @@ export type WorldKey =
   // Liddesdale — the Bloody Valley, the Time Sage's first MISSION ground, and
   // the redcap's lair cut into the bog under it. The first pair of keys that
   // exist because a mission needed them rather than because a level range did.
-  | "liddesdale" | "hermitage";
+  | "liddesdale" | "hermitage"
+  // Haramsey — the barrow coast, the sage's SECOND mission ground, and Kárr's
+  // howe cut into it. Same pairing as Liddesdale: an island to walk and one
+  // room at the bottom of it that closes behind you.
+  | "haramsey" | "haugr";
 
 /** A point in world (pixel) space. */
 export interface Vec {
@@ -268,6 +272,9 @@ export type MonsterKind =
   // anything else in the bestiary: one creature out of Border folklore that
   // exists to be killed once, in an echo, by a character of about level ten.
   | "redcap"
+  // …and his second, at about level fifteen. Same rule: not a rank, not kin to
+  // anything, one creature out of the Icelandic sagas standing in one room.
+  | "draugr"
   // The armoured goblin rank: the camps' answer to the orc warrior.
   | "goblinLegionary"
   // Etap 18 — the undead heavies. Both are skeletons and both leave the

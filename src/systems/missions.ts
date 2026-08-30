@@ -2,12 +2,15 @@
  * The Time Sage's missions: the chain of one-time errands into history that
  * runs alongside the repeatable board tasks.
  *
- * ONE LINK IS IN. The machinery landed empty and ahead of the catalogue on
+ * TWO LINKS ARE IN. The machinery landed empty and ahead of the catalogue on
  * purpose, so the save format, the pad wiring and the tests settled once
  * instead of once per mission; the redcap was poured into it in Etap 41-42 and
- * the ladder above him is designed up to level 50. Every function below is
- * still correct against an EMPTY `MISSIONS` as well as a full one, which is
- * what lets a mission be added or retired without touching any of them.
+ * Kárr the Old in Etap 43. Every function below is still correct against an
+ * EMPTY `MISSIONS` as well as a full one, which is what lets a mission be
+ * added or retired without touching any of them — and Etap 43 proved it: the
+ * ten-mission ladder that had been designed above the redcap was scrapped
+ * wholesale when the creature balance changed, and not one function here
+ * needed an edit for it.
  *
  * ---------------------------------------------------------------------------
  * WHY THIS IS NOT `quests.ts`
@@ -131,6 +134,24 @@ export const MISSIONS: readonly MissionDef[] = [
     // Roughly a third of the level it is gated at (level 10 needs 3700), which
     // is a real bite without being a shortcut past the ground it is set on.
     rewardExp: 1200,
+  },
+  {
+    // The second link, and the first one with an `after`. Both gates are real
+    // and they are checked separately: a level-20 character who never took the
+    // cap still cannot have this, and a level-12 character who did still has
+    // to wait. The ten-mission ladder that was sketched around this slot is
+    // GONE — the creature rebalance retired it — so this is not "mission three
+    // of ten with two missing", it is simply the next one written.
+    id: "draugr",
+    title: "The Helm in the Howe",
+    reqLevel: 15,
+    after: "redcap",
+    ground: "haramsey",
+    echo: "haugr",
+    relic: "graveHelm",
+    // Level 15 needs 5000 to advance, so this is a shade under a quarter of a
+    // level — the same proportion the cap paid, scaled up with the curve.
+    rewardExp: 2400,
   },
 ];
 

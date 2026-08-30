@@ -60,8 +60,12 @@ export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
   },
   elder: {
     greeting: "Adventurer. There is work to be done. See your quest log.",
+    /* THE POWER RING IS NO LONGER FOR SALE (Etap 43). It is the reward in the
+     * chest at the bottom of Kárr's howe, and a reward you can also buy for a
+     * hundred and eighty gold is not a reward. He still BUYS them, so a second
+     * one off a second character is still worth carrying out. */
     entries: shop(
-      ["amulet", "ring", "aolAmulet"],
+      ["amulet", "aolAmulet"],
       ["amulet", "ring", "aolAmulet", "boneSword", "marrowBlade", "knightSword", "essentialGem"],
     ),
   },

@@ -10,6 +10,8 @@ import { BANDITDEEP3_SPEC } from "./world/banditDeep3Spec.ts";
 import { BANDITDEEP_SPEC } from "./world/banditDeepSpec.ts";
 import { LIDDESDALE_SPEC } from "./world/liddesdaleSpec.ts";
 import { HERMITAGE_SPEC } from "./world/hermitageSpec.ts";
+import { HARAMSEY_SPEC } from "./world/haramseySpec.ts";
+import { HAUGR_SPEC } from "./world/haugrSpec.ts";
 import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
@@ -119,6 +121,14 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize
   // — `game.opened` gives it out once per character, and a respawning boss
   // would have given it out forever.
   hermitage: [["platinumCoin", 30]],
+  // Kárr's grave goods: the ring he was buried wearing and the silver that
+  // went in with him. The RING is the point — it is the only Power Ring a
+  // character can now get without paying for one, because Etap 43 took it out
+  // of the elder's stock and left him buying them back. Twenty platinum is
+  // deliberately under the redcap's thirty: the errand pays more in total
+  // because of the ring, and less in coin, so the biggest purse in the game
+  // stays where it was.
+  haugr: ["ring", ["platinumCoin", 20]],
 };
 
 /**
@@ -151,6 +161,8 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     deaddeep2: makeHandmadeWorld(DEADDEEP2_SPEC),
     liddesdale: makeHandmadeWorld(LIDDESDALE_SPEC),
     hermitage: makeHandmadeWorld(HERMITAGE_SPEC),
+    haramsey: makeHandmadeWorld(HARAMSEY_SPEC),
+    haugr: makeHandmadeWorld(HAUGR_SPEC),
   };
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble

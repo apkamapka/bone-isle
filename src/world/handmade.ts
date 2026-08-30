@@ -529,8 +529,16 @@ export const CELLAR_SPEC: HandmadeSpec = {
       dest: "liddesdale", label: "to Liddesdale — the Bloody Valley",
       span: 2, floor: Tile.Cave, inactive: true,
     },
-    // and nine more the sage has not named yet
-    "2": sealed("Sealed Rift II"),
+    // The second, and the same rule: named, dormant, lit by `applyMissionPads`
+    // when Chronos hands the errand over rather than when the player is old
+    // enough for it. Two named pads now, which is why nothing in the smoke
+    // suite counts them — it checks that each named pad has a mission behind
+    // it, and lets the number be whatever the catalogue says today.
+    "2": {
+      dest: "haramsey", label: "to Haramsey — the barrow coast",
+      span: 2, floor: Tile.Cave, inactive: true,
+    },
+    // and eight more the sage has not named yet
     "3": sealed("Sealed Rift III"),
     "4": sealed("Sealed Rift IV"),
     "5": sealed("Sealed Rift V"),
