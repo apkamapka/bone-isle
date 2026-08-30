@@ -323,11 +323,21 @@ export const CRYSTAL_COOLDOWN_S = 3.0;
  * A crystal's own lockout, by tier.
  *
  * Rising, because Tibia charges more for a bigger spell — Exori is four
- * seconds and Exori Gran is six — and because a flat number would collapse the
- * whole bar onto four t3 Shards. The tier ladder has to cost something other
- * than gold or it is not a ladder, it is a price list.
+ * seconds and Exori Gran is six.
+ *
+ * WHERE IT ACTUALLY BITES, which is not where you would guess. Cooldowns are
+ * grouped by ROLE, and there are four roles on a one-second wheel, so a full
+ * set takes four seconds to cycle no matter what these numbers say — anything
+ * at or below 4s is hidden behind the wheel. What these govern is the player
+ * carrying ONE or TWO roles, which is most of the early game: there the tier
+ * cooldown is the only brake, and it makes a t1 crystal the faster, weaker
+ * gun and a t3 the slower, heavier one.
+ *
+ * The top value was 6s and that was too much: it dropped a full t3 set from
+ * 0.62x a sword to 0.42x for no gain anywhere, because role grouping had
+ * already killed the stacking that the long wait was written to prevent.
  */
-export const CRYSTAL_CD_TIER: readonly number[] = [3.0, 4.0, 6.0];
+export const CRYSTAL_CD_TIER: readonly number[] = [3.0, 3.5, 4.0];
 
 /**
  * Between two DIFFERENT attack crystals. One second, as in Tibia.

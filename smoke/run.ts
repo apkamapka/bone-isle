@@ -12661,18 +12661,42 @@ async function main(): Promise<void> {
     CD.startCooldown(t1Shard);
     ok(!CD.isReady(t1Shard), "…casting it locks IT out");
     ok(!CD.isReady(t1Burst),
-      "…and briefly locks the rest of the attack line — the one-second wheel");
+      "…and briefly locks the other roles — the one-second wheel");
     CD.tickCooldowns(cf.CRYSTAL_GCD_S + 0.01);
     ok(CD.isReady(t1Burst),
-      "…which a DIFFERENT crystal clears after one second");
+      "…which a DIFFERENT ROLE clears after one second");
     ok(!CD.isReady(t1Shard),
-      "…while the one just cast is still on its own, longer clock");
+      "…while the role just cast is still on its own, longer clock");
+
+    /* THE GROUP IS THE ROLE, NOT THE ITEM — and this is a PvP rule before it
+     * is a pacing one. A Shard is the strongest thing on the bar and there is
+     * one per element, so per-item cooldowns meant a player whose friends
+     * handed him Storm and Frost alongside his own Flame was not carrying a
+     * varied set: he was carrying three copies of the best crystal and firing
+     * them back to back. */
+    const shardsOfEveryElement = Object.keys(CS.CRYSTAL_SPECS)
+      .filter((k) => CS.CRYSTAL_SPECS[k].role === "shard" && CS.CRYSTAL_SPECS[k].tier === 0) as never[];
+    ok(shardsOfEveryElement.length >= 3,
+      `there really are several shards to stack (${shardsOfEveryElement.length})`);
+    CD.resetCooldowns();
+    CD.startCooldown(shardsOfEveryElement[0]);
+    CD.tickCooldowns(cf.CRYSTAL_GCD_S + 0.01);
+    ok(shardsOfEveryElement.every((k) => !CD.isReady(k)),
+      "…so casting ONE shard cools every shard, whoever gave it to you");
+    ok(CD.groupOf(shardsOfEveryElement[0]) === CD.groupOf(shardsOfEveryElement[1]),
+      "…because the element is decoration and the role is the weapon");
+    ok(CD.groupOf(t1Shard) !== CD.groupOf(t1Burst),
+      "…while a different SHAPE is a different clock, which is the chain worth having");
+    /* Tier does not split the group either: a t3 Shard cooling a t1 Shard is
+     * the point, or the gift stack comes back one tier down. */
+    ok(CD.groupOf(t3Shard) === CD.groupOf(t1Shard), "…and tier does not split it");
 
     /* The refusals mean opposite things and must not read the same. */
     CD.resetCooldowns();
     CD.startCooldown(t1Shard);
     ok(CD.blockedBy(t1Shard) === "own", "your own clock says: press something else");
-    ok(CD.blockedBy(t1Burst) === "group", "…the group's says: wait a beat");
+    CD.tickCooldowns(0.01);
+    ok(CD.blockedBy(t1Burst) === "group", "…the wheel's says: wait a beat");
 
     /* Rising by tier, or the whole bar collapses onto four t3 Shards and the
      * tier ladder becomes a price list rather than a ladder. */
@@ -12731,8 +12755,8 @@ async function main(): Promise<void> {
       ok(at > 0 && rm.slice(at, at + 220).includes("refuseFromProtection()"),
         `…and ${name === "tickMeleeFire" ? "the sword" : "the bow"} will not swing out of it`);
     }
-    ok((rm.match(/if \(refuseFromProtection\(\)\) return;/g) ?? []).length === 4,
-      "…nor will either cast path: four gates, one rule");
+    ok((rm.match(/refuseFromProtection\(\)/g) ?? []).length === 5,
+      "…nor will either cast path: four gates plus the one definition");
     ok(/if \(isSafeTile\(world, P\.tx, P\.ty\)\) return;/.test(rm),
       "…and nothing a creature throws lands on someone standing inside");
     /* Auto-attack asks twice a second, so a refusal that flashed every time it
@@ -12740,6 +12764,44 @@ async function main(): Promise<void> {
      * and is a thing the player can watch happen. */
     ok(/P\.target = null;\s*\n\s*flash\("no fighting from a protected zone"/.test(rm),
       "…stepping in drops the mark, rather than nagging twice a second");
+  }
+
+  console.log("Etap 46 — the tower has to answer for the crystal:");
+  {
+    const rfs = await import("node:fs");
+    const rm = rfs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const TW = await import("../src/systems/tower.ts");
+    const CS2 = await import("../src/systems/crystals.ts");
+    const EL = await import("../src/systems/elements.ts");
+
+    /* NOTHING CHECKED THIS. The tower decided what the shelf SOLD and stopped
+     * caring the moment a crystal was in a bag, so a level-one tower plus one
+     * generous friend equalled a level-three tower — every stone spent on the
+     * building bought a shopping list rather than a capability. */
+    ok(/function refuseUntowered\(kind: ItemKind\): boolean \{/.test(rm),
+      "using a crystal asks the player's own tower");
+    ok(/spec\.tier <= towerTier\(\) - 1/.test(rm),
+      "…with the SAME subtraction the shelf uses, so the two cannot disagree");
+    ok((rm.match(/refuseUntowered\(kind\)/g) ?? []).length === 2,
+      "…on both cast paths, the aimed one and the plain one");
+
+    /* The shelf's side of that equality, checked against the real table. */
+    for (const el of EL.ELEMENTS) TW.markAttuned(el);
+    for (const tower of [1, 2, 3]) {
+      const shelf = TW.offersFor(EL.ELEMENTS[0], tower);
+      ok(shelf.length > 0 && shelf.every((o) => o.tier <= tower - 1),
+        `an Alchemy Tower ${"I".repeat(tower)} sells nothing above tier ${tower}`);
+    }
+
+    /* And the ELEMENT is deliberately NOT gated — gifts between players are
+     * meant to work, which is what the role cooldown is there to police. A
+     * tier you can be handed is a ladder that is only scenery; an element you
+     * can be handed is a friend helping. */
+    ok(!/isAttuned\([\s\S]{0,40}?\)/.test(rm.slice(rm.indexOf("function refuseUntowered"),
+      rm.indexOf("function refuseUntowered") + 600)),
+      "…while a friend's element still works in your hands");
+    ok(Object.keys(CS2.CRYSTAL_SPECS).some((k) => CS2.CRYSTAL_SPECS[k].tier === 2),
+      "there is a tier above the starting tower to be gated");
   }
 
   console.log("The bow swap can see the whole pack, and drops nothing:");

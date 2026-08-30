@@ -36,19 +36,54 @@ import { CRYSTAL_SPECS } from "./crystals.ts";
  * is not how Tibia reads. Exura Vita runs on a one-second clock of its own;
  * two seconds here is the same idea with a wider margin.
  */
-export type CdGroup = "attack" | "heal";
+export type CdGroup = "shard" | "burst" | "nova" | "wave" | "heal";
 
-/** Seconds left, per crystal kind and per group. Transient. */
-interface CdState {
-  each: Map<string, number>;
-  group: Map<CdGroup, number>;
+/** The wider bracket the wheel runs in. Healing does not share the attack's. */
+export type CdFamily = "attack" | "heal";
+
+export function familyOf(kind: ItemKind): CdFamily {
+  return kind === "healCrystal" ? "heal" : "attack";
 }
 
-const st: CdState = { each: new Map(), group: new Map() };
+/**
+ * TWO CLOCKS, AT TWO DIFFERENT WIDTHS, and getting them confused is easy —
+ * the first cut of this used one map for both and the wheel silently became
+ * per-role, which is the same as having no wheel at all.
+ *
+ * `role` is per SHAPE: one entry for shards, one for novas, and every crystal
+ * of that shape reads it. This is the long clock and the anti-stacking rule.
+ *
+ * `wheel` is per FAMILY: one entry for the whole attack line, one for
+ * healing. This is the short beat between two DIFFERENT shapes, and healing
+ * is on its own so a heal never costs you an attack.
+ */
+interface CdState {
+  role: Map<CdGroup, number>;
+  wheel: Map<CdFamily, number>;
+}
 
-/** Which group a crystal belongs to. Anything that is not a heal is an attack. */
+const st: CdState = { role: new Map(), wheel: new Map() };
+
+/**
+ * Which group a crystal belongs to: its ROLE, not its element.
+ *
+ * This was per-item at first, and per-item is a PvP hole. A Shard is the
+ * strongest thing on the bar, and there is one Shard per element — so a player
+ * whose friends hand him Storm and Frost alongside his own Flame does not
+ * carry a varied set, he carries three copies of the best crystal in the game
+ * and fires them back to back. The element is decoration on that; the ROLE is
+ * what the cooldown is protecting.
+ *
+ * Grouped this way, gifts still help — a friend's Storm Shard covers you while
+ * your own Flame Shard cools — but they cannot stack, because they are the
+ * same weapon painted a different colour. Chaining a Shard into a Nova into a
+ * Burst is a decision about shape and position. Chaining a Shard into a Shard
+ * is a decision about who you know.
+ */
 export function groupOf(kind: ItemKind): CdGroup {
-  return kind === "healCrystal" ? "heal" : "attack";
+  if (kind === "healCrystal") return "heal";
+  const spec = CRYSTAL_SPECS[kind];
+  return spec ? (spec.role as CdGroup) : "shard";
 }
 
 /**
@@ -70,12 +105,19 @@ export function groupCooldown(kind: ItemKind): number {
   // A heal's own two seconds is already the brake; a second clock on top would
   // only ever be the smaller of the two and would never be the thing you wait
   // for. One number the player can learn is better than two they cannot see.
-  return groupOf(kind) === "heal" ? 0 : CRYSTAL_GCD_S;
+  return familyOf(kind) === "heal" ? 0 : CRYSTAL_GCD_S;
 }
 
-/** Seconds until `kind` can be cast: the longer of its own clock and its group's. */
+/**
+ * Seconds until `kind` can be cast: the longer of its role's clock and the
+ * wheel that runs between roles.
+ *
+ * Two crystals of the same role now share the ROLE entry, which is the whole
+ * of the anti-stacking rule: casting a Storm Shard sets the shard clock, and
+ * a Flame Shard reads that same clock back.
+ */
 export function cooldownLeft(kind: ItemKind): number {
-  return Math.max(st.each.get(kind) ?? 0, st.group.get(groupOf(kind)) ?? 0);
+  return Math.max(st.role.get(groupOf(kind)) ?? 0, st.wheel.get(familyOf(kind)) ?? 0);
 }
 
 export function isReady(kind: ItemKind): boolean {
@@ -91,41 +133,40 @@ export function isReady(kind: ItemKind): boolean {
  * message that cannot tell them apart teaches the player nothing.
  */
 export function blockedBy(kind: ItemKind): "own" | "group" | null {
-  const own = st.each.get(kind) ?? 0;
-  const grp = st.group.get(groupOf(kind)) ?? 0;
+  const own = st.role.get(groupOf(kind)) ?? 0;
+  const grp = st.wheel.get(familyOf(kind)) ?? 0;
   if (own <= 0 && grp <= 0) return null;
   return own >= grp ? "own" : "group";
 }
 
 /** Start both clocks for a cast that has just happened. */
 export function startCooldown(kind: ItemKind): void {
-  st.each.set(kind, ownCooldown(kind));
+  // keyed by ROLE, so every crystal of that shape cools together
+  st.role.set(groupOf(kind), ownCooldown(kind));
   const g = groupCooldown(kind);
-  if (g > 0) st.group.set(groupOf(kind), Math.max(st.group.get(groupOf(kind)) ?? 0, g));
+  if (g > 0) st.wheel.set(familyOf(kind), Math.max(st.wheel.get(familyOf(kind)) ?? 0, g));
 }
 
 export function tickCooldowns(dt: number): void {
-  for (const [k, v] of st.each) {
-    const n = v - dt;
-    if (n <= 0) st.each.delete(k); else st.each.set(k, n);
-  }
-  for (const [k, v] of st.group) {
-    const n = v - dt;
-    if (n <= 0) st.group.delete(k); else st.group.set(k, n);
+  for (const m of [st.role, st.wheel] as Map<string, number>[]) {
+    for (const [k, v] of m) {
+      const n = v - dt;
+      if (n <= 0) m.delete(k); else m.set(k, n);
+    }
   }
 }
 
 /** Clear everything (new game, character switch, test isolation). */
 export function resetCooldowns(): void {
-  st.each.clear();
-  st.group.clear();
+  st.role.clear();
+  st.wheel.clear();
 }
 
 /** 0..1, for drawing a sweep on a hotbar slot. 0 means ready. */
 export function cooldownFrac(kind: ItemKind): number {
   const left = cooldownLeft(kind);
   if (left <= 0) return 0;
-  const own = st.each.get(kind) ?? 0;
-  const full = own >= (st.group.get(groupOf(kind)) ?? 0) ? ownCooldown(kind) : groupCooldown(kind);
+  const own = st.role.get(groupOf(kind)) ?? 0;
+  const full = own >= (st.wheel.get(familyOf(kind)) ?? 0) ? ownCooldown(kind) : groupCooldown(kind);
   return full > 0 ? Math.min(1, left / full) : 0;
 }

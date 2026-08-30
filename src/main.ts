@@ -1888,7 +1888,7 @@ function useCrystalItem(kind: ItemKind): void {
     flash(`${ITEMS[kind].name}: click a target`, "#ffce4a");
     return;
   }
-  if (refuseFromProtection()) return;
+  if (refuseFromProtection() || refuseUntowered(kind)) return;
   useCrystal(cw(), P, kind);
 }
 
@@ -2341,7 +2341,7 @@ function handleWorldTap(sx: number, sy: number): void {
   if (aimPending) {
     const kind = aimPending;
     aimPending = null;
-    if (refuseFromProtection()) return;
+    if (refuseFromProtection() || refuseUntowered(kind)) return;
     useCrystal(cw(), P, kind, { x: w.x, y: w.y });
     return;
   }
@@ -3200,6 +3200,31 @@ function refuseFromProtection(): boolean {
     P.target = null;
     flash("no fighting from a protected zone", "#8ab6ff");
   }
+  return true;
+}
+
+/**
+ * Refuse a crystal the player's tower cannot answer for.
+ *
+ * NOTHING USED TO CHECK THIS. The Alchemy Tower decided what the shelf SOLD
+ * and stopped caring the moment a crystal was in a bag, so a level-one tower
+ * plus one generous friend was the same as a level-three tower. Every gold
+ * piece and every stone spent upgrading the building bought a shopping list,
+ * not a capability — which is the whole of its power curve gone.
+ *
+ * Note what this deliberately does NOT check: the ELEMENT. A friend's Storm
+ * Shard still works in the hands of a Flame mage, because gifts between
+ * players are meant to work — that is what the role cooldown is for. Tier is
+ * different: it is not a sideways choice, it is the ladder, and a ladder you
+ * can be handed the top of is scenery.
+ *
+ * `offersFor` sells tier `towerTier - 1`, so that same subtraction is what
+ * makes the shelf and the gate agree about what a tower is worth.
+ */
+function refuseUntowered(kind: ItemKind): boolean {
+  const spec = CRYSTAL_SPECS[kind];
+  if (!spec || spec.tier <= towerTier() - 1) return false;
+  flash(`needs an Alchemy Tower ${"I".repeat(spec.tier + 1)}`, "#d96a5a");
   return true;
 }
 
