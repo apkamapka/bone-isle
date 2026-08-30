@@ -660,7 +660,14 @@ const act: PanelActions = {
      * Only food and potions, though. A crystal is bound to a hotbar slot and
      * counted out of the pack, and a corpse is not a quiver — those still have
      * to be picked up, and fall through to the ordinary take below. */
-    const inPlace = from && from.c !== "bag" && (def.food || def.heal);
+    /* IN PLACE means "somewhere that is not already yours". The pack and any
+     * pack inside it are yours, so eating out of those is the ordinary spend
+     * — `removeItem` walks the tree and finds it wherever it is nested. A
+     * body, a chest or a bag on the floor is not, and that is the case this
+     * whole branch exists for. `rootOf` is what tells the two apart; asking
+     * `from.c !== "bag"` got a pack inside the pack wrong. */
+    const outside = !!from && rootOf(from) !== "player";
+    const inPlace = outside && !!(def.food || def.heal);
     const spend = (): boolean => {
       if (!inPlace) return removeItem(P.bag, kind, 1);
       const slots = refSlots(from);
@@ -669,13 +676,20 @@ const act: PanelActions = {
       closeIfEmpty(from);
       return true;
     };
-    if (from && from.c !== "bag" && !inPlace) { openMoveChooser(from, _slotIndex); return; }
+    if (outside && !inPlace && from) { openMoveChooser(from, _slotIndex); return; }
 
     if (def.crystal) { useCrystalItem(kind); return; }
     if (def.food) {
       // Tibia rule: you can bank at most 20 minutes of fed time — eating past
       // it is refused (and the food is NOT consumed)
-      if (P.fedS + def.food > FED_MAX_S) { flash("you are full", "#e0a06a"); return; }
+      /* Naming the wait matters more than it looks. A click that is refused in
+       * silence and a click that does nothing are the same event to the
+       * player, and "can't eat any more" was being read as "eating is
+       * broken". */
+      if (P.fedS + def.food > FED_MAX_S) {
+        flash(`too full — wait ${Math.ceil((P.fedS + def.food - FED_MAX_S) / 60)} min`, "#e0a06a");
+        return;
+      }
       if (!spend()) return;
       P.fedS += def.food;
       flash(["Munch.", "Gulp.", "Mmmh."][rndi(0, 2)], "#e8dcc0");
@@ -2631,7 +2645,7 @@ screen.addEventListener("pointerdown", (e) => {
   if (assignSlot !== null) {
     const b = assignBody;
     if (b && s.x >= b.x && s.x < b.x + b.w && s.y >= b.y && s.y < b.y + b.h && b.max > 0) {
-      assignDrag = { grabY: s.y, from: assignScroll, moved: false };
+      assignDrag = { grabX: s.x, grabY: s.y, from: assignScroll, moved: false };
       e.preventDefault();
     }
     return;
@@ -2888,11 +2902,28 @@ const endDrag = (): void => {
 };
 addEventListener("pointerup", (e) => {
   if (assignDrag) {
-    /* Only a real drag suppresses the click. Suppressing every press would
-     * make the list unscrollable AND unusable, which is worse than either. */
+    /* THE TAP IS DISPATCHED HERE, NOT LEFT TO THE CLICK EVENT.
+     *
+     * pointerdown called `preventDefault()` on this press to stop the page
+     * selecting text and scrolling under the modal — and preventDefault on a
+     * pointerdown also cancels the compatibility mouse events the browser
+     * would otherwise synthesise, `click` among them. So the plan of "a press
+     * that never travelled is handled by the ordinary click path" was undone
+     * two lines earlier by our own hand: on a desktop the picker's rows could
+     * be scrolled and never chosen.
+     *
+     * A phone never noticed, because a tap there arrives through the touch
+     * layer rather than as a synthesised click — which is the whole of "works
+     * on mobile, dead on PC".
+     *
+     * `itemDrag` already solves this exact problem this exact way a few lines
+     * below. Doing it explicitly also means the fix does not depend on how a
+     * given browser reads preventDefault. */
     if (assignDrag.moved) {
       suppressClick = true;
       setTimeout(() => { suppressClick = false; }, 0);
+    } else {
+      handleWorldTap(assignDrag.grabX, assignDrag.grabY);
     }
     assignDrag = null;
     return;
@@ -3110,6 +3141,30 @@ function talkToSage(): void {
   else sageSays("sage.cold", { choices: [leaveChoice()] });
 }
 
+/**
+ * Open a corpse without letting go of what you are fighting.
+ *
+ * In reach the window opens now; out of reach we walk over and `pendingLoot`
+ * pops it on arrival. Either way `P.target` is NOT touched, so the marked
+ * creature stays marked and tickMeleeFire / tickRangedFire keep the blows
+ * coming the whole time.
+ *
+ * Shared by both tap paths on purpose. They had drifted: the exact click did
+ * this dance and the forgiving tap did not, so whether looting cost you your
+ * target depended on which of the two happened to claim the press — and the
+ * forgiving one claims almost all of them.
+ */
+function lootKeepingAttack(c: Corpse): void {
+  if (withinReach(c.x, c.y)) {
+    ui.loot = c;
+    openWindow("loot");
+  } else {
+    pendingLoot = c;
+    P.dest = { x: c.x, y: c.y };
+  }
+  moveMarker = null;
+}
+
 function worldClick(w: Vec): void {
   if (P.dead) return;
   const world = cw();
@@ -3135,16 +3190,7 @@ function worldClick(w: Vec): void {
   if (P.target?.kind === "mob") {
     for (const c of world.corpses) {
       if (Math.abs(w.x - c.x) < 20 && Math.abs(w.y - c.y) < 16) {
-        if (withinReach(c.x, c.y)) {
-          ui.loot = c; openWindow("loot");
-        } else {
-          // out of reach: walk over, and `pendingLoot` pops it on arrival.
-          // The mark is untouched, so tickMeleeFire / tickRangedFire keep the
-          // blows coming the whole way there.
-          pendingLoot = c;
-          P.dest = { x: c.x, y: c.y };
-        }
-        moveMarker = null;
+        lootKeepingAttack(c);
         return;
       }
     }
@@ -3324,6 +3370,25 @@ function forgivingTap(world: World, w: Vec): boolean {
     return best;
   };
 
+  /* CORPSES FIRST WHILE A FIGHT IS ON — and this, not `worldClick`, is where
+   * that rule had to go.
+   *
+   * `touchUI` is true on every device, so this runs on the desktop too and it
+   * claims almost every press before the exact pass below ever sees it. It
+   * snaps within ONE TILE, which is exactly the distance between a body and
+   * the thing that killed it, so a click meant for the loot landed on the
+   * creature you were already fighting — and because that creature was your
+   * target, the toggle read it as "stop attacking".
+   *
+   * The old note here argued the creature branch had already earned the tap
+   * whenever a marked monster was near. That is a description of the bug: near
+   * is precisely when you are looting between blows, and that is the one time
+   * the tap cannot have meant "start over on something else". */
+  if (P.target?.kind === "mob") {
+    const lootable = pick(world.corpses);
+    if (lootable) { lootKeepingAttack(lootable); return true; }
+  }
+
   const m = pick(world.monsters.filter((x) => x.hp > 0));
   if (m) {
     if (P.target?.kind === "mob" && P.target.id === m.id) {
@@ -3343,9 +3408,8 @@ function forgivingTap(world: World, w: Vec): boolean {
   }
   const c = pick(world.corpses);
   if (c) {
-    // deliberately does NOT reproduce the loot-while-attacking dance from the
-    // exact pass: that path needs a marked monster, and if there were one
-    // nearby the creature branch above would already have taken this tap
+    // no fight on: mark and walk, like anything else. The loot-while-attacking
+    // dance is handled at the top, where it belongs.
     P.target = { kind: "corpse", id: c.id };
     P.dest = null; P.gather = null; moveMarker = null;
     return true;
@@ -6105,7 +6169,7 @@ let assignBody: { x: number; y: number; w: number; h: number; rowH: number; max:
  * scroll bars sized for a thumb, and this had a nine-pixel arrow. Radek could
  * see seventy crystals and reach the first fourteen.
  */
-let assignDrag: { grabY: number; from: number; moved: boolean } | null = null;
+let assignDrag: { grabX: number; grabY: number; from: number; moved: boolean } | null = null;
 
 /** The rebind picker overlay: choose what an action slot triggers. */
 function drawAssignPicker(): void {

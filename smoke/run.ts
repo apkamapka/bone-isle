@@ -12224,8 +12224,18 @@ async function main(): Promise<void> {
     /* It was the only scrolling thing in the game a phone could not scroll:
      * the world has a joystick, panels have thumb-sized bars, and this had a
      * nine-pixel arrow and a wheel handler. */
-    ok(main.includes("let assignDrag: { grabY: number; from: number; moved: boolean } | null = null;"),
+    ok(/let assignDrag: \{[^}]*grabY: number;[^}]*moved: boolean;?[^}]*\} \| null = null;/.test(main),
       "a press inside the list starts a scroll");
+    /* …and finishing it without travelling CHOOSES the row.
+     *
+     * pointerdown calls preventDefault on that press, which also cancels the
+     * click the browser would have synthesised — so leaving the choice to "the
+     * ordinary click path" meant the desktop could scroll the picker and never
+     * pick anything out of it. A phone was fine: its taps come through the
+     * touch layer, not as synthesised clicks. */
+    ok(/grabX: number/.test(main), "…the press remembers where it started");
+    ok(/\} else \{\s*\n\s*handleWorldTap\(assignDrag\.grabX, assignDrag\.grabY\);/.test(main),
+      "…and a press that never travelled is dispatched as a tap, not left to a cancelled click");
     ok(main.includes("const rows = -dy / assignBody.rowH;"),
       "…content follows the finger, measured in rows");
     ok(main.includes("if (Math.abs(dy) > 4 * scale) assignDrag.moved = true;"),
@@ -12744,25 +12754,50 @@ async function main(): Promise<void> {
 
     /* #2 — the meat in a corpse. `removeItem(P.bag, …)` found nothing and
      * returned in silence, so the click landed and did nothing at all. */
-    ok(/const inPlace = from && from\.c !== "bag" && \(def\.food \|\| def\.heal\)/.test(rmain),
+    ok(/const outside = !!from && rootOf\(from\) !== "player";/.test(rmain),
+      "\"somewhere else\" is decided by the container's ROOT, so a pack inside the pack is still yours");
+    ok(/const inPlace = outside && !!\(def\.food \|\| def\.heal\)/.test(rmain),
       "food and potions are used where they lie, not only out of the pack");
+    /* The backpack grew this branch and the world grid did not, so eating
+     * worked in one window and silently did nothing in the other. */
+    ok(/consumable && ref \? p\.act\.useItem\(kind, idx, ref\)/.test(rpan),
+      "…and every grid means the same thing by a click on food, not just the pack's");
     ok(/p\.act\.useItem\(k, idx, ref\)/.test(rpan),
       "…because the panel now tells useItem which container was clicked");
     ok(/if \(!spend\(\)\) return;/.test(rmain) && !/if \(!removeItem\(P\.bag, kind, 1\)\) return;\n      P\.fedS/.test(rmain),
       "…and both the eating and the drinking spend from that same place");
 
     /* #3 — a corpse lies where its owner died, which is where its friends are
-     * standing, so the loot click was re-targeting onto whatever stood on it. */
-    const wc = rmain.slice(rmain.indexOf("function worldClick("),
-      rmain.indexOf("\nfunction ", rmain.indexOf("function worldClick(") + 1));
-    const corpseAt = wc.indexOf("world.corpses");
-    const mobAt = wc.indexOf("world.monsters");
-    ok(corpseAt > 0 && mobAt > 0 && corpseAt < mobAt,
-      "with a target held, a click asks the corpses before the living");
-    ok(/if \(P\.target\?\.kind === "mob"\) \{\s*\n\s*for \(const c of world\.corpses\)/.test(wc),
-      "…and only with one held: an unengaged click still finds the creature on top");
-    ok(wc.indexOf("world.corpses", corpseAt + 1) > mobAt,
-      "…the plain corpse walk-to is still there for everyone else");
+     * standing, so the loot click was re-targeting onto whatever stood on it.
+     *
+     * BOTH tap paths need the rule, and the forgiving one needs it MORE: it
+     * runs first, `touchUI` is true on every device so it runs on the desktop
+     * too, and it snaps within one tile — which is exactly the distance
+     * between a body and its killer. Fixing only the exact pass fixed the path
+     * that almost never gets the press. */
+    const fnBody = (name: string): string => {
+      const a = rmain.indexOf("function " + name + "(");
+      const b = rmain.indexOf("\nfunction ", a + 1);
+      return rmain.slice(a, b < 0 ? rmain.length : b);
+    };
+    for (const name of ["worldClick", "forgivingTap"]) {
+      const body = fnBody(name);
+      const corpseAt = body.indexOf("world.corpses");
+      const mobAt = body.indexOf("world.monsters");
+      ok(corpseAt > 0 && mobAt > 0 && corpseAt < mobAt,
+        `${name}: with a target held, a press asks the corpses before the living`);
+      ok(/P\.target\?\.kind === "mob"/.test(body.slice(0, corpseAt + 40)),
+        `${name}: …and only with one held — unengaged, the creature on top still wins`);
+      ok(body.indexOf("world.corpses", corpseAt + 1) > mobAt,
+        `${name}: …the plain corpse walk-to is still there for everyone else`);
+    }
+    /* One helper, so the two paths cannot drift apart again — which is the
+     * shape of this bug in the first place: the dance existed in the pass that
+     * was not running. */
+    ok((rmain.match(/lootKeepingAttack\(/g) ?? []).length === 3,
+      "…both paths loot through the same one helper");
+    ok(!/function lootKeepingAttack[\s\S]{0,400}?P\.target = /.test(rmain),
+      "…and that helper never touches the mark");
 
     /* #5 — the picker is drawn after the toolbar and scrims the screen, so on
      * the reverse sweep the scrim was eating every button on that strip. */

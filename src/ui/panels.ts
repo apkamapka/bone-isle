@@ -2420,10 +2420,25 @@ function drawGrid(
       const kind = slot.kind;
       const nested = isContainer(kind);
       if (ref) p.itemSlots.push({ x: cx, y: cy, w: cell, h: cell, ref, index: idx, kind, n: slot.n });
+      /* A CONSUMABLE IS USED WHERE IT LIES, in every grid that has one.
+       *
+       * The backpack grew this branch and this one did not, so eating the meat
+       * depended on which window you were looking at: the pack knew what food
+       * was for, and the corpse it came out of sent every click to the move
+       * chooser. Two grids, one meaning, and the meaning was written down in
+       * only one of them.
+       *
+       * `useItem` decides what "use" means from the ref it is handed — eaten
+       * or drunk on the spot out of a body or off the floor, spent from the
+       * pack when it is already yours. Dragging still takes it, which is how
+       * you loot a stack of ham rather than biting one off it. */
+      const consumable = !nested && !ITEMS[kind].slot
+        && !!(ITEMS[kind].heal || ITEMS[kind].food || ITEMS[kind].crystal || ITEMS[kind].boost);
       p.hotspots.push({
         x: cx, y: cy, w: cell, h: cell,
         fn: () => (p.ui.lookMode ? p.act.look(kind)
           : nested && ref ? p.act.openNested(ref, idx, p.win)
+          : consumable && ref ? p.act.useItem(kind, idx, ref)
           : onClick(idx)),
       });
     } else if (ref) {
