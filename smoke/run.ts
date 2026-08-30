@@ -8391,8 +8391,7 @@ async function main(): Promise<void> {
     ok(C.MONSTER_AGGRO_HOLD_RANGE < C.POST_LEASH_PX,
       "…and never further than the leash that pulls it home");
 
-    /* --- one cooldown for every crystal, healing included --- */
-    ok(C.CRYSTAL_COOLDOWN_S === 3.0, `the shared crystal cooldown is 3s (${C.CRYSTAL_COOLDOWN_S})`);
+    /* --- cooldowns per crystal and per group (Etap 46) --- */
     const { createPlayer, refreshDerived } = await import("../src/entities/player.ts");
     const w3 = buildWorlds(WORLD_SEED).home;
     const P2 = createPlayer(w3.spawn);
@@ -8402,8 +8401,8 @@ async function main(): Promise<void> {
     CR.resetCrystalCooldown();
     items.addItem(P2.bag, "healCrystal", 5);
     ok(CR.useCrystal(w3, P2, "healCrystal"), "the first Life Crystal goes off");
-    ok(CR.crystalCooldownLeft() === C.CRYSTAL_COOLDOWN_S,
-      "…and starts the shared timer, which healing never used to touch");
+    ok(CR.crystalCooldownLeft("healCrystal") === C.HEAL_CRYSTAL_CD_S,
+      "…and starts its OWN two-second clock, not the attack line's");
     const hpAfterFirst = P2.hp;
     ok(!CR.useCrystal(w3, P2, "healCrystal"), "a second one straight away is refused");
     ok(P2.hp === hpAfterFirst, "…and costs neither a charge's worth of HP…");
@@ -12146,10 +12145,14 @@ async function main(): Promise<void> {
     ok(p9.x !== p3.x || p9.y !== p3.y,
       "…and a second-row slot does not default on top of a first-row one");
 
-    /* Ten of the twenty-four get a key. There is no eleventh digit, and
-     * inventing a chord would cost every player something to remember. */
-    ok(input.includes('k >= "1" && k <= "9"'), "keys 1-9 fire the first nine slots");
-    ok(input.includes('else if (k === "0") h.onSpell(9);'), "…and 0 fires the tenth");
+    /* THE DIGITS ARE GONE (Etap 46). They reached ten of twenty-four and were
+     * printed on none of them — the same fault as the numbering they replaced,
+     * inverted: a slot showing a key that could not be pressed became a key
+     * that worked and no slot showed. The bar is on the function keys and
+     * nothing else, so the caption is the whole contract. */
+    ok(!/k >= "1" && k <= "9"/.test(input), "the digit row no longer fires hotkeys");
+    ok(!/k === "0"/.test(input), "…nor does zero");
+    ok(/const fn = \/\^f\(/.test(input), "…the function keys are the only way in");
 
     /* The control lives with the layout, because "how many buttons" and
      * "where the buttons go" are the same question asked twice. */
@@ -12633,6 +12636,112 @@ async function main(): Promise<void> {
   /* ======================================================================= *
    *  RADEK'S SIX — the bugs found by playing rather than by reading
    * ======================================================================= */
+  console.log("Etap 46 — a crystal has its own clock, and its group's:");
+  {
+    const CD = await import("../src/systems/cooldowns.ts");
+    const cf = await import("../src/config.ts");
+    const CS = await import("../src/systems/crystals.ts");
+    /* Real ids, looked up out of the generated table rather than spelled out.
+     * A guessed id is not a failing test, it is a PASSING one: `ownCooldown`
+     * falls back to tier 0 for anything it does not recognise, so a typo here
+     * would quietly assert nothing at all. */
+    const shardAt = (t: number): never => Object.keys(CS.CRYSTAL_SPECS)
+      .find((k) => CS.CRYSTAL_SPECS[k].role === "shard" && CS.CRYSTAL_SPECS[k].tier === t) as never;
+    const t1Shard = shardAt(0);
+    const t3Shard = shardAt(2);
+    const t1Burst = Object.keys(CS.CRYSTAL_SPECS)
+      .find((k) => CS.CRYSTAL_SPECS[k].role === "burst" && CS.CRYSTAL_SPECS[k].tier === 0) as never;
+    ok(!!t1Shard && !!t3Shard && !!t1Burst, "the crystal table names a shard and a burst to test with");
+
+    /* THE OLD MODEL WAS ONE NUMBER for the whole bar, which made twenty-four
+     * slots into one button drawn twenty-four times: press anything, and
+     * everything went grey. Carrying a varied set bought nothing. */
+    CD.resetCooldowns();
+    ok(CD.isReady(t1Shard), "a fresh crystal is ready");
+    CD.startCooldown(t1Shard);
+    ok(!CD.isReady(t1Shard), "…casting it locks IT out");
+    ok(!CD.isReady(t1Burst),
+      "…and briefly locks the rest of the attack line — the one-second wheel");
+    CD.tickCooldowns(cf.CRYSTAL_GCD_S + 0.01);
+    ok(CD.isReady(t1Burst),
+      "…which a DIFFERENT crystal clears after one second");
+    ok(!CD.isReady(t1Shard),
+      "…while the one just cast is still on its own, longer clock");
+
+    /* The refusals mean opposite things and must not read the same. */
+    CD.resetCooldowns();
+    CD.startCooldown(t1Shard);
+    ok(CD.blockedBy(t1Shard) === "own", "your own clock says: press something else");
+    ok(CD.blockedBy(t1Burst) === "group", "…the group's says: wait a beat");
+
+    /* Rising by tier, or the whole bar collapses onto four t3 Shards and the
+     * tier ladder becomes a price list rather than a ladder. */
+    ok(cf.CRYSTAL_CD_TIER[0] < cf.CRYSTAL_CD_TIER[1] && cf.CRYSTAL_CD_TIER[1] < cf.CRYSTAL_CD_TIER[2],
+      `a bigger crystal costs a longer wait (${cf.CRYSTAL_CD_TIER.join("/")}s)`);
+    CD.resetCooldowns();
+    ok(CD.ownCooldown(t3Shard) > CD.ownCooldown(t1Shard),
+      "…so a t3 is not simply strictly better than a t1");
+
+    /* HEALING LEFT THE ATTACK GROUP. It used to cost a full attack turn,
+     * because with no mana the turn was the only price a heal could pay — and
+     * the cost of that was that every top-up stopped the fight dead. */
+    CD.resetCooldowns();
+    ok(CD.groupOf("healCrystal") !== CD.groupOf(t1Shard),
+      "the Life Crystal is not in the attack group");
+    CD.startCooldown(t1Shard);
+    ok(CD.isReady("healCrystal"), "…so attacking never blocks a heal");
+    CD.resetCooldowns();
+    CD.startCooldown("healCrystal");
+    ok(CD.isReady(t1Shard), "…and healing never blocks an attack");
+    ok(CD.cooldownLeft("healCrystal") === cf.HEAL_CRYSTAL_CD_S,
+      `…the heal runs on its own ${cf.HEAL_CRYSTAL_CD_S}s clock`);
+    /* Two rather than one: a heal here is 30 + 3·level with nothing behind it,
+     * so a one-second clock would be ~138 HP/s at level 36 bought with coin
+     * alone — and would leave the better heal runes nothing to improve on. */
+    ok(cf.HEAL_CRYSTAL_CD_S > cf.CRYSTAL_GCD_S,
+      "…which is slower than the attack wheel, so healing is still a decision");
+
+    /* The bar is only playable if you can SEE which slots are ready. */
+    CD.resetCooldowns();
+    ok(CD.cooldownFrac(t1Shard) === 0, "a ready slot draws no shade");
+    CD.startCooldown(t1Shard);
+    ok(CD.cooldownFrac(t1Shard) > 0.9, "…a just-cast one is nearly full");
+    CD.tickCooldowns(CD.ownCooldown(t1Shard) / 2);
+    const half = CD.cooldownFrac(t1Shard);
+    ok(half > 0.35 && half < 0.65, `…and drains as it runs (${half.toFixed(2)})`);
+    CD.tickCooldowns(99);
+    ok(CD.isReady(t1Shard) && CD.cooldownFrac(t1Shard) === 0,
+      "…and clears completely");
+    CD.resetCooldowns();
+  }
+
+  console.log("Etap 46 — a protected zone protects in BOTH directions:");
+  {
+    const rfs = await import("node:fs");
+    const rm = rfs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+
+    /* Half of this was already true: a creature cannot walk into a haven.
+     * That was taken for a sanctuary, but a crossbowman reaches 300px and a
+     * sword reaches across the boundary tile, so the haven only ever stopped
+     * the ones that had to come to you — while you shelled them freely. */
+    ok(/function inProtection\(\): boolean \{\s*\n\s*return isSafeTile\(cw\(\), P\.tx, P\.ty\);/.test(rm),
+      "the zone is read off the tile the player is standing on");
+    for (const name of ["tickMeleeFire", "tickRangedFire"]) {
+      const at = rm.indexOf("function " + name + "(");
+      ok(at > 0 && rm.slice(at, at + 220).includes("refuseFromProtection()"),
+        `…and ${name === "tickMeleeFire" ? "the sword" : "the bow"} will not swing out of it`);
+    }
+    ok((rm.match(/if \(refuseFromProtection\(\)\) return;/g) ?? []).length === 4,
+      "…nor will either cast path: four gates, one rule");
+    ok(/if \(isSafeTile\(world, P\.tx, P\.ty\)\) return;/.test(rm),
+      "…and nothing a creature throws lands on someone standing inside");
+    /* Auto-attack asks twice a second, so a refusal that flashed every time it
+     * was asked would bury the screen. Dropping the mark is what Tibia does
+     * and is a thing the player can watch happen. */
+    ok(/P\.target = null;\s*\n\s*flash\("no fighting from a protected zone"/.test(rm),
+      "…stepping in drops the mark, rather than nagging twice a second");
+  }
+
   console.log("The bow swap can see the whole pack, and drops nothing:");
   {
     const LD = await import("../src/systems/loadout.ts");
