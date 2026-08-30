@@ -108,8 +108,6 @@ export interface PlayerState {
   research: Set<string>;
   /** Elemental lanes this character has paid to open. */
   attuned: Set<Element>;
-  /** Seconds left on the shared crystal cooldown. */
-  crystalCd: number;
   /**
    * Timestamps (seconds) of the hits the shield has engaged recently — the
    * rolling window behind Tibia's "a shield blocks two creatures" rule.
@@ -207,7 +205,6 @@ export function newPlayerState(): PlayerState {
     pvp: defaultPvp(),
     research: new Set<string>(),
     attuned: new Set<Element>(),
-    crystalCd: 0,
     shieldBlockTimes: [],
     lastBloodHitAt: -Infinity,
   };

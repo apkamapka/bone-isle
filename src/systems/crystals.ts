@@ -7,7 +7,6 @@
  */
 import { beep } from "../audio.ts";
 import { markBloodHit } from "./skills.ts";
-import { active as activeState } from "./playerState.ts";
 import { monsterById } from "../world/entities.ts";
 import { ELEMENTS, ELEMENT_COLOR, TIER_CODE, crystalDamage, type Element, type Tier } from "./elements.ts";
 import { MONSTER_DEFS } from "../entities/monsters.ts";
@@ -15,7 +14,8 @@ import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
 import { TILE } from "../config.ts";
 import { bagCount, removeItem } from "../items.ts";
-import { HEAL_CRYSTAL_BASE, MONSTER_AGGRO_HIT_S, CRYSTAL_COOLDOWN_S } from "../config.ts";
+import { HEAL_CRYSTAL_BASE, MONSTER_AGGRO_HIT_S } from "../config.ts";
+import { cooldownLeft, blockedBy, startCooldown, tickCooldowns, resetCooldowns } from "./cooldowns.ts";
 import { killMonster } from "./combat.ts";
 import { lineOfSight, groundBlocked } from "../world/collision.ts";
 import { addBlast, addBolt } from "../gfx/spellFx.ts";
@@ -36,24 +36,22 @@ export function isCrystal(kind: ItemKind): boolean {
 }
 
 /**
- * The ONE crystal cooldown — elemental line and Life Crystal alike (Etap 30).
- * Module state, not a Player field, so saves need no migration; ticked from
- * the main loop. See CRYSTAL_COOLDOWN_S in config.ts for why healing joined
- * it: with no mana in the game, the turn is the only price a heal can pay.
+ * The crystal cooldowns are no longer one number — see systems/cooldowns.ts.
+ * These three are kept as the names the rest of the game already calls, so the
+ * main loop and the tests did not all have to learn a new vocabulary at once.
  */
 export function tickCrystalCooldown(dt: number): void {
-  const st = activeState();
-  st.crystalCd = Math.max(0, st.crystalCd - dt);
+  tickCooldowns(dt);
 }
 
-/** Seconds left on the shared crystal cooldown. Read by the smoke tests. */
-export function crystalCooldownLeft(): number {
-  return activeState().crystalCd;
+/** Seconds left before THIS crystal can be cast again. */
+export function crystalCooldownLeft(kind: ItemKind): number {
+  return cooldownLeft(kind);
 }
 
-/** Clear the timer (new game / test isolation). */
+/** Clear every timer (new game / test isolation). */
 export function resetCrystalCooldown(): void {
-  activeState().crystalCd = 0;
+  resetCooldowns();
 }
 
 /**
@@ -294,12 +292,17 @@ export function useCrystal(
     // what is hitting you. The refusal is silent about which crystal blocked
     // it — "not ready" is the same message either way, because to the player
     // there is now only one cooldown to learn.
-    if (activeState().crystalCd > 0) {
-      addFloat(world, p.x, p.y - 44, "not ready", "#8ab6ff");
+/* Two clocks now, and they ask for opposite things: your OWN says press a
+     * different crystal, the group's says wait a beat. "Not ready" could not
+     * tell them apart, so it taught the player nothing about what to do. */
+    const why = blockedBy(kind);
+    if (why) {
+      addFloat(world, p.x, p.y - 44,
+        why === "own" ? "still cooling" : "too soon", "#8ab6ff");
       return false;
     }
     removeItem(p.bag, kind, 1);
-    activeState().crystalCd = CRYSTAL_COOLDOWN_S;
+    startCooldown(kind);
     const amount = HEAL_CRYSTAL_BASE + p.level * 3;
     p.hp = Math.min(p.maxhp, p.hp + amount);
     addFloat(world, p.x, p.y - 40, `+${amount}`, "#7dff9e");
@@ -310,8 +313,13 @@ export function useCrystal(
   // ---- the elemental line ----
   const spec = CRYSTAL_SPECS[kind];
   if (spec) {
-    if (activeState().crystalCd > 0) {
-      addFloat(world, p.x, p.y - 44, "not ready", "#8ab6ff");
+/* Two clocks now, and they ask for opposite things: your OWN says press a
+     * different crystal, the group's says wait a beat. "Not ready" could not
+     * tell them apart, so it taught the player nothing about what to do. */
+    const why = blockedBy(kind);
+    if (why) {
+      addFloat(world, p.x, p.y - 44,
+        why === "own" ? "still cooling" : "too soon", "#8ab6ff");
       return false;
     }
     const col = ELEMENT_COLOR[spec.element];
@@ -337,7 +345,7 @@ export function useCrystal(
       // aiming is the skill, and a wave that refunds itself on a miss is a
       // wave you fire blindly.
       removeItem(p.bag, kind, 1);
-      activeState().crystalCd = CRYSTAL_COOLDOWN_S;
+      startCooldown(kind);
       paint(world, shape, spec.element, spec.tier, spec.role);
       if (hit.length) markBloodHit();
       for (const m of hit) damageWithElement(world, p, m, spec, col);
@@ -375,7 +383,7 @@ export function useCrystal(
       toY = target.y;
     }
     removeItem(p.bag, kind, 1);
-    activeState().crystalCd = CRYSTAL_COOLDOWN_S;
+    startCooldown(kind);
     markBloodHit();
     p.face = toX < p.x ? -1 : 1;
 
