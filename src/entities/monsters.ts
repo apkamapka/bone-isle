@@ -470,7 +470,9 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *
    *  He is slow and enormously hard, which is a deliberate shape: the fight
    *  is a standing exchange you choose to have, in a room with eight of his
-   *  victims already in it.
+   *  victims already in it. Eighteen hundred hit points is twice the dragon's
+   *  and three times the redcap's, and it is the longest fight in the game by
+   *  a distance — which is the point of a boss you cannot be caught by.
    *
    *  The purse stays on the bestiary's own gold curve. The payday — a Power
    *  Ring and twenty platinum — is a one-time chest in `CHEST_PRIZES.haugr`,
@@ -483,7 +485,14 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     // Haramsey, who drove every farmer off the island except the one he liked.
     spr: SPR.humanFoe,
     name: "Kárr the Old",
-    hp: 900, dmg: [34, 90], speed: 40, atkRate: 2.0, exp: 750,
+    /* HP DOUBLED, 900 -> 1800, on Radek's call after walking the fight — the
+     * same correction the redcap got in Etap 42 and for the same reason.
+     * Nothing else moves with it: damage, armour and speed all stay on the
+     * level-15 budget, so the fight gets LONGER rather than sharper. That is
+     * the right shape for this one in particular, because he is the slowest
+     * thing in the game and the room is full of his victims: length is what
+     * turns "stand and trade" into "manage the room". */
+    hp: 1800, dmg: [34, 90], speed: 40, atkRate: 2.0, exp: 750,
     gold: [30, 60], danger: 0.5, armor: 26,
     // Fire is the saga's answer to him and the only thing here that is.
     // Shadow is what he is made of; ice is weather, and he has been dead

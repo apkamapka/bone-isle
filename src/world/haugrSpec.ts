@@ -28,11 +28,19 @@
  * `handmade.ts`), so twenty of them cost the floor nothing.
  *
  * THE HOARD IS A CHEST, NOT A POCKET. A Power Ring and twenty platinum sit in
- * a one-time chest against the south wall, keyed to this world in
- * `CHEST_PRIZES`. It is not on the creature: `game.opened` makes a chest
- * unrepeatable per character and a respawning boss is the opposite of that, so
- * routing the payday through his loot table would have turned a boss into a
- * press. He carries the helm, and the helm is what the errand is about.
+ * a one-time chest keyed to this world in `CHEST_PRIZES`. It is not on the
+ * creature: `game.opened` makes a chest unrepeatable per character and a
+ * respawning boss is the opposite of that, so routing the payday through his
+ * loot table would have turned a boss into a press. He carries the helm, and
+ * the helm is what the errand is about.
+ *
+ * IT SITS IN OPEN FLOOR, on the hall's centre line two squares behind him,
+ * with walkable ground on ALL FOUR sides. It was against the back wall first
+ * and that was wrong twice over: a chest sprite is drawn standing on the
+ * bottom edge of its own square, so hard against the rock it reads as part of
+ * the wall rather than as furniture, and you could only ever come at it from
+ * three directions. Out in the room you can walk right round it, and the
+ * smoke suite pins the four neighbours so nobody quietly shoves it back.
  *
  * WHO ELSE IS DOWN HERE. Eight ghouls and nothing else - what he killed, still
  * walking, which is the one thing the sagas say happens to a draugr's victims.
@@ -98,12 +106,12 @@ export const HAUGR_SPEC: HandmadeSpec = {
     "######======o=====o======#####",
     "######====Q=q=====Q=q====#####",
     "######=F===============F=#####",
-    "######===Y===========Y===#####",
-    "######=g=====F===F=====g=#####",
-    "######=====F=======F=====#####",
-    "######======q==X===Q=====#####",
-    "######===F===========F===#####",
-    "######==o=====W===$====o=#####",
+    "######===Y=====o=====Y===#####",
+    "######=g====F=====F====g=#####",
+    "######=========X=========#####",
+    "######=====q======Q======#####",
+    "######===F=====$====W==F=#####",
+    "######==o===F=====F===o==#####",
     "##############################",
     "##############################",
     "##############################",

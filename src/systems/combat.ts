@@ -11,8 +11,8 @@ import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
 import { missionByEcho, wantsRelic, relicTaken } from "./missions.ts";
-import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, addItem, bagCount, itemWeight } from "../items.ts";
-import { refreshDerived, freeCap } from "../entities/player.ts";
+import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, addItem, bagCount } from "../items.ts";
+import { refreshDerived } from "../entities/player.ts";
 import { structCenter, tierOf, DUMMY_TIER_RATE, DUMMY_TIER_SHIELD } from "./building.ts";
 import {
   addSkillXp, addShieldXp, markBloodHit, applySkillDeathLoss, attackPower, defenseArmor, distancePower,
@@ -189,18 +189,29 @@ export function killMonster(world: World, p: Player, m: Monster): void {
    * roll and the corpse is the same corpse minus the thing that is not his to
    * take twice.
    *
-   * A pack with no room for six weight is the one case that refuses the grant.
-   * The mission does NOT advance: he respawns, the cap is still his to take,
-   * and the player is told to make room. Better than the old answer, which
-   * would have been to put a bound item on the floor. */
+   * WEIGHT DOES NOT REFUSE IT, and that is a correction. It used to: the grant
+   * was gated on `itemWeight(relic) <= freeCap(p)`, which reads sensibly and is
+   * wrong, because being over capacity is a state this game LETS you walk
+   * around in. Radek killed Kárr at 1250 oz against a 920 cap, the nine-ounce
+   * helm was refused, `relicTaken` never fired, and the way home never lit —
+   * so the fight paid nothing and looked like a bug in the mission rather than
+   * in the scales. A relic is `boundRelic` the moment it lands: it cannot be
+   * dropped, chested, bodied or sold, so letting it in over cap can never be
+   * used to haul anything. The trade is nine ounces of leniency against
+   * silently voiding a one-time boss, and it is not close.
+   *
+   * A pack with no free SLOT is a different matter and still refuses, because
+   * there is genuinely nowhere to put it. The mission does not advance: he
+   * respawns, the relic is still his to take, and the player is told. */
   const md = missionByEcho(world.key);
   for (let i = items.length - 1; i >= 0; i--) if (md && items[i].kind === md.relic) items.splice(i, 1);
   if (md && wantsRelic(md.id, p.level, bagCount(p.bag, md.relic))) {
-    if (itemWeight(md.relic, 1) <= freeCap(p) && addItem(p.bag, md.relic, 1) === 0) {
+    if (addItem(p.bag, md.relic, 1) === 0) {
       relicTaken(md.id, p.level);
       addFloat(world, p.x, p.y - 64, ITEMS[md.relic].name, "#b9a6d8");
     } else {
-      addFloat(world, p.x, p.y - 64, "no room for it — make space", "#d96a5a");
+      addFloat(world, p.x, p.y - 64, `${ITEMS[md.relic].name}: no free slot!`, "#d96a5a");
+      addFloat(world, p.x, p.y - 44, "he keeps it — empty a slot and kill him again", "#d96a5a");
     }
   }
   world.corpses.push({

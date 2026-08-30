@@ -13222,9 +13222,21 @@ async function main(): Promise<void> {
      * the hole. Asserted as an average because individual posts wobble; what
      * has to hold is the slope. */
     const posts43 = isle.mobPosts!;
-    ok(new Set(posts43.map((p) => p.kind)).size === 2
-      && posts43.every((p) => p.kind === "barbarian" || p.kind === "raider"),
-      `only barbarians and raiders live on the moor (${[...new Set(posts43.map((p) => p.kind))].join(",")})`);
+    const MOOR = ["mercenary", "corsair", "wildWarrior"] as const;
+    ok(posts43.every((p) => (MOOR as readonly string[]).includes(p.kind))
+      && new Set(posts43.map((p) => p.kind)).size === MOOR.length,
+      `three ranks of the living hold the moor (${[...new Set(posts43.map((p) => p.kind))].join(",")})`);
+    /* THE WEIGHT OF THE MOOR, pinned as a relation and not as a number: no
+     * creature on a level-15 hunting ground may be worth more experience than
+     * the heaviest thing on the Bone Reach's opening band. Barbarians and
+     * raiders stood here first and were worth 365 and 420 against a character
+     * with three hundred hit points; this is what stops that happening again
+     * without freezing the roster to three specific names. */
+    const heaviest = Math.max(...posts43.map((p) => M43.MONSTER_DEFS[p.kind].exp));
+    ok(heaviest <= M43.MONSTER_DEFS.ghoul.exp,
+      `nothing on the moor outweighs a ghoul (${heaviest} vs ${M43.MONSTER_DEFS.ghoul.exp})`);
+    ok(heaviest < M43.MONSTER_DEFS.barbarian.exp / 1.5,
+      `…and the level-25 ranks that stood here first are well clear of it (${heaviest})`);
     let tooClose = "";
     for (let i = 0; i < posts43.length; i++) for (let j = i + 1; j < posts43.length; j++) {
       const a = posts43[i], b = posts43[j];
@@ -13235,8 +13247,17 @@ async function main(): Promise<void> {
       const of = posts43.filter((p) => p.kind === kind);
       return of.reduce((s, p) => s + dIsle[p.ty * isle.w + p.tx], 0) / of.length;
     };
-    ok(meanD("raider") > meanD("barbarian"),
-      `raiders stand deeper than barbarians (${meanD("barbarian") | 0} → ${meanD("raider") | 0})`);
+    /* The gradient, asserted as a SLOPE over the ranks in experience order
+     * rather than as two named creatures: heavier things stand further from
+     * the pad, every step of the way. Averages, because individual posts
+     * wobble — what has to hold is that the ladder leans the right way. */
+    const byWeight = [...MOOR].sort((a, b) => M43.MONSTER_DEFS[a].exp - M43.MONSTER_DEFS[b].exp);
+    let slope = "";
+    for (let i = 1; i < byWeight.length; i++) {
+      if (meanD(byWeight[i]) <= meanD(byWeight[i - 1])) slope = `${byWeight[i - 1]} → ${byWeight[i]}`;
+    }
+    ok(slope === "", `each rank stands deeper than the one below it${slope && " — " + slope}`
+      + ` (${byWeight.map((k) => `${k} ${meanD(k) | 0}`).join(", ")})`);
     ok(posts43.every((p) => dIsle[p.ty * isle.w + p.tx] >= 0), "…and every post can be walked to");
 
     /* --- who is in the howe -----------------------------------------------
@@ -13354,6 +13375,20 @@ async function main(): Promise<void> {
       ok(ti.includes(`${key}: "./${file}"`), `…and ${key} is registered, so it never falls back`);
     }
 
+    /* --- the hoard stands in open floor ------------------------------------
+     * All four orthogonal neighbours walkable, so you can come at it from any
+     * side and walk right round it. It sat against the back wall first and
+     * looked like part of the rock: a chest sprite is drawn standing on the
+     * bottom edge of its own square, which reads as furniture in a room and as
+     * masonry against a wall. */
+    const chest43 = howe.structures.find((st) => st.key === "treasure")!;
+    ok(!!chest43 && howe.solid[chest43.ty][chest43.tx], "the hoard is a solid chest you open from beside it");
+    const around = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const)
+      .filter(([dx, dy]) => !howe.solid[chest43.ty + dy][chest43.tx + dx]);
+    ok(around.length === 4,
+      `…with open floor on all four sides of it (${around.length}/4)`);
+    ok(chest43.tx === 15, `…and on the hall's own centre line (x=${chest43.tx})`);
+
     /* --- the relic --------------------------------------------------------
      * It is EVIDENCE, not equipment. A `slot` would put it in the paper-doll
      * and let a player wear the thing the sage is waiting for. */
@@ -13408,6 +13443,97 @@ async function main(): Promise<void> {
      * fault in a sentence about time — the rule from Etap 42, held here. */
     const pl43 = MM43.missionKeys("draugr").map((k) => T43.t(k, "pl")).join(" ");
     ok(!/\bpad\w*/i.test(pl43), "…and not one of them calls a door a pad");
+  }
+
+  console.log("Etap 43a — an over-loaded pack cannot void a one-time boss:");
+  {
+    /* THE BUG THIS PINS. Radek killed Kárr at 1250 oz against a 920 cap. The
+     * grant was gated on `itemWeight(relic) <= freeCap(p)`, freeCap was -330,
+     * the nine-ounce helm was refused, `relicTaken` never fired — so the boss
+     * paid nothing, the way home never lit, and the only sign of it was a
+     * float that had already faded. Being over capacity is a state this game
+     * lets you walk around in; it must not be a state that eats a fight you
+     * only get to have once. */
+    const CB = await import("../src/systems/combat.ts");
+    const MW = await import("../src/systems/missions.ts");
+    const IW = await import("../src/items.ts");
+    const PL = await import("../src/entities/player.ts");
+    const { resetPlayerState: rpsW } = await import("../src/systems/playerState.ts");
+    const { MONSTER_DEFS: MDW, spawnAtPost } = await import("../src/entities/monsters.ts");
+
+    /* The boss of an echo is the one creature in it the bestiary gives a NAME
+     * to — "Robin Redcap", "Kárr the Old". That is the same rule the folklore
+     * uses and it means this loop never has to be told who the boss is. */
+    const bossPost = (w: { mobPosts?: { kind: string; tx: number; ty: number }[] }) =>
+      w.mobPosts!.find((q) => MDW[q.kind as never]?.name !== undefined)!;
+    /* `spawnAtPost` returns a BOOLEAN; the monster it made is the last one on
+     * the world. Reading its return value as the creature is how the first
+     * draft of this block threw. */
+    const standUp = (w: Parameters<typeof spawnAtPost>[0], kind: string, tx: number, ty: number) => {
+      ok(spawnAtPost(w, kind as never, tx, ty), `${kind} stands on its own post`);
+      return w.monsters[w.monsters.length - 1];
+    };
+
+    for (const m of MW.MISSIONS) {
+      const ws = buildWorlds(WORLD_SEED);
+      const echo = ws[m.echo];
+      rpsW(); MW.resetMissions();
+      const p = PL.createPlayer(0, 0);
+      p.level = m.reqLevel;
+      // every prerequisite behind us, this one in hand
+      for (const prev of MW.MISSIONS) { if (prev.id !== m.id) MW.setStage(prev.id, "closed"); }
+      MW.setStage(m.id, "active");
+
+      // load the pack past the cap the way a real session does — one heavy
+      // stack, not a hundred items, so free SLOTS are never the thing at issue
+      const heavy = "stone" as const;
+      IW.addItem(p.bag, heavy, 900);
+      PL.refreshDerived(p);
+      ok(PL.freeCap(p) < 0,
+        `${m.id}: the test player is genuinely over capacity (${PL.freeCap(p) | 0} oz spare)`);
+
+      const post = bossPost(echo);
+      CB.killMonster(echo, p, standUp(echo, post.kind, post.tx, post.ty));
+
+      ok(IW.bagCount(p.bag, m.relic) === 1,
+        `${m.id}: the relic is handed over even to an over-loaded pack`);
+      ok(MW.stageOf(m.id, p.level) === "complete",
+        `…${m.id}: so the errand completes`);
+      ok(MW.relicRoadOpen(m.echo, p.level),
+        `…${m.id}: and the way home lights where he fell`);
+      ok(!echo.corpses.some((c) => (c.items ?? []).some((st) => st && st.kind === m.relic)),
+        `…${m.id}: and it never touches the corpse`);
+    }
+
+    /* NO FREE SLOT is a different failure and still refuses, because there is
+     * genuinely nowhere to put it. The mission must NOT advance: the boss
+     * respawns behind an echo that is still open, and the run can be had
+     * again. This is the case the weight gate was confused with. */
+    {
+      const m = MW.MISSIONS[0];
+      const ws = buildWorlds(WORLD_SEED);
+      const echo = ws[m.echo];
+      rpsW(); MW.resetMissions();
+      const p = PL.createPlayer(0, 0);
+      p.level = m.reqLevel;
+      MW.setStage(m.id, "active");
+      for (let i = 0; i < p.bag.length; i++) p.bag[i] = { kind: "goldCoin", n: 1 };
+      const post = bossPost(echo);
+      CB.killMonster(echo, p, standUp(echo, post.kind, post.tx, post.ty));
+      ok(IW.bagCount(p.bag, m.relic) === 0, "a pack with no free slot really cannot take it");
+      ok(MW.stageOf(m.id, p.level) === "active", "…so the errand does not advance");
+      ok(MW.echoOpen(m.echo, p.level), "…and the echo stays open, so the fight can be had again");
+    }
+
+    /* And the gate itself is gone from the source, not merely stepped around:
+     * a future edit that puts `freeCap` back in front of the grant fails here
+     * rather than three months later on somebody's over-loaded character. */
+    const cbSrc = (await import("node:fs"))
+      .readFileSync(new URL("../src/systems/combat.ts", import.meta.url), "utf8");
+    const grant = cbSrc.slice(cbSrc.indexOf("wantsRelic(md.id"), cbSrc.indexOf("world.corpses.push"));
+    ok(!/freeCap|itemWeight/.test(grant), "no weight check stands between a dead boss and its relic");
+
+    rpsW(); MW.resetMissions();
   }
 
   console.log("Housekeeping — dead files, dead names, dead comments:");
