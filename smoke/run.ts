@@ -13224,10 +13224,9 @@ async function main(): Promise<void> {
      * the hole. Asserted as an average because individual posts wobble; what
      * has to hold is the slope. */
     const posts43 = isle.mobPosts!;
-    const MOOR = ["mercenary", "corsair", "wildWarrior", "viking"] as const;
-    ok(posts43.every((p) => (MOOR as readonly string[]).includes(p.kind))
-      && new Set(posts43.map((p) => p.kind)).size === MOOR.length,
-      `four ranks of the living hold the moor (${[...new Set(posts43.map((p) => p.kind))].join(",")})`);
+    const MOOR = [...new Set(posts43.map((p) => p.kind))];
+    ok(MOOR.length === 1 && MOOR[0] === "viking",
+      `vikings hold the moor, and nothing else does (${MOOR.join(",")})`);
     let tooClose = "";
     for (let i = 0; i < posts43.length; i++) for (let j = i + 1; j < posts43.length; j++) {
       const a = posts43[i], b = posts43[j];
@@ -13238,17 +13237,20 @@ async function main(): Promise<void> {
       const of = posts43.filter((p) => p.kind === kind);
       return of.reduce((s, p) => s + dIsle[p.ty * isle.w + p.tx], 0) / of.length;
     };
-    /* The gradient, asserted as a SLOPE over the ranks in experience order
-     * rather than as two named creatures: heavier things stand further from
-     * the pad, every step of the way. Averages, because individual posts
-     * wobble — what has to hold is that the ladder leans the right way. */
-    const byWeight = [...MOOR].sort((a, b) => M43.MONSTER_DEFS[a].exp - M43.MONSTER_DEFS[b].exp);
-    let slope = "";
-    for (let i = 1; i < byWeight.length; i++) {
-      if (meanD(byWeight[i]) <= meanD(byWeight[i - 1])) slope = `${byWeight[i - 1]} → ${byWeight[i]}`;
-    }
-    ok(slope === "", `each rank stands deeper than the one below it${slope && " — " + slope}`
-      + ` (${byWeight.map((k) => `${k} ${meanD(k) | 0}`).join(", ")})`);
+    /* THE GRADIENT IS GONE, deliberately, and what replaces it is REACH. With
+     * one rank there is nothing to rank, so the thing that can still go wrong
+     * is a scatter that clumps: thirty-two posts all within a short walk of
+     * the pad would leave two thirds of the island empty and the last stretch
+     * before the hole a stroll. So the walk-distances have to span the island
+     * — posts in the near third and posts in the far third, both. */
+    const postD = posts43.map((p) => dIsle[p.ty * isle.w + p.tx]).sort((a, b) => a - b);
+    ok(postD[0] >= 8, `nothing is posted inside the landing circle (${postD[0]})`);
+    ok(postD[0] < farthest / 3, `…but the moor starts near the pad (${postD[0]} of ${farthest})`);
+    ok(postD[postD.length - 1] > (farthest * 2) / 3,
+      `…and runs all the way to the hole (${postD[postD.length - 1]} of ${farthest})`);
+    ok(posts43.filter((p) => dIsle[p.ty * isle.w + p.tx] > farthest / 2).length >= posts43.length / 3,
+      `…with a real share of it in the far half (${posts43.filter((p) => dIsle[p.ty * isle.w + p.tx] > farthest / 2).length}/${posts43.length})`);
+    ok(meanD("viking") > 0, `the moor's mean walk from the pad is ${meanD("viking") | 0} tiles`);
     ok(posts43.every((p) => dIsle[p.ty * isle.w + p.tx] >= 0), "…and every post can be walked to");
 
     /* --- who is in the howe -----------------------------------------------
@@ -13280,8 +13282,17 @@ async function main(): Promise<void> {
       `the moor and the room under it are one weight class (${heaviest} vs ${escort})`);
     ok(heaviest < M43.MONSTER_DEFS.barbarian.exp * 0.7,
       `…and the level-25 ranks that stood here first are well clear of it (${heaviest})`);
-    ok(posts43.some((p) => p.kind === "viking"),
-      "…and the one rank that belongs to this island is actually on it");
+    /* AND NOTHING BUT THE FORGE MAKES BAR STOCK. Iron and steel are smelted
+     * from looted gear; a creature that hands out ingots directly makes the
+     * forge optional. One grandfathered exception, the Black Knight's steel,
+     * which is gated behind the hardest fight in the game — everything else in
+     * the bestiary, including everything on this island, has to stay clean. */
+    const ingots = M43.MONSTER_KINDS
+      .filter((k) => M43.MONSTER_DEFS[k].loot.some((e) => e.kind === "iron" || e.kind === "steel"));
+    ok(ingots.length === 1 && ingots[0] === "blackKnight",
+      `only the Black Knight drops bar stock (${ingots.join(",") || "none"})`);
+    ok(!M43.MONSTER_DEFS.viking.loot.some((e) => e.kind === "iron" || e.kind === "steel"),
+      "…and the viking drops what he wears, not what a forge should have made");
 
     let howeClose = "";
     for (let i = 0; i < inHowe.length; i++) for (let j = i + 1; j < inHowe.length; j++) {
@@ -13658,6 +13669,67 @@ async function main(): Promise<void> {
     ok(MD43.viking.name === undefined, "the viking is a rank and not a named boss");
     ok((MD43.viking.armor ?? 0) > (MD43.wildWarrior.armor ?? 0),
       `mail and a shield make him the wall of the moor (armour ${MD43.viking.armor})`);
+  }
+
+  console.log("Etap 43a — /replay: the chain can be walked twice, and pays once:");
+  {
+    /* THE PROBLEM. The chain is one-shot per character, `/forget` is compiled
+     * out of `vite build`, and the deployed build is the only one Radek walks
+     * — so a mission he had finished could not be re-tested at all. `/replay`
+     * exists to fix that and has to be safe in front of everybody, because
+     * unlike `/forget` it is NOT gated on the dev build.
+     *
+     * Safe means: hands out nothing. The two things a mission pays are the
+     * one-time chest and the reward experience, and the tests below are the
+     * proof that it closes both. If either ever opens, this is a mint. */
+    const fsR2 = await import("node:fs");
+    const mainR2 = fsR2.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const body = mainR2.slice(mainR2.indexOf("function replayMissions"), mainR2.indexOf("function forgetEverything"));
+    ok(body.length > 0, "`/replay` has a body to check");
+
+    /* THE CHEST. `forgetEverything` un-opens every mission hoard; this one must
+     * not touch `game.opened` at all. Checked in the SOURCE because the flag
+     * lives on `game`, which this suite has no instance of — and because the
+     * failure mode is somebody copying the line across from the function two
+     * screens down, which is a source-level mistake. */
+    ok(!/game\.opened/.test(body),
+      "`/replay` never re-opens a one-time chest — the purse is paid once, ever");
+    ok(/game\.opened = game\.opened\.filter/.test(
+      mainR2.slice(mainR2.indexOf("function forgetEverything"))),
+      "…while `/forget`, which does, stays dev-only");
+    ok(/import\.meta\.env\.DEV\s*&&\s*text\.trim\(\)\.toLowerCase\(\) === "\/forget"/.test(mainR2),
+      "…and that gate is still on it");
+    ok(/text\.trim\(\)\.toLowerCase\(\) === "\/replay"/.test(mainR2),
+      "…and `/replay` needs no gate, so it works on the deployed build");
+
+    /* THE EXPERIENCE. Every closed mission's reward is taken back, walking the
+     * character down the curve if it has to, exactly as dying does. Modelled
+     * here rather than called, because the command reaches into module-level
+     * game state — what is pinned is that the ARITHMETIC round-trips to zero,
+     * which is the property that makes looping it worthless. */
+    const cfgR = await import("../src/config.ts");
+    const MR2 = await import("../src/systems/missions.ts");
+    const owed = MR2.MISSIONS.reduce((n, m) => n + m.rewardExp, 0);
+    ok(owed > 0, `the chain pays ${owed} xp in all, so there is something to claw back`);
+    for (const startLv of [15, 16, 20, 40]) {
+      let lv = startLv, exp = 10;
+      const before = cfgR.totalExpFor(lv) + exp;
+      // take it back, the way replayMissions does
+      const total = Math.max(0, cfgR.totalExpFor(lv) + exp - owed);
+      while (lv > 1 && total < cfgR.totalExpFor(lv)) lv--;
+      exp = total - cfgR.totalExpFor(lv);
+      ok(lv >= 1 && exp >= 0 && exp < cfgR.expNeeded(lv),
+        `at level ${startLv} the claw-back lands on a real place on the curve (lv ${lv}, ${exp} into it)`);
+      // …and paying it again returns exactly where it started
+      ok(cfgR.totalExpFor(lv) + exp + owed === before,
+        `…and handing the relics in again puts it back exactly (${startLv})`);
+    }
+    ok(/totalExpFor\(P\.level\) \+ P\.exp - owed/.test(body),
+      "the claw-back works on TOTALS, so it can de-level instead of going negative");
+    ok(/stageOf\(m\.id, P\.level\) === "closed"/.test(body),
+      "…and only closed missions are charged for — an unfinished one was never paid");
+    ok(/removeAcross\(\[P\.bag\], m\.relic, held\)/.test(body),
+      "…and any relic still in the pack goes with it, so nothing can be handed in twice");
   }
 
   console.log("Housekeeping — dead files, dead names, dead comments:");

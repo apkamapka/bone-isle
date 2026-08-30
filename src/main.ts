@@ -41,7 +41,7 @@ import { ELEMENT_LABEL, ELEMENT_COLOR, type Element } from "./systems/elements.t
 import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
-import { totalExpFor } from "./config.ts";
+import { totalExpFor, expNeeded } from "./config.ts";
 import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import {
   MISSIONS, stageOf, setStage, offeredMission, currentMission,
@@ -2488,6 +2488,30 @@ function sendChat(text: string): void {
     closeChat();
     return;
   }
+  /* TEMP-ETAP43 — `/replay`, and the reason it can ship where `/forget` cannot.
+   *
+   * The mission chain is one-shot per character, which made the whole of it
+   * untestable on the DEPLOYED build: `/forget` is compiled out by
+   * `vite build`, and the deployed build is the only one Radek walks. So he
+   * had no way to check any fix to a mission he had already finished.
+   *
+   * This one is safe to leave in front of everybody, because it hands out
+   * NOTHING. Two things pay out on a mission run and it closes both:
+   *
+   *   the chest    `game.opened` is left alone, so every one-time hoard stays
+   *                opened. The pad, the island, the boss, the relic and the
+   *                way home can all be walked again; the purse cannot.
+   *   the exp      the reward for every mission it un-closes is taken BACK,
+   *                de-levelling if it has to, exactly as dying does. Hand the
+   *                relic in again and you are paid it again, so the round trip
+   *                is worth zero and running it in a loop is worth zero.
+   *
+   * What it costs is the walk, which is the whole point. Grep TEMP-ETAP43. */
+  if (text.trim().toLowerCase() === "/replay") {
+    replayMissions();
+    closeChat();
+    return;
+  }
   say(activeChannel(), text, SELF, CHAT_SPEAKER_ID);
   closeChat();
 }
@@ -3054,6 +3078,42 @@ function sageSays(
  * Grep TEMP-ETAP42 to pull the whole thing — this function, its branch in
  * `sendChat`, and its string in speech.ts.
  */
+/**
+ * TEMP-ETAP43 — put the mission chain back to the start without paying for it.
+ *
+ * `forgetEverything` with the two mints removed; see the note on its `/replay`
+ * branch in `sendChat` for why that difference is what lets this one ship.
+ *
+ * The exp claw-back reuses the death penalty's own arithmetic rather than
+ * subtracting from `p.exp`: totals are what the curve is defined on, and
+ * taking 2400 off a character sitting on 300 into a level has to walk him
+ * backwards down it rather than leave him on a negative bar.
+ */
+function replayMissions(): void {
+  let owed = 0;
+  for (const m of MISSIONS) if (stageOf(m.id, P.level) === "closed") owed += m.rewardExp;
+  resetMissions();
+  for (const m of MISSIONS) {
+    const held = countAcross([P.bag], m.relic);
+    if (held > 0) removeAcross([P.bag], m.relic, held);
+  }
+  if (owed > 0) {
+    const total = Math.max(0, totalExpFor(P.level) + P.exp - owed);
+    let lv = P.level;
+    while (lv > 1 && total < totalExpFor(lv)) lv--;
+    P.level = lv;
+    P.exp = total - totalExpFor(lv);
+    P.expNext = expNeeded(lv);
+    refreshDerived(P);
+    if (P.hp > P.maxhp) P.hp = P.maxhp;
+  }
+  applyMissionPads(game.worlds, P.level);
+  saveGame(game);
+  flash(owed > 0
+    ? `Chronos takes his errands back — and the ${owed} xp he paid for them`
+    : "Chronos takes his errands back", "#b9a6d8");
+}
+
 function forgetEverything(): void {
   resetMissions();
   for (const m of MISSIONS) {

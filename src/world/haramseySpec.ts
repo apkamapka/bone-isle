@@ -25,26 +25,30 @@
  * distance would have put the hole barely seventy away and on the wrong side
  * of the water.
  *
- * WHO LIVES HERE. The living who came for the same hoard you did and got no
- * further than the moor: hired blades at the water, sea-raiders across the
- * middle, and the wild ones over the hole. Thirty-two posts, none within eight
- * tiles of another, so every pull is a single one, ranked by walk-distance
- * from the pad.
+ * WHO LIVES HERE. Vikings, and NOTHING else. Thirty-two posts, none within
+ * eight tiles of another, so every pull is a single one; that spacing is what
+ * the sampler could pack at a gap of eight, so the island is as full as its
+ * own rule allows.
  *
- * IT WAS BARBARIANS AND RAIDERS FIRST, and that was a misjudgement worth
- * writing down. Both are 440-hit-point creatures worth 365 and 420 experience
- * — level-25 weight standing on a level-15 errand, against a character with
- * about three hundred hit points. Radek walked it and said so. The four ranks
- * here run 175 to 265 hit points and 150 to 215 experience, which is roughly
- * half of what stood here and sits alongside what the Bone Reach fields at
- * the same level.
+ * ONE RANK IS THE POINT, not a shortcut. This map went through two other
+ * rosters first and both were wrong in the same way. Barbarians and raiders
+ * were wrong on WEIGHT — 440 hit points and 365 to 420 experience, level-25
+ * creatures standing on a level-15 errand. Mercenaries, corsairs and wild
+ * warriors that replaced them were right on weight and wrong on PLACE: they
+ * are people with boats who could be on any coast in the game, and a Norse
+ * burial island fielding three flavours of generic sellsword reads as a
+ * palette swap of the Gallows Coast. Radek's call, and the correct one — one
+ * creature that belongs here beats three that do not.
  *
- * THE VIKING HOLDS THE DEEP HALF, twelve posts of thirty-two, and takes more
- * ground than his share on purpose: the other three ranks are people with
- * boats who could be on any coast in the game, and he is the only one who
- * belongs to THIS island. He is also the wall rather than the spike — armour
- * 16 against a wild warrior's nothing, on hit points that stay inside the
- * band — so the last stretch before the hole is slower without being deadlier.
+ * SO THERE IS NO GRADIENT, and that is a real trade rather than an oversight.
+ * A single rank means the walk from the pad to the hole gets no harder, and
+ * what carries the crossing instead is its LENGTH: a hundred and seven tiles,
+ * around two bays, with a fight every eight squares. The gradient lives in the
+ * chain now, not on the island — the moor is one weight and Kárr is the step.
+ *
+ * The viking is a WALL rather than a spike: armour 16, which is more than
+ * anything else at his level, on hit points that stay inside the band. He
+ * costs time and potions, not surprises.
  *
  * SIX CAMPS - a fire, two tents, a totem and bones apiece - set clear of the
  * posts so a camp never doubles a pull. EIGHT STONE SETTINGS, two boulders and
@@ -55,7 +59,7 @@
  *   P pad back to the cellar (2x2)   D down into Kárr's howe
  *   V dead tree   v felled wood   R stone   Q q black boulder
  *   N tent   F campfire   Y totem   M bog mushrooms   o bones
- *   creatures: m mercenary   c corsair   w wildWarrior   k viking
+ *   creatures: k viking
  */
 import type { HandmadeSpec } from "./handmade.ts";
 import { Tile } from "./types.ts";
@@ -76,9 +80,6 @@ export const HARAMSEY_SPEC: HandmadeSpec = {
   },
   scenery: { V: "deadTree", v: "felledTree", N: "tent", Y: "skullPole", Q: "boulderA", q: "boulderB" },
   monsters: {
-    m: "mercenary",
-    c: "corsair",
-    w: "wildWarrior",
     k: "viking",
   },
   rows: [
@@ -91,36 +92,36 @@ export const HARAMSEY_SPEC: HandmadeSpec = {
     "~~~~~~~~~~~~~~~~~~~~~~~........~~~~~~~~~~~~~~~~~...M.~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     "~~~~~~~~~~~~~~~~~~~~~..M.............M.............................~~~~~~~~~~~~~",
     "~~~~~~~~~~~~~~~~~~~..................................M..............~~~~~~~~~~~~",
-    "~~~~~~~~~~~~~~~~~~.............R..R.....................w............~~~~~~~~~~~",
-    "~~~~~~~~~~~~~~~~~~.........................c.........v...........w..M~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~.............R..R.....................k............~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~.........................k.........v...........k..M~~~~~~~~~~~",
     "~~~~~~~~~~~~~~~~~~..........V........................................~~~~~~~~~~~",
     "~~~~~~~~~~~~~~~~~............................................V....V..~~~~~~~~~~~",
-    "~~~~~~~~~~~~~~~~..............R.m..........R.......R.................~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~..............R.k..........R.......R.................~~~~~~~~~~~",
     "~~~~~~~~~~~~.............................Y.....................V.v...~~~~~~~~~~~",
     "~~~~~~~~~~...........................N......V........................~~~~~~~~~~~",
     "~~~~~~~~~~.............................F.......................V....~~~~~~~~~~~~",
-    "~~~~~~~~~~......P........................N.........c...............~~~~~~~~~~~~~",
-    "~~~~~~~~~~.........................V.o.........R......R.V..c.......~~~~~~~~~~~~~",
+    "~~~~~~~~~~......P........................N.........k...............~~~~~~~~~~~~~",
+    "~~~~~~~~~~.........................V.o.........R......R.V..k.......~~~~~~~~~~~~~",
     "~~~~~~~~~~....................................................V....~~~~~~~~~~~~~",
     "~~~~~~~~~~..........................V...V..........................~~~~~~~~~~~~~",
     "~~~~~~~~~~.........................................v.............M.~~~~~~~~~~~~~",
-    "~~~~~~~~~~......................m....V................V......Y......~~~~~~~~~~~~",
+    "~~~~~~~~~~......................k....V................V......Y......~~~~~~~~~~~~",
     "~~~~~~~~~~...............................................N......V....~~~~~~~~~~~",
     "~~~~~~~~~~~.......................v........................F..........~~~~~~~~~~",
-    "~~~~~~~~~~~...................................c....V...V.....N...v.....~~~~~~~~~",
+    "~~~~~~~~~~~...................................k....V...V.....N...v.....~~~~~~~~~",
     "~~~~~~~~~~~..............................................o.........k....~~~~~~~~",
     "~~~~~~~~~~~........................................R......R..............~~~~~~~",
     "~~~~~~~~~~~~....................................V.................R......~~~~~~~",
-    "~~~~~~~~~~~~...V..m..R.R......................................v..........~~~~~~~",
-    "~~~~~~~~~~~~..............R.Y.V..............Y...........R.w........R....~~~~~~~",
+    "~~~~~~~~~~~~...V..k..R.R......................................v..........~~~~~~~",
+    "~~~~~~~~~~~~..............R.Y.V..............Y...........R.k........R....~~~~~~~",
     "~~~~~~~~~~~~............N................N..........v....................~~~~~~~",
     "~~~~~~~~~~~...............F................F...v.........V...v.....R..V..~~~~~~~",
-    "~~~~~~~~~~~..........R......N.V.m............N.........V.................~~~~~~~",
+    "~~~~~~~~~~~..........R......N.V.k............N.........V.................~~~~~~~",
     "~~~~~~~~~~~.............o..........V.....o..........V....................~~~~~~~",
-    "~~~~~~~~~~~...................V...................w................q.....~~~~~~~",
+    "~~~~~~~~~~~...................V...................k................q.....~~~~~~~",
     "~~~~~~~~~~~............V..R............................V.............Y...~~~~~~~",
-    "~~~~~~~~~~~....m..................v.........................R.V....Q.....~~~~~~~",
-    "~~~~~~~~~~~............m..................c........V....v.......k........~~~~~~~",
+    "~~~~~~~~~~~....k..................v.........................R.V....Q.....~~~~~~~",
+    "~~~~~~~~~~~............k..................k........V....v.......k........~~~~~~~",
     "~~~~~~~~~~~.....................................V...................R...~~~~~~~~",
     "~~~~~~~~~~~..M.......M........................................V........M~~~~~~~~",
     "~~~~~~~~~~~~~~~~~~~~....R................................R.............~~~~~~~~~",
@@ -129,16 +130,16 @@ export const HARAMSEY_SPEC: HandmadeSpec = {
     "~~~~~~~~~~~~~~~~~~~~~~.................R...v.........Y..........V....~~~~~~~~~~~",
     "~~~~~~~~~~~~~~~~~~...M.........V.............R.....q...R....V.......~~~~~~~~~~~~",
     "~~~~~~~~~~~~~~~~~........................v....................q....~~~~~~~~~~~~~",
-    "~~~~~~~~~~~~~~~~......c...........w.........................v...Y..~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~......k...........k.........................v...Y..~~~~~~~~~~~~~",
     "~~~~~~~~~~~~~~~....V..........V...............................Q....~~~~~~~~~~~~~",
-    "~~~~~~~~~~~~~~.............................w.............k.........~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~.............................k.............k.........~~~~~~~~~~~~~",
     "~~~~~~~~~~~~~.........R............V...............................~~~~~~~~~~~~~",
     "~~~~~~~~~~~~~.......................................Y...V....R.....~~~~~~~~~~~~~",
     "~~~~~~~~~~~~~.......................V...........N.R.................~~~~~~~~~~~~",
     "~~~~~~~~~~~~~................R........R.q.........F..................~~~~~~~~~~~",
     "~~~~~~~~~~~~~.............................Y.........N.......R.......M.~~~~~~~~~~",
-    "~~~~~~~~~~~~~.......c.......V...........Q.......o................V....~~~~~~~~~~",
-    "~~~~~~~~~~~~~..................w....R.................................~~~~~~~~~~",
+    "~~~~~~~~~~~~~.......k.......V...........Q.......o................V....~~~~~~~~~~",
+    "~~~~~~~~~~~~~..................k....R.................................~~~~~~~~~~",
     "~~~~~~~~~~~~~............R..............k......R..R.........k...q...o.o~~~~~~~~~",
     "~~~~~~~~~~~~~..........V........V.........................R.......Y....~~~~~~~~~",
     "~~~~~~~~~~~~~...................................k...............Q....o.o~~~~~~~~",

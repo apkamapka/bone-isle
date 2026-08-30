@@ -615,17 +615,23 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  waiting in the howe below him, which is deliberate: the island and the
    *  room under it are one weight class and Kárr is the only step up.
    *
-   *  He drops what he is visibly wearing. That is the rule the whole ladder
-   *  follows and it matters most on a creature the player will kill twelve
-   *  times: chain, an iron axe's worth of steel, and the coal off his fire.
+   *  He drops what he is visibly wearing, and NOTHING a forge should have
+   *  made. That is the rule the whole ladder follows and it matters most on a
+   *  creature the player will kill thirty-two times over: chain, the shield on
+   *  his arm, the axe in his hand, and the coal off his fire.
    * ================================================================== */
   viking: {
     spr: SPR.humanFoe,
     hp: 265, dmg: [19, 50], speed: 54, atkRate: 2.0, exp: 215, gold: [14, 34],
     danger: 0.6, armor: 16,
+    /* NO IRON AND NO STEEL. The forge materials are SMELTED from looted gear
+     * and from nothing else — that is what `smelt.ts` is for and it is the
+     * only reason anyone builds a forge. A creature that hands out bar stock
+     * directly is a creature that makes the forge optional, so the ingots came
+     * back off this table the day they went on. Coal is different and stays:
+     * it is fuel, and it drops off anything that makes camp. */
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
-      { kind: "iron", chance: 0.3, n: [1, 2] },
       { kind: "chainHelm", chance: 0.06, n: [1, 1] },
       { kind: "chainBody", chance: 0.06, n: [1, 1] },
       { kind: "chainLegs", chance: 0.06, n: [1, 1] },
