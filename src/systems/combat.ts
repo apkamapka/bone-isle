@@ -32,6 +32,29 @@ import type { World, Monster, Structure } from "../world/types.ts";
  * Elemental damage is meant to skip this function entirely — that bypass is
  * the whole argument for spending resources on crystals.
  */
+/**
+ * Where to shout when a relic changes hands.
+ *
+ * `killMonster` puts the relic straight into the pack — never into the corpse —
+ * which is right, and which has one bad consequence nobody predicted: the one
+ * thing the player came for arrives SILENTLY, at the same moment a loot window
+ * opens on the body showing forty-five gold. Radek killed Kárr, read the corpse
+ * window, found coin, and reported that the boss had dropped nothing; the helm
+ * was in his backpack the whole time.
+ *
+ * A float above the head is not enough for that — it fades in two seconds and
+ * the eye is on the loot window. So the grant also goes to the Server Log,
+ * which is a place the player can scroll back to. This module cannot reach the
+ * log directly (it is main.ts's), so main.ts hands it down at boot; headless,
+ * the default no-op means the smoke suite never has to know.
+ */
+type RelicNotice = (text: string, color: string) => void;
+let relicNotice: RelicNotice = () => {};
+
+export function setRelicNotice(fn: RelicNotice): void {
+  relicNotice = fn;
+}
+
 export function applyMonsterArmor(m: Monster, raw: number): number {
   const armor = MONSTER_DEFS[m.kind].armor ?? 0;
   if (armor <= 0) return raw;
@@ -209,9 +232,13 @@ export function killMonster(world: World, p: Player, m: Monster): void {
     if (addItem(p.bag, md.relic, 1) === 0) {
       relicTaken(md.id, p.level);
       addFloat(world, p.x, p.y - 64, ITEMS[md.relic].name, "#b9a6d8");
+      relicNotice(`${ITEMS[md.relic].name} — it is in your backpack, not on the body.`, "#b9a6d8");
     } else {
       addFloat(world, p.x, p.y - 64, `${ITEMS[md.relic].name}: no free slot!`, "#d96a5a");
-      addFloat(world, p.x, p.y - 44, "he keeps it — empty a slot and kill him again", "#d96a5a");
+      relicNotice(
+        `${ITEMS[md.relic].name}: your backpack has no free slot. `
+        + "He keeps it — empty one and kill him again.", "#d96a5a",
+      );
     }
   }
   world.corpses.push({

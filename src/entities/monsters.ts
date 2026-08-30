@@ -597,6 +597,46 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "gladius", chance: 0.05, n: [1, 1] },
     ],
   },
+  /* ================================================================== *
+   *  VIKING — lvl 15-18, and the top of Haramsey's moor
+   *
+   *  The first rank in the game added because a MAP wanted one rather than
+   *  because the ladder had a hole in it. Haramsey was fielding mercenaries,
+   *  corsairs and wild warriors, which is a perfectly good gradient and
+   *  reads as nobody in particular; the island is a Norse burial coast and
+   *  the living on it should look it.
+   *
+   *  He is the WALL of that island, not its spike. Mail, a round shield and
+   *  an axe put him at armour 16 — half again the wild warrior's nothing and
+   *  the reason he is worth stopping for — but his hit points and damage
+   *  stay inside the same band, because everything on a level-15 hunting
+   *  ground has to be killable by a character with about three hundred hit
+   *  points. Two hundred and fifteen experience is a shade over the ghouls
+   *  waiting in the howe below him, which is deliberate: the island and the
+   *  room under it are one weight class and Kárr is the only step up.
+   *
+   *  He drops what he is visibly wearing. That is the rule the whole ladder
+   *  follows and it matters most on a creature the player will kill twelve
+   *  times: chain, an iron axe's worth of steel, and the coal off his fire.
+   * ================================================================== */
+  viking: {
+    spr: SPR.humanFoe,
+    hp: 265, dmg: [19, 50], speed: 54, atkRate: 2.0, exp: 215, gold: [14, 34],
+    danger: 0.6, armor: 16,
+    loot: [
+      { kind: "coal", chance: 0.4, n: [1, 3] },
+      { kind: "iron", chance: 0.3, n: [1, 2] },
+      { kind: "chainHelm", chance: 0.06, n: [1, 1] },
+      { kind: "chainBody", chance: 0.06, n: [1, 1] },
+      { kind: "chainLegs", chance: 0.06, n: [1, 1] },
+      { kind: "chainBoots", chance: 0.06, n: [1, 1] },
+      // The round shield on his arm, and the axe in his hand. Both are the
+      // pieces his sprite actually carries, which is the only rule this
+      // table has ever followed.
+      { kind: "chainShield", chance: 0.08, n: [1, 1] },
+      { kind: "orcishAxe", chance: 0.04, n: [1, 1] },
+    ],
+  },
   // lvl 20
   ghoul: {
     spr: SPR.ghoul, hp: 240, dmg: [18, 46], speed: 51, atkRate: 2.0, exp: 200, gold: [9, 26], danger: 0.5, armor: 9, resist: { shadow: 0.5, fire: 1.4 },

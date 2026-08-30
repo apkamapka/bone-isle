@@ -62,6 +62,9 @@ const SHADOW: Record<string, { w: number; dy: number }> = {
   range: { w: 9, dy: -2 },   // a target on a narrow trestle
   dummy: { w: 12, dy: -2 },  // the plinth, measured: 22 px across at world scale
   chest: { w: 28, dy: -9 },  // furniture: a box sits flat, so it hides nearly all of its own shadow
+  // The world-placed hoard. Narrower than its square, and lifted by exactly
+  // CHEST_LIFT so the mark on the ground stays under the chest that casts it.
+  treasure: { w: 13, dy: -6 },
 };
 
 /** The ellipse to lay under a building, given the fallback its footprint

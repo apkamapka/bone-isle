@@ -1103,27 +1103,56 @@ export function bakeChest(): HTMLCanvasElement {
 
 /** The cave-treasure chest: the storage chest's silhouette with a golden lid,
  *  so it reads instantly as "loot", not "stash". */
+/**
+ * A one-time hoard, drawn to FIT ITS OWN SQUARE.
+ *
+ * It used to be 18 x 14 legacy pixels, which is 36 x 28 at world scale in a
+ * 32-pixel tile: two pixels of chest hanging over the square on each side, and
+ * the whole of it shoved against the bottom edge because `structCenter` anchors
+ * a structure's sprite on the foot of its tile. That anchoring is right for
+ * buildings — a house is taller than its plot and you walk behind its gable —
+ * and wrong for furniture, which is the same lesson the campfire taught in
+ * Etap 40. On a cave floor with a visible tile pattern the result reads as a
+ * chest standing between two squares rather than on one, which is exactly what
+ * Radek reported and exactly what moving it to a different TILE could not fix.
+ *
+ * Fifteen by ten, so it comes out 30 x 20 and clears both side edges, and
+ * `CHEST_LIFT` splits the six pixels of slack evenly above and below it. The
+ * drawing is the same drawing, one pixel tighter in every direction.
+ */
 export function bakeTreasureChest(): HTMLCanvasElement {
-  return legacyBake(18, 14, (x) => {
+  return legacyBake(15, 10, (x) => {
     // body
-    x.fillStyle = "#5b3b22"; x.fillRect(1, 5, 16, 8);
-    x.fillStyle = "#7a4a28"; x.fillRect(2, 6, 14, 6);
+    x.fillStyle = "#5b3b22"; x.fillRect(0, 3, 15, 7);
+    x.fillStyle = "#7a4a28"; x.fillRect(1, 4, 13, 5);
     // golden lid
-    x.fillStyle = "#c9a23a"; x.fillRect(1, 2, 16, 4);
-    x.fillStyle = "#e3b341"; x.fillRect(2, 2, 14, 2);
+    x.fillStyle = "#c9a23a"; x.fillRect(0, 0, 15, 4);
+    x.fillStyle = "#e3b341"; x.fillRect(1, 0, 13, 2);
     // iron bands
     x.fillStyle = "#3a2a1a";
-    x.fillRect(1, 5, 16, 1);
-    x.fillRect(4, 2, 1, 11); x.fillRect(13, 2, 1, 11);
+    x.fillRect(0, 3, 15, 1);
+    x.fillRect(3, 0, 1, 10); x.fillRect(11, 0, 1, 10);
     // corners
     x.fillStyle = "#c9c2a8";
-    x.fillRect(1, 12, 1, 1); x.fillRect(16, 12, 1, 1);
-    x.fillRect(1, 2, 1, 1); x.fillRect(16, 2, 1, 1);
+    x.fillRect(0, 9, 1, 1); x.fillRect(14, 9, 1, 1);
+    x.fillRect(0, 0, 1, 1); x.fillRect(14, 0, 1, 1);
     // lock
-    x.fillStyle = "#efe9d6"; x.fillRect(8, 6, 2, 3);
-    x.fillStyle = "#9a7424"; x.fillRect(8, 7, 2, 1);
+    x.fillStyle = "#efe9d6"; x.fillRect(7, 4, 2, 3);
+    x.fillStyle = "#9a7424"; x.fillRect(7, 5, 2, 1);
   });
 }
+
+/**
+ * How far above the foot of its tile a treasure chest is drawn.
+ *
+ * The campfire's `FIRE_LIFT`, applied to the one other object in the game that
+ * is furniture rather than architecture: the sprite is 20 world pixels tall in
+ * a 32-pixel square, so lifting it six centres it and leaves six pixels of
+ * floor showing above and below. Its shadow rides up with it — see the
+ * `treasure` row in `buildingArt.ts` — or the chest would float over a mark on
+ * the ground half a tile behind its own feet.
+ */
+export const CHEST_LIFT = 6;
 
 /** Icon lookup for item kinds (bag, corpse loot, shops). */
 import type { ItemKind } from "../items.ts";

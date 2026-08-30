@@ -1628,8 +1628,10 @@ async function main(): Promise<void> {
     // Etap 43 added the draugr — the fortieth, and the sage's second named
     // boss. Like the redcap he belongs to no ladder: one creature out of the
     // Icelandic sagas that stands in one room and is killed once.
-    ok(MONSTER_KINDS.length === 40,
-      `bestiary holds 40 kinds (18 + 20 humans + redcap + draugr), got ${MONSTER_KINDS.length}`);
+    // …and Etap 43a the viking, the forty-first: a rank rather than a boss,
+    // and the first creature in the game added because a MAP wanted one.
+    ok(MONSTER_KINDS.length === 41,
+      `bestiary holds 41 kinds (18 + 21 humans + redcap + draugr), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -13222,21 +13224,10 @@ async function main(): Promise<void> {
      * the hole. Asserted as an average because individual posts wobble; what
      * has to hold is the slope. */
     const posts43 = isle.mobPosts!;
-    const MOOR = ["mercenary", "corsair", "wildWarrior"] as const;
+    const MOOR = ["mercenary", "corsair", "wildWarrior", "viking"] as const;
     ok(posts43.every((p) => (MOOR as readonly string[]).includes(p.kind))
       && new Set(posts43.map((p) => p.kind)).size === MOOR.length,
-      `three ranks of the living hold the moor (${[...new Set(posts43.map((p) => p.kind))].join(",")})`);
-    /* THE WEIGHT OF THE MOOR, pinned as a relation and not as a number: no
-     * creature on a level-15 hunting ground may be worth more experience than
-     * the heaviest thing on the Bone Reach's opening band. Barbarians and
-     * raiders stood here first and were worth 365 and 420 against a character
-     * with three hundred hit points; this is what stops that happening again
-     * without freezing the roster to three specific names. */
-    const heaviest = Math.max(...posts43.map((p) => M43.MONSTER_DEFS[p.kind].exp));
-    ok(heaviest <= M43.MONSTER_DEFS.ghoul.exp,
-      `nothing on the moor outweighs a ghoul (${heaviest} vs ${M43.MONSTER_DEFS.ghoul.exp})`);
-    ok(heaviest < M43.MONSTER_DEFS.barbarian.exp / 1.5,
-      `…and the level-25 ranks that stood here first are well clear of it (${heaviest})`);
+      `four ranks of the living hold the moor (${[...new Set(posts43.map((p) => p.kind))].join(",")})`);
     let tooClose = "";
     for (let i = 0; i < posts43.length; i++) for (let j = i + 1; j < posts43.length; j++) {
       const a = posts43[i], b = posts43[j];
@@ -13270,8 +13261,28 @@ async function main(): Promise<void> {
     const ghouls = inHowe.filter((p) => p.kind === "ghoul");
     ok(ghouls.length === 8 && ghouls.length + 1 === inHowe.length,
       `…and eight of his victims, and nothing else (${inHowe.length})`);
-    ok(M43.MONSTER_DEFS.ghoul.hp < M43.MONSTER_DEFS.raider.hp,
-      "the escort below is lighter than the moor above it");
+    ok(M43.MONSTER_DEFS.ghoul.hp >= M43.MONSTER_DEFS.mercenary.hp,
+      "the escort below is no lighter than the moor's opening band");
+    /* THE WEIGHT OF THE MOOR, pinned against THE ROOM BELOW IT rather than
+     * against a number. The island and the howe are meant to be one weight
+     * class with the boss as the only step up, so the heaviest rank on the
+     * surface may run a little past the escort guarding him and no further.
+     *
+     * Barbarians and raiders stood here first — 365 and 420 experience against
+     * a character with three hundred hit points, level-25 weight on a level-15
+     * errand. Written as a relation, this keeps catching that whatever the
+     * roster is called next year. */
+    const heaviest = Math.max(...posts43.map((p) => M43.MONSTER_DEFS[p.kind].exp));
+    const escort = Math.max(...inHowe
+      .filter((q) => M43.MONSTER_DEFS[q.kind].name === undefined)
+      .map((q) => M43.MONSTER_DEFS[q.kind].exp));
+    ok(heaviest <= escort * 1.25,
+      `the moor and the room under it are one weight class (${heaviest} vs ${escort})`);
+    ok(heaviest < M43.MONSTER_DEFS.barbarian.exp * 0.7,
+      `…and the level-25 ranks that stood here first are well clear of it (${heaviest})`);
+    ok(posts43.some((p) => p.kind === "viking"),
+      "…and the one rank that belongs to this island is actually on it");
+
     let howeClose = "";
     for (let i = 0; i < inHowe.length; i++) for (let j = i + 1; j < inHowe.length; j++) {
       const a = inHowe[i], b = inHowe[j];
@@ -13534,6 +13545,119 @@ async function main(): Promise<void> {
     ok(!/freeCap|itemWeight/.test(grant), "no weight check stands between a dead boss and its relic");
 
     rpsW(); MW.resetMissions();
+  }
+
+  console.log("Etap 43a — the chest sits on its square, and the relic says so out loud:");
+  {
+    const fs43b = await import("node:fs");
+    const B43 = await import("../src/systems/building.ts");
+    const S43 = await import("../src/gfx/sprites.ts");
+    const A43b = await import("../src/gfx/buildingArt.ts");
+
+    /* THE CHEST FITS ITS OWN SQUARE. It was 36 x 28 in a 32-pixel tile and
+     * anchored on the foot of it, so it overhung both side edges and sat on
+     * the seam with the tile below — which on a patterned cave floor reads as
+     * a chest standing between two squares. Radek asked twice: the first
+     * answer moved it to a different TILE, which was the wrong axis entirely.
+     *
+     * Written as a relation to TILE rather than as 30 x 20, so a future
+     * redraw is free to be any size that actually fits. */
+    const chestSpr = B43.structSprite("treasure");
+    ok(chestSpr.width <= TILE, `the chest is no wider than its square (${chestSpr.width} of ${TILE})`);
+    ok(chestSpr.height <= TILE, `…nor taller (${chestSpr.height} of ${TILE})`);
+    ok(S43.CHEST_LIFT === Math.round((TILE - chestSpr.height) / 2),
+      `…and CHEST_LIFT centres it in the square rather than standing it on the foot (${S43.CHEST_LIFT})`);
+    /* Its shadow rides up with it. A mark on the ground half a tile behind the
+     * thing casting it is worse than no mark at all. */
+    const chestShadow = A43b.buildingShadow("treasure", TILE * 0.42);
+    ok(chestShadow.dy === -S43.CHEST_LIFT,
+      `…and the shadow is lifted with it (${chestShadow.dy} vs ${-S43.CHEST_LIFT})`);
+    const mainSrc43 = fs43b.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(/const lift = s\.key === "treasure" \? CHEST_LIFT : 0;/.test(mainSrc43),
+      "…and the draw path actually applies it");
+    ok(/drawSprite\(spr, bx \+ shake, by - lift\)/.test(mainSrc43), "…to the sprite it draws");
+
+    /* THE RELIC ANNOUNCES ITSELF. It goes into the pack and never onto the
+     * body, which is right and which reads as "the boss dropped nothing"
+     * while a loot window is open on a corpse holding coin. Radek reported it
+     * twice as a missing drop. A float fades; the Server Log does not. */
+    const CB43 = await import("../src/systems/combat.ts");
+    const MM43b = await import("../src/systems/missions.ts");
+    const IT43 = await import("../src/items.ts");
+    const PL43 = await import("../src/entities/player.ts");
+    const { resetPlayerState: rps43b } = await import("../src/systems/playerState.ts");
+    const { MONSTER_DEFS: MD43, spawnAtPost: spawn43 } = await import("../src/entities/monsters.ts");
+
+    const said: string[] = [];
+    CB43.setRelicNotice((textLine) => { said.push(textLine); });
+    const m43 = MM43b.MISSIONS[MM43b.MISSIONS.length - 1];
+    {
+      const ws = buildWorlds(WORLD_SEED);
+      const echo = ws[m43.echo];
+      rps43b(); MM43b.resetMissions();
+      const p = PL43.createPlayer(0, 0);
+      p.level = m43.reqLevel;
+      for (const prev of MM43b.MISSIONS) { if (prev.id !== m43.id) MM43b.setStage(prev.id, "closed"); }
+      MM43b.setStage(m43.id, "active");
+      const post = echo.mobPosts!.find((q) => MD43[q.kind].name !== undefined)!;
+      ok(spawn43(echo, post.kind, post.tx, post.ty), "the boss stands on his post");
+      CB43.killMonster(echo, p, echo.monsters[echo.monsters.length - 1]);
+      ok(said.length === 1, `the grant is announced exactly once (${said.length})`);
+      ok(said[0].includes(IT43.ITEMS[m43.relic].name), "…by name");
+      ok(/backpack/i.test(said[0]), "…and it says WHERE it went, which is the whole point");
+    }
+
+    /* DEATH DOES TAKE IT, and the module comment used to say otherwise.
+     * `applyDeathPenalty` drops the whole backpack at DEATH_PENALTY_LEVEL and
+     * up, bound relic and all — every mission in the catalogue is gated above
+     * that level, so this is the normal case and not a corner. It is SAFE
+     * because `relicLost` is the reconcile point and Chronos runs it on empty
+     * hands, but "the bag survives dying" was simply not true and a comment
+     * that lies is worse than no comment. */
+    {
+      const ws = buildWorlds(WORLD_SEED);
+      rps43b(); MM43b.resetMissions();
+      const p = PL43.createPlayer(0, 0);
+      p.level = m43.reqLevel;
+      MM43b.setStage(m43.id, "active");
+      IT43.addItem(p.bag, m43.relic, 1);
+      MM43b.relicTaken(m43.id, p.level);
+      ok(MM43b.boundRelic(m43.relic, p.level) && MM43b.stageOf(m43.id, p.level) === "complete",
+        "the relic is bound and the errand is complete");
+      ok(p.level >= (await import("../src/config.ts")).DEATH_PENALTY_LEVEL,
+        "…and every mission is gated above the level the pack starts dropping at");
+      CB43.applyDeathPenalty(ws[m43.echo], p);
+      ok(IT43.countAcross([p.bag], m43.relic) === 0, "dying drops the pack, relic included");
+      // …and the errand is recoverable, through the man who wants it
+      MM43b.relicLost(m43.id, p.level);
+      ok(MM43b.stageOf(m43.id, p.level) === "active" && MM43b.echoOpen(m43.echo, p.level),
+        "…so Chronos reopens the echo on empty hands, which is what saves the character");
+      const missionsSrc = fs43b.readFileSync(new URL("../src/systems/missions.ts", import.meta.url), "utf8");
+      ok(!/bag survives dying/.test(missionsSrc), "…and the comment no longer claims otherwise");
+    }
+    CB43.setRelicNotice(() => {});
+    rps43b(); MM43b.resetMissions();
+
+    /* --- the viking's art: registered, shipped, credited -------------------- */
+    const sheetSrc43b = fs43b.readFileSync(new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const credits43b = fs43b.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    for (const f of ["mob-viking-walk.png", "mob-viking-dead.png"]) {
+      ok(fs43b.existsSync(new URL(`../public/${f}`, import.meta.url)), `${f} is shipped`);
+      ok(credits43b.includes(f), `…and ${f} is credited by filename`);
+    }
+    ok(sheetSrc43b.includes('viking: "./mob-viking-walk.png"'), "the walk sheet is registered");
+    ok(sheetSrc43b.includes('viking: "./mob-viking-dead.png"'), "…and so is the body");
+    {
+      const b = fs43b.readFileSync(new URL("../public/mob-viking-walk.png", import.meta.url));
+      const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
+      ok(w % 9 === 0 && h % 4 === 0, `the sheet is the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(w / 9 <= 64 && h / 4 <= 64, "…and no frame is bigger than the LPC cell it came from");
+    }
+    /* He is a RANK, not a boss: no `name`, so nothing about him reads as a
+     * person, and he is the wall of his island rather than its spike. */
+    ok(MD43.viking.name === undefined, "the viking is a rank and not a named boss");
+    ok((MD43.viking.armor ?? 0) > (MD43.wildWarrior.armor ?? 0),
+      `mail and a shield make him the wall of the moor (armour ${MD43.viking.armor})`);
   }
 
   console.log("Housekeeping — dead files, dead names, dead comments:");

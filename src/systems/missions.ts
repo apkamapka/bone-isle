@@ -59,7 +59,18 @@
  *      walk back into.
  *   3. `boundRelic` refuses to let it out of the pack at all while the sage
  *      still wants it — not to the ground, not into a chest, not into a body.
- *      Death does not take it either; the bag survives dying.
+ *
+ * DEATH IS THE ONE THING IT DOES NOT STOP, and this comment used to claim the
+ * opposite. `applyDeathPenalty` drops the whole backpack into your body from
+ * DEATH_PENALTY_LEVEL up, contents and all, and every mission in the catalogue
+ * is gated well above that level — so a bound relic dying with its carrier is
+ * the NORMAL case, not a corner. It is safe: you can loot your own body, and
+ * if you do not, `relicLost` below is what Chronos runs on empty hands and the
+ * echo reopens. It is also not an exploit, because the road it opens is the
+ * one that costs a whole second run. Left as it is on purpose — dropping your
+ * pack when you die is the game — but written down truthfully, because a
+ * comment that lies is worse than no comment, and this one lied for two
+ * etaps.
  *
  * Together those mean `complete` and "the cap is in the pack" are the same
  * statement, which is what makes the count honest. `relicLost` survives as the

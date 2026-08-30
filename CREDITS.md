@@ -1060,6 +1060,35 @@ artwork and are themselves CC-BY-SA 3.0; anyone may take them from this
 repository under those terms. The per-layer CSV attribution still owed before
 release covers these layers too.
 
+## Viking — `public/mob-viking-walk.png`, `public/mob-viking-dead.png`
+
+Source: **Universal LPC Spritesheet Character Generator**, CC-BY-SA 3.0 — the
+same terms and the same ShareAlike obligation as every other LPC creature here.
+See the LPC section above for the full attribution list and the per-layer note.
+
+Reproducible generator URL (paste it in and the exact character loads):
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&hair=Bangslong2_blonde&accessory=Short_Horns_copper&hat=Bascinet_copper&facial_eyes=Eyepatch_2_Left_brown&gloves=Gloves_bronze&chainmail=Chainmail_all.lpcr.honey&shield=Spartan_Shield_spartan&weapon=Axe_iron&legs=Armour_all.lpcr.fern&shoes=Armour_iron>
+
+Layers used: light body, light human male head, neutral expression, blonde
+long-bangs hair, copper short horns, copper bascinet, brown left eyepatch,
+bronze gloves, honey chainmail, spartan round shield, iron axe, fern armour
+legs, iron armour boots.
+
+### Cutting method
+
+The standard recipe, unchanged and identical to the draugr's: rows 8-11 of the
+full export are the walk (up, left, down, right, nine frames each) and row 20 is
+the death sequence, whose last frame is the corpse. One crop rectangle is shared
+by all thirty-six walk frames and kept symmetric about the source cell's centre
+line, x=32, so the body cannot drift as the cycle plays or as it turns. The
+shield and the axe reach past the body on opposite sides, so the crop comes out
+at 56 x 55 per frame; the corpse is 43 x 36, cropped to the body. Nothing was
+recoloured, rescaled or redrawn.
+
+**ShareAlike applies.** Both files are adaptations of CC-BY-SA 3.0 artwork and
+are themselves CC-BY-SA 3.0.
+
 ## Haramsey and Kárr's howe — map layouts
 
 Two files: `public/haramsey-terrain.png` (2560x2560) and

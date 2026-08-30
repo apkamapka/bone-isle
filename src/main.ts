@@ -8,14 +8,14 @@ import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx/fireSheet.ts";
 import { scenerySprite, FOOTPRINT, SCENERY_NAME } from "./gfx/sceneryArt.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
-import { SPR, iconW, iconH, hasPropArt, propSprite } from "./gfx/sprites.ts";
+import { SPR, iconW, iconH, hasPropArt, propSprite, CHEST_LIFT } from "./gfx/sprites.ts";
 import { itemSprite } from "./gfx/itemArt.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName } from "./entities/monsters.ts";
-import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp } from "./systems/combat.ts";
+import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp, setRelicNotice } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
 import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow } from "./gfx/buildingArt.ts";
@@ -433,6 +433,11 @@ const flash = (t: string, c = "#ffe9a8"): void => {
   addFloat(cw(), P.x, P.y - 60, t, c);
   logServer(t, c);
 };
+
+// A relic lands in the PACK rather than on the body, so say so somewhere the
+// player can scroll back to — a float alone fades while their eye is on the
+// loot window. See `setRelicNotice` in combat.ts for the report behind this.
+setRelicNotice((text, color) => logServer(text, color));
 
 /** Recompute the player's max HP from current owned structures. */
 function recomputeBonuses(): void {
@@ -4723,12 +4728,18 @@ function render(): void {
     const drawn = hasBuildingArt(s.key, tier);
     const spr = recoil ?? structSprite(s.key, tier);
     const sh = buildingShadow(s.key, footprint(s.key) * TILE * 0.42);
+    /* Furniture is centred on its square; architecture stands on the foot of
+     * it. A house is taller than its plot and you walk behind the gable, so
+     * bottom-anchoring is what makes the depth read; a chest is smaller than
+     * its plot, and bottom-anchoring shoves it onto the seam between two
+     * tiles. Same distinction, same fix and same reasoning as FIRE_LIFT. */
+    const lift = s.key === "treasure" ? CHEST_LIFT : 0;
     drawList.push({ y: by, fn: () => {
       drawShadow(bx, by + sh.dy, sh.w);
       // A struck building jolts. A post that has its own lean is exempt —
       // shaking a drawn recoil reads as noise on top of the reaction.
       const shake = s.hurtT && !recoil ? Math.round(Math.sin(s.hurtT * 40) * 3) : 0;
-      drawSprite(spr, bx + shake, by);
+      drawSprite(spr, bx + shake, by - lift);
       // Firelight, smoke and alchemical motes ride on top of the artwork, and
       // only on the artwork: their anchors are measured off the drawing, so
       // over a baked stand-in they would land nowhere in particular.

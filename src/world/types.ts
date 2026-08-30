@@ -260,6 +260,11 @@ export type MonsterKind =
   // mid-game has two parallel families instead of one.
   | "mercenary" | "corsair" | "wildWarrior" | "amazon" | "hunter"
   | "gladiator" | "barbarian" | "raider" | "warlord" | "chieftain"
+  // Etap 43a. A mailed, shielded, axe-carrying Norseman — the heaviest thing
+  // a character meets on Haramsey before he goes down the hole, and the first
+  // rank added because a MAP wanted one rather than because the ladder had a
+  // gap in it.
+  | "viking"
   // The fantastic bestiary. Deliberately NOT Tibia's tiering: there a goblin
   // is a level-8 nuisance, here it is a level-16 monster, because a creature
   // out of myth should outclass a man with a sword rather than lose to one.
