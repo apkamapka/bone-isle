@@ -13130,10 +13130,16 @@ async function main(): Promise<void> {
 
     /* --- the kill hands it over rather than dropping it ------------------ */
     const cmb = rfs.readFileSync(new URL("../src/systems/combat.ts", import.meta.url), "utf8");
-    ok(/items\.splice\(i, 1\)/.test(cmb) && /addItem\(p\.bag, md\.relic, 1\)/.test(cmb),
-      "killMonster takes the relic off the corpse and puts it in the pack");
-    ok(/freeCap\(p\)/.test(cmb),
-      "…and a pack with no room leaves the mission where it was, rather than dropping it");
+    /* Etap 45 turned this round: the relic goes ON the body. What did not
+     * change is that it is taken off the ROLL first and put back deliberately,
+     * so the only copy in the corpse is the one this gate decided to put
+     * there — a second kill strips it and adds nothing. */
+    ok(/items\.splice\(i, 1\)/.test(cmb) && /items\.push\(\{ kind: md\.relic, n: 1 \}\)/.test(cmb),
+      "killMonster strips the relic from the roll and puts back the one it means to");
+    ok(/const dropped = !!md && items\.some/.test(cmb),
+      "…and it only fires on a corpse that actually rolled the relic, not anywhere in the echo");
+    ok(/relicTaken\(md\.id, p\.level\)/.test(cmb) && !/if [^\n]*freeCap\(p\)/.test(cmb),
+      "…completing the errand on the kill, with no weight gate in front of it");
 
     rpsR();
     MR.resetMissions();
@@ -13542,14 +13548,20 @@ async function main(): Promise<void> {
       const post = bossPost(echo);
       CB.killMonster(echo, p, standUp(echo, post.kind, post.tx, post.ty));
 
-      ok(IW.bagCount(p.bag, m.relic) === 1,
-        `${m.id}: the relic is handed over even to an over-loaded pack`);
+      ok(IW.bagCount(p.bag, m.relic) === 0,
+        `${m.id}: the relic is not teleported into the pack`);
       ok(MW.stageOf(m.id, p.level) === "complete",
         `…${m.id}: so the errand completes`);
       ok(MW.relicRoadOpen(m.echo, p.level),
         `…${m.id}: and the way home lights where he fell`);
-      ok(!echo.corpses.some((c) => (c.items ?? []).some((st) => st && st.kind === m.relic)),
-        `…${m.id}: and it never touches the corpse`);
+      ok(echo.corpses.some((c) => (c.items ?? []).some((st) => st && st.kind === m.relic)),
+        `…${m.id}: it is lying on the body, where a kill's prize belongs`);
+      /* An over-loaded pack is still no obstacle, because the pack is not
+       * involved: this is the case the old weight gate silently voided, and
+       * putting the prize on the corpse removes the gate's last excuse. */
+      const relicBody = echo.corpses.find((c) => (c.items ?? []).some((st) => st && st.kind === m.relic))!;
+      ok(relicBody.t > (await import("../src/config.ts")).CORPSE_DECAY_S,
+        `…${m.id}: and that body keeps for longer than an ordinary one (${relicBody.t}s)`);
     }
 
     /* NO FREE SLOT is a different failure and still refuses, because there is
@@ -13567,9 +13579,15 @@ async function main(): Promise<void> {
       for (let i = 0; i < p.bag.length; i++) p.bag[i] = { kind: "goldCoin", n: 1 };
       const post = bossPost(echo);
       CB.killMonster(echo, p, standUp(echo, post.kind, post.tx, post.ty));
-      ok(IW.bagCount(p.bag, m.relic) === 0, "a pack with no free slot really cannot take it");
-      ok(MW.stageOf(m.id, p.level) === "active", "…so the errand does not advance");
-      ok(MW.echoOpen(m.echo, p.level), "…and the echo stays open, so the fight can be had again");
+      ok(IW.bagCount(p.bag, m.relic) === 0, "a pack with no free slot still holds no relic");
+      /* This USED to void the drop: nowhere to put it, so the boss kept it and
+       * the errand did not advance. Etap 45 deletes the failure rather than
+       * handling it — the prize is on the body, so a full pack is a thing the
+       * player fixes at their leisure and then loots. */
+      ok(MW.stageOf(m.id, p.level) === "complete",
+        "…and the errand completes anyway, because the pack was never asked");
+      ok(echo.corpses.some((c) => (c.items ?? []).some((st) => st && st.kind === m.relic)),
+        "…the relic waiting on the body until a slot is free");
     }
 
     /* And the gate itself is gone from the source, not merely stepped around:
@@ -13640,7 +13658,7 @@ async function main(): Promise<void> {
       CB43.killMonster(echo, p, echo.monsters[echo.monsters.length - 1]);
       ok(said.length === 1, `the grant is announced exactly once (${said.length})`);
       ok(said[0].includes(IT43.ITEMS[m43.relic].name), "…by name");
-      ok(/backpack/i.test(said[0]), "…and it says WHERE it went, which is the whole point");
+      ok(/body/i.test(said[0]), "…and it says WHERE it is, which is the whole point");
     }
 
     /* DEATH DOES TAKE IT, and the module comment used to say otherwise.
@@ -13925,8 +13943,10 @@ async function main(): Promise<void> {
       "the quest log asks what errand is in hand");
     ok(/mission\.goal\.\$\{errand\.id\}/.test(quests44) && /"mission\.deliver"/.test(quests44),
       "…and shows the objective, or where to take the relic once it is in the pack");
-    ok(/=== "complete"/.test(quests44),
-      "…picking between them on the stage, which IS 'the relic is in the pack'");
+    ok(/!== "complete"/.test(quests44) && /bagCount\(player\.bag, errand\.relic\)/.test(quests44),
+      "…picking between them on the stage AND the pack, since `complete` is now two states");
+    ok(/"mission\.onBody"/.test(quests44),
+      "…so the half-minute between the kill and the loot has a line of its own");
     ok(/wrapText\(hud, errandBody/.test(quests44),
       "…wrapped rather than ellipsised, because an objective cut at 'carry his helm back to…' is worse than none");
     ok(/const h = 20 \* S \+ errandH \+ chronH/.test(quests44),
@@ -14064,7 +14084,7 @@ async function main(): Promise<void> {
      * paid you for the last. That was TEMP-ETAP42's exact mistake. */
     ok((main45.match(/restartChoice\(\)/g) ?? []).length >= 5,
       "…on every speech that ends a conversation");
-    const handIn45 = main45.slice(main45.indexOf("sageSays(`sage.handIn."), main45.indexOf("// He wanted it"));
+    const handIn45 = main45.slice(main45.indexOf("sageSays(`sage.handIn."), main45.indexOf("/* He wanted it"));
     ok(!/restartChoice/.test(handIn45),
       "…but never as the answer to being thanked, which is where the last one went wrong");
 
@@ -14077,6 +14097,104 @@ async function main(): Promise<void> {
       }
     }
     void M45;
+  }
+
+  console.log("Etap 46 — the relic belongs to the boss, not to the room:");
+  {
+    const CB46 = await import("../src/systems/combat.ts");
+    const MW46 = await import("../src/systems/missions.ts");
+    const PL46 = await import("../src/entities/player.ts");
+    const IW46 = await import("../src/items.ts");
+    const CFG46 = await import("../src/config.ts");
+    const { MONSTER_DEFS: MD46, spawnAtPost: spawn46 } = await import("../src/entities/monsters.ts");
+    const { resetPlayerState: rps46 } = await import("../src/systems/playerState.ts");
+    /* `spawnAtPost` returns a BOOLEAN; the creature it made is the last one on
+     * the world — the same footgun the Etap 43a block documents. */
+    const stand46 = (w: Parameters<typeof spawn46>[0], kind: string, tx: number, ty: number) => {
+      ok(spawn46(w, kind as never, tx, ty), `${kind} stands on its own post`);
+      return w.monsters[w.monsters.length - 1];
+    };
+
+    /* THE BUG. `missionByEcho(world.key)` answers "is this Kárr's Howe", and
+     * that is true of every square of it — so the relic gate fired on EVERY
+     * kill down there. Radek walked down the ladder, dealt with a ghoul on the
+     * way in, and the Howe-Helm was in his backpack with the errand complete
+     * and the way home lit before he had swung at anything that mattered. The
+     * boss was still standing.
+     *
+     * The gate asks the loot table now. Both halves are worth a test: the
+     * mob that does not roll it must not hand it over, and the one that does
+     * must still hand it over every time. */
+    for (const m of MW46.MISSIONS) {
+      const ws = buildWorlds(WORLD_SEED);
+      const echo = ws[m.echo];
+      rps46(); MW46.resetMissions();
+      const p = PL46.createPlayer(0, 0);
+      p.level = m.reqLevel;
+      MW46.setStage(m.id, "active");
+
+      const posts = echo.mobPosts ?? [];
+      const boss = posts.find((q) => (MD46[q.kind].loot ?? []).some((l) => l.kind === m.relic));
+      const mook = posts.find((q) => !(MD46[q.kind].loot ?? []).some((l) => l.kind === m.relic));
+      ok(boss !== undefined && mook !== undefined,
+        `${m.id}: the echo has a boss and something else to kill on the way in`);
+      if (!boss || !mook) continue;
+
+      CB46.killMonster(echo, p, stand46(echo, mook.kind, mook.tx, mook.ty));
+      ok(MW46.stageOf(m.id, p.level) === "active",
+        `${m.id}: killing a ${mook.kind} on the way in does not finish the errand`);
+      ok(IW46.bagCount(p.bag, m.relic) === 0 && !echo.corpses.some(
+        (c) => (c.items ?? []).some((st) => st && st.kind === m.relic)),
+        `…${m.id}: and it leaves no ${IW46.ITEMS[m.relic].name} behind it`);
+      ok(!MW46.relicRoadOpen(m.echo, p.level),
+        `…${m.id}: and the way home stays shut, because nothing has been done yet`);
+
+      /* The boss, on the other hand, pays every time and pays on the body. */
+      CB46.killMonster(echo, p, stand46(echo, boss.kind, boss.tx, boss.ty));
+      ok(MW46.stageOf(m.id, p.level) === "complete", `${m.id}: the boss finishes it`);
+      const body = echo.corpses.find((c) => (c.items ?? []).some((st) => st && st.kind === m.relic));
+      ok(body !== undefined, `…${m.id}: leaving the relic on his corpse to be looted`);
+      ok(IW46.bagCount(p.bag, m.relic) === 0, `…${m.id}: and not in the pack behind the player's back`);
+      ok(body !== undefined && body.t === CFG46.RELIC_CORPSE_DECAY_S
+        && CFG46.RELIC_CORPSE_DECAY_S > CFG46.CORPSE_DECAY_S,
+        `…${m.id}: on a clock long enough to clear the room first`);
+
+      /* ONE relic, still. The stage is `complete` from the kill, so a second
+       * body strips the roll and adds nothing — this is the invariant the
+       * whole gate exists for and the one the move to the corpse had to keep. */
+      CB46.killMonster(echo, p, stand46(echo, boss.kind, boss.tx, boss.ty));
+      const loose = echo.corpses.reduce((n, c) =>
+        n + (c.items ?? []).filter((st) => st && st.kind === m.relic).length, 0);
+      ok(loose === 1, `…${m.id}: killing him again does not make a second one (${loose})`);
+    }
+    MW46.resetMissions();
+
+    /* --- the sweep, which is what pays for the move -------------------------
+     *
+     * A relic on a body plus a door the sage has just reopened is two relics
+     * one walk apart. That seam is closed at the sage: before `relicLost`
+     * flips the stage back, the echo is swept of the relic — corpses and
+     * ground both, because a body can be emptied onto the floor.
+     *
+     * Source-level: the sweep is in `talkToSage`, which the suite cannot run.
+     * What is pinned is that it happens, that it happens BEFORE the stage
+     * moves, and that it covers both places an item can sit. */
+    const main46 = (await import("node:fs"))
+      .readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const reopen = main46.slice(main46.indexOf("/* He wanted it"),
+      main46.indexOf("sageSays(`sage.empty."));
+    ok(/game\.worlds\[cur\.echo\]/.test(reopen), "the reopen looks at the echo it is reopening");
+    ok(/for \(const c of stale\.corpses\)/.test(reopen) && /stale\.ground/.test(reopen),
+      "…and sweeps the relic off both the bodies and the floor");
+    ok(reopen.indexOf("stale.ground") < reopen.indexOf("relicLost(cur.id"),
+      "…before the stage goes back, so there is never an open door and a live relic at once");
+
+    /* And the two gates that hold the other end are untouched: a relic in the
+     * pack still cannot be put down, which is what stops the player from
+     * parking one somewhere the sage cannot see it and claiming empty hands.
+     * The move to the corpse would be worth nothing without them. */
+    ok((main46.match(/boundRelic\(/g) ?? []).length === 2,
+      "the two bound-relic gates are still the only two, and still there");
   }
 
   console.log("Housekeeping — dead files, dead names, dead comments:");
