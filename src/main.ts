@@ -3276,7 +3276,32 @@ function talkToSage(): void {
         sageSays(`sage.handIn.${cur.id}`, { then: talkToSage });
         return;
       }
-      // He wanted it and you have not got it. The echo reopens.
+      /* He wanted it and you have not got it. The echo reopens — and the world
+       * behind it is swept first.
+       *
+       * THIS SWEEP IS WHAT LETS THE RELIC SIT ON THE BODY. Etap 45 moved it
+       * off the pack and onto the corpse, which reopens the old duplication
+       * route at exactly one seam: a helm still lying in a body Kárr left
+       * behind, plus a door the sage has just unlocked, is two helms one walk
+       * apart. Nothing else can produce a second one — `wantsRelic` refuses
+       * while the stage is `complete`, `boundRelic` refuses to let a held one
+       * out of the pack, and a body that rots takes what is in it.
+       *
+       * It is also, word for word, what he says while he does it: Kárr pewnie
+       * już go sobie założył. He has put it back on. The line was written
+       * before the sweep existed and turned out to describe it exactly. */
+      const stale = game.worlds[cur.echo];
+      if (stale) {
+        for (const c of stale.corpses) {
+          for (let i = 0; i < c.items.length; i++) {
+            const st = c.items[i];
+            if (st && st.kind === cur.relic) c.items[i] = null;
+          }
+        }
+        for (let i = stale.ground.length - 1; i >= 0; i--) {
+          if (stale.ground[i].kind === cur.relic) stale.ground.splice(i, 1);
+        }
+      }
       relicLost(cur.id, P.level);
       applyMissionPads(game.worlds, P.level);
       saveGame(game);

@@ -221,6 +221,12 @@ export const RESPAWN_RETRY_S = 3;
 
 /** How long a lootable corpse stays on the ground (seconds). */
 export const CORPSE_DECAY_S = 75;
+/* A body with a mission relic in it. Long, because the room a boss dies in is
+ * the room his household is still standing up in, and clearing it before
+ * looting is the sensible order to do things in — see the note in
+ * `killMonster`. Finite rather than forever so nothing can be parked in the
+ * world indefinitely. */
+export const RELIC_CORPSE_DECAY_S = 1800;
 
 /**
  * How close (px) the player must stay to keep TALKING to a townsperson — the
