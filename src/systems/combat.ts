@@ -1,7 +1,7 @@
 /** Combat: player hits monsters, monsters hit the player, corpses & leveling. */
 import {
   TILE,
-  expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, SHOT_SPEED, MONSTER_AGGRO_HIT_S,
+  expNeeded, totalExpFor, MONSTER_RESPAWN_S, CORPSE_DECAY_S, RELIC_CORPSE_DECAY_S, SHOT_SPEED, MONSTER_AGGRO_HIT_S,
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
   SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S, MIN_ELEMENTAL_DAMAGE, MIN_DAMAGE_TO_MONSTER,
 } from "../config.ts";
@@ -11,7 +11,7 @@ import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
 import { missionByEcho, wantsRelic, relicTaken } from "./missions.ts";
-import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, addItem, bagCount } from "../items.ts";
+import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, bagCount } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
 import { structCenter, tierOf, DUMMY_TIER_RATE, DUMMY_TIER_SHIELD } from "./building.ts";
 import {
@@ -200,46 +200,52 @@ export function killMonster(world: World, p: Player, m: Monster): void {
   /* THE RELIC GATE. A mission's relic is not ordinary loot: it exists ONCE per
    * character, and everything here is in service of keeping that true.
    *
-   * It never reaches the corpse. It used to, and a corpse is a place — one the
-   * player can walk away from, leave the cap in, let the sage find empty hands,
-   * and come back to with the echo reopened behind them. Two caps, no cheating
-   * required, just patience. So the relic is taken OFF the loot roll and put
-   * straight into the pack, and `relicTaken` fires on the same line: from the
-   * kill onward, `complete` and "it is in the bag" are one statement.
+   * WHO DROPS IT IS THE LOOT TABLE'S QUESTION, and it used not to be asked at
+   * all. `missionByEcho` answers "is this Kárr's Howe", which is true of every
+   * square of it, so the gate below fired on EVERY kill in the echo: the first
+   * ghoul between the ladder and the chamber handed over the Howe-Helm, the
+   * mission completed, and the way home lit before the player had swung at
+   * anything that mattered. `dropped` is the fix and it is the honest form of
+   * the question — the relic sits on exactly one loot table at a flat hundred
+   * per cent, so "did this corpse actually roll it" is the same question as
+   * "is this the boss", asked where the answer already lives.
    *
-   * `wantsRelic` asks how many are already held, so a character who has one is
-   * simply not given another — the fallback below strips the cap out of the
-   * roll and the corpse is the same corpse minus the thing that is not his to
-   * take twice.
+   * IT GOES ON THE BODY, which is a reversal. It used to go straight into the
+   * pack, because a corpse is a place: one the player can walk away from,
+   * leave the cap in, let the sage find empty hands, and come back to with the
+   * echo reopened behind them. Two caps, no cheating required, just patience.
    *
-   * WEIGHT DOES NOT REFUSE IT, and that is a correction. It used to: the grant
-   * was gated on `itemWeight(relic) <= freeCap(p)`, which reads sensibly and is
-   * wrong, because being over capacity is a state this game LETS you walk
-   * around in. Radek killed Kárr at 1250 oz against a 920 cap, the nine-ounce
-   * helm was refused, `relicTaken` never fired, and the way home never lit —
-   * so the fight paid nothing and looked like a bug in the mission rather than
-   * in the scales. A relic is `boundRelic` the moment it lands: it cannot be
-   * dropped, chested, bodied or sold, so letting it in over cap can never be
-   * used to haul anything. The trade is nine ounces of leniency against
-   * silently voiding a one-time boss, and it is not close.
+   * That hole is now shut at the other end instead. `relicTaken` still fires
+   * HERE, on the kill, so the stage, the pads and the way home behave exactly
+   * as they did — the errand is `complete` the moment he falls, and
+   * `wantsRelic` refuses a second one on any later kill. And `relicLost`, the
+   * one place a reopened echo can come from, sweeps the relic out of the world
+   * first, which is the literal text of what the sage says when he does it:
+   * he has put it back on. So there is never a live relic on a body and an
+   * open door in the same moment.
    *
-   * A pack with no free SLOT is a different matter and still refuses, because
-   * there is genuinely nowhere to put it. The mission does not advance: he
-   * respawns, the relic is still his to take, and the player is told. */
+   * What the reversal buys is that killing a boss looks like killing a boss.
+   * The old arrangement teleported the prize into the pack and printed a line
+   * explaining that it had, which is a rule the player has to be told rather
+   * than one they can see. It also deletes a failure mode outright: a full
+   * pack no longer voids the drop, it just means you free a slot and loot him.
+   *
+   * WEIGHT DOES NOT REFUSE IT, and that is a correction that survives the
+   * reversal. It used to: the grant was gated on `itemWeight(relic) <=
+   * freeCap(p)`, which reads sensibly and is wrong, because being over
+   * capacity is a state this game LETS you walk around in. Radek killed Kárr
+   * at 1250 oz against a 920 cap, the nine-ounce helm was refused,
+   * `relicTaken` never fired, and the way home never lit — so the fight paid
+   * nothing and looked like a bug in the mission rather than in the scales. */
   const md = missionByEcho(world.key);
+  const dropped = !!md && items.some((it) => it.kind === md.relic);
   for (let i = items.length - 1; i >= 0; i--) if (md && items[i].kind === md.relic) items.splice(i, 1);
-  if (md && wantsRelic(md.id, p.level, bagCount(p.bag, md.relic))) {
-    if (addItem(p.bag, md.relic, 1) === 0) {
-      relicTaken(md.id, p.level);
-      addFloat(world, p.x, p.y - 64, ITEMS[md.relic].name, "#b9a6d8");
-      relicNotice(`${ITEMS[md.relic].name} — it is in your backpack, not on the body.`, "#b9a6d8");
-    } else {
-      addFloat(world, p.x, p.y - 64, `${ITEMS[md.relic].name}: no free slot!`, "#d96a5a");
-      relicNotice(
-        `${ITEMS[md.relic].name}: your backpack has no free slot. `
-        + "He keeps it — empty one and kill him again.", "#d96a5a",
-      );
-    }
+  const relicOnBody = !!md && dropped && wantsRelic(md.id, p.level, bagCount(p.bag, md.relic));
+  if (md && relicOnBody) {
+    relicTaken(md.id, p.level);
+    items.push({ kind: md.relic, n: 1 });
+    addFloat(world, p.x, p.y - 64, ITEMS[md.relic].name, "#b9a6d8");
+    relicNotice(`${ITEMS[md.relic].name} — it is on the body. Loot him.`, "#b9a6d8");
   }
   world.corpses.push({
     id: nextEntityId(),
@@ -247,7 +253,17 @@ export function killMonster(world: World, p: Player, m: Monster): void {
     x: m.x,
     y: m.y,
     items: corpseBag(items, gold),
-    t: CORPSE_DECAY_S,
+    /* A body with an errand in it keeps for as long as the run does.
+     *
+     * Seventy-five seconds is the right number for a body full of coin and it
+     * is the wrong number for this one. The chamber a boss dies in is the one
+     * with the rest of his household still standing up in it — the draugr's
+     * page says so in as many words — and a player who does the sensible thing
+     * and clears the room before looting would come back to a patch of floor
+     * and a walk to Bonetown. The relic is not lost by that route: it is
+     * swept when the sage reopens the mound, which is the only place a second
+     * one could ever come from. */
+    t: relicOnBody ? RELIC_CORPSE_DECAY_S : CORPSE_DECAY_S,
   });
 
   onMonsterKilled(m.kind, (t) => addFloat(world, p.x, p.y - 64, t, "#ffe9a8"));
