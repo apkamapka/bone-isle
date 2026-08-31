@@ -46,7 +46,7 @@ import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import {
   MISSIONS, stageOf, setStage, offeredMission, currentMission,
   missionHandedIn, relicLost, missionByGround, groundOpen, boundRelic,
-  loreSeen, markLoreSeen, resetMissions, type MissionDef,
+  loreSeen, markLoreSeen, resetMissions, resetMission, missionById, type MissionDef,
 } from "./systems/missions.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
@@ -67,7 +67,7 @@ import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { planSwap, refused, freeSlots } from "./systems/loadout.ts";
-import { createGame, travelTo, applyGates, applyMissionPads, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
+import { createGame, travelTo, applyGates, applyMissionPads, padRefusal, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
@@ -2507,8 +2507,20 @@ function sendChat(text: string): void {
    *                is worth zero and running it in a loop is worth zero.
    *
    * What it costs is the walk, which is the whole point. Grep TEMP-ETAP43. */
-  if (text.trim().toLowerCase() === "/replay") {
-    replayMissions();
+  if (text.trim().toLowerCase() === "/replay" || text.trim().toLowerCase() === "/missions") {
+    /* Bare `/replay` LISTS rather than wipes, which is a change from Etap 43
+     * and the reason for it is that the wipe is now the rarer of the two. With
+     * one link in the chain "put it all back" and "put that one back" were the
+     * same command; with the chain growing they are not, and the destructive
+     * reading is the wrong thing to put behind the shorter word. It also has
+     * to be discoverable somewhere, and the ids are not guessable — `draugr`
+     * is not what the mission is called on screen. */
+    missionReport();
+    closeChat();
+    return;
+  }
+  if (text.trim().toLowerCase().startsWith("/replay ")) {
+    replayCommand(text.trim().toLowerCase().slice("/replay ".length).trim());
     closeChat();
     return;
   }
@@ -3089,11 +3101,56 @@ function sageSays(
  * taking 2400 off a character sitting on 300 into a level has to walk him
  * backwards down it rather than leave him on a negative bar.
  */
-function replayMissions(): void {
-  let owed = 0;
-  for (const m of MISSIONS) if (stageOf(m.id, P.level) === "closed") owed += m.rewardExp;
-  resetMissions();
+/**
+ * The chain and where this character stands in it, written to the log.
+ *
+ * Also the help text for `/replay`, and deliberately the same lines for both:
+ * the ids are what the command takes and the stages are what it changes, so a
+ * player who can see one can work out the other. The usage line goes LAST
+ * because the overlay keeps the newest six lines and drops the rest, so the
+ * one line that has to survive a long catalogue is the one printed last.
+ */
+function missionReport(): void {
   for (const m of MISSIONS) {
+    const st = stageOf(m.id, P.level);
+    logServer(`${m.id} · lv ${m.reqLevel} · ${st} — ${t(`mission.title.${m.id}`, lang())}`, "#b9a6d8");
+  }
+  logServer("/replay <id> re-opens one errand · /replay all re-opens the chain", "#b9a6d8");
+}
+
+/** `/replay <something>`. An id, or `all`, or a typo — and a typo must not be
+ *  read as "all", which is why the fall-through lists instead of guessing. */
+function replayCommand(arg: string): void {
+  if (arg === "all") { replayMissions(); return; }
+  const m = missionById(arg);
+  if (!m) {
+    logServer(`no errand called "${arg}"`, "#d96a5a");
+    missionReport();
+    return;
+  }
+  replayMissions(m);
+}
+
+/**
+ * Put one errand — or the whole chain — back to where it started.
+ *
+ * `only` is the Etap 44 half. The whole-chain reset was the only thing here
+ * and it made re-testing the SECOND mission cost the first one as well: the
+ * chain gates on the previous link being `closed`, so wiping the lot meant
+ * walking Liddesdale again before Haramsey would open. That is a twenty-minute
+ * toll on a one-minute fix, which is the sort of friction that stops a thing
+ * from being re-tested at all.
+ *
+ * Everything that made the full reset safe to ship in front of players is
+ * unchanged and applies per mission: no chest is re-opened, and the reward for
+ * anything actually being un-closed is taken back.
+ */
+function replayMissions(only?: MissionDef): void {
+  const list = only ? [only] : MISSIONS;
+  let owed = 0;
+  for (const m of list) if (stageOf(m.id, P.level) === "closed") owed += m.rewardExp;
+  for (const m of list) {
+    resetMission(m.id);
     const held = countAcross([P.bag], m.relic);
     if (held > 0) removeAcross([P.bag], m.relic, held);
   }
@@ -3109,9 +3166,14 @@ function replayMissions(): void {
   }
   applyMissionPads(game.worlds, P.level);
   saveGame(game);
+  const what = only ? t(`mission.title.${only.id}`, lang()) : "his errands";
   flash(owed > 0
-    ? `Chronos takes his errands back — and the ${owed} xp he paid for them`
-    : "Chronos takes his errands back", "#b9a6d8");
+    ? `Chronos takes back ${what} — and the ${owed} xp he paid for them`
+    : `Chronos takes back ${what}`, "#b9a6d8");
+  // …and say where that leaves the chain, because the answer is not always the
+  // obvious one: rolling a later link back can leave an earlier one closed, and
+  // rolling an earlier one back does NOT re-lock the links above it.
+  missionReport();
 }
 
 function forgetEverything(): void {
@@ -3855,8 +3917,9 @@ function checkPortals(): void {
   for (const pt of cw().portals) {
     if (portalCovers(pt, P.x, P.y)) {
       if (pt.inactive) {
-        // a dormant quest pad: hum, but do not travel (yet)
-        flash("the portal is dormant… for now", "#b9a6d8");
+        // a dark pad: hum, and say WHY it is dark — see `padRefusal`
+        const why = padRefusal(cw().key, pt.dest, P.level);
+        flash(t(why.key, lang(), why.vars), "#b9a6d8");
         P.tpCd = 1.6; // don't spam the flash while standing on the pad
         return;
       }

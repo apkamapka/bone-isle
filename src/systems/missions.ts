@@ -427,3 +427,26 @@ export function resetMissions(): void {
   const lr = loreBook();
   for (const k of Object.keys(lr)) delete lr[k];
 }
+
+/**
+ * The same thing for ONE link: its stage and its chronicle, nothing else.
+ *
+ * This is what `/replay draugr` is built on, and the reason it is a separate
+ * function rather than a loop over `resetMissions` is the chronicle. Both have
+ * to go together — a mission put back to the start with its history still
+ * marked read would skip the page of folklore that is the whole reason the pad
+ * stops you — and getting that pairing wrong is exactly the bug the full reset
+ * already had once.
+ *
+ * The chain around it is left ALONE, which is deliberate and is what makes the
+ * command usable for testing. Rolling the redcap back does not roll the draugr
+ * back with it: the draugr's `after` looks at the redcap's STORED stage, so a
+ * still-closed draugr stays closed and a not-yet-taken one goes back behind the
+ * gate. Both are correct, and neither costs the player anything they had
+ * finished.
+ */
+export function resetMission(id: string): void {
+  if (!missionById(id)) return;
+  delete stages()[id];
+  delete loreBook()[id];
+}

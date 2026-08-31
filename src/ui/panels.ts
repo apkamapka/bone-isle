@@ -13,7 +13,7 @@ import type { TaskReward } from "../systems/tasks.ts";
 import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed, walletAcross } from "../items.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { questList } from "../systems/quests.ts";
-import { loreRead, stageOf } from "../systems/missions.ts";
+import { loreRead, stageOf, currentMission } from "../systems/missions.ts";
 import { t } from "../text/speech.ts";
 import { lang } from "../systems/panelPrefs.ts";
 import { SHOPS } from "../entities/npcs.ts";
@@ -2183,10 +2183,45 @@ function drawQuests(p: PanelInput): void {
   const chron = loreRead();
   const lg = lang();
   const chronH = chron.length ? 12 * S + chron.length * 20 * S + 6 * S : 0;
-  const h = 20 * S + chronH + questList().length * rowH + 16 * S;
+  /* THE ERRAND IN HAND, above the chronicles.
+   *
+   * Nothing used to say this anywhere but in the sage's mouth. Accepting a
+   * mission writes its objective to the Server Log, the log fades after twelve
+   * seconds, and from then on the only copy of "what am I doing" was a walk
+   * back to the cellar to be told again. A quest log that lists the errands
+   * you have FINISHED and not the one you are on is the wrong way round.
+   *
+   * Two sentences, because the objective has two halves and the second one is
+   * the half the goal line does not cover: with the relic in the pack, "kill
+   * X and bring it back" is half stale and the useful sentence is where to
+   * take it. `complete` is exactly "the relic is in the pack" — see the note
+   * on `wantsRelic` — so the stage is enough to pick between them. */
+  const errand = currentMission(player.level);
+  const errandBody = errand
+    ? (stageOf(errand.id, player.level) === "complete"
+      ? t("mission.deliver", lg)
+      : t(`mission.goal.${errand.id}`, lg))
+    : "";
+  // Wrapped rather than ellipsised: an objective cut off at "carry his helm
+  // back to…" is worse than no objective at all.
+  const errandLines = errand ? wrapText(hud, errandBody, 7 * S, w - 24 * S) : [];
+  const ERR_LINE = 7 * S * 1.25;
+  const errandH = errand ? 12 * S + 14 * S + errandLines.length * ERR_LINE + 13 * S : 0;
+  const h = 20 * S + errandH + chronH + questList().length * rowH + 16 * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "QUEST LOG")) return;
   let ry = y + 18 * S;
+  if (errand) {
+    hudText(hud, t("ui.errand", lg), x + 12 * S, ry + 3 * S, 7 * S, "rgba(202,162,58,.85)", "left", true);
+    ry += 12 * S;
+    hudText(hud, t(`mission.title.${errand.id}`, lg), x + 12 * S, ry + 6 * S, 8 * S,
+      "#b9a6d8", "left", true, w - 24 * S);
+    ry += 14 * S;
+    ry = hudLines(hud, errandLines, x + 12 * S, ry + 4 * S, 7 * S, "rgba(220,214,190,.72)");
+    ctx.fillStyle = "#3a3222";
+    ctx.fillRect(x + 12 * S, ry + 2 * S, w - 24 * S, 1 * S);
+    ry += 9 * S;
+  }
   if (chron.length) {
     hudText(hud, t("ui.chronicles", lg), x + 12 * S, ry + 3 * S, 7 * S, "rgba(202,162,58,.85)", "left", true);
     ry += 12 * S;

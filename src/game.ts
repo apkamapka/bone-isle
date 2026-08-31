@@ -17,7 +17,7 @@ import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, CELLAR_SPEC } from "./world/handmade.ts";
 import { loadTerrainImages } from "./world/terrainImage.ts";
-import { missionByGround, missionByEcho, groundOpen, echoOpen, relicRoadOpen } from "./systems/missions.ts";
+import { missionByGround, missionByEcho, groundOpen, echoOpen, relicRoadOpen, stageOf } from "./systems/missions.ts";
 import { loadPropArt } from "./world/propArt.ts";
 import { loadMobSheets } from "./gfx/mobSheet.ts";
 import { loadFireSheet } from "./gfx/fireSheet.ts";
@@ -269,6 +269,68 @@ export function applyMissionPads(worlds: Record<WorldKey, World>, level: number)
       else if (missionByEcho(pt.dest)) pt.inactive = !echoOpen(pt.dest, level);
     }
   }
+}
+
+/** A text key, and the holes to fill in it. */
+export interface PadRefusal {
+  key: string;
+  vars?: Record<string, number>;
+}
+
+/**
+ * Why this dark pad will not carry you — the sentence form of the rule above.
+ *
+ * Deliberately in this file and directly under `applyMissionPads`, because the
+ * two have to agree and the only reliable way to keep them agreeing is to make
+ * them impossible to read separately. `applyMissionPads` decides WHETHER a pad
+ * is dark from three rules; this asks the same three questions, in the same
+ * order, and answers with a reason. Edit one and the other is on screen.
+ *
+ * WHAT THIS REPLACES, because it is worth being exact about how bad it was.
+ * Every dark pad in the game said "the portal is dormant… for now" — one line
+ * for six situations, and wrong in four of them. The mouth of a finished echo
+ * is not dormant, it is SPENT: nothing about it will ever change, and "for
+ * now" is an invitation to stand there and wait for something that is not
+ * coming. A player who has killed Kárr, handed the helm in and walked back to
+ * the hole out of curiosity was told, in as many words, to keep waiting.
+ *
+ * The order matters and it is `applyMissionPads`' order: a pad is identified
+ * by the room it STANDS IN before it is identified by where it goes, because
+ * half the game points at `cellar` and only the relic road points at it from
+ * inside an echo.
+ *
+ * `here` and `level` are passed rather than read because this module has no
+ * player and should not grow one — the same reason `wantsRelic` takes `held`.
+ */
+export function padRefusal(here: WorldKey, dest: WorldKey, level: number): PadRefusal {
+  // 1. the relic road: standing in an echo, pointing home, boss still up
+  if (missionByEcho(here) && dest === "cellar") return { key: "pad.wayHome" };
+
+  // 2. a hunting ground. Dark means the errand has not been taken — either
+  //    because the sage will not offer it yet, or because he has offered it
+  //    and it was declined. Those are different sentences, and the level gate
+  //    is what tells them apart.
+  const ground = missionByGround(dest);
+  if (ground) {
+    return stageOf(ground.id, level) === "locked"
+      ? { key: "pad.needLevel", vars: { lv: ground.reqLevel } }
+      : { key: "pad.askSage" };
+  }
+
+  // 3. the mouth of an echo. Dark on either side of the fight, and the two
+  //    sides mean opposite things: before it, there is nothing to go down for
+  //    yet; after it, there is nothing down there at all, ever again.
+  const echo = missionByEcho(dest);
+  if (echo) {
+    const st = stageOf(echo.id, level);
+    if (st === "complete") return { key: "pad.relicWaiting" };
+    if (st === "closed") return { key: "pad.errandOver" };
+    return { key: "pad.askSage" };
+  }
+
+  // 4. one of the rifts no mission has been written for yet. Honest about it,
+  //    and the only one of the six the old line was actually right about.
+  return { key: "pad.sealed" };
 }
 
 export function travelTo(g: Game, dest: WorldKey): void {

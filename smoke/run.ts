@@ -13732,6 +13732,182 @@ async function main(): Promise<void> {
       "…and any relic still in the pack goes with it, so nothing can be handed in twice");
   }
 
+  console.log("Etap 44 — one errand at a time, and a dark pad that says why:");
+  {
+    const M44 = await import("../src/systems/missions.ts");
+    const G44 = await import("../src/game.ts");
+    const SP44 = await import("../src/text/speech.ts");
+    const fs44 = await import("node:fs");
+    const main44 = fs44.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+
+    /* ---------------- resetMission: one link, not the chain ---------------
+     *
+     * THE PROBLEM. `/replay` wiped everything, and the chain gates on the
+     * PREVIOUS link being `closed` — so re-testing the draugr cost a full walk
+     * of Liddesdale first. A twenty-minute toll on a one-minute fix is the
+     * sort of friction that stops a thing from being re-tested at all, which
+     * is the exact failure the command was written to prevent. */
+    const first = M44.MISSIONS[0], second = M44.MISSIONS[1];
+    ok(first !== undefined && second !== undefined && second.after === first.id,
+      "the catalogue still has a chain to walk backwards");
+
+    M44.resetMissions();
+    M44.setStage(first.id, "closed");
+    M44.setStage(second.id, "closed");
+    M44.markLoreSeen(first.id);
+    M44.markLoreSeen(second.id);
+    const lv44 = second.reqLevel + 5;
+
+    M44.resetMission(second.id);
+    ok(M44.stageOf(second.id, lv44) === "available",
+      "rolling the second errand back re-offers it");
+    ok(M44.stageOf(first.id, lv44) === "closed" && M44.loreSeen(first.id),
+      "…and leaves the first one finished, which is the whole point of doing it singly");
+    /* The chronicle goes with the stage, ALWAYS. A mission put back to the
+     * start with its history still marked read skips the page of folklore
+     * that is the only reason the pad stops you — and that pairing is a bug
+     * the full reset shipped with once already. */
+    ok(!M44.loreSeen(second.id),
+      "…and takes its chronicle with it, so the pad tells the story again");
+
+    /* The other direction, which is the surprising one and is correct: the
+     * gate reads the previous link's STORED stage, so a still-closed second
+     * link stays closed when the first is rolled back. Nothing the player had
+     * finished is taken away by re-testing something under it. */
+    M44.resetMissions();
+    M44.setStage(first.id, "closed");
+    M44.setStage(second.id, "closed");
+    M44.resetMission(first.id);
+    ok(M44.stageOf(first.id, lv44) === "available" && M44.stageOf(second.id, lv44) === "closed",
+      "rolling the FIRST errand back does not un-finish the ones above it");
+
+    /* A typo must be a no-op rather than a wipe. `replayCommand` checks with
+     * `missionById` before it calls anything, and this is the belt under it. */
+    M44.resetMissions();
+    M44.setStage(first.id, "closed");
+    M44.resetMission("draugrr");
+    M44.resetMission("");
+    ok(M44.stageOf(first.id, lv44) === "closed",
+      "an id that is not in the catalogue changes nothing at all");
+
+    /* ---------------- the command surface ---------------------------------
+     * Source-level, like the Etap 43a tests above it and for the same reason:
+     * these branches live in module-scope game code the suite cannot import.
+     * What is pinned is the SHAPE — that the destructive reading is not the
+     * one behind the shorter word, and that a typo cannot reach it. */
+    ok(/text\.trim\(\)\.toLowerCase\(\)\.startsWith\("\/replay "\)/.test(main44),
+      "`/replay <id>` is a branch of its own");
+    const bare = main44.slice(main44.indexOf('text.trim().toLowerCase() === "/replay"'),
+      main44.indexOf('text.trim().toLowerCase().startsWith("/replay ")'));
+    ok(/missionReport\(\)/.test(bare) && !/replayMissions\(/.test(bare),
+      "bare `/replay` LISTS the chain — the wipe is not behind the shorter word");
+    const dispatch = main44.slice(main44.indexOf("function replayCommand"),
+      main44.indexOf("function replayMissions"));
+    ok(/arg === "all"/.test(dispatch) && /missionById\(arg\)/.test(dispatch),
+      "…the whole-chain reset needs the word `all`, and anything else is looked up");
+    ok(/if \(!m\) \{/.test(dispatch) && dispatch.indexOf("if (!m)") < dispatch.indexOf("replayMissions(m)"),
+      "…and an unknown id falls out BEFORE anything is reset, so a typo is not read as `all`");
+
+    /* The two things a mission pays are still closed, per mission rather than
+     * per chain. If either ever opens, `/replay` is a mint — see Etap 43a. */
+    const body44 = main44.slice(main44.indexOf("function replayMissions"),
+      main44.indexOf("function forgetEverything"));
+    ok(!/game\.opened/.test(body44),
+      "a single replay still never re-opens a one-time chest");
+    ok(/const list = only \? \[only\] : MISSIONS/.test(body44),
+      "…and charges the claw-back over the missions it is actually resetting");
+    ok(/for \(const m of list\) if \(stageOf\(m\.id, P\.level\) === "closed"\) owed \+= m\.rewardExp/.test(body44),
+      "…counting only the ones that were paid for");
+
+    /* The report is also the help text, and the usage line is printed LAST on
+     * purpose: the overlay keeps the newest six lines and drops the rest, so
+     * with a long catalogue the header would be the first thing to scroll off
+     * and the one line that has to survive is the one that says what to type. */
+    const report = main44.slice(main44.indexOf("function missionReport"),
+      main44.indexOf("function replayCommand"));
+    const usage = report.indexOf("/replay <id>");
+    ok(usage > report.indexOf("for (const m of MISSIONS)"),
+      "the usage line is written after the list, so it is the one that survives the overlay");
+
+    /* ---------------- the dark pad says WHY -------------------------------
+     *
+     * One sentence used to cover six situations and was wrong in four. The
+     * worst was the mouth of a finished echo: "dormant… for now" tells a
+     * player who has already killed the boss and handed the relic in to keep
+     * waiting for something that is never coming. */
+    ok(!/dormant… for now/.test(main44), "the one-size-fits-all pad line is gone");
+
+    for (const m of M44.MISSIONS) {
+      /* Below the level gate. The useful fact is the NUMBER, so it goes in the
+       * sentence rather than being implied by a shrug. */
+      M44.resetMissions();
+      if (m.after) M44.setStage(m.after, "closed");
+      const low = G44.padRefusal("cellar", m.ground, 1);
+      ok(low.key === "pad.needLevel" && low.vars?.lv === m.reqLevel,
+        `${m.id}: a ground below the gate names the level it opens at (${m.reqLevel})`);
+      /* At level, chain satisfied, errand not taken — the one case of the six
+       * the player can act on right now, so it names where the man stands. */
+      const open = G44.padRefusal("cellar", m.ground, m.reqLevel);
+      ok(open.key === "pad.askSage",
+        `${m.id}: at level it points at the man who opens it`);
+      /* The echo mouth, on both sides of the fight. */
+      M44.setStage(m.id, "complete");
+      ok(G44.padRefusal(m.ground, m.echo, m.reqLevel).key === "pad.relicWaiting",
+        `${m.id}: with the boss down the mouth says the room is empty and the relic is owed`);
+      M44.setStage(m.id, "closed");
+      ok(G44.padRefusal(m.ground, m.echo, m.reqLevel).key === "pad.errandOver",
+        `${m.id}: once handed in it says so, rather than "for now"`);
+      /* The relic road, from inside the echo, before the kill. */
+      M44.setStage(m.id, "active");
+      ok(G44.padRefusal(m.echo, "cellar", m.reqLevel).key === "pad.wayHome",
+        `${m.id}: the way home from inside the echo opens on the kill, and says so`);
+    }
+    M44.resetMissions();
+    /* A rift nothing has been written for. The only one the old line was right
+     * about, and the fall-through if a fourth rule is ever added to
+     * `applyMissionPads` without one being added here. */
+    ok(G44.padRefusal("cellar", "cellar", 99).key === "pad.sealed",
+      "an unnamed rift admits that nobody has written it yet");
+
+    /* Every key the function can return has to exist in all three languages.
+     * The completeness test above covers the whole table; this one covers the
+     * REACHABILITY of it — a key returned from code and absent from the table
+     * renders as `pad.wayHome` on the player's screen. */
+    for (const k of ["pad.needLevel", "pad.askSage", "pad.relicWaiting",
+      "pad.errandOver", "pad.wayHome", "pad.sealed", "mission.deliver", "ui.errand"]) {
+      ok(SP44.hasText(k), `${k} is written`);
+    }
+
+    /* These are drawn as a FLOAT over the player's head, not in the dialogue
+     * box, so they get one line and no pagination. Fifty-six characters is the
+     * limit the box already lives by on a phone in portrait; a pad message is
+     * shorter than a line of speech or it is cut off by the screen edge. */
+    const longPad = SP44.textKeys().filter((k) => k.startsWith("pad."))
+      .flatMap((k) => SP44.LANGS.map((lg) => [k, lg, SP44.t(k, lg, { lv: 99 })] as const))
+      .filter(([, , s]) => s.length > 56);
+    ok(longPad.length === 0,
+      `every pad message fits one float line${longPad.length ? " — " + longPad[0][0] + "/" + longPad[0][1] : ""}`);
+
+    /* ---------------- the quest log shows the errand in hand ---------------
+     * It listed the ones you had FINISHED and not the one you were on. The
+     * objective was written to the Server Log once, at the moment the sage
+     * handed it over, and faded twelve seconds later — after which the only
+     * copy of "what am I doing" was a walk back to the cellar. */
+    const panels44 = fs44.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
+    const quests44 = panels44.slice(panels44.indexOf("function drawQuests"),
+      panels44.indexOf("function drawQuests") + 3000);
+    ok(/currentMission\(player\.level\)/.test(quests44),
+      "the quest log asks what errand is in hand");
+    ok(/mission\.goal\.\$\{errand\.id\}/.test(quests44) && /"mission\.deliver"/.test(quests44),
+      "…and shows the objective, or where to take the relic once it is in the pack");
+    ok(/=== "complete"/.test(quests44),
+      "…picking between them on the stage, which IS 'the relic is in the pack'");
+    ok(/wrapText\(hud, errandBody/.test(quests44),
+      "…wrapped rather than ellipsised, because an objective cut at 'carry his helm back to…' is worse than none");
+    ok(/const h = 20 \* S \+ errandH \+ chronH/.test(quests44),
+      "…and the panel is measured with it, so the block cannot overflow its own frame");
+  }
+
   console.log("Housekeeping — dead files, dead names, dead comments:");
   {
     const hk = await import("node:fs");

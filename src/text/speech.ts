@@ -441,6 +441,68 @@ const UI: Readonly<Record<string, Bundle>> = {
   "ui.close": { en: "close", pl: "zamknij", es: "cerrar" },
   "ui.chronicles": { en: "CHRONICLES", pl: "KRONIKI", es: "CRÓNICAS" },
   "ui.readAgain": { en: "read again", pl: "przeczytaj", es: "leer de nuevo" },
+  /* The heading over the errand in hand, in the quest log. Keyed for the same
+   * reason CHRONICLES is: it sits directly above a Polish sentence. */
+  "ui.errand": { en: "ERRAND", pl: "ZLECENIE", es: "ENCARGO" },
+};
+
+/* ==========================================================================
+ *  WHAT A DARK PAD SAYS
+ *
+ *  Every one of these replaces the same sentence: "the portal is dormant… for
+ *  now". It was on all six of the cases below and it was wrong on four of
+ *  them — the mouth of a finished echo is not dormant, it is SPENT, and no
+ *  amount of standing on it will ever change that. A player who has just
+ *  killed Kárr walks back to the hole, reads "for now", and waits for
+ *  something that is never coming.
+ *
+ *  So the pad answers the question the player is actually asking, which is
+ *  never "am I dormant" — it is WHY, and WHAT DO I DO NOW. Each line is a
+ *  reason and, where there is one, an instruction. Short, because these are
+ *  drawn as a float over the player's head rather than in a box: the redcap's
+ *  chronicle can afford six pages, this cannot afford two lines.
+ * ========================================================================== */
+
+const PAD: Readonly<Record<string, Bundle>> = {
+  /* The ground exists and the sage will open it — later. The level is the one
+   * fact worth carrying away, so it is in the sentence rather than implied. */
+  "pad.needLevel": {
+    en: "Chronos opens this door at level {lv}.",
+    pl: "Chronos otworzy te wrota na poziomie {lv}.",
+    es: "Chronos abre esta puerta en el nivel {lv}.",
+  },
+  /* The errand is on his table and has not been taken. This is the only one of
+   * the six the player can act on immediately, and it names where he stands. */
+  "pad.askSage": {
+    en: "Not opened yet. Ask Chronos, down in his cellar.",
+    pl: "Jeszcze nieotwarte. Spytaj Chronosa w jego piwnicy.",
+    es: "Aún sin abrir. Pregunta a Chronos en su sótano.",
+  },
+  /* The boss is down and the relic is in the pack: the echo below is an empty
+   * room with a spent chest in it, and the errand finishes at the sage. */
+  "pad.relicWaiting": {
+    en: "Nothing left down there. Carry it to Chronos.",
+    pl: "Nic tam już nie ma. Zanieś to Chronosowi.",
+    es: "Ya no queda nada ahí abajo. Llévaselo a Chronos.",
+  },
+  /* Handed in. This is the one the old line lied about hardest. */
+  "pad.errandOver": {
+    en: "That errand is finished. This door stays shut.",
+    pl: "To zlecenie skończone. Te wrota zostają zamknięte.",
+    es: "Ese encargo terminó. Esta puerta queda cerrada.",
+  },
+  /* Standing in an echo, on the pad home, with the boss still alive. */
+  "pad.wayHome": {
+    en: "The way home opens when he falls.",
+    pl: "Droga powrotna otworzy się, gdy on padnie.",
+    es: "El camino de vuelta se abre cuando él caiga.",
+  },
+  /* One of the ten rifts no mission has been written for. Honest about it. */
+  "pad.sealed": {
+    en: "Sealed. Chronos has not read this far yet.",
+    pl: "Zapieczętowane. Chronos jeszcze tu nie doczytał.",
+    es: "Sellada. Chronos aún no ha leído hasta aquí.",
+  },
 };
 
 /* ==========================================================================
@@ -476,10 +538,21 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     es: "Mata a Kárr el Viejo en el túmulo bajo Haramsey y lleva su yelmo a "
       + "Chronos.",
   },
+  /* The second half of every errand, and the half nothing on screen used to
+   * say. The goal line is written for a player who has not been down yet
+   * ("kill X and carry it back"); once the relic is in the pack that sentence
+   * is half stale, and the log line that carried it faded twelve seconds after
+   * the sage said it. One string covers every mission, because the answer is
+   * the same for all of them: it is in your pack, he is in the cellar. */
+  "mission.deliver": {
+    en: "It is in your pack. Take it to Chronos, in the cellar.",
+    pl: "Masz to w plecaku. Zanieś to Chronosowi, do piwnicy.",
+    es: "Lo llevas en la mochila. Llévaselo a Chronos, al sótano.",
+  },
 };
 
 export const TEXT: Readonly<Record<string, Bundle>> = {
-  ...SAGE, ...LORE, ...UI, ...MISSION,
+  ...SAGE, ...LORE, ...UI, ...PAD, ...MISSION,
 };
 
 /** Every key, for the completeness test. */
