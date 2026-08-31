@@ -2198,9 +2198,15 @@ function drawQuests(p: PanelInput): void {
    * on `wantsRelic` — so the stage is enough to pick between them. */
   const errand = currentMission(player.level);
   const errandBody = errand
-    ? (stageOf(errand.id, player.level) === "complete"
-      ? t("mission.deliver", lg)
-      : t(`mission.goal.${errand.id}`, lg))
+    ? (stageOf(errand.id, player.level) !== "complete"
+      ? t(`mission.goal.${errand.id}`, lg)
+      // `complete` used to be one state and is now two, because Etap 46 moved
+      // the relic onto the corpse: the errand finishes on the kill, but the
+      // thing is on the floor until it is looted. Ask the pack rather than
+      // guessing, so the log never says "in your pack" about a corpse.
+      : bagCount(player.bag, errand.relic) > 0
+        ? t("mission.deliver", lg)
+        : t("mission.onBody", lg))
     : "";
   // Wrapped rather than ellipsised: an objective cut off at "carry his helm
   // back to…" is worse than no objective at all.
