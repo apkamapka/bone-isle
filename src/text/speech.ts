@@ -65,166 +65,284 @@ type Bundle = Readonly<Record<Lang, string>>;
 const SAGE: Readonly<Record<string, Bundle>> = {
   /* Level gate: the next link exists but the player is too green for it. */
   "sage.locked": {
-    en: "Come back at level {lv}. History keeps.",
-    pl: "Wróć na poziomie {lv}. Historia poczeka.",
-    es: "Vuelve al nivel {lv}. La historia espera.",
+    en: "Come back at level {lv}. Not every story cares for an unripe listener.",
+    pl: "Wróć na poziomie {lv}. Nie wszystkie historie lubią niedojrzałych słuchaczy.",
+    es: "Vuelve al nivel {lv}. No todas las historias quieren oyentes verdes.",
   },
   /* Nothing left in the catalogue — for now, which is the part that matters.
    * The first draft of this read as a dead end ("every door I know is behind
    * you"), and a chain of ten missions that says that after the first one has
    * told the player the game is over when it is not. */
   "sage.cold": {
-    en: "That is all I have opened so far. Come back later — I am still reading.",
-    pl: "To wszystko, co dotąd otworzyłem. Wróć później — wciąż czytam.",
-    es: "Eso es todo lo que he abierto hasta ahora. Vuelve más tarde: sigo leyendo.",
+    en: "That is all I have for you. For now. Come back when I open something else.",
+    pl: "To wszystko, co mam dla ciebie. Na razie. Wróć, kiedy znowu coś otworzę.",
+    es: "Eso es todo lo que tengo para ti. Por ahora. Vuelve cuando abra otra cosa.",
   },
 
   /* --- the answers the player picks ------------------------------------- */
   "sage.choice.what": {
-    en: "What is in there?",
-    pl: "Co tam jest?",
-    es: "¿Qué hay ahí dentro?",
+    en: "What is behind them?",
+    pl: "Co jest za nimi?",
+    es: "¿Qué hay detrás?",
   },
   /* Two jobs: declining the errand, and the labelled way out of any other
    * conversation. Both are "I am done here", and one word covers both. */
   "sage.choice.notYet": {
-    en: "Not now.",
-    pl: "Nie teraz.",
-    es: "Ahora no.",
+    en: "Not yet.",
+    pl: "Jeszcze nie.",
+    es: "Todavía no.",
   },
 
-  /* --- mission 1: the redcap -------------------------------------------- */
+  /* --- mission 1: the redcap --------------------------------------------
+   * Rewritten in Etap 45 and the shape of it is the change, not the wording.
+   * He tells it in beats now — one image to a line, a blank line between them
+   * — and he stops before the explanation. "Coś małego. Czerwonego." is the
+   * whole of what the player is told about the redcap in the offer, and it is
+   * more than three sentences of description bought before. What the player
+   * is supposed to walk away with is a question, not a briefing. */
   "sage.offer.redcap": {
-    en: "The first door I have opened for you. The Anglo-Scottish border, "
-      + "thirteen twenty — a wet valley with a castle in it that everyone "
-      + "wanted and nobody enjoyed.",
-    pl: "Pierwsze wrota, które dla ciebie otwieram. Pogranicze "
-      + "angielsko-szkockie, rok tysiąc trzysta dwudziesty — mokra dolina z "
-      + "zamkiem, którego wszyscy chcieli i którego nikt nie znosił.",
-    es: "La primera puerta que te abro. La frontera anglo-escocesa, mil "
-      + "trescientos veinte: un valle húmedo con un castillo que todos "
-      + "querían y que nadie disfrutó.",
+    en: "The first door opens on Hermitage.\n\n"
+      + "Liddesdale, in the year thirteen twenty. Rain, mud, and a castle "
+      + "whose lord was too proud to die like an ordinary man.\n\n"
+      + "It did not help him.",
+    pl: "Pierwsze wrota prowadzą do Hermitage.\n\n"
+      + "Liddesdale, rok 1320. Deszcz, błoto i zamek, którego pan był zbyt "
+      + "dumny, żeby umrzeć jak zwykły człowiek.\n\n"
+      + "Nie pomogło mu to.",
+    es: "La primera puerta da a Hermitage.\n\n"
+      + "Liddesdale, año mil trescientos veinte. Lluvia, barro y un castillo "
+      + "cuyo señor era demasiado orgulloso para morir como un hombre "
+      + "corriente.\n\n"
+      + "No le sirvió de nada.",
   },
   "sage.accept.redcap": {
-    en: "A lord about to be boiled, a great many furious farmers, and one "
-      + "small thing in iron boots that outlived every one of them.\n\n"
-      + "Bring me its cap while the blood on it is still wet. The door below "
-      + "is open, and the echo behind it holds as long as you do.",
-    pl: "Pan na zamku, którego zaraz ugotują, bardzo wielu wściekłych chłopów "
-      + "i jedna mała rzecz w żelaznych butach, która przeżyła ich "
-      + "wszystkich.\n\n"
-      + "Przynieś mi jej czapkę, póki krew na niej jest jeszcze mokra. Wrota "
-      + "na dole stoją otworem, a echo za nimi trzyma się tak długo jak ty.",
-    es: "Un señor a punto de ser hervido, muchísimos campesinos furiosos y "
-      + "una cosa pequeña con botas de hierro que los sobrevivió a "
-      + "todos.\n\n"
-      + "Tráeme su gorro mientras la sangre siga húmeda. La puerta de abajo "
-      + "está abierta, y el eco tras ella aguanta lo que aguantes tú.",
+    en: "William de Soulis had his men, his castle, and the certainty that no "
+      + "death could reach him.\n\n"
+      + "So his tenants poured him into hot lead.\n\n"
+      + "They say all that was left afterwards was an empty shell and the "
+      + "smell of burnt meat.\n\n"
+      + "But when night came down over the castle, something small came out "
+      + "of the stones.\n\n"
+      + "Red.\n\n"
+      + "The Redcap has kept that place ever since.\n\n"
+      + "Bring me his cap. Only do not let it dry. That matters more than it "
+      + "sounds.",
+    pl: "William de Soulis miał swoich ludzi, swój zamek i pewność, że żadna "
+      + "śmierć nie może go dosięgnąć.\n\n"
+      + "Więc jego poddani wlali go do rozgrzanego ołowiu.\n\n"
+      + "Mówią, że po wszystkim został tylko pusty pancerz i zapach palonego "
+      + "mięsa.\n\n"
+      + "Ale kiedy noc zapadła nad zamkiem, z kamieni wyszło coś małego.\n\n"
+      + "Czerwonego.\n\n"
+      + "Od tamtej pory Redcap pilnuje tego miejsca.\n\n"
+      + "Przynieś mi jego czapkę. Tylko jej nie pozwól wyschnąć. To "
+      + "ważniejsze, niż się wydaje.",
+    es: "William de Soulis tenía a sus hombres, su castillo y la certeza de "
+      + "que ninguna muerte podía alcanzarlo.\n\n"
+      + "Así que sus arrendatarios lo vertieron en plomo ardiendo.\n\n"
+      + "Dicen que después sólo quedó una coraza vacía y olor a carne "
+      + "quemada.\n\n"
+      + "Pero cuando cayó la noche sobre el castillo, de las piedras salió "
+      + "algo pequeño.\n\n"
+      + "Rojo.\n\n"
+      + "Desde entonces el Redcap guarda ese lugar.\n\n"
+      + "Tráeme su gorro. Sólo que no dejes que se seque. Importa más de lo "
+      + "que parece.",
   },
   "sage.decline.redcap": {
-    en: "Then it keeps. It has kept seven hundred years without you.",
-    pl: "To poczeka. Czekało siedemset lat bez ciebie.",
-    es: "Entonces esperará. Lleva setecientos años esperando sin ti.",
+    en: "Good.\n\n"
+      + "The Redcap has been waiting there seven hundred years.\n\n"
+      + "I doubt he will notice you were not among them.",
+    pl: "Dobrze.\n\n"
+      + "Redcap czeka tam od siedmiuset lat.\n\n"
+      + "Podejrzewam, że nie zauważy twojej nieobecności.",
+    es: "Bien.\n\n"
+      + "El Redcap lleva setecientos años esperando ahí.\n\n"
+      + "Dudo que note que tú no estabas.",
   },
   "sage.remind.redcap": {
-    en: "The cap, and while the blood on it is still wet. Through the door, "
-      + "across the valley, into the hole at the far end of it.",
-    pl: "Czapka, i to póki krew na niej mokra. Przez wrota, przez dolinę, do "
-      + "dziury na jej drugim końcu.",
-    es: "El gorro, y con la sangre aún húmeda. Cruza la puerta, cruza el "
-      + "valle y entra en el agujero del otro extremo.",
+    en: "Go back to Hermitage.\n\n"
+      + "Find the small man in the red cap and take from him the thing that "
+      + "lets him keep wearing it.\n\n"
+      + "And remember — blood dries faster than you would think.",
+    pl: "Wróć do Hermitage.\n\n"
+      + "Znajdź małego człowieka w czerwonej czapce i zabierz mu to, co "
+      + "sprawia, że wciąż może ją nosić.\n\n"
+      + "I pamiętaj — krew wysycha szybciej, niż mogłoby się wydawać.",
+    es: "Vuelve a Hermitage.\n\n"
+      + "Busca al hombrecillo del gorro rojo y quítale aquello que le "
+      + "permite seguir llevándolo.\n\n"
+      + "Y recuerda: la sangre se seca antes de lo que crees.",
   },
   "sage.handIn.redcap": {
-    en: "Still wet. Good — dry, it is only a hat.\n\n"
-      + "The chronicles gave that castle four hundred years and nine owners. "
-      + "They gave the thing in the boots nothing at all. I have some "
-      + "sympathy.",
-    pl: "Wciąż mokra. Dobrze — sucha byłaby tylko kapeluszem.\n\n"
-      + "Kroniki dały temu zamkowi czterysta lat i dziewięciu właścicieli. "
-      + "Rzeczy w butach nie dały nic. Mam dla niej pewne zrozumienie.",
-    es: "Aún húmedo. Bien: seco no es más que un sombrero.\n\n"
-      + "Las crónicas le dieron a ese castillo cuatrocientos años y nueve "
-      + "dueños. A la cosa de las botas no le dieron nada. Le tengo cierta "
-      + "simpatía.",
+    en: "Still wet.\n\n"
+      + "Good.\n\n"
+      + "Had it dried, you would be holding a fistful of red dust and a very "
+      + "bad memory.\n\n"
+      + "Nine men have called themselves lords of Hermitage.\n\n"
+      + "The Redcap is the only one death could not drive out of it.",
+    pl: "Jeszcze mokra.\n\n"
+      + "Dobrze.\n\n"
+      + "Gdyby wyschła, zostałaby ci garść czerwonego pyłu i bardzo złe "
+      + "wspomnienie.\n\n"
+      + "Dziewięciu ludzi nazywało się panami Hermitage.\n\n"
+      + "Redcap jest jedynym, którego śmierć nie zdołała stamtąd wygonić.",
+    es: "Aún húmedo.\n\n"
+      + "Bien.\n\n"
+      + "Si se hubiera secado, tendrías un puñado de polvo rojo y un recuerdo "
+      + "muy malo.\n\n"
+      + "Nueve hombres se han llamado señores de Hermitage.\n\n"
+      + "El Redcap es el único al que la muerte no logró echar de allí.",
   },
   "sage.empty.redcap": {
-    en: "Empty hands. Then I have opened the hole again, and you will take it "
-      + "off him twice.\n\n"
-      + "Do not lose it a second time. I am patient, not endless.",
-    pl: "Puste ręce. Otworzyłem więc dziurę na nowo i zdejmiesz mu ją dwa "
-      + "razy.\n\n"
-      + "Nie zgub jej po raz drugi. Jestem cierpliwy, nie nieskończony.",
-    es: "Manos vacías. He vuelto a abrir el agujero, y se lo quitarás dos "
-      + "veces.\n\n"
-      + "No lo pierdas una segunda vez. Soy paciente, no infinito.",
+    en: "You lost it.\n\n"
+      + "A pity. The Redcap does not care to have things taken from him.\n\n"
+      + "I will open the door once more. You will find him exactly where you "
+      + "left him.\n\n"
+      + "This time, mind the cap.",
+    pl: "Zgubiłeś ją.\n\n"
+      + "Szkoda. Redcap nie lubi, kiedy ktoś zabiera mu rzeczy.\n\n"
+      + "Otworzę wrota jeszcze raz. Znajdziesz go dokładnie tam, gdzie go "
+      + "zostawiłeś.\n\n"
+      + "Tym razem pilnuj czapki.",
+    es: "Lo has perdido.\n\n"
+      + "Lástima. Al Redcap no le gusta que le quiten cosas.\n\n"
+      + "Abriré la puerta otra vez. Lo encontrarás exactamente donde lo "
+      + "dejaste.\n\n"
+      + "Esta vez, cuida el gorro.",
   },
 
   /* --- mission 2: Kárr the Old ------------------------------------------
-   * He is warmer here than he was about the redcap, and only by a degree: the
-   * cap was a curiosity and this is a NAME, which is the thing he actually
-   * collects. Everything he asks for in these six strings is the helm, and
-   * every time he says why, he says the same thing — the man is on it. */
+   * Same shape, colder. He opens on the temperature of the door rather than
+   * on the century, and the beat that carries the whole thing is the one that
+   * is only four words long: "Poza jednym grobem." */
   "sage.offer.draugr": {
-    en: "The second door. An island off the Norwegian coast, about the year "
-      + "one thousand — a green hump of a place with one farm on it and one "
-      + "grave.",
-    pl: "Drugie wrota. Wyspa u wybrzeży Norwegii, około roku tysięcznego — "
-      + "zielony garb z jednym gospodarstwem i jednym grobem.",
-    es: "La segunda puerta. Una isla frente a la costa noruega, hacia el año "
-      + "mil: un promontorio verde con una sola granja y una sola tumba.",
+    en: "The second door is colder.\n\n"
+      + "Haramsey. A small island off the Norwegian coast where, about a "
+      + "thousand years ago, one farm stood.\n\n"
+      + "Nothing stands there now.\n\n"
+      + "Except one grave.",
+    pl: "Drugie wrota są zimniejsze.\n\n"
+      + "Haramsey. Mała wyspa u wybrzeży Norwegii, gdzie około tysiąca lat "
+      + "temu stało jedno gospodarstwo.\n\n"
+      + "Teraz nie stoi tam nic.\n\n"
+      + "Poza jednym grobem.",
+    es: "La segunda puerta es más fría.\n\n"
+      + "Haramsey. Una isla pequeña frente a la costa noruega donde, hace "
+      + "unos mil años, había una sola granja.\n\n"
+      + "Ahora no hay nada.\n\n"
+      + "Salvo una tumba.",
   },
   "sage.accept.draugr": {
-    en: "They buried a man there with his gold and his helm, and he has been "
-      + "getting up ever since. The farm is empty. The grave is not.\n\n"
-      + "Bring me the helm off his head. There is a name cut inside the brow "
-      + "band, and a name is a record, and records are my business.",
-    pl: "Pochowali tam człowieka ze złotem i hełmem, a on od tamtej pory "
-      + "wstaje. Gospodarstwo jest puste. Grób nie.\n\n"
-      + "Przynieś mi hełm z jego głowy. W otoku jest wycięte imię, a imię to "
-      + "zapis, a zapisy to moja robota.",
-    es: "Allí enterraron a un hombre con su oro y su yelmo, y desde entonces "
-      + "se levanta. La granja está vacía. La tumba no.\n\n"
-      + "Tráeme el yelmo de su cabeza. Hay un nombre grabado por dentro de la "
-      + "banda, y un nombre es un registro, y los registros son lo mío.",
+    en: "Kárr owned the island.\n\n"
+      + "When he died they laid gold and an iron helm in the grave with him. "
+      + "A man of his standing should take something with him.\n\n"
+      + "What they did not allow for was that Kárr would want to come back "
+      + "for it.\n\n"
+      + "The first man to reach for the gold woke him.\n\n"
+      + "Nobody has lived on Haramsey since.\n\n"
+      + "Take his helm.\n\n"
+      + "The name cut into that iron may be the only thing left of him.",
+    pl: "Kárr był właścicielem wyspy.\n\n"
+      + "Kiedy umarł, włożyli mu do grobu złoto i żelazny hełm. Człowiek "
+      + "jego pozycji powinien zabrać coś ze sobą.\n\n"
+      + "Nie przewidzieli tylko, że Kárr będzie chciał po to wrócić.\n\n"
+      + "Pierwszy, który sięgnął po złoto, obudził go.\n\n"
+      + "Od tamtej pory nikt nie mieszka na Haramsey.\n\n"
+      + "Weź jego hełm.\n\n"
+      + "Imię wyryte w żelazie może być jedyną rzeczą, jaka po nim została.",
+    es: "Kárr era el dueño de la isla.\n\n"
+      + "Cuando murió le pusieron oro y un yelmo de hierro en la tumba. Un "
+      + "hombre de su rango debe llevarse algo consigo.\n\n"
+      + "Lo que no previeron es que Kárr querría volver a por ello.\n\n"
+      + "El primero que fue a por el oro lo despertó.\n\n"
+      + "Desde entonces nadie vive en Haramsey.\n\n"
+      + "Coge su yelmo.\n\n"
+      + "El nombre grabado en ese hierro puede ser lo único que quede de él.",
   },
   "sage.decline.draugr": {
-    en: "Then he keeps getting up, and I keep not knowing who he was.",
-    pl: "To będzie wstawał dalej, a ja dalej nie będę wiedział, kim był.",
-    es: "Entonces seguirá levantándose, y yo seguiré sin saber quién fue.",
+    en: "I understand.\n\n"
+      + "Then Kárr can go on sitting in his grave, keeping gold he will never "
+      + "spend.\n\n"
+      + "He has plenty of time.",
+    pl: "Rozumiem.\n\n"
+      + "Kárr może więc dalej siedzieć w swoim grobie i pilnować złota, "
+      + "którego nigdy już nie wyda.\n\n"
+      + "Ma dużo czasu.",
+    es: "Entendido.\n\n"
+      + "Entonces Kárr seguirá sentado en su tumba, guardando un oro que "
+      + "nunca gastará.\n\n"
+      + "Tiempo le sobra.",
   },
   "sage.remind.draugr": {
-    en: "The helm, off his head, out of the mound. Through the door, across "
-      + "the moor, down the hole at the far end of it.",
-    pl: "Hełm, z jego głowy, z kurhanu. Przez wrota, przez wrzosowisko, w "
-      + "dziurę na jego drugim końcu.",
-    es: "El yelmo, de su cabeza, fuera del túmulo. Cruza la puerta, cruza el "
-      + "páramo y baja por el agujero del otro extremo.",
+    en: "Kárr is still under the ground.\n\n"
+      + "Still wearing the same helm.\n\n"
+      + "If you want it for me, you will have to persuade him to part with it "
+      + "first.",
+    pl: "Kárr wciąż siedzi pod ziemią.\n\n"
+      + "Wciąż ma na głowie ten sam hełm.\n\n"
+      + "Jeśli chcesz go dla mnie, będziesz musiał najpierw przekonać jego, "
+      + "żeby go oddał.",
+    es: "Kárr sigue bajo tierra.\n\n"
+      + "Sigue llevando el mismo yelmo.\n\n"
+      + "Si lo quieres para mí, primero tendrás que convencerlo a él de que "
+      + "lo suelte.",
   },
   "sage.handIn.draugr": {
-    en: "Kárr. Kárr inn gamli — Kárr the Old.\n\n"
-      + "The saga gives him nine words and then goes back to the man who "
-      + "robbed him. He held that island alone for eighty years and nobody "
-      + "wrote down a thing he said. Now I have his name, and he can stop.",
-    pl: "Kárr. Kárr inn gamli — Kárr Stary.\n\n"
-      + "Saga daje mu dziewięć słów i wraca do człowieka, który go okradł. "
-      + "Trzymał tę wyspę sam przez osiemdziesiąt lat i nikt nie zapisał ani "
-      + "jednego jego słowa. Teraz mam jego imię, a on może przestać.",
-    es: "Kárr. Kárr inn gamli: Kárr el Viejo.\n\n"
-      + "La saga le dedica nueve palabras y vuelve al hombre que lo robó. "
-      + "Guardó esa isla solo durante ochenta años y nadie anotó nada de lo "
-      + "que dijo. Ahora tengo su nombre, y puede parar.",
+    en: "Kárr inn gamli.\n\n"
+      + "Kárr the Old.\n\n"
+      + "Strange. He held that island eighty years, and all that reached me "
+      + "of his whole life was a handful of words.\n\n"
+      + "Now I have his name.\n\n"
+      + "That should be enough to stop him being one more nameless corpse.",
+    pl: "Kárr inn gamli.\n\n"
+      + "Kárr Stary.\n\n"
+      + "Dziwne. Osiemdziesiąt lat trzymał tę wyspę, a z całego jego życia "
+      + "została mi zaledwie garść słów.\n\n"
+      + "Teraz mam jego imię.\n\n"
+      + "To powinno wystarczyć, żeby przestał być tylko kolejnym bezimiennym "
+      + "trupem.",
+    es: "Kárr inn gamli.\n\n"
+      + "Kárr el Viejo.\n\n"
+      + "Extraño. Mantuvo esa isla ochenta años, y de toda su vida no me "
+      + "llegó más que un puñado de palabras.\n\n"
+      + "Ahora tengo su nombre.\n\n"
+      + "Debería bastar para que deje de ser un cadáver más sin nombre.",
   },
   "sage.empty.draugr": {
-    en: "Empty hands, and he has it back on. I have opened the mound again.\n\n"
-      + "He does not tire and he does not wander. He will be exactly where "
-      + "you left him.",
-    pl: "Puste ręce, a on ma go z powrotem na głowie. Otworzyłem kurhan na "
-      + "nowo.\n\n"
-      + "On się nie męczy i nie chodzi po świecie. Będzie dokładnie tam, "
-      + "gdzie go zostawiłeś.",
-    es: "Manos vacías, y él vuelve a llevarlo puesto. He abierto el túmulo de "
-      + "nuevo.\n\n"
-      + "No se cansa y no vaga. Estará exactamente donde lo dejaste.",
+    en: "You lost the helm.\n\n"
+      + "Kárr will have put it back on by now.\n\n"
+      + "Do not worry. I will open the mound again.\n\n"
+      + "Only this time, do not let him keep what you went in for.",
+    pl: "Zgubiłeś hełm.\n\n"
+      + "Kárr pewnie już go sobie założył.\n\n"
+      + "Nie martw się. Otworzę kurhan ponownie.\n\n"
+      + "Tylko tym razem nie pozwól mu odejść z tym, po co tam przyszedłeś.",
+    es: "Has perdido el yelmo.\n\n"
+      + "Kárr ya se lo habrá vuelto a poner.\n\n"
+      + "No te preocupes. Abriré el túmulo de nuevo.\n\n"
+      + "Sólo que esta vez, no dejes que se quede con aquello a lo que "
+      + "fuiste.",
+  },
+
+  /* --- TEMP-ETAP45-TESTMENU ---------------------------------------------
+   * The two strings behind the "start over" answer. They are HERE rather
+   * than in their own bundle so that pulling the feature is one contiguous
+   * cut in each of the three files it touches; grep TEMP-ETAP45-TESTMENU.
+   *
+   * Written in his voice anyway, because a debug button that says "DEBUG:
+   * reset mission" in the middle of a conversation is the kind of thing that
+   * ships by accident, and one written like this at least does not look like
+   * an accident while it is here. */
+  "sage.test.restart": {
+    en: "Start over.",
+    pl: "Zacznij od nowa.",
+    es: "Empezar de nuevo.",
+  },
+  "sage.test.pick": {
+    en: "Which of them would you live through again?",
+    pl: "Którą z nich chcesz przeżyć jeszcze raz?",
+    es: "¿Cuál de ellas quieres vivir otra vez?",
   },
 };
 
@@ -245,89 +363,117 @@ const LORE: Readonly<Record<string, Bundle>> = {
     pl: "Hermitage, Liddesdale — 1320",
     es: "Hermitage, Liddesdale — 1320",
   },
-  /*
-   * REWRITTEN TWICE, and the second rewrite is the one that matters.
+  /* Rewritten in Etap 45, and the three facts are still all in it — wet cap,
+   * iron, speed — but they are no longer a list of a boss's mechanics with
+   * headings on it. The old version opened "Three things, and I will not
+   * repeat them", which is a briefing, and a briefing read before a fight is
+   * read once and skimmed. This one tells it and lets the mechanics fall out
+   * of the telling. Every heading now sits under an image rather than over a
+   * stat: the cap is where he keeps his life, so of course it must stay wet.
    *
-   * Draft one was an encyclopedia entry: castle, date, owner, mob, shrug.
-   * Draft two put the folklore back — the name, the bargain, the lead — and
-   * was still a HISTORY LESSON. Radek walked the mission twice and came out
-   * bored both times, which is the only review that counts.
-   *
-   * The fault was the register, not the facts. A chronicle read on the way
-   * into a fight should tell the player what is about to try to kill them, and
-   * every line of it should be something they will recognise ten minutes later
-   * with a pike in their face. So it is a BRIEFING now: one paragraph of who
-   * he is, then three things, each of which is true in the folklore AND true
-   * in this build.
-   *
-   *   the cap    his life is in it and only while the blood is wet — which is
-   *              why the errand is "bring it wet" and not "bring it"
-   *   the iron   every other thing of that kind flees cold iron; he wears it,
-   *              boots and pike, and you hear him coming
-   *   the speed  the iron does not slow him — `speed: 79`, the fastest thing
-   *              in the bestiary, and a smoke test pins it there
-   *
-   * The hoard closes it, because the hoard is the one-time chest at the bottom
-   * of the echo. Every promise the page makes is one the map keeps.
-   */
+   * The stone circle in the first half is a place the player can now walk
+   * into — Nine Stane Rig is nine stones and a fire on the Liddesdale map,
+   * eight tiles from where the pad puts you down. Reading this and then
+   * standing in it is the whole trick, and it only works while both halves
+   * agree about the number nine. */
   "lore.redcap": {
-    en: "Robin Redcap. He kept a lord once — William de Soulis of Hermitage, "
-      + "who sold what was left of himself for a life no blade could end. His "
-      + "tenants found the hole in it: no rope would bind him, so they used "
-      + "lead, and boiled him in it inside the stone ring above his own "
-      + "castle. The lord has been cold seven hundred years. The thing he "
-      + "bought is still down there.\n\n"
-      + "Three things, and I will not repeat them.\n\n"
-      + "The cap. It is not a hat, it is where he keeps his life, and it holds "
-      + "only while the blood on it is wet. Let it dry and he dies and it goes "
-      + "to dust in your hand. You take it wet or you take nothing.\n\n"
-      + "The iron. Everything else of that kind runs from cold iron. He wears "
-      + "it — boots shod in it, a pike made of it — and you will hear him "
-      + "coming across stone long before the dark gives him up.\n\n"
-      + "The speed. The iron does not slow him. Nothing on two legs has ever "
-      + "outrun a redcap, so do not plan on it: stand, or do not go down at "
-      + "all.\n\n"
-      + "One more thing. He buried what he took from that valley and never "
-      + "came back for it. That part I would like tested.",
-    pl: "Robin Redcap. Miał kiedyś pana — Williama de Soulis z Hermitage, "
-      + "który sprzedał resztki siebie za życie, którego nie kończy żadne "
-      + "ostrze. Jego poddani znaleźli w tym dziurę: skoro sznur go nie "
-      + "wiązał, wzięli ołów i ugotowali go w nim w kamiennym kręgu nad jego "
-      + "własnym zamkiem. Pan stygnie od siedmiuset lat. To, co kupił, wciąż "
-      + "tam siedzi.\n\n"
-      + "Trzy rzeczy, i nie będę ich powtarzał.\n\n"
-      + "Czapka. To nie nakrycie głowy, tylko miejsce, w którym trzyma życie, "
-      + "i trzyma tylko póki krew na niej jest mokra. Pozwolisz jej wyschnąć — "
-      + "on umiera, a ona rozsypuje ci się w dłoni w proch. Bierzesz ją mokrą "
-      + "albo nie bierzesz nic.\n\n"
-      + "Żelazo. Wszystko inne tego rodzaju ucieka od zimnego żelaza. On je "
-      + "nosi — buty nim okute, pika z niego kuta — i usłyszysz go po kamieniu "
-      + "na długo przedtem, nim ciemność ci go odda.\n\n"
-      + "Szybkość. Żelazo go nie spowalnia. Nic na dwóch nogach nigdy nie "
-      + "uciekło redcapowi, więc na to nie licz: stań, albo w ogóle tam nie "
-      + "schodź.\n\n"
-      + "Jeszcze jedno. Zakopał to, co zabrał tamtej dolinie, i nigdy po to "
-      + "nie wrócił. Tę część chciałbym sprawdzić.",
-    es: "Robin Redcap. Tuvo un señor una vez: William de Soulis de Hermitage, "
-      + "que vendió lo que le quedaba de sí mismo por una vida que ninguna "
-      + "hoja pudiera terminar. Sus arrendatarios le encontraron el agujero: "
-      + "si la cuerda no lo ataba, usaron plomo, y lo hirvieron dentro del "
-      + "círculo de piedras que hay sobre su propio castillo. El señor lleva "
-      + "setecientos años frío. Lo que compró sigue ahí abajo.\n\n"
-      + "Tres cosas, y no las repetiré.\n\n"
-      + "El gorro. No es un sombrero, es donde guarda la vida, y sólo aguanta "
-      + "mientras la sangre siga húmeda. Deja que se seque y él muere y el "
-      + "gorro se te deshace en polvo en la mano. Lo tomas húmedo o no tomas "
-      + "nada.\n\n"
-      + "El hierro. Todo lo demás de esa clase huye del hierro frío. Él lo "
-      + "lleva encima — botas herradas con él, una pica hecha de él — y lo "
-      + "oirás venir sobre la piedra mucho antes de que la oscuridad te lo "
-      + "entregue.\n\n"
-      + "La velocidad. El hierro no lo frena. Nada que ande a dos piernas le "
-      + "ha ganado nunca en carrera a un redcap, así que no cuentes con ello: "
-      + "planta cara, o no bajes siquiera.\n\n"
-      + "Una cosa más. Enterró lo que le quitó a aquel valle y nunca volvió a "
-      + "por ello. Esa es la parte que me gustaría comprobar.",
+    en: "William de Soulis did not want to die.\n\n"
+      + "They say he paid for that with more than gold. When death came for "
+      + "him, it found nowhere in him it could take hold.\n\n"
+      + "So his tenants found another way.\n\n"
+      + "They shut him inside a ring of stones and poured hot lead in on "
+      + "top of him.\n\n"
+      + "They did not hurry.\n\n"
+      + "When they were done, the castle went quiet.\n\n"
+      + "William stayed dead.\n\n"
+      + "But something small came out of the place where they boiled him.\n\n"
+      + "The Redcap has walked Hermitage ever since.\n\n"
+      + "Three things you should know.\n\n"
+      + "The cap.\n\n"
+      + "It is not an ornament. The Redcap keeps his life in it.\n\n"
+      + "While the blood on it is wet, he lives.\n\n"
+      + "When it dries, the cap turns to dust and the Redcap falls with it.\n\n"
+      + "So if you take it — do not wait.\n\n"
+      + "The iron.\n\n"
+      + "The Redcap does not mind it the way the rest of his kind do.\n\n"
+      + "He goes shod in iron and carries an iron weapon. You will hear his "
+      + "step before you see him.\n\n"
+      + "Do not try to stop him with it.\n\n"
+      + "The speed.\n\n"
+      + "That is the worst thing he has.\n\n"
+      + "He is small. He is fast. And he does not tire.\n\n"
+      + "You can try to run, but do not count on losing him.\n\n"
+      + "If you hear iron on stone, you have a moment.\n\n"
+      + "One more thing.\n\n"
+      + "Somewhere under the castle the Redcap hid what he took from the "
+      + "people of that valley.\n\n"
+      + "He never went back for it.\n\n"
+      + "That part I would like to see.",
+    pl: "William de Soulis nie chciał umierać.\n\n"
+      + "Podobno zapłacił za to czymś więcej niż złotem. Kiedy przyszła po "
+      + "niego śmierć, nie znalazła w nim miejsca, w którym mogłaby się "
+      + "zatrzymać.\n\n"
+      + "Jego poddani znaleźli więc inne rozwiązanie.\n\n"
+      + "Zamknęli go w kamiennym kręgu i wlali do środka rozgrzany ołów.\n\n"
+      + "Nie spieszyli się.\n\n"
+      + "Kiedy skończyli, zamek ucichł.\n\n"
+      + "William został martwy.\n\n"
+      + "Ale coś małego wyszło z miejsca, w którym go ugotowali.\n\n"
+      + "Od tamtej pory po Hermitage chodzi Redcap.\n\n"
+      + "Trzy rzeczy powinieneś wiedzieć.\n\n"
+      + "Czapka.\n\n"
+      + "Nie jest ozdobą. Redcap trzyma w niej swoje życie.\n\n"
+      + "Dopóki krew na niej jest mokra, on żyje.\n\n"
+      + "Kiedy wyschnie, czapka zamieni się w proch, a Redcap padnie razem "
+      + "z nią.\n\n"
+      + "Więc jeśli ją zdobędziesz — nie czekaj.\n\n"
+      + "Żelazo.\n\n"
+      + "Redcap nie boi się go tak, jak inne istoty z jego rodzaju.\n\n"
+      + "Sam chodzi w żelaznych butach i nosi żelazną broń. Będziesz słyszał "
+      + "jego kroki, zanim go zobaczysz.\n\n"
+      + "Nie próbuj go tym zatrzymać.\n\n"
+      + "Szybkość.\n\n"
+      + "To najgorsza rzecz, jaką ma.\n\n"
+      + "Jest mały. Jest szybki. I nie zna zmęczenia.\n\n"
+      + "Możesz próbować uciekać, ale nie licz na to, że zdołasz go "
+      + "zgubić.\n\n"
+      + "Jeśli usłyszysz żelazo uderzające o kamień, masz tylko chwilę.\n\n"
+      + "I jeszcze jedno.\n\n"
+      + "Gdzieś pod zamkiem Redcap ukrył to, co zabrał ludziom z doliny.\n\n"
+      + "Nigdy po to nie wrócił.\n\n"
+      + "To akurat chciałbym zobaczyć.",
+    es: "William de Soulis no quería morir.\n\n"
+      + "Dicen que lo pagó con algo más que oro. Cuando la muerte vino a por "
+      + "él, no halló en él sitio donde agarrarse.\n\n"
+      + "Así que sus arrendatarios buscaron otra manera.\n\n"
+      + "Lo encerraron en un círculo de piedras y le echaron plomo ardiendo "
+      + "encima.\n\n"
+      + "No tuvieron prisa.\n\n"
+      + "Cuando terminaron, el castillo se quedó en silencio.\n\n"
+      + "William siguió muerto.\n\n"
+      + "Pero algo pequeño salió del sitio donde lo cocieron.\n\n"
+      + "Desde entonces el Redcap recorre Hermitage.\n\n"
+      + "Tres cosas deberías saber.\n\n"
+      + "El gorro.\n\n"
+      + "No es un adorno. El Redcap guarda en él su vida.\n\n"
+      + "Mientras la sangre siga húmeda, él vive.\n\n"
+      + "Cuando se seca, el gorro se vuelve polvo y el Redcap cae con él.\n\n"
+      + "Así que si lo consigues, no esperes.\n\n"
+      + "El hierro.\n\n"
+      + "Al Redcap no le molesta como a los demás de su especie.\n\n"
+      + "Calza hierro y lleva un arma de hierro. Oirás sus pasos antes de "
+      + "verlo.\n\n"
+      + "No intentes frenarlo con eso.\n\n"
+      + "La velocidad.\n\n"
+      + "Es lo peor que tiene.\n\n"
+      + "Es pequeño. Es rápido. Y no se cansa.\n\n"
+      + "Puedes intentar huir, pero no cuentes con despistarlo.\n\n"
+      + "Si oyes hierro contra piedra, te queda un instante.\n\n"
+      + "Y una cosa más.\n\n"
+      + "En algún lugar bajo el castillo el Redcap escondió lo que les quitó "
+      + "a los del valle.\n\n"
+      + "Nunca volvió a por ello.\n\n"
+      + "Eso sí me gustaría verlo.",
   },
 
   "lore.title.draugr": {
@@ -335,106 +481,124 @@ const LORE: Readonly<Record<string, Bundle>> = {
     pl: "Haramsey — ok. 1000",
     es: "Haramsey — h. 1000",
   },
-  /*
-   * WRITTEN TO THE REDCAP'S SHAPE, because that shape was the one that
-   * worked: a paragraph of who he is, then THREE THINGS, each of which is
-   * true in the sagas AND true in this build, and each pinned by a smoke
-   * test against the creature's own stats.
-   *
-   *   the weight  Þórólfr swelled to the size of an ox and could not be
-   *               lifted without levers — `speed: 40`, the slowest thing in
-   *               the game. You can walk away from him. That is the exact
-   *               inverse of the redcap and the page says so out loud,
-   *               because a player who learned "stand or do not go" last
-   *               mission needs telling that this one is different.
-   *   the armour  grave-iron on dead meat swollen tight — `armor: 26`.
-   *               Flat reduction is rolled per hit, so twenty light blows
-   *               are worth less than four heavy ones. This is the fact
-   *               that decides whether the fight is winnable.
-   *   the fire    iron wounds a draugr and does not finish it; burning is
-   *               what the sagas do about one — `resist.fire: 1.5`. PASSIVE.
-   *               There is no pyre and no second phase; the multiplier is
-   *               the whole of it, which is why the page promises a shorter
-   *               fight and not a puzzle.
-   *
-   * The dead close it, because eight ghouls are standing in that room and
-   * the sagas say exactly where a draugr's victims go.
-   */
+  /* Same rebuild. The one line that changed meaning rather than shape is the
+   * weight beat: the draft read "nie popełnia błędu, którego żywy człowiek
+   * nie popełnia od czasu do czasu", which is a double negative that says the
+   * opposite of what it is reaching for. What it wants is that Kárr does not
+   * make the mistakes a living man makes, and that is what it says now. */
   "lore.draugr": {
-    en: "Kárr the Old. He owned Haramsey and he owned everything on it, and "
-      + "when they put him in the mound they put his gold in with him, "
-      + "because that is what you did for a man of his standing. He got up "
-      + "the first time somebody reached for it. Every farmer on the island "
-      + "left except one he happened to like. That was eighty years ago and "
-      + "he is still down there, still holding it.\n\n"
-      + "Three things, and I will not repeat them.\n\n"
-      + "The weight. The dead of that country swell — one of them came out "
-      + "of the ground the size of an ox and took levers to lift. Kárr is "
-      + "slower than anything alive on that island. You CAN walk away from "
-      + "him, which you could not do from the last one. What you cannot do "
-      + "is wait him out. He has had eight hundred years of practice.\n\n"
-      + "The iron. He is wearing his, and there is more of it than there is "
-      + "of you. Light blows will not get through — a rain of them is worth "
-      + "less than four honest ones, so hit him properly or do not hit him.\n\n"
-      + "The fire. Iron opens a draugr and does not finish it; the sagas "
-      + "burn them, and they burn them because nothing else works quickly. "
-      + "If you have fire, bring it. It will not do the job for you. It will "
-      + "make the job shorter.\n\n"
-      + "One more thing. Whatever a draugr kills gets up after it. There is "
-      + "no farm left on Haramsey and there are a great many of them in that "
-      + "room, so do not assume the last thing between you and him is him.",
-    pl: "Kárr Stary. Był właścicielem Haramsey i wszystkiego, co na niej "
-      + "stało, a kiedy kładli go w kurhanie, włożyli mu złoto do środka, bo "
-      + "tak się chowa człowieka jego stanu. Wstał, kiedy pierwszy raz ktoś "
-      + "po nie sięgnął. Wszyscy gospodarze z wyspy uciekli poza jednym, "
-      + "którego akurat lubił. To było osiemdziesiąt lat temu i on wciąż tam "
-      + "siedzi, wciąż tego pilnuje.\n\n"
-      + "Trzy rzeczy, i nie będę ich powtarzał.\n\n"
-      + "Ciężar. Tamtejsi umarli puchną — jeden wyszedł z ziemi wielkości "
-      + "wołu i podnosili go na dźwigniach. Kárr jest wolniejszy od "
-      + "wszystkiego żywego na tej wyspie. MOŻESZ od niego odejść, czego "
-      + "przy poprzednim nie mogłeś. Czego nie możesz, to go przeczekać. Miał "
-      + "na to osiemset lat wprawy.\n\n"
-      + "Żelazo. On swoje ma na sobie i jest go więcej niż ciebie. Lekkie "
-      + "ciosy przez to nie przejdą — grad takich jest wart mniej niż cztery "
-      + "uczciwe, więc bij go porządnie albo nie bij wcale.\n\n"
-      + "Ogień. Żelazo draugra otwiera, ale go nie kończy; sagi je palą, i "
-      + "palą dlatego, że nic innego nie działa szybko. Jeśli masz ogień, "
-      + "weź go. Nie zrobi roboty za ciebie. Skróci ją.\n\n"
-      + "Jeszcze jedno. To, co draugr zabije, wstaje po nim. Na Haramsey nie "
-      + "został ani jeden gospodarz, a w tamtej komorze jest ich sporo — więc "
-      + "nie zakładaj, że ostatnią rzeczą między tobą a nim jest on.",
-    es: "Kárr el Viejo. Era dueño de Haramsey y de todo lo que había en ella, "
-      + "y cuando lo metieron en el túmulo le metieron el oro dentro, porque "
-      + "eso es lo que se hacía con un hombre de su rango. Se levantó la "
-      + "primera vez que alguien fue a por él. Todos los granjeros de la isla "
-      + "se marcharon salvo uno que le caía bien. De eso hace ochenta años y "
-      + "sigue ahí abajo, sigue guardándolo.\n\n"
-      + "Tres cosas, y no las repetiré.\n\n"
-      + "El peso. Los muertos de aquella tierra se hinchan: uno salió del "
-      + "suelo del tamaño de un buey y hubo que levantarlo con palancas. Kárr "
-      + "es más lento que cualquier cosa viva de esa isla. PUEDES alejarte de "
-      + "él, cosa que no podías con el anterior. Lo que no puedes es "
-      + "esperarlo. Lleva ochocientos años practicando.\n\n"
-      + "El hierro. Lo lleva puesto, y hay más de él que de ti. Los golpes "
-      + "flojos no pasarán: una lluvia de ellos vale menos que cuatro "
-      + "honrados, así que pégale en serio o no le pegues.\n\n"
-      + "El fuego. El hierro abre a un draugr y no lo termina; las sagas los "
-      + "queman, y los queman porque nada más funciona deprisa. Si tienes "
-      + "fuego, tráelo. No hará el trabajo por ti. Lo hará más corto.\n\n"
-      + "Una cosa más. Lo que un draugr mata se levanta después de él. En "
-      + "Haramsey no queda ni una granja y en esa cámara hay unos cuantos, "
-      + "así que no des por hecho que lo último entre tú y él es él.",
+    en: "Kárr was a rich man.\n\n"
+      + "Rich enough that when they buried him, they put gold, weapons and "
+      + "the helm he wore in life into the ground with him.\n\n"
+      + "He was to lie there forever.\n\n"
+      + "Until somebody tried to take the gold.\n\n"
+      + "Then Kárr opened his eyes.\n\n"
+      + "The man who went into the mound did not come out.\n\n"
+      + "The rest of Haramsey did it for him.\n\n"
+      + "Eighty years later the island is still empty.\n\n"
+      + "And Kárr is still under the ground.\n\n"
+      + "Three things.\n\n"
+      + "The weight.\n\n"
+      + "The dead of Haramsey do not come back as they were.\n\n"
+      + "They swell under the ground. They grow. They become heavier than "
+      + "bodies have any business being.\n\n"
+      + "Kárr is one of the heaviest.\n\n"
+      + "He is slow, but he does not make the mistakes a living man makes "
+      + "from time to time.\n\n"
+      + "He does not have to catch you.\n\n"
+      + "It is enough that he keeps walking.\n\n"
+      + "The iron.\n\n"
+      + "Kárr wears more of it than you would like to see.\n\n"
+      + "Helm. Mail. Blade.\n\n"
+      + "Weak blows will come off him like rain off a roof.\n\n"
+      + "If you mean to hurt him, strike as though you actually meant to "
+      + "kill him.\n\n"
+      + "The fire.\n\n"
+      + "Iron lets you wound him.\n\n"
+      + "Fire lets you do it faster.\n\n"
+      + "It is not enough to burn him.\n\n"
+      + "It is enough to stop him being so hard to kill.\n\n"
+      + "Take some with you if you can.\n\n"
+      + "One more thing.\n\n"
+      + "Kárr is not the only one down there who can get up.\n\n"
+      + "What a draugr kills does not always stay dead.\n\n"
+      + "If you go into his chamber, do not assume that beating Kárr leaves "
+      + "you alone in it.",
+    pl: "Kárr był bogatym człowiekiem.\n\n"
+      + "Na tyle bogatym, że kiedy go pochowano, złożono z nim złoto, broń i "
+      + "hełm, który nosił za życia.\n\n"
+      + "Miał leżeć tam na zawsze.\n\n"
+      + "Dopóki ktoś nie spróbował zabrać złota.\n\n"
+      + "Wtedy Kárr otworzył oczy.\n\n"
+      + "Człowiek, który wszedł do kurhanu, nie wyszedł.\n\n"
+      + "Reszta mieszkańców Haramsey zrobiła to za niego.\n\n"
+      + "Osiemdziesiąt lat później wyspa wciąż jest pusta.\n\n"
+      + "A Kárr wciąż siedzi pod ziemią.\n\n"
+      + "Trzy rzeczy.\n\n"
+      + "Ciężar.\n\n"
+      + "Umarli z Haramsey nie wracają tacy, jakimi byli.\n\n"
+      + "Pęcznieją pod ziemią. Rosną. Stają się ciężsi, niż powinny być "
+      + "ludzkie ciała.\n\n"
+      + "Kárr jest jednym z najcięższych.\n\n"
+      + "Jest powolny, ale nie popełnia błędów, które żywy człowiek popełnia "
+      + "od czasu do czasu.\n\n"
+      + "Nie musi cię dogonić.\n\n"
+      + "Wystarczy, że będzie szedł.\n\n"
+      + "Żelazo.\n\n"
+      + "Kárr ma go na sobie więcej, niż chciałbyś widzieć.\n\n"
+      + "Hełm. Zbroja. Broń.\n\n"
+      + "Słabe ciosy będą odbijać się od niego jak deszcz od dachu.\n\n"
+      + "Jeśli chcesz go zranić, uderzaj tak, jakbyś naprawdę chciał go "
+      + "zabić.\n\n"
+      + "Ogień.\n\n"
+      + "Żelazo pozwala ci go zranić.\n\n"
+      + "Ogień pozwala zrobić to szybciej.\n\n"
+      + "Nie wystarczy, żeby go spalić.\n\n"
+      + "Wystarczy, żeby przestał być tak trudny do zabicia.\n\n"
+      + "Weź go ze sobą, jeśli możesz.\n\n"
+      + "I jeszcze jedno.\n\n"
+      + "Kárr nie jest jedynym, który może wstać.\n\n"
+      + "To, co zabije draugr, nie zawsze zostaje martwe.\n\n"
+      + "Jeśli wejdziesz do jego komory, nie zakładaj, że kiedy pokonasz "
+      + "Kárra, będziesz już sam.",
+    es: "Kárr era un hombre rico.\n\n"
+      + "Tan rico que cuando lo enterraron metieron con él oro, armas y el "
+      + "yelmo que llevó en vida.\n\n"
+      + "Debía quedarse allí para siempre.\n\n"
+      + "Hasta que alguien intentó llevarse el oro.\n\n"
+      + "Entonces Kárr abrió los ojos.\n\n"
+      + "El hombre que entró en el túmulo no salió.\n\n"
+      + "El resto de Haramsey lo hizo por él.\n\n"
+      + "Ochenta años después la isla sigue vacía.\n\n"
+      + "Y Kárr sigue bajo tierra.\n\n"
+      + "Tres cosas.\n\n"
+      + "El peso.\n\n"
+      + "Los muertos de Haramsey no vuelven como eran.\n\n"
+      + "Se hinchan bajo tierra. Crecen. Pesan más de lo que un cuerpo "
+      + "debería pesar.\n\n"
+      + "Kárr es de los más pesados.\n\n"
+      + "Es lento, pero no comete los errores que un hombre vivo comete de "
+      + "vez en cuando.\n\n"
+      + "No necesita alcanzarte.\n\n"
+      + "Le basta con seguir andando.\n\n"
+      + "El hierro.\n\n"
+      + "Kárr lleva encima más del que querrías ver.\n\n"
+      + "Yelmo. Cota. Arma.\n\n"
+      + "Los golpes flojos le resbalarán como la lluvia por un tejado.\n\n"
+      + "Si quieres herirlo, pega como si de verdad quisieras matarlo.\n\n"
+      + "El fuego.\n\n"
+      + "El hierro te deja herirlo.\n\n"
+      + "El fuego te deja hacerlo más deprisa.\n\n"
+      + "No basta para quemarlo.\n\n"
+      + "Basta para que deje de ser tan difícil de matar.\n\n"
+      + "Llévate algo si puedes.\n\n"
+      + "Y una cosa más.\n\n"
+      + "Kárr no es el único ahí abajo que puede levantarse.\n\n"
+      + "Lo que un draugr mata no siempre sigue muerto.\n\n"
+      + "Si entras en su cámara, no des por hecho que vencer a Kárr te deje "
+      + "solo en ella.",
   },
 };
-
-/* ==========================================================================
- *  THE FEW INTERFACE WORDS THE BOX ITSELF NEEDS
- *
- *  Not a general UI translation — see the note at the top. These four exist
- *  because they are printed INSIDE the dialogue box, an inch under a Polish
- *  paragraph, where an English word would read as a rendering fault.
- * ========================================================================== */
 
 const UI: Readonly<Record<string, Bundle>> = {
   "ui.continue": { en: "continue", pl: "dalej", es: "continuar" },
@@ -520,10 +684,12 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     es: "El gorro de Hermitage",
   },
   "mission.goal.redcap": {
-    en: "Kill the redcap in the echo of Hermitage and carry its cap back to "
+    en: "Beat the Redcap in the Hermitage echo and bring his bloodied cap to "
       + "Chronos.",
-    pl: "Zabij redcapa w echu Hermitage i przynieś jego czapkę Chronosowi.",
-    es: "Mata al redcap en el eco de Hermitage y lleva su gorro a Chronos.",
+    pl: "Pokonaj Redcapa w echu Hermitage i przynieś jego zakrwawioną czapkę "
+      + "Chronosowi.",
+    es: "Vence al Redcap en el eco de Hermitage y lleva su gorro ensangrentado "
+      + "a Chronos.",
   },
   "mission.title.draugr": {
     en: "The Helm in the Howe",
@@ -531,11 +697,11 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     es: "El yelmo en el túmulo",
   },
   "mission.goal.draugr": {
-    en: "Kill Kárr the Old in the howe under Haramsey and carry his helm back "
-      + "to Chronos.",
-    pl: "Zabij Kárra Starego w kurhanie pod Haramsey i przynieś jego hełm "
+    en: "Beat Kárr the Old in the howe under Haramsey and bring his helm to "
+      + "Chronos.",
+    pl: "Pokonaj Kárra Starego w kurhanie pod Haramsey i przynieś jego hełm "
       + "Chronosowi.",
-    es: "Mata a Kárr el Viejo en el túmulo bajo Haramsey y lleva su yelmo a "
+    es: "Vence a Kárr el Viejo en el túmulo bajo Haramsey y lleva su yelmo a "
       + "Chronos.",
   },
   /* The second half of every errand, and the half nothing on screen used to

@@ -3213,6 +3213,44 @@ function acceptMission(m: MissionDef): void {
   sageSays(`sage.accept.${m.id}`);
 }
 
+/**
+ * TEMP-ETAP45-TESTMENU — "Start over", and the picker behind it.
+ *
+ * `/replay draugr` already does this and does it better, but it is a typed
+ * command on a game that is played on a phone half the time, and a command
+ * nobody can reach is a command nobody uses. This is the same call with a
+ * thumb on it.
+ *
+ * IT IS FOR TESTING AND IT COMES OUT. Not because it is dangerous — it runs
+ * `replayMissions`, which hands out nothing, takes the reward back and leaves
+ * every one-time chest opened — but because a player who has just finished
+ * Kárr should not be offered "start over" by the man who paid him for it. The
+ * conversation belongs to the errand, not to the build.
+ *
+ * Grep TEMP-ETAP45-TESTMENU to pull the whole thing: this function, the two
+ * strings in speech.ts and the four call sites below.
+ */
+function restartChoice(): DialogueChoice[] {
+  // Nothing to put back means no button: on a fresh character every stage is
+  // `locked` or `available`, and an answer that opens a menu of things that
+  // have not happened yet is noise.
+  const started = MISSIONS.filter((m) => stageOf(m.id, P.level) !== "locked"
+    && stageOf(m.id, P.level) !== "available");
+  if (!started.length) return [];
+  return [{ key: "sage.test.restart", run: () => sageSays("sage.test.pick", {
+    choices: [
+      // Titles, not ids. `mission.title.*` is what the quest log calls them
+      // and what the chronicle is filed under, so the picker reads as a shelf
+      // of his own errands rather than as a list of internal names.
+      ...started.map((m) => ({
+        key: `mission.title.${m.id}`,
+        run: () => { replayMissions(m); talkToSage(); },
+      })),
+      leaveChoice(),
+    ],
+  }) }];
+}
+
 function talkToSage(): void {
   const cur = currentMission(P.level);
   if (cur) {
@@ -3242,10 +3280,11 @@ function talkToSage(): void {
       relicLost(cur.id, P.level);
       applyMissionPads(game.worlds, P.level);
       saveGame(game);
-      sageSays(`sage.empty.${cur.id}`, { choices: [leaveChoice()] });
+      // TEMP-ETAP45-TESTMENU: `restartChoice()` on each idle branch.
+      sageSays(`sage.empty.${cur.id}`, { choices: [...restartChoice(), leaveChoice()] });
       return;
     }
-    sageSays(`sage.remind.${cur.id}`, { choices: [leaveChoice()] });
+    sageSays(`sage.remind.${cur.id}`, { choices: [...restartChoice(), leaveChoice()] });
     return;
   }
 
@@ -3259,6 +3298,7 @@ function talkToSage(): void {
     sageSays(`sage.offer.${next.id}`, { choices: [
       { key: "sage.choice.what", run: () => acceptMission(next) },
       { key: "sage.choice.notYet", run: () => sageSays(`sage.decline.${next.id}`) },
+      ...restartChoice(),
     ] });
     return;
   }
@@ -3267,8 +3307,8 @@ function talkToSage(): void {
   // player's level. Say which, because "not yet" with no reason was the whole
   // of what he used to say and it told nobody anything.
   const nextLocked = MISSIONS.find((m) => stageOf(m.id, P.level) === "locked");
-  if (nextLocked) sageSays("sage.locked", { choices: [leaveChoice()], vars: { lv: nextLocked.reqLevel } });
-  else sageSays("sage.cold", { choices: [leaveChoice()] });
+  if (nextLocked) sageSays("sage.locked", { choices: [...restartChoice(), leaveChoice()], vars: { lv: nextLocked.reqLevel } });
+  else sageSays("sage.cold", { choices: [...restartChoice(), leaveChoice()] });
 }
 
 /**

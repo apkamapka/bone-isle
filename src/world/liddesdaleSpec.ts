@@ -36,6 +36,24 @@
  * a pile of bones apiece - set away from the posts so a camp never doubles a
  * pull.
  *
+ * NINE STANE RIG, rows 12-18 around column 16. A ring of nine stones with a
+ * fire burning in the middle of it, eight tiles south-east of where the pad
+ * puts you down, which makes it the first thing on the island the player walks
+ * into. It is the place in the chronicle: the stone circle above Hermitage
+ * where de Soulis' own tenants wrapped him in lead and boiled him, and the
+ * real Nine Stane Rig is a real ring on a real ridge above the real castle.
+ *
+ * NINE, exactly, and a smoke test counts them. The number is the name and the
+ * name is the only reason a player who reads the chronicle can stand in this
+ * thing and recognise it — eight stones or ten would be a different place. The
+ * one pre-existing stone that fell on the ring's own radius was cleared for
+ * the same reason, because a tenth stone at ring distance is a tenth stone.
+ *
+ * The fire in the middle is a campfire and campfires seal nothing, so the
+ * player can walk in and stand where they cooked him. That is the whole point
+ * of putting it there rather than a scorch mark: it is still lit, seven
+ * hundred years on, and nobody is tending it.
+ *
  *   P pad back to the cellar (2x2)   D down to the redcap's lair
  *   V dead tree   v felled wood   R stone
  *   N tent   F campfire   Y march-stone   M bog mushrooms   o bones
@@ -81,13 +99,13 @@ export const LIDDESDALE_SPEC: HandmadeSpec = {
     "~~~~~.................................~~~............~~~~~...........~~~~~~~~~~~",
     "~~~~~..........V................M......~..............~~~.......v.....~~~~~~~~~~",
     "~~~~~....................R.Y.................M...d.....~~.............~~~~~~~~~~",
-    "~~~~~......R......R.................M.....V.........M..~~.............~~~~~~~~~~",
-    "~~~~~...................................c..............~~..M..........~~~~~~~~~~",
-    "~~~~~.............Y...V..s.......o...............................V....~~~~~~~~~~",
-    "~~~~~...V..s...............M.N...............Y...R...........V........~~~~~~~~~~",
+    "~~~~~......R....R...................M.....V.........M..~~.............~~~~~~~~~~",
+    "~~~~~.........R...R.....................c..............~~..M..........~~~~~~~~~~",
+    "~~~~~........R.....R..V..s.......o...............................V....~~~~~~~~~~",
+    "~~~~~...V..s....F..........M.N...............Y...R...........V........~~~~~~~~~~",
     "~~~~~..........................F....................R.................~~~~~~~~~~",
-    "~~~~.................V...........N..........................d....v....~~~~~~~~~~",
-    "~~~......v...................Y.......V........V.......................~~~~~~~~~~",
+    "~~~~.........R.....R.V...........N..........................d....v....~~~~~~~~~~",
+    "~~~......v.....R.R...........Y.......V........V.......................~~~~~~~~~~",
     "~~~....M...R.............V.................................v..R......~~~~~~~~~~~",
     "~~~...........V....R.V.............v...........R....................~~~~~~~~~~~~",
     "~~~.......................M............................Y............~~~~~~~~~~~~",

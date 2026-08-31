@@ -12470,22 +12470,39 @@ async function main(): Promise<void> {
     ok(overflow.length === 0,
       `no page overflows its row budget in any language${overflow.length ? " — " + overflow[0] : ""}`);
     ok(empty.length === 0, `no page comes out blank${empty.length ? " — " + empty[0] : ""}`);
-    /* Eight is a ceiling on the WRITING, not on the box: the box would page
-     * through twenty happily, but twenty pages is not a story beat, it is a
-     * wall, and the point of the chronicle is that it is read rather than
-     * skipped. The redcap's history lands at seven against this deliberately
-     * narrow ruler and six on a real screen — and, more to the point, at the
-     * SAME count in all three languages, which is the number that would drift
-     * first if anyone went back to cutting pages by hand. */
-    ok(worstPages <= 8, `the longest text is still readable in one sitting (${worstPages} pages, ${worstKey})`);
+    /* A ceiling on the WRITING, not on the box: the box would page through
+     * forty happily, but forty pages is not a story beat, it is a wall, and
+     * the point of the chronicle is that it is read rather than skipped.
+     *
+     * Fourteen, raised from eight in Etap 45, and the raise is a real cost
+     * paid on purpose. The chronicles are told in beats now — one image to a
+     * line, a blank line between them — and blank lines are rows. Against
+     * this deliberately narrow ruler the draugr's history is thirteen pages
+     * where the old paragraph form was seven; on a phone in portrait it is
+     * eleven or twelve, and on a desktop nine. That is roughly twice the taps
+     * for a page that is meant to be gripping rather than skimmed, which is
+     * the bet: the old one was six pages and Radek came out of it bored
+     * twice. If a later chronicle needs the ceiling raised again, the answer
+     * is to cut the chronicle, not the number. */
+    ok(worstPages <= 14, `the longest text is still readable in one sitting (${worstPages} pages, ${worstKey})`);
     const spread = SP.LANGS.map((lg) => DL.paginate(SP.t("lore.redcap", lg), COL, ROWS42, ruler).length);
     ok(Math.max(...spread) - Math.min(...spread) <= 1,
       `no language pays for the layout more than another (${spread.join("/")} pages)`);
 
-    /* A blank line is the one piece of layout the writer keeps. */
-    const forced = DL.paginate("one\n\ntwo", 40, 4, ruler);
-    ok(forced.length === 2 && forced[0][0] === "one" && forced[1][0] === "two",
-      "a blank line forces a page break, however short the paragraphs");
+    /* A blank line is a BREATH, not a page turn — changed in Etap 45.
+     *
+     * It used to be a turn, and with the old six-long-paragraph chronicles
+     * that read exactly right. The rewrite tells the story three words at a
+     * time with air between, which under the old rule was twenty-eight
+     * paragraphs and twenty-eight pages: the rhythm the writing is built out
+     * of turned into a tap counter. Beats only land against the ones above
+     * them, so they have to share a page. */
+    const breath = DL.paginate("one\n\ntwo", 40, 4, ruler);
+    ok(breath.length === 1 && breath[0].join("|") === "one||two",
+      "short paragraphs share a page, with the blank line kept between them");
+    const spill = DL.paginate("a\n\nb\n\nc\n\nd", 40, 3, ruler);
+    ok(spill.length === 2 && spill[0].join("|") === "a||b" && spill[1].join("|") === "c||d",
+      "…and the page breaks when the rows run out, on a paragraph edge");
     const long42 = DL.paginate("a b c d e f g h i j k l m n o p", 5, 2, ruler);
     ok(long42.length === 3 && long42.every((pg) => pg.length <= 2)
       && long42.flat().join(" ") === "a b c d e f g h i j k l m n o p",
@@ -12607,7 +12624,7 @@ async function main(): Promise<void> {
       "…and the reward speech is not left with the testing reset as its only answer");
     /* Two exits from the chain, and both have to say something useful: the
      * level to come back at, or that there is more coming later. */
-    ok(/sage\.locked", \{ choices: \[leaveChoice\(\)\], vars: \{ lv:/.test(main42),
+    ok(/sage\.locked", \{ choices: \[[^\]]*leaveChoice\(\)\], vars: \{ lv:/.test(main42),
       "too low a level is answered with the level to come back at");
     for (const lg of SP.LANGS) {
       ok(SP.t("sage.locked", lg, { lv: 12 }).includes("12"),
@@ -12623,7 +12640,7 @@ async function main(): Promise<void> {
      * change nothing mechanically. Without them the last page is a wall of
      * text and a blinking arrow, and dismissing it is a guess. */
     ok(/function leaveChoice/.test(main42), "there is a way out of a conversation that is spelled out");
-    ok(SP.t("sage.choice.notYet", "pl") === "Nie teraz.", "…and it says so plainly");
+    ok(SP.t("sage.choice.notYet", "pl") === "Jeszcze nie.", "…and it says so plainly");
     ok((main42.match(/leaveChoice\(\)/g) ?? []).length >= 4,
       "…on every speech that ends one: no relic, reminder, level gate, end of chain");
 
@@ -12658,15 +12675,23 @@ async function main(): Promise<void> {
      * bottom of the echo. */
     for (const lg of SP.LANGS) {
       const tale = SP.t("lore.redcap", lg);
-      ok(tale.includes("Robin Redcap"), `${lg}: the thing in the boots has a name`);
+      ok(tale.includes("Redcap"), `${lg}: the thing in the boots has a name`);
       ok(tale.includes("de Soulis"), `${lg}: …and the lord who bought him is named too`);
-      /* Six paragraphs, and the SAME six in every language: the opening, the
-       * "three things", then one page each for the cap, the iron and the
-       * speed, then the hoard. That shape is the whole difference between the
-       * page that bored Radek twice and this one — it is a briefing, and a
-       * briefing that loses a beat in translation has lost the beat. */
+      /* BEATS, and the same number of them in every language.
+       *
+       * This used to read `beats === 6` and the six were paragraphs: opening,
+       * "three things", one each for the cap, the iron and the speed, then the
+       * hoard. That is a briefing, and it is the shape Radek walked twice and
+       * came out of bored both times. Etap 45 breaks the same facts into
+       * twenty-odd beats — "Czerwonego." is a paragraph now — so the count is
+       * a floor rather than an equality.
+       *
+       * What is still pinned exactly is that the three languages have the SAME
+       * count, because a beat is a unit of timing and a translation that
+       * merges two of them has changed the timing, which is the one thing this
+       * rewrite was for. */
       const beats = tale.split(/\n\s*\n/).length;
-      ok(beats === 6, `${lg}: …told in six beats, not as a lecture (${beats})`);
+      ok(beats >= 18, `${lg}: …told in beats rather than as a lecture (${beats})`);
       ok(tale.length > 800, `${lg}: …and it is a story rather than a caption (${tale.length} chars)`);
     }
     /* The page promises the player three things about the fight. All three
@@ -13906,6 +13931,152 @@ async function main(): Promise<void> {
       "…wrapped rather than ellipsised, because an objective cut at 'carry his helm back to…' is worse than none");
     ok(/const h = 20 \* S \+ errandH \+ chronH/.test(quests44),
       "…and the panel is measured with it, so the block cannot overflow its own frame");
+  }
+
+  console.log("Etap 45 — the sage told in beats, Nine Stane Rig, and the test menu:");
+  {
+    const SP45 = await import("../src/text/speech.ts");
+    const DL45 = await import("../src/ui/dialogue.ts");
+    const M45 = await import("../src/systems/missions.ts");
+    const fs45 = await import("node:fs");
+    const main45 = fs45.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const ruler45 = (str: string): number => str.length;
+
+    /* --- the same timing in three languages --------------------------------
+     * A beat is a unit of timing. Six words on their own line land because of
+     * the silence around them, so a translation that folds two beats into one
+     * sentence has not translated the writing, it has translated the facts and
+     * thrown the writing away. The count is the only mechanical grip there is
+     * on that, and it is a tight one: it caught nothing on the way in, which
+     * is the point of putting it in before it is needed. */
+    for (const key of ["lore.redcap", "lore.draugr", "sage.accept.redcap",
+      "sage.accept.draugr", "sage.offer.redcap", "sage.offer.draugr",
+      "sage.handIn.redcap", "sage.handIn.draugr", "sage.empty.redcap",
+      "sage.empty.draugr", "sage.remind.redcap", "sage.remind.draugr",
+      "sage.decline.redcap", "sage.decline.draugr"]) {
+      const beats = SP45.LANGS.map((lg) => SP45.t(key, lg).split(/\n\s*\n/).length);
+      ok(new Set(beats).size === 1,
+        `${key} keeps its timing in every language (${beats.join("/")})`);
+    }
+
+    /* He stops before the explanation. The offer is an image and a question
+     * mark, and the mechanics arrive later, on the pad, where they are about
+     * to be true — so a player who reads the offer should not yet know what
+     * the thing IS. "Something small came out of the stones. Red." */
+    for (const lg of SP45.LANGS) {
+      const offer = SP45.t("sage.offer.redcap", lg);
+      ok(!/redcap/i.test(offer), `${lg}: the offer does not name the creature it is about`);
+      ok(SP45.t("sage.accept.redcap", lg).length < SP45.t("lore.redcap", lg).length,
+        `${lg}: …and he is shorter than the chronicle, which is where the detail lives`);
+    }
+
+    /* The three promises the redcap's page makes are still in it, in every
+     * language, and still true of the creature — the wording moved, the facts
+     * did not. Pinned per language because these are the sentences most likely
+     * to be lost when somebody rewrites one bundle and not the other three. */
+    for (const lg of SP45.LANGS) {
+      const tale = SP45.t("lore.redcap", lg);
+      for (const [what, re] of [
+        ["the cap dries", /dries|wyschn|seca/i],
+        ["the iron on his feet", /iron|żelaz|hierro/i],
+        ["nothing outruns him", /fast|szybk|rápid/i],
+      ] as const) ok(re.test(tale), `${lg}: the page still says ${what}`);
+      const howe = SP45.t("lore.draugr", lg);
+      for (const [what, re] of [
+        ["fire shortens him", /fire|ogień|ogie|fuego/i],
+        ["weak blows do nothing", /weak|słabe|flojos/i],
+        ["his dead get up too", /get up|wstać|wstan|levantar/i],
+      ] as const) ok(re.test(howe), `${lg}: the howe's page still says ${what}`);
+    }
+
+    /* --- NINE STANE RIG ----------------------------------------------------
+     *
+     * The chronicle now sends the player to a place they can stand in: a ring
+     * of stones above Hermitage where de Soulis' tenants boiled him. The real
+     * one is called Nine Stane Rig and the name IS the number, which is the
+     * only reason a player who read the page can recognise the thing when they
+     * walk into it. Eight stones or ten would be a different ridge.
+     *
+     * Counted off the grid rather than off a constant, because the grid is
+     * what ships and a scatter pass that drops one more stone next to it would
+     * not touch any constant. */
+    const { LIDDESDALE_SPEC } = await import("../src/world/liddesdaleSpec.ts");
+    const grid45 = LIDDESDALE_SPEC.rows;
+    const CY45 = 15, CX45 = 16;
+    ok(grid45[CY45][CX45] === "F",
+      "there is a fire burning in the middle of the ring, seven hundred years on");
+    const ring45: [number, number][] = [];
+    let nearby = 0;
+    for (let y = 0; y < grid45.length; y++) {
+      for (let x = 0; x < grid45[y].length; x++) {
+        if (grid45[y][x] !== "R") continue;
+        const d = Math.hypot(y - CY45, x - CX45);
+        if (d <= 3.7) ring45.push([y, x]);
+        else if (d <= 4.8) nearby++;
+      }
+    }
+    ok(ring45.length === 9, `Nine Stane Rig is nine stones (${ring45.length})`);
+    ok(nearby === 0, "…and nothing else stands close enough to read as a tenth");
+    /* Every stone the same distance out, or it is a scatter rather than a
+     * ring. Two tiles of slack for the rounding a square grid forces on a
+     * circle, and no more. */
+    const radii = ring45.map(([y, x]) => Math.hypot(y - CY45, x - CX45));
+    ok(Math.max(...radii) - Math.min(...radii) <= 1.1,
+      `…and they sit on a circle rather than in a heap (${Math.min(...radii).toFixed(1)}–${Math.max(...radii).toFixed(1)})`);
+    /* Walk-in-able. A campfire seals nothing on any map — that is why the
+     * middle is a fire and not a boulder — so the player can stand on the spot
+     * where they cooked him, which is the entire reason it is there. */
+    const lidSrc = fs45.readFileSync(new URL("../src/world/liddesdaleSpec.ts", import.meta.url), "utf8");
+    ok(!/solids:[^\n]*F/.test(lidSrc) && !/scenery:[^\n]*F:/.test(lidSrc),
+      "the fire is not sealed into the grid as a wall");
+    /* Close enough to the pad to be the first thing on the island, far enough
+     * that the arrival square is not inside it. */
+    let padY = -1, padX = -1;
+    for (let y = 0; y < grid45.length; y++) {
+      const at = grid45[y].indexOf("P");
+      if (at >= 0) { padY = y; padX = at; break; }
+    }
+    const walk = Math.hypot(padY - CY45, padX - CX45);
+    ok(walk > 5 && walk < 14, `the ring is the first thing you walk into, not where you land (${walk.toFixed(1)} tiles)`);
+
+    /* --- TEMP-ETAP45-TESTMENU ----------------------------------------------
+     * Tagged, and the tag is the removal handle. The test is the reminder:
+     * pull the tag and this block goes red until the feature is pulled too,
+     * which is the arrangement TEMP-ETAP42 and TEMP-ETAP43 already use. */
+    ok(/TEMP-ETAP45-TESTMENU/.test(main45), "the start-over menu is tagged for removal");
+    ok(SP45.hasText("sage.test.restart") && SP45.hasText("sage.test.pick"),
+      "…and its two strings are written, so the button is not raw English on a Polish screen");
+    const menu45 = main45.slice(main45.indexOf("function restartChoice"),
+      main45.indexOf("function talkToSage"));
+    ok(/replayMissions\(m\)/.test(menu45),
+      "…and it goes through the same claw-back as `/replay`, so it hands out nothing either");
+    ok(/mission\.title\.\$\{m\.id\}/.test(menu45),
+      "…offering titles rather than internal ids, since a player is reading it");
+    /* Only what has actually been started. On a fresh character the whole
+     * chain is `locked` or `available` and a menu of things that have not
+     * happened is noise on the one conversation that matters most. */
+    ok(/!== "locked"/.test(menu45) && /!== "available"/.test(menu45),
+      "…and it only lists errands there is something to put back");
+    ok(/if \(!started\.length\) return \[\]/.test(menu45),
+      "…so a character who has never taken one is not offered the button at all");
+    /* On the idle branches, and NOT on the hand-in: the one screen where the
+     * only answer should be about the next errand is the one where he has just
+     * paid you for the last. That was TEMP-ETAP42's exact mistake. */
+    ok((main45.match(/restartChoice\(\)/g) ?? []).length >= 5,
+      "…on every speech that ends a conversation");
+    const handIn45 = main45.slice(main45.indexOf("sageSays(`sage.handIn."), main45.indexOf("// He wanted it"));
+    ok(!/restartChoice/.test(handIn45),
+      "…but never as the answer to being thanked, which is where the last one went wrong");
+
+    /* The picker and the menu it hangs off both have to fit the box like any
+     * other speech; a debug string is still a string on a phone. */
+    for (const lg of SP45.LANGS) {
+      for (const key of ["sage.test.restart", "sage.test.pick"]) {
+        const pages = DL45.paginate(SP45.t(key, lg), 40, 6, ruler45);
+        ok(pages.length === 1 && pages[0].length <= 2, `${key}/${lg} fits an answer row`);
+      }
+    }
+    void M45;
   }
 
   console.log("Housekeeping — dead files, dead names, dead comments:");

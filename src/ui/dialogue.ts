@@ -161,12 +161,37 @@ export function paginate(
   text: string, maxW: number, rows: number, measure: (s: string) => number,
 ): string[][] {
   const pages: string[][] = [];
+  let page: string[] = [];
+  const flush = (): void => { if (page.length) { pages.push(page); page = []; } };
   for (const para of text.split(/\n\s*\n/)) {
     const trimmed = para.trim();
     if (!trimmed) continue;
     const lines = wrap(trimmed, maxW, measure);
-    for (let i = 0; i < lines.length; i += rows) pages.push(lines.slice(i, i + rows));
+    /* A blank line is a BREATH, not a page turn.
+     *
+     * It used to be a page turn — every paragraph started a fresh page, and
+     * with the old chronicles, which were six long paragraphs, that read
+     * exactly right. The Etap 45 rewrite tells the same story in beats: one
+     * image to a line, a blank line between them, three words at a time. Under
+     * the old rule that is twenty-eight paragraphs and twenty-eight pages, so
+     * the rhythm the writing was built out of turned into a tap counter, and a
+     * chronicle nobody finishes is a chronicle nobody reads.
+     *
+     * So paragraphs fill a page and the page breaks when the rows run out. The
+     * beats keep their air, and the reader gets four or five of them at a time
+     * — which is what a beat is FOR, since it only lands against the ones
+     * above it. A paragraph too long for what is left starts the next page
+     * rather than being split across the fold, unless it is too long for a
+     * whole page on its own, in which case it is cut by rows as before. */
+    const gap = page.length ? 1 : 0;
+    if (page.length && page.length + gap + lines.length > rows && lines.length <= rows) flush();
+    if (page.length) page.push("");
+    for (const line of lines) {
+      if (page.length >= rows) flush();
+      page.push(line);
+    }
   }
+  flush();
   return pages.length ? pages : [[""]];
 }
 
