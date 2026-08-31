@@ -645,9 +645,9 @@ const PAD: Readonly<Record<string, Bundle>> = {
   /* The boss is down and the relic is in the pack: the echo below is an empty
    * room with a spent chest in it, and the errand finishes at the sage. */
   "pad.relicWaiting": {
-    en: "Nothing left down there. Carry it to Chronos.",
-    pl: "Nic tam już nie ma. Zanieś to Chronosowi.",
-    es: "Ya no queda nada ahí abajo. Llévaselo a Chronos.",
+    en: "He is down. What he had goes to Chronos.",
+    pl: "On padł. To, co miał, idzie do Chronosa.",
+    es: "Ha caído. Lo que tenía va para Chronos.",
   },
   /* Handed in. This is the one the old line lied about hardest. */
   "pad.errandOver": {
@@ -714,6 +714,17 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     en: "It is in your pack. Take it to Chronos, in the cellar.",
     pl: "Masz to w plecaku. Zanieś to Chronosowi, do piwnicy.",
     es: "Lo llevas en la mochila. Llévaselo a Chronos, al sótano.",
+  },
+  /* And the same sentence for the half-minute between the kill and the loot.
+   * Etap 46 put the relic on the body, so `complete` no longer means "it is
+   * in the bag" — for as long as it takes to open the corpse it means "it is
+   * lying on him". A quest log that says "it is in your pack" while the thing
+   * is still on the floor is the kind of small lie that costs a player ten
+   * minutes of searching their inventory. */
+  "mission.onBody": {
+    en: "It is on his body. Loot him, then take it to Chronos.",
+    pl: "Leży na jego ciele. Obszukaj go i zanieś to Chronosowi.",
+    es: "Está en su cuerpo. Regístralo y llévaselo a Chronos.",
   },
 };
 
