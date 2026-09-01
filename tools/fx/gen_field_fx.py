@@ -11,6 +11,7 @@ CraftPix art rather than beside it:
 
     earth   #170c04  #3a2311  #5c3c20  #8a6037  #bd8d55   (+ a warm ember)
     ice     #4d7593  #8fb4cf  #b5d5e8  #ddeef9  #ffffff
+    storm   #2b1c05  #45300a  #ffb416  #ffd84a  #ffe97e  #fff29b  #ffff81
 
 Nothing is filled edge to edge.  A field is drawn OVER the terrain, so the
 ground has to keep showing through — the earth crack is a fissure with lit
@@ -33,6 +34,20 @@ EARTH = {
     "pale": (189, 141, 85, 255),
     "ember": (232, 176, 86, 255),
     "hot": (249, 226, 160, 255),
+}
+
+STORM = {
+    "char": (43, 28, 5, 255),
+    "scorch": (69, 48, 10, 255),
+    "amber": (255, 180, 22, 255),
+    "yellow": (255, 216, 74, 255),
+    "pale": (255, 233, 126, 255),
+    "cream": (255, 242, 155, 255),
+    "core": (255, 255, 129, 255),
+    # the flash. A strike that only lights its own pixels is a drawn line; the
+    # tile has to go bright for two frames or it never reads as lightning.
+    "flash": (255, 216, 74, 122),
+    "flash_dim": (255, 180, 22, 62),
 }
 
 ICE = {
@@ -229,7 +244,154 @@ def build_ice(i):
     return im
 
 
-BUILDERS = {"earth": build_earth, "ice": build_ice}
+# ---------------------------------------------------------------------------
+# storm — a tile that keeps getting struck
+# ---------------------------------------------------------------------------
+
+NODE_X, NODE_Y = 16, 27
+
+def bres(x0, y0, x1, y1):
+    """Integer line — a bolt has to be plotted pixel by pixel, not stroked."""
+    x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
+    dx, dy = abs(x1 - x0), -abs(y1 - y0)
+    sx, sy = (1 if x0 < x1 else -1), (1 if y0 < y1 else -1)
+    err = dx + dy
+    out = []
+    while True:
+        out.append((x0, y0))
+        if x0 == x1 and y0 == y1:
+            break
+        e2 = 2 * err
+        if e2 >= dy:
+            err += dy
+            x0 += sx
+        if e2 <= dx:
+            err += dx
+            y0 += sy
+    return out
+
+
+def bolt(d, path, hot, flank):
+    """
+    Core plus a broken edge. A solid three-pixel band reads as a rope; lighting
+    only every other flank pixel is what gives the strike its crackle.
+    """
+    for i in range(len(path) - 1):
+        for (x, y) in bres(*path[i], *path[i + 1]):
+            if (x + y) % 2 == 0:
+                put(d, x - 1, y, flank)
+            if (x + y) % 2 == 1:
+                put(d, x + 1, y, flank)
+            put(d, x, y, hot)
+
+
+def flash(im, cx, cy, r, colour, keep):
+    """
+    A dithered halo, composited rather than drawn.
+
+    ImageDraw REPLACES pixels, alpha included, so a translucent ellipse painted
+    straight onto the frame erases the scorch underneath it instead of lighting
+    it. And a solid wash reads as a rounded rectangle at 32 px — the checker is
+    what makes it read as light.
+    """
+    gl, gd = frame()
+    for y in range(max(0, cy - r), min(H, cy + r)):
+        for x in range(max(0, cx - r), min(W, cx + r)):
+            dx, dy = (x - cx) / r, (y - cy) / (r * 0.75)
+            dd = dx * dx + dy * dy
+            if dd > 1.0:
+                continue
+            if (x + y) % 2 and dd > 0.35:
+                continue
+            a = int(colour[3] * (1.0 - dd) ** 0.8)
+            if a > 6:
+                gd.point((x, y), fill=(colour[0], colour[1], colour[2], a))
+    im.alpha_composite(gl)
+    return keep
+
+
+# Three strikes a loop, not two: at fifteen frames a second, six frames between
+# bolts is nearly half a second of a tile that is supposed to be lethal doing
+# nothing. Four frames keeps something on screen at all times.
+STORM_PATHS = [
+    [(13, 0), (17, 6), (12, 11), (18, 17), (14, 22), (NODE_X, NODE_Y)],
+    [(20, 0), (16, 5), (21, 10), (15, 15), (19, 21), (NODE_X, NODE_Y)],
+    [(16, 0), (12, 6), (17, 12), (13, 18), (18, 23), (NODE_X, NODE_Y)],
+]
+STORM_BRANCH = [
+    [(12, 11), (7, 15), (6, 19)],
+    [(21, 10), (26, 14), (27, 18)],
+    [(17, 12), (23, 16), (25, 21)],
+]
+
+
+def build_storm(i):
+    im, d = frame()
+
+    # the scorch every strike lands on, and the crackle that keeps it alive
+    # between them — a field is dangerous on all twelve frames or it is not a
+    # field
+    for a in range(0, 360, 20):
+        r = math.radians(a)
+        put(d, NODE_X + math.cos(r) * 5, NODE_Y + 2 + math.sin(r) * 2.2, STORM["scorch"])
+    for a in range(0, 360, 30):
+        r = math.radians(a)
+        put(d, NODE_X + math.cos(r) * 3, NODE_Y + 2 + math.sin(r) * 1.3, STORM["char"])
+
+    for k, start in enumerate((0, 4, 8)):
+        age = (i - start) % FRAMES
+        if age > 3:
+            continue
+        path = STORM_PATHS[k]
+        branch = STORM_BRANCH[k]
+
+        if age == 0:
+            flash(im, NODE_X, NODE_Y - 2, 14, STORM["flash"], None)
+            bolt(d, path, STORM["core"], STORM["cream"])
+            bolt(d, branch, STORM["pale"], STORM["yellow"])
+            for dx in range(-7, 8):
+                put(d, NODE_X + dx, NODE_Y + 1 + (abs(dx) % 2), STORM["core"] if abs(dx) < 3 else STORM["cream"])
+        elif age == 1:
+            flash(im, NODE_X, NODE_Y - 1, 9, STORM["flash_dim"], None)
+            bolt(d, path, STORM["yellow"], STORM["amber"])
+            for a in range(0, 360, 60):
+                r = math.radians(a)
+                put(d, NODE_X + math.cos(r) * 4, NODE_Y + math.sin(r) * 2.4, STORM["core"])
+        elif age == 2:
+            # the bolt is gone and the ground answers it
+            for j in range(len(path) - 2, len(path) - 1):
+                for n, (x, y) in enumerate(bres(*path[j], *path[j + 1])):
+                    if n % 2 == 0:
+                        put(d, x, y, STORM["amber"])
+            for a in range(0, 360, 45):
+                r = math.radians(a)
+                for rr in (2, 4, 6):
+                    put(d, NODE_X + math.cos(r) * rr, NODE_Y + math.sin(r) * rr * 0.55,
+                        STORM["pale"] if rr < 4 else STORM["yellow"])
+        else:
+            for a in range(25, 360, 90):
+                r = math.radians(a)
+                put(d, NODE_X + math.cos(r) * 8, NODE_Y + math.sin(r) * 4 - 1, STORM["amber"])
+
+    # arcs crawling over the scorch, four-frame cycle so the loop closes
+    for k, (ax, ay, ph) in enumerate([(11, 28, 0), (21, 27, 2), (16, 30, 1)]):
+        step = (i + ph) % 4
+        if step > 1:
+            continue
+        put(d, ax + step, ay - step, STORM["pale"] if step else STORM["amber"])
+        if step:
+            put(d, ax + step + 1, ay - 1, STORM["core"])
+
+    # sparks thrown clear of the tile
+    for k, (sx, ph) in enumerate([(9, 1), (24, 3), (14, 9)]):
+        age = (i - ph) % FRAMES
+        if age > 3:
+            continue
+        put(d, sx + age, 23 - age * 2, STORM["core"] if age < 2 else STORM["yellow"])
+    return im
+
+
+BUILDERS = {"earth": build_earth, "ice": build_ice, "storm": build_storm}
 
 if __name__ == "__main__":
     root = "public"

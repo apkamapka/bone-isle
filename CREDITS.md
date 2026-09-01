@@ -1262,11 +1262,11 @@ them at 64 x 64 at source would be sharper. Each was then trimmed and seated on
 the anchor line so the box sits on the ground rather than hovering over its own
 shadow.
 
-## One-tile fields — `public/fx-earth-1-field.png`, `public/fx-ice-1-field.png`
+## One-tile fields — `public/fx-earth-1-field.png`, `public/fx-ice-1-field.png`, `public/fx-storm-1-field.png`
 
 Source: **generated**, by `tools/fx/gen_field_fx.py` in this repository.
 
-**These two are not CraftPix.** They match the `fx-*.png` glob and they sit
+**These three are not CraftPix.** They match the `fx-*.png` glob and they sit
 next to the bought art, but nothing in them came from anyone else, so the
 public-repository warning in the section below does not reach them. Same as the
 attunement circles: no attribution owed, no ShareAlike, no DRM clause, and
@@ -1277,6 +1277,7 @@ already here, so they read as part of the same set rather than as a visitor:
 
     earth   #170c04  #3a2311  #5c3c20  #8a6037  #bd8d55, plus a warm ember
     ice     #4d7593  #8fb4cf  #b5d5e8  #ddeef9  #ffffff
+    storm   #2b1c05  #45300a  #ffb416  #ffd84a  #ffe97e  #fff29b  #ffff81
 
 Twelve frames each, the same count as `fx-fire-1-field.png`.
 
@@ -1294,11 +1295,27 @@ lit lip broken along its length and embers breathing inside the widest part —
 the ground it splits has to keep showing through, or a field reads as a hole
 cut in the terrain.
 
+**Storm** strikes three times a loop rather than twice. At fifteen frames a
+second, six frames between bolts is nearly half a second of a tile that is
+supposed to be lethal standing there doing nothing; four frames keeps a bolt,
+its afterburst or its ground discharge on screen at every moment. Three
+different paths, so no strike is the previous one played again. The scorch and
+its crawling arcs are drawn on all twelve frames — what makes a field read as a
+field is that it is never off.
+
+Two details that are easy to get wrong at this size. The flash is a **dithered
+halo composited onto the frame**, not an ellipse drawn into it: `ImageDraw`
+replaces pixels including their alpha, so a translucent ellipse painted
+straight on erases the scorch underneath instead of lighting it, and a solid
+wash reads as a rounded rectangle rather than as light. And the bolt lights
+only every other flank pixel — a solid three-pixel band reads as a rope, and
+the broken edge is the whole crackle.
+
 **Ice** is a slick with the surface breaking in it. Its body is deliberately
 semi-transparent rather than dithered: at this size a checkerboard wash reads
 as a mesh, and alpha is what makes water look like water lying on grass.
 
-Both measure a vertical weight near 0.78, so `weightY` calls them grounded and
+All three measure a vertical weight above 0.6 — 0.78, 0.79 and 0.67 — so `weightY` calls them grounded and
 the renderer stands them on the tile's bottom edge — the same treatment the
 fire field gets, and the reason all three line up on the same floor.
 
