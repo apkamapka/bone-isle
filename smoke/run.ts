@@ -14642,11 +14642,15 @@ async function main(): Promise<void> {
      * coloured floor. Drawn from the same `fx-<el>-1-field` strips the spells
      * use, which is why every element needs one. */
     const amb = sanc.ambientFx;
-    ok(amb.length >= 40, `the wedges carry ambient element effects (${amb.length})`);
+    ok(amb.length === 79, `the wedges carry 79 ambient element effects (${amb.length})`);
     const perEl = new Map<string, number>();
     for (const n of amb) perEl.set(n.el, (perEl.get(n.el) ?? 0) + 1);
+    /* Round robin across the wedges, not one wedge after another: filling them
+     * in sequence starved whichever went last, nine against earth's twenty,
+     * because by then its neighbours had eaten the spacing along both borders.
+     * Fifteen is the floor now and sixteen the ceiling. */
     for (const e of ELS47) {
-      ok((perEl.get(e) ?? 0) >= 8, `the ${e} wedge carries ${perEl.get(e) ?? 0} of them`);
+      ok((perEl.get(e) ?? 0) >= 15, `the ${e} wedge carries ${perEl.get(e) ?? 0} of them`);
       ok(nfs47.existsSync(new URL(`../public/fx-${e}-1-field.png`, import.meta.url)),
         `…and ${e} has the field strip they are drawn from`);
     }
@@ -14661,6 +14665,32 @@ async function main(): Promise<void> {
     }
     ok(amb.every((n) => !(n.tx >= 14 && n.tx <= 17 && n.ty >= 14 && n.ty <= 17)),
       "…and none of it stands on the dais");
+    /* --- NOTHING SITS ON THE RIM ---
+     * The artwork draws a shade wider than its square and its glow wider
+     * again, so an effect on an edge square hangs half over the black rock and
+     * reads as a rendering fault rather than as decoration. Every one of them
+     * has all EIGHT neighbours on the floor. */
+    const onRim = amb.filter((n) => {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const x = n.tx + dx, y = n.ty + dy;
+          if (x < 0 || y < 0 || x >= sanc.w || y >= sanc.h) return true;
+          if (sanc.solid[y][x]) return true;
+        }
+      }
+      return false;
+    });
+    ok(onRim.length === 0,
+      `no ambient effect touches the rim (${onRim.map((n) => `${n.tx},${n.ty}`).join(" ") || "none"})`);
+    /* …and none of them doubles up with another. Two on touching squares blend
+     * into one blob and stop reading as separate things. */
+    let ambTouch = 0;
+    for (let i = 0; i < amb.length; i++) {
+      for (let j = i + 1; j < amb.length; j++) {
+        if (Math.abs(amb[i].tx - amb[j].tx) + Math.abs(amb[i].ty - amb[j].ty) < 2) ambTouch++;
+      }
+    }
+    ok(ambTouch === 0, `no two ambient effects are orthogonally adjacent (${ambTouch})`);
     /* Every wedge's decoration is its OWN element. A fire flickering on the
      * water wedge would be telling the player the wrong thing about a choice
      * they cannot take back. */
