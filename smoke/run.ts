@@ -14597,13 +14597,85 @@ async function main(): Promise<void> {
           `${k} exists in ${lg}`);
       }
     }
-    /* He never names an element as the right one, in any language. The choice
-     * is permanent and it is the player's; a sage who nudged would be making
-     * it for them. */
+    /* He never singles an element out, in any language. The choice is
+     * permanent and it is the player's; a sage who nudged would be making it
+     * for them.
+     *
+     * WHAT THIS REPLACES, because the old test both failed for the wrong
+     * reason and passed for one. It asked whether the word "fire" appeared at
+     * all — so the moment the offer grew a MENU ("Fire. Water. Storm. Earth.
+     * Wind.") it went red, though a menu is the exact opposite of a nudge. And
+     * it was written `\b(fire|ogień|fuego)\b`, where JavaScript's `\b` is
+     * ASCII: there is no word boundary after `ń`, so the Polish half of it had
+     * never matched anything in its life. It was one language pretending to be
+     * three.
+     *
+     * The rule that actually holds is ALL FIVE OR NONE. Five is a menu. Zero
+     * is silence. Anything between is Chronos putting his thumb on it. */
+    const ELWORDS: Readonly<Record<string, readonly string[]>> = {
+      en: ["fire", "water", "storm", "earth", "wind"],
+      pl: ["ogień", "woda", "burza", "ziemia", "wiatr"],
+      es: ["fuego", "agua", "tormenta", "tierra", "viento"],
+    };
+    /* The stair names COLOURS, in the same slots. This is the shape the Etap
+     * 48 rewrite chose and it is worth being exact about what it costs: the
+     * old stair line was a lookup table — "yellow is storm, the pale one is
+     * wind" — and the new one gives two of the five a temperament instead of a
+     * name ("yellow has no patience for quiet", "the pale one is always trying
+     * to leave"). Storm and Wind are never NAMED down there in any language.
+     *
+     * So the floor is decoded by ORDER and by nothing else: the offer lists
+     * the five elements, the stair lists the five colours, and slot n of one
+     * is slot n of the other. That is a real and deliberate piece of writing,
+     * and it is also one reordered sentence away from a player permanently
+     * taking the wrong element on a one-shot errand. Hence the test. */
+    const COLWORDS: Readonly<Record<string, readonly string[]>> = {
+      en: ["red", "blue", "yellow", "brown", "pale"],
+      pl: ["czerwień", "błękit", "żółć", "brąz", "blady"],
+      es: ["rojo", "azul", "amarillo", "marrón", "pálido"],
+    };
+    const inOrder = (hay: string, needles: readonly string[]): number[] =>
+      needles.map((w) => hay.indexOf(w));
     for (const lg of SP47.LANGS) {
-      const offer = SP47.t("sage.offer.calanais", lg);
-      ok(!/\b(fire|ogień|ogien|fuego)\b/i.test(offer),
-        `the offer recommends no element (${lg})`);
+      const offer = SP47.t("sage.offer.calanais", lg).toLowerCase();
+      const elAt = inOrder(offer, ELWORDS[lg] ?? []);
+      ok(elAt.every((i) => i >= 0),
+        `the offer names all five elements (${lg}: ${elAt.filter((i) => i < 0).length} missing)`);
+      ok(elAt.every((i, n) => n === 0 || i > elAt[n - 1]),
+        `…in the canonical order fire · water · storm · earth · wind (${lg})`);
+
+      const descend = SP47.t("sage.descend.calanais", lg).toLowerCase();
+      const colAt = inOrder(descend, COLWORDS[lg] ?? []);
+      ok(colAt.every((i) => i >= 0),
+        `the stair names all five colours (${lg}: ${colAt.filter((i) => i < 0).length} missing)`);
+      ok(colAt.every((i, n) => n === 0 || i > colAt[n - 1]),
+        `…in the SAME slot order, which is the only key to the floor (${lg})`);
+    }
+
+    /* --- THE THREE LANGUAGES KEEP THE SAME BEAT ---------------------------
+     * The house rule for in-game text is that Polish is the original and the
+     * other two are REBUILT to it — same number of beats, blank line in the
+     * same places, one image to a line — rather than translated off it. That
+     * rule has been followed by hand since Etap 45 and pinned by nothing, so
+     * the first speech written straight into English on a tired evening would
+     * have broken it silently: the paginator lays beats out by row, so a
+     * Spanish speech carrying six beats where Polish carries nine reads as a
+     * different scene rather than as the same one in another language.
+     *
+     * Over EVERY mission, not only this one, so the eleventh errand is held to
+     * it the day its strings land. */
+    for (const m of M47.MISSIONS) {
+      const speechKeys = [...M47.missionKeys(m.id), "sage.descend", "sage.attuned"]
+        .filter((k) => k.startsWith("sage.") || k === `mission.goal.${m.id}`)
+        .map((k) => (k.includes(".") && !k.endsWith(m.id) ? `${k}.${m.id}` : k))
+        .filter((k) => SP47.hasText(k));
+      for (const k of speechKeys) {
+        const beats = SP47.LANGS.map((lg) =>
+          SP47.t(k, lg).split(/\n\s*\n/).filter((s) => s.trim().length > 0).length);
+        ok(new Set(beats).size === 1,
+          `${k}: all three languages carry the same beats (${SP47.LANGS
+            .map((lg, i) => `${lg}:${beats[i]}`).join(" ")})`);
+      }
     }
 
     /* --- THE CIRCLE ANIMATION IS A CAMPFIRE THAT DOES NOT BITE --- */

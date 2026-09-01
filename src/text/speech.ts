@@ -693,144 +693,206 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     es: "Los Círculos de Calanais",
   },
   "mission.goal.calanais": {
-    en: "Cross Calanais, go down into the sanctum and step into one of the five "
-      + "circles. Then tell Chronos which.",
-    pl: "Przejdź Calanais, zejdź do sanktuarium i wejdź w jeden z pięciu kręgów. "
-      + "Potem powiedz Chronosowi, w który.",
-    es: "Cruza Calanais, baja al santuario y entra en uno de los cinco círculos. "
-      + "Luego dile a Chronos en cuál.",
+    en: "Cross Calanais, go down into the sanctum and choose one of the five "
+      + "element circles. Then return to Chronos.",
+    pl: "Przejdź przez Calanais, zejdź do sanktuarium i wybierz jeden z pięciu "
+      + "kręgów żywiołów. Następnie wróć do Chronosa.",
+    es: "Cruza Calanais, baja al santuario y elige uno de los cinco círculos "
+      + "elementales. Luego vuelve con Chronos.",
   },
   "sage.offer.calanais": {
-    en: "Before we begin, a gift.\n\n"
-      + "You fight with iron. Iron meets armour, and armour is what everything "
-      + "worth killing is wearing.\n\n"
-      + "There is another way to hit a thing.\n\n"
-      + "On Calanais, under the temple, five circles are still burning. Each "
-      + "holds one element.\n\n"
-      + "Walk into one and it is yours. One. For good.\n\n"
-      + "Go and choose.",
-    pl: "Zanim zaczniemy — prezent.\n\n"
-      + "Bijesz żelazem. Żelazo trafia w pancerz, a pancerz nosi wszystko, co "
-      + "warto zabić.\n\n"
-      + "Jest inny sposób, żeby uderzyć.\n\n"
-      + "Na Calanais, pod świątynią, wciąż płonie pięć kręgów. W każdym jeden "
-      + "żywioł.\n\n"
-      + "Wejdziesz w jeden i jest twój. Jeden. Na zawsze.\n\n"
-      + "Idź i wybierz.",
-    es: "Antes de empezar, un regalo.\n\n"
-      + "Peleas con hierro. El hierro choca con la armadura, y armadura lleva "
-      + "todo lo que merece la pena matar.\n\n"
-      + "Hay otra forma de golpear una cosa.\n\n"
-      + "En Calanais, bajo el templo, cinco círculos siguen ardiendo. Cada uno "
-      + "guarda un elemento.\n\n"
-      + "Entra en uno y es tuyo. Uno. Para siempre.\n\n"
-      + "Ve y elige.",
+    en: "Before we begin in earnest, I have something for you that money does "
+      + "not buy.\n\n"
+      + "On Calanais stand stones older than the kingdoms that tried to name "
+      + "them. Beneath them somebody built a room where five fires are still "
+      + "burning.\n\n"
+      + "Fire. Water. Storm. Earth. Wind.\n\n"
+      + "You may step into one only.\n\n"
+      + "When you choose, the rest go out.\n\n"
+      + "So do not choose the one that looks best.\n\n"
+      + "Choose the one you want to live with.",
+    pl: "Zanim zaczniemy na dobre, mam dla ciebie coś, czego nie da się "
+      + "kupić.\n\n"
+      + "Na wyspie Calanais stoją kamienie starsze od królestw, które próbowały "
+      + "je nazwać. Pod nimi zbudowano miejsce, w którym wciąż płonie pięć "
+      + "ognisk.\n\n"
+      + "Ogień. Woda. Burza. Ziemia. Wiatr.\n\n"
+      + "Możesz wejść tylko w jedno.\n\n"
+      + "Kiedy wybierzesz, pozostałe zgasną.\n\n"
+      + "Więc nie wybieraj tego, który wygląda najładniej.\n\n"
+      + "Wybierz ten, z którym chcesz zostać.",
+    es: "Antes de empezar de verdad, tengo algo para ti que no se compra.\n\n"
+      + "En Calanais hay piedras más viejas que los reinos que intentaron "
+      + "nombrarlas. Debajo levantaron una sala donde siguen ardiendo cinco "
+      + "fuegos.\n\n"
+      + "Fuego. Agua. Tormenta. Tierra. Viento.\n\n"
+      + "Sólo puedes entrar en uno.\n\n"
+      + "Cuando elijas, los demás se apagarán.\n\n"
+      + "Así que no elijas el que mejor se vea.\n\n"
+      + "Elige aquel con el que quieras quedarte.",
   },
   "sage.accept.calanais": {
-    en: "The rift is open.\n\n"
-      + "The island is not empty — it has not been for a long time. Whoever "
-      + "went looking for the temple before you is still on it.\n\n"
-      + "The bridge is narrow. Cross it once and think about it first.",
-    pl: "Szczelina otwarta.\n\n"
-      + "Wyspa nie jest pusta — nie jest od dawna. Kto szukał świątyni przed "
-      + "tobą, wciąż tam chodzi.\n\n"
-      + "Most jest wąski. Przejdź go raz, a najpierw pomyśl.",
-    es: "La grieta está abierta.\n\n"
-      + "La isla no está vacía — hace mucho que no lo está. Quien buscó el "
-      + "templo antes que tú sigue allí.\n\n"
-      + "El puente es estrecho. Crúzalo una vez, y piénsalo antes.",
+    en: "The gate is open.\n\n"
+      + "Calanais is not as empty today as it once was.\n\n"
+      + "Somebody went in before you.\n\n"
+      + "And plainly never found the way back.\n\n"
+      + "Cross the bridge. Then go down beneath the temple.\n\n"
+      + "You will see five circles.\n\n"
+      + "The rest you will work out yourself.",
+    pl: "Wrota są otwarte.\n\n"
+      + "Calanais nie jest dziś tak puste, jak było kiedyś.\n\n"
+      + "Ktoś tam wszedł przed tobą.\n\n"
+      + "I najwyraźniej nigdy nie znalazł drogi powrotnej.\n\n"
+      + "Przejdź przez most. Potem zejdź pod świątynię.\n\n"
+      + "Zobaczysz pięć kręgów.\n\n"
+      + "Resztę zrozumiesz sam.",
+    es: "La puerta está abierta.\n\n"
+      + "Calanais no está hoy tan vacío como estuvo.\n\n"
+      + "Alguien entró antes que tú.\n\n"
+      + "Y por lo visto nunca encontró la vuelta.\n\n"
+      + "Cruza el puente. Luego baja bajo el templo.\n\n"
+      + "Verás cinco círculos.\n\n"
+      + "El resto lo entenderás tú solo.",
   },
   "sage.decline.calanais": {
-    en: "As you like.\n\n"
-      + "The circles have burned five thousand years without you.\n\n"
-      + "They will manage a while longer.",
-    pl: "Jak chcesz.\n\n"
-      + "Kręgi płoną pięć tysięcy lat bez ciebie.\n\n"
-      + "Wytrzymają jeszcze chwilę.",
-    es: "Como quieras.\n\n"
-      + "Los círculos llevan cinco mil años ardiendo sin ti.\n\n"
-      + "Aguantarán un rato más.",
+    en: "Very well.\n\n"
+      + "Not every gift has to be taken.\n\n"
+      + "The circles burned long before us.\n\n"
+      + "If you change your mind, they will be there.",
+    pl: "Dobrze.\n\n"
+      + "Nie każdy prezent trzeba przyjąć.\n\n"
+      + "Kręgi płonęły na długo przed nami.\n\n"
+      + "Jeśli zmienisz zdanie, będą tam.",
+    es: "Está bien.\n\n"
+      + "No todo regalo hay que aceptarlo.\n\n"
+      + "Los círculos ardían mucho antes que nosotros.\n\n"
+      + "Si cambias de idea, allí estarán.",
   },
   "sage.remind.calanais": {
-    en: "Calanais. The temple in the middle, the stair under it.\n\n"
-      + "Five circles, five colours. You take one.\n\n"
-      + "Do not stand there all day — but do not hurry either. It does not "
-      + "come round again.",
-    pl: "Calanais. Świątynia pośrodku, schody pod nią.\n\n"
-      + "Pięć kręgów, pięć kolorów. Bierzesz jeden.\n\n"
-      + "Nie stój tam cały dzień — ale i się nie spiesz. To się nie powtórzy.",
-    es: "Calanais. El templo en medio, la escalera debajo.\n\n"
-      + "Cinco círculos, cinco colores. Tomas uno.\n\n"
-      + "No te quedes ahí todo el día — pero tampoco corras. No se repite.",
+    en: "Calanais.\n\n"
+      + "Go down under the stones and find five circles.\n\n"
+      + "One will be yours.\n\n"
+      + "Do not ask me which. If I wanted to choose for you, I would not have "
+      + "given you a choice.",
+    pl: "Calanais.\n\n"
+      + "Zejdź pod kamienie i znajdź pięć kręgów.\n\n"
+      + "Jeden będzie twój.\n\n"
+      + "Nie pytaj mnie, który wybrać. Gdybym chciał wybrać za ciebie, nie "
+      + "dałbym ci wyboru.",
+    es: "Calanais.\n\n"
+      + "Baja bajo las piedras y encuentra cinco círculos.\n\n"
+      + "Uno será tuyo.\n\n"
+      + "No me preguntes cuál. Si quisiera elegir por ti, no te habría dado a "
+      + "elegir.",
   },
   /* Said on the stair, on the cellar side of the jump, every descent. He names
-   * the five and refuses to recommend one. The last line is the only warning
-   * the player gets that stepping in is the commit. */
+   * the five and refuses to recommend one — the five are a MENU, and the line
+   * that gives each a temperament is the closest he comes to a hint. */
   "sage.descend.calanais": {
-    en: "Five wedges. Five colours. Look at the floor and you will know which "
-      + "is which.\n\n"
-      + "Red is fire. Blue is water. Yellow is the storm. Brown is earth. The "
-      + "pale one is wind.\n\n"
-      + "Walk the whole room first. All of it.\n\n"
-      + "Then step into one — and be certain, because the other four go out "
-      + "the moment you do.",
-    pl: "Pięć wycinków. Pięć kolorów. Spójrz na podłogę, a poznasz, który "
-      + "jest który.\n\n"
-      + "Czerwień to ogień. Błękit to woda. Żółć to burza. Brąz to ziemia. "
-      + "Ten blady to wiatr.\n\n"
-      + "Najpierw obejdź całą salę. Całą.\n\n"
-      + "Potem wejdź w jeden — i bądź pewien, bo pozostałe cztery zgasną w tej "
-      + "samej chwili.",
-    es: "Cinco sectores. Cinco colores. Mira el suelo y sabrás cuál es cuál.\n\n"
-      + "El rojo es fuego. El azul, agua. El amarillo, tormenta. El marrón, "
-      + "tierra. El pálido es viento.\n\n"
-      + "Recorre la sala entera primero. Entera.\n\n"
-      + "Luego entra en uno — y ten la certeza, porque los otros cuatro se "
-      + "apagan en ese mismo instante.",
+    en: "You can see them now.\n\n"
+      + "Do not go near yet.\n\n"
+      + "Walk around them.\n\n"
+      + "Look at what is burning.\n\n"
+      + "Red remembers fire. Blue — water. Yellow has no patience for quiet. "
+      + "Brown holds to the ground. The pale one... is always trying to "
+      + "leave.\n\n"
+      + "Five elements.\n\n"
+      + "One place for you.\n\n"
+      + "When you step in, the other four go out.\n\n"
+      + "And they will never light for you again.",
+    pl: "Już je widzisz.\n\n"
+      + "Nie podchodź jeszcze.\n\n"
+      + "Obejdź je.\n\n"
+      + "Przyjrzyj się temu, co płonie.\n\n"
+      + "Czerwień pamięta ogień. Błękit — wodę. Żółć nie lubi ciszy. Brąz "
+      + "trzyma się ziemi. Ten blady... zawsze próbuje uciec.\n\n"
+      + "Pięć żywiołów.\n\n"
+      + "Jedno miejsce dla ciebie.\n\n"
+      + "Kiedy wejdziesz, pozostałe cztery zgasną.\n\n"
+      + "I nie zapalą się już dla ciebie nigdy.",
+    es: "Ya los ves.\n\n"
+      + "No te acerques todavía.\n\n"
+      + "Rodéalos.\n\n"
+      + "Mira lo que arde.\n\n"
+      + "El rojo recuerda el fuego. El azul — el agua. El amarillo no soporta "
+      + "el silencio. El marrón se aferra a la tierra. El pálido... siempre "
+      + "intenta irse.\n\n"
+      + "Cinco elementos.\n\n"
+      + "Un sitio para ti.\n\n"
+      + "Cuando entres, los otros cuatro se apagarán.\n\n"
+      + "Y ya nunca volverán a encenderse para ti.",
   },
   /* Said standing in the circle, the instant it takes. Not a reward speech —
-   * the reward speech is at his table. This is the door closing. */
+   * the reward speech is at his table. This is the door closing.
+   *
+   * It opens on a beat of nothing but an ellipsis, which is deliberate and is
+   * why it is three dots rather than the one-character "…": the box is drawn
+   * in Courier New, so a single glyph would occupy one narrow cell and read as
+   * a typo. Three cells read as a pause. */
   "sage.attuned.calanais": {
-    en: "It is in you.\n\n"
-      + "The other four are dark. They will not light again for you.\n\n"
-      + "Come back and tell me what you took.",
-    pl: "Jest w tobie.\n\n"
-      + "Pozostałe cztery zgasły. Dla ciebie już się nie zapalą.\n\n"
-      + "Wróć i powiedz mi, co wziąłeś.",
-    es: "Ya está en ti.\n\n"
-      + "Los otros cuatro están apagados. Para ti no volverán a encenderse.\n\n"
-      + "Vuelve y dime qué tomaste.",
+    en: "...\n\n"
+      + "Do you feel it?\n\n"
+      + "Good.\n\n"
+      + "Now you know why I made you choose alone.\n\n"
+      + "Come back to me.\n\n"
+      + "I want to see what you have done with what I gave you.",
+    pl: "...\n\n"
+      + "Czujesz to?\n\n"
+      + "Dobrze.\n\n"
+      + "Teraz już wiesz, dlaczego kazałem ci wybrać samemu.\n\n"
+      + "Wróć do mnie.\n\n"
+      + "Chcę zobaczyć, co zrobiłeś z tym, co ci dałem.",
+    es: "...\n\n"
+      + "¿Lo sientes?\n\n"
+      + "Bien.\n\n"
+      + "Ahora sabes por qué te hice elegir solo.\n\n"
+      + "Vuelve a mí.\n\n"
+      + "Quiero ver qué has hecho con lo que te di.",
   },
   "sage.handIn.calanais": {
-    en: "I can see it from here.\n\n"
-      + "Now build the Alchemy Tower on your island, if it is not standing "
-      + "yet. Without it this is a promise and nothing more.\n\n"
-      + "With it, your element goes into arrowheads and shards, and those "
-      + "meet resistance — never armour.\n\n"
-      + "Now. The Borders. There is something there I want.",
-    pl: "Widzę to stąd.\n\n"
-      + "Teraz postaw na swojej wyspie Wieżę Alchemiczną, jeśli jeszcze nie "
-      + "stoi. Bez niej to tylko obietnica.\n\n"
-      + "Z nią twój żywioł wejdzie w groty i odłamki, a te trafiają w "
-      + "odporność — nigdy w pancerz.\n\n"
-      + "A teraz Pogranicze. Jest tam coś, czego chcę.",
-    es: "Lo veo desde aquí.\n\n"
-      + "Ahora levanta la Torre de Alquimia en tu isla, si aún no está. Sin "
-      + "ella esto es sólo una promesa.\n\n"
-      + "Con ella tu elemento entra en puntas y esquirlas, y ésas chocan con "
-      + "la resistencia — nunca con la armadura.\n\n"
-      + "Y ahora, la Frontera. Hay algo allí que quiero.",
+    en: "I see it.\n\n"
+      + "Not bad.\n\n"
+      + "Raise the Alchemy Tower on your island. There you will learn to carry "
+      + "that element further — into arrowheads, into shards, into whatever "
+      + "else comes of it.\n\n"
+      + "Only remember: an element does not try to punch through armour.\n\n"
+      + "It looks for what is underneath it.\n\n"
+      + "And now, enough gifts.\n\n"
+      + "I have another gate for you.",
+    pl: "Widzę.\n\n"
+      + "Nieźle.\n\n"
+      + "Postaw na swojej wyspie Wieżę Alchemiczną. Tam nauczysz się prowadzić "
+      + "ten żywioł dalej — w groty, odłamki i wszystko, co jeszcze z niego "
+      + "powstanie.\n\n"
+      + "Pamiętaj tylko: żywioł nie próbuje przebić pancerza.\n\n"
+      + "Szuka tego, co jest pod nim.\n\n"
+      + "A teraz wystarczy prezentów.\n\n"
+      + "Mam dla ciebie kolejne wrota.",
+    es: "Lo veo.\n\n"
+      + "Nada mal.\n\n"
+      + "Levanta la Torre de Alquimia en tu isla. Allí aprenderás a llevar ese "
+      + "elemento más lejos — a puntas, a esquirlas, a todo lo que salga de "
+      + "él.\n\n"
+      + "Recuerda sólo una cosa: un elemento no intenta atravesar la "
+      + "armadura.\n\n"
+      + "Busca lo que hay debajo.\n\n"
+      + "Y ahora, basta de regalos.\n\n"
+      + "Tengo otra puerta para ti.",
   },
-  /* Never reached — the errand has no relic to lose — but the catalogue owes
-   * every id all ten keys and a blank one would be a hole waiting for the day
-   * somebody gives this errand a thing to carry. */
+  /* Reached by walking down to the sanctum and coming back up without standing
+   * in anything — the errand has no relic to lose, so this is the only way to
+   * return empty-handed. */
   "sage.empty.calanais": {
-    en: "You went down and came back with nothing.\n\n"
-      + "The circles are still burning. Go and stand in one.",
-    pl: "Zszedłeś i wróciłeś z niczym.\n\n"
-      + "Kręgi wciąż płoną. Idź i stań w jednym.",
-    es: "Bajaste y volviste sin nada.\n\n"
-      + "Los círculos siguen ardiendo. Ve y ponte en uno.",
+    en: "You went all the way down under the temple and came back with "
+      + "nothing.\n\n"
+      + "The circles are still burning.\n\n"
+      + "Next time, step into one.",
+    pl: "Zszedłeś aż pod świątynię i wróciłeś bez niczego.\n\n"
+      + "Kręgi wciąż płoną.\n\n"
+      + "Następnym razem wejdź do jednego.",
+    es: "Bajaste hasta debajo del templo y volviste sin nada.\n\n"
+      + "Los círculos siguen ardiendo.\n\n"
+      + "La próxima vez, entra en uno.",
   },
   "lore.title.calanais": {
     en: "The Circles of Calanais",
