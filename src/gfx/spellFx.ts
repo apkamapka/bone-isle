@@ -365,6 +365,46 @@ function drawField(
   vctx.globalAlpha = 1;
 }
 
+/**
+ * A permanent decorative field on one square — the sanctum's ambient element
+ * effects and nothing else so far.
+ *
+ * Deliberately `drawField` with the two things that make a field a SPELL taken
+ * out: there is no life, so no fade, and no `Field` record, so nothing ticks
+ * it or expires it. Sharing the anchoring and the glow is the point — an
+ * ambient fire that sat differently on its square from a cast one would read
+ * as a different object, and the whole job of these is to look like the
+ * element the wedge grants.
+ */
+export function drawAmbientField(
+  vctx: CanvasRenderingContext2D, el: Element, x: number, y: number,
+  camX: number, camY: number, t: number,
+): void {
+  const sheet = spellSheet(el, 0, "field");
+  if (!sheet) return;            // no art, no stand-in: the floor colour speaks
+  const sx = Math.round(x - camX);
+  const sy = Math.round(y - camY);
+  const i = loopFrameIndex(t, sheet.base.length, FX_FPS);
+  const size = Math.round(TILE * SCALE.field);
+  pool(vctx, sx, sy, TILE * 0.75, POOL_ALPHA * AMBIENT_DIM, ELEMENT_COLOR[el]);
+  const leftPx = sx - size / 2;
+  const top = sheet.grounded ? sy + TILE / 2 - size : sy - size / 2;
+  const gs = size * sheet.glowScale;
+  vctx.globalCompositeOperation = "lighter";
+  /* Dimmer again than a field's, which is already dimmer than a blast's.
+   * Ten of these burn on one wedge at once and they are never the thing the
+   * player is looking at — the circle is. */
+  vctx.globalAlpha = GLOW_ALPHA * FIELD_GLOW * AMBIENT_DIM;
+  vctx.drawImage(sheet.glow[i], leftPx + size / 2 - gs / 2, top + size / 2 - gs / 2, gs, gs);
+  vctx.globalCompositeOperation = "source-over";
+  vctx.globalAlpha = AMBIENT_DIM;
+  vctx.drawImage(sheet.base[i], leftPx, top, size, size);
+  vctx.globalAlpha = 1;
+}
+
+/** How far down the ambient decoration sits from a cast field's strength. */
+const AMBIENT_DIM = 0.7;
+
 function drawBlast(
   vctx: CanvasRenderingContext2D, b: Blast, camX: number, camY: number,
 ): void {
