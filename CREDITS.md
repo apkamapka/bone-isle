@@ -1262,11 +1262,11 @@ them at 64 x 64 at source would be sharper. Each was then trimmed and seated on
 the anchor line so the box sits on the ground rather than hovering over its own
 shadow.
 
-## One-tile fields — `public/fx-earth-1-field.png`, `public/fx-ice-1-field.png`, `public/fx-storm-1-field.png`
+## One-tile fields — `public/fx-earth-1-field.png`, `public/fx-ice-1-field.png`, `public/fx-storm-1-field.png`, `public/fx-shadow-1-field.png`
 
 Source: **generated**, by `tools/fx/gen_field_fx.py` in this repository.
 
-**These three are not CraftPix.** They match the `fx-*.png` glob and they sit
+**These four are not CraftPix.** They match the `fx-*.png` glob and they sit
 next to the bought art, but nothing in them came from anyone else, so the
 public-repository warning in the section below does not reach them. Same as the
 attunement circles: no attribution owed, no ShareAlike, no DRM clause, and
@@ -1278,6 +1278,7 @@ already here, so they read as part of the same set rather than as a visitor:
     earth   #170c04  #3a2311  #5c3c20  #8a6037  #bd8d55, plus a warm ember
     ice     #4d7593  #8fb4cf  #b5d5e8  #ddeef9  #ffffff
     storm   #2b1c05  #45300a  #ffb416  #ffd84a  #ffe97e  #fff29b  #ffff81
+    wind    #3a4070  #5f6796  #8f96c4  #b9bfe0  #d8dcf2  #eef0ff  #ffffff
 
 Twelve frames each, the same count as `fx-fire-1-field.png`.
 
@@ -1311,13 +1312,40 @@ wash reads as a rounded rectangle rather than as light. And the bolt lights
 only every other flank pixel — a solid three-pixel band reads as a rope, and
 the broken edge is the whole crackle.
 
+**Wind is a new tornado, not a copy of the burst.** `fx-shadow-1-burst.png` is
+already a tornado and copying it across would have cost nothing, so it was
+measured first: sixteen lit pixels on its first frame, two hundred and fifty at
+its peak, thirty on its last. It is a one-shot — the funnel gathers, tops out
+and blows apart. Looped as a field it would materialise and evaporate every
+eleven frames, which is the one thing a field must never do. The funnel here is
+drawn to turn forever instead: an open mouth with a stroke revolving inside it,
+and a stem that never gathers or disperses.
+
+**It is white, not violet.** The element reads as Wind on screen and only its
+ID still says `shadow`; a violet funnel reads as smoke rising, not as moving
+air. The shadows keep a lavender cast so the shape still belongs to the
+element's colour without the body going grey.
+
+The body is **solid, with the coils drawn on it as light**. An earlier version
+made the coils the whole funnel and let the ground show between them, which
+left it looking torn rather than dense. What sells it now is that the body is
+shaded a step darker than the coils across its whole width, that each coil has
+one darker pixel under it so it is a rope and not a stripe, and that the mouth
+is painted BETWEEN the body and the front coils — drawn last, it laid a dark
+dish over the top third of the funnel.
+
 **Ice** is a slick with the surface breaking in it. Its body is deliberately
 semi-transparent rather than dithered: at this size a checkerboard wash reads
 as a mesh, and alpha is what makes water look like water lying on grass.
 
-All three measure a vertical weight above 0.6 — 0.78, 0.79 and 0.67 — so `weightY` calls them grounded and
-the renderer stands them on the tile's bottom edge — the same treatment the
-fire field gets, and the reason all three line up on the same floor.
+Vertical weights measure 0.78 for earth, 0.79 for ice, 0.67 for storm and 0.40
+for the tornado, so `weightY` calls the first three grounded and the tornado
+not — it is top-heavy by design, since the mouth is the widest thing in the
+frame. That costs nothing here: `SCALE.field` is 1.05, so a field is drawn 34 px
+across on a 32 px tile and the grounded and centred branches of `drawField`
+land one pixel apart. Worth knowing before anyone reshapes a field to chase the
+0.58 threshold — on the wider slots, where the scale is 1.35 or 1.4, the same
+difference is five or six pixels and does matter.
 
 ## Element attunement circles — `public/fx-attune-*.png`
 

@@ -12,6 +12,7 @@ CraftPix art rather than beside it:
     earth   #170c04  #3a2311  #5c3c20  #8a6037  #bd8d55   (+ a warm ember)
     ice     #4d7593  #8fb4cf  #b5d5e8  #ddeef9  #ffffff
     storm   #2b1c05  #45300a  #ffb416  #ffd84a  #ffe97e  #fff29b  #ffff81
+    wind    #3a4070  #5f6796  #8f96c4  #b9bfe0  #d8dcf2  #eef0ff  #ffffff
 
 Nothing is filled edge to edge.  A field is drawn OVER the terrain, so the
 ground has to keep showing through — the earth crack is a fissure with lit
@@ -34,6 +35,19 @@ EARTH = {
     "pale": (189, 141, 85, 255),
     "ember": (232, 176, 86, 255),
     "hot": (249, 226, 160, 255),
+}
+
+# White, not violet. The element is called Wind on screen and only its ID says
+# shadow; a violet funnel reads as smoke. The shadows keep a lavender cast so
+# the shape ties back to the element's colour without the body going grey.
+WIND = {
+    "void": (58, 64, 112, 255),
+    "deep": (95, 103, 150, 255),
+    "mid": (143, 150, 196, 255),
+    "body": (185, 191, 224, 255),
+    "lit": (216, 220, 242, 255),
+    "pale": (238, 240, 255, 255),
+    "edge": (255, 255, 255, 255),
 }
 
 STORM = {
@@ -391,7 +405,104 @@ def build_storm(i):
     return im
 
 
-BUILDERS = {"earth": build_earth, "ice": build_ice, "storm": build_storm}
+# ---------------------------------------------------------------------------
+# wind — a funnel that keeps turning
+# ---------------------------------------------------------------------------
+
+def funnel_r(y):
+    """
+    Radius of the funnel at a given row: wide mouth, a stem wrung thin, a small
+    flare where it drags on the ground. The curve is deliberately not straight
+    — a straight cone reads as a party hat.
+    """
+    if y <= 27:
+        u = max(0.0, (27 - y) / 22.0)
+        return 2.6 + 8.0 * (u ** 1.35)
+    return 2.6 + (y - 27) * 0.9
+
+
+def build_wind(i):
+    t = i / FRAMES
+    im, d = frame()
+    # the column leans and sways a pixel over the loop, or it reads as a decal
+    cx = 16 + math.sin(2 * math.pi * t) * 1.0
+
+    # A SOLID body, shaded across its width. The first attempt drew the funnel
+    # as bare coils with the ground showing between them, which left it looking
+    # torn; the coils belong ON a body, as the light on it, not instead of it.
+    for y in range(5, 31):
+        r = funnel_r(y)
+        if r < 1:
+            continue
+        for x in range(int(round(cx - r)), int(round(cx + r)) + 1):
+            u = max(-1.0, min(1.0, (x - cx) / r))
+            # one step darker than the coils across the whole width, or the
+            # white highlights have nothing to stand out against
+            if abs(u) > 0.90:
+                col = WIND["deep"]
+            elif u > 0.45:
+                col = WIND["mid"]
+            elif u > -0.15:
+                col = WIND["body"]
+            else:
+                col = WIND["lit"]
+            put(d, x, y, col)
+
+    TURNS = 2.25
+
+    # the mouth, painted over the body and under the front coils
+    mr = funnel_r(5)
+    for yy in range(2, 9):
+        for xx in range(int(cx - mr) - 1, int(cx + mr) + 2):
+            dx = (xx - cx) / (mr - 0.6)
+            dy = (yy - 5) / ((mr - 0.6) * 0.34)
+            if dx * dx + dy * dy < 1.0:
+                put(d, xx, yy, WIND["void"] if dy < 0.1 else WIND["deep"])
+    for k, (rf, ph) in enumerate(((0.78, 0.0), (0.52, 2.4))):
+        for step in range(26):
+            a = -2 * math.pi * t + ph + step * 0.075
+            put(d, cx + math.cos(a) * mr * rf, 5 + math.sin(a) * mr * rf * 0.34,
+                WIND["mid"] if k == 0 else WIND["deep"])
+    for a in range(0, 360, 5):
+        rad = math.radians(a)
+        put(d, cx + math.cos(rad) * mr, 5 + math.sin(rad) * mr * 0.34,
+            WIND["body"] if math.sin(rad) > 0.2 else
+            (WIND["edge"] if math.sin(rad) < -0.5 else WIND["pale"]))
+
+    # the coils, as light running round the body: white crest, a shaded pixel
+    # underneath. Only the near side is drawn now — nothing shows through a
+    # body that is solid.
+    for ribbon in range(2):
+        off = math.pi * ribbon
+        for n in range(170):
+            u = n / 169.0
+            y = 5.0 + u * 24.0
+            r = funnel_r(y)
+            a = off + u * TURNS * 2 * math.pi - 2 * math.pi * t
+            face = math.sin(a)
+            if face <= 0:
+                continue
+            x = cx + math.cos(a) * r
+            yy = y + face * r * 0.34
+            if face > 0.75 and abs(math.cos(a)) < 0.55:
+                col = WIND["edge"]
+            elif face > 0.40:
+                col = WIND["pale"]
+            else:
+                col = WIND["lit"]
+            put(d, x, yy, col)
+            put(d, x, yy + 1, WIND["mid"] if face > 0.42 else WIND["deep"])
+
+    # debris dragged round the base, one whole orbit per loop
+    for k, ph in enumerate((0.0, 2.1, 4.2, 5.6)):
+        a = 2 * math.pi * t + ph
+        rr = 7 + (k % 2) * 3
+        put(d, cx + math.cos(a) * rr, 28 + math.sin(a) * rr * 0.28,
+            WIND["pale"] if math.sin(a) > 0 else WIND["mid"])
+    return im
+
+
+BUILDERS = {"earth": build_earth, "ice": build_ice, "storm": build_storm, "shadow": build_wind}
 
 if __name__ == "__main__":
     root = "public"
