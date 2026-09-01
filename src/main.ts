@@ -6,6 +6,7 @@ import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, chebToPoint,
 import { nearestHit, footprintHit } from "./world/pick.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx/fireSheet.ts";
+import { attuneFrame, ATTUNE_SPAN } from "./gfx/attuneSheet.ts";
 import { scenerySprite, FOOTPRINT, SCENERY_NAME } from "./gfx/sceneryArt.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, iconW, iconH, hasPropArt, propSprite, CHEST_LIFT } from "./gfx/sprites.ts";
@@ -36,7 +37,7 @@ import {
   type HudGroup,
 } from "./systems/hudLayout.ts";
 import { researchById, isResearched, markResearched, towerTierOk, towerTierFor,
-  ATTUNEMENT, isAttuned, markAttuned, attunementOk, offerById } from "./systems/tower.ts";
+  ATTUNEMENT, isAttuned, markAttuned, clearAttuned, attunementOk, offerById } from "./systems/tower.ts";
 import { ELEMENT_LABEL, ELEMENT_COLOR, type Element } from "./systems/elements.ts";
 import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
@@ -47,6 +48,7 @@ import {
   MISSIONS, stageOf, setStage, offeredMission, currentMission,
   missionHandedIn, relicLost, missionByGround, groundOpen, boundRelic,
   loreSeen, markLoreSeen, resetMissions, resetMission, missionById, type MissionDef,
+  relicTaken, grantsAttunement, missionByEcho,
 } from "./systems/missions.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
@@ -3151,8 +3153,15 @@ function replayMissions(only?: MissionDef): void {
   for (const m of list) if (stageOf(m.id, P.level) === "closed") owed += m.rewardExp;
   for (const m of list) {
     resetMission(m.id);
-    const held = countAcross([P.bag], m.relic);
-    if (held > 0) removeAcross([P.bag], m.relic, held);
+    // A bossless errand carries nothing back, so there is nothing to strip.
+    if (m.relic) {
+      const held = countAcross([P.bag], m.relic);
+      if (held > 0) removeAcross([P.bag], m.relic, held);
+    }
+    // …but an errand that pays in STATE has to give the state back, or
+    // replaying it is a free element every time. The one-time-chest flag is
+    // not the guard here — the circles are not chests and never touched it.
+    if (grantsAttunement(m)) clearAttuned();
   }
   if (owed > 0) {
     const total = Math.max(0, totalExpFor(P.level) + P.exp - owed);
@@ -3179,8 +3188,11 @@ function replayMissions(only?: MissionDef): void {
 function forgetEverything(): void {
   resetMissions();
   for (const m of MISSIONS) {
-    const held = countAcross([P.bag], m.relic);
-    if (held > 0) removeAcross([P.bag], m.relic, held);
+    if (m.relic) {
+      const held = countAcross([P.bag], m.relic);
+      if (held > 0) removeAcross([P.bag], m.relic, held);
+    }
+    if (grantsAttunement(m)) clearAttuned();
   }
   game.opened = game.opened.filter((id) => !MISSIONS.some((m) => id.startsWith(`treasure:${m.echo}:`)));
   applyMissionPads(game.worlds, P.level);
@@ -3256,8 +3268,13 @@ function talkToSage(): void {
   if (cur) {
     const stage = stageOf(cur.id, P.level);
     if (stage === "complete") {
-      if (countAcross([P.bag], cur.relic) > 0) {
-        removeAcross([P.bag], cur.relic, 1);
+      // A bossless errand has nothing to hand over: reaching `complete` at all
+      // means the circle was walked into and the element is already written.
+      // So the hand-in is unconditional for it, and the empty-hands branch
+      // below — the whole `relicLost` reconciliation — is skipped, because a
+      // state cannot go missing on the walk home.
+      if (!cur.relic || countAcross([P.bag], cur.relic) > 0) {
+        if (cur.relic) removeAcross([P.bag], cur.relic, 1);
         missionHandedIn(cur.id, P.level);
         grantExp(cw(), P, cur.rewardExp);
         beep(660, 0.2, "sine", 0.06, 220);
@@ -3295,11 +3312,11 @@ function talkToSage(): void {
         for (const c of stale.corpses) {
           for (let i = 0; i < c.items.length; i++) {
             const st = c.items[i];
-            if (st && st.kind === cur.relic) c.items[i] = null;
+            if (st && cur.relic && st.kind === cur.relic) c.items[i] = null;
           }
         }
         for (let i = stale.ground.length - 1; i >= 0; i--) {
-          if (stale.ground[i].kind === cur.relic) stale.ground.splice(i, 1);
+          if (cur.relic && stale.ground[i].kind === cur.relic) stale.ground.splice(i, 1);
         }
       }
       relicLost(cur.id, P.level);
@@ -3972,6 +3989,50 @@ function tickCampfireBurn(world: World, dt: number): void {
   }
 }
 
+/**
+ * Walking into a rune circle, which is the whole of the Calanais errand.
+ *
+ * There is no click and no prompt. The player has walked the disc, looked at
+ * five coloured wedges, and stepped into one — stepping in IS the answer, and
+ * asking "are you sure?" after they crossed an island to do it would be the
+ * game second-guessing a decision it just watched them make.
+ *
+ * ONCE, EVER, and the guard is the mission stage rather than a flag or a
+ * clock. `relicTaken` moves `active` to `complete`, and this returns early on
+ * anything that is not `active` — so the other four circles go quiet the
+ * instant the first one fires, the sanctum door upstairs goes dark behind the
+ * player, and the dais to Chronos lights. The same three pads, in the same
+ * three states, that a boss kill drives on the other two errands.
+ *
+ * `isAttuned` is checked as well, and it is not redundant: a character who
+ * somehow already holds this element gets the circle refused rather than
+ * spending their one errand on a duplicate.
+ */
+function checkAttuneCircles(world: World): void {
+  if (P.dead) return;
+  const md = missionByEcho(world.key);
+  if (!md || !grantsAttunement(md)) return;
+  if (stageOf(md.id, P.level) !== "active") return;
+  for (const nd of world.attuneNodes) {
+    // The circle owns the 2x2 block it is centred on, so standing anywhere on
+    // its artwork counts — being refused by a ring you are visibly inside is
+    // the campfire's old collision bug wearing a different hat.
+    if (Math.abs(P.tx - nd.tx) > 1 || Math.abs(P.ty - nd.ty) > 1) continue;
+    if (isAttuned(nd.el)) {
+      flash(t("attune.already", lang()), ELEMENT_COLOR[nd.el]);
+      return;
+    }
+    markAttuned(nd.el);
+    relicTaken(md.id, P.level);
+    applyMissionPads(game.worlds, P.level);
+    addFloat(world, P.x, P.y - 64, ELEMENT_LABEL[nd.el], ELEMENT_COLOR[nd.el]);
+    beep(660, 0.28, "sine", 0.06, 220);
+    saveGame(game);
+    sageSays("sage.attuned.calanais", { then: () => {} });
+    return;
+  }
+}
+
 function checkPortals(): void {
   /* A box on screen holds the pad. The player is standing on it, the jump has
    * not happened, and the moment the box closes this runs again and takes it —
@@ -4002,6 +4063,24 @@ function checkPortals(): void {
         markLoreSeen(m.id);
         saveGame(game);
         openDialogue({ titleKey: `lore.title.${m.id}`, bodyKey: `lore.${m.id}` });
+        return;
+      }
+      /* THE SAGE'S WORD IN THE SANCTUM. Same trick as the chronicle above and
+       * for the same reason: said on THIS side of the jump, where the player
+       * is standing on a mission pad and nothing can walk over while they
+       * read. The difference is that it is not once-per-character — the
+       * sanctum has no ladder back up, so a descent happens once per errand
+       * anyway, and gating it on a flag would only mean a player who logged
+       * out on the stair came back to a room of five permanent choices and no
+       * instructions.
+       *
+       * Gated on the stage rather than on the destination alone: once a circle
+       * has been walked into the errand is `complete`, the door is dark, and
+       * this cannot be reached at all. */
+      const echoM = missionByEcho(pt.dest);
+      if (echoM && grantsAttunement(echoM) && stageOf(echoM.id, P.level) === "active") {
+        travelTo(game, pt.dest);
+        openDialogue({ titleKey: `lore.title.${echoM.id}`, bodyKey: `sage.descend.${echoM.id}` });
         return;
       }
       travelTo(game, pt.dest);
@@ -4284,6 +4363,7 @@ function update(dt: number): void {
   });
 
   tickCampfireBurn(world, dt);
+  checkAttuneCircles(world);
 
   tickRegrowth(world, dt, P.x, P.y, true);
   tickNpcTalk(world);
@@ -4898,6 +4978,27 @@ function render(): void {
     // with it.
     drawList.push({ y: by, fn: () => {
       drawSprite(campfireFrame(waveT, fr.phase) ?? SPR.campfire, bx, by - FIRE_LIFT);
+    } });
+  }
+  // The attunement circles in the sanctum, drawn on the campfire's contract:
+  // recut every frame, in the depth-sorted list, with a per-node phase so two
+  // circles never pulse together. Unlike a fire there is no baked stand-in —
+  // if the strip never lands nothing is drawn, and the coloured floor under it
+  // still says which wedge this is.
+  //
+  // The art is 64x64 and the node names the tile it is CENTRED on, so it is
+  // blitted from the middle of the 2x2 block. It sorts on the bottom of that
+  // block, which puts the player in front of the ring when they stand south of
+  // it and behind the rising column when they stand in it — which is the right
+  // way round, because the column is light and the player is not.
+  for (const nd of world.attuneNodes) {
+    const bx = nd.tx * TILE + TILE / 2;
+    const by = nd.ty * TILE + TILE / 2;
+    if (!inView(bx, by)) continue;
+    const half = (ATTUNE_SPAN * TILE) / 2;
+    drawList.push({ y: by + half, fn: () => {
+      const fr = attuneFrame(nd.el, waveT, nd.phase);
+      if (fr) drawSprite(fr, bx, by + half);
     } });
   }
   // structures. Artwork splits a building by tier, so the tier has to be read

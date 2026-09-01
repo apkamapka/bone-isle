@@ -11,6 +11,7 @@ import { BANDITDEEP_SPEC } from "./world/banditDeepSpec.ts";
 import { LIDDESDALE_SPEC } from "./world/liddesdaleSpec.ts";
 import { HERMITAGE_SPEC } from "./world/hermitageSpec.ts";
 import { HARAMSEY_SPEC } from "./world/haramseySpec.ts";
+import { loadAttuneArt } from "./gfx/attuneSheet.ts";
 import { HAUGR_SPEC } from "./world/haugrSpec.ts";
 import { CALANAIS_SPEC } from "./world/calanaisSpec.ts";
 import { TURSACHAN_SPEC } from "./world/tursachanSpec.ts";
@@ -177,6 +178,7 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
   loadControlIcons();        // the five sidebar buttons, 16x16 each
   loadItemArt();             // drawn icons over the baked stand-ins
   loadSpellArt();            // bolts and blooms, one strip per element and tier
+  loadAttuneArt();           // the five rune circles in the sanctum under Calanais
   return worlds;
 }
 
