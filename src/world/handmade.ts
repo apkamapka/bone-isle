@@ -109,6 +109,8 @@ export interface HandmadeSpec {
   /** Glyph → an attunement circle granting that element. The sanctum under
    *  Calanais is the only map that uses it. */
   attune?: Readonly<Record<string, Element>>;
+  /** Glyph → a decorative one-square element effect on that tile. */
+  ambient?: Readonly<Record<string, Element>>;
   /** Glyph → standing scenery on that tile. The tile is made solid, exactly
    *  like a tree's: these objects are taller than one square and the player
    *  walks BEHIND them, never through them. Glyphs are per-spec so a letter
@@ -192,6 +194,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     decos: [],
     fires: [],
     attuneNodes: [],
+    ambientFx: [],
     scenery: [],
     monsters: [],
     corpses: [],
@@ -272,6 +275,11 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           solid[y][x] = true;
           break;
         default: {
+          const amb = spec.ambient?.[ch];
+          if (amb) {
+            w.ambientFx.push({ el: amb, tx: x, ty: y, phase: ((x * 7 + y * 13) % 20) / 20 });
+            break;
+          }
           const att = spec.attune?.[ch];
           if (att) {
             // The glyph names the CENTRE the art is anchored on; the 64x64

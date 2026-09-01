@@ -518,6 +518,12 @@ export interface World {
    *  into one is how the errand is finished. Kept off `fires` because a fire
    *  bites you every second and a circle fires once, ever. */
   attuneNodes: AttuneNode[];
+  /** Decorative one-square element effects. Same drawing as a spell's field
+   *  and none of its meaning: they hurt nothing, grant nothing and seal
+   *  nothing. Separate from `attuneNodes` so that the thing the player can
+   *  walk into is never confused, in code or on screen, with the scenery that
+   *  tells them which wedge they are standing in. */
+  ambientFx: AttuneNode[];
   scenery: Scenery[];
   monsters: Monster[];
   corpses: Corpse[];
