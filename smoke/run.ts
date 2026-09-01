@@ -7877,8 +7877,11 @@ async function main(): Promise<void> {
     ok(M.MISSIONS.length >= 1, `the chain has ${M.MISSIONS.length} link(s)`);
     ok(new Set(M.MISSIONS.map((m) => m.id)).size === M.MISSIONS.length, "…with unique ids");
     const roots = M.MISSIONS.filter((m) => m.after === undefined);
-    ok(roots.length === 1 && roots[0].id === "redcap",
-      `exactly one link starts the chain, and it is the redcap (${roots.map((m) => m.id).join(",")})`);
+    /* Calanais, not the redcap. Etap 47 put the gift-errand in FRONT of him:
+     * it hands out the element, and he is the first creature whose resistances
+     * make that choice mean anything. */
+    ok(roots.length === 1 && roots[0].id === "calanais",
+      `exactly one link starts the chain, and it is Calanais (${roots.map((m) => m.id).join(",")})`);
     let chainBad = "";
     M.MISSIONS.forEach((m, i) => {
       if (m.after === undefined) return;
@@ -7895,11 +7898,21 @@ async function main(): Promise<void> {
     // answer would be silent.
     for (const [what, of] of [["ground", (m: M.MissionDef) => m.ground],
       ["echo", (m: M.MissionDef) => m.echo], ["relic", (m: M.MissionDef) => m.relic]] as const) {
-      const all = M.MISSIONS.map(of);
+      // `relic` is optional since Etap 47, and undefined is not a collision:
+      // two bossless errands both carry nothing back, and `boundRelic` answers
+      // false for both because `undefined === kind` is false for every kind.
+      const all = M.MISSIONS.map(of).filter((v) => v !== undefined);
       ok(new Set(all).size === all.length, `no two missions share a ${what} (${all.join(",")})`);
     }
-    ok(M.offeredMission(9) === undefined, "below level ten the sage offers nothing");
-    ok(M.offeredMission(10)?.id === "redcap", "…and at ten he offers the cap");
+    ok(M.offeredMission(7) === undefined, "below level eight the sage offers nothing");
+    ok(M.offeredMission(8)?.id === "calanais", "…and at eight he offers Calanais");
+    /* At ten he STILL offers Calanais, because the redcap now waits on it.
+     * This is the one visible change to an existing save: a character past
+     * level eight who never took the cap is sent to the circles first. */
+    ok(M.offeredMission(10)?.id === "calanais", "…and at ten he still offers it first");
+    M.setStage("calanais", "closed");
+    ok(M.offeredMission(10)?.id === "redcap", "…and only once it is closed does the cap come up");
+    M.resetMissions();
     ok(M.currentMission(99) === undefined, "…and nothing is in hand until it is taken");
     ok(M.stageOf("nope", 99) === "locked", "an unknown id reads as locked rather than throwing");
     M.setStage("nope", "closed");
@@ -7919,7 +7932,7 @@ async function main(): Promise<void> {
       ok(M.stageOf("t1", 7) === "locked", "below its level, the first mission is locked");
       ok(M.stageOf("t1", 8) === "available", "…and at its level it is offered");
       ok(M.stageOf("t2", 99) === "locked", "the second stays locked however high you level");
-      ok(M.MISSIONS.find((m) => M.stageOf(m.id, 99) === "available")?.id === "redcap",
+      ok(M.MISSIONS.find((m) => M.stageOf(m.id, 99) === "available")?.id === "calanais",
         "…so the sage offers the FIRST, not the one you outlevelled");
 
       // taking it opens the ground permanently and the echo conditionally
@@ -12530,8 +12543,12 @@ async function main(): Promise<void> {
     ok(!M42.loreSeen("redcap"), "a pre-v13 save reads as 'has been told nothing', which is true");
     M42.markLoreSeen("redcap");
     M42.resetMissions();
+    // The redcap waits on Calanais now, so reaching "available" needs its
+    // predecessor closed. What is under test here is the LORE wipe, not the gate.
+    M42.setStage("calanais", "closed");
     ok(!M42.loreSeen("redcap") && M42.stageOf("redcap", 10) === "available",
       "the reset wipes the history as well as the stage, or the pad stops stopping you");
+    M42.resetMissions();
 
     /* --- the language is a DEVICE preference, not save state ---------------- */
     ok(PP.lang() === SP.DEFAULT_LANG, "a player who has never touched the strip reads English");
@@ -13134,9 +13151,12 @@ async function main(): Promise<void> {
      * change is that it is taken off the ROLL first and put back deliberately,
      * so the only copy in the corpse is the one this gate decided to put
      * there — a second kill strips it and adds nothing. */
-    ok(/items\.splice\(i, 1\)/.test(cmb) && /items\.push\(\{ kind: md\.relic, n: 1 \}\)/.test(cmb),
+    /* Etap 47 made `relic` optional, so this reads a local `relic` const rather
+     * than `md.relic` — the SHAPE moved, the rule did not: off the roll first,
+     * put back deliberately, one copy, decided here. */
+    ok(/items\.splice\(i, 1\)/.test(cmb) && /items\.push\(\{ kind: relic, n: 1 \}\)/.test(cmb),
       "killMonster strips the relic from the roll and puts back the one it means to");
-    ok(/const dropped = !!md && items\.some/.test(cmb),
+    ok(/const dropped = !!relic && items\.some/.test(cmb),
       "…and it only fires on a corpse that actually rolled the relic, not anywhere in the echo");
     ok(/relicTaken\(md\.id, p\.level\)/.test(cmb) && !/if [^\n]*freeCap\(p\)/.test(cmb),
       "…completing the errand on the kill, with no weight gate in front of it");
@@ -13456,6 +13476,7 @@ async function main(): Promise<void> {
     applyMissionPads(ws43, 20);
     ok(padTo43("haramsey").inactive === true,
       "level twenty is not enough — the redcap has to be closed first");
+    MM43.setStage("calanais", "closed");
     MM43.setStage("redcap", "closed");
     ok(MM43.offeredMission(14) === undefined, "at fourteen the sage still says nothing about Haramsey");
     ok(MM43.offeredMission(15)?.id === "draugr", "…and at fifteen he offers it");
@@ -13530,6 +13551,15 @@ async function main(): Promise<void> {
     for (const m of MW.MISSIONS) {
       const ws = buildWorlds(WORLD_SEED);
       const echo = ws[m.echo];
+      /* A BOSSLESS errand has no boss to void, so there is nothing here to
+       * test — but the skip is asserted rather than assumed, or the day
+       * somebody gives Calanais a boss this block would quietly stop covering
+       * it. No relic and no creature in the echo have to agree. */
+      if (!m.relic) {
+        ok((echo.mobPosts ?? []).length === 0,
+          `${m.id}: a relic-less errand has nothing posted in its echo`);
+        continue;
+      }
       rpsW(); MW.resetMissions();
       const p = PL.createPlayer(0, 0);
       p.level = m.reqLevel;
@@ -13569,7 +13599,10 @@ async function main(): Promise<void> {
      * respawns behind an echo that is still open, and the run can be had
      * again. This is the case the weight gate was confused with. */
     {
-      const m = MW.MISSIONS[0];
+      // The FIRST errand with a boss, not simply the first entry: Calanais is
+      // the head of the chain now and has neither boss nor relic, so indexing
+      // blind picked a mission this case cannot be stated about at all.
+      const m = MW.MISSIONS.find((q) => !!q.relic)!;
       const ws = buildWorlds(WORLD_SEED);
       const echo = ws[m.echo];
       rpsW(); MW.resetMissions();
@@ -14133,6 +14166,15 @@ async function main(): Promise<void> {
       p.level = m.reqLevel;
       MW46.setStage(m.id, "active");
 
+      /* Bossless errands are not covered here and cannot be: the whole block
+       * is about which KILL fires the relic gate, and there is no kill. The
+       * skip is asserted so it cannot quietly swallow an errand that grows a
+       * boss later. */
+      if (!m.relic) {
+        ok((echo.mobPosts ?? []).length === 0,
+          `${m.id}: nothing is posted in a relic-less echo, so no kill can fire the gate`);
+        continue;
+      }
       const posts = echo.mobPosts ?? [];
       const boss = posts.find((q) => (MD46[q.kind].loot ?? []).some((l) => l.kind === m.relic));
       const mook = posts.find((q) => !(MD46[q.kind].loot ?? []).some((l) => l.kind === m.relic));
@@ -14232,13 +14274,26 @@ async function main(): Promise<void> {
     const { fxFile: fxF, FX_SLOTS: slots } = await import("../src/gfx/spellArt.ts");
     const { ELEMENTS: elsHk } = await import("../src/systems/elements.ts");
     const present = new Set(pub);
+    /* TWO derived-name families now, not one. The attunement circles are also
+     * `fx-` and also one file per element, but they are built by
+     * `attuneSheet.ts` rather than by `fxFile()` — so a name this loop cannot
+     * construct is not automatically stranded, it might belong to the other
+     * builder. Both are checked; a picture reachable by neither still fails. */
+    const attuneNames = new Set(elsHk.map((e) => `fx-attune-${e}.png`));
     const stranded = pub.filter((f) => /^fx-/.test(f)).filter((f) => {
+      if (attuneNames.has(f)) return false;
       for (const e of elsHk) for (const t of [0, 1, 2] as const)
         for (const s of slots) if (fxF(e, t, s) === f) return false;
       return true;
     });
     ok(stranded.length === 0,
-      `every fx picture answers to a name fxFile() can build (${stranded.join(", ") || "none"})`);
+      `every fx picture answers to a name some builder can build (${stranded.join(", ") || "none"})`);
+    /* …and the other direction for the circles: five elements, five strips,
+     * every one of them actually in public/. A missing strip is silent at run
+     * time — `attuneFrame` returns null and the circle simply is not drawn. */
+    for (const e of elsHk) {
+      ok(present.has(`fx-attune-${e}.png`), `the ${e} attunement circle has its strip`);
+    }
 
     /* --- no second copy of a source file --------------------------------
      * `main.ts`, `run.ts` and `save.ts` sat in the repo ROOT as well as under
@@ -14272,44 +14327,45 @@ async function main(): Promise<void> {
     void present;
   }
 
-  console.log("Etap 47 — Calanais and the sanctum: the map says what the picture cannot:");
+  console.log("Etap 47 — Calanais, the sanctum, and the element you walk into:");
   {
     const nfs47 = await import("node:fs");
-    const { TILE: TILE47 } = await import("../src/config.ts");
-    const { Tile: Tile47 } = await import("../src/world/types.ts");
     const read47 = (rel: string): string =>
       nfs47.readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
+    const { TILE: TILE47 } = await import("../src/config.ts");
+    const { Tile: Tile47 } = await import("../src/world/types.ts");
+    const { ELEMENTS: ELS47 } = await import("../src/systems/elements.ts");
+    const M47 = await import("../src/systems/missions.ts");
+    const T47 = await import("../src/systems/tower.ts");
+    const { resetPlayerState: rps47 } = await import("../src/systems/playerState.ts");
     const { buildWorlds: bw47 } = await import("../src/game.ts");
-    const w47 = bw47(1);
+    const w47 = bw47(WORLD_SEED);
     const isle = w47.calanais;
     const sanc = w47.tursachan;
 
     /* --- the pair exists and is the size its export is ---
      * A terrain image that does not match its grid is refused at load and the
-     * map silently falls back to the procedural bake — which is the exact
-     * failure mode that has to be pinned, because it looks like nothing. */
+     * map silently falls back to the procedural bake, which looks like nothing
+     * at all. Both halves are pinned. */
     ok(isle.w === 110 && isle.h === 110, `Calanais is 110x110 (${isle.w}x${isle.h})`);
-    ok(sanc.w === 48 && sanc.h === 44, `the sanctum is 48x44 (${sanc.w}x${sanc.h})`);
+    ok(sanc.w === 32 && sanc.h === 32, `the sanctum is 32x32 (${sanc.w}x${sanc.h})`);
     const terr = read47("src/world/terrainImage.ts");
-    ok(/calanais:\s*"\.\/calanais-terrain\.png"/.test(terr),
-      "Calanais is registered in terrainImage, so it does not fall back to the bake");
-    ok(/tursachan:\s*"\.\/tursachan-terrain\.png"/.test(terr),
-      "…and so is the sanctum");
+    ok(/calanais:\s*"\.\/calanais-terrain\.png"/.test(terr), "Calanais is registered in terrainImage");
+    ok(/tursachan:\s*"\.\/tursachan-terrain\.png"/.test(terr), "…and so is the sanctum");
     for (const f of ["calanais-terrain.png", "tursachan-terrain.png"]) {
-      ok(nfs47.existsSync(new URL(`../public/${f}`, import.meta.url)),
-        `public/${f} is actually there`);
+      ok(nfs47.existsSync(new URL(`../public/${f}`, import.meta.url)), `public/${f} is there`);
     }
 
     /* --- COLLISION COMES FROM THE LAYER STACK ---
-     * `questna8.tmx` fills the whole map with water and paints land on top, so
-     * a square is land exactly when a later layer covers it. Read the other
-     * way — "dark pixels seal" like the older maps in this folder — the
-     * temple's inlay reads as wall and the descent chamber is walled in with
-     * no door at all. Flood fill is what tells the two apart: the right rule
-     * reaches every land square, the wrong one strands seventeen of them. */
+     * Both TMX files fill the whole map with a base layer — water on the isle,
+     * black rock below — and paint the floor ON TOP. A square is walkable
+     * exactly when something above the base covers it. Read the other way,
+     * "dark pixels seal" like the older maps in this folder, the temple's inlay
+     * becomes wall and the descent chamber is walled in with no door. Flood
+     * fill is what tells the two apart. */
     const flood = (w: typeof isle, sx: number, sy: number) => {
       const seen = new Set<number>([sy * w.w + sx]);
-      const q = [[sx, sy]];
+      const q: number[][] = [[sx, sy]];
       while (q.length) {
         const [x, y] = q.shift() as number[];
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -14326,43 +14382,42 @@ async function main(): Promise<void> {
       for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (!w.solid[y][x]) n++;
       return n;
     };
-    const isleOpen = open(isle);
-    ok(flood(isle, 18, 18) === isleOpen,
-      `every open square on Calanais is walkable from the pad (${flood(isle, 18, 18)}/${isleOpen})`);
-    ok(flood(sanc, 24, 21) === open(sanc),
-      `…and every square of the sanctum from the stair (${flood(sanc, 24, 21)}/${open(sanc)})`);
+    ok(flood(isle, 18, 18) === open(isle),
+      `every open square on Calanais is walkable from the pad (${flood(isle, 18, 18)}/${open(isle)})`);
+    ok(flood(sanc, 16, 16) === open(sanc),
+      `…and every square of the sanctum from the dais (${flood(sanc, 16, 16)}/${open(sanc)})`);
 
-    /* --- the descent is reachable, which is the whole point of the above ---
-     * It sits in the small chamber at the middle of the temple. Under the
-     * wrong collision rule that chamber is sealed on all four sides and the
-     * errand cannot be finished; the flood above passes only if it is not. */
     const down = isle.portals.find((p) => p.dest === "tursachan");
     ok(!!down, "Calanais has a way down into the sanctum");
     const dtx = down ? Math.floor(down.x / TILE47) : 0;
     const dty = down ? Math.floor(down.y / TILE47) : 0;
     ok(!!down && !isle.solid[dty][dtx], "…and the square it stands on is walkable");
 
-    /* --- the band is capped BELOW Liddesdale ---
-     * A character lands here at eight and on Liddesdale at ten. Liddesdale
-     * opens on the smuggler and closes on the highwayman; if this island
-     * reached the brigand the two would be one ground and the next errand
-     * would have nothing left to be. */
+    /* --- THE BRIDGE IS THREE SQUARES OF DECK, NOT FIVE ---
+     * The `most` layer paints x=58..62; the export draws planks on 59..61 and
+     * posts on the other two. Taking the layer at face value left a walkable
+     * square on open water down each side of both crossings, and the player
+     * standing on it was standing on the sea. */
+    for (const y of [36, 68]) {
+      ok(isle.solid[y][58] && isle.solid[y][62], `row ${y}: the bridge posts are not walkable`);
+      for (const x of [59, 60, 61]) ok(!isle.solid[y][x], `row ${y}: x=${x} is deck`);
+    }
+
+    /* --- the band is capped BELOW Liddesdale --- */
     const posts47 = isle.mobPosts ?? [];
     const kinds = new Set(posts47.map((p) => p.kind));
     for (const k of ["snake", "poacher", "bandit", "smuggler", "cutthroat"]) {
       ok(kinds.has(k as never), `Calanais posts the ${k}`);
     }
-    for (const k of ["brigand", "highwayman", "deserter", "skeleton", "goblin"]) {
+    for (const k of ["brigand", "highwayman", "deserter"]) {
       ok(!kinds.has(k as never), `…and nothing as heavy as the ${k}`);
     }
+    ok(posts47.length === 64, `Calanais carries all 64 posts (${posts47.length})`);
 
     /* --- the gradient runs AT the temple, not away from the pad ---
-     * Every other island ranks its posts by walk distance from where you land,
-     * which works because the hole is at the far end of the walk. Here the
-     * hole is in the MIDDLE, so ranking from the pad would put the softest
-     * creatures over the thing the errand is about. Straight-line distance to
-     * the descent is enough to catch a regression: the means have to stay
-     * ordered, cutthroat nearest, snake furthest. */
+     * The hole is in the MIDDLE of this island, so ranking posts by distance
+     * from where you land would leave the softest creatures guarding the thing
+     * the errand is about. */
     const mean = (kind: string) => {
       const d = posts47.filter((p) => p.kind === kind)
         .map((p) => Math.hypot(p.tx - dtx, p.ty - dty));
@@ -14375,22 +14430,16 @@ async function main(): Promise<void> {
         + `(${ladder[i - 1].toFixed(1)} → ${ladder[i].toFixed(1)})`);
     }
 
-    /* --- the bridges carry no posts ---
-     * They are one square wide with no way off. A creature on the deck, or
-     * close enough to step onto it, turns the crossing into a corridor fight
-     * with no retreat — the island is meant to be hard to cross, not to have
-     * one square on it where the player cannot fight back. */
+    /* --- nothing is posted on the temple or either bridge ---
+     * The deck is one square wide with no way off, and the platform is where
+     * the player stands still and reads. */
     const deck: [number, number][] = [];
     for (let y = 0; y < isle.h; y++) {
       for (let x = 0; x < isle.w; x++) if (isle.tile[y][x] === Tile47.Dirt) deck.push([x, y]);
     }
     const tooClose = posts47.filter((p) =>
       deck.some(([x, y]) => Math.abs(p.tx - x) <= 3 && Math.abs(p.ty - y) <= 3));
-    ok(tooClose.length === 0,
-      `no post stands within three squares of the bridges or the platform (${tooClose.length})`);
-
-    /* --- no post doubles another ---
-     * Eight squares apart, so every pull is a single one. */
+    ok(tooClose.length === 0, `no post within three squares of the temple or a bridge (${tooClose.length})`);
     let doubled = 0;
     for (let i = 0; i < posts47.length; i++) {
       for (let j = i + 1; j < posts47.length; j++) {
@@ -14399,49 +14448,160 @@ async function main(): Promise<void> {
       }
     }
     ok(doubled === 0, `no two posts on Calanais are within eight squares (${doubled})`);
-    ok(posts47.length === 64, `Calanais carries all 64 posts (${posts47.length})`);
 
-    /* --- five monuments, on the five squares the TMX marks ---
-     * These are the object-layer positions from `questna8-1.tmx`: ogien,
-     * woda, ziemia, blyskawica, wiatr. The ART is a placeholder and is allowed
-     * to change; the SQUARES are the contract, because the errand's whole
-     * mechanic is which of the five the player walked to. */
-    const MONUMENTS: [string, number, number][] = [
-      ["fire", 13, 19], ["water", 32, 18], ["earth", 17, 31],
-      ["lightning", 31, 29], ["wind", 23, 7],
+    /* --- TWELVE FIRES, AND THE SYMMETRY IS THE POINT ---
+     * A ring that is NEARLY symmetric reads as a mistake where a scatter would
+     * have read as deliberate, so all three symmetries of the platform are
+     * checked: both mirrors about its centre at 60,52 and the diagonal swap. */
+    const fires = isle.fires.map((f) => [f.tx, f.ty] as const);
+    ok(fires.length === 12, `the temple carries twelve fires (${fires.length})`);
+    const fset = new Set(fires.map(([x, y]) => `${x},${y}`));
+    const has = (x: number, y: number) => fset.has(`${x},${y}`);
+    ok(fires.every(([x, y]) => has(120 - x, y)), "the fire ring is closed under the east-west mirror");
+    ok(fires.every(([x, y]) => has(x, 104 - y)), "…and under the north-south mirror");
+    ok(fires.every(([x, y]) => has(60 + (y - 52), 52 + (x - 60))), "…and under the diagonal swap");
+    ok(!has(dtx, dty), "…and the descent square itself is left clear");
+    /* Fires seal nothing — that stopped being true of every map at Etap 44 —
+     * so the ring lights the temple without walling any of it off. */
+    ok(fires.every(([x, y]) => !isle.solid[y][x]), "…and no fire seals its square");
+
+    /* --- FIVE CIRCLES, ON THE FIVE SQUARES THE TMX MARKS ---
+     * These are the object-layer positions from `questna8-1.tmx`. The ART may
+     * change; the SQUARES are the contract, because which one the player walked
+     * to IS the choice. */
+    const CIRCLES: [string, number, number][] = [
+      ["fire", 10, 8], ["ice", 20, 8], ["shadow", 7, 17], ["storm", 24, 16], ["earth", 16, 23],
     ];
-    ok(sanc.scenery.length === 5, `the sanctum holds exactly five monuments (${sanc.scenery.length})`);
-    for (const [name, x, y] of MONUMENTS) {
-      ok(sanc.scenery.some((s) => s.tx === x && s.ty === y),
-        `the ${name} monument stands on ${x},${y}`);
-      ok(sanc.solid[y][x], `…and you stand beside it, not on it`);
+    ok(sanc.attuneNodes.length === 5, `the sanctum holds five circles (${sanc.attuneNodes.length})`);
+    ok(new Set(sanc.attuneNodes.map((n) => n.el)).size === 5, "…one per element, none repeated");
+    for (const [el, x, y] of CIRCLES) {
+      ok(sanc.attuneNodes.some((n) => n.el === el && n.tx === x && n.ty === y),
+        `the ${el} circle is centred on ${x},${y}`);
+      /* A circle must NOT seal. Walking in is the input, and a ring that
+       * refused you at its own edge would be the campfire's old collision bug
+       * wearing a different hat. */
+      ok(!sanc.solid[y][x], `…and you can stand in it`);
+    }
+    ok((sanc.mobPosts ?? []).length === 0, "nothing is posted in the sanctum");
+    /* The circles are the only ones in the game, and they are only here. */
+    for (const k of Object.keys(w47) as (keyof typeof w47)[]) {
+      if (k === "tursachan") continue;
+      ok(w47[k].attuneNodes.length === 0, `${k} has no attunement circles`);
     }
 
-    /* --- nothing lives down here --- */
-    ok((sanc.mobPosts ?? []).length === 0,
-      `the sanctum is empty of creatures (${(sanc.mobPosts ?? []).length})`);
+    /* --- NO LADDER BACK UP ---
+     * The one echo with no way out but forward. You came down to choose and
+     * you leave by telling him what you chose. */
+    ok(!sanc.portals.some((p) => p.dest === "calanais"), "the sanctum has no stair back up");
+    const dais = sanc.portals.find((p) => p.dest === "cellar");
+    ok(!!dais && dais.inactive === true, "…and its one exit is dark until a circle is walked into");
 
-    /* --- TEMP-ETAP47-OPENRIFT: both halves, together or neither ---
-     * Cellar rift "3" and the descent on Calanais both ship LIVE, because the
-     * level-8 errand is not in the catalogue yet and a dormant pad nothing can
-     * light is an island nobody can walk. They flip to `inactive: true`
-     * together the day the mission lands. This block is what stops one of them
-     * being closed on its own, which would maroon the sanctum again — and it
-     * is what makes the suite go red if the tag is deleted while either pad is
-     * still open. */
-    const hmk = read47("src/world/handmade.ts");
-    const csp = read47("src/world/calanaisSpec.ts");
-    const tagged = (hmk.match(/TEMP-ETAP47-OPENRIFT/g) ?? []).length
-      + (csp.match(/TEMP-ETAP47-OPENRIFT/g) ?? []).length;
-    const riftLive = /"3":\s*\{\s*[^}]*dest:\s*"calanais"[^}]*\}/.test(hmk)
-      && !/"3":\s*\{[^}]*inactive/.test(hmk);
-    const doorLive = !!isle.portals.find((p) => p.dest === "tursachan" && !p.inactive);
-    ok(riftLive === doorLive,
-      `both temporary openings agree (rift ${riftLive}, descent ${doorLive})`);
-    ok(!riftLive || tagged === 2,
-      `…and while they are open, both are tagged TEMP-ETAP47-OPENRIFT (${tagged})`);
-    ok(riftLive || !/TEMP-ETAP47-OPENRIFT/.test(hmk + csp),
-      "…and once they are closed the tag is gone with them");
+    /* --- THE CHAIN: Calanais first, the redcap behind it --- */
+    rps47(); M47.resetMissions();
+    const cal = M47.missionById("calanais")!;
+    ok(cal.reqLevel === 8 && cal.after === undefined, "Calanais is the root, at level eight");
+    ok(cal.relic === undefined, "…and it carries nothing back");
+    ok(M47.grantsAttunement(cal), "…so it is the errand that pays in attunement");
+    ok(!M47.grantsAttunement(M47.missionById("redcap")!), "…and the redcap is not");
+    ok(M47.missionById("redcap")!.after === "calanais", "the redcap now waits on it");
+    /* Inserting a link in FRONT of one already in people's saves is safe
+     * because `stageOf` returns a stored stage before it consults either gate.
+     * A character who closed the redcap keeps him closed. */
+    M47.setStage("redcap", "closed");
+    ok(M47.stageOf("redcap", 20) === "closed",
+      "a save that already closed the redcap keeps him closed under the new prerequisite");
+    M47.resetMissions();
+
+    /* --- THE THREE PADS, DRIVEN BY A CIRCLE INSTEAD OF A KILL ---
+     * The same three states the other two errands get from a boss dying. */
+    ok(!M47.groundOpen("calanais", 8), "before the sage speaks the island is shut");
+    M47.setStage("calanais", "active");
+    ok(M47.groundOpen("calanais", 8), "taking the errand opens the island");
+    ok(M47.echoOpen("tursachan", 8), "…and the stair down");
+    ok(!M47.relicRoadOpen("tursachan", 8), "…while the dais stays dark");
+    M47.relicTaken("calanais", 8);
+    ok(M47.stageOf("calanais", 8) === "complete", "walking into a circle completes the errand");
+    ok(!M47.echoOpen("tursachan", 8), "…the stair goes dark behind you");
+    ok(M47.relicRoadOpen("tursachan", 8), "…and the dais lights");
+    M47.missionHandedIn("calanais", 8);
+    ok(M47.groundOpen("calanais", 8), "handing it in leaves the island open forever");
+    ok(!M47.echoOpen("tursachan", 8), "…and the sanctum shut for good");
+
+    /* --- THE RESET HAS TO GIVE THE ELEMENT BACK ---
+     * `/replay` on a relic errand strips the relic from the pack. On this one
+     * there is no relic and the payment is a bit in `attuned`, so a reset that
+     * only cleared the stage would hand out a free element every run — the
+     * same shape of bug as a dev command re-opening a one-time chest. */
+    T47.markAttuned("fire");
+    ok(T47.isAttuned("fire"), "the element is written on the character");
+    T47.clearAttuned();
+    ok(!T47.isAttuned("fire"), "…and the reset takes it back");
+    const mainSrc = read47("src/main.ts");
+    const replayBody = mainSrc.slice(mainSrc.indexOf("function replayMissions"),
+      mainSrc.indexOf("function forgetEverything"));
+    ok(/grantsAttunement\(m\)\s*\)\s*clearAttuned\(\)/.test(replayBody),
+      "`/replay` gives the element back, or replaying this errand is a free element every time");
+    ok(/grantsAttunement/.test(mainSrc.slice(mainSrc.indexOf("function forgetEverything"),
+      mainSrc.indexOf("function forgetEverything") + 700)),
+      "…and so does the full wipe");
+    /* While Calanais is the ONLY source, clearing the whole set is exact. A
+     * second source makes it over-clear, and this is the tripwire for that
+     * day — see the note on `clearAttuned`. */
+    ok(M47.MISSIONS.filter((m) => M47.grantsAttunement(m)).length === 1,
+      "one source of attunement, so the blanket reset is still precise");
+
+    /* --- THE ANTI-MULE PROPERTY, STATED AS A TEST ---
+     * The element is never an item, so it cannot be dropped on death, looted
+     * off a corpse, put in a chest or traded. That is what stops a player
+     * running five throwaway characters through this errand and funnelling
+     * five elements onto one main — not scarcity, and not a bind. */
+    const ITM47 = await import("../src/items.ts");
+    for (const el of ELS47) {
+      ok(!M47.boundRelic(`${el}Crystal` as never, 8),
+        `nothing binds a ${el} stone, because the errand never makes one`);
+    }
+    ok(!M47.MISSIONS.some((m) => m.relic && String(m.relic).endsWith("Crystal")),
+      "no errand hands out an attunement stone as an item");
+    void ITM47;
+
+    /* --- EVERY STRING, IN ALL THREE LANGUAGES ---
+     * Plus the two this errand owns beyond the ten every mission owns. */
+    const SP47 = await import("../src/text/speech.ts");
+    for (const k of [...M47.missionKeys("calanais"), "sage.descend.calanais",
+      "sage.attuned.calanais", "attune.already"]) {
+      for (const lg of SP47.LANGS) {
+        const v = SP47.t(k, lg);
+        ok(typeof v === "string" && v.length > 0 && v !== k,
+          `${k} exists in ${lg}`);
+      }
+    }
+    /* He never names an element as the right one, in any language. The choice
+     * is permanent and it is the player's; a sage who nudged would be making
+     * it for them. */
+    for (const lg of SP47.LANGS) {
+      const offer = SP47.t("sage.offer.calanais", lg);
+      ok(!/\b(fire|ogień|ogien|fuego)\b/i.test(offer),
+        `the offer recommends no element (${lg})`);
+    }
+
+    /* --- THE CIRCLE ANIMATION IS A CAMPFIRE THAT DOES NOT BITE --- */
+    const A47 = await import("../src/gfx/attuneSheet.ts");
+    ok(A47.ATTUNE_FRAMES === 12 && A47.ATTUNE_SPAN === 2,
+      "twelve frames over a two-by-two block");
+    ok(A47.attuneFrameIndex(0, 0) === 0 && A47.attuneFrameIndex(1, 0) === 0,
+      "the loop closes on the second, so the wrap is no larger a step than any inside it");
+    ok(A47.attuneFrameIndex(0, -0.5) >= 0,
+      "a negative phase does not index off the front of the strip");
+    ok(A47.attuneFrame("fire", 0, 0) === null,
+      "headless, no strip has landed and nothing is drawn — no baked stand-in to be wrong");
+    const attSrc = read47("src/gfx/attuneSheet.ts");
+    ok(!/BURN|hurtPlayer/.test(attSrc), "a circle costs nothing to stand in");
+    /* Distinct phases, or five circles pulse in lockstep and the room reads as
+     * one object with five heads. */
+    ok(new Set(sanc.attuneNodes.map((n) => n.phase)).size > 1,
+      "…and no two circles were given the same phase");
+
+    rps47(); M47.resetMissions(); T47.clearAttuned();
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
