@@ -57,7 +57,12 @@ export type WorldKey =
   // Haramsey — the barrow coast, the sage's SECOND mission ground, and Kárr's
   // howe cut into it. Same pairing as Liddesdale: an island to walk and one
   // room at the bottom of it that closes behind you.
-  | "haramsey" | "haugr";
+  | "haramsey" | "haugr"
+  // Calanais — the Temple Isle, the sage's THIRD mission ground and the first
+  // one he opens: level eight, before the redcap. The sanctum below it breaks
+  // the pairing the other two set, because there is nothing down there to
+  // kill. The island is the errand; the room at the bottom is the choice.
+  | "calanais" | "tursachan";
 
 /** A point in world (pixel) space. */
 export interface Vec {

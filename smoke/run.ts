@@ -7792,10 +7792,10 @@ async function main(): Promise<void> {
     // Those four are the only keys in the game that exist because a MISSION
     // needed them rather than because a level range did, and they arrive in
     // pairs by construction: a ground to walk and one room at the end of it.
-    ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 cellar deaddeep1 "
-      + "deaddeep2 haramsey haugr hermitage home liddesdale minodeep1 minodeep2 "
-      + "orcdeep1 orcdeep2 reach town",
-      `eighteen maps and no others (${keys.length}: ${keys.join(" ")})`);
+    ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 calanais cellar "
+      + "deaddeep1 deaddeep2 haramsey haugr hermitage home liddesdale minodeep1 "
+      + "minodeep2 orcdeep1 orcdeep2 reach town tursachan",
+      `twenty maps and no others (${keys.length}: ${keys.join(" ")})`);
     for (const dead of ["cave.ts", "deepwild.ts"]) {
       ok(!nfs.existsSync(new URL(`../src/world/${dead}`, import.meta.url)),
         `${dead} is gone, not merely unreferenced`);
@@ -14270,6 +14270,178 @@ async function main(): Promise<void> {
     ok(claimed === null,
       `buildWorlds does not hard-code a spec count that nothing checks (${claimed?.[1] ?? "none"})`);
     void present;
+  }
+
+  console.log("Etap 47 — Calanais and the sanctum: the map says what the picture cannot:");
+  {
+    const nfs47 = await import("node:fs");
+    const { TILE: TILE47 } = await import("../src/config.ts");
+    const { Tile: Tile47 } = await import("../src/world/types.ts");
+    const read47 = (rel: string): string =>
+      nfs47.readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
+    const { buildWorlds: bw47 } = await import("../src/game.ts");
+    const w47 = bw47(1);
+    const isle = w47.calanais;
+    const sanc = w47.tursachan;
+
+    /* --- the pair exists and is the size its export is ---
+     * A terrain image that does not match its grid is refused at load and the
+     * map silently falls back to the procedural bake — which is the exact
+     * failure mode that has to be pinned, because it looks like nothing. */
+    ok(isle.w === 110 && isle.h === 110, `Calanais is 110x110 (${isle.w}x${isle.h})`);
+    ok(sanc.w === 48 && sanc.h === 44, `the sanctum is 48x44 (${sanc.w}x${sanc.h})`);
+    const terr = read47("src/world/terrainImage.ts");
+    ok(/calanais:\s*"\.\/calanais-terrain\.png"/.test(terr),
+      "Calanais is registered in terrainImage, so it does not fall back to the bake");
+    ok(/tursachan:\s*"\.\/tursachan-terrain\.png"/.test(terr),
+      "…and so is the sanctum");
+    for (const f of ["calanais-terrain.png", "tursachan-terrain.png"]) {
+      ok(nfs47.existsSync(new URL(`../public/${f}`, import.meta.url)),
+        `public/${f} is actually there`);
+    }
+
+    /* --- COLLISION COMES FROM THE LAYER STACK ---
+     * `questna8.tmx` fills the whole map with water and paints land on top, so
+     * a square is land exactly when a later layer covers it. Read the other
+     * way — "dark pixels seal" like the older maps in this folder — the
+     * temple's inlay reads as wall and the descent chamber is walled in with
+     * no door at all. Flood fill is what tells the two apart: the right rule
+     * reaches every land square, the wrong one strands seventeen of them. */
+    const flood = (w: typeof isle, sx: number, sy: number) => {
+      const seen = new Set<number>([sy * w.w + sx]);
+      const q = [[sx, sy]];
+      while (q.length) {
+        const [x, y] = q.shift() as number[];
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+          if (w.solid[ny][nx] || seen.has(ny * w.w + nx)) continue;
+          seen.add(ny * w.w + nx); q.push([nx, ny]);
+        }
+      }
+      return seen.size;
+    };
+    const open = (w: typeof isle) => {
+      let n = 0;
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (!w.solid[y][x]) n++;
+      return n;
+    };
+    const isleOpen = open(isle);
+    ok(flood(isle, 18, 18) === isleOpen,
+      `every open square on Calanais is walkable from the pad (${flood(isle, 18, 18)}/${isleOpen})`);
+    ok(flood(sanc, 24, 21) === open(sanc),
+      `…and every square of the sanctum from the stair (${flood(sanc, 24, 21)}/${open(sanc)})`);
+
+    /* --- the descent is reachable, which is the whole point of the above ---
+     * It sits in the small chamber at the middle of the temple. Under the
+     * wrong collision rule that chamber is sealed on all four sides and the
+     * errand cannot be finished; the flood above passes only if it is not. */
+    const down = isle.portals.find((p) => p.dest === "tursachan");
+    ok(!!down, "Calanais has a way down into the sanctum");
+    const dtx = down ? Math.floor(down.x / TILE47) : 0;
+    const dty = down ? Math.floor(down.y / TILE47) : 0;
+    ok(!!down && !isle.solid[dty][dtx], "…and the square it stands on is walkable");
+
+    /* --- the band is capped BELOW Liddesdale ---
+     * A character lands here at eight and on Liddesdale at ten. Liddesdale
+     * opens on the smuggler and closes on the highwayman; if this island
+     * reached the brigand the two would be one ground and the next errand
+     * would have nothing left to be. */
+    const posts47 = isle.mobPosts ?? [];
+    const kinds = new Set(posts47.map((p) => p.kind));
+    for (const k of ["snake", "poacher", "bandit", "smuggler", "cutthroat"]) {
+      ok(kinds.has(k as never), `Calanais posts the ${k}`);
+    }
+    for (const k of ["brigand", "highwayman", "deserter", "skeleton", "goblin"]) {
+      ok(!kinds.has(k as never), `…and nothing as heavy as the ${k}`);
+    }
+
+    /* --- the gradient runs AT the temple, not away from the pad ---
+     * Every other island ranks its posts by walk distance from where you land,
+     * which works because the hole is at the far end of the walk. Here the
+     * hole is in the MIDDLE, so ranking from the pad would put the softest
+     * creatures over the thing the errand is about. Straight-line distance to
+     * the descent is enough to catch a regression: the means have to stay
+     * ordered, cutthroat nearest, snake furthest. */
+    const mean = (kind: string) => {
+      const d = posts47.filter((p) => p.kind === kind)
+        .map((p) => Math.hypot(p.tx - dtx, p.ty - dty));
+      return d.reduce((a, b) => a + b, 0) / d.length;
+    };
+    const ladder = ["cutthroat", "smuggler", "bandit", "poacher", "snake"].map(mean);
+    for (let i = 1; i < ladder.length; i++) {
+      ok(ladder[i] > ladder[i - 1],
+        `rank ${i + 1} stands further from the descent than rank ${i} `
+        + `(${ladder[i - 1].toFixed(1)} → ${ladder[i].toFixed(1)})`);
+    }
+
+    /* --- the bridges carry no posts ---
+     * They are one square wide with no way off. A creature on the deck, or
+     * close enough to step onto it, turns the crossing into a corridor fight
+     * with no retreat — the island is meant to be hard to cross, not to have
+     * one square on it where the player cannot fight back. */
+    const deck: [number, number][] = [];
+    for (let y = 0; y < isle.h; y++) {
+      for (let x = 0; x < isle.w; x++) if (isle.tile[y][x] === Tile47.Dirt) deck.push([x, y]);
+    }
+    const tooClose = posts47.filter((p) =>
+      deck.some(([x, y]) => Math.abs(p.tx - x) <= 3 && Math.abs(p.ty - y) <= 3));
+    ok(tooClose.length === 0,
+      `no post stands within three squares of the bridges or the platform (${tooClose.length})`);
+
+    /* --- no post doubles another ---
+     * Eight squares apart, so every pull is a single one. */
+    let doubled = 0;
+    for (let i = 0; i < posts47.length; i++) {
+      for (let j = i + 1; j < posts47.length; j++) {
+        const a = posts47[i], b = posts47[j];
+        if (Math.hypot(a.tx - b.tx, a.ty - b.ty) < 8) doubled++;
+      }
+    }
+    ok(doubled === 0, `no two posts on Calanais are within eight squares (${doubled})`);
+    ok(posts47.length === 64, `Calanais carries all 64 posts (${posts47.length})`);
+
+    /* --- five monuments, on the five squares the TMX marks ---
+     * These are the object-layer positions from `questna8-1.tmx`: ogien,
+     * woda, ziemia, blyskawica, wiatr. The ART is a placeholder and is allowed
+     * to change; the SQUARES are the contract, because the errand's whole
+     * mechanic is which of the five the player walked to. */
+    const MONUMENTS: [string, number, number][] = [
+      ["fire", 13, 19], ["water", 32, 18], ["earth", 17, 31],
+      ["lightning", 31, 29], ["wind", 23, 7],
+    ];
+    ok(sanc.scenery.length === 5, `the sanctum holds exactly five monuments (${sanc.scenery.length})`);
+    for (const [name, x, y] of MONUMENTS) {
+      ok(sanc.scenery.some((s) => s.tx === x && s.ty === y),
+        `the ${name} monument stands on ${x},${y}`);
+      ok(sanc.solid[y][x], `…and you stand beside it, not on it`);
+    }
+
+    /* --- nothing lives down here --- */
+    ok((sanc.mobPosts ?? []).length === 0,
+      `the sanctum is empty of creatures (${(sanc.mobPosts ?? []).length})`);
+
+    /* --- TEMP-ETAP47-OPENRIFT: both halves, together or neither ---
+     * Cellar rift "3" and the descent on Calanais both ship LIVE, because the
+     * level-8 errand is not in the catalogue yet and a dormant pad nothing can
+     * light is an island nobody can walk. They flip to `inactive: true`
+     * together the day the mission lands. This block is what stops one of them
+     * being closed on its own, which would maroon the sanctum again — and it
+     * is what makes the suite go red if the tag is deleted while either pad is
+     * still open. */
+    const hmk = read47("src/world/handmade.ts");
+    const csp = read47("src/world/calanaisSpec.ts");
+    const tagged = (hmk.match(/TEMP-ETAP47-OPENRIFT/g) ?? []).length
+      + (csp.match(/TEMP-ETAP47-OPENRIFT/g) ?? []).length;
+    const riftLive = /"3":\s*\{\s*[^}]*dest:\s*"calanais"[^}]*\}/.test(hmk)
+      && !/"3":\s*\{[^}]*inactive/.test(hmk);
+    const doorLive = !!isle.portals.find((p) => p.dest === "tursachan" && !p.inactive);
+    ok(riftLive === doorLive,
+      `both temporary openings agree (rift ${riftLive}, descent ${doorLive})`);
+    ok(!riftLive || tagged === 2,
+      `…and while they are open, both are tagged TEMP-ETAP47-OPENRIFT (${tagged})`);
+    ok(riftLive || !/TEMP-ETAP47-OPENRIFT/.test(hmk + csp),
+      "…and once they are closed the tag is gone with them");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

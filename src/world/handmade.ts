@@ -538,8 +538,17 @@ export const CELLAR_SPEC: HandmadeSpec = {
       dest: "haramsey", label: "to Haramsey — the barrow coast",
       span: 2, floor: Tile.Cave, inactive: true,
     },
-    // and eight more the sage has not named yet
-    "3": sealed("Sealed Rift III"),
+    // The third named rift. TEMP-ETAP47-OPENRIFT: it ships LIVE rather than
+    // dormant, which is not where it ends up. Every other mission door is
+    // `inactive` and lit by `applyMissionPads` when Chronos hands the errand
+    // over — but the level-8 errand does not exist in the catalogue yet, so a
+    // dormant pad here would be a pad nothing can ever light and an island
+    // nobody can walk. It flips to `inactive: true` the day the mission lands,
+    // and the smoke suite fails until it does.
+    "3": {
+      dest: "calanais", label: "to Calanais — the Temple Isle",
+      span: 2, floor: Tile.Cave,
+    },
     "4": sealed("Sealed Rift IV"),
     "5": sealed("Sealed Rift V"),
     "6": sealed("Sealed Rift VI"),

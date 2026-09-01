@@ -12,6 +12,8 @@ import { LIDDESDALE_SPEC } from "./world/liddesdaleSpec.ts";
 import { HERMITAGE_SPEC } from "./world/hermitageSpec.ts";
 import { HARAMSEY_SPEC } from "./world/haramseySpec.ts";
 import { HAUGR_SPEC } from "./world/haugrSpec.ts";
+import { CALANAIS_SPEC } from "./world/calanaisSpec.ts";
+import { TURSACHAN_SPEC } from "./world/tursachanSpec.ts";
 import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
@@ -163,6 +165,8 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     hermitage: makeHandmadeWorld(HERMITAGE_SPEC),
     haramsey: makeHandmadeWorld(HARAMSEY_SPEC),
     haugr: makeHandmadeWorld(HAUGR_SPEC),
+    calanais: makeHandmadeWorld(CALANAIS_SPEC),
+    tursachan: makeHandmadeWorld(TURSACHAN_SPEC),
   };
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
