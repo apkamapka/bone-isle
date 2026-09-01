@@ -7,6 +7,7 @@ import { nearestHit, footprintHit } from "./world/pick.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx/fireSheet.ts";
 import { attuneFrame, ATTUNE_SPAN } from "./gfx/attuneSheet.ts";
+import { drawAmbientField } from "./gfx/spellFx.ts";
 import { scenerySprite, FOOTPRINT, SCENERY_NAME } from "./gfx/sceneryArt.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, iconW, iconH, hasPropArt, propSprite, CHEST_LIFT } from "./gfx/sprites.ts";
@@ -4991,6 +4992,15 @@ function render(): void {
   // block, which puts the player in front of the ring when they stand south of
   // it and behind the rising column when they stand in it — which is the right
   // way round, because the column is light and the player is not.
+  // The ambient element decoration: one square each, drawn UNDER everything
+  // that sorts, because it is floor dressing and nothing should ever be hidden
+  // behind it. Sorted on its own square's bottom edge like a fire.
+  for (const nd of world.ambientFx) {
+    const bx = nd.tx * TILE + TILE / 2;
+    const by = nd.ty * TILE + TILE / 2;
+    if (!inView(bx, by)) continue;
+    drawList.push({ y: by, fn: () => drawAmbientField(vctx, nd.el, bx, by, camX, camY, waveT + nd.phase * 4) });
+  }
   for (const nd of world.attuneNodes) {
     const bx = nd.tx * TILE + TILE / 2;
     const by = nd.ty * TILE + TILE / 2;
