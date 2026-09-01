@@ -27,6 +27,8 @@ export type Tile = (typeof Tile)[keyof typeof Tile];
  * any more, so `POPULATIONS` and the danger-band scatter went with them: what
  * the author drew is what the player meets. See `game.ts` for the fallout.
  */
+import type { Element } from "../systems/elements.ts";
+
 export type WorldKey =
   // The hubs: the player's own island, the town, and the Time Sage's cellar
   // under it — fourteen pads, twelve of them still dormant.
@@ -458,6 +460,18 @@ export interface Respawn {
   guard?: { tx: number; ty: number };
 }
 
+/**
+ * A rune circle on the sanctum floor: which element it grants, and the
+ * TOP-LEFT tile of the 2x2 block its artwork covers.
+ */
+export interface AttuneNode {
+  el: Element;
+  tx: number;
+  ty: number;
+  /** Keeps two circles from pulsing in lockstep, as a fire's phase does. */
+  phase: number;
+}
+
 /** Options for generating a world. */
 export interface WorldOpts {
   key: WorldKey;
@@ -499,6 +513,11 @@ export interface World {
   rocks: RockNode[];
   decos: Deco[];
   fires: Fire[];
+  /** The five attunement circles in the sanctum, and nowhere else. Kept off
+   *  `scenery` because scenery seals its square and a circle must not: walking
+   *  into one is how the errand is finished. Kept off `fires` because a fire
+   *  bites you every second and a circle fires once, ever. */
+  attuneNodes: AttuneNode[];
   scenery: Scenery[];
   monsters: Monster[];
   corpses: Corpse[];

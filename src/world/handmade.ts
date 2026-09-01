@@ -28,6 +28,7 @@ import { npcRest } from "../entities/npcs.ts";
 import { nextEntityId } from "./entities.ts";
 import { FOOTPRINT, BLOCK } from "../gfx/sceneryArt.ts";
 import type { MonsterKind, SceneryKind } from "./types.ts";
+import type { Element } from "../systems/elements.ts";
 import { Tile } from "./types.ts";
 import type { World, WorldKey, NpcKey } from "./types.ts";
 
@@ -105,6 +106,9 @@ export interface HandmadeSpec {
    * ruin on the minimap and in the baked fallback.
    */
   solids?: string;
+  /** Glyph → an attunement circle granting that element. The sanctum under
+   *  Calanais is the only map that uses it. */
+  attune?: Readonly<Record<string, Element>>;
   /** Glyph → standing scenery on that tile. The tile is made solid, exactly
    *  like a tree's: these objects are taller than one square and the player
    *  walks BEHIND them, never through them. Glyphs are per-spec so a letter
@@ -187,6 +191,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     rocks: [],
     decos: [],
     fires: [],
+    attuneNodes: [],
     scenery: [],
     monsters: [],
     corpses: [],
@@ -267,6 +272,14 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           solid[y][x] = true;
           break;
         default: {
+          const att = spec.attune?.[ch];
+          if (att) {
+            // The glyph names the CENTRE the art is anchored on; the 64x64
+            // frame covers the 2x2 block whose top-left is one tile up and
+            // left. Nothing is sealed — walking in is the whole mechanic.
+            w.attuneNodes.push({ el: att, tx: x, ty: y, phase: ((x * 5 + y * 11) % 10) / 10 });
+            break;
+          }
           if (spec.solids?.includes(ch)) break; // painted obstacle; collision only
           const scn = spec.scenery?.[ch];
           if (scn) {
@@ -545,9 +558,12 @@ export const CELLAR_SPEC: HandmadeSpec = {
     // dormant pad here would be a pad nothing can ever light and an island
     // nobody can walk. It flips to `inactive: true` the day the mission lands,
     // and the smoke suite fails until it does.
+    // The third named rift, and the first one the sage opens: Calanais is the
+    // level-8 link and comes before Liddesdale in the chain. Dormant like the
+    // other two — `applyMissionPads` lights it when the errand is in hand.
     "3": {
       dest: "calanais", label: "to Calanais — the Temple Isle",
-      span: 2, floor: Tile.Cave,
+      span: 2, floor: Tile.Cave, inactive: true,
     },
     "4": sealed("Sealed Rift IV"),
     "5": sealed("Sealed Rift V"),

@@ -8,18 +8,21 @@
  *
  * COLLISION COMES FROM THE LAYER STACK, NOT FROM THE COLOURS. This map stacks
  * its layers for looks: `woda` is a full-map water fill and every later layer
- * is painted ON TOP of it. So a square is land exactly when something above
- * the water paints it, and water when nothing does. That is the opposite of
- * the rule the older Tiled maps in this folder follow, where the extra layers
- * SEAL their square - and reading this one the old way is a real trap, because
- * the temple's dark inlay and the moat both come out as "dark pixels" and the
- * derived grid then walls the descent chamber in completely. Flood-filling
- * from the arrival pad is what catches it: the correct grid reaches all 7885
- * land squares, the wrong one reaches 7683 and strands the hole.
+ * is painted ON TOP of it. A square is land exactly when something above the
+ * water paints it. That is the OPPOSITE of the rule the older Tiled maps in
+ * this folder follow, where the extra layers SEAL their square - and reading
+ * this one the old way is a real trap, because the temple's dark inlay and the
+ * moat both come out as "dark pixels" and the derived grid then walls the
+ * descent chamber in completely, with no door at all. Flood-filling from the
+ * arrival pad is what tells the two apart, and the smoke suite does it.
  *
- * THE TERRAIN IS ONLY TWO GLYPHS. `.` grass everywhere on the island, `:` on
- * the two bridges and the temple platform they lead to. That is all the grid
- * needs to say, because the export paints the rest.
+ * THE BRIDGES ARE NARROWER THAN THE LAYER THAT PAINTS THEM. The `most` layer
+ * covers five columns, x=58..62, and the decking in the export is three -
+ * x=59..61 - with the posts standing on the outer two. Taking the layer at
+ * face value put a walkable square on open water down each side of both
+ * crossings, and the player standing on it was standing on the sea. So 58 and
+ * 62 are water here on the bridge rows, and the deck is the three squares you
+ * can actually see planks under.
  *
  * WHO LIVES HERE, AND WHY THIS BAND. Snake, poacher, bandit, smuggler,
  * cutthroat - 20 to 80 experience. Deliberately capped BELOW Liddesdale, which
@@ -33,25 +36,32 @@
  * the hole is at the far end of the walk. Here the hole is in the MIDDLE, so
  * ranking from the pad would leave the softest creatures guarding the thing
  * the errand is about. Posts are ranked by walk distance to the platform
- * instead: cutthroats at a mean of 12 squares from it, snakes at 57. Walking
- * to the temple gets harder the closer you get, which is the whole point of
- * the errand - the crossing IS the mission, there is nothing to kill at the
- * end of it.
+ * instead: cutthroats nearest it, snakes furthest. The crossing IS the
+ * mission - there is nothing to kill at the end of it.
  *
  * 64 posts, no two within 8 squares, so every pull is a single one.
  *
- * A THREE-SQUARE APRON round the platform and both bridges carries no posts at
- * all. The bridges are one tile wide and there is no way off them; a creature
- * standing on the deck, or close enough to step onto it, turns a crossing into
- * a corridor fight with no retreat. The island is meant to be hard to cross,
- * not to have one square on it where you cannot fight back.
+ * NOTHING IS POSTED ON THE TEMPLE ITSELF, or within three squares of it or of
+ * either bridge. Two reasons, and they are different. The bridges are one
+ * square of deck wide with no way off, so a creature on or beside them turns a
+ * crossing into a corridor fight with no retreat. The platform is where the
+ * player stands still and reads - the descent is on it - and an ambush there
+ * is an ambush on a menu.
+ *
+ * TWELVE FIRES INSTEAD, AND THEY ARE SYMMETRIC ON PURPOSE. Four on the inner
+ * cross at three squares, eight on the outer arms at (1,6) and its whole
+ * eight-fold orbit, all about the platform's own centre at 60,52. The set is
+ * closed under both mirrors AND the diagonal swap, and a test checks all
+ * three, because a ring of fires that is nearly symmetric looks like a mistake
+ * where a scatter would have looked deliberate. The descent square itself is
+ * left clear. Fires seal nothing, so they light the temple without walling it.
  *
  * NINE GROVES, 135 live trees. `T` and not the dead wood of Liddesdale - this
  * island is alive, and the contrast is the point when the two sit next to each
  * other in the sage's cellar. 87 boulders scattered between them.
  *
  *   P pad back to the cellar (2x2)   D down into the sanctum
- *   T tree   R stone
+ *   T tree   R stone   F fire
  *   creatures: n snake  p poacher  b bandit  s smuggler  c cutthroat
  */
 import type { HandmadeSpec } from "./handmade.ts";
@@ -65,25 +75,13 @@ export const CALANAIS_SPEC: HandmadeSpec = {
     P: { dest: "cellar", label: "back to the Time Sage's cellar", span: 2, floor: Tile.Dirt },
     // The one way down, and a MISSION door: `applyMissionPads` puts it to
     // sleep whenever the sanctum behind it is not enterable, so it is dark
-    // before the sage speaks and dark again once a monument has been touched.
-    // TEMP-ETAP47-OPENRIFT, the second half of it. This is a MISSION door and
-    // it belongs dormant, lit by `applyMissionPads` when the sanctum behind it
-    // is enterable. It ships LIVE for the same reason cellar rift "3" does:
-    // the level-8 errand is not in the catalogue yet, so nothing exists that
-    // could ever light it, and a dormant door here would maroon the sanctum.
-    // Both halves flip together the day the mission lands.
+    // before the sage speaks and dark again the moment a circle is walked into.
     D: {
       dest: "tursachan", label: "down into the sanctum",
-      style: "caveMouth", floor: Tile.Dirt,
+      style: "caveMouth", floor: Tile.Dirt, inactive: true,
     },
   },
-  monsters: {
-    n: "snake",
-    p: "poacher",
-    b: "bandit",
-    s: "smuggler",
-    c: "cutthroat",
-  },
+  monsters: { n: "snake", p: "poacher", b: "bandit", s: "smuggler", c: "cutthroat" },
   rows: [
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
@@ -118,45 +116,45 @@ export const CALANAIS_SPEC: HandmadeSpec = {
     "~~~~~~~~~.............................................R...............................s........R..~~~~~~~~~~~~",
     "~~~~~~~~~n...........................R............................R.........c...................b.~~~~~~~~~~~~",
     "~~~~~~~~~.........................................................c...............................~~~~~~~~~~~~",
-    "~~~~~~~~~.................................................:.:::...................................~~~~~~~~~~~~",
-    "~~~~~~~~~.................................................:::::~..................................~~~~~~~~~~~~",
-    "~~~~~~~~~~....................................Rc.....~~~~~:::::~~~~~~.............................~~~~~~~~~~~~",
-    "~~~~~~~~~~..R.......................................~~~~~~:::::~~~~~~~............................~~~~~~~~~~~~",
-    "~~~~~~~~~~..........R...b.........................~~~~~~~~:::::~~~~~~~~...........................~~~~~~~~~~~~",
-    "~~~~~~~~~~.......................R..............~~~~~~~~~.:::::.~~~~~~~~~...........R.............~~~~~~~~~~~~",
-    "~~~~~~~~~~~..................................~~~~~~~~~...:::::::...~~~~~~~........................~~~~~~~~~~~~",
+    "~~~~~~~~~.................................................~.::~...................................~~~~~~~~~~~~",
+    "~~~~~~~~~.................................................~:::~~..................................~~~~~~~~~~~~",
+    "~~~~~~~~~~....................................Rc.....~~~~~~:::~~~~~~~.............................~~~~~~~~~~~~",
+    "~~~~~~~~~~..R.......................................~~~~~~~:::~~~~~~~~............................~~~~~~~~~~~~",
+    "~~~~~~~~~~..........R...b.........................~~~~~~~~~:::~~~~~~~~~...........................~~~~~~~~~~~~",
+    "~~~~~~~~~~.......................R..............~~~~~~~~~.~:::~.~~~~~~~~~...........R.............~~~~~~~~~~~~",
+    "~~~~~~~~~~~..................................~~~~~~~~~...:~:::~:...~~~~~~~........................~~~~~~~~~~~~",
     "~~~~~~~~~~~.........................s.......~~~~~~~~..:::.:::::.:::..~~~~~~......................R~~~~~~~~~~~~",
     "~~~~~~~~~~~~...............................~~~~~~~..::....:::::....::..~~~~~R....................p~~~~~~~~~~~~",
     "~~~~~~~~~~~~...............................~~~~~~.::.....:::::::.....::.~~~~~s.....................~~~~~~~~~~~",
     "~~~~~~~~~~~.n.............................~~~~~~.:.::.....:::::.....::.:.~~~~~.....................~~~~~~~~~~~",
     "~~~~~~~~~~~R..............................~~~~~.::::::.....:::.....::::::.~~~~.........b...........~~~~~~~~~~~",
     "~~~~~~~~~~~.................R............R~~~~~.:::::::...:::::...:::::::.~~~~~.....................~~~~~~~~~~",
-    "~~~~~~~~~~~..............................~~~~~.:.::::.::..:::::..::.::::.:.~~~~........R............~~~~~~~~~~",
+    "~~~~~~~~~~~..............................~~~~~.:.::::.::..:F:F:..::.::::.:.~~~~........R............~~~~~~~~~~",
     "~~~~~~~~~~~..............................~~~~.:..::::..::::.:.::::..::::..:.~~~.....................~~~~~~~~~~",
     "~~~~~~~~~~~.............................~~~~~.:.........::.:::.::.........:.~~~.....................~~~~~~~~~~",
-    "~~~~~~~~~~~...T......R...p..............~~~~~.:.......:::.:::::.:::.......:.~~~......................~~~~~~~~~",
+    "~~~~~~~~~~~...T......R...p..............~~~~~.:.......:::.::F::.:::.......:.~~~......................~~~~~~~~~",
     "~~~~~~~~~~~.............................~~~~~.:.......::.:::::::.::.......:.~~~R.....................~~~~~~~~~",
-    "~~~~~~~~~~~......T......................~~~~~.:...c...::::::D::::::...c...:.~~~.................R....~~~~~~~~~",
-    "~~~~~~~~~~~T..T.T.T..............R.....~~~~~~.:.......::.:::::::.::.......:.~~~...............p......~~~~~~~~~",
-    "~~~~~~~~~~~...T.....................b..~~~~~~.:.......:::.:::::.:::.......:.~~~......................~~~~~~~~~",
+    "~~~~~~~~~~~......T......................~~~~~.:...c...F:::::D:::::F...c...:.~~~.................R....~~~~~~~~~",
+    "~~~~~~~~~~~T..T.T.T..............R.....~~~~~~.:.......::.F:::::F.::.......:.~~~...............p......~~~~~~~~~",
+    "~~~~~~~~~~~...T.....................b..~~~~~~.:.......F::.:::::.::F.......:.~~~......................~~~~~~~~~",
     "~~~~~~~~~~~..T..TT.....................~~~~~~.:.........::.:::.::.........:.~~~.......................~~~~~~~~",
-    "~~~~~~~~~~~R..Tn.......................~~~~~~.:.::::...::::.:.::::..::::..:.~~~...................T.TT~~~~~~~~",
+    "~~~~~~~~~~~R..Tn.......................~~~~~~.:.::::...::::.F.::::..::::..:.~~~...................T.TT~~~~~~~~",
     "~~~~~~~~~~~T..T........................~~~~~~.:.::::..::..:::::..::.::::..:.~~~....................TT.~~~~~~~~",
     "~~~~~~~~~~~......T..T..................~~~~~~.:.::::.::...:::::...::::::..:.~~~.....R.................~~~~~~~~",
-    "~~~~~~~~~~~~.......T...................~~~~~~~.:::::::.....:::.....:::::.:.~~~~.....b..........T.T.TT.~~~~~~~~",
+    "~~~~~~~~~~~~.......T...................~~~~~~~.:::::::.....F:F.....:::::.:.~~~~.....b..........T.T.TT.~~~~~~~~",
     "~~~~~~~~~~~~..T........................~~~~~~~~.:..::.....:::::.....::..:.~~~~~.................T....T~~~~~~~~",
     "~~~~~~~~~~~~.T.........R................~~~~~~~.:..::....:::::::....::..:.~~~~..............R.....T..R~~~~~~~~",
     "~~~~~~~~~~~~...................R.........~~~~~~~.:........:::::........:.~~~~........................p~~~~~~~~",
     "~~~~~~~~~~~~..............b.................~~~~~.::.......:::.......::.~~~~~.......................T.~~~~~~~~",
     "~~~~~~~~~~~~.................................~~~~~..::......:......::..~~~~~R.................T..T....~~~~~~~~",
     "~~~~~~~~~~~~~.................................~~~~~~..:::.......:::..~~~~~~c....................TT.T.~~~~~~~~~",
-    "~~~~~~~~~~~~~...p.....................R.........~~~~~~...:::::::...~~~~~~~.........................T.~~~~~~~~~",
-    "~~~~~~~~~~~~~.R........................s.........~~~~~~~~.:::::.~~~~~~~~~........................TT.~~~~~~~~~~",
-    "~~~~~~~~~~~~~.....................................~~~~~~~~:::::~~~~~~~~~............................~~~~~~~~~~",
-    "~~~~~~~~~~~~~...................................T...c~~~~~:::::~~~~~~~............................R~~~~~~~~~~~",
-    "~~~~~~~~~~~~~....................................T..T.....:::::....R......................Rs.......~~~~~~~~~~~",
-    "~~~~~~~~~~~~~....................................TTT......:::::...................................~~~~~~~~~~~~",
-    "~~~~~~~~~~~~.....................................T.T.T....:.:::...................................~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~...p.....................R.........~~~~~~...:~:::~:...~~~~~~~.........................T.~~~~~~~~~",
+    "~~~~~~~~~~~~~.R........................s.........~~~~~~~~.~:::~.~~~~~~~~~........................TT.~~~~~~~~~~",
+    "~~~~~~~~~~~~~.....................................~~~~~~~~~:::~~~~~~~~~~............................~~~~~~~~~~",
+    "~~~~~~~~~~~~~...................................T...c~~~~~~:::~~~~~~~~............................R~~~~~~~~~~~",
+    "~~~~~~~~~~~~~....................................T..T.....~:::~....R......................Rs.......~~~~~~~~~~~",
+    "~~~~~~~~~~~~~....................................TTT......~:::~...................................~~~~~~~~~~~~",
+    "~~~~~~~~~~~~.....................................T.T.T....~.::~...................................~~~~~~~~~~~~",
     "~~~~~~~~~~~~.......................R................TTT...........................................~~~~~~~~~~~~",
     "~~~~~~~~~~~~...............R.........................T.......................R....................~~~~~~~~~~~~",
     "~~~~~~~~~~~p.......R..........................................................c...................~~~~~~~~~~~~",
