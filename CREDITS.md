@@ -1262,6 +1262,56 @@ them at 64 x 64 at source would be sharper. Each was then trimmed and seated on
 the anchor line so the box sits on the ground rather than hovering over its own
 shadow.
 
+## Element attunement circles — `public/fx-attune-*.png`
+
+Source: **generated**, by `tools/fx/gen_element_fx.py` in this repository. No
+third-party asset went into these files — no trace, no sample, no recolour of
+anyone else's art.
+
+That is the whole licence note. Unlike every other sheet on this page there is
+no attribution to make, no ShareAlike to honour, no DRM clause to trip over on
+iOS, and no reason to keep these out of a public repository. Re-running the
+script reproduces them byte for byte; every constant that shapes them lives at
+the top of the file and in the `ELEMENTS` table, so a palette change is one line
+and a sixth element is one entry.
+
+Five sheets, one per element, each a horizontal strip of twelve 64 x 64 frames —
+two tiles by two at `TILE = 32`. Drawn at 128 and halved on the way out, which
+is what keeps the glow smooth at the zooms the camera actually reaches
+(f = 2 .. 3.2). The frame count is read off the image exactly as
+`src/gfx/spellArt.ts` reads it, so a redrawn strip of a different length needs no
+code change.
+
+**Anchor 0.72.** The ring centre sits at half the frame's width and 72% of its
+height: the ring is the ground plane and everything above it is airborne. That
+stands the circle on the caster's tile with the column rising over the
+character, the same way the ice spike stands on 0.70.
+
+**The loop is seamless.** Every animated quantity advances by a whole period
+across the twelve frames — the star turns exactly one step of its own symmetry,
+the motes rise a whole number of column heights, the twinkles run whole cycles.
+Frame twelve leads back into frame one with no seam, so the loop can hold for as
+long as a choice screen is open instead of needing a fade.
+
+| Element | Ring | Rising motes | Colour |
+| --- | --- | --- | --- |
+| Fire | tongues licking the rim, 9-point star | flame tongues, embers | orange, cream core |
+| Ice | double ring, hexagram, a ripple pulsing outward | droplets | cyan, white core |
+| Earth | ring broken into ten slabs, 8-point star | irregular dust chips | brown, cream core |
+| Storm | solid ring, 7-point star, three bolts firing in turn | sparks, streaks | yellow, white core |
+| Wind (`shadow`) | five blades, swooshes orbiting up the column | curved swipes | white, lavender halo |
+
+Wind is filed under `shadow` for the same reason its crystals are: the id builds
+item keys and save data and is frozen, while the name the player reads lives in
+`ELEMENT_LABEL`. A file called `fx-attune-wind.png` would be the one that never
+loads.
+
+Earth is the one to watch on brown ground. The slabs are deliberately brown
+rather than the sandier gold they started as, which reads well on grass and
+loses contrast on a dirt or cave floor; the cream core of the star is what still
+carries it. If a mission ever stands this circle on bare earth, lift the rim
+rather than the whole ramp.
+
 ## Spell effects — `public/fx-*.png`
 
 Source: **CraftPix.net**, standard (non-Enterprise) licence —
