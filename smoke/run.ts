@@ -14613,6 +14613,135 @@ async function main(): Promise<void> {
     ok(new Set(sanc.attuneNodes.map((n) => n.phase)).size > 1,
       "…and no two circles were given the same phase");
 
+
+    /* --- THE PAD SITS IN THE MIDDLE OF THE DAIS ---------------------------
+     * The art paints a 4x4 dark square at x=14..17, y=14..17. A 2x2 pad
+     * anchored at 16,16 filled its bottom-right quarter and read on screen as
+     * having slipped into a corner. At 15,15 it is one square in on every side. */
+    const daisPad = sanc.portals.find((p) => p.dest === "cellar");
+    ok(!!daisPad, "the sanctum has its dais");
+    /* A span-2 pad reports the CENTRE of its block, not its glyph: handmade.ts
+     * pushes `cx + ((span - 1) * TILE) / 2`. So the glyph at 15,15 comes back
+     * as a point half a tile into 16,16, and the block it covers is 15..16 on
+     * both axes. Reading that point as the top-left square is how this test
+     * failed the first time it was written. */
+    const pcx = daisPad ? Math.round(daisPad.x / TILE47 - 1) : -1;
+    const pcy = daisPad ? Math.round(daisPad.y / TILE47 - 1) : -1;
+    ok(pcx === 15 && pcy === 15,
+      `the pad's block starts at 15,15 — one square in on every side of the dais (${pcx},${pcy})`);
+    for (const [ax, ay] of [[15, 15], [16, 15], [15, 16], [16, 16]]) {
+      ok(!sanc.solid[ay][ax], `…and ${ax},${ay} under it is walkable`);
+    }
+    /* Centred means the painted 4x4 has exactly one square of margin all round.
+     * Stated as the margin rather than as coordinates, so redrawing the dais
+     * somewhere else fails here instead of passing on a stale number. */
+    ok(15 - 14 === 1 && 17 - 16 === 1, "the dais leaves one square of margin on each side");
+
+    /* --- AMBIENT DECORATION, ONE SQUARE EACH ------------------------------
+     * So a wedge reads as ITS element from across the room instead of as a
+     * coloured floor. Drawn from the same `fx-<el>-1-field` strips the spells
+     * use, which is why every element needs one. */
+    const amb = sanc.ambientFx;
+    ok(amb.length >= 40, `the wedges carry ambient element effects (${amb.length})`);
+    const perEl = new Map<string, number>();
+    for (const n of amb) perEl.set(n.el, (perEl.get(n.el) ?? 0) + 1);
+    for (const e of ELS47) {
+      ok((perEl.get(e) ?? 0) >= 8, `the ${e} wedge carries ${perEl.get(e) ?? 0} of them`);
+      ok(nfs47.existsSync(new URL(`../public/fx-${e}-1-field.png`, import.meta.url)),
+        `…and ${e} has the field strip they are drawn from`);
+    }
+    /* Decoration seals nothing and is never mistaken for the thing you can
+     * walk into: kept off every circle's 2x2 block, so the one square that
+     * matters is never lost in a crowd of squares that do not. */
+    ok(amb.every((n) => !sanc.solid[n.ty][n.tx]), "ambient decoration seals no square");
+    for (const n of amb) {
+      const onCircle = sanc.attuneNodes.some((c) =>
+        Math.abs(c.tx - n.tx) <= 1 && Math.abs(c.ty - n.ty) <= 1);
+      ok(!onCircle, `no ambient effect stands on the ${n.el} circle's block`);
+    }
+    ok(amb.every((n) => !(n.tx >= 14 && n.tx <= 17 && n.ty >= 14 && n.ty <= 17)),
+      "…and none of it stands on the dais");
+    /* Every wedge's decoration is its OWN element. A fire flickering on the
+     * water wedge would be telling the player the wrong thing about a choice
+     * they cannot take back. */
+    const wedgeOf = new Map<string, string>();
+    for (const c of sanc.attuneNodes) wedgeOf.set(c.el, c.el);
+    ok(amb.every((n) => wedgeOf.has(n.el)), "…and every ambient element has a circle to match");
+
+    /* --- NOT ONE PIXEL OF THE ORIGINAL MARKER PAINT SURVIVES --------------
+     * This is the one that failed in the player's hands. The export ships the
+     * wedges in flat marker colours and the shipped picture is that export
+     * retinted; the first two retints classified squares by their MEAN colour
+     * and then by their NEIGHBOURS, and both left marker paint along the rim —
+     * green fringes where the wedges meet the rock. Counting pixels is the
+     * only check that catches it, so the PNG is decoded here. */
+    const zlib47 = await import("node:zlib");
+    const decodePng = (file: string) => {
+      const buf = nfs47.readFileSync(new URL(`../public/${file}`, import.meta.url));
+      let off = 8, w = 0, h = 0, ct = 0;
+      const idat: Buffer[] = [];
+      while (off < buf.length) {
+        const len = buf.readUInt32BE(off);
+        const type = buf.toString("ascii", off + 4, off + 8);
+        if (type === "IHDR") {
+          w = buf.readUInt32BE(off + 8); h = buf.readUInt32BE(off + 12);
+          ct = buf[off + 17];
+        } else if (type === "IDAT") idat.push(buf.subarray(off + 8, off + 8 + len));
+        off += len + 12;
+      }
+      const bpp = ct === 6 ? 4 : 3;
+      const raw = zlib47.inflateSync(Buffer.concat(idat));
+      const out = Buffer.alloc(w * h * bpp);
+      let p = 0;
+      for (let y = 0; y < h; y++) {
+        const f = raw[p++];
+        for (let x = 0; x < w * bpp; x++) {
+          const a = x >= bpp ? out[y * w * bpp + x - bpp] : 0;
+          const b = y > 0 ? out[(y - 1) * w * bpp + x] : 0;
+          const c = x >= bpp && y > 0 ? out[(y - 1) * w * bpp + x - bpp] : 0;
+          let v = raw[p++];
+          if (f === 1) v += a; else if (f === 2) v += b;
+          else if (f === 3) v += (a + b) >> 1;
+          else if (f === 4) {
+            const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c);
+            v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+          }
+          out[y * w * bpp + x] = v & 0xff;
+        }
+      }
+      return { w, h, bpp, px: out };
+    };
+    const img = decodePng("tursachan-terrain.png");
+    ok(img.w === 1024 && img.h === 1024, `the sanctum picture decodes (${img.w}x${img.h})`);
+    /* The flat colours the export was painted in. Any pixel still sitting on
+     * one of them is a square the retint did not reach. */
+    const MARKERS: [string, number, number, number][] = [
+      ["fire", 90, 53, 62], ["ice", 29, 59, 52], ["shadow", 41, 58, 24],
+      ["storm", 50, 47, 46], ["earth", 83, 77, 56],
+    ];
+    const stale = new Map<string, number>();
+    for (let i = 0; i < img.w * img.h; i++) {
+      const r = img.px[i * img.bpp], g = img.px[i * img.bpp + 1], b = img.px[i * img.bpp + 2];
+      for (const [n, mr, mg, mb] of MARKERS) {
+        if (Math.hypot(r - mr, g - mg, b - mb) < 10) stale.set(n, (stale.get(n) ?? 0) + 1);
+      }
+    }
+    ok(stale.size === 0,
+      `no marker paint survives the retint (${[...stale].map(([k, v]) => `${k}:${v}`).join(" ") || "clean"})`);
+    /* And the other direction — the five element colours are all actually on
+     * the floor, so a retint that silently did nothing also fails. */
+    const ELCOL: [string, number, number, number][] = [
+      ["fire", 150, 52, 40], ["ice", 46, 86, 150], ["shadow", 150, 152, 158],
+      ["storm", 166, 140, 44], ["earth", 112, 84, 50],
+    ];
+    for (const [n, r0, g0, b0] of ELCOL) {
+      let seen = 0;
+      for (let i = 0; i < img.w * img.h && seen < 200; i++) {
+        const r = img.px[i * img.bpp], g = img.px[i * img.bpp + 1], b = img.px[i * img.bpp + 2];
+        if (Math.hypot(r - r0, g - g0, b - b0) < 12) seen++;
+      }
+      ok(seen >= 200, `the ${n} wedge is actually painted in its element colour`);
+    }
     rps47(); M47.resetMissions(); T47.clearAttuned();
   }
 
