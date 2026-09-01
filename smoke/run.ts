@@ -5720,19 +5720,31 @@ async function main(): Promise<void> {
       const b = nfs41.readFileSync(new URL(`../public/${f}`, import.meta.url));
       return [b.readUInt32BE(16), b.readUInt32BE(20)] as const;
     };
-    for (const [key, file, side] of [
-      ["liddesdale", "liddesdale-terrain.png", 80],
-      ["hermitage", "hermitage-terrain.png", 30],
-    ] as const) {
-      ok(tsrc.includes(`${key}: "./${file}"`), `${key} is registered in TERRAIN_SRC`);
-      ok(nfs41.existsSync(new URL(`../public/${file}`, import.meta.url)), `…and ${file} is shipped`);
+    /* THIS LOOP USED TO BE A HAND-WRITTEN LIST of two maps, and that is how a
+     * broken export reached a running game: Na Tursachan was redrawn from
+     * 48x44 down to 32x32, the spec followed, the PICTURE did not, and the
+     * list had never heard of either map so nothing failed. In the game the
+     * sanctum rendered in grey procedural cave with grass patches through it —
+     * no crash, no red anywhere, one console line nobody was reading.
+     *
+     * So it is driven off TERRAIN_SRC and the built worlds now, and a map
+     * cannot be forgotten because nobody has to remember to add it. */
+    const ws41 = buildWorlds(WORLD_SEED);
+    const { TERRAIN_SRC: TSRC41 } = await import("../src/world/terrainImage.ts");
+    for (const key of Object.keys(TSRC41) as (keyof typeof TSRC41)[]) {
+      const file = String(TSRC41[key]).replace(/^\.\//, "");
+      ok(nfs41.existsSync(new URL(`../public/${file}`, import.meta.url)),
+        `${key}: ${file} is shipped`);
+      const w41 = ws41[key as keyof typeof ws41];
+      ok(!!w41, `${key}: TERRAIN_SRC names a map that exists`);
+      if (!w41) continue;
       const [pw, ph] = pngSize(file);
-      ok(pw === side * TILE && ph === side * TILE,
-        `…at native tile size, or the loader silently refuses it (${pw}x${ph} vs ${side * TILE})`);
+      ok(pw === w41.w * TILE && ph === w41.h * TILE,
+        `…${key} is exported at native tile size, or the loader silently refuses it `
+        + `(${pw}x${ph}, grid wants ${w41.w * TILE}x${w41.h * TILE})`);
     }
     /* EVERY authored map has one. A new map added without an export renders in
      * the fallback bake and looks like a different game. */
-    const ws41 = buildWorlds(WORLD_SEED);
     const noArt = Object.keys(ws41).filter((k) => !tsrc.includes(`${k}: "./`));
     ok(noArt.length === 0, `no map is left drawing its own procedural bake${noArt.length ? " — " + noArt.join(", ") : ""}`);
 
