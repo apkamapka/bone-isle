@@ -1909,6 +1909,55 @@ function doRecall(): void {
   flash("recalled home", "#c9a6ff");
 }
 
+/**
+ * TEMP-ETAP47-TP — `/tp`. A door out of a room that has none.
+ *
+ * THE ROOM WITH NO DOOR, because this is not hypothetical and the shape of the
+ * trap is the reason the command exists. An echo's way home is
+ * `relicRoadOpen`, which is the stage `complete` and nothing else. A character
+ * standing in `tursachan` whose calanais errand is NOT `active` can never make
+ * it `complete`: `checkAttuneCircles` returns early on any stage but `active`,
+ * so all five circles refuse him, so the stage never moves, so the pad home
+ * never lights and the pad he came in by is `inactive` too. He reads "the way
+ * home opens when he falls" about a boss that errand does not have.
+ *
+ * Radek walked into Na Tursachan before the errand was written. The only two
+ * ways out of that room were a recall crystal — his stack read zero — and
+ * dying for it, which costs a level.
+ *
+ * WHY IT IS NOT SHAPED LIKE `/forget`. `import.meta.env.DEV` is false in
+ * `vite build`, and the deployed build is the only one Radek walks. A rescue
+ * compiled out of the build that needs rescuing is not a rescue. Same argument
+ * that put `/replay` in front of everybody.
+ *
+ * WHY IT IS TEMP ANYWAY. It is recall's effect without recall's crystal, which
+ * is a hole in a real item: on a shared shard a free ride out of any fight is
+ * a PvP problem long before it is an economy one. Grep TEMP-ETAP47-TP to pull
+ * it — this function and its branch in `sendChat`.
+ *
+ * WHAT IT DOES NOT TOUCH: the errands. Not a stage, not a pad, not a relic,
+ * not a chest — "aby nie mieszać w misji". It moves the player and it saves.
+ * The smoke suite holds it to that, because an escape hatch that also quietly
+ * re-opened an errand would be the second bug wearing the first one's clothes.
+ */
+function tpHome(): void {
+  /* Written `return;` on one line rather than as a braced block, and not for
+   * taste: the Etap 33 tests pin the chat and skull clocks by POSITION, using
+   * the first `if (P.dead) {` in this file as the marker for the frame loop's
+   * death branch. A braced guard in any function above `update` moves that
+   * marker and reddens two tests that have nothing to do with this command.
+   * `doRecall` directly above is the same shape for the same reason. There is
+   * also nothing to say here — dying already sends you home. */
+  if (P.dead) return;
+  if (cw() === game.worlds.home) { flash("already home", "#8ab6ff"); return; }
+  travelTo(game, "home");
+  flash("teleported home", "#c9a6ff");
+  /* The autosave runs on a five-second timer and the whole point of this
+   * command is being stuck. Write it now, so a tab closed in the next breath
+   * does not load the character back into the room he just escaped. */
+  saveGame(game);
+}
+
 function takeOne(c: Corpse, index: number): void {
   const ref: ContainerRef = { c: "corpse", id: c.id };
   moveItems(ref, index, { c: "bag" }, null, refSlots(ref)?.[index]?.n ?? 1);
@@ -2524,6 +2573,15 @@ function sendChat(text: string): void {
   }
   if (text.trim().toLowerCase().startsWith("/replay ")) {
     replayCommand(text.trim().toLowerCase().slice("/replay ".length).trim());
+    closeChat();
+    return;
+  }
+  /* TEMP-ETAP47-TP — the way out of a sealed echo. See `tpHome` for why this
+   * is not behind `import.meta.env.DEV` and why it is tagged anyway. It is
+   * checked BEFORE `say`, like the other two, so the word never reaches the
+   * local channel and is never spoken aloud on a shard. */
+  if (text.trim().toLowerCase() === "/tp") {
+    tpHome();
     closeChat();
     return;
   }

@@ -11239,9 +11239,19 @@ async function main(): Promise<void> {
      * happen before the death branch, which returns. */
     ok((main.match(/\n\s*tickChat\(dt\);/g) ?? []).length === 1,
       "…exactly once per frame, not twice from a bad merge");
-    ok(main.indexOf("tickChat(dt);") < main.indexOf("if (P.dead) {"),
+    /* Anchored INSIDE `update` rather than across the whole file, which is a
+     * repair and not a loosening. The marker used to be the first
+     * `if (P.dead) {` anywhere in main.ts, and that is a marker any new
+     * function written above the frame loop can steal — Etap 47's `/tp` did
+     * exactly that and reddened both lines while changing nothing either one
+     * is about. Slicing to the loop first says what was always meant: the
+     * clocks run at the top of the frame, above the branch that returns. */
+    const loop33 = main.slice(main.indexOf("function update(dt: number): void {"));
+    ok(loop33.length > 0 && loop33.includes("tickChat(dt);"),
+      "…inside the frame loop at all, rather than somewhere that runs once");
+    ok(loop33.indexOf("tickChat(dt);") < loop33.indexOf("if (P.dead) {"),
       "…on the LIVING path, above the death branch that returns past it");
-    ok(main.indexOf("tickSkull(dt);") < main.indexOf("if (P.dead) {"),
+    ok(loop33.indexOf("tickSkull(dt);") < loop33.indexOf("if (P.dead) {"),
       "…and the skull's clock with it: dying does not launder a frag");
     ok(main.includes("sayBubble(m.id"), "creatures can speak over their own heads");
 
@@ -14773,6 +14783,177 @@ async function main(): Promise<void> {
       ok(seen >= 200, `the ${n} wedge is actually painted in its element colour`);
     }
     rps47(); M47.resetMissions(); T47.clearAttuned();
+  }
+
+  console.log("Etap 47 — `/tp`, the door out of a room that has none:");
+  {
+    const nfs47 = await import("node:fs");
+    const mainTp = nfs47.readFileSync("src/main.ts", "utf8");
+    const M47b = await import("../src/systems/missions.ts");
+    const { resetPlayerState: rps47b } = await import("../src/systems/playerState.ts");
+
+    /* ---------------- the trap is real -------------------------------------
+     * THE FAILURE THIS COMMAND ANSWERS: "Radek stuck on Na Tursachan with a
+     * recall stack of zero". He crossed into the echo before the Calanais
+     * errand was written, so its stage is not `active` — and every road out of
+     * that room is spelled out of the stage.
+     *
+     * This half is not about `/tp` at all. It pins the JUSTIFICATION: if the
+     * echo ever grows a way out of its own, whoever writes it should be told
+     * by a failing test that the rescue command's reason has changed, rather
+     * than leaving a free teleport in the game because nobody re-read it. */
+    rps47b(); M47b.resetMissions();
+    for (const m of M47b.MISSIONS) {
+      const lv = m.reqLevel;
+      ok(M47b.stageOf(m.id, lv) !== "active",
+        `${m.id}: an errand nobody took is not active`);
+      ok(!M47b.echoOpen(m.echo, lv) && !M47b.relicRoadOpen(m.echo, lv),
+        `${m.id}: with the errand untaken, the ${m.echo} relic road is dark in both directions`);
+    }
+
+    /* WHICH echo can actually hold somebody, which is the sharp version and
+     * the reason this never bit on the other two errands. `applyMissionPads`
+     * governs three kinds of pad, and a ladder back up to a HUNTING GROUND is
+     * spelled by `groundOpen` — true from the moment the errand goes active
+     * and true forever after. So Hermitage and the Howe each keep a lit ladder
+     * whatever the stage does.
+     *
+     * Na Tursachan has one portal and it is the relic road. Its own spec says
+     * so in as many words: "NO LADDER BACK UP… the one echo in the game with
+     * no way out but forward". One room, one door, and the door is spelled out
+     * of a stage the sealed-in player cannot reach. */
+    {
+      const ws47 = buildWorlds(WORLD_SEED);
+      const sealable: string[] = [];
+      for (const m of M47b.MISSIONS) {
+        const echo = ws47[m.echo];
+        const others = echo.portals.filter((pt) => pt.dest !== "cellar");
+        const grounded = others.filter((pt) => M47b.missionByGround(pt.dest) !== undefined);
+        if (others.length === 0) sealable.push(m.echo);
+        else {
+          ok(grounded.length > 0,
+            `${m.echo}: the second door goes to a hunting ground, which never re-locks`);
+          ok(M47b.groundOpen(grounded[0].dest, m.reqLevel) === false
+            || M47b.groundOpen(grounded[0].dest, m.reqLevel) === true,
+            `${m.echo}: …and that door is spelled by \`groundOpen\`, not by the errand's stage`);
+        }
+      }
+      ok(sealable.length === 1 && sealable[0] === "tursachan",
+        `exactly one room in the game can hold a player: ${sealable.join(", ") || "none"}`);
+    }
+
+    /* AND IT IS NOT ONLY A LEGACY SAVE. `/replay` is typed anywhere, including
+     * standing in the room it is about: `resetMission` puts the stage back to
+     * `available`, `applyMissionPads` runs immediately after, and the relic
+     * road goes dark under the player's feet. Radek reached the trap the first
+     * way — he walked into Na Tursachan before the errand was written — but
+     * this is the way it recurs, and it recurs on the command he tests with.
+     * `/tp` is the standing net under both. */
+    {
+      const cal = M47b.missionById("calanais")!;
+      M47b.resetMissions();
+      M47b.setStage(cal.id, "complete");
+      ok(M47b.relicRoadOpen(cal.echo, cal.reqLevel),
+        "with the element taken, the dais to Chronos is lit");
+      M47b.resetMission(cal.id);
+      ok(M47b.stageOf(cal.id, cal.reqLevel) === "available"
+        && !M47b.relicRoadOpen(cal.echo, cal.reqLevel)
+        && !M47b.echoOpen(cal.echo, cal.reqLevel),
+        "…and `/replay calanais` typed INSIDE the room puts that light out — the trap, reproduced");
+      M47b.resetMissions();
+      M47b.setStage(cal.id, "closed");
+      ok(!M47b.relicRoadOpen(cal.echo, cal.reqLevel),
+        "…as does a handed-in errand, for a character who is somehow back down there");
+    }
+    /* And the specific one, spelled out, because Calanais is the errand with
+     * no boss: the pad home reads "the way home opens when he falls" about a
+     * creature this echo never had. `checkAttuneCircles` is the only thing
+     * that can move the stage and it refuses on anything but `active`. */
+    {
+      const cal = M47b.missionById("calanais");
+      ok(cal !== undefined && cal.echo === "tursachan" && !cal.relic,
+        "Calanais is the bossless errand, and Na Tursachan is its echo");
+      const mainCal = mainTp.slice(mainTp.indexOf("function checkAttuneCircles"),
+        mainTp.indexOf("function checkPortals"));
+      ok(/stageOf\(md\.id, P\.level\) !== "active"/.test(mainCal),
+        "…and the circles refuse anyone whose errand is not active, so the stage cannot self-heal");
+    }
+
+    /* ---------------- the command ------------------------------------------
+     * Source-level, like the `/replay` blocks above and for the same reason:
+     * these branches live in module-scope game code the suite cannot import. */
+    ok(/text\.trim\(\)\.toLowerCase\(\) === "\/tp"/.test(mainTp),
+      "`/tp` is a branch of its own in `sendChat`");
+    const tpBranch = mainTp.slice(mainTp.indexOf('text.trim().toLowerCase() === "/tp"'),
+      mainTp.indexOf('text.trim().toLowerCase() === "/tp"') + 200);
+    ok(/tpHome\(\)/.test(tpBranch) && /closeChat\(\)/.test(tpBranch),
+      "…it calls `tpHome` and shuts the field, and never falls through to `say`");
+
+    /* THE ONE THAT MATTERS ON A DEPLOYED BUILD. `/forget` is compiled out by
+     * `vite build`; a rescue that vanishes from the only build Radek walks
+     * rescues nobody. If somebody later "tidies" this behind the DEV flag the
+     * way the other two testing commands are, this goes red.
+     *
+     * Read off the CODE with the comments taken out first, which is not
+     * fussiness: the prose above `tpHome` and above the branch both name the
+     * flag in order to explain why it is absent, and a naive search finds
+     * those and calls the command gated when it is not. A test that can be
+     * failed by a comment explaining the test is worse than no test. */
+    const stripComments = (s: string) =>
+      s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+    const dispatchSrc = stripComments(mainTp.slice(mainTp.indexOf("function sendChat"),
+      mainTp.indexOf("const CHAT_SPEAKER_ID")));
+    ok(dispatchSrc.includes('"/tp"'), "the stripped dispatch still holds the branch");
+    const devHits = (dispatchSrc.match(/import\.meta\.env\.DEV/g) ?? []).length;
+    ok(devHits === 1,
+      `only ONE command in \`sendChat\` is compiled out of the build (${devHits})`);
+    const devLine = dispatchSrc.slice(dispatchSrc.indexOf("import.meta.env.DEV"),
+      dispatchSrc.indexOf("import.meta.env.DEV") + 120);
+    ok(devLine.includes('"/forget"') && !devLine.includes('"/tp"'),
+      "`/tp` is NOT behind `import.meta.env.DEV` — it survives `vite build`");
+    ok(dispatchSrc.indexOf("import.meta.env.DEV") < dispatchSrc.indexOf('"/tp"'),
+      "…and the one gate that exists closes before the rescue branch begins");
+
+    /* ---------------- what it must not touch --------------------------------
+     * Radek's words were "aby nie mieszać w misji". The escape hatch moves the
+     * player and saves; anything else it learned to do would be a second bug
+     * wearing the first one's clothes. Every name below is a road into mission
+     * state, the attunement, the purse or the chest. */
+    const tpBody = mainTp.slice(mainTp.indexOf("function tpHome"),
+      mainTp.indexOf("function takeOne"));
+    ok(tpBody.length > 0, "`tpHome` has a body to check");
+    for (const forbidden of [
+      "setStage", "resetMission", "relicTaken", "relicLost", "missionHandedIn",
+      "applyMissionPads", "replayMissions", "markAttuned", "clearAttuned",
+      "game.opened", "grantExp", "removeItem", "addItem",
+    ]) {
+      ok(!tpBody.includes(forbidden),
+        `\`tpHome\` never reaches for ${forbidden} — it does not touch the errands`);
+    }
+    ok(/travelTo\(game, "home"\)/.test(tpBody) && /saveGame\(game\)/.test(tpBody),
+      "…it goes home by the same road recall goes, and writes the save on the spot");
+    ok(/P\.dead/.test(tpBody) && /game\.worlds\.home/.test(tpBody),
+      "…and refuses on a corpse, and refuses when you are already standing at home");
+    /* Recall still costs a crystal. `/tp` is the free one and it is the ONLY
+     * free one — if this ever fails, the crystal has quietly become optional. */
+    const recallBody = mainTp.slice(mainTp.indexOf("function doRecall"),
+      mainTp.indexOf("function tpHome"));
+    ok(/bagCount\(P\.bag, "recallCrystal"\)/.test(recallBody)
+      && /removeItem\(P\.bag, "recallCrystal", 1\)/.test(recallBody),
+      "the recall CRYSTAL still checks the stack and still spends one");
+
+    /* ---------------- the temp tag ------------------------------------------
+     * Same discipline as TEMP-ETAP45-TESTMENU: the tag has to be on every call
+     * site, so that grepping it finds the whole thing and removing it by hand
+     * cannot leave half of it behind. Two sites, both named. */
+    const tags = (mainTp.match(/TEMP-ETAP47-TP/g) ?? []).length;
+    ok(tags >= 2,
+      `TEMP-ETAP47-TP is on the function AND on its branch (${tags} sites)`);
+    ok(/TEMP-ETAP47-TP/.test(mainTp.slice(mainTp.indexOf("function tpHome") - 2000,
+      mainTp.indexOf("function tpHome"))),
+      "…the tag sits on `tpHome` itself, so the grep lands on the code and not only the caller");
+
+    rps47b(); M47b.resetMissions();
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
