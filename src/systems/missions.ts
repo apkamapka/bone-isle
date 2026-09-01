@@ -100,8 +100,20 @@ export interface MissionDef {
   ground: WorldKey;
   /** The one-time instance reached from the hunting ground. */
   echo: WorldKey;
-  /** What the echo's boss leaves behind, and what the sage takes back. */
-  relic: ItemKind;
+  /**
+   * What the echo's boss leaves behind, and what the sage takes back.
+   *
+   * OPTIONAL, and the absence is a real shape rather than an oversight. An
+   * errand whose reward is a THING has to survive that thing going missing,
+   * which is why `relicLost` exists and why the relic is bound while the
+   * errand is live. An errand whose reward is a STATE - the Calanais circles
+   * write straight into `attuned` - cannot lose anything on the way home, so
+   * there is nothing for those guards to guard. `wantsRelic` is only ever
+   * asked from the boss-kill path, which a bossless errand never walks;
+   * `boundRelic` compares `undefined === kind` and is false for everything;
+   * and the sage's empty-hands branch checks for a relic before it looks.
+   */
+  relic?: ItemKind;
   /** Paid when the relic reaches the sage's table. Experience only: the coin
    *  is already down in the echo, in a chest the player has to fight for, and
    *  paying twice for one errand would make the ladder's own purses look silly. */
@@ -127,18 +139,52 @@ export function missionKeys(id: string): readonly string[] {
 }
 
 /**
- * The chain. One link so far.
+ * The chain, in the order the sage offers it.
  *
- * The redcap is the first, at level ten, and he has no `after`: nothing has to
- * be closed before the sage will speak about him. Everything that follows will
- * name him, so this entry's `id` is now permanent — it is written into every
- * save that has ever started the mission.
+ * CALANAIS IS FIRST AND THE REDCAP IS SECOND, which reverses what shipped.
+ * Inserting a link in FRONT of one that is already in people's saves is safe,
+ * and the reason is `stageOf`: a stored stage is returned before either gate
+ * is consulted, so a character who has already closed the redcap keeps him
+ * closed no matter what is now written in his `after`. The one visible effect
+ * on an existing save is on a character who is past level 8 and has NOT yet
+ * taken the redcap — they are offered Calanais first. That is the intended
+ * order, not a regression.
+ *
+ * WHY IN FRONT AND NOT BEHIND. Calanais hands out the element, and the redcap
+ * is the first creature in the game whose resistances make the choice mean
+ * something. Putting the gift after the fight it pays off in would be telling
+ * the joke and then the setup.
  */
 export const MISSIONS: readonly MissionDef[] = [
+  {
+    // The gift-errand. No `after`, level 8, and NO RELIC — the first entry in
+    // the catalogue to leave `relic` off, and the reason it became optional.
+    //
+    // Nothing is carried back from the sanctum because nothing is picked up
+    // there: walking into a circle writes the element into `attuned` on the
+    // spot. That also closes the only door a mule could have used. An element
+    // that is never an item cannot be dropped on death, looted off a corpse,
+    // put in a chest or traded — so a player cannot run five throwaway
+    // characters through this errand and funnel five elements onto one main.
+    // The absorb IS the anti-mule design; the one-per-character scarcity is a
+    // separate matter, and deliberately NOT enforced anywhere in code. It
+    // falls out of the errand being one-time, which means a second source at
+    // some later level is one catalogue entry and no migration at all.
+    id: "calanais",
+    title: "The Circles of Calanais",
+    reqLevel: 8,
+    ground: "calanais",
+    echo: "tursachan",
+    // Level 8 needs 2400 to advance, so this is a shade over a fifth of a
+    // level — lighter than the cap, because the errand's real payment is the
+    // element and the island stays open afterwards.
+    rewardExp: 500,
+  },
   {
     id: "redcap",
     title: "The Cap of Hermitage",
     reqLevel: 10,
+    after: "calanais",
     ground: "liddesdale",
     echo: "hermitage",
     relic: "bloodCap",
@@ -170,6 +216,22 @@ export const MISSIONS: readonly MissionDef[] = [
  *  the caller has: the loot roll, the pad sweep. */
 export function missionByEcho(key: WorldKey): MissionDef | undefined {
   return MISSIONS.find((m) => m.echo === key);
+}
+
+/**
+ * Does this errand pay in ATTUNEMENT rather than in a thing?
+ *
+ * Asked by the developer resets, which have to give back whatever an errand
+ * paid before they can honestly call it un-done. A relic is taken out of the
+ * pack; an element has to come out of `attuned`, and nothing else in the game
+ * would think to look there.
+ *
+ * Derived from the SHAPE of the errand — no relic, and an echo whose spec
+ * carries rune circles — rather than from a flag on the entry, so a second
+ * bossless errand cannot be added and quietly miss the reset.
+ */
+export function grantsAttunement(m: MissionDef): boolean {
+  return !m.relic;
 }
 
 /** The mission whose hunting ground this world is, if any. */

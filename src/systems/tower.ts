@@ -111,6 +111,24 @@ export function markAttuned(el: Element): void {
 }
 
 /** Snapshot for saving. */
+/**
+ * Forget every attunement this character has.
+ *
+ * Only the developer resets call this — `/replay` and the test menu — and it
+ * clears the WHOLE set rather than the one element the errand granted, which
+ * is deliberate and is the safe direction of a real trade-off. Nothing records
+ * which element a character chose at Calanais, so an exact undo is not
+ * available; over-clearing costs a tester an element they must walk down and
+ * pick again, while under-clearing would hand out a second element free and be
+ * a live exploit the moment `/replay` reached a player's hands.
+ *
+ * If a SECOND source of attunement is ever added, this has to become precise,
+ * and the smoke suite fails the day that happens.
+ */
+export function clearAttuned(): void {
+  attuned.clear();
+}
+
 export function attunedState(): Element[] {
   return [...attuned];
 }

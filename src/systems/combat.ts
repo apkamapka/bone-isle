@@ -237,15 +237,23 @@ export function killMonster(world: World, p: Player, m: Monster): void {
    * at 1250 oz against a 920 cap, the nine-ounce helm was refused,
    * `relicTaken` never fired, and the way home never lit — so the fight paid
    * nothing and looked like a bug in the mission rather than in the scales. */
+  /* A relic-less errand never reaches any of this: `md.relic` is undefined,
+   * so nothing is stripped from the roll, nothing is planted, and the stage is
+   * left for the thing that really finishes that errand — a rune circle
+   * upstairs in the sanctum, which no creature can stand in. */
   const md = missionByEcho(world.key);
-  const dropped = !!md && items.some((it) => it.kind === md.relic);
-  for (let i = items.length - 1; i >= 0; i--) if (md && items[i].kind === md.relic) items.splice(i, 1);
-  const relicOnBody = !!md && dropped && wantsRelic(md.id, p.level, bagCount(p.bag, md.relic));
-  if (md && relicOnBody) {
+  const relic = md?.relic;
+  const dropped = !!relic && items.some((it) => it.kind === relic);
+  if (relic) {
+    for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === relic) items.splice(i, 1);
+  }
+  const relicOnBody = !!md && !!relic && dropped
+    && wantsRelic(md.id, p.level, bagCount(p.bag, relic));
+  if (md && relic && relicOnBody) {
     relicTaken(md.id, p.level);
-    items.push({ kind: md.relic, n: 1 });
-    addFloat(world, p.x, p.y - 64, ITEMS[md.relic].name, "#b9a6d8");
-    relicNotice(`${ITEMS[md.relic].name} — it is on the body. Loot him.`, "#b9a6d8");
+    items.push({ kind: relic, n: 1 });
+    addFloat(world, p.x, p.y - 64, ITEMS[relic].name, "#b9a6d8");
+    relicNotice(`${ITEMS[relic].name} — it is on the body. Loot him.`, "#b9a6d8");
   }
   world.corpses.push({
     id: nextEntityId(),
