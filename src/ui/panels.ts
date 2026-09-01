@@ -2204,7 +2204,9 @@ function drawQuests(p: PanelInput): void {
       // the relic onto the corpse: the errand finishes on the kill, but the
       // thing is on the floor until it is looted. Ask the pack rather than
       // guessing, so the log never says "in your pack" about a corpse.
-      : bagCount(player.bag, errand.relic) > 0
+      // A relic-less errand has no third state: `complete` means the circle
+      // was walked into, and the only thing left is to go and say so.
+      : !errand.relic || bagCount(player.bag, errand.relic) > 0
         ? t("mission.deliver", lg)
         : t("mission.onBody", lg))
     : "";
