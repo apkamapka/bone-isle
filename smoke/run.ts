@@ -14434,7 +14434,21 @@ async function main(): Promise<void> {
     for (const k of ["brigand", "highwayman", "deserter"]) {
       ok(!kinds.has(k as never), `…and nothing as heavy as the ${k}`);
     }
-    ok(posts47.length === 64, `Calanais carries all 64 posts (${posts47.length})`);
+    ok(posts47.length === 56, `Calanais carries all 56 posts (${posts47.length})`);
+    /* SIXTY-FOUR UNTIL ETAP 48, and the eight that went were snakes. Ten of the
+     * weakest creature on the map is filler, not a population: the errand IS
+     * the crossing, and a crossing interrupted every twenty squares by a
+     * 20-exp pull is a chore rather than a danger. Two are left, at opposite
+     * ends of the island, so the species is still here and never near itself.
+     *
+     * Pinned as a NUMBER and a DISTANCE rather than as "few", because "two
+     * snakes on one beach" would satisfy a count and miss the point. */
+    const snakes48 = posts47.filter((q) => q.kind === "snake");
+    ok(snakes48.length === 2, `two snakes on the whole island (${snakes48.length})`);
+    if (snakes48.length === 2) {
+      const gap = Math.hypot(snakes48[0].tx - snakes48[1].tx, snakes48[0].ty - snakes48[1].ty);
+      ok(gap > 60, `…and they are at opposite ends of it (${gap.toFixed(0)} squares apart)`);
+    }
 
     /* --- the gradient runs AT the temple, not away from the pad ---
      * The hole is in the MIDDLE of this island, so ranking posts by distance
@@ -14486,6 +14500,51 @@ async function main(): Promise<void> {
     /* Fires seal nothing — that stopped being true of every map at Etap 44 —
      * so the ring lights the temple without walling any of it off. */
     ok(fires.every(([x, y]) => !isle.solid[y][x]), "…and no fire seals its square");
+
+    /* --- ETAP 48: THE OTHER FOUR ELEMENTS ARE ON THE LID TOO ---------------
+     * The platform showed fire and nothing else, which told the player the
+     * wrong thing about the room beneath it: five circles wait down there and
+     * the lid advertised one. Four ambient rings were added, drawn from the
+     * same `fx-<el>-1-field` strips the sanctum uses.
+     *
+     * Held to the SAME three symmetries as the fires, and for the same reason
+     * — a ring that is nearly symmetric reads as a mistake. That is also why
+     * only two orbit shapes are used: a cross {(0,±r),(±r,0)} and a diagonal
+     * {(±r,±r)} are the two four-point sets closed under all three. */
+    const amb48 = isle.ambientFx;
+    const RINGS: [string, number][] = [["ice", 2], ["storm", 4], ["earth", 5], ["shadow", 7]];
+    ok(amb48.length === 16, `the lid carries sixteen element squares (${amb48.length})`);
+    ok(!amb48.some((n) => n.el === "fire"),
+      "fire keeps its campfires and grows no field of its own — a lit camp reads as a lit camp");
+    const aset = new Set(amb48.map((n) => `${n.tx},${n.ty}`));
+    const ahas = (x: number, y: number) => aset.has(`${x},${y}`);
+    for (const [el, r] of RINGS) {
+      const ring = amb48.filter((n) => n.el === el);
+      ok(ring.length === 4, `${el} sits on four squares (${ring.length})`);
+      /* The radius is checked as Chebyshev distance so a cross and a diagonal
+       * are both simply "r squares out", which is what the eye reads. */
+      ok(ring.every((n) => Math.max(Math.abs(n.tx - 60), Math.abs(n.ty - 52)) === r),
+        `…all ${r} squares from the platform's centre`);
+      ok(ring.every((n) => ahas(120 - n.tx, n.ty)), `…closed under the east-west mirror (${el})`);
+      ok(ring.every((n) => ahas(n.tx, 104 - n.ty)), `…and the north-south mirror (${el})`);
+      ok(ring.every((n) => ahas(60 + (n.ty - 52), 52 + (n.tx - 60))),
+        `…and the diagonal swap (${el})`);
+    }
+    /* Radii strictly increasing outward, and interleaved with the fires at 3
+     * and 6 rather than sharing a square with them: water · FIRE · lightning ·
+     * earth · FIRE · wind. Two things on one square would draw as one thing. */
+    ok(RINGS.every(([, r], i) => i === 0 || r > RINGS[i - 1][1]),
+      "the rings run outward in order — water, lightning, earth, wind");
+    ok(!fires.some(([x, y]) => ahas(x, y)), "…and no element square stands on a fire");
+    ok(!ahas(dtx, dty), "…nor on the descent itself");
+    /* Decoration seals nothing, exactly as in the sanctum — a lid you cannot
+     * cross is not a lid, it is a wall with a hole in the middle. */
+    ok(amb48.every((n) => !isle.solid[n.ty][n.tx]), "…and every element square is walkable");
+    /* THE LID GRANTS NOTHING. `attuneNodes` is what a player can walk into for
+     * an element; if a surface square ever became one, the crossing the errand
+     * is about could be skipped by standing on the roof of it. */
+    ok(isle.attuneNodes.length === 0,
+      "nothing on the surface is a real circle — the choice is only ever made below");
 
     /* --- FIVE CIRCLES, ON THE FIVE SQUARES THE TMX MARKS ---
      * These are the object-layer positions from `questna8-1.tmx`. The ART may
@@ -14613,9 +14672,13 @@ async function main(): Promise<void> {
      * The rule that actually holds is ALL FIVE OR NONE. Five is a menu. Zero
      * is silence. Anything between is Chronos putting his thumb on it. */
     const ELWORDS: Readonly<Record<string, readonly string[]>> = {
-      en: ["fire", "water", "storm", "earth", "wind"],
-      pl: ["ogień", "woda", "burza", "ziemia", "wiatr"],
-      es: ["fuego", "agua", "tormenta", "tierra", "viento"],
+      /* Matched on STEMS where a language inflects: Polish "Błyskawice" is
+       * plural here and could reasonably become "Błyskawica" in another line,
+       * and a test that pins the ending would fail on a synonym rather than on
+       * a mistake. */
+      en: ["fire", "water", "lightning", "earth", "wind"],
+      pl: ["ogień", "woda", "błyskawic", "ziemia", "wiatr"],
+      es: ["fuego", "agua", "relámpago", "tierra", "viento"],
     };
     /* The stair names COLOURS, in the same slots. This is the shape the Etap
      * 48 rewrite chose and it is worth being exact about what it costs: the
@@ -14642,7 +14705,7 @@ async function main(): Promise<void> {
       ok(elAt.every((i) => i >= 0),
         `the offer names all five elements (${lg}: ${elAt.filter((i) => i < 0).length} missing)`);
       ok(elAt.every((i, n) => n === 0 || i > elAt[n - 1]),
-        `…in the canonical order fire · water · storm · earth · wind (${lg})`);
+        `…in the canonical order fire · water · lightning · earth · wind (${lg})`);
 
       const descend = SP47.t("sage.descend.calanais", lg).toLowerCase();
       const colAt = inOrder(descend, COLWORDS[lg] ?? []);
@@ -15026,6 +15089,77 @@ async function main(): Promise<void> {
       "…the tag sits on `tpHome` itself, so the grep lands on the code and not only the caller");
 
     rps47b(); M47b.resetMissions();
+  }
+  console.log("Etap 48 — what the player calls the elements, and saying it once:");
+  {
+    const nfs48 = await import("node:fs");
+    const main48 = nfs48.readFileSync("src/main.ts", "utf8");
+    const EL48 = await import("../src/systems/elements.ts");
+    const PAN48 = nfs48.readFileSync("src/ui/panels.ts", "utf8");
+    const IT48 = await import("../src/items.ts");
+
+    /* --- THE THREE IDS THAT ARE NOT THEIR NAME ----------------------------
+     * `ice`, `storm` and `shadow` are frozen keys: they build item ids, save
+     * keys and icon filenames, so renaming them is seventy-five item keys,
+     * thirty PNGs and a save migration. What the PLAYER reads is one table.
+     * The fiction settled on Water, Lightning and Wind, and the sanctum floor
+     * is painted blue, yellow and pale to match. */
+    ok(EL48.ELEMENT_LABEL.ice === "Water", `the ice lane reads Water (${EL48.ELEMENT_LABEL.ice})`);
+    ok(EL48.ELEMENT_LABEL.storm === "Lightning",
+      `the storm lane reads Lightning (${EL48.ELEMENT_LABEL.storm})`);
+    ok(EL48.ELEMENT_LABEL.shadow === "Wind",
+      `the shadow lane reads Wind (${EL48.ELEMENT_LABEL.shadow})`);
+    /* …and the ids are UNTOUCHED, which is the half that would break saves. A
+     * well-meaning rename of the KEY rather than the label goes red here. */
+    ok(EL48.ELEMENTS.join(",") === "fire,ice,earth,storm,shadow",
+      `the ids are still the ids (${EL48.ELEMENTS.join(",")})`);
+    ok(EL48.TIER_CODE.shadow[0] === "Gloom" && EL48.TIER_CODE.storm[0] === "Spark",
+      "…and TIER_CODE, which spells the item keys, is untouched too");
+    /* The tabs are DERIVED, so one table drives every surface: the tower, the
+     * float out of a circle, the "attuned to X" line. Typing the six labels
+     * out again in panels.ts is exactly how they drift apart. */
+    ok(/ELEMENTS\.map\(\(el\) => \(\{ id: el, label: ELEMENT_LABEL\[el\]\.toUpperCase\(\) \}\)\)/.test(PAN48),
+      "the Alchemy Tower's tabs are derived from ELEMENT_LABEL, not typed out");
+    /* Shadow's ITEM names are already wind words. A WIND tab over a "Gloom
+     * Shard" would be the same mismatch one layer down. */
+    ok(IT48.ITEMS.shadowEclipseShard.name === "Cyclone Shard",
+      `shadow's items are wind words (${IT48.ITEMS.shadowEclipseShard.name})`);
+
+    /* --- THE CIRCLE SAYS IT ONCE ------------------------------------------
+     * THE BUG, in Radek's words: "jak wybralem zywiol to gore mi spamuje
+     * tekstem". `checkAttuneCircles` runs every frame and `flash` writes both
+     * a float AND a log line, so standing on a circle you already carry
+     * stacked six copies of "ten już w tobie jest" up the screen and buried
+     * the chat under them.
+     *
+     * Only the REFUSAL ever showed it, which is why it looked intermittent: on
+     * the success path `markAttuned` moves the stage off `active` and the
+     * guard returns forever after — "a jak wszedlem ktory nie mam to dobrze
+     * dzialalo".
+     *
+     * Source-level, like the `/tp` block, because this is module-scope game
+     * code the suite cannot import. */
+    const body48 = main48.slice(main48.indexOf("function checkAttuneCircles"),
+      main48.indexOf("function checkPortals"));
+    ok(body48.length > 0, "`checkAttuneCircles` has a body to check");
+    ok(/let refusedCircle: string \| null = null;/.test(main48),
+      "the refusal is latched on a square rather than fired every tick");
+    const flashLine = body48.slice(body48.indexOf("isAttuned(nd.el)"),
+      body48.indexOf("markAttuned(nd.el)"));
+    ok(/if \(refusedCircle !== here\)/.test(flashLine)
+      && flashLine.indexOf("refusedCircle !== here") < flashLine.indexOf('t("attune.already"'),
+      "…and the guard is IN FRONT of the flash, not after it");
+    ok((body48.match(/refusedCircle = null;/g) ?? []).length === 2,
+      "…cleared both ways out: stepping off a circle, and leaving the sanctum");
+    /* Keyed on WHICH circle, not on a timer. A timer would have made the
+     * second of two rings checked in a row say nothing, which is precisely
+     * when the player wants to be told. */
+    ok(/const here = `\$\{nd\.tx\},\$\{nd\.ty\}`/.test(body48),
+      "…and on which circle, so checking a second ring answers about that ring");
+    /* The success path is untouched. */
+    ok(/markAttuned\(nd\.el\)/.test(body48) && /saveGame\(game\)/.test(body48)
+      && /sageSays\("sage\.attuned\.calanais"/.test(body48),
+      "…while taking an element you do NOT have still attunes, saves and speaks");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

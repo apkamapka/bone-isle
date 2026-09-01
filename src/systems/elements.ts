@@ -17,11 +17,28 @@ export type Element = "fire" | "ice" | "earth" | "storm" | "shadow";
 
 export const ELEMENTS: readonly Element[] = ["fire", "ice", "earth", "storm", "shadow"];
 
+/**
+ * What the player reads, everywhere: the Alchemy Tower's tabs, the float that
+ * rises out of a circle, the "attuned to X" line.
+ *
+ * THREE OF THESE ARE NOT THEIR ID, and that is settled rather than sloppy.
+ * `ice`, `storm` and `shadow` are the internal keys, frozen because they build
+ * item ids, save keys and icon filenames — see TIER_CODE. The fiction calls
+ * them Water, Lightning and Wind, and the sanctum floor under Calanais is
+ * painted blue, yellow and pale to match. Renaming the keys would touch
+ * seventy-five item keys, thirty PNGs and a save migration to change strings
+ * nobody sees; renaming what the player reads is this table and nothing else.
+ *
+ * The one thing still out of step is the ICE tier words — Frost, Rime, Glacier
+ * under a tab that now says WATER — and they are left alone on purpose: the
+ * icons are frost-coloured, so "Tide Shard" over a snowflake would trade one
+ * mismatch for a worse one. That is an art job, not a string job.
+ */
 export const ELEMENT_LABEL: Readonly<Record<Element, string>> = {
   fire: "Fire",
-  ice: "Ice",
+  ice: "Water",
   earth: "Earth",
-  storm: "Storm",
+  storm: "Lightning",
   shadow: "Wind",
 };
 
@@ -43,7 +60,8 @@ export const ELEMENT_COLOR: Readonly<Record<Element, string>> = {
  * existing save and orphans fifteen PNGs. Rename what the PLAYER reads in
  * TIER_NAME and in the `name` fields of `ITEMS` — that is free.
  *
- * `shadow` is the element the fiction now calls Wind. The id kept its old
+ * `ice`, `storm` and `shadow` are the elements the fiction calls Water,
+ * Lightning and Wind. The ids kept their old
  * spelling on purpose: renaming it would touch seventy-five item keys, thirty
  * filenames and a save migration, to change a string nobody sees.
  */

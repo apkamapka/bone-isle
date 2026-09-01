@@ -4049,6 +4049,13 @@ function tickCampfireBurn(world: World, dt: number): void {
 }
 
 /**
+ * The circle whose refusal has already been spoken, as `"tx,ty"`, or null when
+ * the player is not standing in one. Purely a UI latch — transient, never
+ * saved, and reset by simply walking off.
+ */
+let refusedCircle: string | null = null;
+
+/**
  * Walking into a rune circle, which is the whole of the Calanais errand.
  *
  * There is no click and no prompt. The player has walked the disc, looked at
@@ -4068,17 +4075,39 @@ function tickCampfireBurn(world: World, dt: number): void {
  * spending their one errand on a duplicate.
  */
 function checkAttuneCircles(world: World): void {
-  if (P.dead) return;
   const md = missionByEcho(world.key);
-  if (!md || !grantsAttunement(md)) return;
-  if (stageOf(md.id, P.level) !== "active") return;
+  if (P.dead || !md || !grantsAttunement(md) || stageOf(md.id, P.level) !== "active") {
+    /* Not standing anywhere that can refuse, so the latch below is cleared on
+     * every path out — including leaving the sanctum entirely, which is why
+     * the four guards are one branch rather than four early returns. */
+    refusedCircle = null;
+    return;
+  }
   for (const nd of world.attuneNodes) {
     // The circle owns the 2x2 block it is centred on, so standing anywhere on
     // its artwork counts — being refused by a ring you are visibly inside is
     // the campfire's old collision bug wearing a different hat.
     if (Math.abs(P.tx - nd.tx) > 1 || Math.abs(P.ty - nd.ty) > 1) continue;
     if (isAttuned(nd.el)) {
-      flash(t("attune.already", lang()), ELEMENT_COLOR[nd.el]);
+      /* SAID ONCE PER VISIT, not once per frame.
+       *
+       * This runs every tick, and `flash` writes a float AND a log line, so
+       * standing on a circle you already carry stacked six copies of "ten już
+       * w tobie jest" up the left of the screen and buried the chat log under
+       * them. The successful path never showed it because `markAttuned` moves
+       * the stage off `active` and the guard above then returns forever — so
+       * the bug only ever appeared on the refusal, which is exactly what
+       * Radek found: "robi tak wtedy kiedy juz ten żywioł mam".
+       *
+       * Latched on the SQUARE rather than on a timer, because the useful
+       * behaviour is per visit: stand still and it is said once, step off and
+       * back on — or onto a different circle — and it is said again, which is
+       * what a player checking two rings actually wants. */
+      const here = `${nd.tx},${nd.ty}`;
+      if (refusedCircle !== here) {
+        refusedCircle = here;
+        flash(t("attune.already", lang()), ELEMENT_COLOR[nd.el]);
+      }
       return;
     }
     markAttuned(nd.el);
@@ -4090,6 +4119,8 @@ function checkAttuneCircles(world: World): void {
     sageSays("sage.attuned.calanais", { then: () => {} });
     return;
   }
+  // Off every circle: the next one stepped into may speak again.
+  refusedCircle = null;
 }
 
 function checkPortals(): void {
