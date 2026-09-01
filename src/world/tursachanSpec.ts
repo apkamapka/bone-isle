@@ -43,12 +43,27 @@
  *         marks. `attuneNodes`: 2x2 of artwork, seal nothing, and walking into
  *         one IS the errand. Their squares are a contract - which one the
  *         player walked to is the choice they made.
- *   a..e  AMBIENT. One square each, scattered nine to eleven a wedge, three
- *         squares apart minimum. `ambientFx`: pure decoration, drawn from the
- *         same `fx-<el>-1-field` strips the spells use. They exist so a wedge
- *         reads as ITS element from across the room rather than as a coloured
- *         floor, and they are kept clear of the circles so the thing you can
- *         actually walk into is never lost in a crowd of things you cannot.
+ *   a..e  AMBIENT. One square each, sixteen or so a wedge, seventy-nine in
+ *         all. `ambientFx`: pure decoration, drawn from the same
+ *         `fx-<el>-1-field` strips the spells use. They exist so a wedge reads
+ *         as ITS element from across the room rather than as a coloured floor.
+ *
+ *         NONE OF THEM TOUCHES THE RIM. Every one has all eight of its
+ *         neighbouring squares on the floor, because the artwork is drawn a
+ *         shade wider than its square and its glow wider again: an effect
+ *         placed on an edge square hung half over the black rock and read as a
+ *         rendering fault rather than as decoration.
+ *
+ *         They are also kept off the circles' 2x2 blocks, so the one square in
+ *         this room the player can actually walk into is never lost in a crowd
+ *         of squares that do nothing.
+ *
+ *         Placed by farthest-point insertion ROUND ROBIN across the five
+ *         wedges. Filling them one after another starved whichever went last -
+ *         water came out with nine to earth's twenty - because by then its
+ *         neighbours' effects had eaten the spacing along both its borders.
+ *         Taking one per wedge per pass ends at sixteen, sixteen, sixteen,
+ *         sixteen and fifteen. No two are orthogonally adjacent.
  *
  * NOTHING LIVES DOWN HERE. The difficulty of this errand is the island on top.
  * A room holding a permanent choice is not a place to be interrupted.
@@ -75,30 +90,30 @@ export const TURSACHAN_SPEC: HandmadeSpec = {
     "################################",
     "################################",
     "################################",
-    "#########===a===b===b==#########",
-    "########================########",
-    "#######==a=====a=======b=#######",
-    "######============b=======######",
-    "#####=====1=a=======2=====b#####",
-    "####=a=========a======b=====####",
-    "####=======================d####",
-    "####e==ea==a======b=========####",
-    "####=================b======####",
-    "####==========a===========d=####",
-    "####====e==a======b====d====####",
-    "####===========C============####",
-    "####=e=====e=======d====4=d=####",
-    "####===5==============d=====####",
-    "####========================####",
-    "####========ec==c==d=====d==####",
-    "####====e=============d=====####",
-    "####e==============c========####",
-    "####======================d=####",
-    "#####====c===c==3======d===#####",
-    "######e===================######",
-    "#######==========c===c==c#######",
-    "########======c=========########",
-    "#########c=============#########",
+    "#########==============#########",
+    "########==a=a==a==b=b===########",
+    "#######==a=a=====b=b=b===#######",
+    "######========a=b=b===b===######",
+    "#####==a==1=a=======2==b===#####",
+    "####=============b==========####",
+    "####=e=a=a=a==a======b====d=####",
+    "####==e===========b=====d===####",
+    "####===e====a=a=b===b=======####",
+    "####=e====a===========d===d=####",
+    "####========a======b====d===####",
+    "####=e=e=e=====C=====d====d=####",
+    "####=======e============4===####",
+    "####===5=e=========d==d=====####",
+    "####=e=====e============d=d=####",
+    "####===e=====c=c=c==========####",
+    "####=====e==========d==d=d==####",
+    "####=e=e===c=c==c=c=========####",
+    "####=================c===d==####",
+    "#####===e====c==3==c===d===#####",
+    "######====c===============######",
+    "#######=========c=====c==#######",
+    "########===c==c====c====########",
+    "#########==============#########",
     "################################",
     "################################",
     "################################",
