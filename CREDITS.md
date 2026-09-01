@@ -1262,6 +1262,46 @@ them at 64 x 64 at source would be sharper. Each was then trimmed and seated on
 the anchor line so the box sits on the ground rather than hovering over its own
 shadow.
 
+## One-tile fields — `public/fx-earth-1-field.png`, `public/fx-ice-1-field.png`
+
+Source: **generated**, by `tools/fx/gen_field_fx.py` in this repository.
+
+**These two are not CraftPix.** They match the `fx-*.png` glob and they sit
+next to the bought art, but nothing in them came from anyone else, so the
+public-repository warning in the section below does not reach them. Same as the
+attunement circles: no attribution owed, no ShareAlike, no DRM clause, and
+re-running the script reproduces them byte for byte.
+
+Drawn at 32 x 32 with hard pixels on the palettes sampled out of the sheets
+already here, so they read as part of the same set rather than as a visitor:
+
+    earth   #170c04  #3a2311  #5c3c20  #8a6037  #bd8d55, plus a warm ember
+    ice     #4d7593  #8fb4cf  #b5d5e8  #ddeef9  #ffffff
+
+Twelve frames each, the same count as `fx-fire-1-field.png`.
+
+**They loop, because `field` is the slot that has to.** Every other slot plays
+once and stops; a field outlives its own animation, so a seam would tick on
+screen every twelve frames for as long as the tile burns. Every moving part
+here has a period that twelve divides — the earth's embers pulse twice a loop,
+its rubble hops on sixes, its dust makes one whole rise; the ice throws two
+crowns half a loop apart and drifts its ripples on a triangle wave. Measured,
+not assumed: frame twelve differs from frame one by less than the average
+frame-to-frame step in both sheets.
+
+**Earth** is a fissure, not a slab. Only the crack itself is opaque, with the
+lit lip broken along its length and embers breathing inside the widest part —
+the ground it splits has to keep showing through, or a field reads as a hole
+cut in the terrain.
+
+**Ice** is a slick with the surface breaking in it. Its body is deliberately
+semi-transparent rather than dithered: at this size a checkerboard wash reads
+as a mesh, and alpha is what makes water look like water lying on grass.
+
+Both measure a vertical weight near 0.78, so `weightY` calls them grounded and
+the renderer stands them on the tile's bottom edge — the same treatment the
+fire field gets, and the reason all three line up on the same floor.
+
 ## Element attunement circles — `public/fx-attune-*.png`
 
 Source: **generated**, by `tools/fx/gen_element_fx.py` in this repository. No
