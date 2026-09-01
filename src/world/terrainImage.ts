@@ -19,7 +19,14 @@ import { TILE } from "../config.ts";
 import type { World, WorldKey } from "./types.ts";
 
 /** Which maps have an exported terrain picture, and where it lives. */
-const TERRAIN_SRC: Partial<Record<WorldKey, string>> = {
+/**
+ * Exported so the smoke suite can walk it. It used to be private and the suite
+ * kept its own hand-written list of which maps had art — which is precisely
+ * how a 48x44 export survived a map being redrawn at 32x32: the list had never
+ * heard of that map, so nothing failed and the sanctum quietly rendered in the
+ * procedural bake.
+ */
+export const TERRAIN_SRC: Partial<Record<WorldKey, string>> = {
   home: "./home-terrain.png",
   town: "./town-terrain.png",
   cellar: "./cellar-terrain.png",
