@@ -12887,8 +12887,53 @@ async function main(): Promise<void> {
       ok(at > 0 && rm.slice(at, at + 220).includes("refuseFromProtection()"),
         `…and ${name === "tickMeleeFire" ? "the sword" : "the bow"} will not swing out of it`);
     }
-    ok((rm.match(/refuseFromProtection\(\)/g) ?? []).length === 5,
+    /* Counted off the CODE with the comments stripped out first. The prose
+     * around `isOffensiveCrystal` names this helper in order to explain when
+     * it is NOT called, and a raw text count reads that explanation as a sixth
+     * gate. Same trap the `/tp` DEV-flag test walked into: a test that can be
+     * failed by a comment about the test is worse than no test. */
+    const rmCode = rm.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+    ok((rmCode.match(/refuseFromProtection\(\)/g) ?? []).length === 5,
       "…nor will either cast path: four gates plus the one definition");
+
+    /* ETAP 48 — AND THE GATE IS ON THE OFFENSIVE CRYSTALS ONLY.
+     *
+     * It used to be on ALL of them, which meant the Life crystal was refused
+     * in Bonetown — and refused SILENTLY, because the flash inside
+     * `refuseFromProtection` only fires when there is a target to drop, and a
+     * player pressing heal in town has none. The button did nothing and said
+     * nothing.
+     *
+     * The rule is "you may not strike out of a refuge", not "no magic
+     * indoors". A town you cannot bind your wounds in is exactly backwards for
+     * the one map whose job is to be where you recover. */
+    const useBody = rm.slice(rm.indexOf("function useCrystalItem"),
+      rm.indexOf("function isOffensiveCrystal"));
+    ok(/isOffensiveCrystal\(kind\) && refuseFromProtection\(\)/.test(useBody),
+      "a crystal is refused by the zone only if it HITS something");
+    ok(/return CRYSTAL_SPECS\[kind\] !== undefined;/.test(rm),
+      "…and 'hits something' is the shard/burst/nova/wave table, not a hand-written list");
+    /* Life and Recall must stay OUT of that table, or the fix silently undoes
+     * itself the day somebody adds a spec entry for them. */
+    const CR48 = await import("../src/systems/crystals.ts");
+    ok(CR48.CRYSTAL_SPECS.healCrystal === undefined
+      && CR48.CRYSTAL_SPECS.recallCrystal === undefined,
+      "Life and Recall are not in the damage table");
+    ok(CR48.CRYSTAL_KINDS.includes("healCrystal" as never)
+      && CR48.CRYSTAL_KINDS.includes("recallCrystal" as never),
+      "…they are the two utility crystals, and still are");
+    /* Every elemental crystal IS in it, so nothing offensive slipped the net. */
+    const EL48b = await import("../src/systems/elements.ts");
+    for (const el of EL48b.ELEMENTS) {
+      const k = `${el}${EL48b.TIER_CODE[el][0]}Shard`;
+      ok(CR48.CRYSTAL_SPECS[k] !== undefined, `${k} is still gated by the zone`);
+    }
+    /* Recall was NEVER gated by the zone — `doRecall` returns before the check
+     * — so a recall that does nothing in town is an empty stack and not this
+     * bug. Pinned so the two never get merged into one path by accident. */
+    const recallBody = rm.slice(rm.indexOf("function doRecall"), rm.indexOf("function tpHome"));
+    ok(!/refuseFromProtection/.test(recallBody),
+      "travelling home out of a safe zone was never a refusal and still is not");
     ok(/if \(isSafeTile\(world, P\.tx, P\.ty\)\) return;/.test(rm),
       "…and nothing a creature throws lands on someone standing inside");
     /* Auto-attack asks twice a second, so a refusal that flashed every time it
@@ -15090,6 +15135,113 @@ async function main(): Promise<void> {
 
     rps47b(); M47b.resetMissions();
   }
+  console.log("Etap 48 — the bridges are exactly their deck, and the black boulders:");
+  {
+    const W48 = buildWorlds(WORLD_SEED);
+    const town48 = W48.town;
+    const isle48 = W48.calanais;
+    const T48 = 32;
+    const { Tile: TileEnum48 } = await import("../src/world/types.ts");
+
+    /* --- A BRIDGE IS ONLY AS WIDE AS ITS PLANKS --------------------------
+     * THE BUG, and it is the Calanais bridge bug on a different map: the
+     * walkable strip ran a square wider than the deck the terrain export
+     * draws, at BOTH ends of all five crossings. The art puts a railing along
+     * the outer edge of those squares and open river underneath, so a player
+     * standing on one is standing on the water with a handrail at his feet —
+     * which is exactly what Radek's three screenshots show.
+     *
+     * Forty-one squares in all. The test is not a coordinate list: it says
+     * the RULE, which is that a walkable square over the river must have deck
+     * stone painted under it. A coordinate list would pass a redrawn bridge
+     * that had moved.
+     *
+     * The five decks, after: y20-21 x51-55 · x63-64 y29-33 · y46-47 x30-33 ·
+     * x52-53 y69-71 · y80-81 x37-41. Two squares thick each, which is what
+     * "poskrócić o kratkę" came to at both ends. */
+    const RIVER: [number, number, number, number][] = [
+      [48, 58, 17, 24], [59, 68, 28, 35], [28, 36, 43, 50],
+      [48, 58, 67, 73], [34, 44, 77, 84],
+    ];
+    let overWater = 0, deckSquares = 0;
+    for (const [x0, x1, y0, y1] of RIVER) {
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          if (town48.solid[y][x]) continue;
+          /* `Tile.Water` under a walkable square is the baked floor's own word
+           * for "this is river", and the floor grid was trimmed to match the
+           * collision grid in the same pass. If the two ever drift apart
+           * again this is where it shows. */
+          if (town48.tile[y][x] === TileEnum48.Water) overWater++;
+          else deckSquares++;
+        }
+      }
+    }
+    ok(overWater === 0, `no walkable square on any crossing stands on open river (${overWater})`);
+    ok(deckSquares > 0, "…and the crossings still have deck to stand on");
+
+    /* CROSSABLE IS THE OTHER HALF. Trimming a bridge until it is safe and
+     * until it is impassable are one keystroke apart, so the town is re-walked
+     * from the Home Isle pad and must still reach everything it reached. */
+    const flood48 = (w: typeof town48, sx: number, sy: number): number => {
+      const seen = new Set<number>([sy * w.w + sx]);
+      const q: [number, number][] = [[sx, sy]];
+      while (q.length) {
+        const [x, y] = q.pop()!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+          if (w.solid[ny][nx] || seen.has(ny * w.w + nx)) continue;
+          seen.add(ny * w.w + nx); q.push([nx, ny]);
+        }
+      }
+      return seen.size;
+    };
+    const pad48 = town48.portals.find((pt) => pt.dest === "home");
+    ok(!!pad48, "Bonetown still has its pad home");
+    if (pad48) {
+      const px = Math.floor(pad48.x / T48), py = Math.floor(pad48.y / T48);
+      let open = 0;
+      for (let y = 0; y < town48.h; y++) {
+        for (let x = 0; x < town48.w; x++) if (!town48.solid[y][x]) open++;
+      }
+      ok(flood48(town48, px, py) === open,
+        `every square of Bonetown is still walkable from the pad (${flood48(town48, px, py)}/${open})`);
+    }
+
+    /* --- THIRTY BLACK BOULDERS ON CALANAIS -------------------------------
+     * The island had `R`, the grey rock you mine, and nothing you simply walk
+     * around — so every obstacle on it was a resource and the ground read as a
+     * lawn with quarries in it.
+     *
+     * Each is two squares wide and seals both, which is why the scatter is
+     * checked rather than trusted. A boulder is the one prop on this map that
+     * can quietly wall something off. */
+    const bould = isle48.scenery.filter((sc) => sc.kind === "boulderA" || sc.kind === "boulderB");
+    ok(bould.length === 30, `Calanais carries thirty black boulders (${bould.length})`);
+    ok(bould.filter((b) => b.kind === "boulderA").length === 15,
+      "…fifteen of each, so neither silhouette is the odd one out");
+    for (const b of bould) {
+      ok(Math.max(Math.abs(b.tx - 60), Math.abs(b.ty - 52)) >= 12,
+        `boulder at ${b.tx},${b.ty} keeps clear of the platform and its element rings`);
+    }
+    /* Never within three of a creature's post: a boulder that walls a snake
+     * into a corner is a creature that can never be fought. */
+    for (const q of isle48.mobPosts ?? []) {
+      ok(!bould.some((b) => Math.abs(b.ty - q.ty) <= 1
+        && (Math.abs(b.tx - q.tx) <= 1 || Math.abs(b.tx + 1 - q.tx) <= 1)),
+        `the post at ${q.tx},${q.ty} is not boxed in by a boulder`);
+    }
+    /* And no two crowd each other into reading as one lump of rock. */
+    for (let i = 0; i < bould.length; i++) {
+      for (let j = i + 1; j < bould.length; j++) {
+        ok(Math.max(Math.abs(bould[i].tx - bould[j].tx),
+          Math.abs(bould[i].ty - bould[j].ty)) >= 6,
+          `boulders ${i} and ${j} stand apart`);
+      }
+    }
+  }
+
   console.log("Etap 48 — what the player calls the elements, and saying it once:");
   {
     const nfs48 = await import("node:fs");

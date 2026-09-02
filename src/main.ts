@@ -1896,8 +1896,32 @@ function useCrystalItem(kind: ItemKind): void {
     flash(`${ITEMS[kind].name}: click a target`, "#ffce4a");
     return;
   }
-  if (refuseFromProtection() || refuseUntowered(kind)) return;
+  if (isOffensiveCrystal(kind) && refuseFromProtection()) return;
+  if (refuseUntowered(kind)) return;
   useCrystal(cw(), P, kind);
+}
+
+/**
+ * Does this crystal HIT something?
+ *
+ * Every entry in `CRYSTAL_SPECS` is a shard, burst, nova or wave, and all four
+ * deal damage. Life is not in that table and neither is Recall, which is the
+ * whole distinction: one heals the caster, one moves him, and neither reaches
+ * across the boundary of a protected zone at anybody.
+ *
+ * THE BUG THIS ANSWERS. `useCrystalItem` asked `refuseFromProtection()` about
+ * EVERY crystal, so standing in Bonetown — a safe map, so every square of it —
+ * refused the Life crystal too. Worse, it refused SILENTLY: the flash inside
+ * that helper only fires when there is a target to drop, and a player pressing
+ * heal in town has none. So the button did nothing and said nothing, which is
+ * the least debuggable failure a button has.
+ *
+ * The protection rule is "you may not strike out of a refuge", not "no magic
+ * indoors". A refuge you cannot bind your wounds in is not a refuge, and it is
+ * exactly backwards for a town whose whole job is to be where you recover.
+ */
+function isOffensiveCrystal(kind: ItemKind): boolean {
+  return CRYSTAL_SPECS[kind] !== undefined;
 }
 
 function doRecall(): void {
@@ -2398,6 +2422,10 @@ function handleWorldTap(sx: number, sy: number): void {
   if (aimPending) {
     const kind = aimPending;
     aimPending = null;
+    /* Unconditional here, unlike the direct path above, and that asymmetry is
+     * correct rather than an oversight: only a Burst is ever armed, every
+     * Burst is in `CRYSTAL_SPECS`, and everything in that table hurts. There
+     * is no self-cast that can reach this line. */
     if (refuseFromProtection() || refuseUntowered(kind)) return;
     useCrystal(cw(), P, kind, { x: w.x, y: w.y });
     return;
