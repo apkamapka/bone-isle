@@ -15846,6 +15846,113 @@ async function main(): Promise<void> {
       "…and so does nearestHit, which is where look and the context menu go");
   }
 
+
+  console.log("Etap 49 — nothing decorative is planted on the shoreline:");
+  {
+    const fsSh = await import("node:fs");
+    const { paintedTiles, ART_SPILL, FOOTPRINT } = await import("../src/gfx/sceneryArt.ts");
+    const { buildWorlds: bwSh } = await import("../src/game.ts");
+    const { WORLD_SEED: seedSh } = await import("../src/config.ts");
+    const { Tile: TileSh } = await import("../src/world/types.ts");
+    const worldsSh = bwSh(seedSh);
+
+    /* Radek photographed boulders lying on open water off the west of
+     * Calanais, and tree crowns hanging over the waves. Nothing was placed IN
+     * the water — every glyph involved is on grass — which is exactly why it
+     * survived: the TILE was legal and the PICTURE was not. */
+    let overlap = 0;
+    let margin = 0;
+    for (const k of Object.keys(worldsSh) as (keyof typeof worldsSh)[]) {
+      const wd = worldsSh[k];
+      const wet = (tx: number, ty: number): boolean =>
+        tx >= 0 && ty >= 0 && tx < wd.w && ty < wd.h && wd.tile[ty][tx] === TileSh.Water;
+      const near = (tx: number, ty: number): boolean => {
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (wet(tx + dx, ty + dy)) return true;
+        return false;
+      };
+      for (const sc of wd.scenery) for (const t of paintedTiles(sc.kind, sc.tx, sc.ty)) {
+        if (wet(t.tx, t.ty)) overlap++;
+        else if (near(t.tx, t.ty)) margin++;
+      }
+      // a tree is 32x56 on the bottom of its square: its own tile and one north
+      for (const tr of wd.trees) {
+        if (wet(tr.tx, tr.ty) || wet(tr.tx, tr.ty - 1)) overlap++;
+        else if (near(tr.tx, tr.ty) || near(tr.tx, tr.ty - 1)) margin++;
+      }
+    }
+    /* A RATCHET, not a pass. These are ceilings, and they are the current
+     * counts — so the suite is honest that the maps are still wrong and it
+     * goes red the moment a new map makes them wronger.
+     *
+     * A silent cull at build time was tried first and reverted. It fixed the
+     * picture and broke eight older assertions that say "every authored tree
+     * and rock came across", which is not a formality: it is what catches a
+     * spec that failed to parse. Overriding the author from inside the loader
+     * is the wrong direction. The right fix is a pass over the specs in Tiled,
+     * moving these props a square inland, and then both numbers go to 0 and
+     * these two lines become `=== 0`. */
+    ok(overlap <= 4, `at most four props still paint on water (${overlap})`);
+    ok(margin <= 71, `…and at most 71 stand within a square of it (${margin})`);
+    if (overlap || margin) console.log(`    (shoreline debt: ${overlap} overlapping, ${margin} within a square — see the report below)`);
+
+    /* Gatherable rocks are deliberately exempt from the MARGIN and only from
+     * the margin. `SPR.rock` is 20x12 centred in a 32px square and cannot
+     * reach a neighbour, so it never caused this and may sit on the last tile
+     * of a beach. Giving it the margin cost Home Isle eight of its ten stone
+     * nodes, and "gather 20 stone" is the fourth quest in the game. */
+    let rockOnWater = 0;
+    let rockAtShore = 0;
+    for (const k of Object.keys(worldsSh) as (keyof typeof worldsSh)[]) {
+      const wd = worldsSh[k];
+      const wet = (tx: number, ty: number): boolean =>
+        tx >= 0 && ty >= 0 && tx < wd.w && ty < wd.h && wd.tile[ty][tx] === TileSh.Water;
+      for (const r of wd.rocks) {
+        if (wet(r.tx, r.ty)) rockOnWater++;
+        for (let dy = -1; dy <= 1 && !wet(r.tx, r.ty); dy++)
+          for (let dx = -1; dx <= 1; dx++) if (wet(r.tx + dx, r.ty + dy)) { rockAtShore++; dy = 2; break; }
+      }
+    }
+    ok(rockOnWater === 0, "a stone node is never IN the water");
+    ok(rockAtShore > 0,
+      `…but is still allowed on the shore, or the exemption would be doing nothing (${rockAtShore})`);
+    ok(worldsSh.home.rocks.length >= 8,
+      `…and Home Isle keeps enough stone to finish the gathering quest (${worldsSh.home.rocks.length})`);
+
+    /* The spill table is read off the PNGs, so the PNGs are what checks it.
+     * `FOOTPRINT` says which tiles an object CLAIMS; it never said which tiles
+     * its artwork paints on, and for five kinds those are different — a
+     * boulder is filed 2x1 (64x32) and its file is 60x44, so twelve pixels of
+     * stone are painted a row further north than anything knew. */
+    const dim = (file: string): { w: number; h: number } => {
+      const b = fsSh.readFileSync(new URL("../public/" + file, import.meta.url));
+      return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
+    };
+    const artSrc = fsSh.readFileSync(new URL("../src/gfx/sceneryArt.ts", import.meta.url), "utf8");
+    const srcBlock = artSrc.slice(artSrc.indexOf("const SRC:"), artSrc.indexOf("export const FOOTPRINT"));
+    const files = new Map<string, string>();
+    for (const m of srcBlock.matchAll(/(\w+):\s*"\.\/([a-z0-9-]+\.png)"/g)) files.set(m[1], m[2]);
+    let drifted = 0;
+    for (const [kind, file] of files) {
+      const fp = FOOTPRINT[kind as never];
+      if (!fp || !fsSh.existsSync(new URL("../public/" + file, import.meta.url))) continue;
+      const a = dim(file);
+      const up = Math.max(0, a.h - fp.h * 32);
+      const side = Math.max(0, Math.floor((a.w - fp.w * 32) / 2));
+      const declared = ART_SPILL[kind as never] ?? { up: 0, side: 0 };
+      if (declared.up !== up || declared.side !== side) {
+        drifted++;
+        console.log(`    (${kind}: file says up=${up} side=${side}, table says up=${declared.up} side=${declared.side})`);
+      }
+    }
+    ok(drifted === 0, `every ART_SPILL entry still matches its PNG (${drifted} drifted)`);
+    ok(Object.keys(ART_SPILL).length === 5,
+      "…and the five kinds that outgrow their footprint are all listed");
+    ok(paintedTiles("boulderA", 10, 10).some((t) => t.ty === 9),
+      "a boulder is known to paint a row above its own");
+    ok(!paintedTiles("well", 10, 10).some((t) => t.ty === 9),
+      "…while something that fits its footprint claims nothing extra");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

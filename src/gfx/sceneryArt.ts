@@ -102,6 +102,9 @@ export const SCENERY_NAME: Record<SceneryKind, string> = {
   windmillLattice: "a windmill",
 };
 
+/** Tile side in pixels. Local, so this module stays free of config imports. */
+const TILE_PX = 32;
+
 export const FOOTPRINT: Record<SceneryKind, { w: number; h: number }> = {
   skullPole: { w: 1, h: 1 },
   deadTree: { w: 1, h: 1 },
@@ -153,6 +156,50 @@ export const FOOTPRINT: Record<SceneryKind, { w: number; h: number }> = {
  *
  * Anything one row deep has nothing to give back, and lists its own row here.
  */
+/**
+ * How far each PNG spills OUTSIDE the footprint it is filed under, in pixels.
+ *
+ * `FOOTPRINT` says which tiles an object claims; it does not say which tiles
+ * its artwork paints on, and for five of these they are not the same thing. A
+ * boulder is filed as 2x1 — 64x32 px — and its PNG is 60x44, so twelve pixels
+ * of stone are painted in the row ABOVE the block. Standing one square in from
+ * a shoreline, that is twelve pixels of rock lying on the sea, which is the
+ * artefact Radek photographed on Calanais.
+ *
+ * `up` is what the art adds above the block's top edge; `side` is what it adds
+ * beyond each vertical edge (negative means the art is narrower than its
+ * footprint and needs no room). Anything absent fits inside its footprint and
+ * is zero.
+ *
+ * These are read off the files, and the smoke suite re-reads the PNG headers
+ * and fails if any entry stops matching — the same guarantee the comment above
+ * `chapel` makes for the town set, made checkable.
+ */
+export const ART_SPILL: Partial<Record<SceneryKind, { up: number; side: number }>> = {
+  boulderA: { up: 12, side: 0 },
+  boulderB: { up: 12, side: 0 },
+  deadTree: { up: 40, side: 7 },
+  felledTree: { up: 6, side: 1 },
+  skullPole: { up: 17, side: 0 },
+};
+
+/**
+ * The tiles a piece of scenery actually PAINTS on: its footprint plus whatever
+ * its artwork spills above and beside it. This is the rectangle that has to sit
+ * on dry land — sealing is a different question and `BLOCK` answers that one.
+ */
+export function paintedTiles(kind: SceneryKind, tx: number, ty: number): { tx: number; ty: number }[] {
+  const fp = FOOTPRINT[kind];
+  const sp = ART_SPILL[kind] ?? { up: 0, side: 0 };
+  const x0 = tx - Math.max(0, Math.ceil(sp.side / TILE_PX));
+  const x1 = tx + fp.w - 1 + Math.max(0, Math.ceil(sp.side / TILE_PX));
+  const y0 = ty - Math.max(0, Math.ceil(sp.up / TILE_PX));
+  const y1 = ty + fp.h - 1;
+  const out: { tx: number; ty: number }[] = [];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) out.push({ tx: x, ty: y });
+  return out;
+}
+
 export const BLOCK: Record<SceneryKind, { w: number; h: number }> = {
   skullPole: { w: 1, h: 1 },
   deadTree: { w: 1, h: 1 },

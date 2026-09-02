@@ -221,10 +221,22 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
       const cy = y * TILE + TILE / 2;
       switch (ch) {
         case "T":
+          // 32x56, anchored on the bottom of its square: one tile wide, and the
+          // crown reaches into the square north of it.
           w.trees.push({ tx: x, ty: y, spr: bakeTree(), hp: 3, maxhp: 3, stump: false, respawnT: 0, hurtT: 0 });
           solid[y][x] = true;
           break;
         case "R":
+          /* The margin does NOT apply to a gatherable rock, and that is a
+           * decision rather than an oversight. `SPR.rock` is 20x12 drawn
+           * centred in a 32px square: it cannot touch a neighbouring tile at
+           * all, so it never produced the artefact this rule exists to stop,
+           * and it may sit on the very last square of a beach as it always
+           * has. Giving it the margin cost Home Isle eight of its ten stone
+           * nodes, and "gather 20 stone" is the fourth quest in the game.
+           *
+           * The rule is about what an object PAINTS, so an object that paints
+           * inside its own square answers about its own square. */
           w.rocks.push({ tx: x, ty: y, hp: 4, maxhp: 4, depleted: false, respawnT: 0, hurtT: 0 });
           solid[y][x] = true;
           break;
