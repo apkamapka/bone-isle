@@ -15174,6 +15174,80 @@ async function main(): Promise<void> {
 
     rps47b(); M47b.resetMissions();
   }
+  console.log("Etap 49 — three layers of sea over a still export:");
+  {
+    const CFG49 = await import("../src/config.ts");
+    const main49 = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    const W49 = buildWorlds(WORLD_SEED);
+    const { Tile: Tile49 } = await import("../src/world/types.ts");
+
+    /* THE COMPLAINT: "sporadycznie widać jakąś jej animacje". The glint count
+     * was 26% of water tiles AND a dash was drawn only above 0.5 of its own
+     * sine, so at any instant about THIRTEEN per cent of the sea had anything
+     * on it. The rest was a photograph. */
+    ok(CFG49.WATER_GLINT_PCT >= 45,
+      `enough of the sea carries a glint (${CFG49.WATER_GLINT_PCT}%)`);
+    ok(CFG49.WATER_GLINT_CUT < 0.5,
+      `…and the dash fades in rather than popping on (cut ${CFG49.WATER_GLINT_CUT})`);
+    /* Doubling the count ALONE would have made the sea twitch: every dash the
+     * same length, the same speed, appearing at full opacity. Variation is
+     * what turns dots into water, and it comes off the hash that already
+     * decides which tiles glint, so it costs nothing to store. */
+    ok(CFG49.WATER_GLINT_LEN_VAR > 0 && CFG49.WATER_GLINT_SPEED_VAR > 0,
+      "…and length and speed vary per tile, so the dashes are not a pattern");
+    const seaBody = main49.slice(main49.indexOf("THE SEA, in three layers"),
+      main49.indexOf("animated coastal foam"));
+    ok(seaBody.length > 0, "the sea pass is where the test thinks it is");
+    ok(/\(h >>> 7\) % \(WATER_GLINT_LEN_VAR \+ 1\)/.test(seaBody)
+      && /\(h >>> 13\) % 200/.test(seaBody),
+      "…drawn off the SAME hash, second and third shifts — no new per-tile state");
+
+    /* TWO LAYERS, NOT ONE, and this is the part that actually answers the
+     * complaint. One moving thing on a still picture is a light; two moving at
+     * unrelated rates is a surface. A denser field of glints on its own still
+     * reads as blinking dots. */
+    ok(CFG49.WATER_SWELL_ALPHA > 0, "there is a swell under the glints");
+    ok(seaBody.indexOf("WATER_SWELL_COLOR") < seaBody.indexOf("WATER_GLINT_COLOR"),
+      "…and it is drawn UNDER them — a glint dimmed by the swell is backwards");
+
+    /* THE SHORE, on maps that have an export. `world.coastWater` is filled by
+     * the procedural baker and by nothing else, so `art ? [] : coastWater` left
+     * every hand-drawn map with a sea that moved and an edge that did not. */
+    /* The list EXISTS on these maps — the procedural baker fills it whether or
+     * not an export is present. What killed the shoreline was the draw, which
+     * reads `art ? [] : world.coastWater`: on any map with an export the loop
+     * is handed an empty array and the coast never moves. Pinned as the reason
+     * rather than as the data, because the data was never the problem and a
+     * test that said otherwise would send the next reader to the wrong file. */
+    ok(/for \(const cwv of art \? \[\] : world\.coastWater\)/.test(main49),
+      "the baked coast list is still skipped on exported maps — that is the gate that killed it");
+    for (const key of ["town", "calanais", "liddesdale", "haramsey"] as const) {
+      ok(W49[key].tile.some((row) => row.some((t) => t === Tile49.Water)),
+        `${key} has sea for the new pass to find in the grid`);
+    }
+    /* ONE TILE DEEPER THAN THE GRID SAYS. The collision grid calls a square
+     * water the moment any of it is, and the export paints the bank THROUGH
+     * that square, mostly green — 333 of Bonetown's 3692 water squares are
+     * painted as land. Foam on their outer edge lands on grass, which is what
+     * the first attempt did. So it is drawn on the first FULLY wet square,
+     * facing the bank square. */
+    ok(/if \(!wet\(tx, ty\) \|\| bank\(tx, ty\)\) continue;/.test(seaBody),
+      "the bank square itself is skipped — it is half grass in the art");
+    ok(/if \(!bank\(tx \+ dx, ty \+ dy\)\) continue;/.test(seaBody),
+      "…and the foam faces it from the water side");
+    /* BROKEN DASHES. The grid boundary is straight, the painted bank is not,
+     * so a full-length bar reads as a fence built in the river. */
+    ok(CFG49.COAST_FOAM_DASHES >= 2,
+      `the foam is broken into dashes (${CFG49.COAST_FOAM_DASHES} per edge)`);
+    ok(/\(h >>> 17\) % \(TILE - len\)/.test(seaBody),
+      "…at hashed offsets, so no two edges break in the same place");
+
+    /* AND ALL THREE ONLY OVER AN EXPORT. Procedural terrain bakes its own
+     * moving water and its own foam; painting these on top would double it. */
+    ok(seaBody.trimStart().startsWith("if (art)") || /^\s*if \(art\)/m.test(seaBody),
+      "the whole pass is behind `if (art)` — procedural maps already move");
+  }
+
   console.log("Etap 48 — the bridges are exactly their deck, and the black boulders:");
   {
     const W48 = buildWorlds(WORLD_SEED);
