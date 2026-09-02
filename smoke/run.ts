@@ -14585,6 +14585,45 @@ async function main(): Promise<void> {
     /* Decoration seals nothing, exactly as in the sanctum — a lid you cannot
      * cross is not a lid, it is a wall with a hole in the middle. */
     ok(amb48.every((n) => !isle.solid[n.ty][n.tx]), "…and every element square is walkable");
+
+    /* --- AND WALKABLE IS NOT FREE ----------------------------------------
+     * Radek, twice: "te efekty co zrobiles nie daja obrazenia jak ogien" and
+     * then "ogień bierze ok 8-11 DMG jak się stanie ale inne żywioły nie".
+     *
+     * The complaint is not that the fields were too gentle. It is that the
+     * ground lied: sixteen glowing squares that looked exactly as dangerous as
+     * the camp fires beside them and cost nothing at all to cross. That is the
+     * same lie the camp fire told before it was made walkable and made to
+     * hurt, and it gets the same answer — same tick, same numbers, same
+     * elemental bypass of shield and armour, and no floating label, because
+     * the glow under your feet is the label. */
+    const EL48c = await import("../src/systems/elements.ts");
+    const FS48 = await import("../src/gfx/fireSheet.ts");
+    const mainBurn = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    ok(EL48c.FIELD_BURN_TICK_S === FS48.FIRE_BURN_TICK_S,
+      "an element field bites on the camp fire's clock");
+    ok(EL48c.FIELD_BURN_DMG[0] === FS48.FIRE_BURN_DMG[0]
+      && EL48c.FIELD_BURN_DMG[1] === FS48.FIRE_BURN_DMG[1],
+      `…for the camp fire's damage (${EL48c.FIELD_BURN_DMG.join("-")})`);
+    const burnBody = mainBurn.slice(mainBurn.indexOf("function tickCampfireBurn"),
+      mainBurn.indexOf("let refusedCircle"));
+    ok(burnBody.length > 0 && /for \(const nd of world\.ambientFx\)/.test(burnBody),
+      "the burn tick walks the element fields, not only the fires");
+    ok(/hurtPlayer\(world, P, rndi\(FIELD_BURN_DMG\[0\], FIELD_BURN_DMG\[1\]\), true\)/.test(burnBody),
+      "…and the `true` is the elemental bypass: no shield against a floor");
+    /* THE CIRCLES ARE NOT FIELDS, and this is the line that matters most.
+     * `attuneNodes` is the five rune circles — the thing the errand is FOR.
+     * Charging a player health for accepting the gift he walked across an
+     * island to collect would be a joke at his expense, and the two lists sit
+     * apart on `World` for exactly this kind of reason. */
+    ok(!/world\.attuneNodes/.test(burnBody),
+      "standing in a rune circle still costs nothing — the circles are not hazards");
+    /* One clock, keyed per TILE, shared by both loops: a field and a fire on
+     * one square could not double-bite even if one were ever placed on the
+     * other. The assertion above says none ever is; this says the arithmetic
+     * would hold if one were. */
+    ok((burnBody.match(/fireClock\.set\(key, /g) ?? []).length === 2,
+      "…and both loops share the one per-tile clock");
     /* THE LID GRANTS NOTHING. `attuneNodes` is what a player can walk into for
      * an element; if a surface square ever became one, the crossing the errand
      * is about could be skipped by standing on the roof of it. */
