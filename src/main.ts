@@ -39,7 +39,8 @@ import {
 } from "./systems/hudLayout.ts";
 import { researchById, isResearched, markResearched, towerTierOk, towerTierFor,
   ATTUNEMENT, isAttuned, markAttuned, clearAttuned, attunementOk, offerById } from "./systems/tower.ts";
-import { ELEMENT_LABEL, ELEMENT_COLOR, type Element } from "./systems/elements.ts";
+import { ELEMENT_LABEL, ELEMENT_COLOR, FIELD_BURN_TICK_S, FIELD_BURN_DMG,
+  type Element } from "./systems/elements.ts";
 import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
@@ -4069,6 +4070,31 @@ function tickCampfireBurn(world: World, dt: number): void {
     if (fireT < next) continue;
     fireClock.set(key, fireT + FIRE_BURN_TICK_S);
     hurtPlayer(world, P, rndi(FIRE_BURN_DMG[0], FIRE_BURN_DMG[1]), true);
+  }
+  /* THE OTHER FOUR ELEMENTS BITE TOO, on the same terms.
+   *
+   * The lid of the temple carried sixteen glowing squares that looked exactly
+   * as dangerous as the camp fires beside them and cost nothing at all to walk
+   * through. That is the ground telling a lie, and it is the same lie the camp
+   * fire used to tell before it was made walkable and made to hurt.
+   *
+   * `ambientFx` ONLY. `attuneNodes` — the five rune circles — are left alone
+   * deliberately: they are the thing the errand is about, and charging a
+   * player health for accepting the gift he came for would be a joke at his
+   * expense. The two lists are separate in `World` for exactly this kind of
+   * reason.
+   *
+   * The clock is shared with the fires and keyed on the tile, so a field and a
+   * fire could not double-bite the same square even if one were ever placed on
+   * the other — and a test says none ever is.
+   */
+  for (const nd of world.ambientFx) {
+    if (nd.tx !== P.tx || nd.ty !== P.ty) continue;
+    const key = `${world.key}|${nd.tx}|${nd.ty}`;
+    const next = fireClock.get(key) ?? 0;
+    if (fireT < next) continue;
+    fireClock.set(key, fireT + FIELD_BURN_TICK_S);
+    hurtPlayer(world, P, rndi(FIELD_BURN_DMG[0], FIELD_BURN_DMG[1]), true);
   }
   // the map's fires never move, but travelling between worlds retires the keys
   if (fireClock.size > 64) {
