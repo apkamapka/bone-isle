@@ -15219,6 +15219,61 @@ async function main(): Promise<void> {
      * can quietly wall something off. */
     const bould = isle48.scenery.filter((sc) => sc.kind === "boulderA" || sc.kind === "boulderB");
     ok(bould.length === 30, `Calanais carries thirty black boulders (${bould.length})`);
+
+    /* --- THE TREES ARE SPREAD, NOT JUST COUNTED --------------------------
+     * Radek's report was "drzewa chyba usunąłeś". Nothing had been deleted —
+     * the count was untouched at 135 — but all nine groves sat within a dozen
+     * squares of a shore and the whole middle of the island was bare, so a
+     * player crossing it saw grass and drew the obvious conclusion.
+     *
+     * That is why this pins a DISTRIBUTION and not a number. A count alone
+     * would have passed happily on the map that caused the complaint. */
+    const trees48 = isle48.trees;
+    ok(trees48.length > 300, `Calanais is wooded (${trees48.length} trees)`);
+    const BLK = 20;
+    for (let by = 0; by < isle48.h; by += BLK) {
+      for (let bx = 0; bx < isle48.w; bx += BLK) {
+        let land = 0;
+        for (let y = by; y < Math.min(by + BLK, isle48.h); y++) {
+          for (let x = bx; x < Math.min(bx + BLK, isle48.w); x++) {
+            if (isle48.tile[y][x] !== TileEnum48.Water) land++;
+          }
+        }
+        if (land < 200) continue;   // edge blocks that are mostly sea
+        const here = trees48.filter((t) => t.tx >= bx && t.tx < bx + BLK
+          && t.ty >= by && t.ty < by + BLK).length;
+        /* The temple islet is deliberately bare and its block is allowed to
+         * be: nothing is planted inside the moat, because the platform is
+         * where the player stands still and reads. */
+        const templeBlock = bx <= 60 && bx + BLK > 46 && by <= 52 && by + BLK > 42;
+        ok(templeBlock || here >= 4,
+          `the 20x20 block at ${bx},${by} has trees in it (${here})`);
+      }
+    }
+    /* NOTHING INSIDE THE MOAT. A grove on the islet would crowd the twelve
+     * fires, the sixteen element squares and the descent — and the first
+     * attempt at this planted a hedge fourteen long down both banks, because
+     * "within 14 of the centre" left the shoreline just outside the circle. */
+    ok(!trees48.some((t) => Math.max(Math.abs(t.tx - 60), Math.abs(t.ty - 52)) <= 13),
+      "no tree stands on the temple islet or crowds its rings");
+    /* NO FENCES. Three in a row is a copse edge; four is a fence, and a fence
+     * is what an automatic planter builds when the only land left is a strip. */
+    const tset = new Set(trees48.map((t) => `${t.tx},${t.ty}`));
+    let longest = 0;
+    for (const t of trees48) {
+      for (const [dx, dy] of [[1, 0], [0, 1]] as const) {
+        let k = 0;
+        while (tset.has(`${t.tx + dx * k},${t.ty + dy * k}`)) k++;
+        longest = Math.max(longest, k);
+      }
+    }
+    ok(longest <= 5, `no tree runs read as a fence (longest straight run ${longest})`);
+    /* And a tree beside a boulder is the pair that pinches a gap shut, so the
+     * two are kept a square apart. The island-wide flood fill above is the
+     * real proof; this says WHY it passes. */
+    ok(!trees48.some((t) => bould.some((b) => Math.abs(t.ty - b.ty) <= 1
+      && (Math.abs(t.tx - b.tx) <= 1 || Math.abs(t.tx - (b.tx + 1)) <= 1))),
+      "no tree is planted against a boulder");
     ok(bould.filter((b) => b.kind === "boulderA").length === 15,
       "…fifteen of each, so neither silhouette is the odd one out");
     for (const b of bould) {
