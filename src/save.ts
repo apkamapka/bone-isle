@@ -7,6 +7,7 @@ import { portalSpawn, feetBlocked, worldSpawn } from "./world/collision.ts";
 import { placeWalker } from "./world/grid.ts";
 import { stampWorlds, nextEntityId } from "./world/entities.ts";
 import { applyStructureSolidity, canPlaceAt, STRUCTS, CHEST_SLOTS } from "./systems/building.ts";
+import { liftOverDeep } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState, attunedState, loadAttunedState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
@@ -362,6 +363,17 @@ export function loadGame(): Game | null {
       }
     }
   }
+  /* Anything buried past the readable nesting depth comes back up.
+   *
+   * `moveItems` now refuses to put a pack that deep, so no save written from
+   * here on can be in this state — but a character who did it under an older
+   * build has a window that shows nothing and a carry weight that charges for
+   * it anyway. Lifted onto the same road every other homeless stack takes:
+   * the first chest, then the ground by the portal. Visible beats tidy.
+   *
+   * Costs one walk of the bag tree on load and finds nothing in the ordinary
+   * case, which is the right price for not stranding somebody's loot. */
+  if (player.pack?.items) spill.push(...liftOverDeep(player.pack.items));
   player.eq = normalizeEquipment(sp.eq);
   // A pick naming an arrow that no longer exists falls back to "auto" rather
   // than sticking the bow with a kind it can never fire.

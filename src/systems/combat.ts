@@ -10,8 +10,8 @@ import { addFloat } from "../fx.ts";
 import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
-import { missionByEcho, wantsRelic, relicTaken } from "./missions.ts";
-import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, bagCount } from "../items.ts";
+import { missionByEcho, wantsRelic, relicTaken, extractBound } from "./missions.ts";
+import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, bagCount, newContainer, contentsOf } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
 import { structCenter, tierOf, DUMMY_TIER_RATE, DUMMY_TIER_SHIELD } from "./building.ts";
 import {
@@ -315,8 +315,33 @@ export function applyDeathPenalty(world: World, p: Player): void {
      * It is also never subject to DEATH_EQ_DROP_CHANCE. A worn piece surviving
      * on a lucky roll is the intended mercy; your entire inventory surviving
      * on one would gut the penalty outright. */
+    /* THE RELIC DOES NOT DIE WITH YOU.
+     *
+     * The pack drops whole, which is right, and until now the relic rode along
+     * inside it — straight past `carriesBound`, which guards the moves and has
+     * nothing to say about a corpse the game creates on the player's behalf.
+     * That was the widest hole of the lot, and it was open on exactly the two
+     * missions that have relics: both sit at or above DEATH_PENALTY_LEVEL, so
+     * the backpack-drop rule is always live for them.
+     *
+     * Lifted out FIRST, then put back on the character after the pack has
+     * gone. If there is no pack left to hold it the relic waits in the
+     * equipment-free hands — `addStack` into a fresh pack on respawn — but the
+     * common case is the amulet branch above, which never gets here at all. */
+    const rescued = p.pack ? extractBound(p.pack, p.level) : [];
     let lost = false;
     if (p.pack) { addStack(body, p.pack); p.pack = null; lost = true; }
+    /* Something has to hold what was rescued, and the pack it was in is now in
+     * the corpse. A bagless character has a frozen empty `bag` and would drop
+     * the relic on the floor of this function, so a plain backpack comes with
+     * it — the cheapest container in the game, and the alternative is losing
+     * the errand to a death the rule says should not cost it. */
+    if (rescued.length) {
+      const home = newContainer("backpack")!;
+      const slots = contentsOf(home)!;
+      for (const r of rescued) addStack(slots, r);
+      p.pack = home;
+    }
     for (const slot of Object.keys(p.eq) as (keyof typeof p.eq)[]) {
       const it = p.eq[slot];
       if (it && Math.random() < DEATH_EQ_DROP_CHANCE) {

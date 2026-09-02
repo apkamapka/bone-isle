@@ -188,9 +188,18 @@ export function markKiller(): void {
  * it names who started it.
  */
 export function resolvePlayerHit(
-  attackerLevel: number, victimLevel: number, provoked = false,
+  attackerLevel: number, victimLevel: number, provoked = false, inSafeZone = false,
 ): boolean {
-  if (!mayHit(attackerLevel, victimLevel)) return false;
+  /* `inSafeZone` is forwarded, and that is the whole of this line's history:
+   * it was not. `mayHit` grew the protection zone and the tests grew with it,
+   * but the seam that is supposed to be the one place the rule lives called
+   * `mayHit` with two arguments of three — so the function every future damage
+   * path is meant to go through quietly answered "no zone" for everybody.
+   *
+   * Nothing could notice yet, because there is nobody to hit. That is exactly
+   * why it is worth fixing now rather than on the day it decides a fight in
+   * the middle of Bonetown. */
+  if (!mayHit(attackerLevel, victimLevel, inSafeZone)) return false;
   if (!provoked) markAggressor();
   return true;
 }

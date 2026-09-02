@@ -44,6 +44,12 @@ import type { OutfitSave } from "./outfit.ts";
 import type { Element } from "./elements.ts";
 import type { PvpState } from "./pvp.ts";
 import type { MissionSave } from "./missions.ts";
+import type { CdGroup, CdFamily } from "./cooldowns.ts";
+import type { SlotAction } from "./actions.ts";
+import type { DerivedBonus } from "../entities/player.ts";
+
+/** Re-exported so actions.ts can pin its own constants against these. */
+export { SLOTS_MIN as STATE_SLOTS_MIN, SLOTS_MAX as STATE_SLOTS_MAX };
 
 /**
  * The three combat toggles. Tibia 8.6 has exactly these, as three independent
@@ -115,6 +121,30 @@ export interface PlayerState {
   shieldBlockTimes: number[];
   /** When this character last DEALT damage; gates Shielding advancement. */
   lastBloodHitAt: number;
+  /**
+   * Crystal cooldowns: the per-ROLE clock and the per-FAMILY wheel.
+   *
+   * These sat in a module `const` in cooldowns.ts, which was the last of the
+   * combat clocks not to make the move — and the odd one out beside
+   * `shieldBlockTimes` two fields up, whose comment spells out why a clock
+   * cannot be shared between characters. Worse, `resetCooldowns()` documented
+   * itself as running on "new game, character switch, test isolation" and had
+   * no caller in `src/` at all, so a fresh character inherited whatever the
+   * last one had just cast.
+   *
+   * Still not saved, and that is still right: a cooldown is a fact about the
+   * last few seconds. Being per-character and being persistent are different
+   * questions and only the first one applies here.
+   */
+  cooldowns: { role: Map<CdGroup, number>; wheel: Map<CdFamily, number> };
+  /** The hotbar: every binding (including the hidden tail past the current
+   *  length) and how many slots are actually in play. Both are saved per
+   *  character already; they were simply living in a module `let`. */
+  actionSlots: (SlotAction | null)[];
+  actionSlotCount: number;
+  /** Passive bonuses from the structures this character owns. Per-character
+   *  because the Home Isle is per-character. */
+  bonus: Required<DerivedBonus>;
 }
 
 /** A pristine skill table. Cloned per character rather than shared. */
@@ -192,6 +222,27 @@ function defaultPvp(): PvpState {
   return { skull: "none", t: 0, frags: 0 };
 }
 
+/**
+ * The hotbar a brand-new character wakes up with: the two utility crystals in
+ * slots 1–2, the rest empty and waiting for whichever element they attune to.
+ *
+ * The two numbers live here rather than in actions.ts for the same reason
+ * `defaultQuests` and `defaultOutfit` do — this module takes no VALUE import
+ * from a feature module, and actions.ts now reads `active()` out of here.
+ * There is no second copy to drift: `ACTION_SLOTS_MIN`/`_MAX` are re-exported
+ * FROM these, so actions.ts and this file cannot disagree by construction.
+ */
+const SLOTS_MIN = 6;
+const SLOTS_MAX = 24;
+
+function defaultActionSlots(): (SlotAction | null)[] {
+  return Array.from({ length: SLOTS_MAX }, (_, i): SlotAction | null => {
+    if (i === 0) return { type: "crystal", item: "healCrystal" };
+    if (i === 1) return { type: "crystal", item: "recallCrystal" };
+    return null;
+  });
+}
+
 /** A brand-new character: nothing trained, nothing done, nothing on cooldown. */
 export function newPlayerState(): PlayerState {
   return {
@@ -207,6 +258,10 @@ export function newPlayerState(): PlayerState {
     attuned: new Set<Element>(),
     shieldBlockTimes: [],
     lastBloodHitAt: -Infinity,
+    cooldowns: { role: new Map(), wheel: new Map() },
+    actionSlots: defaultActionSlots(),
+    actionSlotCount: SLOTS_MIN,
+    bonus: { maxhp: 0 },
   };
 }
 

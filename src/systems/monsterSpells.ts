@@ -124,6 +124,13 @@ let clock = 0;
  * the clock and let a caster tick you every frame by re-casting. Keeping the
  * clock here means re-lighting a tile extends how long it burns and changes
  * nothing about how often it bites.
+ *
+ * The world IS in the key, and until now only the comment said so — the code
+ * keyed on `tx|ty` alone, so tile (10,10) burning on two islands shared one
+ * clock. It was harmless only because `clearMonsterSpells()` empties this on
+ * every crossing, which means the invariant was being held from another
+ * module. Putting the world back in the key makes it hold on its own, which
+ * is what a key is for.
  */
 const fieldClock = new Map<string, number>();
 
@@ -281,7 +288,7 @@ export function updateMonsterSpells(
   const hot = burningTiles(w);
   for (const f of hot) {
     if (target.dead || f.tx !== target.tx || f.ty !== target.ty) continue;
-    const key = `${f.tx}|${f.ty}`;
+    const key = `${w.key}|${f.tx}|${f.ty}`;
     const next = fieldClock.get(key) ?? 0;
     if (clock < next) continue;
     fieldClock.set(key, clock + FIELD_TICK_S);
@@ -290,7 +297,7 @@ export function updateMonsterSpells(
   }
   // Tiles that have gone out stop taking up space in the clock.
   if (fieldClock.size > 64) {
-    const live = new Set(hot.map((f) => `${f.tx}|${f.ty}`));
+    const live = new Set(hot.map((f) => `${w.key}|${f.tx}|${f.ty}`));
     for (const k of fieldClock.keys()) if (!live.has(k)) fieldClock.delete(k);
   }
 }

@@ -7,6 +7,7 @@
  */
 import type { ItemKind } from "../items.ts";
 import { ITEMS } from "../items.ts";
+import { active as activeState, STATE_SLOTS_MIN, STATE_SLOTS_MAX } from "./playerState.ts";
 
 export type SlotAction =
   | { type: "crystal"; item: ItemKind }
@@ -27,12 +28,12 @@ export type SlotAction =
  * a ragged half-row to lay out.
  */
 export const ACTION_SLOT_STEP = 6;
-export const ACTION_SLOTS_MIN = 6;
+export const ACTION_SLOTS_MIN = STATE_SLOTS_MIN;
 /**
  * Four rows. Past this the deck is eating half the phone, and a hotbar you
  * have to read rather than know by position has stopped being a hotbar.
  */
-export const ACTION_SLOTS_MAX = 24;
+export const ACTION_SLOTS_MAX = STATE_SLOTS_MAX;
 
 /**
  * The array is always MAX long; `count` is how much of it is in play.
@@ -45,31 +46,35 @@ export const ACTION_SLOTS_MAX = 24;
  */
 export const ACTION_SLOTS = ACTION_SLOTS_MAX;
 
-let count = ACTION_SLOTS_MIN;
+/* The hotbar lives on PlayerState now — both the bindings and the length.
+ * Both were already saved per character; they were simply being kept in a
+ * module `let` and a module `const`, which is the one shape playerState.ts
+ * exists to remove. Every accessor below keeps its exact signature, so no
+ * call site moved. */
 
 /** How many slots the player currently has. */
 export function actionSlotCount(): number {
-  return count;
+  return activeState().actionSlotCount;
 }
 
 /** Set it directly (loading a save). Clamped and rounded to a whole row. */
 export function setActionSlotCount(n: number): void {
   const rows = Math.round(n / ACTION_SLOT_STEP);
-  count = Math.max(ACTION_SLOTS_MIN,
+  activeState().actionSlotCount = Math.max(ACTION_SLOTS_MIN,
     Math.min(ACTION_SLOTS_MAX, rows * ACTION_SLOT_STEP));
 }
 
 /** Add a row. False when already at the ceiling, so the caller can say so. */
 export function addActionSlots(): boolean {
-  if (count >= ACTION_SLOTS_MAX) return false;
-  count += ACTION_SLOT_STEP;
+  if (activeState().actionSlotCount >= ACTION_SLOTS_MAX) return false;
+  activeState().actionSlotCount += ACTION_SLOT_STEP;
   return true;
 }
 
 /** Drop a row. False at the floor — there is always at least one. */
 export function removeActionSlots(): boolean {
-  if (count <= ACTION_SLOTS_MIN) return false;
-  count -= ACTION_SLOT_STEP;
+  if (activeState().actionSlotCount <= ACTION_SLOTS_MIN) return false;
+  activeState().actionSlotCount -= ACTION_SLOT_STEP;
   return true;
 }
 
@@ -78,12 +83,29 @@ export function removeActionSlots(): boolean {
  * the rest empty and waiting for whichever element the player attunes to.
  * A fresh character genuinely has no attack binding, and that is deliberate.
  */
-export const actionSlots: (SlotAction | null)[] = Array.from(
-  { length: ACTION_SLOTS },
-  (_, i): SlotAction | null => {
-    if (i === 0) return { type: "crystal", item: "healCrystal" };
-    if (i === 1) return { type: "crystal", item: "recallCrystal" };
-    return null;
+/**
+ * The live binding array, as a VIEW onto the active character.
+ *
+ * A Proxy rather than the frozen-getter object the other modules use, because
+ * this one is an ARRAY and every call site indexes it, assigns into it, or
+ * calls `map`/`some`/`length` on it. Forwarding get and set is enough for all
+ * of those: the array methods run with `this` set to the proxy and read their
+ * elements straight back through it, so `actionSlots.map(...)` still returns a
+ * plain array of this character's bindings and `actionSlots[i] = a` still
+ * writes to this character's row.
+ *
+ * The point of the shape is that not one call site had to move — which is the
+ * same promise playerState.ts makes in its header, kept here too.
+ */
+export const actionSlots: (SlotAction | null)[] = new Proxy(
+  [] as (SlotAction | null)[],
+  {
+    get: (_t, k, r) => Reflect.get(activeState().actionSlots, k, r),
+    set: (_t, k, v) => Reflect.set(activeState().actionSlots, k, v),
+    has: (_t, k) => Reflect.has(activeState().actionSlots, k),
+    ownKeys: () => Reflect.ownKeys(activeState().actionSlots),
+    getOwnPropertyDescriptor: (_t, k) =>
+      Reflect.getOwnPropertyDescriptor(activeState().actionSlots, k),
   },
 );
 
@@ -96,11 +118,11 @@ export const actionSlots: (SlotAction | null)[] = Array.from(
  * back.
  */
 export function slotAt(i: number): SlotAction | null {
-  return i >= 0 && i < count ? actionSlots[i] : null;
+  return i >= 0 && i < actionSlotCount() ? actionSlots[i] : null;
 }
 
 export function setSlot(i: number, a: SlotAction | null): void {
-  if (i >= 0 && i < count) actionSlots[i] = a;
+  if (i >= 0 && i < actionSlotCount()) actionSlots[i] = a;
 }
 
 /** Snapshot the current bindings for saving — the whole array, tail included. */

@@ -1398,17 +1398,45 @@ export function updateMonsters(
       // a brute shooter (the dragon) does NOT kite — fall through to chase
     }
 
-    if (!target.dead && provoked && cheb > 1 && lineOfSight(w, m.x, m.y, target.x, target.y)) {
-      // ---- tile-grid chase ----
-      let budget = m.speed * dt;
-      for (;;) {
-        budget = glideWalker(m, budget);
-        if (budget <= 0) break;
-        if (chebTiles(m.tx, m.ty, ptx, pty) <= 1) break; // arrived at the ring
-        if (!chaseStep(m, occ, ptx, pty)) break;
+    /* ---- tile-grid chase, and what happens when the player steps behind a
+     * rock.
+     *
+     * Sight decides WHERE to walk, not WHETHER to. With the player in view the
+     * creature walks at the player and remembers the square; with the view
+     * broken but the aggro clock still running it walks at the square it last
+     * saw them on. That is the whole of it, and it is what `aggroT` was
+     * written for — before this, the clock ran while the only line of code
+     * that could act on it sat behind the sight test, so a corner ended every
+     * pursuit and a provoked creature wandered off mid-fight.
+     *
+     * The memory is dropped on arrival, so a creature that walks to an empty
+     * square goes back to idling rather than standing on it. */
+    const canSee = !target.dead && provoked
+      && lineOfSight(w, m.x, m.y, target.x, target.y);
+    if (canSee) m.seen = { tx: ptx, ty: pty };
+    else if (!provoked) m.seen = undefined;
+
+    const goal = canSee ? { tx: ptx, ty: pty } : (provoked ? m.seen : undefined);
+    if (goal && cheb > 1) {
+      const chasingSeen = !canSee;
+      if (chasingSeen && m.tx === goal.tx && m.ty === goal.ty) {
+        // arrived where they were last seen, and they are not here
+        m.seen = undefined;
+      } else {
+        let budget = m.speed * dt;
+        for (;;) {
+          budget = glideWalker(m, budget);
+          if (budget <= 0) break;
+          if (chasingSeen) {
+            if (m.tx === goal.tx && m.ty === goal.ty) { m.seen = undefined; break; }
+          } else if (chebTiles(m.tx, m.ty, goal.tx, goal.ty) <= 1) {
+            break; // arrived at the ring
+          }
+          if (!chaseStep(m, occ, goal.tx, goal.ty)) break;
+        }
+        m.bob += dt * 9;
+        continue;
       }
-      m.bob += dt * 9;
-      continue;
     }
 
     // ---- idle: wander / home leash ----

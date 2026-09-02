@@ -105,6 +105,35 @@ export function depthOf(ref: ContainerRef): number {
 export const MAX_NEST_DEPTH = 6;
 
 /**
+ * Detach everything sitting deeper than the resolver can read, and hand it
+ * back so the caller can put it somewhere the player will find it.
+ *
+ * The repair half of the depth rule. `moveItems` now refuses to bury a pack
+ * past MAX_NEST_DEPTH, which stops any NEW save reaching this state — but a
+ * character written before that gate existed may be carrying a seventh pack
+ * whose window has been showing nothing for as long as it has been there.
+ * Fixing the rule going forward does not open that pack; this does.
+ *
+ * Returns the loose stacks, in the order found. The tree below the cap is left
+ * exactly as it was: only the slots AT the cap are emptied, because lifting
+ * their contents lifts the whole subtree with them.
+ */
+export function liftOverDeep(root: Bag, cap = MAX_NEST_DEPTH): ItemStack[] {
+  const out: ItemStack[] = [];
+  const walk = (slots: Bag, depth: number): void => {
+    for (let i = 0; i < slots.length; i++) {
+      const st = slots[i];
+      if (!st) continue;
+      if (depth >= cap) { out.push(st); slots[i] = null; continue; }
+      const inner = st.items;
+      if (inner) walk(inner, depth + 1);
+    }
+  };
+  walk(root, 0);
+  return out;
+}
+
+/**
  * What `slotsOf` needs from the outside world to resolve a base address.
  *
  * It grew a world when refs went from holding objects to holding ids: an id

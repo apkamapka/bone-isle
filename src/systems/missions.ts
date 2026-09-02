@@ -76,7 +76,7 @@
  * statement, which is what makes the count honest. `relicLost` survives as the
  * reconcile point but is now a road almost nothing travels — see its comment.
  */
-import type { ItemKind } from "../items.ts";
+import type { ItemKind, ItemStack } from "../items.ts";
 import type { WorldKey } from "../world/types.ts";
 import { active } from "./playerState.ts";
 
@@ -401,6 +401,60 @@ export function wantsRelic(id: string, level: number, held: number): boolean {
  */
 export function boundRelic(kind: ItemKind, level: number): boolean {
   return currentMission(level)?.relic === kind;
+}
+
+/**
+ * Does this STACK carry a bound relic — as itself, or anywhere inside it?
+ *
+ * `boundRelic` asks about a kind, and every gate that used it asked about the
+ * kind of the stack being moved. That is the wrong question the moment the
+ * stack is a container, because a backpack's kind is "backpack" however many
+ * relics are sleeping in it: the cap went into a spare pack, the pack went
+ * into a chest, and the gate waved it through because it was looking at the
+ * wrong noun. `dropFromContainer` even says out loud two lines below its own
+ * gate that "a pack goes down whole, contents and all" — which is exactly the
+ * hole.
+ *
+ * So the question every exit asks is this one instead. It walks the tree,
+ * because the tree is how deep a player can hide something, and `null` slots
+ * are normal rather than exceptional.
+ *
+ * The depth bound is not a rule the player meets; it is the same defence
+ * `slotsOf` carries, so that a corrupt save cannot turn a containment check
+ * into an infinite walk. A cycle is already impossible by construction (see
+ * the `isInside` gate in `moveItems`) and this is the belt to that's braces.
+ */
+export function carriesBound(st: ItemStack, level: number, depth = 0): boolean {
+  if (boundRelic(st.kind, level)) return true;
+  if (!st.items || depth > 8) return false;
+  for (const inner of st.items) {
+    if (inner && carriesBound(inner, level, depth + 1)) return true;
+  }
+  return false;
+}
+
+/**
+ * Take every bound relic out of `st` and hand them back as loose stacks.
+ *
+ * The mirror of `carriesBound`, for the one caller that cannot simply refuse:
+ * death. A dying character drops the backpack AS ITSELF, whole, which is
+ * Tibia's rule and is right — but a relic riding along inside it is the same
+ * escape the move gates exist to close, and worse, because the body rots. So
+ * the relic is lifted out first and stays on the character, and the pack drops
+ * with everything else still in it.
+ *
+ * `missions.ts:417` has claimed since Etap 45 that "dying does not cost the
+ * bag". It was describing the intent rather than the code; this is the code.
+ */
+export function extractBound(st: ItemStack, level: number, out: ItemStack[] = [], depth = 0): ItemStack[] {
+  if (!st.items || depth > 8) return out;
+  for (let i = 0; i < st.items.length; i++) {
+    const inner = st.items[i];
+    if (!inner) continue;
+    if (boundRelic(inner.kind, level)) { out.push(inner); st.items[i] = null; continue; }
+    extractBound(inner, level, out, depth + 1);
+  }
+  return out;
 }
 
 /** The boss is down and the relic is in the pack. */

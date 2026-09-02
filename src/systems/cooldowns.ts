@@ -26,6 +26,7 @@
 import { CRYSTAL_CD_TIER, CRYSTAL_GCD_S, HEAL_CRYSTAL_CD_S } from "../config.ts";
 import type { ItemKind } from "../items.ts";
 import { CRYSTAL_SPECS } from "./crystals.ts";
+import { active as activeState } from "./playerState.ts";
 
 /**
  * Cooldowns are grouped, and the groups do not talk to each other.
@@ -62,7 +63,19 @@ interface CdState {
   wheel: Map<CdFamily, number>;
 }
 
-const st: CdState = { role: new Map(), wheel: new Map() };
+/**
+ * This character's two clocks. A LIVE VIEW onto PlayerState rather than a
+ * module `const` — see playerState.ts for why, and see `shieldBlockTimes`
+ * over in combat.ts for the same rule stated about the same kind of value.
+ *
+ * The old module-level object was the last combat clock still shared between
+ * every character in the process. It also meant `resetCooldowns()` was the
+ * only thing that could clear it and nothing in `src/` ever called it, so a
+ * new game inherited whatever the previous character had just cast.
+ */
+function st(): CdState {
+  return activeState().cooldowns;
+}
 
 /**
  * Which group a crystal belongs to: its ROLE, not its element.
@@ -117,7 +130,7 @@ export function groupCooldown(kind: ItemKind): number {
  * a Flame Shard reads that same clock back.
  */
 export function cooldownLeft(kind: ItemKind): number {
-  return Math.max(st.role.get(groupOf(kind)) ?? 0, st.wheel.get(familyOf(kind)) ?? 0);
+  return Math.max(st().role.get(groupOf(kind)) ?? 0, st().wheel.get(familyOf(kind)) ?? 0);
 }
 
 export function isReady(kind: ItemKind): boolean {
@@ -133,8 +146,8 @@ export function isReady(kind: ItemKind): boolean {
  * message that cannot tell them apart teaches the player nothing.
  */
 export function blockedBy(kind: ItemKind): "own" | "group" | null {
-  const own = st.role.get(groupOf(kind)) ?? 0;
-  const grp = st.wheel.get(familyOf(kind)) ?? 0;
+  const own = st().role.get(groupOf(kind)) ?? 0;
+  const grp = st().wheel.get(familyOf(kind)) ?? 0;
   if (own <= 0 && grp <= 0) return null;
   return own >= grp ? "own" : "group";
 }
@@ -142,13 +155,13 @@ export function blockedBy(kind: ItemKind): "own" | "group" | null {
 /** Start both clocks for a cast that has just happened. */
 export function startCooldown(kind: ItemKind): void {
   // keyed by ROLE, so every crystal of that shape cools together
-  st.role.set(groupOf(kind), ownCooldown(kind));
+  st().role.set(groupOf(kind), ownCooldown(kind));
   const g = groupCooldown(kind);
-  if (g > 0) st.wheel.set(familyOf(kind), Math.max(st.wheel.get(familyOf(kind)) ?? 0, g));
+  if (g > 0) st().wheel.set(familyOf(kind), Math.max(st().wheel.get(familyOf(kind)) ?? 0, g));
 }
 
 export function tickCooldowns(dt: number): void {
-  for (const m of [st.role, st.wheel] as Map<string, number>[]) {
+  for (const m of [st().role, st().wheel] as Map<string, number>[]) {
     for (const [k, v] of m) {
       const n = v - dt;
       if (n <= 0) m.delete(k); else m.set(k, n);
@@ -158,15 +171,15 @@ export function tickCooldowns(dt: number): void {
 
 /** Clear everything (new game, character switch, test isolation). */
 export function resetCooldowns(): void {
-  st.role.clear();
-  st.wheel.clear();
+  st().role.clear();
+  st().wheel.clear();
 }
 
 /** 0..1, for drawing a sweep on a hotbar slot. 0 means ready. */
 export function cooldownFrac(kind: ItemKind): number {
   const left = cooldownLeft(kind);
   if (left <= 0) return 0;
-  const own = st.role.get(groupOf(kind)) ?? 0;
-  const full = own >= (st.wheel.get(familyOf(kind)) ?? 0) ? ownCooldown(kind) : groupCooldown(kind);
+  const own = st().role.get(groupOf(kind)) ?? 0;
+  const full = own >= (st().wheel.get(familyOf(kind)) ?? 0) ? ownCooldown(kind) : groupCooldown(kind);
   return full > 0 ? Math.min(1, left / full) : 0;
 }

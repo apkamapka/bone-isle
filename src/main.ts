@@ -48,7 +48,7 @@ import { totalExpFor, expNeeded } from "./config.ts";
 import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import {
   MISSIONS, stageOf, setStage, offeredMission, currentMission,
-  missionHandedIn, relicLost, missionByGround, groundOpen, boundRelic,
+  missionHandedIn, relicLost, missionByGround, groundOpen, carriesBound,
   loreSeen, markLoreSeen, resetMissions, resetMission, missionById, type MissionDef,
   relicTaken, grantsAttunement, missionByEcho,
 } from "./systems/missions.ts";
@@ -93,7 +93,7 @@ import { lang } from "./systems/panelPrefs.ts";
 import { Tile } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
-import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays } from "./systems/containers.ts";
+import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays, depthOf, MAX_NEST_DEPTH } from "./systems/containers.ts";
 import type { ContainerRef, RefWorld } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -998,7 +998,7 @@ function moveItems(
    * is the same reason weight and the chest budget are checked two lines down.
    * Moving it about inside the player's own pack is untouched — the rule is
    * about leaving, not about tidiness. */
-  if (rootOf(from) === "player" && rootOf(to) === "world" && boundRelic(st.kind, P.level)) {
+  if (rootOf(from) === "player" && rootOf(to) === "world" && carriesBound(st, P.level)) {
     flash("the sage is waiting for that — it stays with you", "#e0a06a");
     return false;
   }
@@ -1008,6 +1008,23 @@ function moveItems(
    * unreachable from any root and every recursive walk runs forever. */
   if (st.items && isInside(to, { c: "nested", via: from, i: fi })) {
     flash("it will not fit inside itself", "#d96a5a");
+    return false;
+  }
+
+  /* …and a container may not be buried deeper than the resolver can read.
+   *
+   * MAX_NEST_DEPTH was enforced in exactly one place — `slotsOf`, on the way
+   * OUT — and nothing checked it on the way in. So the seventh nested pack
+   * could be placed and then never opened again: its view ref resolves to
+   * null, the window shows nothing, and `bagWeight` goes on charging the
+   * player for contents no hand can reach. Containers travel whole, so one
+   * drag of a full loot bag was enough to lose everything in it.
+   *
+   * The check belongs here, where there is still a player to tell. The one in
+   * `slotsOf` stays exactly as its comment describes it — the defence against
+   * a corrupt save, not the rule. */
+  if (st.items && depthOf(to) >= MAX_NEST_DEPTH) {
+    flash("that pack is already too deep to open", "#d96a5a");
     return false;
   }
 
@@ -1475,7 +1492,7 @@ function dropFromContainer(ref: ContainerRef, index: number, n: number, tx?: num
    * relic the sage is still waiting for cannot be put down. The ground is the
    * easiest hiding place of the lot — it is one drag and the cap is still four
    * tiles away when Chronos looks at your hands. */
-  if (rootOf(ref) === "player" && boundRelic(st.kind, P.level)) {
+  if (rootOf(ref) === "player" && carriesBound(st, P.level)) {
     flash("the sage is waiting for that — it stays with you", "#e0a06a");
     return;
   }
@@ -1605,9 +1622,19 @@ function movePackTo(to: ContainerRef): void {
 }
 
 /** Take the worn pack off onto the ground. */
+/* The THIRD door out of the pack, and until now the only one with no lock on
+ * it at all. Taking the backpack off is one button and it puts the whole tree
+ * on the floor — where, because `groundDecays` deliberately never eats a
+ * container, it would sit for as long as the character cared to leave it.
+ * The two gates in `moveItems` and `dropFromContainer` were guarding the front
+ * door while this stood open. */
 function dropWornPack(tx?: number, ty?: number): void {
   const st = P.pack;
   if (!st) return;
+  if (carriesBound(st, P.level)) {
+    flash("the sage is waiting for what is in there — it stays with you", "#e0a06a");
+    return;
+  }
   P.pack = null;
   dropContainerToGround(st, tx, ty);
   flash("backpack off", "#e0a06a");
@@ -3330,6 +3357,41 @@ function acceptMission(m: MissionDef): void {
  * Grep TEMP-ETAP45-TESTMENU to pull the whole thing: this function, the two
  * strings in speech.ts and the four call sites below.
  */
+/**
+ * Erase every copy of `kind` lying anywhere in the world, at any depth.
+ *
+ * The reconcile half of the relic rule. `carriesBound` stops one leaving the
+ * player; this cleans up the copies that got out before the gates were
+ * complete — an old save, a body from a death on the walk home, a pack the
+ * player dropped in a build where dropping was allowed.
+ *
+ * Bodies and loose stacks only. Storage Chests are deliberately NOT swept: a
+ * relic in a chest means the character genuinely put it there under some
+ * earlier build, and taking it out of a chest while the player watches reads
+ * as theft rather than as bookkeeping. It cannot be carried out to the sage
+ * either, so the sage will simply keep asking — which is the honest state.
+ */
+function sweepRelic(kind: ItemKind): void {
+  const scrub = (slots: (ItemStack | null)[], depth = 0): void => {
+    if (depth > 8) return;
+    for (let i = 0; i < slots.length; i++) {
+      const st = slots[i];
+      if (!st) continue;
+      if (st.kind === kind) { slots[i] = null; continue; }
+      if (st.items) scrub(st.items, depth + 1);
+    }
+  };
+  for (const key of Object.keys(game.worlds) as WorldKey[]) {
+    const w = game.worlds[key];
+    for (const c of w.corpses) scrub(c.items);
+    for (let i = w.ground.length - 1; i >= 0; i--) {
+      const gi = w.ground[i];
+      if (gi.kind === kind) { w.ground.splice(i, 1); continue; }
+      if (gi.items) scrub(gi.items);
+    }
+  }
+}
+
 function restartChoice(): DialogueChoice[] {
   // Nothing to put back means no button: on a fresh character every stage is
   // `locked` or `available`, and an answer that opens a menu of things that
@@ -3395,18 +3457,20 @@ function talkToSage(): void {
        * It is also, word for word, what he says while he does it: Kárr pewnie
        * już go sobie założył. He has put it back on. The line was written
        * before the sweep existed and turned out to describe it exactly. */
-      const stale = game.worlds[cur.echo];
-      if (stale) {
-        for (const c of stale.corpses) {
-          for (let i = 0; i < c.items.length; i++) {
-            const st = c.items[i];
-            if (st && cur.relic && st.kind === cur.relic) c.items[i] = null;
-          }
-        }
-        for (let i = stale.ground.length - 1; i >= 0; i--) {
-          if (cur.relic && stale.ground[i].kind === cur.relic) stale.ground.splice(i, 1);
-        }
-      }
+      /* The sweep runs over EVERY world, and in depth.
+       *
+       * It used to look in one place and at one level: `game.worlds[cur.echo]`,
+       * top-level corpse slots and top-level ground stacks. Both bounds were
+       * wrong for the same reason — the relic does not stay where the mission
+       * left it. A player who dies on the walk home leaves a body on the
+       * SURFACE with the cap in it, and a player who tucked it inside a spare
+       * backpack leaves it one slot deeper than the loop could see. Either way
+       * the sweep found nothing, reopened the door, and there were two.
+       *
+       * Reaching into every world is cheap and it is honest: the rule is "one
+       * of these exists at a time", and a rule that only holds on one map is
+       * not the rule. */
+      if (cur.relic) sweepRelic(cur.relic);
       relicLost(cur.id, P.level);
       applyMissionPads(game.worlds, P.level);
       saveGame(game);

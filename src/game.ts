@@ -380,6 +380,11 @@ export function travelTo(g: Game, dest: WorldKey): void {
 
 /** Send the player home alive (used on respawn after death). */
 export function respawnAtHome(g: Game): void {
+  // Same reason as `travelTo`: dying is a crossing too. Without this a caster
+  // left mid-windup on the floor you died on stays rooted in its cast until
+  // you happen to walk back in, and the burning tiles you died on keep their
+  // clocks.
+  clearMonsterSpells();
   g.current = g.worlds.home;
   const p = worldSpawn(g.worlds.home);
   placeWalker(g.player, p.x, p.y);

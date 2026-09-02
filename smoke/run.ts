@@ -13200,17 +13200,53 @@ async function main(): Promise<void> {
       "…but the boss will not hand a second to a man already wearing one");
     ok(held(pr) === 1, "…so the loop comes out where it started: ONE cap");
 
-    /* --- and both doors out of the pack are shut ------------------------- */
-    const mainR = rfs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    ok(/rootOf\(from\) === "player" && rootOf\(to\) === "world" && boundRelic\(/.test(mainR),
-      "moveItems refuses to send a bound relic out of the player");
-    ok(/function dropFromContainer[\s\S]{0,700}?boundRelic\(/.test(mainR),
-      "…and dropFromContainer refuses to put it on the ground");
-    /* Both gates ask `boundRelic`, and `boundRelic` is the ONLY thing either
-     * asks — a second, differently-worded rule in one of them is how the two
-     * drift apart, which is the bug this whole section exists to prevent. */
-    ok((mainR.match(/boundRelic\(/g) ?? []).length === 2,
-      "…and there are exactly two gates, both asking the same question");
+    /* --- and EVERY door out of the pack is shut --------------------------
+     *
+     * This used to be three regexes over `main.ts`: two that checked the gate
+     * text existed and one that pinned the number of gates at exactly two.
+     * All three passed while the rule was broken, and the third one actively
+     * held it broken — adding the missing gate in `dropWornPack` turned the
+     * suite red, so the test was enforcing the bug.
+     *
+     * They were also asking the wrong question in the first place. Both gates
+     * read `boundRelic(st.kind, …)` — the kind of the stack being moved — and
+     * a backpack's kind is "backpack" however many relics are asleep inside
+     * it. So the cap went into a spare pack and walked straight out.
+     *
+     * What replaces them is the behaviour, asked of the function that now
+     * answers for every exit. A gate that forgets to call it fails the
+     * BEHAVIOURAL tests further down, which is where a missing gate should
+     * fail — not in a count. */
+    ok(MR.carriesBound({ kind: "bloodCap", n: 1 }, pr.level),
+      "a bare relic answers the containment question");
+    ok(MR.carriesBound({ kind: "backpack", n: 1, items: [{ kind: "bloodCap", n: 1 }, null] }, pr.level),
+      "…and so does one hidden in a pack, which is the case the old gates missed");
+    {
+      // six deep, because the nesting cap is six and a hider will use all of it
+      let nest: { kind: string; n: number; items?: unknown[] } = { kind: "bloodCap", n: 1 };
+      for (let i = 0; i < 6; i++) nest = { kind: "backpack", n: 1, items: [nest, null] };
+      ok(MR.carriesBound(nest as never, pr.level),
+        "…at any depth a player can actually build");
+    }
+    ok(!MR.carriesBound({ kind: "backpack", n: 1, items: [{ kind: "stone", n: 5 }, null] }, pr.level),
+      "…while an ordinary pack of stone is not held back");
+    /* A stored stage is a FACT, not a level test — `stageOf` returns it
+     * whatever level is passed — so the way to be unbound is to have a
+     * different errand in hand, not a lower level. The draugr's helm is the
+     * control: its mission is closed in this fixture. */
+    ok(!MR.carriesBound({ kind: "graveHelm", n: 1 }, pr.level),
+      "…while a relic whose errand is not the one in hand is free to move");
+    {
+      /* `extractBound` is the death path: the pack drops whole, so the relic
+       * has to be lifted OUT of it first rather than refused. */
+      const pack = { kind: "backpack", n: 1,
+        items: [{ kind: "backpack", n: 1, items: [{ kind: "bloodCap", n: 1 }, null] }, { kind: "stone", n: 9 }] };
+      const got = MR.extractBound(pack as never, pr.level);
+      ok(got.length === 1 && got[0].kind === "bloodCap", "extractBound lifts the buried relic out");
+      ok(!MR.carriesBound(pack as never, pr.level), "…leaving nothing bound behind in the pack");
+      ok(pack.items[1] && (pack.items[1] as { kind: string }).kind === "stone",
+        "…and does not disturb anything else on the way");
+    }
 
     /* --- the kill hands it over rather than dropping it ------------------ */
     const cmb = rfs.readFileSync(new URL("../src/systems/combat.ts", import.meta.url), "utf8");
@@ -13761,13 +13797,21 @@ async function main(): Promise<void> {
       ok(/body/i.test(said[0]), "…and it says WHERE it is, which is the whole point");
     }
 
-    /* DEATH DOES TAKE IT, and the module comment used to say otherwise.
-     * `applyDeathPenalty` drops the whole backpack at DEATH_PENALTY_LEVEL and
-     * up, bound relic and all — every mission in the catalogue is gated above
-     * that level, so this is the normal case and not a corner. It is SAFE
-     * because `relicLost` is the reconcile point and Chronos runs it on empty
-     * hands, but "the bag survives dying" was simply not true and a comment
-     * that lies is worse than no comment. */
+    /* DEATH DOES NOT TAKE IT ANY MORE, and this block used to assert that it
+     * did.
+     *
+     * The old test pinned `countAcross([p.bag], relic) === 0` after dying and
+     * explained at length why that was safe: `relicLost` reopens the echo on
+     * empty hands, so the errand is recoverable. What it did not account for
+     * is that reopening the echo MAKES A SECOND RELIC — and the first one is
+     * lying in a body on whatever map the character died on, for the five
+     * minutes PLAYER_CORPSE_DECAY_S allows. The sweep only ever looked inside
+     * the echo, so it never saw that body. Two caps, one walk apart, which is
+     * exactly the duplication the whole bind exists to prevent.
+     *
+     * So the relic is lifted out of the pack before the pack drops, and the
+     * character keeps it. Every mission is gated at or above the level the
+     * pack starts dropping at, so this is the normal case and not a corner. */
     {
       const ws = buildWorlds(WORLD_SEED);
       rps43b(); MM43b.resetMissions();
@@ -13781,13 +13825,23 @@ async function main(): Promise<void> {
       ok(p.level >= (await import("../src/config.ts")).DEATH_PENALTY_LEVEL,
         "…and every mission is gated above the level the pack starts dropping at");
       CB43.applyDeathPenalty(ws[m43.echo], p);
-      ok(IT43.countAcross([p.bag], m43.relic) === 0, "dying drops the pack, relic included");
-      // …and the errand is recoverable, through the man who wants it
+      ok(IT43.countAcross([p.bag], m43.relic) === 1,
+        "dying drops the pack but NOT the relic — it stays on the character");
+      ok(!!p.pack, "…which means a character who died bagless still has somewhere to keep it");
+      ok(MM43b.stageOf(m43.id, p.level) === "complete",
+        "…so the errand is still complete and the echo stays shut");
+      /* The corpse got everything else. A death that cost nothing would be no
+       * penalty at all, and this rule is about ONE item, not about mercy. */
+      const body = ws[m43.echo].corpses[ws[m43.echo].corpses.length - 1];
+      ok(!!body && body.name === "your body", "…and the body is still there for the rest of it");
+      ok(IT43.countAcross([body.items], m43.relic) === 0, "…with no copy of the relic in it");
+      /* And the reconcile path still exists for the cases the gates cannot
+       * reach — an old save, a pre-bind character. Losing it by hand still
+       * reopens the door. */
+      IT43.removeAcross([p.bag], m43.relic, 1);
       MM43b.relicLost(m43.id, p.level);
       ok(MM43b.stageOf(m43.id, p.level) === "active" && MM43b.echoOpen(m43.echo, p.level),
-        "…so Chronos reopens the echo on empty hands, which is what saves the character");
-      const missionsSrc = fs43b.readFileSync(new URL("../src/systems/missions.ts", import.meta.url), "utf8");
-      ok(!/bag survives dying/.test(missionsSrc), "…and the comment no longer claims otherwise");
+        "…while a relic lost some OTHER way still reopens the echo, as it always did");
     }
     CB43.setRelicNotice(() => {});
     rps43b(); MM43b.resetMissions();
@@ -14292,18 +14346,38 @@ async function main(): Promise<void> {
       .readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
     const reopen = main46.slice(main46.indexOf("/* He wanted it"),
       main46.indexOf("sageSays(`sage.empty."));
-    ok(/game\.worlds\[cur\.echo\]/.test(reopen), "the reopen looks at the echo it is reopening");
-    ok(/for \(const c of stale\.corpses\)/.test(reopen) && /stale\.ground/.test(reopen),
-      "…and sweeps the relic off both the bodies and the floor");
-    ok(reopen.indexOf("stale.ground") < reopen.indexOf("relicLost(cur.id"),
+    ok(/sweepRelic\(cur\.relic\)/.test(reopen), "the reopen sweeps before it opens");
+    ok(reopen.indexOf("sweepRelic(cur.relic)") < reopen.indexOf("relicLost(cur.id"),
       "…before the stage goes back, so there is never an open door and a live relic at once");
+    /* The sweep used to be written inline HERE and looked only at
+     * `game.worlds[cur.echo]`, top level. Both bounds were wrong: a player who
+     * dies on the walk home leaves the relic in a body on the SURFACE, and one
+     * who tucked it in a spare pack left it a slot deeper than the loop could
+     * see. It is a named function now, and what it covers is pinned below
+     * rather than by matching the shape of a loop. */
+    const sweepSrc = main46.slice(main46.indexOf("function sweepRelic"),
+      main46.indexOf("function restartChoice"));
+    ok(/Object\.keys\(game\.worlds\)/.test(sweepSrc),
+      "…and it walks every world, not just the echo");
+    ok(/scrub\(c\.items\)/.test(sweepSrc) && /w\.ground\.splice/.test(sweepSrc),
+      "…covering both the bodies and the floor");
+    ok(/if \(st\.items\) scrub\(st\.items, depth \+ 1\)/.test(sweepSrc),
+      "…and reaches into nested packs, which is where a hider would put it");
+    ok(!/structures/.test(sweepSrc),
+      "…while leaving Storage Chests alone, since taking one out of a chest reads as theft");
 
-    /* And the two gates that hold the other end are untouched: a relic in the
-     * pack still cannot be put down, which is what stops the player from
-     * parking one somewhere the sage cannot see it and claiming empty hands.
-     * The move to the corpse would be worth nothing without them. */
-    ok((main46.match(/boundRelic\(/g) ?? []).length === 2,
-      "the two bound-relic gates are still the only two, and still there");
+    /* And the gates that hold the other end. There are THREE now, not two, and
+     * the count is deliberately not what is checked any more — the old
+     * `length === 2` assertion passed while the rule was broken and then went
+     * red when the third gate was added, so it was pinning the bug rather than
+     * the behaviour. What matters is that every exit asks the same question,
+     * and that the question is about the stack rather than its kind. */
+    for (const fn of ["function moveItems", "function dropFromContainer", "function dropWornPack"]) {
+      const body = main46.slice(main46.indexOf(fn), main46.indexOf(fn) + 2600);
+      ok(/carriesBound\(st, P\.level\)/.test(body), `${fn.slice(9)} asks the containment question`);
+    }
+    ok(!/boundRelic\(st\.kind/.test(main46),
+      "…and nothing asks the old kind-only question any more");
   }
 
   console.log("Housekeeping — dead files, dead names, dead comments:");
@@ -15480,6 +15554,236 @@ async function main(): Promise<void> {
     ok(/markAttuned\(nd\.el\)/.test(body48) && /saveGame\(game\)/.test(body48)
       && /sageSays\("sage\.attuned\.calanais"/.test(body48),
       "…while taking an element you do NOT have still attunes, saves and speaks");
+  }
+
+
+  console.log("Etap 49 — nesting depth is a RULE, not just a read-time refusal:");
+  {
+    const C49 = await import("../src/systems/containers.ts");
+    const I49 = await import("../src/items.ts");
+    const mk = (): { kind: string; n: number; items: unknown[] } =>
+      I49.newContainer("backpack") as never;
+
+    /* The cap was enforced in exactly one place — `slotsOf`, on the way OUT —
+     * and nothing checked it on the way IN. So the seventh nested pack could
+     * be placed and then never opened again: the window resolved to null, the
+     * items were unreachable for good, and `bagWeight` went on charging the
+     * player for them. Containers travel whole, so one drag of a full loot bag
+     * was enough to lose everything in it. */
+    const worn = I49.contentsOf(mk() as never)!;
+    const w49 = { bag: worn, world: {} as never, home: {} as never };
+    let ref: import("../src/systems/containers.ts").ContainerRef = { c: "bag" };
+    let deepest = 0;
+    for (let lvl = 1; lvl <= 8; lvl++) {
+      const slots = C49.slotsOf(ref, w49 as never);
+      if (!slots) break;
+      const pack = mk();
+      I49.addStack(slots, pack as never);
+      const child: import("../src/systems/containers.ts").ContainerRef =
+        { c: "nested", via: ref, i: slots.indexOf(pack as never) };
+      if (!C49.slotsOf(child, w49 as never)) break;
+      deepest = lvl;
+      ref = child;
+    }
+    ok(deepest === C49.MAX_NEST_DEPTH,
+      `the readable floor is exactly MAX_NEST_DEPTH deep (${deepest})`);
+    ok(C49.depthOf(ref) === C49.MAX_NEST_DEPTH, "…and the ref that names it agrees");
+    ok(!C49.slotsOf({ c: "nested", via: ref, i: 0 }, w49 as never),
+      "…while one past it resolves to nothing, which is what made items unreachable");
+
+    /* The gate that stops it happening lives at the MOVE, where there is still
+     * a player to tell. Source-pinned because `moveItems` needs a canvas. */
+    const m49 = (await import("node:fs"))
+      .readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const mv49 = m49.slice(m49.indexOf("function moveItems"), m49.indexOf("function takeAllFrom"));
+    ok(/st\.items && depthOf\(to\) >= MAX_NEST_DEPTH/.test(mv49),
+      "moveItems refuses to bury a container past the cap");
+    ok(mv49.indexOf("depthOf(to) >= MAX_NEST_DEPTH") < mv49.indexOf("const whole ="),
+      "…before anything is detached, so a refused move moves nothing");
+    /* …and the read-time check stays, as the thing its own comment says it is:
+     * the defence against a corrupt save, not the rule. */
+    const c49src = (await import("node:fs"))
+      .readFileSync(new URL("../src/systems/containers.ts", import.meta.url), "utf8");
+    ok(/depthOf\(ref\) > MAX_NEST_DEPTH/.test(c49src),
+      "…and slotsOf keeps its backstop for a save that is already wrong");
+
+    /* The repair, for the saves that already are. Everything at the cap comes
+     * back up, whole, and the tree below it is untouched. */
+    {
+      const root = I49.contentsOf(mk() as never)!;
+      let cur = root;
+      for (let i = 0; i < C49.MAX_NEST_DEPTH; i++) {
+        const p = mk();
+        I49.addStack(cur, p as never);
+        cur = p.items as never;
+      }
+      I49.addStack(cur, { kind: "stone", n: 40 } as never);
+      const buried = I49.bagWeight(root);
+      const lifted = C49.liftOverDeep(root);
+      ok(lifted.length === 1, "liftOverDeep brings the buried pack back up");
+      ok(I49.bagWeight(root) < buried,
+        "…and the weight it was charging for goes with it");
+      ok(lifted[0].kind === "stone" || !!lifted[0].items,
+        "…as whatever was sitting on the capped slot, whole");
+      ok(C49.liftOverDeep(root).length === 0, "…and a second pass finds nothing left");
+    }
+    ok(C49.liftOverDeep(I49.contentsOf(mk() as never)!).length === 0,
+      "…while an ordinary bag is walked and left alone");
+  }
+
+  console.log("Etap 49 — a corner does not end a chase:");
+  {
+    const MN49 = await import("../src/entities/monsters.ts");
+    const src49 = (await import("node:fs"))
+      .readFileSync(new URL("../src/entities/monsters.ts", import.meta.url), "utf8");
+    const up49 = src49.slice(src49.indexOf("export function updateMonsters"));
+
+    /* The chase branch used to test line of sight EVERY FRAME, so stepping
+     * behind a rock dropped the creature straight into the idle branch and it
+     * started wandering mid-fight. `aggroT` bought nothing, because the only
+     * movement toward the player sat behind the very test it was meant to
+     * survive — the hit clock ran while nothing could act on it. */
+    ok(/m\.seen = \{ tx: ptx, ty: pty \}/.test(up49),
+      "sight writes down where the player was");
+    ok(/const goal = canSee \? \{ tx: ptx, ty: pty \} : \(provoked \? m\.seen : undefined\)/.test(up49),
+      "…and a provoked creature that has lost sight walks to that square");
+    ok(/else if \(!provoked\) m\.seen = undefined/.test(up49),
+      "…while a creature that was never provoked remembers nothing");
+    ok(/m\.seen = undefined;[\s\S]{0,80}break;/.test(up49),
+      "…and the memory is dropped on arrival, so it does not stand there forever");
+    ok(!/cheb > 1 && lineOfSight\(w, m\.x, m\.y, target\.x, target\.y\)\) \{\s*\/\/ ---- tile-grid chase/.test(up49),
+      "…and the old sight-gated chase is gone");
+
+    /* The comment on `aggroT` claimed "LoS still required", which described
+     * the bug rather than the intent. */
+    const ty49 = (await import("node:fs"))
+      .readFileSync(new URL("../src/world/types.ts", import.meta.url), "utf8");
+    ok(!/LoS still required/.test(ty49), "…and the type no longer documents the bug as the rule");
+    ok(/seen\?: \{ tx: number; ty: number \}/.test(ty49), "…while the memory itself is declared");
+
+    /* Runtime only. A remembered tile in a save would be a creature that woke
+     * up already walking somewhere the player has not been for a week. */
+    const sv49 = (await import("node:fs"))
+      .readFileSync(new URL("../src/save.ts", import.meta.url), "utf8");
+    ok(!/\bseen\b/.test(sv49), "…and it is never saved");
+    void MN49;
+  }
+
+  console.log("Etap 49 — the PvP seam forwards the protection zone:");
+  {
+    const P49 = await import("../src/systems/pvp.ts");
+    P49.setPvpArmed(true);
+    ok(P49.resolvePlayerHit(30, 30, true, false) === true,
+      "outside a zone the blow still lands");
+    /* This is the whole fix. `resolvePlayerHit` called `mayHit` with two
+     * arguments of three, so the function every future damage path is meant to
+     * go through quietly answered "no zone" for everybody — in the one place
+     * the rule is supposed to live. Nothing could notice, because there is
+     * nobody to hit yet, which is exactly why it was worth fixing before the
+     * day it decides a fight in the middle of Bonetown. */
+    ok(P49.resolvePlayerHit(30, 30, true, true) === false,
+      "…and inside one it does not, which it did before");
+    ok(P49.resolvePlayerHit(30, 30, true) === P49.resolvePlayerHit(30, 30, true, false),
+      "…with the default still meaning 'no zone', so no call site changed meaning");
+    /* The refusal must not earn a skull: a blow that never landed is not an
+     * attack. */
+    const before = P49.skull();
+    P49.resolvePlayerHit(30, 30, false, true);
+    ok(P49.skull() === before, "…and a blow refused by the zone marks nobody");
+    P49.setPvpArmed(false);
+  }
+
+  console.log("Etap 49 — the last three per-character values leave module scope:");
+  {
+    const PS49 = await import("../src/systems/playerState.ts");
+    const CD49 = await import("../src/systems/cooldowns.ts");
+    const A49 = await import("../src/systems/actions.ts");
+    const D49 = await import("../src/systems/derived.ts");
+
+    const a = PS49.newPlayerState();
+    const b = PS49.newPlayerState();
+
+    /* Crystal cooldowns were the last combat clock still shared by every
+     * character in the process — the odd one out beside `shieldBlockTimes`,
+     * whose comment spells out why a clock cannot be shared. Worse,
+     * `resetCooldowns()` documented itself as running on "new game, character
+     * switch, test isolation" and had NO caller in src/ at all, so a fresh
+     * character inherited whatever the last one had just cast. */
+    PS49.setActive(a);
+    CD49.startCooldown("healCrystal");
+    ok(!CD49.isReady("healCrystal"), "A casts and A's heal is on cooldown");
+    PS49.setActive(b);
+    ok(CD49.isReady("healCrystal"), "…and B, who cast nothing, is ready");
+    PS49.setActive(a);
+    ok(!CD49.isReady("healCrystal"), "…while A's clock is still running when A comes back");
+    ok(!CD49.cooldownLeft("healCrystal") === false, "…and reads a real number, not a default");
+
+    /* The hotbar: both the bindings and the length. Both were already saved
+     * per character; they were simply living in a module `let` and a module
+     * `const`. The array is a Proxy so that not one call site had to move —
+     * which is the promise playerState.ts makes in its header. */
+    PS49.setActive(a);
+    A49.setSlot(3, { type: "attack" });
+    ok(A49.actionSlots[3]?.type === "attack", "A binds slot 4");
+    PS49.setActive(b);
+    ok(A49.actionSlots[3] === null, "…and B's slot 4 is empty");
+    ok(A49.actionSlots.length === A49.ACTION_SLOTS_MAX, "…with the array still its full length");
+    ok(A49.actionSlots.filter((s) => s !== null).length === 2,
+      "…and B still has exactly the two starting utility bindings");
+    A49.addActionSlots();
+    ok(A49.actionSlotCount() > A49.ACTION_SLOTS_MIN, "B lengthens the bar");
+    PS49.setActive(a);
+    ok(A49.actionSlotCount() === A49.ACTION_SLOTS_MIN, "…and A's bar is the length A left it");
+
+    /* One source for the two numbers, so the copy in playerState.ts and the
+     * export in actions.ts cannot drift apart in silence. */
+    ok(A49.ACTION_SLOTS_MIN === PS49.STATE_SLOTS_MIN
+      && A49.ACTION_SLOTS_MAX === PS49.STATE_SLOTS_MAX,
+      "…and the slot bounds come from one place, not two copies");
+
+    /* The passive bonus. Per-character because the Home Isle is. */
+    PS49.setActive(a);
+    D49.setActiveBonus({ maxhp: 40 });
+    ok(D49.activeBonus.maxhp === 40, "A's forge bonus is A's");
+    PS49.setActive(b);
+    ok(D49.activeBonus.maxhp === 0, "…and B gets none of it");
+    PS49.setActive(a);
+    ok(D49.activeBonus.maxhp === 40, "…and it is still there when A comes back");
+
+    /* A new character starts clean on all three, which is the thing that was
+     * not true before: `resetPlayerState` could not clear a module const. */
+    const fresh = PS49.resetPlayerState();
+    ok(CD49.isReady("healCrystal"), "a brand-new character has nothing on cooldown");
+    ok(D49.activeBonus.maxhp === 0, "…no inherited bonus");
+    ok(A49.actionSlotCount() === A49.ACTION_SLOTS_MIN, "…and a bar of the starting length");
+    ok(fresh.cooldowns.role.size === 0 && fresh.cooldowns.wheel.size === 0,
+      "…with both clocks empty on the state object itself");
+    /* Still not SAVED, and that is still right: a cooldown is a fact about the
+     * last few seconds. Per-character and persistent are different questions. */
+    const sv = (await import("node:fs"))
+      .readFileSync(new URL("../src/save.ts", import.meta.url), "utf8");
+    ok(!/cooldowns/.test(sv), "…and no cooldown survives a reload");
+    D49.setActiveBonus({ maxhp: 0 });
+  }
+
+
+  console.log("Etap 49 — the burning-tile clock knows which island it is on:");
+  {
+    const fs49b = await import("node:fs");
+    const ms49 = fs49b.readFileSync(new URL("../src/systems/monsterSpells.ts", import.meta.url), "utf8");
+    /* The comment over `fieldClock` has always said the key is `world|tx|ty`.
+     * The code keyed on `tx|ty`, so the same square on two islands shared one
+     * clock. It was harmless — but only because `clearMonsterSpells()` empties
+     * the map on every crossing, which is an invariant held from a DIFFERENT
+     * module. A key that is correct on its own does not need that. */
+    ok(/const key = `\$\{w\.key\}\|\$\{f\.tx\}\|\$\{f\.ty\}`/.test(ms49),
+      "the field clock is keyed by world as well as tile");
+    ok(/live = new Set\(hot\.map\(\(f\) => `\$\{w\.key\}\|/.test(ms49),
+      "…and the sweep that trims it uses the same key, or it would trim nothing");
+    const g49 = fs49b.readFileSync(new URL("../src/game.ts", import.meta.url), "utf8");
+    const resp = g49.slice(g49.indexOf("export function respawnAtHome"));
+    ok(/clearMonsterSpells\(\)/.test(resp.slice(0, 600)),
+      "…and dying clears the casts too, since dying is a crossing as much as a portal is");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

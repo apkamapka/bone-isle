@@ -336,9 +336,25 @@ export interface Monster {
   dir: MobDir;
   hurtT: number;
   /** Seconds of forced aggression left after taking a hit — the creature
-   *  chases even beyond its normal sight range (LoS still required), so
-   *  shooting anything always provokes it regardless of bow reach. */
+   *  chases even beyond its normal sight range, so shooting anything always
+   *  provokes it regardless of bow reach. */
   aggroT: number;
+  /**
+   * The last tile this creature actually SAW the player on.
+   *
+   * The chase used to test line of sight every frame, which meant a corner
+   * ended a pursuit outright: the creature fell straight through to the idle
+   * branch and started wandering, mid-fight, with the player four tiles away
+   * behind a rock. `aggroT` was buying nothing, because the only movement
+   * toward the player sat behind the sight test it was supposed to survive.
+   *
+   * So sight now writes this down, and a provoked creature that has lost
+   * sight walks to the remembered square instead of forgetting. It arrives,
+   * finds nothing, and goes back to wandering when the clock runs out — which
+   * is what a creature that saw you go round a corner ought to do. Runtime
+   * only; never saved.
+   */
+  seen?: { tx: number; ty: number };
   /** True once this creature has actually noticed the player, and until it
    *  loses them again. While set, the sight test uses the wider
    *  MONSTER_AGGRO_HOLD_RANGE instead of MONSTER_AGGRO_RANGE — six tiles to
