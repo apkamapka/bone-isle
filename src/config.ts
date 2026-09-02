@@ -666,7 +666,63 @@ export const PLAYER_CORPSE_DECAY_S = 300; // your dropped body waits this long
  * tiles glint at a time — a dash on every square reads as static noise.
  */
 export const WATER_GLINT_COLOR = "#cfeef4";
-export const WATER_GLINT_PCT = 26;    // % of water tiles carrying a glint
+export const WATER_GLINT_PCT = 52;    // % of water tiles carrying a glint
 export const WATER_GLINT_ALPHA = 0.5; // peak opacity
-export const WATER_GLINT_DRIFT = 6;   // px per second the dash slides
-export const WATER_GLINT_LEN = 5;     // dash length in px
+export const WATER_GLINT_DRIFT = 9;   // px per second the dash slides
+export const WATER_GLINT_LEN = 4;     // dash length in px, before variation
+/**
+ * WHY THE FIRST FOUR NUMBERS MOVED. Radek: "sporadycznie widać jakąś jej
+ * animacje". The count was 26% of water tiles, and a dash was drawn only on
+ * the bright half of its own sine — so at any instant roughly THIRTEEN per
+ * cent of the sea had anything on it at all, and the rest was a photograph.
+ *
+ * Doubling the count alone would have made the sea twitch rather than move,
+ * because every dash was the same length, ran at the same speed and snapped in
+ * and out at a hard threshold. So three other things changed with it:
+ *
+ *   - the cut is 0.35 instead of 0.5, and the dash FADES through it rather
+ *     than appearing at full opacity — a glint that pops on is a pixel fault,
+ *     a glint that swells is light on water;
+ *   - length and speed now VARY per tile, drawn from the same spatial hash
+ *     that already decides which tiles glint, so it still costs no state;
+ *   - and the swell below is a second layer at a different period. Two layers
+ *     beating against each other read as a surface in motion. One layer, however
+ *     dense, reads as blinking dots — which is the actual reason the old sea
+ *     looked still even where it was busy.
+ */
+export const WATER_GLINT_CUT = 0.35;  // below this the dash is absent
+export const WATER_GLINT_LEN_VAR = 3; // extra px, 0..this, per tile
+export const WATER_GLINT_SPEED_VAR = 0.7; // ±fraction of DRIFT, per tile
+
+/**
+ * The swell: a slow dark band that crosses the water diagonally, at a period
+ * deliberately unrelated to the glints' so the two never march together.
+ *
+ * Drawn per tile as one flat wash whose opacity comes from a travelling sine
+ * of the tile's own position, which is the cheapest thing that reads as a
+ * surface rather than as a pattern — no per-tile state, no offscreen buffer,
+ * and it costs one `fillRect` on the tiles that are dark at that instant.
+ *
+ * Set ALPHA to 0 to remove the layer entirely; nothing else depends on it.
+ */
+export const WATER_SWELL_COLOR = "#0a2f3d";
+export const WATER_SWELL_ALPHA = 0.22; // peak opacity of the dark band
+export const WATER_SWELL_LEN = 7;      // tiles from one crest to the next
+export const WATER_SWELL_SPEED = 0.55; // crests per second
+
+/**
+ * Coastal foam on IMAGE-BASED terrain.
+ *
+ * `world.coastWater` is filled by the procedural baker and by nothing else, so
+ * the line that draws it reads `art ? [] : world.coastWater` — every hand-drawn
+ * map in the game has had a dead shoreline. The sea moved and the edge where it
+ * meets the land did not, which is the one place a still sea is most obvious.
+ *
+ * The shore is found the same way `generate.ts` finds it: a water tile with
+ * land on one of its four sides, and the foam is drawn against that side. No
+ * new data — the collision grid already knows.
+ */
+export const COAST_FOAM_COLOR = "rgba(200,240,235,.55)";
+export const COAST_FOAM_SPEED = 1.7;  // pulses per second
+export const COAST_FOAM_CUT = 0.55;   // below this the foam is absent
+export const COAST_FOAM_DASHES = 3;   // dashes per shore edge, each on its own phase

@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, PANEL_REACH_TILES, RESPAWN_RETRY_S, THROW_RANGE_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, PANEL_REACH_TILES, RESPAWN_RETRY_S, THROW_RANGE_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, WATER_GLINT_CUT, WATER_GLINT_LEN_VAR, WATER_GLINT_SPEED_VAR, WATER_SWELL_COLOR, WATER_SWELL_ALPHA, WATER_SWELL_LEN, WATER_SWELL_SPEED, COAST_FOAM_COLOR, COAST_FOAM_SPEED, COAST_FOAM_CUT, COAST_FOAM_DASHES, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers, isSafeTile } from "./world/collision.ts";
 import { carryCap, carriedWeight } from "./entities/player.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, chebToPoint, type Occupied } from "./world/grid.ts";
@@ -4881,14 +4881,48 @@ function render(): void {
     vctx.drawImage(srcImg, sx0, sy0, srcW, srcH, -offX, -offY, srcW * K, srcH * K);
   }
 
-  // Animated sea over a still export: drifting glints on the water tiles the
-  // collision grid already knows about. Only the visible window is walked.
+  /* THE SEA, in three layers over a still export.
+   *
+   * A Tiled export is a photograph, so everything that moves on the water is
+   * painted here. Only the visible window is walked, and which tiles do what
+   * comes from a spatial hash of their coordinates — stable per tile, no state
+   * stored anywhere, so this scales to every map in the game for free.
+   *
+   * Order matters: swell first as a wash under everything, then glints on top
+   * of it, then foam at the edge. Glints drawn under the swell would be dimmed
+   * by the thing they are supposed to be catching light above.
+   */
   if (art) {
-    vctx.fillStyle = WATER_GLINT_COLOR;
     const tx0 = Math.max(0, Math.floor(cam.x / TILE));
     const ty0 = Math.max(0, Math.floor(cam.y / TILE));
     const tx1 = Math.min(world.w - 1, Math.ceil((cam.x + VW) / TILE));
     const ty1 = Math.min(world.h - 1, Math.ceil((cam.y + VH) / TILE));
+
+    /* 1. THE SWELL — a slow dark band crossing diagonally. This is the layer
+     * that was missing, and its absence is the whole reason a denser field of
+     * glints still read as blinking dots: one moving thing on a still picture
+     * is a light, two moving at different rates is a surface. */
+    if (WATER_SWELL_ALPHA > 0) {
+      vctx.fillStyle = WATER_SWELL_COLOR;
+      for (let ty = ty0; ty <= ty1; ty++) {
+        for (let tx = tx0; tx <= tx1; tx++) {
+          if (world.tile[ty][tx] !== Tile.Water) continue;
+          const band = (tx + ty * 0.6) / WATER_SWELL_LEN - waveT * WATER_SWELL_SPEED;
+          const a = 0.5 + 0.5 * Math.sin(band * Math.PI * 2);
+          if (a < 0.5) continue;                    // the light half stays clear
+          vctx.globalAlpha = (a - 0.5) * 2 * WATER_SWELL_ALPHA;
+          vctx.fillRect(tx * TILE - cam.x, ty * TILE - cam.y, TILE, TILE);
+        }
+      }
+      vctx.globalAlpha = 1;
+    }
+
+    /* 2. THE GLINTS — short bright dashes drifting across a tile. Length and
+     * speed vary per tile now: uniform dashes at uniform speed are a pattern,
+     * and the eye finds a pattern faster than it finds a sea. The dash fades
+     * through its cut rather than snapping on, because a glint that pops is
+     * read as a pixel fault. */
+    vctx.fillStyle = WATER_GLINT_COLOR;
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
         if (world.tile[ty][tx] !== Tile.Water) continue;
@@ -4897,12 +4931,72 @@ function render(): void {
         if (h % 100 >= WATER_GLINT_PCT) continue;
         const ph = (h % 628) / 100;
         const a = 0.5 + 0.5 * Math.sin(waveT * 1.5 + ph);
-        if (a < 0.5) continue; // dark half of the cycle: the dash is absent
-        const drift = (waveT * WATER_GLINT_DRIFT + ph * 9) % TILE;
+        if (a < WATER_GLINT_CUT) continue; // dark part of the cycle: no dash
+        // second and third draws off the same hash, so the variation is free
+        const len = WATER_GLINT_LEN + ((h >>> 7) % (WATER_GLINT_LEN_VAR + 1));
+        const spd = WATER_GLINT_DRIFT
+          * (1 + (((h >>> 13) % 200) / 100 - 1) * WATER_GLINT_SPEED_VAR);
+        const drift = (waveT * spd + ph * 9) % TILE;
         const sx = tx * TILE + drift - cam.x;
         const sy = ty * TILE + (h % (TILE - 2)) + 1 - cam.y;
-        vctx.globalAlpha = (a - 0.5) * 2 * WATER_GLINT_ALPHA;
-        vctx.fillRect(Math.round(sx), Math.round(sy), WATER_GLINT_LEN, 1);
+        vctx.globalAlpha = ((a - WATER_GLINT_CUT) / (1 - WATER_GLINT_CUT)) * WATER_GLINT_ALPHA;
+        vctx.fillRect(Math.round(sx), Math.round(sy), len, 1);
+      }
+    }
+    vctx.globalAlpha = 1;
+
+    /* 3. THE SHORE. The foam loop further down reads `art ? [] : coastWater`,
+     * so on every map with a Tiled export it is handed an empty array and the
+     * coast never moves. The list itself is fine — the baker fills it either
+     * way — it simply never reaches the screen on Bonetown, Calanais or either
+     * mission island. A sea that moves against an edge that does not is the
+     * one place a still sea gives itself away.
+     *
+     * TWO THINGS HERE ARE NOT OBVIOUS AND BOTH WERE WRONG ON THE FIRST TRY.
+     *
+     * ONE TILE DEEPER THAN THE GRID SAYS. The obvious rule — foam on a water
+     * tile's edge where it meets land — puts the foam on grass. The collision
+     * grid marks a whole square as water the moment any of it is; the export
+     * paints an organic bank THROUGH that square, mostly green. Measured on
+     * Bonetown: 333 of 3692 water squares are painted as land, all of them the
+     * ragged edge, and every one of them would have taken a foam bar across
+     * dry ground. So the foam is drawn on the water tile BEHIND that edge —
+     * the first fully-wet square — against its neighbour that touches land.
+     * That lands it on the painted waterline within a square either way.
+     *
+     * BROKEN DASHES, NOT A BAR. The grid boundary is straight and the painted
+     * bank is not, so a full-length bar reads as a fence someone built in the
+     * river. Two or three short dashes at hashed offsets, each on its own
+     * phase, read as surf — the eye forgives a dash that is a few pixels off
+     * the waterline and does not forgive a straight line that is.
+     *
+     * No new data either way: the collision grid already knows, and the offsets
+     * come from the same kind of spatial hash as the glints. */
+    vctx.fillStyle = COAST_FOAM_COLOR;
+    const wet = (ax: number, ay: number): boolean => world.tile[ay]?.[ax] === Tile.Water;
+    const bank = (ax: number, ay: number): boolean => wet(ax, ay)
+      && (!wet(ax - 1, ay) || !wet(ax + 1, ay) || !wet(ax, ay - 1) || !wet(ax, ay + 1));
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        if (!wet(tx, ty) || bank(tx, ty)) continue;  // the bank square itself is half grass
+        const px = tx * TILE - cam.x, py = ty * TILE - cam.y;
+        const sides: readonly [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (let k = 0; k < sides.length; k++) {
+          const [dx, dy] = sides[k];
+          if (!bank(tx + dx, ty + dy)) continue;
+          for (let j = 0; j < COAST_FOAM_DASHES; j++) {
+            const h = ((tx * 83492791) ^ (ty * 29840351) ^ ((k * 7 + j) * 2654435761)) >>> 0;
+            const a = 0.5 + 0.5 * Math.sin(waveT * COAST_FOAM_SPEED + (h % 628) / 100);
+            if (a < COAST_FOAM_CUT) continue;
+            vctx.globalAlpha = (a - COAST_FOAM_CUT) / (1 - COAST_FOAM_CUT);
+            const len = 4 + ((h >>> 9) % 5);
+            const off = (h >>> 17) % (TILE - len);
+            if (dx === -1) vctx.fillRect(px, py + off, 2, len);
+            else if (dx === 1) vctx.fillRect(px + TILE - 2, py + off, 2, len);
+            else if (dy === -1) vctx.fillRect(px + off, py, len, 2);
+            else vctx.fillRect(px + off, py + TILE - 2, len, 2);
+          }
+        }
       }
     }
     vctx.globalAlpha = 1;
