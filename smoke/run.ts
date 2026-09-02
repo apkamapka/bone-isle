@@ -15786,6 +15786,66 @@ async function main(): Promise<void> {
       "…and dying clears the casts too, since dying is a crossing as much as a portal is");
   }
 
+
+  console.log("Etap 49 — a pile is picked up from the TOP, the way Tibia does it:");
+  {
+    const PK49 = await import("../src/world/pick.ts");
+    const T49 = 32;
+
+    /* Radek dropped ten things on one square. They LOOKED right — `drawList`
+     * is sorted by `y` and `Array.sort` is stable, so equal-`y` items keep
+     * array order and the last one dropped is the last one painted, i.e. the
+     * one on top. Picking up took the other end of the stack.
+     *
+     * Ten items on a tile all share ONE pixel position, so every score comes
+     * out identical and the tie decides everything. `score < bestScore` keeps
+     * the first entry it met; first in `world.ground` is the OLDEST drop,
+     * which is the bottom of the pile. So the tie was the whole rule, and it
+     * was unwritten. */
+    const pile = Array.from({ length: 10 }, (_, i) => ({ x: 336, y: 336, drop: i }));
+    ok(PK49.nearestHit(pile, { x: 336, y: 336 })?.drop === 9,
+      "ten stacks on one square: the pointer finds the newest, which is the visible one");
+    ok(PK49.nearestHit(pile.slice(0, 2), { x: 336, y: 336 })?.drop === 1,
+      "…and so does a pile of two, which is where this is easiest to miss");
+    ok(PK49.nearestHit([pile[3]], { x: 336, y: 336 })?.drop === 3,
+      "…while one alone is still itself");
+
+    /* The two rules that were already right must stay right. A tie-break is
+     * exactly the kind of change that quietly reorders everything else. */
+    const at49 = { x: 10 * T49 + 4, y: 10 * T49 + 4 };
+    const onTile49 = { x: 10 * T49 + 30, y: 10 * T49 + 30, tag: "on-tile" };
+    const over49 = { x: 9 * T49 + 31, y: 9 * T49 + 31, tag: "next-door" };
+    ok(Math.hypot(over49.x - at49.x, over49.y - at49.y)
+      < Math.hypot(onTile49.x - at49.x, onTile49.y - at49.y),
+      "the neighbour really is nearer in pixels, so this test means something");
+    ok(PK49.nearestHit([over49, onTile49], at49)?.tag === "on-tile",
+      "…and the exact tile still beats it anyway");
+    ok(PK49.nearestHit([onTile49, over49], at49)?.tag === "on-tile",
+      "…in either array order, so the tie-break did not become the sort key");
+    ok(PK49.nearestHit([over49], at49)?.tag === "next-door",
+      "…while a lone neighbour is still found, which is why the box is loose");
+    ok(PK49.nearestHit([{ x: 0, y: 0 }], at49) === null, "…and something far away is not");
+    /* `keep` still filters before the tie is considered — a dead creature must
+     * not win a tie against a live one just by being later in the list. */
+    ok(PK49.nearestHit([{ x: 336, y: 336, hp: 1 }, { x: 336, y: 336, hp: 0 }],
+      { x: 336, y: 336 }, (e) => e.hp > 0)?.hp === 1,
+      "…and a filtered-out candidate cannot win the tie by lying on top");
+
+    /* The tap path in main.ts had the identical `<` and needed the identical
+     * fix. It is a second copy of this question, which is the thing pick.ts
+     * was extracted to stop — pinned here so the two cannot drift apart. */
+    const m49p = (await import("node:fs"))
+      .readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const tap49 = m49p.slice(m49p.indexOf("function forgivingTap"),
+      m49p.indexOf("function targetPoint"));
+    ok(/if \(d <= bestD\) \{ best = e; bestD = d; \}/.test(tap49),
+      "the touch tap breaks the tie the same way");
+    const pk49src = (await import("node:fs"))
+      .readFileSync(new URL("../src/world/pick.ts", import.meta.url), "utf8");
+    ok(/if \(score <= bestScore\)/.test(pk49src),
+      "…and so does nearestHit, which is where look and the context menu go");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

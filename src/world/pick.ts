@@ -42,6 +42,20 @@ export interface Point {
  *      however the pixels fall. You pointed at a square, and the square is
  *      the most explicit thing you said.
  *   2. Among things on equal footing, nearest to the actual click point.
+ *   3. And when two are EQUALLY near — which is not a corner case but the
+ *      normal one, because ten stacks dropped on a single tile all share one
+ *      pixel position — the one on TOP of the pile wins.
+ *
+ * Rule 3 is Tibia's rule and it was missing. The scan kept the first entry it
+ * found at the best score, and first in `world.ground` is the OLDEST drop,
+ * which the renderer draws at the BOTTOM: `drawList` is sorted by `y` and
+ * `sort` is stable, so equal-`y` items keep array order and the last one
+ * painted is the one you can see. So the pile you were looking at and the item
+ * you picked up were opposite ends of the same stack.
+ *
+ * Keeping the LAST best rather than the first is the whole of the fix, and it
+ * is right for every list this is called with: a newer corpse lies on top of
+ * an older one for the same reason.
  *
  * So it is an ORDERING, not a filter — a lone item a tile over is still
  * found, which is the whole reason the loose box exists.
@@ -64,7 +78,10 @@ export function nearestHit<T extends Point>(
      * being very slightly closer, and that is the bug in a subtler coat. */
     const onTile = ex === tx && ey === ty ? 0 : 1e6;
     const score = onTile + Math.hypot(e.x - at.x, e.y - at.y);
-    if (score < bestScore) { bestScore = score; best = e; }
+    // `<=`, not `<`: on a tie the LATER entry wins, and later is higher in
+    // the pile. See rule 3 above — this single character is the difference
+    // between picking up what you can see and picking up what is under it.
+    if (score <= bestScore) { bestScore = score; best = e; }
   }
   return best;
 }

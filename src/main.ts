@@ -3782,14 +3782,29 @@ function forgivingTap(world: World, w: Vec): boolean {
   /** Within one tile of the tap, in tile space. */
   const near = (ex: number, ey: number): boolean =>
     Math.abs(toTile(ex) - tx) <= 1 && Math.abs(toTile(ey) - ty) <= 1;
-  /** Of the candidates that qualify, the one nearest the finger. */
+  /**
+   * Of the candidates that qualify, the one nearest the finger — and on a tie,
+   * the one on TOP.
+   *
+   * The tie is the normal case, not a corner: ten stacks dropped on one tile
+   * share a single pixel position, so every distance comes out identical and
+   * `<` would keep whichever the scan met first. First in `world.ground` is
+   * the oldest drop, which the renderer paints at the BOTTOM of the pile — so
+   * a tap meant for the thing you can see took the thing underneath it.
+   *
+   * Same rule and same reason as `nearestHit` in world/pick.ts, which had the
+   * identical `<`. Two copies of "which thing did you point at" is precisely
+   * what that file was extracted to stop; this one stays for now because it
+   * asks a slightly different question (no exact-tile priority), but it is the
+   * obvious next thing to fold in.
+   */
   const pick = <T extends { x: number; y: number }>(list: readonly T[]): T | null => {
     let best: T | null = null;
     let bestD = Infinity;
     for (const e of list) {
       if (!near(e.x, e.y)) continue;
       const d = dist(w.x, w.y, e.x, e.y);
-      if (d < bestD) { best = e; bestD = d; }
+      if (d <= bestD) { best = e; bestD = d; }
     }
     return best;
   };
