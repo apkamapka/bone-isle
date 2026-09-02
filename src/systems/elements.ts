@@ -34,6 +34,27 @@ export const ELEMENTS: readonly Element[] = ["fire", "ice", "earth", "storm", "s
  * icons are frost-coloured, so "Tide Shard" over a snowflake would trade one
  * mismatch for a worse one. That is an art job, not a string job.
  */
+/**
+ * Standing in an element field burns you, exactly as standing in a camp fire
+ * does.
+ *
+ * SAME NUMBERS AS THE CAMPFIRE, on purpose. Radek's report was "ogień bierze
+ * ok 8-11 DMG jak się stanie ale inne żywioły nie" — the complaint is not that
+ * the fields are too gentle, it is that the ground lies: sixteen glowing
+ * squares that look exactly as dangerous as the fire beside them and cost
+ * nothing to walk through. Giving them their own softer number would have
+ * fixed the lie by half.
+ *
+ * ELEMENTAL, so it goes past shield and armour, again like the fire. You
+ * cannot raise a buckler against the floor. And no floating label: the glow
+ * under your feet is the label.
+ *
+ * The clock is per TILE, so crossing four squares of lightning costs four
+ * bites and standing on one costs one.
+ */
+export const FIELD_BURN_TICK_S = 1.0;
+export const FIELD_BURN_DMG: readonly [number, number] = [6, 12];
+
 export const ELEMENT_LABEL: Readonly<Record<Element, string>> = {
   fire: "Fire",
   ice: "Water",
