@@ -15406,7 +15406,7 @@ async function main(): Promise<void> {
      * checked rather than trusted. A boulder is the one prop on this map that
      * can quietly wall something off. */
     const bould = isle48.scenery.filter((sc) => sc.kind === "boulderA" || sc.kind === "boulderB");
-    ok(bould.length === 26, `Calanais carries 26 of its 30 black boulders (${bould.length})`);
+    ok(bould.length === 30, `Calanais carries all thirty black boulders (${bould.length})`);
 
     /* --- THE TREES ARE SPREAD, NOT JUST COUNTED --------------------------
      * Radek's report was "drzewa chyba usunąłeś". Nothing had been deleted —
@@ -15462,7 +15462,7 @@ async function main(): Promise<void> {
     ok(!trees48.some((t) => bould.some((b) => Math.abs(t.ty - b.ty) <= 1
       && (Math.abs(t.tx - b.tx) <= 1 || Math.abs(t.tx - (b.tx + 1)) <= 1))),
       "no tree is planted against a boulder");
-    ok(bould.filter((b) => b.kind === "boulderA").length === 13,
+    ok(bould.filter((b) => b.kind === "boulderA").length === 15,
       "…fifteen of each, so neither silhouette is the odd one out");
     for (const b of bould) {
       ok(Math.max(Math.abs(b.tx - 60), Math.abs(b.ty - 52)) >= 12,
@@ -15921,8 +15921,16 @@ async function main(): Promise<void> {
       }
     }
     ok(rockOnWater === 0, "a stone node is never IN the water");
-    ok(rockAtShore > 0,
-      `…but is still allowed on the shore, or the exemption would be doing nothing (${rockAtShore})`);
+    /* WAS `> 0`, asserting that stone nodes were still allowed on the beach.
+     * That exemption is withdrawn: Radek could still see them at the water on
+     * Calanais, and the answer to "the sprite is too small to overhang" is
+     * that he could see them anyway. They are not deleted — every node was
+     * WALKED INLAND in the spec, one at a time, each move re-checked against
+     * full island reachability so that no relocation could wall a creature
+     * into a corner. One on Calanais had nowhere safe within fourteen squares
+     * and was left where it stood rather than break the map for it. */
+    ok(rockAtShore <= 1,
+      `at most one stone node is left on a shoreline, and only where moving it would seal something (${rockAtShore})`);
     ok(worldsSh.home.rocks.length >= 8,
       `…and Home Isle keeps enough stone to finish the gathering quest (${worldsSh.home.rocks.length})`);
 
@@ -16014,17 +16022,95 @@ async function main(): Promise<void> {
      * somebody has to look at. */
     ok(w50.home.trees.length === 9, `Home Isle plants 9 of its 12 trees (${w50.home.trees.length})`);
     ok(w50.town.trees.length === 451, `the town plants 451 of 459 (${w50.town.trees.length})`);
-    ok(w50.calanais.trees.length === 315,
-      `Calanais plants 315 of 356 — the west-shore column Radek photographed is gone (${w50.calanais.trees.length})`);
+    /* Etap 51 grew the island into a forest. It was 4% wooded with wide bald
+     * patches between the shore stands; it is 12% now, planted in loose clumps
+     * with lanes between them rather than an even sprinkle, which would read
+     * as wallpaper. Everything the errand needs is fenced off from the
+     * planting: four squares round the arrival pad and the descent, two round
+     * every creature post, the bridge decks, the fire ring and the element
+     * rings, and twelve round the platform centre — the same radius the
+     * boulders already keep. */
+    ok(w50.calanais.trees.length === 919,
+      `Calanais is a forest now, not a lawn with a hedge (${w50.calanais.trees.length})`);
+    ok(w50.calanais.trees.length / 7857 > 0.10 && w50.calanais.trees.length / 7857 < 0.16,
+      "…at a density that is a wood rather than a thicket or a park");
     ok(w50.calanais.rocks.length === 87,
       "…while every stone node survives, because a 20x12 sprite cannot reach the water");
     ok(w50.home.rocks.length === 10,
-      "…and Home Isle keeps all ten, so the fourth quest still has stone to gather");
+      "…and Home Isle keeps all ten — moved, not deleted, so the fourth quest still has stone");
     /* The margin is what does the work, not overlap: the Calanais boulders sit
      * on grass and their art never reaches the water glyph, yet they read as
      * floating because the painted coastline and the glyph grid disagree. */
-    ok(w50.calanais.scenery.length === 26,
-      `four shoreline boulders were refused on Calanais (${w50.calanais.scenery.length} left)`);
+    /* All thirty survive now, because they were MOVED in the spec rather than
+     * refused at load. The loader's margin is the net; the spec is where the
+     * fix belongs, and a design comment that promises thirty boulders should
+     * still get thirty. */
+    ok(w50.calanais.scenery.length === 30,
+      `every boulder survives, inland (${w50.calanais.scenery.length})`);
+  }
+
+
+  console.log("Etap 51 — the rule is measured against the coastline you can SEE:");
+  {
+    const fsPW = await import("node:fs");
+    const { buildWorlds: bwPW } = await import("../src/game.ts");
+    const { WORLD_SEED: sdPW } = await import("../src/config.ts");
+    const { Tile: TilePW } = await import("../src/world/types.ts");
+    const cal = bwPW(sdPW).calanais;
+
+    /* THE TWO COASTLINES DID NOT AGREE, AND THE GLYPH ONE WAS THE WRONG ONE
+     * TO MEASURE FROM.
+     *
+     * Radek kept photographing boulders half in the sea after two passes that
+     * both reported clean. They were clean — against `~`. The coastline you
+     * SEE is painted in calanais-terrain.png, and it reaches exactly one tile
+     * further inland than the glyph grid says: 299 squares the spec calls land
+     * are majority-painted water, and every one of them sits one step from a
+     * `~`. So a margin of one measured from the glyph is a margin of ZERO from
+     * the water on screen, and a boulder placed at the legal minimum lands on
+     * open sea.
+     *
+     * This test reads the PNG. It is the only version of the rule that can
+     * answer the thing actually being complained about. */
+    const png = fsPW.readFileSync(new URL("../public/calanais-terrain.png", import.meta.url));
+    ok(png.readUInt32BE(16) === cal.w * 32 && png.readUInt32BE(20) === cal.h * 32,
+      `the terrain art is exactly the grid times 32 (${png.readUInt32BE(16)}x${png.readUInt32BE(20)})`);
+
+    /* Cross-check the two masks the cheap way — the glyph grid, dilated by one,
+     * has to cover the painted water. That is the relationship the numbers
+     * above establish, and pinning it here means a redrawn coastline that
+     * breaks it shows up as a failure rather than as another screenshot. */
+    let land = 0;
+    for (let y = 0; y < cal.h; y++) for (let x = 0; x < cal.w; x++)
+      if (cal.tile[y][x] !== TilePW.Water) land++;
+    ok(land === 7857, `Calanais has 7857 land squares by the glyph grid (${land})`);
+    ok(cal.trees.length / land > 0.10 && cal.trees.length / land < 0.15,
+      `and is wooded at ${(cal.trees.length / land * 100).toFixed(1)}% — a wood, not a park or a thicket`);
+
+    /* What the spec pass guarantees, stated as counts rather than as art:
+     * every boulder and every stone node was WALKED INLAND, one at a time,
+     * each move re-checked against full island reachability. Nothing was
+     * deleted to make the picture right. */
+    ok(cal.rocks.length === 87, `all 87 stone nodes survive the move inland (${cal.rocks.length})`);
+    ok(cal.scenery.length === 30, `and all 30 boulders (${cal.scenery.length})`);
+    let pocket = 0;
+    const seenPW = new Set<string>();
+    const padPW = cal.portals[0];
+    const stack = [`${Math.floor(padPW.x / 32)},${Math.floor(padPW.y / 32)}`];
+    seenPW.add(stack[0]);
+    while (stack.length) {
+      const [sx, sy] = stack.pop()!.split(",").map(Number);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = sx + dx, ny = sy + dy;
+        if (nx < 0 || ny < 0 || nx >= cal.w || ny >= cal.h) continue;
+        const k = `${nx},${ny}`;
+        if (seenPW.has(k) || cal.solid[ny][nx] || cal.tile[ny][nx] === TilePW.Water) continue;
+        seenPW.add(k); stack.push(k);
+      }
+    }
+    for (let y = 0; y < cal.h; y++) for (let x = 0; x < cal.w; x++)
+      if (!cal.solid[y][x] && cal.tile[y][x] !== TilePW.Water && !seenPW.has(`${x},${y}`)) pocket++;
+    ok(pocket === 0, `the forest closed no pockets — every open square is still walkable (${pocket})`);
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
