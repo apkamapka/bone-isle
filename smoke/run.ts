@@ -3082,7 +3082,8 @@ async function main(): Promise<void> {
 
     ok(home.w === 35 && home.h === 35, "the island is the 35x35 grid exported from Tiled");
     ok(home.mapImage === undefined, "headless: no terrain image, the baked canvas carries on");
-    ok(home.trees.length === 12, "all 12 authored trees made it across");
+    ok(home.trees.length === 9,
+      "9 of 12 authored trees made it across — 3 stood on the shoreline");
     ok(home.rocks.length === 10, "…and all 10 rocks (the duplicate marker is gone)");
     ok(home.decos.length === 0, "no scattered decoration was added");
     ok(home.portals.length === 1 && home.portals[0].dest === "town", "one portal, to Bonetown");
@@ -3238,7 +3239,7 @@ async function main(): Promise<void> {
     const { inHaven } = await import("../src/world/collision.ts");
     const town = buildWorlds(WORLD_SEED).town;
     ok(town.w === 106 && town.h === 106, `the town is the 106x106 grid exported from Tiled (${town.w}x${town.h})`);
-    ok(town.trees.length === 459 && town.rocks.length === 230,
+    ok(town.trees.length === 451 && town.rocks.length === 230,
       `every authored tree and rock came across (${town.trees.length}/${town.rocks.length})`);
     ok(town.npcs.length === 6, "all six townsfolk are present");
     ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
@@ -3247,7 +3248,7 @@ async function main(): Promise<void> {
       "two gates: Home Isle and the Time Sage's cellar");
     ok(town.portals.every((p) => p.span === 2),
       "…both of them four squares, sitting on the circles the map paints for them");
-    ok(town.scenery.length === 28,
+    ok(town.scenery.length === 26,
       `every stall and camp tent came across (${town.scenery.length})`);
 
     /* --- NOTHING IS BUILT ON THE SQUARE ------------------------------------
@@ -3272,7 +3273,7 @@ async function main(): Promise<void> {
     const stalls = town.scenery.filter((s) => s.kind.startsWith("stall"));
     ok(stalls.length === 4 && stalls.every((s) => scn2.FOOTPRINT[s.kind].w === 3),
       `four stalls, still three tiles wide (${stalls.length})`);
-    ok(town.scenery.filter((s) => s.kind === "tent").length === 24,
+    ok(town.scenery.filter((s) => s.kind === "tent").length === 22,
       "…and the rest is camp canvas, out on the wild islands");
     ok(town.scenery.filter((s) => s.kind === "tent")
         .every((s) => !inHaven(town, s.tx, s.ty)),
@@ -4709,7 +4710,7 @@ async function main(): Promise<void> {
     const { FOOTPRINT } = await import("../src/gfx/sceneryArt.ts");
     const count = (k: string) => r.scenery.filter((s) => s.kind === k).length;
     ok(count("tent") === 43, "all 43 tents were planted");
-    ok(count("well") === 13, "…all 13 wells");
+    ok(count("well") === 12, "…12 of 13 wells, the thirteenth being a square from the water");
     ok(count("boulderA") + count("boulderB") === 24, "…and all 24 black boulders");
     ok(count("boulderA") > 0 && count("boulderB") > 0,
       "…drawn from both boulder variants rather than one stamp repeated");
@@ -4728,7 +4729,7 @@ async function main(): Promise<void> {
       }
     }
     ok(unsealed === 0, "the near row of every footprint is solid, wells included");
-    ok(overhang === 112, "…and the 43 tents and 13 wells put up 112 squares of overhang");
+    ok(overhang === 110, "…and the 43 tents and 12 wells put up 110 squares of overhang");
     ok(walledOverhang === 0,
       "…every one of them walkable, so you slip in behind a tent as you would under a crown");
     ok(!REACH_SPEC.rows.some((row) => row.includes("X") || row.includes("x")),
@@ -15405,7 +15406,7 @@ async function main(): Promise<void> {
      * checked rather than trusted. A boulder is the one prop on this map that
      * can quietly wall something off. */
     const bould = isle48.scenery.filter((sc) => sc.kind === "boulderA" || sc.kind === "boulderB");
-    ok(bould.length === 30, `Calanais carries thirty black boulders (${bould.length})`);
+    ok(bould.length === 26, `Calanais carries 26 of its 30 black boulders (${bould.length})`);
 
     /* --- THE TREES ARE SPREAD, NOT JUST COUNTED --------------------------
      * Radek's report was "drzewa chyba usunąłeś". Nothing had been deleted —
@@ -15461,7 +15462,7 @@ async function main(): Promise<void> {
     ok(!trees48.some((t) => bould.some((b) => Math.abs(t.ty - b.ty) <= 1
       && (Math.abs(t.tx - b.tx) <= 1 || Math.abs(t.tx - (b.tx + 1)) <= 1))),
       "no tree is planted against a boulder");
-    ok(bould.filter((b) => b.kind === "boulderA").length === 15,
+    ok(bould.filter((b) => b.kind === "boulderA").length === 13,
       "…fifteen of each, so neither silhouette is the odd one out");
     for (const b of bould) {
       ok(Math.max(Math.abs(b.tx - 60), Math.abs(b.ty - 52)) >= 12,
@@ -15891,8 +15892,15 @@ async function main(): Promise<void> {
      * is the wrong direction. The right fix is a pass over the specs in Tiled,
      * moving these props a square inland, and then both numbers go to 0 and
      * these two lines become `=== 0`. */
-    ok(overlap <= 4, `at most four props still paint on water (${overlap})`);
-    ok(margin <= 71, `…and at most 71 stand within a square of it (${margin})`);
+    /* Was a ratchet — `<= 4` and `<= 71`, the counts as they stood — because
+     * the first attempt at this refused to override the specs from inside the
+     * loader. It now does override them, deliberately: eight assertions that
+     * counted authored props were re-pinned to the post-shoreline numbers, so
+     * the spec and the world are allowed to differ by exactly the refused set
+     * and both ends are nailed down. A silently shrinking map is the only
+     * thing here that would be worse than the artefact. */
+    ok(overlap === 0, `nothing paints on a water tile (${overlap})`);
+    ok(margin === 0, `…and nothing stands within a square of one either (${margin})`);
     if (overlap || margin) console.log(`    (shoreline debt: ${overlap} overlapping, ${margin} within a square — see the report below)`);
 
     /* Gatherable rocks are deliberately exempt from the MARGIN and only from
@@ -15951,6 +15959,72 @@ async function main(): Promise<void> {
       "a boulder is known to paint a row above its own");
     ok(!paintedTiles("well", 10, 10).some((t) => t.ty === 9),
       "…while something that fits its footprint claims nothing extra");
+  }
+
+
+  console.log("Etap 50 — the pile is taken from the top on EVERY input path:");
+  {
+    const fs50 = await import("node:fs");
+    const m50 = fs50.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+
+    /* Radek tested the last fix and reported it still took from the bottom.
+     * It did. The fix reached `nearestHit` (look, context menu) and the touch
+     * tap, and missed the two scans a MOUSE actually takes — both plain
+     * forward `for…of` loops that return their first hit, which is the oldest
+     * drop and the bottom of the pile. They were missed because the search
+     * that found the others was for `.find(`.
+     *
+     * There is no way to reach either from a headless test — one needs a
+     * pointer event, the other a camera — so they are pinned as source. The
+     * pinning is exact on purpose: a forward loop reintroduced here is the
+     * whole bug back again. */
+    const probe50 = m50.slice(m50.indexOf("function probeGroundDrag"),
+      m50.indexOf("function probeSlotDrag"));
+    ok(/for \(let i = world\.ground\.length - 1; i >= 0; i--\)/.test(probe50),
+      "dragging off the floor scans the pile from the top");
+    ok(!/for \(const gi of world\.ground\)/.test(probe50),
+      "…and no forward scan is left in it");
+
+    const click50 = m50.slice(m50.indexOf("// dropped ground items — walk over and pick up"),
+      m50.indexOf("// corpses, for a player who is NOT mid-fight"));
+    ok(/for \(let i = world\.ground\.length - 1; i >= 0; i--\)/.test(click50),
+      "…and so does clicking one to walk to it, which is the path a mouse takes");
+    ok(!/for \(const gi of world\.ground\)/.test(click50),
+      "…with no forward scan left there either");
+
+    /* Four ways in, one rule. The MERGE lookups are deliberately not in this
+     * list: `dropToGround` and friends use `.find` to join an existing stack
+     * of the same kind, which is a different question with a different right
+     * answer. */
+    const PK50 = await import("../src/world/pick.ts");
+    const pile50 = Array.from({ length: 10 }, (_, i) => ({ x: 336, y: 336, drop: i }));
+    ok(PK50.nearestHit(pile50, { x: 336, y: 336 })?.drop === 9,
+      "look and the context menu still answer with the top of the pile");
+    const tap50 = m50.slice(m50.indexOf("function forgivingTap"), m50.indexOf("function targetPoint"));
+    ok(/if \(d <= bestD\)/.test(tap50), "…and the touch tap still does too");
+  }
+
+  console.log("Etap 50 — the shoreline rule is enforced, not merely measured:");
+  {
+    const { buildWorlds: bw50 } = await import("../src/game.ts");
+    const { WORLD_SEED: sd50 } = await import("../src/config.ts");
+    const w50 = bw50(sd50);
+    /* The counts the refusal changed, pinned at BOTH ends: what the spec still
+     * authors, and what survives the shore. Either drifting is a real change
+     * somebody has to look at. */
+    ok(w50.home.trees.length === 9, `Home Isle plants 9 of its 12 trees (${w50.home.trees.length})`);
+    ok(w50.town.trees.length === 451, `the town plants 451 of 459 (${w50.town.trees.length})`);
+    ok(w50.calanais.trees.length === 315,
+      `Calanais plants 315 of 356 — the west-shore column Radek photographed is gone (${w50.calanais.trees.length})`);
+    ok(w50.calanais.rocks.length === 87,
+      "…while every stone node survives, because a 20x12 sprite cannot reach the water");
+    ok(w50.home.rocks.length === 10,
+      "…and Home Isle keeps all ten, so the fourth quest still has stone to gather");
+    /* The margin is what does the work, not overlap: the Calanais boulders sit
+     * on grass and their art never reaches the water glyph, yet they read as
+     * floating because the painted coastline and the glyph grid disagree. */
+    ok(w50.calanais.scenery.length === 26,
+      `four shoreline boulders were refused on Calanais (${w50.calanais.scenery.length} left)`);
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

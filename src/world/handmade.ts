@@ -26,7 +26,7 @@ import { SPR, bakeTree } from "../gfx/sprites.ts";
 import { NPC_DATA, bakeWorldCanvas } from "./generate.ts";
 import { npcRest } from "../entities/npcs.ts";
 import { nextEntityId } from "./entities.ts";
-import { FOOTPRINT, BLOCK } from "../gfx/sceneryArt.ts";
+import { FOOTPRINT, BLOCK, paintedTiles } from "../gfx/sceneryArt.ts";
 import type { MonsterKind, SceneryKind } from "./types.ts";
 import type { Element } from "../systems/elements.ts";
 import { Tile } from "./types.ts";
@@ -212,6 +212,42 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     mapCanvas: document.createElement("canvas"),
   };
 
+  /**
+   * NOTHING DECORATIVE WITHIN A SQUARE OF THE SEA.
+   *
+   * Props are drawn larger than the squares they stand on, so a tree or a
+   * boulder one tile in from a shoreline paints part of itself on the water.
+   * Radek photographed it twice: boulders lying on open sea off Calanais, and
+   * a whole column of trees hugging the west shore with their crowns out over
+   * the waves. Nothing was ever placed IN the water — every glyph involved is
+   * on grass — which is exactly why it lasted: the tile was legal and the
+   * picture was not.
+   *
+   * The margin, rather than a test for literal overlap, is the part that had
+   * to be decided. Overlap alone does not catch the Calanais boulders: their
+   * art is 60px wide inside a 64px footprint and never reaches the water glyph
+   * next door. They still look wrong, because the coastline you SEE is painted
+   * in the terrain PNG exported from Tiled and the coastline the game reasons
+   * about is this glyph grid, and along a hand-drawn shore the two do not
+   * agree to the pixel. One clear square absorbs that disagreement without
+   * redrawing every map.
+   *
+   * Refusing here rather than in the specs means a map author cannot make the
+   * mistake by hand — but it also means the spec and the world legitimately
+   * disagree now, so `refused` is counted and the smoke suite pins it. A
+   * silently shrinking map is the thing that would be worse than the artefact.
+   */
+  const SHORE_MARGIN = 1;
+  const wetGlyph = (tx: number, ty: number): boolean =>
+    tx < 0 || ty < 0 || tx >= W || ty >= H || baseTileOf(rows[ty][tx]) === Tile.Water;
+  const nearWater = (tiles: readonly { tx: number; ty: number }[]): boolean =>
+    tiles.some(({ tx, ty }) => {
+      for (let dy = -SHORE_MARGIN; dy <= SHORE_MARGIN; dy++)
+        for (let dx = -SHORE_MARGIN; dx <= SHORE_MARGIN; dx++)
+          if (wetGlyph(tx + dx, ty + dy)) return true;
+      return false;
+    });
+
   // Second pass: features. Reading order (top→bottom, left→right) fixes a
   // stable, deterministic order for build spots — important for save migration.
   for (let y = 0; y < H; y++) {
@@ -223,6 +259,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
         case "T":
           // 32x56, anchored on the bottom of its square: one tile wide, and the
           // crown reaches into the square north of it.
+          if (nearWater([{ tx: x, ty: y }, { tx: x, ty: y - 1 }])) break;
           w.trees.push({ tx: x, ty: y, spr: bakeTree(), hp: 3, maxhp: 3, stump: false, respawnT: 0, hurtT: 0 });
           solid[y][x] = true;
           break;
@@ -303,6 +340,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           if (spec.solids?.includes(ch)) break; // painted obstacle; collision only
           const scn = spec.scenery?.[ch];
           if (scn) {
+            if (nearWater(paintedTiles(scn, x, y))) break;
             w.scenery.push({ tx: x, ty: y, kind: scn });
             // The glyph is the footprint's top-left square. Seal the near row of
             // the block and nothing else: the far row is overhang the player is

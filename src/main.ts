@@ -370,7 +370,16 @@ function probeGroundDrag(sx: number, sy: number, isTouch: boolean): boolean {
   const wx = sx / vScale + cam.x;
   const wy = sy / vScale + cam.y;
   const world = cw();
-  for (const gi of world.ground) {
+  /* BACKWARDS, so the stack you can SEE is the stack you grab.
+   *
+   * `world.ground` is append-ordered and the renderer sorts by `y` with a
+   * stable sort, so ten stacks on one square keep array order and the LAST is
+   * painted on top. A forward scan returns the first hit, which is the oldest
+   * drop — the one at the bottom of the pile, under everything. Reverse is
+   * what `probeSlotDrag` immediately below already does, and for exactly this
+   * reason. */
+  for (let i = world.ground.length - 1; i >= 0; i--) {
+    const gi = world.ground[i];
     if (Math.abs(wx - gi.x) < 18 && wy > gi.y - 28 && wy < gi.y + 8) {
       itemDrag = { index: -1, kind: gi.kind, n: gi.n, sx, sy, active: false, floor: gi, touch: isTouch };
       return true;
@@ -3634,8 +3643,14 @@ function worldClick(w: Vec): void {
       return;
     }
   }
-  // dropped ground items — walk over and pick up (Tibia-style, no telekinesis)
-  for (const gi of world.ground) {
+  // dropped ground items — walk over and pick up (Tibia-style, no telekinesis).
+  // Backwards for the same reason as `probeGroundDrag`: last in the array is
+  // the top of the pile, and the top of the pile is what you clicked on. This
+  // is the pass a mouse actually takes, so a fix that only reached
+  // `nearestHit` and the touch tap left the desktop still taking from the
+  // bottom.
+  for (let i = world.ground.length - 1; i >= 0; i--) {
+    const gi = world.ground[i];
     if (Math.abs(w.x - gi.x) < 18 && w.y > gi.y - 28 && w.y < gi.y + 8) {
       P.target = { kind: "ground", id: gi.id };
       P.dest = null; P.gather = null; moveMarker = null;
