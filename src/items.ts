@@ -18,6 +18,9 @@ export type ItemKind =
   // Kárr's helm, taken off his head in the howe. Same shape as the cap: one
   // creature, one drop, a relic for the sage's table rather than a trophy.
   | "graveHelm"
+  // The thing Black Annis left in the oak. Same shape again, and the third of
+  // them, which is the point at which the pattern is the pattern.
+  | "hairEffigy"
   // forge materials (Etap 24): smelted from looted gear, never bought
   | "iron" | "steel" | "essentialGem"
   // furnace fuel: dropped by anything that makes camp — people, orcs,
@@ -214,6 +217,18 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * cut into the brow band in runes, which is the part Chronos wants. Heavier
    * than the cap and worth more, and it does not stack for the same reason. */
   graveHelm:    { name: "Howe-Helm",      stack: 1, value: 600, weight: 9 },
+  /* Black Annis' effigy. Plaited hair and skin, and it is not a trophy off
+   * her body — it is the DECOY she kept in the pollard oak over the cave
+   * mouth, so that the county could go on seeing her crouched up there on the
+   * nights she was asleep. That is what makes it evidence worth carrying to
+   * Chronos: not that she is dead, but that for most of three hundred years
+   * she did not have to be there at all. The fear was doing the work.
+   *
+   * The most valuable relic so far and by some way the LIGHTEST — four against
+   * the helm's nine — which is a small joke the item table is allowed to make:
+   * the heaviest thing she left behind weighs almost nothing. Does not stack,
+   * for the reason the other two do not. */
+  hairEffigy:   { name: "Hair Effigy",   stack: 1, value: 800, weight: 4 },
   // ---- forge materials. Iron and steel are LIGHT on purpose: the Alchemy
   // ---- Tower wants 600 iron and 550 steel, and at a realistic weight the
   // ---- logistics of carrying them would be a bigger obstacle than earning

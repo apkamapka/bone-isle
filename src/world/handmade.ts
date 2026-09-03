@@ -623,7 +623,15 @@ export const CELLAR_SPEC: HandmadeSpec = {
       dest: "calanais", label: "to Calanais — the Temple Isle",
       span: 2, floor: Tile.Cave, inactive: true,
     },
-    "4": sealed("Sealed Rift IV"),
+    // The fourth named rift. TEMP-ETAP52-OPENHILLS: it ships LIVE rather than
+    // dormant, the same exception Calanais shipped with and for the same
+    // reason — the level-20 errand is not in the catalogue yet, so a dormant
+    // pad here would be a pad nothing can ever light and an island nobody can
+    // walk. It flips to `inactive: true` the day the mission lands.
+    "4": {
+      dest: "daneHills", label: "to the Dane Hills — the heath west of Leicester",
+      span: 2, floor: Tile.Cave,
+    },
     "5": sealed("Sealed Rift V"),
     "6": sealed("Sealed Rift VI"),
     "7": sealed("Sealed Rift VII"),

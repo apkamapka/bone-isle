@@ -506,6 +506,81 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
 
   /* ================================================================== *
+   *  BLACK ANNIS — the Time Sage's THIRD boss, level 20
+   *
+   *  A blue-faced hag out of Leicestershire, and she is built as the exact
+   *  INVERSE of Kárr, on purpose. Three bosses now means three different
+   *  problems, and the third one is not allowed to be a bigger version of
+   *  either of the first two:
+   *
+   *    THE REDCAP    you cannot outrun him, and he throws stones at what he
+   *                  cannot reach. `speed: 79`, plus a ranged roll.
+   *    KÁRR          you can ALWAYS outrun him, and armour 26 means a hail
+   *                  of weak blows is worth nothing. `speed: 40`.
+   *    ANNIS         she decides when the distance closes. `speed: 79`, LEVEL
+   *                  with the redcap and twice Kárr's forty — and NO ranged
+   *                  roll at all, because everything she does she does within
+   *                  arm's length. The folklore has her crouched in the
+   *                  pollard oak over the cave mouth waiting to spring; speed
+   *                  IS that, expressed as a stat.
+   *
+   *  SHE TIES THE REDCAP RATHER THAN BEATING HIM, and that is the smoke suite
+   *  making a good call on my behalf. Eighty-four was written here first. Two
+   *  tests refused it — one pinning that nothing in the bestiary is quicker
+   *  than the redcap, one pinning that his own chronicle page does not lie
+   *  when it says nothing outruns him. Both compare with `<=`, so a tie
+   *  passes, and a tie is the better answer anyway: it costs her nothing (she
+   *  is still the joint-fastest thing in the game and still the exact inverse
+   *  of Kárr) and it costs the shipped text nothing either. Beating him by
+   *  five would have quietly made a story file wrong.
+   *
+   *  ARMOUR SIX, which is the low end of the level-20 band and deliberate.
+   *  She wears no metal — the accounts dress her in the skins and nothing
+   *  else — so she is soft and quick where Kárr is slow and sealed. Against
+   *  a player that inverts too: flat reduction is rolled per hit, so where
+   *  Kárr punished light weapons, she punishes going in unarmoured.
+   *
+   *  FOURTEEN HUNDRED HIT POINTS, between the redcap's six and Kárr's
+   *  eighteen. Not doubled the way those two were after Radek walked them,
+   *  because length is the wrong lever here: Kárr is long because he cannot
+   *  catch you and the room is full of his victims, and this room is empty
+   *  and she is faster than you are. A long fight against something you can
+   *  never disengage from is a different thing from a long fight you choose
+   *  to have. Walk it before doubling it.
+   *
+   *  THE RESISTANCES ARE THE FOLKLORE, and they claim the one element the
+   *  first two bosses left alone:
+   *
+   *    ICE 0.4    she is a winter creature. She hunted on winter nights and
+   *               the sources tie her to storms and cold. Weather she has
+   *               stood in for eight hundred years is not a weapon.
+   *    SHADOW 0.5 the dark is her house. She dug it herself.
+   *    EARTH 1.5  and this is the answer. Every account agrees she scooped
+   *               the bower out of the sandstone with her own nails, and the
+   *               thing that finally ended the legend was not a hero — the
+   *               locals filled the cave in. The rock is what beat her once
+   *               already. Fire is Kárr's weakness and storm is the redcap's;
+   *               earth is hers, so a character who took a different circle
+   *               at Calanais has a boss that answers to it.
+   *
+   *  WHERE SHE LIVES: the bower under the Dane Hills, on her own square at
+   *  the far end of it, and nowhere else in the game.
+   * ================================================================== */
+  blackAnnis: {
+    // Named, because the county names her — Black Annis, Black Anna, Cat Anna.
+    // Heyrick's 1794 poem is the first time she reaches print.
+    spr: SPR.humanFoe,
+    name: "Black Annis",
+    hp: 1400, dmg: [30, 78], speed: 79, atkRate: 2.0, exp: 1000,
+    gold: [35, 70], danger: 0.5, armor: 6,
+    resist: { ice: 0.4, shadow: 0.5, earth: 1.5 },
+    loot: [
+      // The relic. Flat 100%, the same rule as the cap and the helm.
+      { kind: "hairEffigy", chance: 1.0, n: [1, 1] },
+    ],
+  },
+
+  /* ================================================================== *
    *  THE FANTASTIC BESTIARY, lower rungs — levels 15-22
    *
    *  Re-tiered wholesale (Etap 20). In Tibia these are level-8 fodder; here

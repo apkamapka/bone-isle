@@ -1588,8 +1588,8 @@ async function main(): Promise<void> {
     const alsoSold = gear.filter((k) => onSale.has(k as never));
     ok(alsoSold.length === 0,
       `…and nothing buried is also on a shelf${alsoSold.length ? " — " + alsoSold.join(",") : ""}`);
-    ok(held === gear.length + 4,
-      `every hoard is gear plus a purse, and four purses in all (${held})`);
+    ok(held === gear.length + 5,
+      `every hoard is gear plus a purse, and five purses in all (${held})`);
     // and nothing else in the game hides a chest that no prize is named for
     let orphan = "";
     for (const w of Object.values(worlds)) {
@@ -1630,8 +1630,11 @@ async function main(): Promise<void> {
     // Icelandic sagas that stands in one room and is killed once.
     // …and Etap 43a the viking, the forty-first: a rank rather than a boss,
     // and the first creature in the game added because a MAP wanted one.
-    ok(MONSTER_KINDS.length === 41,
-      `bestiary holds 41 kinds (18 + 21 humans + redcap + draugr), got ${MONSTER_KINDS.length}`);
+    // …and Etap 52 Black Annis, the forty-second and the sage's THIRD named
+    // boss. Same rule as the other two: no ladder, no kin, one creature out of
+    // Leicestershire folklore standing at the end of one room.
+    ok(MONSTER_KINDS.length === 42,
+      `bestiary holds 42 kinds (18 + 21 humans + redcap + draugr + blackAnnis), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -7805,10 +7808,13 @@ async function main(): Promise<void> {
     // Those four are the only keys in the game that exist because a MISSION
     // needed them rather than because a level range did, and they arrive in
     // pairs by construction: a ground to walk and one room at the end of it.
-    ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 calanais cellar "
-      + "deaddeep1 deaddeep2 haramsey haugr hermitage home liddesdale minodeep1 "
+    // Etap 48 adds the fifth such pair — the Dane Hills and the bower under
+    // them — which keeps the rule the other four set: a ground to walk and one
+    // room at the end of it, arriving together or not at all.
+    ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 bower calanais cellar "
+      + "daneHills deaddeep1 deaddeep2 haramsey haugr hermitage home liddesdale minodeep1 "
       + "minodeep2 orcdeep1 orcdeep2 reach town tursachan",
-      `twenty maps and no others (${keys.length}: ${keys.join(" ")})`);
+      `twenty-two maps and no others (${keys.length}: ${keys.join(" ")})`);
     for (const dead of ["cave.ts", "deepwild.ts"]) {
       ok(!nfs.existsSync(new URL(`../src/world/${dead}`, import.meta.url)),
         `${dead} is gone, not merely unreferenced`);
@@ -16111,6 +16117,192 @@ async function main(): Promise<void> {
     for (let y = 0; y < cal.h; y++) for (let x = 0; x < cal.w; x++)
       if (!cal.solid[y][x] && cal.tile[y][x] !== TilePW.Water && !seenPW.has(`${x},${y}`)) pocket++;
     ok(pocket === 0, `the forest closed no pockets — every open square is still walkable (${pocket})`);
+  }
+
+
+  console.log("Etap 52 — the Dane Hills, Annis' Bower, and Black Annis:");
+  {
+    const { buildWorlds: bw48 } = await import("../src/game.ts");
+    const { CHEST_PRIZES: CP48 } = await import("../src/game.ts");
+    const { MONSTER_DEFS: MD48 } = await import("../src/entities/monsters.ts");
+    const { ITEMS: IT48 } = await import("../src/items.ts");
+    const { Tile: T48 } = await import("../src/world/types.ts");
+    const w48 = bw48(WORLD_SEED);
+    const hills = w48.daneHills, bower = w48.bower;
+
+    /* --- the island, and that it still matches the export -------------------
+     * Both numbers come out of `blackannispowieschnia.tmx` rather than being
+     * chosen: the grid is the trace and the picture is the same file's image
+     * export, so if either one is re-exported without the other these two
+     * assertions are what says so. */
+    ok(hills.w === 90 && hills.h === 90, `Dane Hills is 90x90 (${hills.w}x${hills.h})`);
+    ok(bower.w === 30 && bower.h === 30, `the bower is 30x30 (${bower.w}x${bower.h})`);
+
+    const openAt = (wd: typeof hills, x: number, y: number): boolean =>
+      x >= 0 && y >= 0 && x < wd.w && y < wd.h
+      && !wd.solid[y][x] && wd.tile[y][x] !== T48.Water;
+    const walkCount = (wd: typeof hills): number => {
+      let n = 0;
+      for (let y = 0; y < wd.h; y++) for (let x = 0; x < wd.w; x++) if (openAt(wd, x, y)) n++;
+      return n;
+    };
+    /* Reachability, not merely openness. A pocket walled off by props is the
+     * failure this catches — it is how a scatter of 237 objects goes wrong,
+     * and it cannot be seen by counting them. */
+    const flood = (wd: typeof hills, sx: number, sy: number): Map<string, number> => {
+      const d = new Map<string, number>([[`${sx},${sy}`, 0]]);
+      const q: [number, number][] = [[sx, sy]];
+      for (let i = 0; i < q.length; i++) {
+        const [x, y] = q[i];
+        const here = d.get(`${x},${y}`)!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, k = `${nx},${ny}`;
+          if (!openAt(wd, nx, ny) || d.has(k)) continue;
+          d.set(k, here + 1); q.push([nx, ny]);
+        }
+      }
+      return d;
+    };
+
+    /* --- the two ends came out of the TMX object layer ---------------------- */
+    /* A Portal carries PIXEL centres, not tile indices — `x: cx` in the parser,
+     * where cx is `x * TILE + TILE / 2`. Writing `p.tx` here typechecked, read
+     * fine, and quietly made every distance NaN, which is exactly the class of
+     * mistake this block exists to catch on the map. Divide. */
+    const padPortal = hills.portals.find((p) => p.dest === "cellar")!;
+    const holePortal = hills.portals.find((p) => p.dest === "bower")!;
+    ok(!!padPortal && !!holePortal, "the island has exactly the two doors it should");
+    const padTile = { tx: Math.floor(padPortal.x / 32), ty: Math.floor(padPortal.y / 32) };
+    const holeTile = { tx: Math.floor(holePortal.x / 32), ty: Math.floor(holePortal.y / 32) };
+    ok(holeTile.tx === 12 && holeTile.ty === 80,
+      `the way down is where the export's object layer put it (${holeTile.tx},${holeTile.ty})`);
+    const reach48 = flood(hills, holeTile.tx, holeTile.ty);
+    /* 3522 squares of land in the trace, 186 of them sealed by what stands on
+     * them — trees, dead wood, stone, boulders, tents and totems. This is the
+     * count AFTER the scatter, which is the number that matters: it is what a
+     * creature can actually walk. */
+    ok(walkCount(hills) === 3336, `3336 open squares on the heath (${walkCount(hills)})`);
+    ok(reach48.size === walkCount(hills),
+      `…and every one of them is reachable from the hole — the scatter closed no pockets (${reach48.size})`);
+    const crossing = reach48.get(`${padTile.tx},${padTile.ty}`) ?? -1;
+    ok(crossing > 90 && crossing < 120,
+      `the crossing is Haramsey-length, pad to hole (${crossing} tiles of walking)`);
+
+    /* --- who stands on it, and how far apart -------------------------------- */
+    const posts48 = hills.mobPosts ?? [];
+    ok(posts48.length === 34, `thirty-four posts on the heath (${posts48.length})`);
+    const ranks = new Set(posts48.map((p) => p.kind));
+    ok(ranks.size === 4 && ["corsair", "hunter", "wildWarrior", "viking"].every((k) => ranks.has(k as never)),
+      `four ranks and no others (${[...ranks].sort().join(" ")})`);
+    let tight = 0;
+    for (let i = 0; i < posts48.length; i++)
+      for (let j = i + 1; j < posts48.length; j++) {
+        const a = posts48[i], b = posts48[j];
+        if ((a.tx - b.tx) ** 2 + (a.ty - b.ty) ** 2 < 64) tight++;
+      }
+    ok(tight === 0, `no two posts inside eight tiles — every pull is a single one (${tight})`);
+    /* You land clear and you leave clear. Eight is the aggro range plus two,
+     * so neither door is inside anything's awareness. */
+    const nearDoor = posts48.filter((p) =>
+      (p.tx - padTile.tx) ** 2 + (p.ty - padTile.ty) ** 2 < 64
+      || (p.tx - holeTile.tx) ** 2 + (p.ty - holeTile.ty) ** 2 < 64);
+    ok(nearDoor.length === 0, `nothing stands within eight tiles of either door (${nearDoor.length})`);
+
+    /* THE GRADIENT IS BY WALKING, and this is the assertion that says so. Mean
+     * distance from the hole must fall as the rank gets heavier — a straight-
+     * line ranking would pass a weaker test and fail this one, because the
+     * island has a bay in it. */
+    const meanFromHole = (kind: string): number => {
+      const ds = posts48.filter((p) => p.kind === kind)
+        .map((p) => reach48.get(`${p.tx},${p.ty}`) ?? 1e9);
+      return ds.reduce((a, b) => a + b, 0) / ds.length;
+    };
+    const ladder = ["viking", "wildWarrior", "hunter", "corsair"].map(meanFromHole);
+    ok(ladder.every((d, i) => i === 0 || d > ladder[i - 1]),
+      `the heavier the rank the nearer the hole, by WALKING (${ladder.map((d) => d.toFixed(0)).join(" < ")})`);
+
+    /* --- the camp at the mouth ---------------------------------------------- */
+    const mouthFire = hills.fires.find((f) =>
+      (f.tx - holeTile.tx) ** 2 + (f.ty - holeTile.ty) ** 2 <= 9);
+    ok(!!mouthFire, "a fire burns within three tiles of the way down");
+    const stalked = posts48.some((p) =>
+      (p.tx - mouthFire!.tx) ** 2 + (p.ty - mouthFire!.ty) ** 2 < 64);
+    ok(!stalked, "…and nothing hostile is inside aggro of it — it is a breather, not a trap");
+
+    /* LIVE WOOD, and only here. Haramsey is the North Atlantic and has none by
+     * design; this is Leicestershire. If a later pass strips the oaks off the
+     * heath the mission ground loses the one thing that separates it. */
+    ok(hills.trees.length > 30, `the heath carries live oak (${hills.trees.length})`);
+    ok(w48.haramsey.trees.length === 0, "…while the barrow coast still carries none");
+
+    /* --- the room at the bottom --------------------------------------------- */
+    /* 224 squares in the trace and 203 once the room is dressed. The gap is
+     * bigger than the glyph count because a boulder is a 2x1 sprite and seals
+     * BOTH squares — fourteen tiles across eight boulders, plus six poles and
+     * the chest. That is the whole point of them: the export handed over a
+     * clean fourteen-by-sixteen rectangle, and she is supposed to have dug
+     * this out with her nails. Straight walls are what the boulders are here
+     * to spoil. */
+    ok(walkCount(bower) === 203, `the bower is 203 open squares (${walkCount(bower)})`);
+    const annisPost = (bower.mobPosts ?? [])[0]!;
+    const bowerReach = flood(bower, annisPost.tx, annisPost.ty);
+    ok(bowerReach.size === walkCount(bower),
+      `…and the dressing walled nothing off — she can reach all of it (${bowerReach.size})`);
+    const inBower = bower.mobPosts ?? [];
+    ok(inBower.length === 1 && inBower[0].kind === "blackAnnis",
+      `she is the ONLY thing alive down there (${inBower.map((p) => p.kind).join(",") || "nothing"})`);
+    /* THE DARK IS THE LEVEL DESIGN. Six fires, two at each end and two more
+     * behind her, and nine unlit rows between them. Light the middle and the
+     * walk in stops being a walk in. */
+    ok(bower.fires.length === 6, `six fires and no more (${bower.fires.length})`);
+    const litMiddle = bower.fires.filter((f) => f.ty >= 9 && f.ty <= 17);
+    ok(litMiddle.length === 0, `rows nine to seventeen carry no light at all (${litMiddle.length})`);
+    /* The hoard sits in open floor, walkable on all four sides, exactly as
+     * Kárr's does — a chest against the rock reads as part of the wall and can
+     * only be opened from three directions. */
+    const hoard = bower.structures.find((st) => st.key === "treasure")!;
+    ok(!!hoard && [[1, 0], [-1, 0], [0, 1], [0, -1]]
+      .every(([dx, dy]) => openAt(bower, hoard.tx + dx, hoard.ty + dy)),
+      "you can walk right round her hoard");
+    ok(!!CP48.bower && CP48.bower.every((pz) => Array.isArray(pz)),
+      "…and what is in it is coin and no gear — she had no use for either, but the county did");
+
+    /* --- the creature -------------------------------------------------------- */
+    const an = MD48.blackAnnis, rc48 = MD48.redcap, kr48 = MD48.draugr;
+    ok(an.speed === rc48.speed,
+      `she is level with the redcap and beats nothing (${an.speed})`);
+    ok(an.speed > kr48.speed * 1.9 && (an.armor ?? 0) < (kr48.armor ?? 0) / 3,
+      "…and the exact inverse of Kárr: twice his pace, a fraction of his armour");
+    ok(!an.ranged, "everything she does she does within arm's length");
+    /* THE ELEMENTS DO NOT REPEAT. Three bosses, three different answers, so a
+     * character who took a different circle at Calanais has one that is his.
+     * A fourth boss reusing storm or fire would quietly make the choice
+     * matter less, and this is what would notice. */
+    const weakness = (d: typeof an): string[] =>
+      Object.entries(d.resist ?? {}).filter(([, v]) => v > 1).map(([k]) => k);
+    const answers = [weakness(rc48), weakness(kr48), weakness(an)].flat();
+    ok(new Set(answers).size === answers.length,
+      `each named boss answers to its own element (${answers.join(" ")})`);
+    ok(weakness(an).join() === "earth",
+      "…and hers is earth — the rock she dug through, and what the county finally filled her in with");
+
+    /* --- the relic ----------------------------------------------------------- */
+    const drops = (an.loot ?? []).filter((l) => l.chance >= 1);
+    ok(drops.length === 1 && drops[0].kind === "hairEffigy",
+      "the effigy is her one certain drop — a mission cannot hang on a dice roll");
+    ok(IT48.hairEffigy.stack === 1, "…it does not stack, as the cap and the helm do not");
+    ok(IT48.hairEffigy.weight < IT48.bloodCap.weight && IT48.hairEffigy.weight < IT48.graveHelm.weight,
+      `…and it is the lightest of the three relics (${IT48.hairEffigy.weight})`);
+
+    /* TEMP-ETAP52-OPENHILLS. Both doors ship live because the errand is not in
+     * the catalogue yet. This is the tripwire: write the mission and these two
+     * go red, which is the reminder to put `inactive: true` back on them and
+     * hand them to `applyMissionPads`. */
+    const { MISSIONS: MS48 } = await import("../src/systems/missions.ts");
+    ok(!MS48.some((m) => m.echo === "bower"),
+      "TEMP-ETAP52-OPENHILLS: no mission owns the bower yet");
+    ok(!holeTile.inactive,
+      "…so the way down ships live, and goes dormant the day one does");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

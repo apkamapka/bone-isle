@@ -15,6 +15,8 @@ import { loadAttuneArt } from "./gfx/attuneSheet.ts";
 import { HAUGR_SPEC } from "./world/haugrSpec.ts";
 import { CALANAIS_SPEC } from "./world/calanaisSpec.ts";
 import { TURSACHAN_SPEC } from "./world/tursachanSpec.ts";
+import { DANEHILLS_SPEC } from "./world/daneHillsSpec.ts";
+import { BOWER_SPEC } from "./world/bowerSpec.ts";
 import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
@@ -132,6 +134,15 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize
   // because of the ring, and less in coin, so the biggest purse in the game
   // stays where it was.
   haugr: ["ring", ["platinumCoin", 20]],
+  // Black Annis' hole, and the one hoard in the game that is NOT plunder. She
+  // took lambs and children; she had no use for money and the folklore never
+  // says she did. What is down here is what the county carried to her — the
+  // offerings they started leaving under the oak once barring the doors had
+  // stopped working, which is a beat Chronos' own briefing already has. So it
+  // is coin and no gear: twenty-five platinum, under the redcap's thirty,
+  // because his purse is meant to stay the biggest single prize in the game
+  // and nothing about this errand argues for moving it.
+  bower: [["platinumCoin", 25]],
 };
 
 /**
@@ -168,6 +179,8 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     haugr: makeHandmadeWorld(HAUGR_SPEC),
     calanais: makeHandmadeWorld(CALANAIS_SPEC),
     tursachan: makeHandmadeWorld(TURSACHAN_SPEC),
+    daneHills: makeHandmadeWorld(DANEHILLS_SPEC),
+    bower: makeHandmadeWorld(BOWER_SPEC),
   };
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble

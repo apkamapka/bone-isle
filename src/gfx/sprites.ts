@@ -1223,6 +1223,9 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   bloodCap: SPR.cursedRib,
   // …and so does the helm.
   graveHelm: SPR.cursedRib,
+  // …and so does the effigy, which is drawn rather than sourced — see
+  // `tools/gen_hair_effigy.py`, which regenerates the PNG byte for byte.
+  hairEffigy: SPR.cursedRib,
   iron: SPR.ironIngot, steel: SPR.steelIngot, essentialGem: SPR.essentialGem, coal: SPR.coalLump,
   mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed, dragonHam: SPR.dragonHam,
   // Etap 22: every piece of the new catalog draws with ONE shared stub until

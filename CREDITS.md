@@ -1510,6 +1510,65 @@ a launcher is free to crop a maskable icon to a circle, a squircle or a
 rounded square depending on the platform, and anything outside that safe zone
 may be cut off.
 
+## Black Annis — `public/mob-black-annis-walk.png`, `public/mob-black-annis-dead.png`
+
+Source: **Universal LPC Spritesheet Character Generator**, CC-BY-SA 3.0 — the
+same terms and the same ShareAlike obligation as every other LPC creature here.
+See the LPC section above for the full attribution list and the per-layer note.
+
+Reproducible generator URL (paste it in and the exact character loads):
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_blue&head=Human_Female_Elderly_blue&expression=Angry_blue&hair=Xlong_black&legs=Plain_skirt_leather&clothes=Cardigan_leather&shoes=Sandals_black&bauldron=Bauldron_black&nose=Straight_nose_blue&eyes=Eye_Color_red>
+
+Layers used: blue body, blue elderly female head, blue angry expression, black
+extra-long hair, blue straight nose, red eyes, leather cardigan, leather plain
+skirt, black sandals, black bauldron.
+
+The palette is doing a job here rather than only describing her. The county
+never described anything about Black Annis except the colour of her face, so
+the skin, nose and expression are all the same blue and the clothes are all
+leather — and in a room lit by six fires and painted in cold stone she is the
+only WARM thing on the screen. That inversion is deliberate: outside is brown
+and dead, inside is blue and dead, and she is brown in the middle of the blue.
+
+### Cutting method
+
+The standard recipe, unchanged: rows 8-11 of the full export are the walk (up,
+left, down, right, nine frames each) and row 20 is the death sequence, whose
+last frame is the corpse. One crop rectangle is shared by all thirty-six walk
+frames and kept symmetric about the source cell's centre line, x=32, so the body
+cannot drift as the cycle plays or as it turns. She carries no weapon and no
+shield, so nothing pushes the crop wide: it comes out at 38 x 50 per frame, the
+narrowest of the three bosses. The corpse is 38 x 35, cropped to the body.
+Nothing was recoloured, rescaled or redrawn.
+
+### The effigy icon
+
+`item-hair-effigy.png` is **not** LPC and carries no third-party licence at all.
+It is drawn from scratch by `tools/gen_hair_effigy.py`, which regenerates the
+file byte for byte:
+
+```
+python3 tools/gen_hair_effigy.py
+```
+
+The mask trick that produced the redcap's cap and Kárr's helm was no use here:
+the effigy is not a thing the character is wearing, so there is no layer to
+stencil it out of. Thirty-two by thirty-two, the same cell as the other two
+relics, in the mission's own palette — her hair-black over the rust of the
+leathers, with the one cold note kept for the face.
+
+## Dane Hills and Annis' Bower — `public/danehills-terrain.png`, `public/bower-terrain.png`
+
+Both are flattened "Export as Image" pictures out of Tiled, at native tile size:
+`blackannispowieschnia.tmx` (90x90, 2880x2880) and `blackanni-1.tmx` (30x30,
+960x960). The tilesets painted into them (`32x32_DEMO`, `MainLev2.0`,
+`MainLev2.0hhh`, `Water_tafle_4A`) are commercial assets held under the
+project's own licences; the `.tsx` files and source sheets are NOT in this
+repository, only the flattened pictures. Everything standing on top — live
+trees, dead wood, felled wood, tents, skull poles, boulders, campfires — is the
+`prop-*` set already credited above.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in

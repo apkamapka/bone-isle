@@ -64,7 +64,13 @@ export type WorldKey =
   // one he opens: level eight, before the redcap. The sanctum below it breaks
   // the pairing the other two set, because there is nothing down there to
   // kill. The island is the errand; the room at the bottom is the choice.
-  | "calanais" | "tursachan";
+  | "calanais" | "tursachan"
+  // Dane Hills — the heath west of Leicester, the sage's FOURTH ground, and
+  // Annis' Bower cut into the spit at the far end of it. Back to the Liddesdale
+  // and Haramsey pairing: an island to walk and one room at the bottom of it
+  // that closes behind you. The room is a third the size of Kárr's, which is
+  // why there is nothing in it but her.
+  | "daneHills" | "bower";
 
 /** A point in world (pixel) space. */
 export interface Vec {
@@ -287,6 +293,10 @@ export type MonsterKind =
   // …and his second, at about level fifteen. Same rule: not a rank, not kin to
   // anything, one creature out of the Icelandic sagas standing in one room.
   | "draugr"
+  // …and his third, at about level twenty. Leicestershire, this time, and the
+  // shape is the exact inverse of the draugr's: the fastest creature in the
+  // game rather than the slowest, and armour six rather than twenty-six.
+  | "blackAnnis"
   // The armoured goblin rank: the camps' answer to the orc warrior.
   | "goblinLegionary"
   // Etap 18 — the undead heavies. Both are skeletons and both leave the
