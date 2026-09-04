@@ -63,12 +63,11 @@
  * dead wood behind. Nothing hostile stands within eight tiles of it, so it is
  * a breather and not a trap — you can sit down, eat, and then go down.
  *
- * TEMP-ETAP52-OPENHILLS: the descent ships LIVE rather than dormant. Every
- * other mission door is `inactive` and lit by `applyMissionPads` when Chronos
- * hands the errand over, but the level-20 errand is not in the catalogue yet,
- * so a dormant pad here would be a hole nobody can ever fall down. It flips to
- * `inactive: true` the day the mission lands. Same tag, same reason and same
- * shape as TEMP-ETAP47-OPENRIFT on Calanais.
+ * THE DESCENT IS A MISSION DOOR. It ships dormant and `applyMissionPads` puts
+ * it to sleep whenever the echo behind it is not enterable — dark before
+ * Chronos speaks and dark again once the effigy is on his table. It spent one
+ * pass live under a TEMP tag, while the map existed and the errand did not;
+ * the errand landed in the same Etap and the tag is gone.
  *
  *   P pad back to the cellar (2x2)   D down into Annis' Bower
  *   T live oak   V dead tree   v felled wood   R stone   Q q black boulder
@@ -85,9 +84,10 @@ export const DANEHILLS_SPEC: HandmadeSpec = {
   safe: false,
   portals: {
     P: { dest: "cellar", label: "back to the Time Sage's cellar", span: 2, floor: Tile.Dirt },
-    // TEMP-ETAP52-OPENHILLS — see the note above. `inactive: true` goes back
-    // on this the day the mission is written.
-    D: { dest: "bower", label: "down into Annis' Bower", style: "caveMouth", floor: Tile.Dirt },
+    D: {
+      dest: "bower", label: "down into Annis' Bower",
+      style: "caveMouth", floor: Tile.Dirt, inactive: true,
+    },
   },
   // The crags the export draws. Collision only: no wall, no ruin, no minimap
   // masonry — just a square you cannot cross.
@@ -179,7 +179,7 @@ export const DANEHILLS_SPEC: HandmadeSpec = {
     "~~~~~~~~~~~..........Y....xxxxxx......v.............~~~~~....................~~~~~~~~~~~~~",
     "~~~~~~~~~~...V.....q...Q..xxxxxx................v.~~~~~~~~...R...........R..h~~~~~~~~~~~~~",
     "~~~~~~~~~.o.F.............xxxxxx..k.V...........~~~~~~~~~~~~..........R.....~~~~~~~~~~~~~~",
-    "~~~~~~~~...N..o............~~xxx.............~~~~~~~~~~~~~~~~~~~~~.........~~~~~~~~~~~~~~~",
+    "~~~~~~~~.N....o............~~xxx.............~~~~~~~~~~~~~~~~~~~~~.........~~~~~~~~~~~~~~~",
     "~~~~~~~.....D...........v.~~~~..............~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     "~~~~~~~~..V.........k....~~~~~~............~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     "~~~~~~~~~.......~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",

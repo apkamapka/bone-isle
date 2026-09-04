@@ -50,11 +50,10 @@
  * is about. It sits in open floor with walkable ground on all four sides — the
  * fire south of it does not seal, so that neighbour counts.
  *
- * TEMP-ETAP52-OPENHILLS: the way home ships LIVE rather than dormant, for the
- * same reason the descent above does — there is no mission in the catalogue
- * yet to light it, and a player who kills her would otherwise be walled in.
- * It goes back to `inactive: true`, opened by `applyMissionPads` on `complete`,
- * the day the errand is written.
+ * THE WAY HOME is dark until she is down, then lit where she fell, so the
+ * effigy goes straight to Chronos' table without the walk back across the
+ * heath. `applyMissionPads` owns it: a pad out of an echo to the cellar is the
+ * relic road, and it opens on `complete` and on nothing else.
  *
  *   U ladder back up to Dane Hills   W the way home, with the effigy
  *   X Black Annis   $ her hoard
@@ -69,10 +68,10 @@ export const BOWER_SPEC: HandmadeSpec = {
   safe: false,
   portals: {
     U: { dest: "daneHills", label: "back up to the Dane Hills", style: "ladderUp" },
-    // TEMP-ETAP52-OPENHILLS — see the note above. This becomes
-    // `inactive: true` and `applyMissionPads` takes ownership of it the day
-    // the mission lands, which is what makes it the relic road.
-    W: { dest: "cellar", label: "back to Chronos, with the effigy", floor: Tile.Cave },
+    W: {
+      dest: "cellar", label: "back to Chronos, with the effigy",
+      floor: Tile.Cave, inactive: true,
+    },
   },
   scenery: { Y: "skullPole", Q: "boulderA", q: "boulderB" },
   monsters: {

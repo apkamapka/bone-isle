@@ -210,6 +210,30 @@ export const MISSIONS: readonly MissionDef[] = [
     // level — the same proportion the cap paid, scaled up with the curve.
     rewardExp: 2400,
   },
+  {
+    /* The third door, and the fourth link — Chronos numbers DOORS, not links,
+     * so Calanais is unnumbered in his mouth ("before we begin properly") and
+     * this is the third thing he sends anyone through for a relic. Radek's
+     * draft said "Trzecie wrota" and it was right; I queried it and I was
+     * wrong.
+     *
+     * WHY TWENTY. The draugr sits at fifteen and the heath behind this door
+     * fields ranks 18 to 23, which is the first hunting ground in the chain
+     * that a character is expected to WORK rather than cross — four ranks and
+     * thirty-four posts, against Haramsey's one rank and thirty-two. Five
+     * levels is roughly the distance that island covers. */
+    id: "blackannis",
+    title: "The Effigy in the Oak",
+    reqLevel: 20,
+    after: "draugr",
+    ground: "daneHills",
+    echo: "bower",
+    relic: "hairEffigy",
+    // Level 20 needs 17200 to advance. The cap paid 32% of its level, the helm
+    // 26%, and this pays 23% — the same slow taper, which is what keeps the
+    // errands from outrunning the grind they are supposed to punctuate.
+    rewardExp: 4000,
+  },
 ];
 
 /** The mission whose echo this world is, if any. Used where a world key is all

@@ -14306,18 +14306,37 @@ async function main(): Promise<void> {
       const posts = echo.mobPosts ?? [];
       const boss = posts.find((q) => (MD46[q.kind].loot ?? []).some((l) => l.kind === m.relic));
       const mook = posts.find((q) => !(MD46[q.kind].loot ?? []).some((l) => l.kind === m.relic));
-      ok(boss !== undefined && mook !== undefined,
-        `${m.id}: the echo has a boss and something else to kill on the way in`);
-      if (!boss || !mook) continue;
+      ok(boss !== undefined, `${m.id}: the echo has a boss in it`);
+      if (!boss) continue;
 
-      CB46.killMonster(echo, p, stand46(echo, mook.kind, mook.tx, mook.ty));
-      ok(MW46.stageOf(m.id, p.level) === "active",
-        `${m.id}: killing a ${mook.kind} on the way in does not finish the errand`);
-      ok(IW46.bagCount(p.bag, m.relic) === 0 && !echo.corpses.some(
-        (c) => (c.items ?? []).some((st) => st && st.kind === m.relic)),
-        `…${m.id}: and it leaves no ${IW46.ITEMS[m.relic].name} behind it`);
-      ok(!MW46.relicRoadOpen(m.echo, p.level),
-        `…${m.id}: and the way home stays shut, because nothing has been done yet`);
+      /* THE MOOK HALF IS CONDITIONAL, and the condition is itself the
+       * assertion. What this block is really about is that ONLY the boss's
+       * death fires the relic gate, and there are two ways an echo can satisfy
+       * that. Hermitage and the howe satisfy it by having something else in
+       * them whose death provably does nothing — so kill one and check. The
+       * bower satisfies it by having NOTHING else in them at all, which is the
+       * stronger form of the same guarantee and is a design decision rather
+       * than an empty room: the folklore is explicit that Black Annis ate what
+       * she took and wore the skins, so nothing she caught ever walked again.
+       *
+       * Written as an either/or so that a boss-only echo cannot quietly skip
+       * the check, and so that an echo which GROWS a mook later gets the kill
+       * test the day it does. */
+      if (mook) {
+        CB46.killMonster(echo, p, stand46(echo, mook.kind, mook.tx, mook.ty));
+        ok(MW46.stageOf(m.id, p.level) === "active",
+          `${m.id}: killing a ${mook.kind} on the way in does not finish the errand`);
+        ok(IW46.bagCount(p.bag, m.relic) === 0 && !echo.corpses.some(
+          (c) => (c.items ?? []).some((st) => st && st.kind === m.relic)),
+          `…${m.id}: and it leaves no ${IW46.ITEMS[m.relic].name} behind it`);
+        ok(!MW46.relicRoadOpen(m.echo, p.level),
+          `…${m.id}: and the way home stays shut, because nothing has been done yet`);
+      } else {
+        ok(posts.length === 1,
+          `${m.id}: the echo holds the boss and nothing else — no other death can fire the gate`);
+        ok(!MW46.relicRoadOpen(m.echo, p.level),
+          `…${m.id}: and the way home is shut on arrival`);
+      }
 
       /* The boss, on the other hand, pays every time and pays on the body. */
       CB46.killMonster(echo, p, stand46(echo, boss.kind, boss.tx, boss.ty));
@@ -16177,11 +16196,11 @@ async function main(): Promise<void> {
     ok(holeTile.tx === 12 && holeTile.ty === 80,
       `the way down is where the export's object layer put it (${holeTile.tx},${holeTile.ty})`);
     const reach48 = flood(hills, holeTile.tx, holeTile.ty);
-    /* 3522 squares of land in the trace, 186 of them sealed by what stands on
+    /* 3522 squares of land in the trace, 185 of them sealed by what stands on
      * them — trees, dead wood, stone, boulders, tents and totems. This is the
      * count AFTER the scatter, which is the number that matters: it is what a
      * creature can actually walk. */
-    ok(walkCount(hills) === 3336, `3336 open squares on the heath (${walkCount(hills)})`);
+    ok(walkCount(hills) === 3337, `3337 open squares on the heath (${walkCount(hills)})`);
     ok(reach48.size === walkCount(hills),
       `…and every one of them is reachable from the hole — the scatter closed no pockets (${reach48.size})`);
     const crossing = reach48.get(`${padTile.tx},${padTile.ty}`) ?? -1;
@@ -16294,15 +16313,63 @@ async function main(): Promise<void> {
     ok(IT48.hairEffigy.weight < IT48.bloodCap.weight && IT48.hairEffigy.weight < IT48.graveHelm.weight,
       `…and it is the lightest of the three relics (${IT48.hairEffigy.weight})`);
 
-    /* TEMP-ETAP52-OPENHILLS. Both doors ship live because the errand is not in
-     * the catalogue yet. This is the tripwire: write the mission and these two
-     * go red, which is the reminder to put `inactive: true` back on them and
-     * hand them to `applyMissionPads`. */
+    /* --- SCENERY ART vs EVERYTHING UNDER IT ---------------------------------
+     * A general rule, pinned here because this is where it was broken. A
+     * scenery object seals `BLOCK` but PAINTS `FOOTPRINT`, and the two are not
+     * the same rectangle: a tent seals one row and covers two. So collision
+     * can be perfectly correct while the art sits on top of something that
+     * matters, which is exactly what happened — the camp tent at the mouth of
+     * the bower was drawn over the cave mouth, and every reachability check in
+     * this block passed anyway because the square underneath was still
+     * walkable. Radek saw it on screen; nothing here could.
+     *
+     * Checked across EVERY map rather than just this one, because the mistake
+     * has nothing to do with the Dane Hills — it is a property of how props
+     * are placed, and the other twenty-one maps happen to be clean today. */
+    const scen = await import("../src/gfx/sceneryArt.ts");
+    let buriedDoor = "", buriedMob = "", stacked = "";
+    for (const [wk, wd] of Object.entries(w48)) {
+      const cover = new Map<string, string>();
+      for (const sc of wd.scenery ?? []) {
+        const f = scen.FOOTPRINT[sc.kind];
+        for (let dy = 0; dy < f.h; dy++) for (let dx = 0; dx < f.w; dx++) {
+          const k = `${sc.tx + dx},${sc.ty + dy}`;
+          if (cover.has(k)) stacked = `${wk}: ${sc.kind} over ${cover.get(k)}`;
+          cover.set(k, `${sc.kind}@${sc.tx},${sc.ty}`);
+        }
+      }
+      for (const pt of wd.portals)
+        if (cover.has(`${Math.floor(pt.x / 32)},${Math.floor(pt.y / 32)}`))
+          buriedDoor = `${wk}: ${pt.dest} under ${cover.get(`${Math.floor(pt.x / 32)},${Math.floor(pt.y / 32)}`)}`;
+      for (const mb of wd.mobPosts ?? [])
+        if (cover.has(`${mb.tx},${mb.ty}`)) buriedMob = `${wk}: ${mb.kind} inside ${cover.get(`${mb.tx},${mb.ty}`)}`;
+    }
+    ok(buriedDoor === "", `no prop is painted over a door, on any map${buriedDoor && " — " + buriedDoor}`);
+    ok(buriedMob === "", `no creature stands inside a prop's artwork${buriedMob && " — " + buriedMob}`);
+    ok(stacked === "", `no two props are painted on the same square${stacked && " — " + stacked}`);
+
+    /* The errand, and the doors it owns. Both shipped live for one pass under
+     * TEMP-ETAP52-OPENHILLS, while the maps existed and the mission did not;
+     * the tripwire fired the moment the catalogue entry landed, which is what
+     * it was for. Now the opposite is pinned: the mission exists and neither
+     * door opens by itself. */
     const { MISSIONS: MS48 } = await import("../src/systems/missions.ts");
-    ok(!MS48.some((m) => m.echo === "bower"),
-      "TEMP-ETAP52-OPENHILLS: no mission owns the bower yet");
-    ok(!holeTile.inactive,
-      "…so the way down ships live, and goes dormant the day one does");
+    const errand = MS48.find((m) => m.echo === "bower");
+    ok(errand?.ground === "daneHills" && errand?.relic === "hairEffigy" && errand?.reqLevel === 20,
+      `the heath and the bower belong to one level-20 errand (${errand?.id})`);
+    ok(errand?.after === "draugr" && MS48[MS48.length - 1].id === errand?.id,
+      "…the fourth link in the chain, behind Kárr");
+    ok(!!holePortal.inactive && !!bower.portals.find((pt) => pt.dest === "cellar")?.inactive,
+      "…and neither the way down nor the way home opens without Chronos");
+    /* He numbers DOORS, not links: Calanais is the gift and carries no number,
+     * so this is the third. Pinned in three languages because the phrase is
+     * the one thing in the offer that a fifth errand could silently make
+     * wrong. */
+    const SP52 = await import("../src/text/speech.ts");
+    ok(/\bTrzecie\b/.test(SP52.t("sage.offer.blackannis", "pl"))
+      && /\bthird\b/.test(SP52.t("sage.offer.blackannis", "en"))
+      && /\btercera\b/.test(SP52.t("sage.offer.blackannis", "es")),
+      "…and Chronos calls it the third door, because he counts doors and not errands");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

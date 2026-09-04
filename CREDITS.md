@@ -1569,6 +1569,32 @@ repository, only the flattened pictures. Everything standing on top — live
 trees, dead wood, felled wood, tents, skull poles, boulders, campfires — is the
 `prop-*` set already credited above.
 
+## Black Annis — the folklore behind `lore.blackannis`
+
+The chronicle is written for the game, not quoted from anywhere, but the facts
+in it are all attested and worth being able to trace. The sources used:
+
+- the cave in the Dane Hills, the pollard oak growing from a cleft above it,
+  the claim that she scooped the bower out of the sandstone with her nails, and
+  the small windows on the cottages around Leicester — Katharine Briggs,
+  *A Dictionary of British Folk-Tales*, and the correspondence in the *Leicester
+  Chronicle* of 1874;
+- her first appearance in print — John Heyrick's poem, 1794, quoted in John
+  Nichols' *History and Antiquities of the County of Leicester*, which is where
+  the "livid blue" face and the talons come from and why `lore.title.blackannis`
+  carries that date;
+- the Easter Monday drag hunt from her bower to the mayor's door, with a dead
+  cat soaked in aniseed, running from 1668 to 1842;
+- the two competing origins — Anu/Danu by way of T. C. Lethbridge's
+  *Gogmagog: The Buried Gods*, and Agnes Scott the anchoress by way of Ronald
+  Hutton's *The Triumph of the Moon*, which rejects the goddess reading;
+- the locals filling the cave in during the nineteenth century, which is the
+  last beat of the page and the reason `resist.earth` is her weakness.
+
+No text is reproduced from any of them. The page is told in the game's own
+beats and the Polish is the primary, with English and Spanish rebuilt to the
+same beat count rather than translated line by line.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in

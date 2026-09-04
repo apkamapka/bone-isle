@@ -324,6 +324,118 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Sólo que esta vez, no dejes que se quede con aquello a lo que "
       + "fuiste.",
   },
+  /* Etap 52 — the third door. THE POLISH IS RADEK'S OWN and is copied in
+   * unchanged, beat for beat; English and Spanish are rebuilt to the same beat
+   * count rather than translated line by line, which is the house rule.
+   *
+   * "TRZECIE WROTA" IS CORRECT and I queried it wrongly. Chronos numbers
+   * DOORS, not links in the chain: Calanais is the gift errand and he opens it
+   * with "before we begin properly" rather than a number, so the redcap is the
+   * first door, Kárr the second, and this is the third — even though it is the
+   * fourth mission.
+   *
+   * THE HAND-IN LINE BECAME LITERAL. "For hundreds of years it was enough that
+   * people feared her more than she feared them" was written before the relic
+   * was decided, and the relic turned it from a moral into a fact: what the
+   * player carries back is the effigy she kept in the oak so the county could
+   * go on seeing her on the nights she was asleep. Nothing in the beat had to
+   * change for that to land, which is why it did not. */
+  "sage.offer.blackannis": {
+    en: "The third door.\n\n"
+      + "Leicestershire. There is a cave under an old oak there that the locals have long since stopped calling by name.\n\n"
+      + "They say Black Annis lives in it.\n\n"
+      + "They also say she was a woman once.\n\n"
+      + "One of those two claims is probably true.",
+    pl: "Trzecie wrota.\n\n"
+      + "Leicestershire. Jest tam jaskinia pod starym dębem, której miejscowi od dawna nie nazywają po imieniu.\n\n"
+      + "Mówią, że mieszka w niej Black Annis.\n\n"
+      + "Mówią też, że kiedyś była kobietą.\n\n"
+      + "Jedno z tych dwóch twierdzeń jest prawdopodobnie prawdą.",
+    es: "La tercera puerta.\n\n"
+      + "Leicestershire. Hay allí una cueva bajo un roble viejo que los vecinos hace mucho que no llaman por su nombre.\n\n"
+      + "Dicen que en ella vive Black Annis.\n\n"
+      + "Dicen también que alguna vez fue mujer.\n\n"
+      + "Una de esas dos afirmaciones es probablemente cierta.",
+  },
+  "sage.accept.blackannis": {
+    en: "Once, when children went missing from the villages around, people barred their doors before sundown.\n\n"
+      + "It did not help.\n\n"
+      + "Black Annis came out at night and took whoever she found outside.\n\n"
+      + "Then they began leaving food under the oak.\n\n"
+      + "That worked.\n\n"
+      + "For a while.\n\n"
+      + "Go down into her cave and end the story.",
+    pl: "Dawniej, kiedy dzieci znikały z okolicznych wiosek, ludzie zamykali drzwi przed zachodem słońca.\n\n"
+      + "Nie pomagało.\n\n"
+      + "Black Annis wychodziła nocą i zabierała tych, których znalazła poza domem.\n\n"
+      + "Potem zaczęli zostawiać jedzenie pod dębem.\n\n"
+      + "Zadziałało.\n\n"
+      + "Przez jakiś czas.\n\n"
+      + "Zejdź do jej jaskini i zakończ tę historię.",
+    es: "Antes, cuando los niños desaparecían de las aldeas cercanas, la gente atrancaba las puertas antes del ocaso.\n\n"
+      + "No servía de nada.\n\n"
+      + "Black Annis salía de noche y se llevaba a quien encontrara fuera de casa.\n\n"
+      + "Luego empezaron a dejar comida bajo el roble.\n\n"
+      + "Eso funcionó.\n\n"
+      + "Durante un tiempo.\n\n"
+      + "Baja a su cueva y termina esta historia.",
+  },
+  "sage.decline.blackannis": {
+    en: "Sensible.\n\n"
+      + "The locals did the same for years.\n\n"
+      + "They barred the door and hoped she would pick somebody else this time.",
+    pl: "Rozsądnie.\n\n"
+      + "Miejscowi przez lata robili to samo.\n\n"
+      + "Zamykali drzwi i liczyli, że tym razem wybierze kogoś innego.",
+    es: "Razonable.\n\n"
+      + "Los vecinos hicieron lo mismo durante años.\n\n"
+      + "Atrancaban la puerta y confiaban en que esta vez eligiera a otro.",
+  },
+  "sage.remind.blackannis": {
+    en: "The old oak. The cave beneath it.\n\n"
+      + "If you find tracks leading in, follow them.\n\n"
+      + "If you find tracks leading out...\n\n"
+      + "make sure there is only one set.",
+    pl: "Stary dąb. Jaskinia pod nim.\n\n"
+      + "Jeśli znajdziesz ślady prowadzące do środka, idź za nimi.\n\n"
+      + "Jeśli znajdziesz ślady prowadzące na zewnątrz...\n\n"
+      + "upewnij się, że są tylko jedne.",
+    es: "El roble viejo. La cueva debajo.\n\n"
+      + "Si encuentras huellas que entran, síguelas.\n\n"
+      + "Si encuentras huellas que salen...\n\n"
+      + "asegúrate de que sean unas solas.",
+  },
+  "sage.handIn.blackannis": {
+    en: "So she could be quieted after all.\n\n"
+      + "For hundreds of years it was enough that people feared her more than she feared them.\n\n"
+      + "Now the fear is on the other side of the door.\n\n"
+      + "Good.\n\n"
+      + "That is one story fewer to tell.",
+    pl: "Więc jednak można było ją uciszyć.\n\n"
+      + "Przez setki lat wystarczało, że ludzie bali się jej bardziej, niż ona bała się ich.\n\n"
+      + "Teraz strach został po drugiej stronie wrót.\n\n"
+      + "Dobrze.\n\n"
+      + "To jedna historia mniej do opowiedzenia.",
+    es: "Así que sí se la podía acallar.\n\n"
+      + "Durante siglos bastó con que la gente le temiera más de lo que ella les temía.\n\n"
+      + "Ahora el miedo se quedó al otro lado de la puerta.\n\n"
+      + "Bien.\n\n"
+      + "Una historia menos que contar.",
+  },
+  "sage.empty.blackannis": {
+    en: "You came back.\n\n"
+      + "Black Annis did not.\n\n"
+      + "That is not how this was meant to go.\n\n"
+      + "The door is still open. Go back and finish what you started.",
+    pl: "Wróciłeś.\n\n"
+      + "A Black Annis nie.\n\n"
+      + "Nie tak miało być.\n\n"
+      + "Wrota wciąż są otwarte. Wróć tam i dokończ, co zacząłeś.",
+    es: "Has vuelto.\n\n"
+      + "Black Annis no.\n\n"
+      + "No es así como debía terminar.\n\n"
+      + "La puerta sigue abierta. Vuelve y acaba lo que empezaste.",
+  },
 
   /* --- TEMP-ETAP45-TESTMENU ---------------------------------------------
    * The two strings behind the "start over" answer. They are HERE rather
@@ -597,6 +709,92 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Lo que un draugr mata no siempre sigue muerto.\n\n"
       + "Si entras en su cámara, no des por hecho que vencer a Kárr te deje "
       + "solo en ella.",
+  },
+  "lore.title.blackannis": {
+    en: "Dane Hills — 1794",
+    pl: "Dane Hills — 1794",
+    es: "Dane Hills — 1794",
+  },
+  /* The chronicle. Same build as Kárr's: a page told in beats, ending in the
+   * three things it promises about the fight — and all three are stats in
+   * MONSTER_DEFS rather than colour, so the page cannot quietly go out of date
+   * without the smoke suite saying so. Speed level with the redcap, no iron on
+   * her, and earth as the answer.
+   *
+   * The last beat is the one the folklore actually hands over: she scooped the
+   * bower out of sandstone with her nails and it was the locals filling that
+   * same rock back in that ended her, not a hero. That is why `resist.earth`
+   * is 1.5 and why it is hers rather than a third helping of fire. */
+  "lore.blackannis": {
+    en: "The Dane Hills lie two miles west of Leicester.\n\n"
+      + "It was waste ground once: low sandstone rises, gorse, and one cave.\n\n"
+      + "They called it the Bower.\n\n"
+      + "A pollard oak grew out of a cleft in the rock above the mouth of it.\n\n"
+      + "They said she sat in its branches and waited.\n\n"
+      + "That she had scratched the cave out with her own nails.\n\n"
+      + "That her howling carried for miles.\n\n"
+      + "And that this was good news, because it bought you time to bar the door.\n\n"
+      + "The cottages around there were built with very small windows.\n\n"
+      + "That part is true and can still be checked.\n\n"
+      + "The reason cannot.\n\n"
+      + "Every Easter Monday the mayor of Leicester rode out into the fields.\n\n"
+      + "They dragged a dead cat soaked in aniseed from her cave to his door.\n\n"
+      + "They did it for a hundred and seventy years and nobody wrote down why.\n\n"
+      + "There are two stories about who she was.\n\n"
+      + "In the first she is what is left of a Celtic goddess, and the cave was a place of worship before it was a place of fear.\n\n"
+      + "In the second her name was Agnes Scott, an anchoress, who really did live in a cave in these hills.\n\n"
+      + "A hundred years later all anyone remembered was that she sat there.\n\n"
+      + "In the end they filled the cave in. Not to kill her — to stop people talking.\n\n"
+      + "Three things.\n\n"
+      + "She is fast. As fast as the one in the red cap, and nobody has outrun him.\n\n"
+      + "She wears no iron, so every heavy blow counts for all of itself.\n\n"
+      + "And she gives way to stone. She dug that sandstone out with her nails, and stone is what covered her.",
+    pl: "Dane Hills leżą dwie mile na zachód od Leicester.\n\n"
+      + "Kiedyś było tam pustkowie: niskie wzgórza z piaskowca, janowiec i jedna jaskinia.\n\n"
+      + "Nazywali ją Bower.\n\n"
+      + "Nad wejściem, ze szczeliny w skale, rósł ogławiany dąb.\n\n"
+      + "Mówiono, że siedziała w jego konarach i czekała.\n\n"
+      + "Że jaskinię wydrapała własnymi paznokciami.\n\n"
+      + "Że jej wycie słychać było z wielu mil.\n\n"
+      + "I że to dobra wiadomość, bo daje czas na zaryglowanie drzwi.\n\n"
+      + "Chaty w tej okolicy budowano z bardzo małymi oknami.\n\n"
+      + "To akurat prawda i można sprawdzić do dziś.\n\n"
+      + "Powodu sprawdzić się nie da.\n\n"
+      + "Co roku w Wielkanocny Poniedziałek burmistrz Leicester wyjeżdżał w pole.\n\n"
+      + "Ciągnęli martwego kota natartego anyżem od jej groty pod jego drzwi.\n\n"
+      + "Robili to przez sto siedemdziesiąt lat i nikt nie zapisał, po co.\n\n"
+      + "Są dwie opowieści o tym, kim była.\n\n"
+      + "W pierwszej jest resztką celtyckiej bogini, a grota była miejscem czci, zanim stała się miejscem strachu.\n\n"
+      + "W drugiej nazywała się Agnes Scott, była pustelnicą i naprawdę mieszkała w jaskini w tych wzgórzach.\n\n"
+      + "Sto lat później pamiętano już tylko, że siedziała.\n\n"
+      + "W końcu zasypali grotę ziemią. Nie po to, żeby ją zabić — żeby przestano o niej mówić.\n\n"
+      + "Trzy rzeczy.\n\n"
+      + "Jest szybka. Tak szybka jak ten w czerwonej czapce, a jemu nikt nie uciekł.\n\n"
+      + "Nie ma na sobie żelaza, więc każde ciężkie uderzenie liczy się całe.\n\n"
+      + "I ustępuje kamieniowi. Przekopała się przez ten piaskowiec paznokciami, a to on ją przykrył.",
+    es: "Las Dane Hills están dos millas al oeste de Leicester.\n\n"
+      + "Antes era un yermo: lomas bajas de arenisca, aulaga y una sola cueva.\n\n"
+      + "La llamaban el Bower.\n\n"
+      + "Sobre la boca crecía un roble desmochado, salido de una grieta de la roca.\n\n"
+      + "Decían que se sentaba en sus ramas y esperaba.\n\n"
+      + "Que había excavado la cueva con sus propias uñas.\n\n"
+      + "Que su aullido se oía a millas.\n\n"
+      + "Y que era una buena noticia, porque daba tiempo a atrancar la puerta.\n\n"
+      + "Las casas de por allí se construían con ventanas muy pequeñas.\n\n"
+      + "Eso sí es cierto y aún puede comprobarse.\n\n"
+      + "El motivo no.\n\n"
+      + "Cada Lunes de Pascua el alcalde de Leicester salía a caballo al campo.\n\n"
+      + "Arrastraban un gato muerto empapado en anís desde su cueva hasta la puerta de él.\n\n"
+      + "Lo hicieron ciento setenta años y nadie anotó para qué.\n\n"
+      + "Hay dos historias sobre quién fue.\n\n"
+      + "En la primera es lo que queda de una diosa celta, y la cueva fue lugar de culto antes de ser lugar de miedo.\n\n"
+      + "En la segunda se llamaba Agnes Scott, anacoreta, que de verdad vivió en una cueva de estas colinas.\n\n"
+      + "Cien años después solo se recordaba que estaba allí sentada.\n\n"
+      + "Al final rellenaron la cueva. No para matarla — para que dejaran de hablar.\n\n"
+      + "Tres cosas.\n\n"
+      + "Es rápida. Tan rápida como el de la gorra roja, y a él nadie lo ha dejado atrás.\n\n"
+      + "No lleva hierro, así que cada golpe pesado cuenta entero.\n\n"
+      + "Y cede ante la piedra. Excavó esa arenisca con las uñas, y fue la piedra la que la tapó.",
   },
 };
 
@@ -959,6 +1157,16 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Chronosowi.",
     es: "Vence a Kárr el Viejo en el túmulo bajo Haramsey y lleva su yelmo a "
       + "Chronos.",
+  },
+  "mission.title.blackannis": {
+    en: "The Effigy in the Oak",
+    pl: "Kukła w dębie",
+    es: "El muñeco en el roble",
+  },
+  "mission.goal.blackannis": {
+    en: "Find Black Annis' cave under the Dane Hills, beat the hag, and bring the effigy to Chronos.",
+    pl: "Odnajdź jaskinię Black Annis pod Dane Hills, pokonaj wiedźmę i przynieś kukłę Chronosowi.",
+    es: "Encuentra la cueva de Black Annis bajo las Dane Hills, vence a la bruja y lleva el muñeco a Chronos.",
   },
   /* The second half of every errand, and the half nothing on screen used to
    * say. The goal line is written for a player who has not been down yet
