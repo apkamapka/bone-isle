@@ -16141,7 +16141,7 @@ async function main(): Promise<void> {
 
   console.log("Etap 52 — the Dane Hills, Annis' Bower, and Black Annis:");
   {
-    const { buildWorlds: bw48 } = await import("../src/game.ts");
+    const { buildWorlds: bw48, applyMissionPads: applyMissionPads48 } = await import("../src/game.ts");
     const { CHEST_PRIZES: CP48 } = await import("../src/game.ts");
     const { MONSTER_DEFS: MD48 } = await import("../src/entities/monsters.ts");
     const { ITEMS: IT48 } = await import("../src/items.ts");
@@ -16196,11 +16196,11 @@ async function main(): Promise<void> {
     ok(holeTile.tx === 12 && holeTile.ty === 80,
       `the way down is where the export's object layer put it (${holeTile.tx},${holeTile.ty})`);
     const reach48 = flood(hills, holeTile.tx, holeTile.ty);
-    /* 3522 squares of land in the trace, 185 of them sealed by what stands on
+    /* 3522 squares of land in the trace, 186 of them sealed by what stands on
      * them — trees, dead wood, stone, boulders, tents and totems. This is the
      * count AFTER the scatter, which is the number that matters: it is what a
      * creature can actually walk. */
-    ok(walkCount(hills) === 3337, `3337 open squares on the heath (${walkCount(hills)})`);
+    ok(walkCount(hills) === 3336, `3336 open squares on the heath (${walkCount(hills)})`);
     ok(reach48.size === walkCount(hills),
       `…and every one of them is reachable from the hole — the scatter closed no pockets (${reach48.size})`);
     const crossing = reach48.get(`${padTile.tx},${padTile.ty}`) ?? -1;
@@ -16253,16 +16253,31 @@ async function main(): Promise<void> {
      * heath the mission ground loses the one thing that separates it. */
     ok(hills.trees.length > 30, `the heath carries live oak (${hills.trees.length})`);
     ok(w48.haramsey.trees.length === 0, "…while the barrow coast still carries none");
+    /* THE OLD OAK. Every account of the bower puts a pollard oak over the
+     * mouth of it — she is supposed to have crouched in the branches — and
+     * Chronos' own briefing says "a cave under an old oak". One live tree
+     * stands directly north of the hole, and it is the ONLY live wood in the
+     * southern half of the island, so it reads as that oak rather than as
+     * scenery. Its crown paints the square above its own, which is why the
+     * camp fire had to move a square west to get out from under it. */
+    const oak = hills.trees.filter((tr) =>
+      (tr.tx - holeTile.tx) ** 2 + (tr.ty - holeTile.ty) ** 2 <= 4);
+    ok(oak.length === 1, `one oak stands over the cave mouth (${oak.length})`);
+    /* Measured straight-line rather than by walking, because a tree SEALS its
+     * own square — it is not in the reachability map at all, so the BFS that
+     * ranks everything else on this island cannot see one. */
+    const southernWood = hills.trees.filter((tr) =>
+      (tr.tx - holeTile.tx) ** 2 + (tr.ty - holeTile.ty) ** 2 <= 30 * 30);
+    ok(southernWood.length === 1,
+      `…and it is the only living tree at that end of the heath (${southernWood.length})`);
 
     /* --- the room at the bottom --------------------------------------------- */
-    /* 224 squares in the trace and 203 once the room is dressed. The gap is
-     * bigger than the glyph count because a boulder is a 2x1 sprite and seals
-     * BOTH squares — fourteen tiles across eight boulders, plus six poles and
-     * the chest. That is the whole point of them: the export handed over a
-     * clean fourteen-by-sixteen rectangle, and she is supposed to have dug
-     * this out with her nails. Straight walls are what the boulders are here
-     * to spoil. */
-    ok(walkCount(bower) === 203, `the bower is 203 open squares (${walkCount(bower)})`);
+    /* 224 squares in the trace and 209 once the room is dressed — four
+     * boulders at two squares apiece, six poles and the chest. Eight boulders
+     * shipped first and they sat in the corners and against the long walls,
+     * where they read as masonry rather than as anything in the room. Half as
+     * many, two clear squares off every wall, is the correction. */
+    ok(walkCount(bower) === 209, `the bower is 209 open squares (${walkCount(bower)})`);
     const annisPost = (bower.mobPosts ?? [])[0]!;
     const bowerReach = flood(bower, annisPost.tx, annisPost.ty);
     ok(bowerReach.size === walkCount(bower),
@@ -16365,6 +16380,57 @@ async function main(): Promise<void> {
      * so this is the third. Pinned in three languages because the phrase is
      * the one thing in the offer that a fifth errand could silently make
      * wrong. */
+    /* --- THE BACK DOOR PAYS NOTHING, which is what Radek hit ------------------
+     * Reported as "I killed her and the way home did not open". It is not a
+     * fault in the wiring — the wiring is the redcap's and Kárr's, checked
+     * mechanism by mechanism — it is what happens when you reach the room by
+     * `/tp` instead of by the errand.
+     *
+     * `wantsRelic` asks the stage, and `/tp` is documented not to touch a
+     * stage, a pad, a relic or a chest. So a character who drops into the
+     * bower with the errand at `available` kills her, gets no relic, moves no
+     * stage, and stands on a way home that is still correctly dark. She then
+     * respawns like anything else, which is why she was on her feet again in
+     * the screenshot.
+     *
+     * Pinned so that it stays a known property rather than a rediscovered
+     * bug: the kill must be worth nothing without the errand, and worth
+     * everything with it, on the same creature in the same room. */
+    {
+      const p52 = createPlayer({ x: 0, y: 0 });
+      p52.level = 20;
+      const MS = await import("../src/systems/missions.ts");
+      const CB52 = await import("../src/systems/combat.ts");
+      const { spawnAtPost: spawn52 } = await import("../src/entities/monsters.ts");
+      const post52 = bower.mobPosts![0];
+
+      MS.resetMissions();
+      for (const id of ["calanais", "redcap", "draugr"]) MS.setStage(id, "closed");
+      ok(MS.stageOf("blackannis", 20) === "available",
+        "with Kárr closed and at level, Chronos has the next one to hand out");
+      ok(MS.offeredMission(20)?.id === "blackannis", "…and it is the one he offers");
+
+      spawn52(bower, "blackAnnis", post52.tx, post52.ty);
+      CB52.killMonster(bower, p52, bower.monsters[bower.monsters.length - 1]);
+      ok(MS.stageOf("blackannis", 20) === "available",
+        "killing her without the errand moves nothing");
+      ok(!MS.relicRoadOpen("bower", 20), "…and the way home stays shut, correctly");
+      ok(!bower.corpses.some((c) => (c.items ?? []).some((st) => st && st.kind === "hairEffigy")),
+        "…and she parts with no effigy for a walk-in");
+      bower.corpses.length = 0;
+      bower.monsters.length = 0;
+
+      MS.setStage("blackannis", "active");
+      spawn52(bower, "blackAnnis", post52.tx, post52.ty);
+      CB52.killMonster(bower, p52, bower.monsters[bower.monsters.length - 1]);
+      ok(MS.stageOf("blackannis", 20) === "complete", "the same kill with the errand finishes it");
+      ok(MS.relicRoadOpen("bower", 20), "…and lights the way home");
+      MS.resetMissions();
+      bower.corpses.length = 0;
+      bower.monsters.length = 0;
+      applyMissionPads48(w48, 20);
+    }
+
     const SP52 = await import("../src/text/speech.ts");
     ok(/\bTrzecie\b/.test(SP52.t("sage.offer.blackannis", "pl"))
       && /\bthird\b/.test(SP52.t("sage.offer.blackannis", "en"))

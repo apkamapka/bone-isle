@@ -540,13 +540,20 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  a player that inverts too: flat reduction is rolled per hit, so where
    *  Kárr punished light weapons, she punishes going in unarmoured.
    *
-   *  FOURTEEN HUNDRED HIT POINTS, between the redcap's six and Kárr's
-   *  eighteen. Not doubled the way those two were after Radek walked them,
-   *  because length is the wrong lever here: Kárr is long because he cannot
-   *  catch you and the room is full of his victims, and this room is empty
-   *  and she is faster than you are. A long fight against something you can
-   *  never disengage from is a different thing from a long fight you choose
-   *  to have. Walk it before doubling it.
+   *  TWENTY-TWO HUNDRED HIT POINTS, and this is the corrected number. She
+   *  shipped at fourteen hundred on the argument that length is the wrong
+   *  lever for something you cannot disengage from — under Kárr's eighteen,
+   *  on purpose. Radek walked her and the argument lost: a boss five levels
+   *  ABOVE the last one that dies faster than it reads as a step backwards,
+   *  whatever the reasoning behind it. So she is now over Kárr on both the
+   *  levers that make a fight feel heavy, hit points and damage, and the
+   *  inversion he was built around lives entirely in speed and armour where
+   *  it belongs.
+   *
+   *  The budget still holds at these numbers: twenty-two hundred reads as
+   *  tier 96, and forty-two to a hundred and eight over a two-second swing is
+   *  a shade over half that tier's damage allowance — the same fraction Kárr
+   *  sits at, which is what a named boss is supposed to look like.
    *
    *  THE RESISTANCES ARE THE FOLKLORE, and they claim the one element the
    *  first two bosses left alone:
@@ -571,8 +578,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     // Heyrick's 1794 poem is the first time she reaches print.
     spr: SPR.humanFoe,
     name: "Black Annis",
-    hp: 1400, dmg: [30, 78], speed: 79, atkRate: 2.0, exp: 1000,
-    gold: [35, 70], danger: 0.5, armor: 6,
+    hp: 2200, dmg: [42, 108], speed: 79, atkRate: 2.0, exp: 1300,
+    gold: [50, 95], danger: 0.5, armor: 6,
     resist: { ice: 0.4, shadow: 0.5, earth: 1.5 },
     loot: [
       // The relic. Flat 100%, the same rule as the cap and the helm.

@@ -38,11 +38,16 @@
  * THE BOULDERS ARE THERE TO BREAK THE RECTANGLE. She dug this out with her
  * nails — every account says so, and the poem is specific that the rooms were
  * "scooped with her claws beneath the flinty ground". A room with four square
- * corners and four straight walls reads as something BUILT. Ten boulders sit
- * in the corners and against the long walls, which costs the floor ten squares
- * out of two hundred and twenty-four and buys back the one thing the traced
- * rectangle could not say about itself. Six skull poles down the sides stand
- * in for what the accounts call the drying racks.
+ * corners and four straight walls reads as something BUILT.
+ *
+ * THEY DO NOT TOUCH THE WALLS, and that is a correction. The first pass put
+ * eight of them in the corners and hard against the long sides, where they
+ * read as part of the rock rather than as anything standing in the room —
+ * Radek could see it on screen the moment he walked in. Four now, pulled two
+ * clear squares off both walls, where a boulder is an obstacle you go round
+ * instead of a bump in the masonry. Six skull poles down the sides stand in
+ * for what the accounts call the drying racks, and they are off the walls for
+ * the same reason.
  *
  * THE HOARD IS A CHEST, NOT A POCKET, exactly as in the howe: she respawns and
  * a chest does not, so routing the payday through her loot table would turn a
@@ -84,22 +89,22 @@ export const BOWER_SPEC: HandmadeSpec = {
     "##############################",
     "##############################",
     "##############################",
-    "########Q============q########",
+    "########==============########",
     "########======U=======########",
     "########==F========F==########",
-    "########=Y==========Y=########",
+    "########==Y========Y==########",
     "########=====o==o=====########",
-    "########=q==========Q=########",
-    "########==o========o==########",
-    "########=Y==o====o==Y=########",
+    "########==Q=======q===########",
     "########====o====o====########",
-    "########=Q==========q=########",
-    "########==o========o==########",
-    "########=Y===o==o===Y=########",
-    "########===F======F===########",
+    "########==Y========Y==########",
+    "########=====o==o=====########",
+    "########==q=======Q===########",
+    "########====o====o====########",
+    "########==Y========Y==########",
+    "########==F========F==########",
     "########======X=======########",
     "########===$======W===########",
-    "########q==F======F==Q########",
+    "########==F========F==########",
     "##############################",
     "##############################",
     "##############################",
