@@ -70,7 +70,13 @@ export type WorldKey =
   // and Haramsey pairing: an island to walk and one room at the bottom of it
   // that closes behind you. The room is a third the size of Kárr's, which is
   // why there is nothing in it but her.
-  | "daneHills" | "bower";
+  | "daneHills" | "bower"
+  // Crete — the sage's FIFTH ground, and the Labyrinth cut into its south-west
+  // corner. The pairing is the same and the echo is not: every other one is a
+  // room, and this is four hundred tiles of maze with one creature at the
+  // middle of it. The walk IS the encounter, which is why nothing else lives
+  // down there.
+  | "crete" | "labyrinth";
 
 /** A point in world (pixel) space. */
 export interface Vec {
@@ -297,6 +303,12 @@ export type MonsterKind =
   // shape is the exact inverse of the draugr's: the fastest creature in the
   // game rather than the slowest, and armour six rather than twenty-six.
   | "blackAnnis"
+  // …and his fourth, at about level twenty-five. Crete, and the first named
+  // boss that is KIN to something: four minotaur ranks already walk the game,
+  // and the thing at the middle of the labyrinth is the same animal several
+  // sizes up. Everything else about the rule holds — one creature, one echo,
+  // killed once.
+  | "asterion"
   // The armoured goblin rank: the camps' answer to the orc warrior.
   | "goblinLegionary"
   // Etap 18 — the undead heavies. Both are skeletons and both leave the

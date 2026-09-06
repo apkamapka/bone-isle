@@ -588,6 +588,92 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
 
   /* ================================================================== *
+   *  THE MINOTAUR — the Time Sage's FOURTH DOOR, level 25
+   *
+   *  Named Asterion, which is what the Greeks actually called him before the
+   *  epithet swallowed the name. That is not decoration: the whole errand is
+   *  about the distance between what happened and what got told, and a thing
+   *  with a name is a different animal from a thing with a description.
+   *  Chronos never says it aloud — the player is told "the Minotaur" from
+   *  first line to last, because that is the story he grew up with — and it
+   *  is on the corpse, which is where the correction belongs.
+   *
+   *  THE FIRST NAMED BOSS THAT IS KIN TO SOMETHING. The redcap, Kárr and
+   *  Black Annis are each the only one of their species in the game. Four
+   *  minotaur ranks already walk the Bone Reach's western descent and the
+   *  whole of Crete, and this is the same animal at the top of them — which
+   *  is a shape the chain has not used before and is worth having once: the
+   *  player spends an island learning what a minotaur does, and then meets
+   *  the one all four ranks are copies of.
+   *
+   *  THE NUMBERS, and what they are answering.
+   *
+   *    HP 2800   the largest body in the game, over Black Annis' 2200 and
+   *              five times the minotaur guard's 565. Radek's ask was
+   *              literally "stronger than the current guards and the other
+   *              quest bosses", and HP is where a boss at the end of four
+   *              hundred tiles of maze should spend it — the fight has to be
+   *              worth the walk, and a walk that ends in ninety seconds is
+   *              not.
+   *    DMG 50-128  one rung over hers, on the same 2.0 rate. That is 0.60 of
+   *              the level's dps budget, between her 0.53 and the dragon's
+   *              0.85: he hits harder than anything in the chain so far and
+   *              is still not the hardest hitter in the game.
+   *    SPEED 70  and this is the interesting one. He is NOT at the cap. Both
+   *              the redcap and Black Annis sit on 79, which is the ceiling —
+   *              nothing may outrun the redcap, because the chronicle text
+   *              promises it. Seventy means you can break away from him, and
+   *              you will need to, because breaking away in a labyrinth means
+   *              running down a corridor you may not be able to come back
+   *              along. A boss you can outpace in a room you cannot read is a
+   *              different problem from a boss you cannot outpace at all.
+   *    ARMOR 24  over the guard's 22 and under Kárr's 26. His identity is not
+   *              plate — it is the body and the reach of the arm.
+   *    EXP 2100  and the errand pays 5800 on top when the earring reaches the
+   *              table. Named creatures are off the grind curve by design
+   *              (see the budget block in the smoke suite) because the payday
+   *              is the errand, not the corpse.
+   *
+   *  THE ELEMENTS, and the rule they keep. Three bosses, three answers, and
+   *  no repeats: storm broke the redcap's tower, fire is the saga's answer to
+   *  Kárr, earth is what the county finally filled Annis in with. This is the
+   *  fourth and it must be a fourth, or the circle a character chose at
+   *  Calanais quietly stops mattering.
+   *
+   *    SHADOW 0.4  Minos shut him under the palace before he could walk. The
+   *                dark is not a weapon against something raised in it.
+   *    EARTH 0.6   Daedalus built the labyrinth out of the island's own
+   *                limestone and it held him for thirty years. Stone is the
+   *                one thing that has already been tried.
+   *    ICE 1.5     and this is the answer. A Cretan animal, bred out of a
+   *                bull that came out of a warm sea, that has never once in
+   *                its life been cold. There is no ice in this story at all,
+   *                which is exactly why it works: the thing the labyrinth
+   *                could not prepare him for.
+   *
+   *  NO SPELLS, deliberately. The dragon is still "the first creature in the
+   *  game with real SPELLS" and a level-25 boss taking that away from a
+   *  level-50 one would be a worse trade than whatever it bought. What makes
+   *  this fight unlike the other three is not a kit — it is the four hundred
+   *  tiles in front of it and the fact that the way out is behind him.
+   *
+   *  WHERE HE LIVES: the chamber at the centre of the labyrinth under
+   *  Knossos, on his own square, and nowhere else in the game.
+   * ================================================================== */
+  asterion: {
+    spr: SPR.minotaur,
+    name: "Asterion",
+    hp: 2800, dmg: [50, 128], speed: 70, atkRate: 2.0, exp: 2100,
+    gold: [70, 140], danger: 0.5, armor: 24,
+    resist: { shadow: 0.4, earth: 0.6, ice: 1.5 },
+    loot: [
+      // The relic. Flat 100%, the same rule as the cap, the helm and the
+      // effigy — a mission cannot hang on a dice roll.
+      { kind: "minotaurEarring", chance: 1.0, n: [1, 1] },
+    ],
+  },
+
+  /* ================================================================== *
    *  THE FANTASTIC BESTIARY, lower rungs — levels 15-22
    *
    *  Re-tiered wholesale (Etap 20). In Tibia these are level-8 fodder; here

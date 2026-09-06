@@ -1595,6 +1595,103 @@ No text is reproduced from any of them. The page is told in the game's own
 beats and the Polish is the primary, with English and Spanish rebuilt to the
 same beat count rather than translated line by line.
 
+## Asterion, the Minotaur — `public/mob-asterion-walk.png`, `public/mob-asterion-dead.png`
+
+Source: **Universal LPC Spritesheet Character Generator**, CC-BY-SA 3.0 — the
+same terms and the same ShareAlike obligation as every other LPC creature here.
+See the LPC section above for the full attribution list and the per-layer note.
+
+Reproducible generator URL (paste it in and the exact character loads):
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_fur_tan&head=Minotaur_fur_tan&expression=Neutral_fur_tan&gloves=Gloves_iron&legs=Legion_skirt_red&weapon=Mace_mace&cape=Solid_red&shoes=Sandals_red&shoulders=Epaulets_red&ring=Stud_Ring_green&necklace=Simple_Necklace_copper&wrists=Cuffs_red>
+
+Layers used: muscular build, fur-tan body, fur-tan minotaur head, neutral
+fur-tan expression, iron gloves, red legion skirt, mace, solid red cape, red
+sandals, red epaulets, green stud ring, copper simple necklace, red cuffs.
+
+He is deliberately built out of the SAME generator parts as the four minotaur
+ranks that walk Crete above him and the Bone Reach's western descent — same
+head, same fur — and then dressed in things none of them have: the muscular
+build, a legion skirt, epaulets, a cape, and metal on both wrists. That is the
+errand's whole argument in one sprite. A beast does not put a copper necklace
+and a green stud on itself. Somebody dressed the thing at the middle of the
+labyrinth, and the relic the player carries out of there is the ring from its
+ear.
+
+### Cutting method
+
+The standard recipe, unchanged, and run by `tools/cut_asterion.py`: rows 8-11 of
+the full export are the walk (up, left, down, right, nine frames each) and row
+20 is the death sequence, whose last frame is the corpse. One crop rectangle is
+shared by all thirty-six walk frames and kept symmetric about the source cell's
+centre line, x=32, so the body cannot drift as the cycle plays or as it turns.
+The mace swings well clear of the body, which is what pushes the crop out to
+52 x 56 per frame — the widest of the four bosses. The corpse is 47 x 38,
+cropped to the body. Nothing was recoloured, rescaled or redrawn.
+
+He is the one minotaur in the game that does not share the plain minotaur's
+corpse. The other four ranks do, because stripped of crossbow, shield and staff
+they are the same animal; this one is half again their size and still wearing
+the cloak, and a boss whose body is indistinguishable from the forty ordinary
+horns on the island above would undo the fight.
+
+### The two placeholder icons
+
+`item-guard-ring.png` and `item-minotaur-earring.png` are **not** LPC and carry
+no third-party licence at all. Both are drawn from scratch and regenerate byte
+for byte:
+
+```
+python3 tools/gen_guard_ring.py
+python3 tools/gen_minotaur_earring.py
+```
+
+Both are explicitly PLACEHOLDERS — Radek is replacing them — and they are drawn
+rather than borrowed so that the stand-in cannot leave a licence obligation
+behind when it is thrown away. The one thing they had to get right in the
+meantime is being told apart at twelve screen pixels, since they come out of
+the same chest: the guard ring is a fat three-quarter band filling its cell
+like the Power Ring it mirrors, and the earring is a thin hoop pulled out of
+round with a torn crescent of hide still on it.
+
+## Crete and the Labyrinth — `public/crete-terrain.png`, `public/labyrinth-terrain.png`
+
+Both are flattened "Export as Image" pictures out of Tiled, at native tile size:
+`minoqxp.tmx` (100x100, 3200x3200) and `labiryntmino.tmx` (100x100, 3200x3200).
+The tilesets painted into them (`32x32_DEMO`, `MainLev2.0`, `MainLev2.0hhh`,
+`Water_tafle_4A`) are commercial assets held under the project's own licences;
+the `.tsx` files and source sheets are NOT in this repository, only the
+flattened pictures. Everything standing on top — olive, limestone, dead wood,
+felled wood, tents, poles, boulders, campfires — is the `prop-*` set already
+credited above.
+
+Both collision grids are traced from those same two `.tmx` files by
+`tools/gen_minotaur_maps.py`, which also places every prop and every creature
+post and writes `src/world/creteSpec.ts` and `src/world/labyrinthSpec.ts`
+whole. Those two files are generated and should not be hand-edited.
+
+## The Minotaur chronicle — sources
+
+`lore.minotaur` is written from the standard classical account and from the
+archaeology that argues with it. Nothing is quoted:
+
+- Apollodorus, *Bibliotheca* III.1 and *Epitome* I, for Pasiphae, the bull of
+  Poseidon, Daedalus and the labyrinth;
+- Plutarch, *Life of Theseus*, for the Athenian tribute, Ariadne and the thread;
+- the excavation of Knossos and the reading of its plan as the origin of the
+  "labyrinth" — the point the page turns on, and the reason its last beats are
+  a question rather than a fact;
+- the name Asterion, which is what the sources call the creature before the
+  epithet "Minotaur" replaced it. It is on the corpse and nowhere in Chronos'
+  mouth, which is deliberate: he tells the player the story they grew up with.
+
+The Polish is Radek's and is primary; English and Spanish are rebuilt to the
+same beat count rather than translated line by line. The last four paragraphs
+of the page — the "three things" that name the fight's levers — are the only
+part not in his draft, added because every other boss chronicle ends that way
+and because they are the only place in the game a player can learn that cold
+is the answer.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in

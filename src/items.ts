@@ -21,6 +21,9 @@ export type ItemKind =
   // The thing Black Annis left in the oak. Same shape again, and the third of
   // them, which is the point at which the pattern is the pattern.
   | "hairEffigy"
+  // Pulled out of the Minotaur's ear. The fourth relic, and the first one that
+  // is evidence of something rather than a trophy off a body — see the table.
+  | "minotaurEarring"
   // forge materials (Etap 24): smelted from looted gear, never bought
   | "iron" | "steel" | "essentialGem"
   // furnace fuel: dropped by anything that makes camp — people, orcs,
@@ -99,7 +102,7 @@ export type ItemKind =
   // human smiths make swords and hammers that guard as well as they cut,
   // beasts carry axes and fangs that hit harder and defend far worse
   | "shortSword" | "fangDagger" | "ironSword" | "goblinHatchet" | "mercBlade" | "warHammer" | "orcishAxe" | "gladius" | "boneSword" | "minotaurAxe" | "warlordBlade" | "steelMaul" | "demonCleaver" | "knightSword" | "fireSword" | "marrowBlade"
-  | "ring" | "amulet"
+  | "ring" | "guardRing" | "amulet"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet"
   // containers & test gear (Etap 11)
@@ -229,6 +232,17 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * the heaviest thing she left behind weighs almost nothing. Does not stack,
    * for the reason the other two do not. */
   hairEffigy:   { name: "Hair Effigy",   stack: 1, value: 800, weight: 4 },
+  /* The Minotaur's earring. It is NOT a trophy off the body, which is the
+   * whole reason Chronos wants it: a bull does not put a ring in its own ear
+   * and a monster has nobody to do it for him. Somebody dressed the thing at
+   * the middle of the labyrinth — fed it, and hung bronze on it — and that is
+   * a different story from the one Athens was told for a generation.
+   *
+   * The heaviest relic in the chain and the dearest, and it does not stack
+   * for the reason none of them do: there is one Minotaur and there was one
+   * ear. PLACEHOLDER ARTWORK, drawn by `tools/gen_minotaur_earring.py` —
+   * Radek is replacing it. */
+  minotaurEarring: { name: "Minotaur's Earring", stack: 1, value: 1100, weight: 10 },
   // ---- forge materials. Iron and steel are LIGHT on purpose: the Alchemy
   // ---- Tower wants 600 iron and 550 steel, and at a realistic weight the
   // ---- logistics of carrying them would be a bigger obstacle than earning
@@ -423,6 +437,16 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   knightShield: { name: "Knight Shield", stack: 1, value: 272, weight: 60, slot: "shield", gear: { def: 17 } },
   dragonShield: { name: "Dragon Shield", stack: 1, value: 313, weight: 70, slot: "shield", gear: { def: 17 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
+  /* The Power Ring's opposite number, out of the hoard at the middle of the
+   * labyrinth. Same slot, same weight, the mirrored stat: two points of guard
+   * where that one gives two of attack, so the ring slot becomes a CHOICE
+   * rather than a thing you either have or have not found yet.
+   *
+   * Priced above the Power Ring but not by much. It is worth more because
+   * there is exactly one source — a one-time chest, no shop, no drop — and
+   * the Power Ring at least still has Kárr's howe as well as its old shelf.
+   * PLACEHOLDER ARTWORK, drawn by `tools/gen_guard_ring.py`. */
+  guardRing: { name: "Guard Ring",   stack: 1, value: 120, weight: 2, slot: "ring",    gear: { def: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
   // Backpack: buy it at the smith. A CONTAINER, not a capacity upgrade — it

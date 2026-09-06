@@ -234,6 +234,35 @@ export const MISSIONS: readonly MissionDef[] = [
     // errands from outrunning the grind they are supposed to punctuate.
     rewardExp: 4000,
   },
+  {
+    /* The FOURTH door and the fifth link — Chronos numbers doors, and he does
+     * not number Calanais, because he opens that one as a gift rather than as
+     * an errand.
+     *
+     * WHY TWENTY-FIVE. Black Annis sits at twenty and the island behind this
+     * door fields four minotaur ranks running tier 27 to tier 40, which is
+     * the heaviest hunting ground the chain has opened: the guard alone is a
+     * tier-40 creature, four rungs over anything on the Dane Hills. Five
+     * levels is what the gap between the heath and this is worth.
+     *
+     * WHAT MAKES IT DIFFERENT FROM THE FOUR BEFORE IT. Every echo so far has
+     * been a room — you go down a hole, you cross a chamber, the boss is at
+     * the far end of it. This echo is four hundred tiles of maze and one
+     * creature at the middle, and nothing else alive in it at all. The walk
+     * IS the encounter; the Minotaur is what the walk was for. That is worth
+     * spending a link on once, and only once. */
+    id: "minotaur",
+    title: "The Ring in His Ear",
+    reqLevel: 25,
+    after: "blackannis",
+    ground: "crete",
+    echo: "labyrinth",
+    relic: "minotaurEarring",
+    // Level 25 needs 27700 to advance. The taper continues exactly as it has:
+    // 32%, 26%, 23%, and 21% here. It is a smaller slice of a much larger
+    // level, which is the point — the errands are punctuation, not the road.
+    rewardExp: 5800,
+  },
 ];
 
 /** The mission whose echo this world is, if any. Used where a world key is all

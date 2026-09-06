@@ -17,6 +17,8 @@ import { CALANAIS_SPEC } from "./world/calanaisSpec.ts";
 import { TURSACHAN_SPEC } from "./world/tursachanSpec.ts";
 import { DANEHILLS_SPEC } from "./world/daneHillsSpec.ts";
 import { BOWER_SPEC } from "./world/bowerSpec.ts";
+import { CRETE_SPEC } from "./world/creteSpec.ts";
+import { LABYRINTH_SPEC } from "./world/labyrinthSpec.ts";
 import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
@@ -143,6 +145,32 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize
   // because his purse is meant to stay the biggest single prize in the game
   // and nothing about this errand argues for moving it.
   bower: [["platinumCoin", 25]],
+  /* THE MINOTAUR'S HOARD, and the first time the ladder's purses stop being
+   * flat. Minos took tribute from Athens for a generation and it did not
+   * consist of teenagers alone; what is at the middle of the labyrinth is
+   * what a kingdom skimmed off a city for thirty years, and it is sized to
+   * say so — a hundred platinum, ten thousand gold, comfortably the biggest
+   * single prize in the game.
+   *
+   * IT DISPLACES THE REDCAP'S THIRTY, which held that title from Etap 42 and
+   * whose comment above said so in as many words until this landed. That is
+   * progression rather than inflation: his errand is gated at level 10 and
+   * this one at 25, and the experience needed to advance a level grows 7.5x
+   * across that span while the purse grows 3.3x. The taper is still there;
+   * it is just measured against the curve rather than against the last one.
+   *
+   * The RING is the other half and the part that lasts. It is the Power
+   * Ring's opposite number — the same slot, the same weight class, guard
+   * where that one gives attack — and like the Power Ring in Kárr's howe it
+   * is a chest prize and nothing else: no shop stocks it and no creature
+   * drops it, so the only one in the game is the one at the end of the maze.
+   *
+   * Radek's own note on the Tiled object says "100 crystal coin". There is no
+   * crystal denomination in the game — gold and platinum are the two — so
+   * this is the same hundred coins struck in the largest one that exists.
+   * Adding a third denomination is a one-line change if he wants the Tibia
+   * number literally, and a very different economy. */
+  labyrinth: ["guardRing", ["platinumCoin", 100]],
 };
 
 /**
@@ -181,6 +209,8 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     tursachan: makeHandmadeWorld(TURSACHAN_SPEC),
     daneHills: makeHandmadeWorld(DANEHILLS_SPEC),
     bower: makeHandmadeWorld(BOWER_SPEC),
+    crete: makeHandmadeWorld(CRETE_SPEC),
+    labyrinth: makeHandmadeWorld(LABYRINTH_SPEC),
   };
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble

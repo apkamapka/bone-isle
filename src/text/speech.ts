@@ -437,6 +437,140 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "La puerta sigue abierta. Vuelve y acaba lo que empezaste.",
   },
 
+  /* ---------------------------------------------------------------------
+   * THE MINOTAUR — the FOURTH door, level 25.
+   *
+   * Radek wrote the Polish and it is verbatim here, beat for beat. English
+   * and Spanish are rebuilt to the same beat COUNT rather than translated
+   * word for word, which is the rule in this file: a blank line is a page
+   * break, so a language that runs long has to run long inside the same
+   * number of pages or the three readers get three different pacings.
+   *
+   * WHAT IS NEW IN HIS VOICE HERE, and it is deliberate. The three errands
+   * before this one are told straight: here is a creature, here is what it
+   * did, go and end it. This is the first time Chronos hands over a story he
+   * is NOT sure of — "if you want the truth of it", "no story says what
+   * happened afterwards" — and the chronicle behind it ends on the
+   * possibility that there was never a bull-headed man in there at all. That
+   * is the turn Radek's draft asked for and it is the reason this errand sits
+   * where it does in the chain: four doors in, the player has earned a
+   * narrator who admits to a doubt.
+   * ------------------------------------------------------------------- */
+  "sage.offer.minotaur": {
+    en: "The fourth door.\n\n"
+      + "Crete.\n\n"
+      + "Long ago a king had a place built that nobody could find the way out of.\n\n"
+      + "They said a monster was shut inside it.\n\n"
+      + "Half a man. Half a bull.\n\n"
+      + "The Minotaur.\n\n"
+      + "If you want the truth of it, you will have to go in where nobody should ever have gone in twice.",
+    pl: "Czwarte wrota.\n\n"
+      + "Kreta.\n\n"
+      + "Dawno temu pewien król kazał zbudować miejsce, z którego nie można było znaleźć wyjścia.\n\n"
+      + "Mówiono, że w środku zamknięto potwora.\n\n"
+      + "Pół człowieka. Pół byka.\n\n"
+      + "Minotaura.\n\n"
+      + "Jeśli chcesz poznać prawdę, będziesz musiał wejść tam, gdzie nikt nie powinien był wejść drugi raz.",
+    es: "La cuarta puerta.\n\n"
+      + "Creta.\n\n"
+      + "Hace mucho, un rey mandó construir un lugar del que no se podía encontrar la salida.\n\n"
+      + "Decían que dentro habían encerrado a un monstruo.\n\n"
+      + "Medio hombre. Medio toro.\n\n"
+      + "El Minotauro.\n\n"
+      + "Si quieres saber la verdad, tendrás que entrar donde nadie debió entrar dos veces.",
+  },
+  "sage.accept.minotaur": {
+    en: "King Minos did not want anyone to see what he had hidden under his palace.\n\n"
+      + "So he built the labyrinth.\n\n"
+      + "Hundreds of corridors. Blind alleys. Stairs that lead nowhere.\n\n"
+      + "And in the middle of it — the Minotaur.\n\n"
+      + "Every few years they sent him young people as tribute.\n\n"
+      + "Until Theseus came.\n\n"
+      + "He had a sword, he had courage, and he had Ariadne's thread.\n\n"
+      + "You will not have the thread.\n\n"
+      + "So if you hear heavy steps behind you...\n\n"
+      + "you had better remember which way you came in.",
+    pl: "Król Minos nie chciał, żeby ktokolwiek zobaczył, co ukrył pod swoim pałacem.\n\n"
+      + "Dlatego zbudował labirynt.\n\n"
+      + "Setki korytarzy. Ślepe zaułki. Schody prowadzące donikąd.\n\n"
+      + "A pośrodku — Minotaur.\n\n"
+      + "Co kilka lat wysyłano mu młodych ludzi jako ofiarę.\n\n"
+      + "Aż pojawił się Tezeusz.\n\n"
+      + "Miał miecz, miał odwagę i miał nić Ariadny.\n\n"
+      + "Ty nie będziesz miał nici.\n\n"
+      + "Więc jeśli usłyszysz za sobą ciężkie kroki...\n\n"
+      + "lepiej pamiętaj, którędy przyszedłeś.",
+    es: "El rey Minos no quería que nadie viera lo que había escondido bajo su palacio.\n\n"
+      + "Por eso construyó el laberinto.\n\n"
+      + "Cientos de pasillos. Callejones sin salida. Escaleras que no llevan a ninguna parte.\n\n"
+      + "Y en el centro — el Minotauro.\n\n"
+      + "Cada pocos años le enviaban jóvenes como ofrenda.\n\n"
+      + "Hasta que llegó Teseo.\n\n"
+      + "Tenía una espada, tenía valor y tenía el hilo de Ariadna.\n\n"
+      + "Tú no tendrás el hilo.\n\n"
+      + "Así que si oyes pasos pesados detrás de ti...\n\n"
+      + "más te vale recordar por dónde entraste.",
+  },
+  "sage.decline.minotaur": {
+    en: "I understand.\n\n"
+      + "Theseus could have turned back too.\n\n"
+      + "Only then Crete would have had to find somebody else.",
+    pl: "Rozumiem.\n\n"
+      + "Tezeusz też mógł zawrócić.\n\n"
+      + "Tylko wtedy Kreta musiałaby znaleźć kogoś innego.",
+    es: "Entiendo.\n\n"
+      + "Teseo también pudo dar la vuelta.\n\n"
+      + "Solo que entonces Creta habría tenido que buscar a otro.",
+  },
+  "sage.remind.minotaur": {
+    en: "The labyrinth was not built to keep the Minotaur in.\n\n"
+      + "It was built so that nobody would find him.\n\n"
+      + "Go deeper than Theseus did.\n\n"
+      + "I want to know what was left in there after he walked out.",
+    pl: "Labirynt nie został zbudowany po to, żeby zatrzymać Minotaura.\n\n"
+      + "Został zbudowany po to, żeby nikt go nie znalazł.\n\n"
+      + "Wejdź głębiej, niż zrobił to Tezeusz.\n\n"
+      + "Chcę wiedzieć, co zostało tam po jego odejściu.",
+    es: "El laberinto no se construyó para retener al Minotauro.\n\n"
+      + "Se construyó para que nadie lo encontrara.\n\n"
+      + "Entra más hondo de lo que entró Teseo.\n\n"
+      + "Quiero saber qué quedó allí cuando él se marchó.",
+  },
+  "sage.handIn.minotaur": {
+    en: "So it really was him.\n\n"
+      + "For thousands of years the story went that Theseus killed the Minotaur and walked out of the labyrinth.\n\n"
+      + "But no story says what happened afterwards.\n\n"
+      + "Now we know.\n\n"
+      + "The Minotaur was not the end of that story.\n\n"
+      + "He was only a part of it.",
+    pl: "Więc to naprawdę on.\n\n"
+      + "Przez tysiące lat opowiadano, że Tezeusz zabił Minotaura i wyszedł z labiryntu.\n\n"
+      + "Ale żadna opowieść nie mówi, co stało się potem.\n\n"
+      + "Teraz już wiemy.\n\n"
+      + "Minotaur nie był końcem historii.\n\n"
+      + "Był tylko jej częścią.",
+    es: "Así que era él de verdad.\n\n"
+      + "Durante miles de años se contó que Teseo mató al Minotauro y salió del laberinto.\n\n"
+      + "Pero ninguna historia dice qué pasó después.\n\n"
+      + "Ahora ya lo sabemos.\n\n"
+      + "El Minotauro no fue el final de esa historia.\n\n"
+      + "Solo fue una parte de ella.",
+  },
+  "sage.empty.minotaur": {
+    en: "The labyrinth let you out.\n\n"
+      + "The Minotaur evidently did not.\n\n"
+      + "Go back in there.\n\n"
+      + "And this time do not let him be the one who finds the way out.",
+    pl: "Labirynt cię wypuścił.\n\n"
+      + "Minotaur najwyraźniej nie.\n\n"
+      + "Wróć tam.\n\n"
+      + "I tym razem nie pozwól, żeby to on znalazł drogę do wyjścia.",
+    es: "El laberinto te dejó salir.\n\n"
+      + "El Minotauro por lo visto no.\n\n"
+      + "Vuelve allí.\n\n"
+      + "Y esta vez no dejes que sea él quien encuentre la salida.",
+  },
+
   /* --- TEMP-ETAP45-TESTMENU ---------------------------------------------
    * The two strings behind the "start over" answer. They are HERE rather
    * than in their own bundle so that pulling the feature is one contiguous
@@ -795,6 +929,79 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Es rápida. Tan rápida como el de la gorra roja, y a él nadie lo ha dejado atrás.\n\n"
       + "No lleva hierro, así que cada golpe pesado cuenta entero.\n\n"
       + "Y cede ante la piedra. Excavó esa arenisca con las uñas, y fue la piedra la que la tapó.",
+  },
+  "lore.title.minotaur": {
+    en: "Knossos, Crete — c. 1400 BC",
+    pl: "Knossos, Kreta — ok. 1400 p.n.e.",
+    es: "Cnosos, Creta — h. 1400 a.C.",
+  },
+  /* Radek's page, verbatim in Polish, and the first chronicle in the chain
+   * that ends on a QUESTION rather than on a fact. The redcap's ends with a
+   * wet cap, Kárr's with fire, hers with stone; this one ends with "maybe it
+   * was enough that somebody told the story that way", which is the turn the
+   * whole errand is built around.
+   *
+   * THE LAST FOUR PARAGRAPHS ARE MINE, not his, and they are the one thing in
+   * here he did not write — flagged so he can cut them in one edit if he
+   * wants the page to end on the doubt. The reason they are here is that
+   * every other boss chronicle closes with the three levers of its fight, and
+   * they are the only place in the game a player can learn them: the body,
+   * the iron, and the element. Without the last beat there is no in-game way
+   * to find out that ice is the answer, and the circle a character chose at
+   * Calanais quietly stops paying off.
+   *
+   * All three facts are stats in MONSTER_DEFS rather than colour, and the
+   * smoke suite reads them back, so the page cannot go out of date without
+   * failing. */
+  "lore.minotaur": {
+    en: "The Minotaur was not an ordinary monster.\n\n"
+      + "In the myth he was the son of Pasiphae, wife of King Minos, and a white bull sent by Poseidon. Minos hid him from the world and had Daedalus build a labyrinth there was no getting out of.\n\n"
+      + "For years Athens had to send young men and girls to Crete as tribute for the beast.\n\n"
+      + "Then Theseus came.\n\n"
+      + "Ariadne helped him, giving him a ball of thread. Theseus unwound it as he went through the labyrinth, so that after killing the Minotaur he could find his way back.\n\n"
+      + "But there is something strange here.\n\n"
+      + "The ancient Greeks never left us a description of the labyrinth that would match the later legend of hundreds of corridors.\n\n"
+      + "Some scholars tie the myth to the enormous palace at Knossos — a place full of rooms, stairs and passages, which to a man from a distant age could have looked like a real labyrinth.\n\n"
+      + "And the Minotaur?\n\n"
+      + "Perhaps it was never about a man with a bull's head really living inside.\n\n"
+      + "Perhaps it was enough that somebody told the story that way.\n\n"
+      + "And for thousands of years everybody believed him.\n\n"
+      + "Three things.\n\n"
+      + "He is the biggest of them all, and not the fastest — you can break away from him. In a labyrinth that is not always the help it sounds like.\n\n"
+      + "He wears iron. Not as much as Kárr, but enough that a light blow comes off him.\n\n"
+      + "And he gives way to cold. He was bred under the sun of Crete and was never once in his life cold.",
+    pl: "Minotaur nie był zwykłym potworem.\n\n"
+      + "Według mitu był synem Pasifae, żony króla Minosa, i białego byka zesłanego przez Posejdona. Minos ukrył go przed światem i kazał Dedalowi zbudować labirynt, z którego nie sposób było się wydostać.\n\n"
+      + "Przez lata Ateny musiały wysyłać na Kretę młodzieńców i dziewczęta jako ofiarę dla bestii.\n\n"
+      + "Potem przybył Tezeusz.\n\n"
+      + "Pomogła mu Ariadna, dając mu kłębek nici. Tezeusz rozwinął go podczas przechodzenia przez labirynt, dzięki czemu po zabiciu Minotaura mógł odnaleźć drogę powrotną.\n\n"
+      + "Ale jest tu coś dziwnego.\n\n"
+      + "Starożytni Grecy nigdy nie zostawili nam opisu labiryntu, który pasowałby do późniejszej legendy o setkach korytarzy.\n\n"
+      + "Niektórzy badacze wiążą mit z ogromnym pałacem w Knossos — miejscem pełnym pomieszczeń, schodów i przejść, które dla człowieka z odległej epoki mogło wyglądać jak prawdziwy labirynt.\n\n"
+      + "A Minotaur?\n\n"
+      + "Być może nigdy nie chodziło o to, że w środku naprawdę mieszkał człowiek z głową byka.\n\n"
+      + "Może wystarczyło, że ktoś tak opowiedział tę historię.\n\n"
+      + "I przez tysiące lat wszyscy mu uwierzyli.\n\n"
+      + "Trzy rzeczy.\n\n"
+      + "Jest największy z nich wszystkich i nie jest najszybszy — możesz się od niego oderwać. W labiryncie to nie zawsze taka pomoc, na jaką wygląda.\n\n"
+      + "Nosi żelazo. Nie tyle co Kárr, ale dość, żeby lekki cios się od niego odbił.\n\n"
+      + "I ustępuje zimnu. Wyhodowano go pod słońcem Krety i nigdy w życiu nie było mu zimno.",
+    es: "El Minotauro no era un monstruo cualquiera.\n\n"
+      + "Según el mito era hijo de Pasífae, esposa del rey Minos, y de un toro blanco enviado por Poseidón. Minos lo escondió del mundo y mandó a Dédalo construir un laberinto del que no había salida.\n\n"
+      + "Durante años Atenas tuvo que enviar a Creta muchachos y muchachas como ofrenda para la bestia.\n\n"
+      + "Después llegó Teseo.\n\n"
+      + "Le ayudó Ariadna, dándole un ovillo de hilo. Teseo lo fue desenrollando al cruzar el laberinto, y así, tras matar al Minotauro, pudo encontrar el camino de vuelta.\n\n"
+      + "Pero aquí hay algo extraño.\n\n"
+      + "Los griegos antiguos nunca nos dejaron una descripción del laberinto que encajara con la leyenda posterior de los cientos de pasillos.\n\n"
+      + "Algunos estudiosos atan el mito al enorme palacio de Cnosos — un lugar lleno de salas, escaleras y pasos que a un hombre de una época lejana pudo parecerle un laberinto de verdad.\n\n"
+      + "¿Y el Minotauro?\n\n"
+      + "Quizá nunca se trató de que dentro viviera de verdad un hombre con cabeza de toro.\n\n"
+      + "Quizá bastó con que alguien contara así la historia.\n\n"
+      + "Y durante miles de años todos le creyeron.\n\n"
+      + "Tres cosas.\n\n"
+      + "Es el mayor de todos ellos, y no el más rápido — puedes soltarte de él. En un laberinto eso no siempre ayuda tanto como suena.\n\n"
+      + "Lleva hierro. No tanto como Kárr, pero bastante para que un golpe ligero le resbale.\n\n"
+      + "Y cede ante el frío. Lo criaron bajo el sol de Creta y no pasó frío ni una sola vez en su vida.",
   },
 };
 
@@ -1167,6 +1374,16 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     en: "Find Black Annis' cave under the Dane Hills, beat the hag, and bring the effigy to Chronos.",
     pl: "Odnajdź jaskinię Black Annis pod Dane Hills, pokonaj wiedźmę i przynieś kukłę Chronosowi.",
     es: "Encuentra la cueva de Black Annis bajo las Dane Hills, vence a la bruja y lleva el muñeco a Chronos.",
+  },
+  "mission.title.minotaur": {
+    en: "The Ring in His Ear",
+    pl: "Kolczyk w jego uchu",
+    es: "El aro en su oreja",
+  },
+  "mission.goal.minotaur": {
+    en: "Find the Minotaur in the labyrinth on Crete and beat the beast that for centuries let nobody find the way back.",
+    pl: "Odnajdź Minotaura w labiryncie na Krecie i pokonaj bestię, która przez wieki nie pozwalała nikomu odnaleźć drogi powrotnej.",
+    es: "Encuentra al Minotauro en el laberinto de Creta y vence a la bestia que durante siglos no dejó a nadie encontrar el camino de vuelta.",
   },
   /* The second half of every errand, and the half nothing on screen used to
    * say. The goal line is written for a player who has not been down yet

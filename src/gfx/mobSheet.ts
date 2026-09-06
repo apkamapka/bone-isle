@@ -115,6 +115,7 @@ const SHEET_SRC: Record<string, string> = {
   redcap: "./mob-redcap-walk.png",
   draugr: "./mob-draugr-walk.png",
   blackAnnis: "./mob-black-annis-walk.png",
+  asterion: "./mob-asterion-walk.png",
   viking: "./mob-viking-walk.png",
   mercenary: "./mob-mercenary-walk.png",
   corsair: "./mob-corsair-walk.png",
@@ -195,6 +196,12 @@ const CORPSE_SRC: Record<string, string> = {
   redcap: "./mob-redcap-dead.png",
   draugr: "./mob-draugr-dead.png",
   blackAnnis: "./mob-black-annis-dead.png",
+  /* The one minotaur that does NOT share the plain minotaur's body. All four
+   * ranks do, because stripped of crossbow, shield and staff they are the
+   * same animal — but this one is half again their size, wears a legion skirt
+   * and a red cloak, and a boss whose corpse is indistinguishable from the
+   * forty ordinary horns on the island above would undo the fight. */
+  asterion: "./mob-asterion-dead.png",
   viking: "./mob-viking-dead.png",
   mercenary: "./mob-mercenary-dead.png",
   corsair: "./mob-corsair-dead.png",

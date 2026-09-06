@@ -1588,8 +1588,10 @@ async function main(): Promise<void> {
     const alsoSold = gear.filter((k) => onSale.has(k as never));
     ok(alsoSold.length === 0,
       `…and nothing buried is also on a shelf${alsoSold.length ? " — " + alsoSold.join(",") : ""}`);
-    ok(held === gear.length + 5,
-      `every hoard is gear plus a purse, and five purses in all (${held})`);
+    /* Six purses since Etap 53, and four pieces of gear: the labyrinth's
+     * hoard is the second chest in the game to hold both, after Kárr's. */
+    ok(held === gear.length + 6,
+      `every hoard is gear plus a purse, and six purses in all (${held})`);
     // and nothing else in the game hides a chest that no prize is named for
     let orphan = "";
     for (const w of Object.values(worlds)) {
@@ -1633,8 +1635,13 @@ async function main(): Promise<void> {
     // …and Etap 52 Black Annis, the forty-second and the sage's THIRD named
     // boss. Same rule as the other two: no ladder, no kin, one creature out of
     // Leicestershire folklore standing at the end of one room.
-    ok(MONSTER_KINDS.length === 42,
-      `bestiary holds 42 kinds (18 + 21 humans + redcap + draugr + blackAnnis), got ${MONSTER_KINDS.length}`);
+    // …and Etap 53 Asterion, the forty-third and the sage's FOURTH named boss.
+    // He breaks half the rule the other three keep: still no ladder, still one
+    // creature killed once in one echo, but he is KIN — the four minotaur
+    // ranks are the same animal several sizes down, and the errand is built on
+    // the player having walked an island of them first.
+    ok(MONSTER_KINDS.length === 43,
+      `bestiary holds 43 kinds (18 + 21 humans + redcap + draugr + blackAnnis + asterion), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -7811,10 +7818,13 @@ async function main(): Promise<void> {
     // Etap 48 adds the fifth such pair — the Dane Hills and the bower under
     // them — which keeps the rule the other four set: a ground to walk and one
     // room at the end of it, arriving together or not at all.
+    // Etap 53 adds the sixth pair — Crete and the labyrinth under Knossos.
+    // The rule holds a sixth time; what is new is the SHAPE of the second
+    // half, which is a four-hundred-tile maze rather than a room.
     ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 bower calanais cellar "
-      + "daneHills deaddeep1 deaddeep2 haramsey haugr hermitage home liddesdale minodeep1 "
-      + "minodeep2 orcdeep1 orcdeep2 reach town tursachan",
-      `twenty-two maps and no others (${keys.length}: ${keys.join(" ")})`);
+      + "crete daneHills deaddeep1 deaddeep2 haramsey haugr hermitage home labyrinth liddesdale "
+      + "minodeep1 minodeep2 orcdeep1 orcdeep2 reach town tursachan",
+      `twenty-four maps and no others (${keys.length}: ${keys.join(" ")})`);
     for (const dead of ["cave.ts", "deepwild.ts"]) {
       ok(!nfs.existsSync(new URL(`../src/world/${dead}`, import.meta.url)),
         `${dead} is gone, not merely unreferenced`);
@@ -16372,7 +16382,12 @@ async function main(): Promise<void> {
     const errand = MS48.find((m) => m.echo === "bower");
     ok(errand?.ground === "daneHills" && errand?.relic === "hairEffigy" && errand?.reqLevel === 20,
       `the heath and the bower belong to one level-20 errand (${errand?.id})`);
-    ok(errand?.after === "draugr" && MS48[MS48.length - 1].id === errand?.id,
+    /* WAS `MS48[MS48.length - 1].id === errand?.id`, which said "and it is the
+     * last one written" — true until Etap 53 put the Minotaur behind her, and
+     * a thing that stops being true every time a mission ships is the wrong
+     * thing to assert. What this actually wants to say is that she is the
+     * fourth link and that the chain is ordered, so that is what it says. */
+    ok(errand?.after === "draugr" && MS48.findIndex((m) => m.id === errand?.id) === 3,
       "…the fourth link in the chain, behind Kárr");
     ok(!!holePortal.inactive && !!bower.portals.find((pt) => pt.dest === "cellar")?.inactive,
       "…and neither the way down nor the way home opens without Chronos");
@@ -16436,6 +16451,295 @@ async function main(): Promise<void> {
       && /\bthird\b/.test(SP52.t("sage.offer.blackannis", "en"))
       && /\btercera\b/.test(SP52.t("sage.offer.blackannis", "es")),
       "…and Chronos calls it the third door, because he counts doors and not errands");
+  }
+
+
+  console.log("Etap 53 — Crete, the Labyrinth, and the Minotaur:");
+  {
+    const fs53 = await import("node:fs");
+    const { buildWorlds: bw53, applyMissionPads: pads53, CHEST_PRIZES: CP53 } = await import("../src/game.ts");
+    const { MONSTER_DEFS: MD53 } = await import("../src/entities/monsters.ts");
+    const { ITEMS: IT53 } = await import("../src/items.ts");
+    const { Tile: T53 } = await import("../src/world/types.ts");
+    const A53 = await import("../src/gfx/itemArt.ts");
+    const w53 = bw53(WORLD_SEED);
+    const crete = w53.crete, maze = w53.labyrinth;
+
+    /* --- the two traces still match their exports --------------------------
+     * Both numbers come out of `minoqxp.tmx` and `labiryntmino.tmx` rather
+     * than being chosen: the grids are the trace and the pictures are the
+     * same files' image exports, so if either is re-exported without the
+     * other these two assertions are what says so. */
+    ok(crete.w === 100 && crete.h === 100, `Crete is 100x100 (${crete.w}x${crete.h})`);
+    ok(maze.w === 100 && maze.h === 100, `the labyrinth is 100x100 (${maze.w}x${maze.h})`);
+    for (const f of ["crete-terrain.png", "labyrinth-terrain.png"]) {
+      const b = fs53.readFileSync(new URL(`../public/${f}`, import.meta.url));
+      ok(b.readUInt32BE(16) === 3200 && b.readUInt32BE(20) === 3200,
+        `${f} is exactly the grid times 32 (${b.readUInt32BE(16)}x${b.readUInt32BE(20)})`);
+    }
+
+    const open53 = (wd: typeof crete, x: number, y: number): boolean =>
+      x >= 0 && y >= 0 && x < wd.w && y < wd.h
+      && !wd.solid[y][x] && wd.tile[y][x] !== T53.Water;
+    const walkCount53 = (wd: typeof crete): number => {
+      let n = 0;
+      for (let y = 0; y < wd.h; y++) for (let x = 0; x < wd.w; x++) if (open53(wd, x, y)) n++;
+      return n;
+    };
+    const flood53 = (wd: typeof crete, sx: number, sy: number): Map<string, number> => {
+      const d = new Map<string, number>([[`${sx},${sy}`, 0]]);
+      const q: [number, number][] = [[sx, sy]];
+      for (let i = 0; i < q.length; i++) {
+        const [x, y] = q[i];
+        const here = d.get(`${x},${y}`)!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, k = `${nx},${ny}`;
+          if (!open53(wd, nx, ny) || d.has(k)) continue;
+          d.set(k, here + 1); q.push([nx, ny]);
+        }
+      }
+      return d;
+    };
+
+    /* --- the island --------------------------------------------------------- */
+    const padP = crete.portals.find((p) => p.dest === "cellar")!;
+    const holeP = crete.portals.find((p) => p.dest === "labyrinth")!;
+    ok(!!padP && !!holeP && crete.portals.length === 2,
+      `Crete has exactly the two doors it should (${crete.portals.length})`);
+    const holeT = { tx: Math.floor(holeP.x / 32), ty: Math.floor(holeP.y / 32) };
+    ok(holeT.tx === 15 && holeT.ty === 78,
+      `the way in is where the export's object layer put it (${holeT.tx},${holeT.ty})`);
+    const reach53 = flood53(crete, holeT.tx, holeT.ty);
+    ok(reach53.size === walkCount53(crete),
+      `every open square on Crete is reachable — the scatter closed no pockets (${reach53.size} of ${walkCount53(crete)})`);
+    const padT = { tx: Math.floor(padP.x / 32), ty: Math.floor(padP.y / 32) };
+    const crossing53 = reach53.get(`${padT.tx},${padT.ty}`) ?? -1;
+    ok(crossing53 > 95 && crossing53 < 150,
+      `the crossing is Haramsey-length, pad to hole (${crossing53} tiles of walking)`);
+
+    /* --- who stands on it ---------------------------------------------------
+     * ALL FOUR RANKS ARE HORNS, and that is the design rather than a saving.
+     * This island is the minotaur's country; a corsair on it would say it is
+     * somewhere minotaurs happen to be. */
+    const posts53 = crete.mobPosts ?? [];
+    ok(posts53.length === 48, `forty-eight posts on Crete (${posts53.length})`);
+    const ranks53 = posts53.map((p) => p.kind);
+    ok(new Set(ranks53).size === 4 && ranks53.every((k) => k.startsWith("minotaur")),
+      `four ranks and every one of them a minotaur (${[...new Set(ranks53)].sort().join(" ")})`);
+    ok(ranks53.filter((k) => k === "minotaurMage").length === 1,
+      "exactly ONE mage, as asked");
+    let tight53 = 0;
+    for (let i = 0; i < posts53.length; i++)
+      for (let j = i + 1; j < posts53.length; j++) {
+        const a = posts53[i], b = posts53[j];
+        if ((a.tx - b.tx) ** 2 + (a.ty - b.ty) ** 2 < 64) tight53++;
+      }
+    ok(tight53 === 0, `no two posts inside eight tiles — every pull is a single one (${tight53})`);
+    const atDoor53 = posts53.filter((p) =>
+      (p.tx - padT.tx) ** 2 + (p.ty - padT.ty) ** 2 < 64
+      || (p.tx - holeT.tx) ** 2 + (p.ty - holeT.ty) ** 2 < 64);
+    ok(atDoor53.length === 0, `nothing stands within eight tiles of either door (${atDoor53.length})`);
+
+    /* THE GRADIENT IS BY WALKING. Radek's ask was "guards and one mage near
+     * the tp"; this is that ask expressed the way every other mission ground
+     * expresses difficulty, and a straight-line ranking would pass a weaker
+     * test than this one. */
+    const meanFromHole53 = (kind: string): number => {
+      const ds = posts53.filter((p) => p.kind === kind)
+        .map((p) => reach53.get(`${p.tx},${p.ty}`) ?? 1e9);
+      return ds.reduce((a, b) => a + b, 0) / ds.length;
+    };
+    const ladder53 = ["minotaurMage", "minotaurGuard", "minotaurArcher", "minotaur"].map(meanFromHole53);
+    ok(ladder53.every((d, i) => i === 0 || d > ladder53[i - 1]),
+      `the heavier the rank the nearer the labyrinth, by WALKING (${ladder53.map((d) => d.toFixed(0)).join(" < ")})`);
+
+    /* --- the island is dressed ---------------------------------------------
+     * The export is bare grass and a ground a player walks repeatedly cannot
+     * be a lawn. Olive at a Mediterranean density — a scrub island, not
+     * Calanais' forest and not the Dane Hills' heath. */
+    ok(crete.trees.length > 350 && crete.trees.length < 550,
+      `Crete is olive scrub, not a forest and not a lawn (${crete.trees.length} trees)`);
+    ok(crete.rocks.length > 60, `…and carries real stone (${crete.rocks.length} nodes)`);
+    const campFire53 = crete.fires.find((f) =>
+      (f.tx - holeT.tx) ** 2 + (f.ty - holeT.ty) ** 2 <= 36);
+    ok(!!campFire53, "a fire burns within six tiles of the way in");
+    ok(!posts53.some((p) =>
+      (p.tx - campFire53!.tx) ** 2 + (p.ty - campFire53!.ty) ** 2 < 64),
+      "…and nothing hostile is inside aggro of it — a breather, not a trap");
+
+    /* --- the maze ------------------------------------------------------------
+     * THE ONE THING THAT MAKES THIS ECHO DIFFERENT FROM THE FOUR BEFORE IT.
+     * Every other one is a room you cross; this is a walk you survive. If a
+     * later pass ever shortens it into a chamber, this is the assertion that
+     * should stop it. */
+    const upP = maze.portals.find((p) => p.dest === "crete")!;
+    const homeP = maze.portals.find((p) => p.dest === "cellar")!;
+    const upT = { tx: Math.floor(upP.x / 32), ty: Math.floor(upP.y / 32) };
+    const bossPost = (maze.mobPosts ?? [])[0]!;
+    const mazeReach = flood53(maze, upT.tx, upT.ty);
+    ok(mazeReach.size === walkCount53(maze),
+      `the maze has no pockets — every open square is reachable (${mazeReach.size} of ${walkCount53(maze)})`);
+    const toBoss = mazeReach.get(`${bossPost.tx},${bossPost.ty}`) ?? -1;
+    ok(toBoss > 300,
+      `the walk to him is the encounter: ${toBoss} tiles from the way in`);
+    ok(toBoss > (crossing53 * 2),
+      "…longer than the whole island crossing above it, twice over");
+
+    /* NOTHING ELSE LIVES DOWN HERE — the bower's call, made again. Filling
+     * the corridors with horns would turn the navigation into another lap of
+     * the hunting ground and take the mission's one idea with it. */
+    const inMaze = maze.mobPosts ?? [];
+    ok(inMaze.length === 1 && inMaze[0].kind === "asterion",
+      `he is the ONLY thing alive in the labyrinth (${inMaze.map((p) => p.kind).join(",") || "nothing"})`);
+    /* The bones are PLACED, not scattered: every blind alley carries a pile,
+     * because a blind alley is where somebody stopped. */
+    ok(maze.decos.length > 80, `the dead ends are full of them (${maze.decos.length} piles)`);
+    /* The hoard sits in open floor, walkable on all four sides, exactly as
+     * Kárr's and hers do — a chest against the wall can only be opened from
+     * three directions. */
+    const hoard53 = maze.structures.find((st) => st.key === "treasure")!;
+    ok(!!hoard53 && [[1, 0], [-1, 0], [0, 1], [0, -1]]
+      .every(([dx, dy]) => open53(maze, hoard53.tx + dx, hoard53.ty + dy)),
+      "you can walk right round his hoard");
+    ok(CP53.labyrinth?.length === 2 && CP53.labyrinth[0] === "guardRing",
+      "…and it holds the ring and a purse, the second chest in the game to hold both");
+
+    /* --- the creature -------------------------------------------------------- */
+    const ast = MD53.asterion, an53 = MD53.blackAnnis, gd53 = MD53.minotaurGuard;
+    ok(ast.hp > an53.hp && ast.hp > gd53.hp * 4,
+      `he is stronger than the guards and than every boss before him (${ast.hp} hp)`);
+    ok((ast.dmg[0] + ast.dmg[1]) > (an53.dmg[0] + an53.dmg[1]),
+      "…and hits harder than her too");
+    ok(ast.speed < an53.speed && ast.speed > MD53.draugr.speed,
+      `…but he is NOT at the speed cap — you can break away (${ast.speed})`);
+    ok((ast.armor ?? 0) > (gd53.armor ?? 0) && (ast.armor ?? 0) < (MD53.draugr.armor ?? 0),
+      `…behind more iron than his guards and less than Kárr (${ast.armor})`);
+    ok(!ast.ranged && !ast.spells,
+      "everything he does he does within arm's length — the dragon keeps its spells");
+    /* THE ELEMENTS DO NOT REPEAT, now across FOUR bosses. A fifth reusing one
+     * of these would quietly make the circle chosen at Calanais matter less,
+     * and this is what would notice. */
+    const weak53 = (d: typeof ast): string[] =>
+      Object.entries(d.resist ?? {}).filter(([, v]) => v > 1).map(([k]) => k);
+    const answers53 = [weak53(MD53.redcap), weak53(MD53.draugr), weak53(an53), weak53(ast)].flat();
+    ok(new Set(answers53).size === answers53.length,
+      `each named boss still answers to its own element (${answers53.join(" ")})`);
+    ok(weak53(ast).join() === "ice",
+      "…and his is ice — a Cretan animal that was never once in its life cold");
+    /* …and the chronicle has to keep saying so. All three "three things" are
+     * stats above rather than colour, which is what stops the page going out
+     * of date silently. */
+    const SP53 = await import("../src/text/speech.ts");
+    for (const [lg, cold] of [["en", /cold/i], ["pl", /zimn/i], ["es", /frío/i]] as const) {
+      ok(cold.test(SP53.t("lore.minotaur", lg)),
+        `the ${lg} chronicle names cold as the answer`);
+    }
+
+    /* --- the relic ----------------------------------------------------------- */
+    const drops53 = (ast.loot ?? []).filter((l) => l.chance >= 1);
+    ok(drops53.length === 1 && drops53[0].kind === "minotaurEarring",
+      "the earring is his one certain drop — a mission cannot hang on a dice roll");
+    ok(IT53.minotaurEarring.stack === 1, "…it does not stack, as the other three relics do not");
+    ok(!IT53.minotaurEarring.slot, "…and it is evidence rather than equipment: no slot");
+    /* THE RING IS THE OTHER HALF, and it is the Power Ring's mirror: same
+     * slot, same weight, guard where that one gives attack. The ring slot
+     * becomes a choice rather than a thing you have or have not found. */
+    ok(IT53.guardRing.slot === "ring" && IT53.guardRing.weight === IT53.ring.weight,
+      "the guard ring is the Power Ring's opposite number in the same slot");
+    ok((IT53.guardRing.gear?.def ?? 0) > 0 && !IT53.guardRing.gear?.atk,
+      "…guard where that one gives attack");
+
+    /* --- art: registered, shipped, credited ---------------------------------- */
+    const sheet53 = fs53.readFileSync(new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const cred53 = fs53.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    for (const f of ["mob-asterion-walk.png", "mob-asterion-dead.png",
+      "item-minotaur-earring.png", "item-guard-ring.png",
+      "crete-terrain.png", "labyrinth-terrain.png"]) {
+      ok(fs53.existsSync(new URL(`../public/${f}`, import.meta.url)), `${f} is shipped`);
+      ok(cred53.includes(f), `…and ${f} is credited by filename`);
+    }
+    ok(sheet53.includes('asterion: "./mob-asterion-walk.png"'), "the walk sheet is registered");
+    ok(sheet53.includes('asterion: "./mob-asterion-dead.png"'),
+      "…and so is the body, which is HIS and not the plain minotaur's");
+    {
+      const b = fs53.readFileSync(new URL("../public/mob-asterion-walk.png", import.meta.url));
+      const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
+      ok(w % 9 === 0 && h % 4 === 0, `the sheet is the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(w / 9 <= 64 && h / 4 <= 64, "…and no frame is bigger than the LPC cell it came from");
+      for (const f of ["item-guard-ring.png", "item-minotaur-earring.png"]) {
+        const c = fs53.readFileSync(new URL(`../public/${f}`, import.meta.url));
+        ok(c.readUInt32BE(16) === 32 && c.readUInt32BE(20) === 32, `${f} is 32x32`);
+      }
+    }
+    ok(A53.iconFile("minotaurEarring") === "item-minotaur-earring.png"
+      && A53.iconFile("guardRing") === "item-guard-ring.png",
+      "both icons answer to their item ids");
+
+    /* --- the errand, and the doors it owns ----------------------------------- */
+    const { MISSIONS: MS53 } = await import("../src/systems/missions.ts");
+    const errand53 = MS53.find((m) => m.echo === "labyrinth");
+    ok(errand53?.ground === "crete" && errand53?.relic === "minotaurEarring"
+      && errand53?.reqLevel === 25,
+      `Crete and the labyrinth belong to one level-25 errand (${errand53?.id})`);
+    ok(errand53?.after === "blackannis" && MS53.findIndex((m) => m.id === errand53?.id) === 4,
+      "…the fifth link in the chain, behind Black Annis");
+    ok(!!holeP.inactive && !!homeP.inactive,
+      "…and neither the way in nor the way home opens without Chronos");
+    /* The pad in the cellar is the FIFTH named rift and it ships dormant like
+     * the other four. A named pad with no mission behind it is what the suite
+     * already forbids; this is the other half — a mission whose pad is lit by
+     * itself. */
+    const riftP = w53.cellar.portals.find((p) => p.dest === "crete");
+    ok(!!riftP && !!riftP.inactive, "the cellar's fifth rift is dark until he opens it");
+
+    /* HE NUMBERS DOORS, NOT LINKS, and Calanais is a gift rather than an
+     * errand — so this is the FOURTH door and the fifth mission. Pinned in
+     * three languages, because the phrase is the one thing in the offer a
+     * sixth errand could silently make wrong. */
+    ok(/\bCzwarte\b/.test(SP53.t("sage.offer.minotaur", "pl"))
+      && /\bfourth\b/.test(SP53.t("sage.offer.minotaur", "en"))
+      && /\bcuarta\b/.test(SP53.t("sage.offer.minotaur", "es")),
+      "…and Chronos calls it the fourth door");
+
+    /* --- THE BACK DOOR PAYS NOTHING, the same property Etap 52 pinned --------
+     * `/tp` does not touch a stage, a pad, a relic or a chest. A character who
+     * drops into the maze with the errand at `available` kills him, gets no
+     * earring, moves no stage, and stands on a way home that is correctly
+     * dark. Known property, not a bug — and it must stay known. */
+    {
+      const p53 = createPlayer({ x: 0, y: 0 });
+      p53.level = 25;
+      const MS = await import("../src/systems/missions.ts");
+      const CB53 = await import("../src/systems/combat.ts");
+      const { spawnAtPost: spawn53 } = await import("../src/entities/monsters.ts");
+
+      MS.resetMissions();
+      for (const id of ["calanais", "redcap", "draugr", "blackannis"]) MS.setStage(id, "closed");
+      ok(MS.stageOf("minotaur", 25) === "available",
+        "with Black Annis closed and at level, Chronos has the next one to hand out");
+      ok(MS.offeredMission(25)?.id === "minotaur", "…and it is the one he offers");
+      ok(MS.stageOf("minotaur", 24) === "locked", "…and one level short is still locked");
+
+      spawn53(maze, "asterion", bossPost.tx, bossPost.ty);
+      CB53.killMonster(maze, p53, maze.monsters[maze.monsters.length - 1]);
+      ok(MS.stageOf("minotaur", 25) === "available", "killing him without the errand moves nothing");
+      ok(!MS.relicRoadOpen("labyrinth", 25), "…and the way home stays shut, correctly");
+      ok(!maze.corpses.some((c) => (c.items ?? []).some((st) => st && st.kind === "minotaurEarring")),
+        "…and he parts with no earring for a walk-in");
+      maze.corpses.length = 0;
+      maze.monsters.length = 0;
+
+      MS.setStage("minotaur", "active");
+      spawn53(maze, "asterion", bossPost.tx, bossPost.ty);
+      CB53.killMonster(maze, p53, maze.monsters[maze.monsters.length - 1]);
+      ok(MS.stageOf("minotaur", 25) === "complete", "the same kill with the errand finishes it");
+      ok(MS.relicRoadOpen("labyrinth", 25), "…and lights the way home");
+      ok(MS.boundRelic("minotaurEarring", 25), "…and the earring is nailed to the character carrying it");
+      MS.resetMissions();
+      maze.corpses.length = 0;
+      maze.monsters.length = 0;
+      pads53(w53, 25);
+    }
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

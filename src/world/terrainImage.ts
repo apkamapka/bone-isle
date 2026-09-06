@@ -49,6 +49,8 @@ export const TERRAIN_SRC: Partial<Record<WorldKey, string>> = {
   tursachan: "./tursachan-terrain.png",
   daneHills: "./danehills-terrain.png",
   bower: "./bower-terrain.png",
+  crete: "./crete-terrain.png",
+  labyrinth: "./labyrinth-terrain.png",
 };
 
 /**
