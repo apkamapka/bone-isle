@@ -16337,6 +16337,22 @@ async function main(): Promise<void> {
     ok(IT48.hairEffigy.stack === 1, "…it does not stack, as the cap and the helm do not");
     ok(IT48.hairEffigy.weight < IT48.bloodCap.weight && IT48.hairEffigy.weight < IT48.graveHelm.weight,
       `…and it is the lightest of the three relics (${IT48.hairEffigy.weight})`);
+    /* SHIPPED AND CREDITED, the two checks the cap and the helm have had since
+     * Etap 41 and this relic somehow never got. It went unnoticed because the
+     * icon was procedural and the script that drew it was in the repo, so the
+     * file could not go missing; it is Radek's own artwork now, the script is
+     * gone, and a hand-drawn PNG very much can. */
+    {
+      const fsE = await import("node:fs");
+      const AE = await import("../src/gfx/itemArt.ts");
+      ok(fsE.existsSync(new URL("../public/item-hair-effigy.png", import.meta.url)),
+        "item-hair-effigy.png is shipped");
+      const b = fsE.readFileSync(new URL("../public/item-hair-effigy.png", import.meta.url));
+      ok(b.readUInt32BE(16) === 32 && b.readUInt32BE(20) === 32, "…at 32x32, the relic cell");
+      ok(fsE.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8")
+        .includes("item-hair-effigy.png"), "…and credited by filename");
+      ok(AE.iconFile("hairEffigy") === "item-hair-effigy.png", "…and the icon answers to the item id");
+    }
 
     /* --- SCENERY ART vs EVERYTHING UNDER IT ---------------------------------
      * A general rule, pinned here because this is where it was broken. A
@@ -16674,6 +16690,31 @@ async function main(): Promise<void> {
     ok(A53.iconFile("minotaurEarring") === "item-minotaur-earring.png"
       && A53.iconFile("guardRing") === "item-guard-ring.png",
       "both icons answer to their item ids");
+
+    /* NO GENERATOR MAY POINT AT A HAND-DRAWN FILE.
+     *
+     * All three relic-and-ring icons shipped first as procedural stand-ins,
+     * each with a script in `tools/` that regenerated its PNG byte for byte —
+     * which is the right shape for a placeholder and a loaded gun the moment
+     * the placeholder is replaced. Radek's artwork landed; the three scripts
+     * were deleted the same hour. This is what stops one of them coming back:
+     * anybody who re-adds a generator writing to one of these paths destroys
+     * the artwork the first time the directory is run, and would find out
+     * from a screenshot rather than from here.
+     *
+     * The check is on the FILENAMES rather than on the file contents because
+     * that is the mistake being guarded against — resurrecting the script,
+     * not editing the PNG. */
+    for (const gen of ["gen_hair_effigy.py", "gen_guard_ring.py", "gen_minotaur_earring.py"]) {
+      ok(!fs53.existsSync(new URL(`../tools/${gen}`, import.meta.url)),
+        `tools/${gen} stays deleted — its output path holds hand-drawn art now`);
+    }
+    /* …and the icons the generators used to write are all still there and all
+     * still the relic cell, which is the other half of the same guarantee. */
+    for (const f of ["item-hair-effigy.png", "item-guard-ring.png", "item-minotaur-earring.png"]) {
+      const b = fs53.readFileSync(new URL(`../public/${f}`, import.meta.url));
+      ok(b.readUInt32BE(16) === 32 && b.readUInt32BE(20) === 32, `${f} survives at 32x32`);
+    }
 
     /* --- the errand, and the doors it owns ----------------------------------- */
     const { MISSIONS: MS53 } = await import("../src/systems/missions.ts");

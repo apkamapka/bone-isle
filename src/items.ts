@@ -240,8 +240,10 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    *
    * The heaviest relic in the chain and the dearest, and it does not stack
    * for the reason none of them do: there is one Minotaur and there was one
-   * ear. PLACEHOLDER ARTWORK, drawn by `tools/gen_minotaur_earring.py` —
-   * Radek is replacing it. */
+   * ear. The icon is Radek's own, and what it draws is the EAR rather than
+   * the ring — which is the better reading of the two and the one the item
+   * name should be read against: what comes off him is the whole torn lobe
+   * with the bronze still in it. */
   minotaurEarring: { name: "Minotaur's Earring", stack: 1, value: 1100, weight: 10 },
   // ---- forge materials. Iron and steel are LIGHT on purpose: the Alchemy
   // ---- Tower wants 600 iron and 550 steel, and at a realistic weight the
@@ -445,7 +447,8 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * Priced above the Power Ring but not by much. It is worth more because
    * there is exactly one source — a one-time chest, no shop, no drop — and
    * the Power Ring at least still has Kárr's howe as well as its old shelf.
-   * PLACEHOLDER ARTWORK, drawn by `tools/gen_guard_ring.py`. */
+   * Icon by Radek: a banded ring, three-quarter on like the Power Ring's, in
+   * cold teal and bone against that one's gold and green. */
   guardRing: { name: "Guard Ring",   stack: 1, value: 120, weight: 2, slot: "ring",    gear: { def: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },

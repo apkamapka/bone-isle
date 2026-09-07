@@ -1223,10 +1223,11 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   bloodCap: SPR.cursedRib,
   // …and so does the helm.
   graveHelm: SPR.cursedRib,
-  // …and so does the effigy, which is drawn rather than sourced — see
-  // `tools/gen_hair_effigy.py`, which regenerates the PNG byte for byte.
+  // …and so do the effigy and the earring. All four relics ship with their
+  // own artwork and none of them has ever shown this bake on a real screen;
+  // it is here because the table must be total over `ItemKind`, and because a
+  // PNG that fails to load should draw something rather than nothing.
   hairEffigy: SPR.cursedRib,
-  // …and so does the earring, from `tools/gen_minotaur_earring.py`.
   minotaurEarring: SPR.cursedRib,
   iron: SPR.ironIngot, steel: SPR.steelIngot, essentialGem: SPR.essentialGem, coal: SPR.coalLump,
   mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed, dragonHam: SPR.dragonHam,
@@ -1234,8 +1235,9 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   // its own art lands. Slot-coloured so an outfit is still readable at a
   // glance, but deliberately crude — a placeholder that looks finished is a
   // placeholder that never gets replaced.
-  // The guard ring shares the Power Ring's bake for the moment before its own
-  // PNG lands — same slot, same silhouette at twelve pixels.
+  // The guard ring falls back to the Power Ring's bake: same slot, same
+  // silhouette at twelve pixels, and the only pair in the table where sharing
+  // a stand-in is the RIGHT answer rather than a placeholder.
   ring: SPR.eqRing, guardRing: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
   leatherHelm: SPR.gearStubHead, snakeskinHelm: SPR.gearStubHead, leatherBody: SPR.gearStubBody, snakeskinBody: SPR.gearStubBody,
   leatherLegs: SPR.gearStubLegs, snakeskinLegs: SPR.gearStubLegs, leatherBoots: SPR.gearStubBoots, snakeskinBoots: SPR.gearStubBoots,
