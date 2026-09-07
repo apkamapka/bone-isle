@@ -19,6 +19,8 @@ import { DANEHILLS_SPEC } from "./world/daneHillsSpec.ts";
 import { BOWER_SPEC } from "./world/bowerSpec.ts";
 import { CRETE_SPEC } from "./world/creteSpec.ts";
 import { LABYRINTH_SPEC } from "./world/labyrinthSpec.ts";
+import { ORCISLE_SPEC } from "./world/orcIsleSpec.ts";
+import { GORAK_SPEC } from "./world/gorakSpec.ts";
 import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
@@ -135,7 +137,16 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize
   // deliberately under the redcap's thirty: the errand pays more in total
   // because of the ring, and less in coin, so the biggest purse in the game
   // stays where it was.
-  haugr: ["ring", ["platinumCoin", 20]],
+  /* THE HOWE NOW HANDS OUT THE HEALTH RING (Etap 54), and the Power Ring has
+   * gone down to Gorak's hoard at level thirty. This is a swap rather than an
+   * addition and it is the right way round: at level fifteen, walking back out
+   * of a barrow, thirty-five points of body is worth more than two of attack,
+   * and the third ring had to enter the game somewhere a player would still be
+   * grateful for it. It also puts the three of them in the order they can be
+   * used — body at fifteen, guard at twenty-five, attack at thirty — instead
+   * of handing out the weakest one first and leaving the slot solved. The
+   * twenty platinum is unchanged. */
+  haugr: ["healthRing", ["platinumCoin", 20]],
   // Black Annis' hole, and the one hoard in the game that is NOT plunder. She
   // took lambs and children; she had no use for money and the folklore never
   // says she did. What is down here is what the county carried to her — the
@@ -174,6 +185,31 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize
    * Adding a third denomination is a one-line change if he wants the Tibia
    * number literally, and a very different economy. */
   labyrinth: ["guardRing", ["platinumCoin", 100]],
+  /* GORAK'S HOARD, and the biggest purse in the game — a hundred and thirty
+   * platinum, thirteen thousand gold, displacing the labyrinth's hundred the
+   * same way that one displaced the redcap's thirty.
+   *
+   * WHY IT MOVED AT ALL. Radek's note said a hundred, which would have been
+   * the first flat rung in the ladder: the labyrinth is gated at twenty-five
+   * and this at thirty, and paying both the same would say the two errands are
+   * worth the same. The exp needed to advance grows from 27,700 to 40,700
+   * across that gap — 1.47x — and the purse grows 1.3x, so the taper the chain
+   * has kept since the redcap is still there. It is a bigger prize measured in
+   * coin and a slightly smaller one measured against the level it is for.
+   *
+   * WHAT IT IS, in the fiction: this is not plunder off a road like the
+   * redcap's and it is not tribute like Minos'. Gorak has been collecting
+   * tribes, and a tribe that swears to somebody arrives carrying what it has.
+   * The pile at the end of the hall is what a hundred war-bands brought with
+   * them, which is why it is the largest one and why there is no gear in it
+   * beyond the ring.
+   *
+   * THE RING IS THE POWER RING, moved down out of Kárr's howe. It is the last
+   * of the three to arrive and the plainest — two points of attack, no guard,
+   * no body — which is right at the rung where a character has already been
+   * handed the other two and has to decide which of the three to actually
+   * wear. */
+  gorak: ["ring", ["platinumCoin", 130]],
 };
 
 /**
@@ -214,6 +250,8 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     bower: makeHandmadeWorld(BOWER_SPEC),
     crete: makeHandmadeWorld(CRETE_SPEC),
     labyrinth: makeHandmadeWorld(LABYRINTH_SPEC),
+    orcIsle: makeHandmadeWorld(ORCISLE_SPEC),
+    gorak: makeHandmadeWorld(GORAK_SPEC),
   };
   loadTerrainImages(worlds); // async; the baked terrain shows until it lands
   loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble

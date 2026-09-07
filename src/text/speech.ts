@@ -571,6 +571,143 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Y esta vez no dejes que sea él quien encuentre la salida.",
   },
 
+  /* ======================================================================
+   *  THE ORC ISLE — the fifth door, and the first errand about somebody who
+   *  was never written down.
+   *
+   *  RADEK'S POLISH IS THE PRIMARY AND IT IS HIS, not a translation of an
+   *  English draft — he wrote all six of these beats-first, and the only line
+   *  added to them is the door number at the top of the offer, because
+   *  Chronos has counted every door since Hermitage and skipping this one
+   *  would be the one wrong note in the set. English and Spanish are rebuilt
+   *  to the same beat count rather than translated line by line.
+   * ====================================================================== */
+
+  "sage.offer.orc": {
+    en: "The fifth door, and this time I have found something interesting.\n\n"
+      + "The orcs have started to gather.\n\n"
+      + "Not long ago they fought each other over every cave, every forge and "
+      + "every scrap of ground.\n\n"
+      + "Now somebody is uniting them.\n\n"
+      + "They call him Gorak.\n\n"
+      + "I want to see how far he can lead them.",
+    pl: "Piąte wrota, i tym razem znalazłem coś ciekawego.\n\n"
+      + "Orkowie zaczęli się zbierać.\n\n"
+      + "Jeszcze niedawno walczyli między sobą o każdą jaskinię, każdą kuźnię "
+      + "i każdy kawałek ziemi.\n\n"
+      + "Teraz ktoś ich jednoczy.\n\n"
+      + "Nazywają go Gorak.\n\n"
+      + "Chcę zobaczyć, jak daleko zdoła ich poprowadzić.",
+    es: "La quinta puerta, y esta vez he encontrado algo interesante.\n\n"
+      + "Los orcos han empezado a reunirse.\n\n"
+      + "Hace poco peleaban entre ellos por cada cueva, cada fragua y cada "
+      + "palmo de tierra.\n\n"
+      + "Ahora alguien los está uniendo.\n\n"
+      + "Lo llaman Gorak.\n\n"
+      + "Quiero ver hasta dónde logra llevarlos.",
+  },
+
+  "sage.accept.orc": {
+    en: "Gorak is the largest orc I have ever seen.\n\n"
+      + "And the first one to understand something important.\n\n"
+      + "One orc alone can take a village.\n\n"
+      + "Ten can take a fortress.\n\n"
+      + "A thousand can change the map.\n\n"
+      + "That is why he is gathering all of them.\n\n"
+      + "Warriors, hunters, shamans, and the ones who swore they would never "
+      + "fight under a single banner.\n\n"
+      + "Find Gorak.\n\n"
+      + "Before his army is ready.",
+    pl: "Gorak jest największym orkiem, jakiego widziałem.\n\n"
+      + "I pierwszym, który zrozumiał coś ważnego.\n\n"
+      + "Samotny ork może podbić wioskę.\n\n"
+      + "Dziesięciu może zdobyć twierdzę.\n\n"
+      + "Tysiąc może zmienić mapę.\n\n"
+      + "Dlatego zbiera ich wszystkich.\n\n"
+      + "Wojowników, łowców, szamanów i tych, którzy wcześniej przysięgali, "
+      + "że nigdy nie będą walczyć pod jednym sztandarem.\n\n"
+      + "Znajdź Goraka.\n\n"
+      + "Zanim jego armia będzie gotowa.",
+    es: "Gorak es el orco más grande que he visto.\n\n"
+      + "Y el primero que ha entendido algo importante.\n\n"
+      + "Un orco solo puede tomar una aldea.\n\n"
+      + "Diez pueden tomar una fortaleza.\n\n"
+      + "Mil pueden cambiar el mapa.\n\n"
+      + "Por eso los está reuniendo a todos.\n\n"
+      + "Guerreros, cazadores, chamanes y aquellos que juraron que nunca "
+      + "pelearían bajo un mismo estandarte.\n\n"
+      + "Encuentra a Gorak.\n\n"
+      + "Antes de que su ejército esté listo.",
+  },
+
+  "sage.decline.orc": {
+    en: "I understand.\n\n"
+      + "In that case, do not get in their way.\n\n"
+      + "In a while you may have a great many more reasons to look in on them.",
+    pl: "Rozumiem.\n\n"
+      + "W takim razie nie przeszkadzaj im.\n\n"
+      + "Być może za jakiś czas będziesz miał znacznie więcej powodów, żeby "
+      + "tam zajrzeć.",
+    es: "Entiendo.\n\n"
+      + "En ese caso, no te cruces en su camino.\n\n"
+      + "Puede que dentro de un tiempo tengas muchísimas más razones para "
+      + "asomarte por allí.",
+  },
+
+  "sage.remind.orc": {
+    en: "The orcs are still gathering.\n\n"
+      + "The further into their country you go, the more of them you will see.\n\n"
+      + "That is no longer an ordinary camp.\n\n"
+      + "It is an army.\n\n"
+      + "And Gorak is waiting at the end of it.",
+    pl: "Orkowie nadal się zbierają.\n\n"
+      + "Im dalej wejdziesz w ich ziemie, tym więcej ich zobaczysz.\n\n"
+      + "To już nie jest zwykły obóz.\n\n"
+      + "To armia.\n\n"
+      + "A na jej końcu czeka Gorak.",
+    es: "Los orcos siguen reuniéndose.\n\n"
+      + "Cuanto más entres en sus tierras, más de ellos verás.\n\n"
+      + "Eso ya no es un campamento cualquiera.\n\n"
+      + "Es un ejército.\n\n"
+      + "Y al final de él espera Gorak.",
+  },
+
+  "sage.handIn.orc": {
+    en: "So Gorak has fallen.\n\n"
+      + "Interesting.\n\n"
+      + "All their lives the orcs fought each other.\n\n"
+      + "He made them start fighting together.\n\n"
+      + "That was his greatest strength.\n\n"
+      + "And it may be exactly why his death does not end this story.",
+    pl: "Więc Gorak upadł.\n\n"
+      + "Ciekawe.\n\n"
+      + "Przez całe życie orkowie walczyli ze sobą.\n\n"
+      + "On sprawił, że zaczęli walczyć razem.\n\n"
+      + "To była jego największa siła.\n\n"
+      + "I może właśnie dlatego jego śmierć nie zakończy tej historii.",
+    es: "Así que Gorak ha caído.\n\n"
+      + "Interesante.\n\n"
+      + "Toda su vida los orcos pelearon entre ellos.\n\n"
+      + "Él hizo que empezaran a pelear juntos.\n\n"
+      + "Esa fue su mayor fuerza.\n\n"
+      + "Y puede que sea justo por eso que su muerte no cierra esta historia.",
+  },
+
+  "sage.empty.orc": {
+    en: "You are back.\n\n"
+      + "Gorak is presumably still alive.\n\n"
+      + "And his army is still growing.\n\n"
+      + "If you want to stop what he started, you will have to go back.",
+    pl: "Wróciłeś.\n\n"
+      + "Gorak zapewne wciąż żyje.\n\n"
+      + "A jego armia wciąż rośnie.\n\n"
+      + "Jeśli chcesz przerwać to, co zaczął, będziesz musiał wrócić.",
+    es: "Has vuelto.\n\n"
+      + "Gorak sigue vivo, con toda probabilidad.\n\n"
+      + "Y su ejército sigue creciendo.\n\n"
+      + "Si quieres detener lo que empezó, tendrás que volver.",
+  },
+
   /* --- TEMP-ETAP45-TESTMENU ---------------------------------------------
    * The two strings behind the "start over" answer. They are HERE rather
    * than in their own bundle so that pulling the feature is one contiguous
@@ -929,6 +1066,92 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Es rápida. Tan rápida como el de la gorra roja, y a él nadie lo ha dejado atrás.\n\n"
       + "No lleva hierro, así que cada golpe pesado cuenta entero.\n\n"
       + "Y cede ante la piedra. Excavó esa arenisca con las uñas, y fue la piedra la que la tapó.",
+  },
+  "lore.title.orc": {
+    en: "The orc lands — date unknown",
+    pl: "Ziemie orków — data nieznana",
+    es: "Las tierras de los orcos — fecha desconocida",
+  },
+  /* THE ONE CHRONICLE IN THE GAME THAT IS ABOUT NOT HAVING ONE.
+   *
+   * The other five pages are history — the Border ballads, Grettis saga, the
+   * Leicestershire records, Apollodorus, the stones at Calanais. Gorak is
+   * invented, and Radek's instruction was to make something up and to make it
+   * fascinating rather than to borrow a myth and file the name off.
+   *
+   * So the page does not invent a past for him. It inverts the form: Chronos
+   * is a man who has read everything, and the thing in front of him is the
+   * first thing he has no page for. He checks the way a time traveller would
+   * — forward, not backward — and the banner is not in the future either.
+   * That leaves him two readings, and he says which one he is choosing by
+   * sending the player. "I am not sending you to find out which. I am sending
+   * you to be the reason."
+   *
+   * That is also why the relic is a piece of the creature rather than
+   * something somebody put on it, and why `lore.title.orc` has no date on it
+   * where all four before it do. The heading is the argument in three words.
+   *
+   * The last four beats are the three levers, the same as every other boss
+   * page, and for the same reason: they are the only place in the game a
+   * player can learn that darkness is the answer. Every one of them is a
+   * stat in MONSTER_DEFS rather than colour and the smoke suite reads all
+   * three back, so the page cannot quietly go out of date.
+   *
+   * AND HIS ELEMENT IS ARGUED FROM CHARACTER, not from climate, which is what
+   * keeps it from being Asterion's beat again. Cold beats a bull bred under
+   * the Cretan sun because of where it was raised. Dark beats Gorak because
+   * being LOOKED AT is his entire method — a thousand orcs who have never
+   * stood in the same field follow the biggest thing in it, and they have to
+   * be able to see it. */
+  "lore.orc": {
+    en: "I have no page for you about Gorak.\n\n"
+      + "I will say that plainly, because I have never had to say it before: I looked, and he is nowhere.\n\n"
+      + "I have been in hundreds of ages. In every one of them the orcs are the same — many tribes, each against the next, and each of them losing on its own.\n\n"
+      + "There has never been an age in which they were one people.\n\n"
+      + "So when I saw a banner going up, I did what I always do. I went further on. A hundred years, then two hundred, then a thousand.\n\n"
+      + "The banner is not there either.\n\n"
+      + "No song about him, no name in any roll, no mound anybody stops at.\n\n"
+      + "Which means one of two things.\n\n"
+      + "Either Gorak fails on his own.\n\n"
+      + "Or somebody makes him fail.\n\n"
+      + "I am not sending you to find out which.\n\n"
+      + "I am sending you to be the reason.\n\n"
+      + "Three things.\n\n"
+      + "He is the largest I have ever seen, larger than the Minotaur, and he is slower than the fastest of his own. You can break away from him. They will not let you.\n\n"
+      + "He wears the heaviest iron anyone in this world has worn. Heavier than Kárr. A light blow will come straight back off it.\n\n"
+      + "And he gives way to the dark. Not because he is afraid of the night — because his whole strength is that a thousand orcs have something to look at. Take away the thing they are looking at and he is standing there alone.",
+    pl: "Nie mam dla ciebie strony o Goraku.\n\n"
+      + "Powiem to wprost, bo jeszcze nigdy nie musiałem: sprawdziłem i nie ma go nigdzie.\n\n"
+      + "Byłem w setkach epok. W każdej z nich orkowie są tacy sami — wiele plemion, jedno przeciwko drugiemu, i każde przegrywa osobno.\n\n"
+      + "Nigdy nie było wieku, w którym byliby jednym ludem.\n\n"
+      + "Więc kiedy zobaczyłem, że podnosi się sztandar, zrobiłem to, co zawsze. Poszedłem dalej. Sto lat naprzód, potem dwieście, potem tysiąc.\n\n"
+      + "Sztandaru tam też nie ma.\n\n"
+      + "Żadnej pieśni o nim, żadnego imienia w spisie, żadnego kopca, przy którym ktoś by się zatrzymał.\n\n"
+      + "To znaczy jedno z dwojga.\n\n"
+      + "Albo Gorak zawiedzie sam.\n\n"
+      + "Albo ktoś sprawi, że zawiedzie.\n\n"
+      + "Nie wysyłam cię, żebyś się dowiedział które.\n\n"
+      + "Wysyłam cię, żebyś był powodem.\n\n"
+      + "Trzy rzeczy.\n\n"
+      + "Jest największy, jakiego widziałem, większy od Minotaura, i jest wolniejszy od najszybszych ze swoich. Możesz się od niego oderwać. Oni ci na to nie pozwolą.\n\n"
+      + "Nosi najcięższe żelazo, jakie ktokolwiek na tym świecie nosił. Cięższe niż Kárr. Lekki cios się od niego odbije.\n\n"
+      + "I ustępuje ciemności. Nie dlatego, że boi się nocy — dlatego, że cała jego siła polega na tym, że tysiąc orków ma na co patrzeć. Zabierz im to, na co patrzą, a zostanie tam sam.",
+    es: "No tengo una página sobre Gorak para ti.\n\n"
+      + "Lo diré sin rodeos, porque nunca antes he tenido que decirlo: he buscado, y no está en ninguna parte.\n\n"
+      + "He estado en cientos de épocas. En todas ellas los orcos son iguales — muchas tribus, cada una contra la siguiente, y cada una perdiendo por su cuenta.\n\n"
+      + "Nunca ha habido un siglo en que fueran un solo pueblo.\n\n"
+      + "Así que al ver que se alzaba un estandarte, hice lo de siempre. Seguí adelante. Cien años, luego doscientos, luego mil.\n\n"
+      + "El estandarte tampoco está allí.\n\n"
+      + "Ninguna canción sobre él, ningún nombre en registro alguno, ningún túmulo ante el que alguien se detenga.\n\n"
+      + "Lo cual significa una de dos cosas.\n\n"
+      + "O Gorak fracasa por sí solo.\n\n"
+      + "O alguien hace que fracase.\n\n"
+      + "No te envío para que averigües cuál de las dos.\n\n"
+      + "Te envío para que seas el motivo.\n\n"
+      + "Tres cosas.\n\n"
+      + "Es el más grande que he visto, más que el Minotauro, y es más lento que los más rápidos de los suyos. Puedes zafarte de él. Ellos no te dejarán.\n\n"
+      + "Lleva el hierro más pesado que nadie ha llevado en este mundo. Más que Kárr. Un golpe ligero rebotará en él.\n\n"
+      + "Y cede ante la oscuridad. No porque tema la noche — sino porque toda su fuerza consiste en que mil orcos tengan algo que mirar. Quítales aquello que miran y se queda allí solo.",
   },
   "lore.title.minotaur": {
     en: "Knossos, Crete — c. 1400 BC",
@@ -1384,6 +1607,21 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     en: "Find the Minotaur in the labyrinth on Crete and beat the beast that for centuries let nobody find the way back.",
     pl: "Odnajdź Minotaura w labiryncie na Krecie i pokonaj bestię, która przez wieki nie pozwalała nikomu odnaleźć drogi powrotnej.",
     es: "Encuentra al Minotauro en el laberinto de Creta y vence a la bestia que durante siglos no dejó a nadie encontrar el camino de vuelta.",
+  },
+  /* The only mission title in the set that names no object and no place. The
+   * five before it are a cap, a helm, an effigy, an earring and a circle of
+   * stones — a thing you can hold or a thing you can stand in. This one names
+   * an ABSENCE, which is the whole errand, and the goal line under it is
+   * Radek's verbatim. */
+  "mission.title.orc": {
+    en: "The Banner Nobody Wrote Down",
+    pl: "Sztandar, którego nikt nie zapisał",
+    es: "El estandarte que nadie anotó",
+  },
+  "mission.goal.orc": {
+    en: "Find Gorak, chieftain of the orcs, and beat him before he can gather an army able to threaten the lands around him.",
+    pl: "Odnajdź Goraka, wodza orków, i pokonaj go, zanim zdoła zebrać armię zdolną zagrozić okolicznym krainom.",
+    es: "Encuentra a Gorak, caudillo de los orcos, y véncelo antes de que logre reunir un ejército capaz de amenazar las tierras vecinas.",
   },
   /* The second half of every errand, and the half nothing on screen used to
    * say. The goal line is written for a player who has not been down yet

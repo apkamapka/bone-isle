@@ -1588,10 +1588,11 @@ async function main(): Promise<void> {
     const alsoSold = gear.filter((k) => onSale.has(k as never));
     ok(alsoSold.length === 0,
       `…and nothing buried is also on a shelf${alsoSold.length ? " — " + alsoSold.join(",") : ""}`);
-    /* Six purses since Etap 53, and four pieces of gear: the labyrinth's
-     * hoard is the second chest in the game to hold both, after Kárr's. */
-    ok(held === gear.length + 6,
-      `every hoard is gear plus a purse, and six purses in all (${held})`);
+    /* Seven purses since Etap 54, and five pieces of gear: Gorak's hoard is
+     * the third chest in the game to hold both, after Kárr's and the
+     * labyrinth's. */
+    ok(held === gear.length + 7,
+      `every hoard is gear plus a purse, and seven purses in all (${held})`);
     // and nothing else in the game hides a chest that no prize is named for
     let orphan = "";
     for (const w of Object.values(worlds)) {
@@ -1640,8 +1641,12 @@ async function main(): Promise<void> {
     // creature killed once in one echo, but he is KIN — the four minotaur
     // ranks are the same animal several sizes down, and the errand is built on
     // the player having walked an island of them first.
-    ok(MONSTER_KINDS.length === 43,
-      `bestiary holds 43 kinds (18 + 21 humans + redcap + draugr + blackAnnis + asterion), got ${MONSTER_KINDS.length}`);
+    // …and Etap 54 Gorak, the forty-fourth and the sage's FIFTH named boss.
+    // Kin like Asterion — five orc ranks are the same creature smaller — and
+    // the first one in the chain who is nobody's folklore: invented for this
+    // game, which is what his errand is actually about.
+    ok(MONSTER_KINDS.length === 44,
+      `bestiary holds 44 kinds (18 + 21 humans + redcap + draugr + blackAnnis + asterion + gorak), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -7821,10 +7826,13 @@ async function main(): Promise<void> {
     // Etap 53 adds the sixth pair — Crete and the labyrinth under Knossos.
     // The rule holds a sixth time; what is new is the SHAPE of the second
     // half, which is a four-hundred-tile maze rather than a room.
+    // Etap 54 adds the seventh pair — the Orc Isle and Gorak's hall under it.
+    // Back to Liddesdale's shape after the labyrinth's detour: a ground to
+    // walk and one room at the end. What is new is that the room is FULL.
     ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 bower calanais cellar "
-      + "crete daneHills deaddeep1 deaddeep2 haramsey haugr hermitage home labyrinth liddesdale "
-      + "minodeep1 minodeep2 orcdeep1 orcdeep2 reach town tursachan",
-      `twenty-four maps and no others (${keys.length}: ${keys.join(" ")})`);
+      + "crete daneHills deaddeep1 deaddeep2 gorak haramsey haugr hermitage home labyrinth liddesdale "
+      + "minodeep1 minodeep2 orcIsle orcdeep1 orcdeep2 reach town tursachan",
+      `twenty-six maps and no others (${keys.length}: ${keys.join(" ")})`);
     for (const dead of ["cave.ts", "deepwild.ts"]) {
       ok(!nfs.existsSync(new URL(`../src/world/${dead}`, import.meta.url)),
         `${dead} is gone, not merely unreferenced`);
@@ -13520,7 +13528,15 @@ async function main(): Promise<void> {
       "the hoard is NOT in his pocket — a respawning boss may not print money");
     ok((d43.gold[0] + d43.gold[1]) / 2 < 60, "…his purse stays on the bestiary's own gold curve");
     const hoard43 = (await import("../src/game.ts")).CHEST_PRIZES.haugr;
-    ok(!!hoard43 && hoard43.includes("ring"), "…and the Power Ring waits in a one-time chest instead");
+    /* THE HOWE HANDS OUT THE HEALTH RING SINCE ETAP 54, not the Power Ring.
+     * The property being pinned is unchanged and is the one that matters — a
+     * respawning boss does not print the reward, a one-time chest does — but
+     * which ring is in it moved: the Power Ring went down to Gorak at level
+     * thirty and thirty-five points of body took its place here at fifteen,
+     * which is the better gift at this rung and puts the three rings in the
+     * order a character can use them. */
+    ok(!!hoard43 && hoard43.includes("healthRing"),
+      "…and the Health Ring waits in a one-time chest instead");
     ok(!!hoard43 && hoard43.some((pz) => Array.isArray(pz) && pz[0] === "platinumCoin" && pz[1] === 20),
       "…with twenty platinum beside it");
     const { SHOPS: SHOPS43 } = await import("../src/entities/npcs.ts");
@@ -16813,6 +16829,446 @@ async function main(): Promise<void> {
       maze.corpses.length = 0;
       maze.monsters.length = 0;
       pads53(w53, 25);
+    }
+  }
+
+  console.log("Etap 54 — the Orc Isle, Gorak's hall, and the third ring:");
+  {
+    const fs54 = await import("node:fs");
+    const { buildWorlds: bw54, applyMissionPads: pads54, CHEST_PRIZES: CP54 } = await import("../src/game.ts");
+    const { MONSTER_DEFS: MD54 } = await import("../src/entities/monsters.ts");
+    const { ITEMS: IT54 } = await import("../src/items.ts");
+    const { Tile: T54 } = await import("../src/world/types.ts");
+    const A54 = await import("../src/gfx/itemArt.ts");
+    const SP54 = await import("../src/text/speech.ts");
+    const w54 = bw54(WORLD_SEED);
+    const isle = w54.orcIsle, hall = w54.gorak;
+
+    /* --- the two traces still match their exports -------------------------- */
+    ok(isle.w === 110 && isle.h === 110, `the Orc Isle is 110x110 (${isle.w}x${isle.h})`);
+    ok(hall.w === 40 && hall.h === 100, `Gorak's hall is 40x100 (${hall.w}x${hall.h})`);
+    for (const [f, W, H] of [["orcisle-terrain.png", 3520, 3520],
+      ["gorak-terrain.png", 1280, 3200]] as const) {
+      const b = fs54.readFileSync(new URL(`../public/${f}`, import.meta.url));
+      ok(b.readUInt32BE(16) === W && b.readUInt32BE(20) === H,
+        `${f} is exactly the grid times 32 (${b.readUInt32BE(16)}x${b.readUInt32BE(20)})`);
+    }
+
+    const open54 = (wd: typeof isle, x: number, y: number): boolean =>
+      x >= 0 && y >= 0 && x < wd.w && y < wd.h
+      && !wd.solid[y][x] && wd.tile[y][x] !== T54.Water;
+    const walkCount54 = (wd: typeof isle): number => {
+      let n = 0;
+      for (let y = 0; y < wd.h; y++) for (let x = 0; x < wd.w; x++) if (open54(wd, x, y)) n++;
+      return n;
+    };
+    const flood54 = (wd: typeof isle, sx: number, sy: number): Map<string, number> => {
+      const d = new Map<string, number>([[`${sx},${sy}`, 0]]);
+      const q: [number, number][] = [[sx, sy]];
+      for (let i = 0; i < q.length; i++) {
+        const [x, y] = q[i];
+        const here = d.get(`${x},${y}`)!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, k = `${nx},${ny}`;
+          if (!open54(wd, nx, ny) || d.has(k)) continue;
+          d.set(k, here + 1); q.push([nx, ny]);
+        }
+      }
+      return d;
+    };
+
+    /* --- the island --------------------------------------------------------- */
+    const padI = isle.portals.find((p) => p.dest === "cellar")!;
+    const holeI = isle.portals.find((p) => p.dest === "gorak")!;
+    ok(!!padI && !!holeI && isle.portals.length === 2,
+      `the Orc Isle has exactly the two doors it should (${isle.portals.length})`);
+    const holeT = { tx: Math.floor(holeI.x / 32), ty: Math.floor(holeI.y / 32) };
+    const padT = { tx: Math.floor(padI.x / 32), ty: Math.floor(padI.y / 32) };
+    const reach54 = flood54(isle, holeT.tx, holeT.ty);
+    ok(reach54.size === walkCount54(isle),
+      `every open square on the isle is reachable — the scatter closed no pockets (${reach54.size} of ${walkCount54(isle)})`);
+    /* THE LONGEST CROSSING IN THE CHAIN, and it is meant to be. This export is
+     * seven and a half thousand land squares against Crete's five, and it is
+     * the ground behind the highest door the sage has opened. Banded rather
+     * than pinned, because the two ends are CHOSEN in the generator — this
+     * export carries no object layer — and a re-pick that quietly halved the
+     * walk is the thing worth catching. */
+    const crossing54 = reach54.get(`${padT.tx},${padT.ty}`) ?? -1;
+    ok(crossing54 > 120 && crossing54 < 165,
+      `the crossing is the longest in the chain, pad to descent (${crossing54} tiles of walking)`);
+    const crete54 = w54.crete;
+    const creteCross = flood54(crete54, 15, 78).get("50,14") ?? -1;
+    ok(crossing54 > creteCross,
+      `…and longer than Crete's, which is the right way round (${crossing54} > ${creteCross})`);
+
+    /* --- who lives on it ----------------------------------------------------
+     * ALL FIVE RANKS ARE ORCS, and that is the errand's argument rather than a
+     * saving: the island is where they are all WALKING TO. A sellsword or a
+     * horn on it would say it is somewhere orcs happen to be. */
+    const posts54 = isle.mobPosts ?? [];
+    ok(posts54.length === 70, `seventy posts on the Orc Isle (${posts54.length})`);
+    const ranks54 = posts54.map((p) => p.kind);
+    ok(new Set(ranks54).size === 5 && ranks54.every((k) => k.startsWith("orc")),
+      `five ranks and every one of them an orc (${[...new Set(ranks54)].sort().join(" ")})`);
+    /* RADEK'S CAP, and it is also the fiction — what is on the island is the
+     * tribes still arriving, and the heavy things are already down the hole.
+     * An island fielding a dozen berserkers would answer the question the
+     * errand exists to ask. */
+    ok(ranks54.filter((k) => k === "orcBerserker").length === 1,
+      "exactly ONE berserker, as asked");
+    ok(ranks54.filter((k) => k === "orcShaman").length === 1,
+      "…and exactly ONE shaman");
+    /* THE BERSERKER GLYPH IS NOT `B`. `handmade.ts` handles `B` in its own
+     * switch as a BUILD SPOT, before a spec's `monsters` map is consulted, so
+     * a berserker written as `B` is not an error — it is a plot of empty
+     * ground where a creature should be. The first cut of the generator did
+     * exactly that and both maps shipped a rank short with every test green.
+     * Two assertions rather than one, because the count above would pass on a
+     * map that had lost the rank and gained a build spot. */
+    ok((isle.buildSpots ?? []).length === 0 && (hall.buildSpots ?? []).length === 0,
+      "neither map grew a build spot where a berserker should stand");
+    let tight54 = 0;
+    for (let i = 0; i < posts54.length; i++)
+      for (let j = i + 1; j < posts54.length; j++) {
+        const a = posts54[i], b = posts54[j];
+        if ((a.tx - b.tx) ** 2 + (a.ty - b.ty) ** 2 < 64) tight54++;
+      }
+    ok(tight54 === 0, `no two posts inside eight tiles — every pull is a single one (${tight54})`);
+    const atDoor54 = posts54.filter((p) =>
+      (p.tx - padT.tx) ** 2 + (p.ty - padT.ty) ** 2 < 64
+      || (p.tx - holeT.tx) ** 2 + (p.ty - holeT.ty) ** 2 < 64);
+    ok(atDoor54.length === 0, `nothing stands within eight tiles of either door (${atDoor54.length})`);
+
+    /* THE GRADIENT IS BY WALKING, from the DESCENT. Radek's ask was "the
+     * closer to the descent the stronger"; a straight-line ranking would pass
+     * a weaker test than this one. */
+    const meanFromHole54 = (kind: string): number => {
+      const ds = posts54.filter((p) => p.kind === kind)
+        .map((p) => reach54.get(`${p.tx},${p.ty}`) ?? 1e9);
+      return ds.reduce((a, b) => a + b, 0) / ds.length;
+    };
+    const ladder54 = ["orcBerserker", "orcShaman", "orcWarrior", "orcArcher", "orc"].map(meanFromHole54);
+    ok(ladder54.every((d, i) => i === 0 || d > ladder54[i - 1]),
+      `the heavier the rank the nearer the descent, by WALKING (${ladder54.map((d) => d.toFixed(0)).join(" < ")})`);
+
+    /* --- the island is dressed ---------------------------------------------- */
+    ok(isle.trees.length > 450 && isle.trees.length < 750,
+      `the isle is wooded rather than mown (${isle.trees.length} trees)`);
+    ok(isle.rocks.length > 90, `…and carries real stone (${isle.rocks.length} nodes)`);
+
+    /* THE BREATHER IS AT THE PAD, WHICH INVERTS CRETE — and this is the one
+     * assertion in the block that is about the DESIGN rather than the numbers.
+     * On Crete the camp sits at the mouth of the labyrinth, somewhere to sit
+     * down before going in. Here the hole is the enemy's own heart, so a
+     * friendly fire beside it would be the wrong sentence: the breather is
+     * where you LAND and everything else runs the other way. */
+    const padFire = isle.fires.find((f) =>
+      (f.tx - padT.tx) ** 2 + (f.ty - padT.ty) ** 2 <= 36);
+    ok(!!padFire, "a fire burns within six tiles of where you land");
+    ok(!posts54.some((p) =>
+      (p.tx - padFire!.tx) ** 2 + (p.ty - padFire!.ty) ** 2 < 64),
+      "…and nothing hostile is inside aggro of it — a breather, not a trap");
+    /* THERE ARE FIRES AT THE DESCENT TOO, and that is the inversion rather
+     * than a contradiction of it: those are THEIRS. What separates the two
+     * ends is not whether something is burning, it is who is standing round
+     * it — the fire where you land has nothing hostile inside its aggro, and
+     * the ones at the far end are ringed by the army. */
+    const manned = isle.fires.filter((f) =>
+      (f.tx - holeT.tx) ** 2 + (f.ty - holeT.ty) ** 2 <= 400
+      && posts54.some((p) => (p.tx - f.tx) ** 2 + (p.ty - f.ty) ** 2 < 100));
+    ok(manned.length > 0,
+      `the fires near the descent are manned, unlike the one you land at (${manned.length})`);
+    /* The camps thicken toward the hole rather than being scattered flat, so
+     * the island says what Chronos says out loud. Totems are the tell.
+     *
+     * MEASURED FROM THE NEIGHBOURING SQUARE, because a totem SEALS the tile it
+     * stands on and never appears in a flood of open ground. Reading the pole's
+     * own square would score every one of them as unreachable and the
+     * comparison would pass on nothing at all. */
+    const distTo = (tx: number, ty: number): number => {
+      const n = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+        .map(([dx, dy]) => reach54.get(`${tx + dx},${ty + dy}`))
+        .filter((v): v is number => v !== undefined);
+      return n.length ? Math.min(...n) : Number.POSITIVE_INFINITY;
+    };
+    const poles = (isle.scenery ?? []).filter((sc) => sc.kind === "skullPole");
+    const sited = poles.map((sc) => distTo(sc.tx, sc.ty)).filter((d) => Number.isFinite(d));
+    const meanPole = sited.reduce((a, b) => a + b, 0) / sited.length;
+    const meanOpen = [...reach54.values()].reduce((a, b) => a + b, 0) / reach54.size;
+    ok(sited.length === poles.length,
+      `every totem stands on ground somebody could walk up to (${sited.length} of ${poles.length})`);
+    ok(poles.length > 15 && meanPole < meanOpen * 0.8,
+      `the totems crowd the descent rather than the shore (${meanPole.toFixed(0)} vs ${meanOpen.toFixed(0)} average)`);
+
+    /* --- the hall ------------------------------------------------------------
+     * THE LABYRINTH'S OPPOSITE, on purpose. That one is four hundred tiles of
+     * maze with nothing else alive in it; this is ONE room you can see the
+     * whole length of, and what makes the walk long is that his army is
+     * standing in it. If a later pass ever empties it, this is what stops it. */
+    const upH = hall.portals.find((p) => p.dest === "orcIsle")!;
+    const homeH = hall.portals.find((p) => p.dest === "cellar")!;
+    const upT = { tx: Math.floor(upH.x / 32), ty: Math.floor(upH.y / 32) };
+    const inHall = hall.mobPosts ?? [];
+    const bossPost54 = inHall.find((p) => p.kind === "gorak")!;
+    const hallReach = flood54(hall, upT.tx, upT.ty);
+    ok(hallReach.size === walkCount54(hall),
+      `the hall has no pockets — every open square is reachable (${hallReach.size} of ${walkCount54(hall)})`);
+    const toGorak = hallReach.get(`${bossPost54.tx},${bossPost54.ty}`) ?? -1;
+    ok(toGorak > 70, `the length of the room is the approach: ${toGorak} tiles from the ladder`);
+    ok(inHall.length === 23 && inHall.filter((p) => p.kind === "gorak").length === 1,
+      `twenty-two ranks and the man himself (${inHall.length})`);
+    ok(inHall.filter((p) => p.kind === "orcBerserker").length === 8
+      && inHall.filter((p) => p.kind === "orcWarrior").length === 14,
+      "…eight berserkers and fourteen warriors, which is what Radek asked for down here");
+    /* AND THE HEAVY END IS THE FAR END. Above ground the errand allows one
+     * berserker because the tribes are still arriving; down here they are what
+     * he has already collected, and they hold the last third. */
+    const meanToBoss = (kind: string): number => {
+      const ds = inHall.filter((p) => p.kind === kind)
+        .map((p) => (p.tx - bossPost54.tx) ** 2 + (p.ty - bossPost54.ty) ** 2);
+      return Math.sqrt(ds.reduce((a, b) => a + b, 0) / ds.length);
+    };
+    ok(meanToBoss("orcBerserker") < meanToBoss("orcWarrior"),
+      `the berserkers hold the far third (${meanToBoss("orcBerserker").toFixed(0)} vs ${meanToBoss("orcWarrior").toFixed(0)} from him)`);
+    /* NINE TILES MATTERS MORE HERE THAN ANYWHERE, because an open hall has no
+     * corner to break line of sight — spacing is the ONLY thing keeping a pull
+     * to one creature. And he carries a wider ring than his ranks do, so the
+     * last berserker cannot be fought inside his aggro. */
+    let tightH = 0;
+    for (let i = 0; i < inHall.length; i++)
+      for (let j = i + 1; j < inHall.length; j++) {
+        const a = inHall[i], b = inHall[j];
+        if ((a.tx - b.tx) ** 2 + (a.ty - b.ty) ** 2 < 64) tightH++;
+      }
+    ok(tightH === 0, `no two posts inside eight tiles in the hall either (${tightH})`);
+    const crowding = inHall.filter((p) => p.kind !== "gorak").map((p) =>
+      Math.hypot(p.tx - bossPost54.tx, p.ty - bossPost54.ty)).sort((a, b) => a - b)[0];
+    ok(crowding > 10, `nothing stands inside his own ring (${crowding.toFixed(0)} tiles to the nearest rank)`);
+    /* NO TREES DOWN HERE — Radek's rule, and the obvious one. Stone does both
+     * jobs instead, because he asked for both, and this is the FIRST echo in
+     * the game to carry stone you can actually work. */
+    ok(hall.trees.length === 0, "nothing grows in a hall cut out of rock");
+    ok(hall.rocks.length > 25, `…and it is the first echo with workable stone in it (${hall.rocks.length} nodes)`);
+    ok((hall.scenery ?? []).some((sc) => sc.kind === "boulderA" || sc.kind === "boulderB"),
+      "…and boulders as well, which is the other half of the same ask");
+    /* The hoard sits in open floor, walkable on all four sides, exactly as
+     * Kárr's, hers and the Minotaur's do. */
+    const hoard54 = hall.structures.find((st) => st.key === "treasure")!;
+    ok(!!hoard54 && [[1, 0], [-1, 0], [0, 1], [0, -1]]
+      .every(([dx, dy]) => open54(hall, hoard54.tx + dx, hoard54.ty + dy)),
+      "you can walk right round his hoard");
+    /* THE PURSE GREW RATHER THAN REPEATING. Radek's note said a hundred, which
+     * would have been the first flat rung in the chain — the labyrinth pays a
+     * hundred at level 25 and this is gated at 30. The exp needed to advance
+     * grows 1.47x across that gap and the purse grows 1.3x, so it is a bigger
+     * prize in coin and a slightly smaller one against the level it is for,
+     * which is the taper every rung since the redcap has kept. */
+    ok(CP54.gorak?.length === 2 && CP54.gorak[0] === "ring",
+      "his hoard holds the Power Ring, moved down out of Kárr's howe");
+    const purse54 = (CP54.gorak ?? []).find((pz) => Array.isArray(pz)) as [string, number] | undefined;
+    const purseLab = (CP54.labyrinth ?? []).find((pz) => Array.isArray(pz)) as [string, number] | undefined;
+    ok(!!purse54 && purse54[0] === "platinumCoin" && purse54[1] === 130,
+      `…and a hundred and thirty platinum, the biggest purse in the game (${purse54?.[1]})`);
+    ok(!!purseLab && purse54![1] > purseLab[1],
+      `…which is a real step up from the labyrinth's (${purse54![1]} > ${purseLab![1]})`);
+
+    /* --- the creature --------------------------------------------------------
+     * HE IS ASTERION'S SHAPE, NOT THE REDCAP'S: kin to a rank that already
+     * walks the game, one echo, killed once. What is his own is the size. */
+    const gk = MD54.gorak, ber54 = MD54.orcBerserker, ast54 = MD54.asterion;
+    ok(gk.hp > ast54.hp && gk.hp > ber54.hp * 6,
+      `the largest body in the game, over Asterion and six times his own berserkers (${gk.hp} hp)`);
+    ok((gk.dmg[0] + gk.dmg[1]) > (ast54.dmg[0] + ast54.dmg[1]),
+      "…and hits harder than Asterion too");
+    /* THE SPEED IS THE INTERESTING ONE. He is the SLOWEST named boss in the
+     * chain and slower than his own soldiers: you can break away from him, and
+     * the berserkers you broke away past will not let you enjoy it. */
+    ok(gk.speed < ber54.speed,
+      `…but slower than his own berserkers, so breaking away costs you (${gk.speed} < ${ber54.speed})`);
+    ok(gk.speed < MD54.redcap.speed, "…and nowhere near the redcap's ceiling, which nothing may pass");
+    ok((gk.armor ?? 0) > (MD54.draugr.armor ?? 0),
+      `…behind more iron than Kárr, which is the most anyone has worn (${gk.armor})`);
+    ok(!gk.ranged && !gk.spells,
+      "everything he does he does within arm's length — no kit, just the room");
+    /* THE ELEMENTS DO NOT REPEAT, now across FIVE bosses, and shadow was the
+     * last one unclaimed. A sixth reusing one of these would quietly make the
+     * circle chosen at Calanais matter less, and this is what would notice. */
+    const weak54 = (d: typeof gk): string[] =>
+      Object.entries(d.resist ?? {}).filter(([, v]) => v > 1).map(([k]) => k);
+    const answers54 = [weak54(MD54.redcap), weak54(MD54.draugr), weak54(MD54.blackAnnis),
+      weak54(ast54), weak54(gk)].flat();
+    ok(new Set(answers54).size === answers54.length,
+      `each named boss still answers to its own element (${answers54.join(" ")})`);
+    ok(weak54(gk).join() === "shadow",
+      "…and his is the dark, which is the fifth and the last of them");
+    /* …and the chronicle has to keep saying so, in all three languages. It is
+     * the only place in the game a player can learn it. */
+    for (const [lg, dark] of [["en", /\bdark\b/i], ["pl", /ciemno/i], ["es", /oscurid/i]] as const) {
+      ok(dark.test(SP54.t("lore.orc", lg)),
+        `the ${lg} chronicle names the dark as the answer`);
+    }
+    /* AND THE PAGE IS ABOUT NOT HAVING A PAGE, which is the one thing in this
+     * errand that could be quietly rewritten into an ordinary myth. Chronos
+     * says he looked and found nothing; if that beat ever goes, the relic,
+     * the mission title and the dateless heading all stop meaning anything. */
+    ok(/nigdzie/i.test(SP54.t("lore.orc", "pl")) && /nowhere/i.test(SP54.t("lore.orc", "en")),
+      "…and it still opens on the fact that he is in no chronicle at all");
+    ok(!/\d{3}/.test(SP54.t("lore.title.orc", "pl")),
+      `the heading carries no date, where all four before it do (${SP54.t("lore.title.orc", "pl")})`);
+
+    /* --- the relic ------------------------------------------------------------ */
+    const drops54 = (gk.loot ?? []).filter((l) => l.chance >= 1);
+    ok(drops54.length === 1 && drops54[0].kind === "gorakTusk",
+      "the tusk is his one certain drop — a mission cannot hang on a dice roll");
+    ok(IT54.gorakTusk.stack === 1, "…it does not stack, as the other four relics do not");
+    ok(!IT54.gorakTusk.slot, "…and it is evidence rather than equipment: no slot");
+    ok(!gk.loot?.some((e) => e.kind === "platinumCoin" || e.kind === "goldCoin"),
+      "…and the hoard is NOT in his pocket — a respawning boss may not print money");
+
+    /* --- THE THIRD RING ------------------------------------------------------
+     * The pair became a trio, and the point is that the slot is now a real
+     * three-way trade rather than a thing you have or have not found. Attack,
+     * guard, body — one stat each, no overlap. */
+    for (const k of ["ring", "guardRing", "healthRing"] as const) {
+      ok(IT54[k].slot === "ring" && IT54[k].weight === IT54.ring.weight,
+        `${IT54[k].name} is in the ring slot at the Power Ring's weight`);
+    }
+    ok((IT54.healthRing.gear?.maxhp ?? 0) === 35
+      && !IT54.healthRing.gear?.atk && !IT54.healthRing.gear?.defBonus,
+      "the Health Ring pays body and nothing else");
+    ok(!IT54.ring.gear?.maxhp && !IT54.guardRing.gear?.maxhp,
+      "…and neither of the other two pays any, so the three do not overlap");
+    {
+      const SK54 = await import("../src/systems/skills.ts");
+      const pr = createPlayer({ x: 0, y: 0 });
+      const armorBare = SK54.defenseArmor(pr.eq), poolBare = SK54.defenseShield(pr.eq);
+      pr.eq.ring = "healthRing";
+      /* IT IS NOT A FIFTH HELMET, the same trap the Guard Ring had to avoid.
+       * `maxhp` is a pool, not a subtraction: wearing it must change neither
+       * defence number, or it would quietly be armour with a different name. */
+      ok(SK54.defenseArmor(pr.eq) === armorBare && SK54.defenseShield(pr.eq) === poolBare,
+        "…and it guards nothing at all, which is what makes the slot a choice");
+      pr.eq.ring = null;
+    }
+    /* THE ORDER THEY ARRIVE IN IS THE POINT. Body at fifteen out of Kárr's
+     * howe, guard at twenty-five out of the labyrinth, attack at thirty out of
+     * Gorak's hoard — each one useful at the rung that hands it over, instead
+     * of the weakest arriving first and solving the slot. */
+    ok(CP54.haugr?.includes("healthRing") && CP54.labyrinth?.includes("guardRing")
+      && CP54.gorak?.includes("ring"),
+      "the three rings arrive in the order a character can use them");
+    const { SHOPS: SHOPS54 } = await import("../src/entities/npcs.ts");
+    const stocked = new Set(Object.values(SHOPS54)
+      .flatMap((sh) => (sh?.entries ?? []).filter((e) => e.buy > 0).map((e) => e.kind)));
+    const bought = new Set(Object.values(SHOPS54)
+      .flatMap((sh) => (sh?.entries ?? []).filter((e) => e.sell > 0).map((e) => e.kind)));
+    ok(!["ring", "guardRing", "healthRing"].some((k) => stocked.has(k as never)),
+      "no shelf sells any of them — a reward you can buy is not a reward");
+    ok(["ring", "guardRing", "healthRing"].every((k) => bought.has(k as never)),
+      "…but the elder buys all three, so a duplicate is still worth carrying out");
+
+    /* --- art: registered, shipped, credited ---------------------------------- */
+    const sheet54 = fs54.readFileSync(new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
+    const cred54 = fs54.readFileSync(new URL("../CREDITS.md", import.meta.url), "utf8");
+    for (const f of ["mob-gorak-walk.png", "mob-gorak-dead.png",
+      "item-gorak-tusk.png", "item-health-ring.png",
+      "orcisle-terrain.png", "gorak-terrain.png"]) {
+      ok(fs54.existsSync(new URL(`../public/${f}`, import.meta.url)), `${f} is shipped`);
+      ok(cred54.includes(f), `…and ${f} is credited by filename`);
+    }
+    ok(sheet54.includes('gorak: "./mob-gorak-walk.png"'), "the walk sheet is registered");
+    ok(sheet54.includes('gorak: "./mob-gorak-dead.png"'),
+      "…and so is the body, which is HIS and not the plain orc's");
+    {
+      const b = fs54.readFileSync(new URL("../public/mob-gorak-walk.png", import.meta.url));
+      const o = fs54.readFileSync(new URL("../public/mob-orc-walk.png", import.meta.url));
+      const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
+      ok(w % 9 === 0 && h % 4 === 0, `the sheet is the 9x4 grid the slicer expects (${w}x${h})`);
+      ok(w / 9 <= 64 && h / 4 <= 64, "…and no frame is bigger than the LPC cell it came from");
+      /* FORTY PER CENT, and it is checked rather than trusted. He is cut from
+       * the same generator parts as the plain orc — same body, same head — so
+       * at native size his frame is that one's to the pixel, and the ONLY
+       * thing on screen saying warlord before he swings is the scale. A
+       * re-cut that forgot it would produce a boss indistinguishable from the
+       * ranks he commands, which is exactly the mistake Asterion's corpse
+       * assertion exists to prevent one map down. */
+      const ratio = (h / 4) / (o.readUInt32BE(20) / 4);
+      ok(ratio > 1.35 && ratio < 1.45,
+        `…and he is drawn forty per cent taller than the orcs he commands (${ratio.toFixed(2)}x)`);
+      for (const f of ["item-gorak-tusk.png", "item-health-ring.png"]) {
+        const c = fs54.readFileSync(new URL(`../public/${f}`, import.meta.url));
+        ok(c.readUInt32BE(16) === 32 && c.readUInt32BE(20) === 32, `${f} is 32x32`);
+      }
+    }
+    ok(A54.iconFile("gorakTusk") === "item-gorak-tusk.png"
+      && A54.iconFile("healthRing") === "item-health-ring.png",
+      "both icons answer to their item ids");
+    /* THE RECOLOUR SCRIPT MAY NOT RUN WITHOUT A SOURCE. Etap 53's rule is that
+     * no generator may quietly destroy bought artwork the first time somebody
+     * runs the tools directory; this one writes to such a path, so the guard
+     * is that its source argument is mandatory rather than defaulted. */
+    const rec54 = fs54.readFileSync(new URL("../tools/recolor_gorak_tusk.py", import.meta.url), "utf8");
+    ok(/len\(sys\.argv\) < 2/.test(rec54) && /source is required/.test(rec54),
+      "the tusk recolour refuses to run without the file it is recolouring");
+
+    /* --- the errand, and the doors it owns ----------------------------------- */
+    const { MISSIONS: MS54 } = await import("../src/systems/missions.ts");
+    const errand54 = MS54.find((m) => m.echo === "gorak");
+    ok(errand54?.ground === "orcIsle" && errand54?.relic === "gorakTusk"
+      && errand54?.reqLevel === 30,
+      `the isle and the hall belong to one level-30 errand (${errand54?.id})`);
+    ok(errand54?.after === "minotaur" && MS54.findIndex((m) => m.id === errand54?.id) === 5,
+      "…the sixth link in the chain, behind the Minotaur");
+    ok(!!holeI.inactive && !!homeH.inactive,
+      "…and neither the way in nor the way home opens without Chronos");
+    const riftI = w54.cellar.portals.find((p) => p.dest === "orcIsle");
+    ok(!!riftI && !!riftI.inactive, "the cellar's sixth rift is dark until he opens it");
+    /* HE NUMBERS DOORS, NOT LINKS — Calanais was a gift rather than an errand
+     * — so this is the FIFTH door and the sixth mission. Pinned in three
+     * languages, because it is the one phrase a seventh errand could silently
+     * make wrong. */
+    ok(/\bPiąte\b/.test(SP54.t("sage.offer.orc", "pl"))
+      && /\bfifth\b/.test(SP54.t("sage.offer.orc", "en"))
+      && /\bquinta\b/.test(SP54.t("sage.offer.orc", "es")),
+      "…and Chronos calls it the fifth door");
+
+    /* --- THE BACK DOOR PAYS NOTHING, the property Etaps 52 and 53 pinned ----- */
+    {
+      const p54 = createPlayer({ x: 0, y: 0 });
+      p54.level = 30;
+      const MS = await import("../src/systems/missions.ts");
+      const CB54 = await import("../src/systems/combat.ts");
+      const { spawnAtPost: spawn54 } = await import("../src/entities/monsters.ts");
+
+      MS.resetMissions();
+      for (const id of ["calanais", "redcap", "draugr", "blackannis", "minotaur"]) MS.setStage(id, "closed");
+      ok(MS.stageOf("orc", 30) === "available",
+        "with the Minotaur closed and at level, Chronos has the next one to hand out");
+      ok(MS.offeredMission(30)?.id === "orc", "…and it is the one he offers");
+      ok(MS.stageOf("orc", 29) === "locked", "…and one level short is still locked");
+
+      spawn54(hall, "gorak", bossPost54.tx, bossPost54.ty);
+      CB54.killMonster(hall, p54, hall.monsters[hall.monsters.length - 1]);
+      ok(MS.stageOf("orc", 30) === "available", "killing him without the errand moves nothing");
+      ok(!MS.relicRoadOpen("gorak", 30), "…and the way home stays shut, correctly");
+      ok(!hall.corpses.some((c) => (c.items ?? []).some((st) => st && st.kind === "gorakTusk")),
+        "…and he parts with no tusk for a walk-in");
+      hall.corpses.length = 0;
+      hall.monsters.length = 0;
+
+      MS.setStage("orc", "active");
+      spawn54(hall, "gorak", bossPost54.tx, bossPost54.ty);
+      CB54.killMonster(hall, p54, hall.monsters[hall.monsters.length - 1]);
+      ok(MS.stageOf("orc", 30) === "complete", "the same kill with the errand finishes it");
+      /* RADEK'S ONE EXPLICIT ASK ABOUT THE PADS: the way back to the sage
+       * turns on when Gorak goes down, so the tusk does not have to walk
+       * eighty-three squares back through everything that has respawned. */
+      ok(MS.relicRoadOpen("gorak", 30), "…and lights the way home the moment he falls");
+      ok(MS.boundRelic("gorakTusk", 30), "…and the tusk is nailed to the character carrying it");
+      MS.resetMissions();
+      hall.corpses.length = 0;
+      hall.monsters.length = 0;
+      pads54(w54, 30);
     }
   }
 

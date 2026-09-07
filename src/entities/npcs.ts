@@ -60,13 +60,18 @@ export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
   },
   elder: {
     greeting: "Adventurer. There is work to be done. See your quest log.",
-    /* THE POWER RING IS NO LONGER FOR SALE (Etap 43). It is the reward in the
-     * chest at the bottom of Kárr's howe, and a reward you can also buy for a
-     * hundred and eighty gold is not a reward. He still BUYS them, so a second
-     * one off a second character is still worth carrying out. */
+    /* THE POWER RING IS NO LONGER FOR SALE (Etap 43). It is a chest prize —
+     * Kárr's howe until Etap 54 and Gorak's hoard since — and a reward you can
+     * also buy for a hundred and eighty gold is not a reward. He still BUYS
+     * them, so a second one off a second character is still worth carrying
+     * out, and since Etap 54 he buys all THREE rings on the same principle:
+     * every one of them comes out of exactly one chest, none of them is
+     * stocked, and a player who finds a duplicate should have somewhere to
+     * take it. */
     entries: shop(
       ["amulet", "aolAmulet"],
-      ["amulet", "ring", "aolAmulet", "boneSword", "marrowBlade", "knightSword", "essentialGem"],
+      ["amulet", "ring", "guardRing", "healthRing", "aolAmulet", "boneSword",
+        "marrowBlade", "knightSword", "essentialGem"],
     ),
   },
 };

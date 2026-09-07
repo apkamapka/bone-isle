@@ -24,6 +24,11 @@ export type ItemKind =
   // Pulled out of the Minotaur's ear. The fourth relic, and the first one that
   // is evidence of something rather than a trophy off a body — see the table.
   | "minotaurEarring"
+  // Cut off Gorak. The fifth relic and the first that is a piece of the
+  // creature rather than something somebody put on it — which is the errand's
+  // argument, not a break in the pattern: nothing has ever been written about
+  // him, so there is nothing to bring back but him.
+  | "gorakTusk"
   // forge materials (Etap 24): smelted from looted gear, never bought
   | "iron" | "steel" | "essentialGem"
   // furnace fuel: dropped by anything that makes camp — people, orcs,
@@ -102,7 +107,7 @@ export type ItemKind =
   // human smiths make swords and hammers that guard as well as they cut,
   // beasts carry axes and fangs that hit harder and defend far worse
   | "shortSword" | "fangDagger" | "ironSword" | "goblinHatchet" | "mercBlade" | "warHammer" | "orcishAxe" | "gladius" | "boneSword" | "minotaurAxe" | "warlordBlade" | "steelMaul" | "demonCleaver" | "knightSword" | "fireSword" | "marrowBlade"
-  | "ring" | "guardRing" | "amulet"
+  | "ring" | "guardRing" | "healthRing" | "amulet"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet"
   // containers & test gear (Etap 11)
@@ -250,6 +255,19 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * name should be read against: what comes off him is the whole torn lobe
    * with the bronze still in it. */
   minotaurEarring: { name: "Minotaur's Earring", stack: 1, value: 1100, weight: 10 },
+  /* Gorak's tusk, and the fifth relic in the chain. The other four are things
+   * that were PUT on a creature — a cap dyed in what he did, a helm laid in a
+   * grave, an effigy of hair, an earring somebody hung on a bull. This one is
+   * a piece of the animal itself, and that is not a change of pattern so much
+   * as the errand's whole point: there is no chronicle of Gorak anywhere,
+   * nothing anybody has written down and nothing anybody has left behind, so
+   * there is nothing about him to carry back except him.
+   *
+   * The heaviest and the dearest of the five, and it does not stack, for the
+   * reason none of them do. Bone-white in the bag rather than the warm ivory
+   * a living tusk would be — see `tools/recolor_gorak_tusk.py` for why the
+   * icon was ramped rather than repainted. */
+  gorakTusk:    { name: "Gorak's Tusk",  stack: 1, value: 1600, weight: 14 },
   // ---- forge materials. Iron and steel are LIGHT on purpose: the Alchemy
   // ---- Tower wants 600 iron and 550 steel, and at a realistic weight the
   // ---- logistics of carrying them would be a bigger obstacle than earning
@@ -465,6 +483,33 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * gives. Two points puts it between the short sword's one and the marrow
    * blade's four. */
   guardRing: { name: "Guard Ring",   stack: 1, value: 120, weight: 2, slot: "ring",    gear: { defBonus: 2 } },
+  /* THE THIRD RING, and the one that turns a pair into a real choice.
+   *
+   * Attack, guard, and now BODY: thirty-five points of maximum health, which
+   * is deliberately the Bone Amulet's number to the point. Two items in two
+   * different slots paying the same stat is not a duplication — it is the
+   * only way the ring slot can offer something the other two cannot, because
+   * `atk` and `defBonus` are both answers to the fight and this is an answer
+   * to the mistake you make during it.
+   *
+   * IT DISPLACED THE POWER RING IN KÁRR'S HOWE (Etap 54) rather than being
+   * added beside it. The howe is the level-15 errand and it used to hand out
+   * two of attack there; the Power Ring has moved down to Gorak's hoard at
+   * level thirty, and what is buried with Kárr now is the ring that keeps a
+   * fifteenth-level character alive on the walk back out. That is the better
+   * gift at that rung, and it means the three rings arrive in the order a
+   * player can use them: body at fifteen, guard at twenty-five, attack at
+   * thirty.
+   *
+   * Priced above the Guard Ring, for the same reason that one is priced above
+   * the Power Ring: one source, one chest, no shop and no drop. The elder buys
+   * all three and stocks none of them.
+   *
+   * Icon: a smooth red-orange band, three-quarter on like the other two, and
+   * unmistakable beside them at twelve pixels — the Power Ring is studded gold
+   * and teal, the Guard Ring banded teal and bone, and this one is the only
+   * one of the three with no second colour on it at all. */
+  healthRing: { name: "Health Ring",  stack: 1, value: 150, weight: 2, slot: "ring",    gear: { maxhp: 35 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
   // Backpack: buy it at the smith. A CONTAINER, not a capacity upgrade — it

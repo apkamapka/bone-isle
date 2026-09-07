@@ -1745,6 +1745,124 @@ time anybody runs the directory, and "do not run this one" is not a safeguard.
 The smoke suite asserts all three stay deleted, so one cannot quietly come
 back in a later pass.
 
+## Gorak — `public/mob-gorak-walk.png`, `public/mob-gorak-dead.png`
+
+Source: **Universal LPC Spritesheet Character Generator**, CC-BY-SA 3.0 — the
+same terms and the same ShareAlike obligation as every other LPC creature here.
+See the LPC section above for the full attribution list and the per-layer note.
+
+Reproducible generator URL (paste it in and the exact character loads):
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&legs=Pants_leather&gloves=Gloves_iron>
+
+Layers used: muscular build, dark-green body, dark-green male orc head, neutral
+dark-green expression, leather pants, iron gloves.
+
+He is deliberately built out of the SAME generator parts as the five orc ranks
+that walk the island above him — same body colour, same head — and dressed in
+almost nothing: leather trousers and a pair of iron gloves. That is the
+opposite of Asterion, who is the argument's other half. Somebody dressed the
+thing in the labyrinth, and the relic proves it; nobody dressed Gorak, and the
+relic is a piece of him. The five ranks below him wear more than he does.
+
+### Cutting method
+
+Rows 8-11 of the full export are the walk (up, left, down, right, nine frames
+each) and row 20 is the death sequence, whose last frame is the corpse. One
+crop rectangle is shared by all thirty-six walk frames and kept symmetric about
+the source cell's centre line, x=32. Run by `tools/cut_gorak.py`.
+
+**He is the one creature in this repository that is rescaled**, and it is the
+whole reason the script exists. At native size his crop is 32 x 46 — the plain
+orc's frame to the pixel, because he is the same generator parts — so he is
+drawn at **1.4x, 45 x 64 per frame**, which is Radek's forty per cent. The
+corpse is 48 x 48, cropped to the body and scaled the same way.
+
+The whole assembled sheet is resized in one call rather than frame by frame.
+The target is chosen so both divisions are exact (405 = 9 x 45, 256 = 4 x 64),
+which makes nearest-neighbour on the sheet arithmetically identical to
+nearest-neighbour on each frame: no seams and no chance of two frames rounding
+differently. 1.4 is not an integer scale, so some source pixels come out one
+screen pixel wide and some two — visible if you go looking for it, and not at
+this size on a top-down map. 2x was the only clean alternative and would have
+made him taller than the tent he stands beside.
+
+He does not share the plain orc's corpse, which the other five ranks all do.
+Stripped of axes and crossbows those five are the same animal; this one is half
+again their size, and a body indistinguishable from the seventy ordinary orcs
+on the island above would undo the fight.
+
+## The Orc Isle and Gorak's Hall — `public/orcisle-terrain.png`, `public/gorak-terrain.png`
+
+Both are flattened "Export as Image" pictures out of Tiled, at native tile size:
+`orkipowieschnia.tmx` (110x110, 3520x3520) and `orkiboss-1.tmx` (40x100,
+1280x3200). The tilesets painted into them (`32x32_DEMO`, `MainLev2.0hhh`,
+`Water_tafle_4A`) are commercial assets held under the project's own licences;
+the `.tsx` files and source sheets are NOT in this repository, only the
+flattened pictures. Everything standing on top — wood, stone, dead and felled
+timber, tents, totems, boulders, campfires — is the `prop-*` set already
+credited above.
+
+Both collision grids are traced from those same two `.tmx` files by
+`tools/gen_orc_maps.py`, which also places every prop and every creature post
+and writes `src/world/orcIsleSpec.ts` and `src/world/gorakSpec.ts` whole. Those
+two files are generated and should not be hand-edited.
+
+Unlike every mission ground before it, the island's export carries **no object
+layer**, so the two doors are chosen by the generator rather than read off the
+picture — see the header of `orcIsleSpec.ts` for the rule they are chosen by.
+
+## The Gorak chronicle — no sources
+
+`lore.orc` is the only chronicle in the game with nothing behind it, and that is
+the point rather than an omission. The four before it are the Border ballads,
+Grettis saga, the Leicestershire records and Apollodorus; Gorak is **Radek's own
+invention**, made for this game, and his instruction was to write something
+fascinating rather than to borrow a myth and file the name off.
+
+So the page does not invent a past for him. It inverts the form: Chronos has
+read everything, and this is the first thing he has no page for. He checks the
+way a time traveller would — forward rather than back — and the banner is not
+in the future either, which leaves him two readings and a choice about which
+one to make true. `lore.title.orc` carries no date where all four before it do.
+
+All six of Chronos' lines for this errand are **Radek's Polish, verbatim**. The
+only line added to them is the door number at the top of the offer, because he
+has counted every door since Hermitage. English and Spanish are rebuilt to the
+same beat count rather than translated line by line. The last four beats of the
+chronicle are the three levers of the fight, added for the reason every other
+boss page ends that way: they are the only place in the game a player can learn
+that the dark is the answer.
+
+## Gorak's tusk and the Health Ring — `item-gorak-tusk.png`, `item-health-ring.png`
+
+Source: **CraftPix.net**, standard (non-Enterprise) licence —
+https://craftpix.net/file-licenses/
+
+Same terms as the dragon, the buildings and the two icons above: commercial use
+granted outright, no royalty, no attribution owed on a paid product, and the
+same clause 1.1.3 / 1.2.1 restriction on public source files. **The
+public-repository warning in the buildings section applies to both of these
+files in full.**
+
+`item-health-ring.png` ships exactly as purchased; the only change made was
+re-saving it from an indexed palette to RGBA so it matches the other icons in
+the folder, which is the same one change the Guard Ring got.
+
+`item-gorak-tusk.png` is **recoloured**, and it is the only bought icon in the
+repository that is. The purchased artwork is a warm brown horn whose drawing is
+carried entirely by its luminance ramp; `tools/recolor_gorak_tusk.py` measures
+each pixel's luminance, normalises it across the icon's own range and looks the
+result up in a bone ramp. Shading, edges, dither and alpha come through
+untouched and only the hue moves — repainting it by hand would have been a
+different drawing, not a recolour.
+
+That script takes its source path as a **required** argument rather than a
+default, and the smoke suite asserts it. The rule set in Etap 53 is that no
+generator may destroy bought artwork the first time somebody runs the tools
+directory; this one writes to exactly such a path, so it is made incapable of
+running without the file it is meant to be transforming.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in

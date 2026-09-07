@@ -76,7 +76,15 @@ export type WorldKey =
   // room, and this is four hundred tiles of maze with one creature at the
   // middle of it. The walk IS the encounter, which is why nothing else lives
   // down there.
-  | "crete" | "labyrinth";
+  | "crete" | "labyrinth"
+  // The Orc Isle — the sage's SIXTH ground, and Gorak's hall cut under its
+  // south-east corner. Back to the Liddesdale pairing after the labyrinth's
+  // detour: an island to walk and one room at the bottom of it that closes
+  // behind you. The room is the largest single chamber in the game — twenty-
+  // four squares wide and eighty-three long — and unlike the labyrinth it is
+  // FULL. You can see the far end of it from the ladder; what makes the walk
+  // long is his army standing in it.
+  | "orcIsle" | "gorak";
 
 /** A point in world (pixel) space. */
 export interface Vec {
@@ -309,6 +317,13 @@ export type MonsterKind =
   // sizes up. Everything else about the rule holds — one creature, one echo,
   // killed once.
   | "asterion"
+  // …and his fifth, at about level thirty, and the first one who never
+  // existed. The four above him come out of Border folklore, the Icelandic
+  // sagas, Leicestershire and Greece; this one is Radek's, invented for the
+  // game, and the errand is built around the fact that no chronicle has ever
+  // heard of him. Kin to the five orc ranks the way Asterion is kin to the
+  // horns, and drawn forty per cent larger than any of them.
+  | "gorak"
   // The armoured goblin rank: the camps' answer to the orc warrior.
   | "goblinLegionary"
   // Etap 18 — the undead heavies. Both are skeletons and both leave the

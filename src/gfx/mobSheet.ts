@@ -116,6 +116,7 @@ const SHEET_SRC: Record<string, string> = {
   draugr: "./mob-draugr-walk.png",
   blackAnnis: "./mob-black-annis-walk.png",
   asterion: "./mob-asterion-walk.png",
+  gorak: "./mob-gorak-walk.png",
   viking: "./mob-viking-walk.png",
   mercenary: "./mob-mercenary-walk.png",
   corsair: "./mob-corsair-walk.png",
@@ -202,6 +203,11 @@ const CORPSE_SRC: Record<string, string> = {
    * and a red cloak, and a boss whose corpse is indistinguishable from the
    * forty ordinary horns on the island above would undo the fight. */
   asterion: "./mob-asterion-dead.png",
+  /* And the one orc that does not share the plain orc's body, for the same
+   * reason and a plainer one: he is forty per cent larger than the five ranks
+   * above him, and a corpse the size of an ordinary orc lying at the end of a
+   * hall you fought the length of would read as the wrong body. */
+  gorak: "./mob-gorak-dead.png",
   viking: "./mob-viking-dead.png",
   mercenary: "./mob-mercenary-dead.png",
   corsair: "./mob-corsair-dead.png",

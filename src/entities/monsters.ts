@@ -674,6 +674,90 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
 
   /* ================================================================== *
+   *  GORAK — the Time Sage's FIFTH named boss, and the first invented
+   *  one. Level 30.
+   *
+   *  THE FOUR BEFORE HIM CAME OUT OF SOMEBODY ELSE'S BOOK. Robin Redcap is
+   *  in the Border ballads, Kárr inn gamli is in Grettis saga, Black Annis
+   *  is in the Leicestershire records and Asterion is in Apollodorus. This
+   *  one is Radek's, made up for this game, and the errand does not hide
+   *  that — it is built on it. Chronos has walked every age there is and
+   *  there is no age in which the orcs are one people; so a banner going up
+   *  is the one thing in the world he has no page for.
+   *
+   *  HE IS KIN, WHICH MAKES HIM ASTERION'S SHAPE AND NOT THE REDCAP'S. Five
+   *  orc ranks already walk the game, and he is cut from the very same
+   *  generator parts as the plain orc — same dark-green body, same head, and
+   *  at native size the same 32x46 frame to the pixel. What is different is
+   *  that he is drawn FORTY PER CENT larger, 45x64, which is Radek's number
+   *  and the only thing on screen that says warlord before he swings.
+   *
+   *  THE NUMBERS, and what each is for:
+   *
+   *    HP 3600   the largest body in the game, over Asterion's 2800 and four
+   *              and a half times a warrior of his own army. He is the thing
+   *              you can see from the ladder.
+   *    DMG 58-148 on the same 2.0 cadence — 51.5 dps, over Asterion's 44.5.
+   *              Hits harder than anything the chain has put in front of a
+   *              player, and still under the dragon.
+   *    SPEED 64  and this is the interesting one, because it is the SLOWEST
+   *              named boss in the chain and it is slower than his own
+   *              soldiers. An orc berserker runs at 75; Gorak does not. You
+   *              can break away from him, and in a hall eighty-three squares
+   *              long with no corner to turn that is a real option — but the
+   *              berserkers you broke away past are faster than he is, so
+   *              running costs you the fight you already won. Nothing here is
+   *              near the redcap's 79, which stays the game's ceiling.
+   *    ARMOR 28  the heaviest in the game, over Kárr's 26. His army is where
+   *              the orcish line comes out of, and the first thing anybody
+   *              does with a forge is armour the man who owns it.
+   *    EXP 2600  and the errand pays 7700 on top when the tusk reaches the
+   *              table. Named creatures are off the grind curve by design —
+   *              see the budget block in the smoke suite — because the payday
+   *              is the errand, not the corpse.
+   *
+   *  THE ELEMENT IS SHADOW, and it is the LAST one. Storm broke the redcap's
+   *  tower, fire is the saga's answer to Kárr, earth is what the county
+   *  filled Annis in with, ice is what Crete never gave Asterion. Five bosses
+   *  and five elements with no repeat, which is what keeps the circle a
+   *  character chose at Calanais worth having chosen.
+   *
+   *  AND THE REASON IS CHARACTER RATHER THAN CLIMATE, which the other four
+   *  are not. Asterion gives way to cold because he was bred under the sun;
+   *  Gorak gives way to the dark because his whole method is being SEEN. A
+   *  thousand orcs who have never once stood in the same field follow him
+   *  because he is the biggest thing in it and because his banner is where
+   *  they can all look. Take the looking away and there is no army — and
+   *  there is nothing else he has ever had to be.
+   *
+   *    FIRE 0.5    he was raised in forge-smoke. Every camp on the island
+   *                above him is a fire and every rank on it wears iron that
+   *                came out of one.
+   *    STORM 0.7   the orcs have held open ground in weather for as long as
+   *                anybody has been able to see them do it.
+   *    SHADOW 1.5  and there is the answer.
+   *
+   *  NO SPELLS AND NO REACH, exactly like Asterion. What makes this fight
+   *  unlike the four before it is not a kit — it is the eighty-three squares
+   *  of his own army standing between the ladder and him, and the fact that
+   *  the way out is behind him.
+   *
+   *  WHERE HE LIVES: the far end of the hall under the Orc Isle, on his own
+   *  square, and nowhere else in the game.
+   * ================================================================== */
+  gorak: {
+    spr: SPR.orc,
+    name: "Gorak",
+    hp: 3600, dmg: [58, 148], speed: 64, atkRate: 2.0, exp: 2600,
+    gold: [90, 180], danger: 0.5, armor: 28,
+    resist: { fire: 0.5, storm: 0.7, shadow: 1.5 },
+    loot: [
+      // The relic. Flat 100%, the rule all five keep.
+      { kind: "gorakTusk", chance: 1.0, n: [1, 1] },
+    ],
+  },
+
+  /* ================================================================== *
    *  THE FANTASTIC BESTIARY, lower rungs — levels 15-22
    *
    *  Re-tiered wholesale (Etap 20). In Tibia these are level-8 fodder; here

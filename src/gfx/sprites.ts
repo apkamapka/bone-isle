@@ -1229,6 +1229,11 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   // PNG that fails to load should draw something rather than nothing.
   hairEffigy: SPR.cursedRib,
   minotaurEarring: SPR.cursedRib,
+  // …and the fifth, which ships with its own artwork too. The stand-in is the
+  // rib rather than the horn: a tusk that fell back to `minotaurHorn` would
+  // draw a horn and be wrong in a way nobody would notice, where a rib is
+  // obviously a placeholder.
+  gorakTusk: SPR.cursedRib,
   iron: SPR.ironIngot, steel: SPR.steelIngot, essentialGem: SPR.essentialGem, coal: SPR.coalLump,
   mushroom: SPR.mushroom, meat: SPR.meatIcon, hpPotion: SPR.potionRed, dragonHam: SPR.dragonHam,
   // Etap 22: every piece of the new catalog draws with ONE shared stub until
@@ -1238,7 +1243,7 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   // The guard ring falls back to the Power Ring's bake: same slot, same
   // silhouette at twelve pixels, and the only pair in the table where sharing
   // a stand-in is the RIGHT answer rather than a placeholder.
-  ring: SPR.eqRing, guardRing: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
+  ring: SPR.eqRing, guardRing: SPR.eqRing, healthRing: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
   leatherHelm: SPR.gearStubHead, snakeskinHelm: SPR.gearStubHead, leatherBody: SPR.gearStubBody, snakeskinBody: SPR.gearStubBody,
   leatherLegs: SPR.gearStubLegs, snakeskinLegs: SPR.gearStubLegs, leatherBoots: SPR.gearStubBoots, snakeskinBoots: SPR.gearStubBoots,
   leatherShield: SPR.gearStubShield, snakeskinShield: SPR.gearStubShield, studdedHelm: SPR.gearStubHead, goblinHelm: SPR.gearStubHead,

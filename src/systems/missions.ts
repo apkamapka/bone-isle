@@ -263,6 +263,44 @@ export const MISSIONS: readonly MissionDef[] = [
     // level, which is the point — the errands are punctuation, not the road.
     rewardExp: 5800,
   },
+  {
+    /* The FIFTH door and the sixth link, and the first errand in the chain
+     * about somebody who never existed.
+     *
+     * WHY THIRTY. The Minotaur sits at twenty-five and the island behind this
+     * door fields five orc ranks over seven and a half thousand squares — a
+     * hundred and thirty-seven tiles of walking between its two doors, against
+     * Crete's hundred and fourteen. Five levels is what the gap between the
+     * two is worth, and it is the same five the chain has used at every rung
+     * since the draugr.
+     *
+     * WHAT MAKES IT DIFFERENT FROM THE FIVE BEFORE IT. Four of those echoes
+     * are a room with a boss standing in it and the fifth is four hundred
+     * tiles of maze with nothing else alive in it. This one is a single hall
+     * you can see the whole length of from the ladder — and it is FULL. The
+     * labyrinth's idea was that the space is the opponent; this one's is that
+     * the space is his ARMY, which is the same sentence Chronos opens the
+     * errand with. You do not get lost. You get tired.
+     *
+     * AND IT IS THE FIRST INVENTED ONE. The redcap, Kárr, Black Annis and the
+     * Minotaur are all somebody else's story and the chronicle for each of
+     * them is a page of history. Gorak has no history, and rather than
+     * inventing one the errand is built on the absence — see `lore.orc`. That
+     * is also why the relic is a piece of the creature rather than something
+     * that was put on it: there is nothing else of him to carry back. */
+    id: "orc",
+    title: "The Banner Nobody Wrote Down",
+    reqLevel: 30,
+    after: "minotaur",
+    ground: "orcIsle",
+    echo: "gorak",
+    relic: "gorakTusk",
+    // Level 30 needs 40700 to advance. The taper holds exactly as it has:
+    // 32%, 26%, 23%, 21%, and 19% here. A smaller slice of a much larger
+    // level, which is the point — the errands punctuate the road, they are
+    // not the road.
+    rewardExp: 7700,
+  },
 ];
 
 /** The mission whose echo this world is, if any. Used where a world key is all

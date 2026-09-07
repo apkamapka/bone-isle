@@ -639,7 +639,16 @@ export const CELLAR_SPEC: HandmadeSpec = {
       dest: "crete", label: "to Crete — the island under Minos",
       span: 2, floor: Tile.Cave, inactive: true,
     },
-    "6": sealed("Sealed Rift VI"),
+    // The sixth named rift, and the FIFTH door — Chronos still does not count
+    // Calanais, which he opened as a gift rather than as an errand. Dormant
+    // like the other five; `applyMissionPads` lights it when he hands this one
+    // over. It was `sealed("Sealed Rift VI")` until Etap 54; the label is now
+    // the island's, because a pad with a mission behind it is named after the
+    // place rather than after the number nothing had used yet.
+    "6": {
+      dest: "orcIsle", label: "to the Orc Isle — where the banners are going up",
+      span: 2, floor: Tile.Cave, inactive: true,
+    },
     "7": sealed("Sealed Rift VII"),
     "8": sealed("Sealed Rift VIII"),
     "9": sealed("Sealed Rift IX"),
