@@ -686,11 +686,20 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  is the one thing in the world he has no page for.
    *
    *  HE IS KIN, WHICH MAKES HIM ASTERION'S SHAPE AND NOT THE REDCAP'S. Five
-   *  orc ranks already walk the game, and he is cut from the very same
+   *  orc ranks already walk the game, and he is built on the very same
    *  generator parts as the plain orc — same dark-green body, same head, and
    *  at native size the same 32x46 frame to the pixel. What is different is
    *  that he is drawn FORTY PER CENT larger, 45x64, which is Radek's number
-   *  and the only thing on screen that says warlord before he swings.
+   *  and the first thing on screen that says warlord before he swings.
+   *
+   *  AND THE SECOND THING IS THE STEEL. He wears legion shoulders, bracers,
+   *  gloves and wide charcoal trousers, which is a change made because the
+   *  chronicle says he is behind more iron than anyone in the game and the
+   *  first cut of him was standing there in leather trousers. A page that
+   *  claims armour 28 over a sprite dressed like a labourer is a page the
+   *  player has no reason to believe. None of the five ranks under him wears
+   *  as much — which is also the fiction: the first thing anybody does with a
+   *  forge is armour the man who owns it.
    *
    *  THE NUMBERS, and what each is for:
    *

@@ -432,61 +432,13 @@ def build_orc_isle():
             grid[ty][tx] = glyph
             taken.add((tx, ty))   # a fire and a bone pile seal nothing
 
-    # PINE IN STANDS, NOT WALLPAPER. Trees go down in loose clumps with lanes
-    # between them; an even sprinkle over seven thousand squares reads as
-    # texture rather than as woodland, which is the note Calanais got in Etap
-    # 51 and Crete got again in Etap 53.
-    grove_centres = []
-    for _ in range(6000):
-        if len(grove_centres) >= 34:
-            break
-        x, y = RNG.randrange(W), RNG.randrange(H)
-        if not (walk(x, y) and dry(x, y)):
-            continue
-        if any((x - c[0]) ** 2 + (y - c[1]) ** 2 < 196 for c in grove_centres):
-            continue
-        grove_centres.append((x, y))
-    trees = 0
-    for cx, cy in grove_centres:
-        for _ in range(56):
-            x = cx + RNG.randint(-3, 3)
-            y = cy + RNG.randint(-3, 3)
-            if not (0 <= x < W and 0 <= y < H) or grid[y][x] != ".":
-                continue
-            if RNG.random() < 0.48 and place("tree", "T", x, y):
-                trees += 1
-    # …and a thin scatter of solitary wood between the stands, so the open
-    # ground reads as open rather than as mown.
-    for _ in range(9000):
-        if trees >= 620:
-            break
-        x, y = RNG.randrange(W), RNG.randrange(H)
-        if grid[y][x] == "." and place("tree", "T", x, y):
-            trees += 1
-
-    # STONE, over the whole of it. The orcish line is iron and this is where it
-    # comes out of, so an island worth walking repeatedly has to be worth more
-    # than experience.
-    rocks = 0
-    for _ in range(14000):
-        if rocks >= 130:
-            break
-        x, y = RNG.randrange(W), RNG.randrange(H)
-        if grid[y][x] == "." and place("rock", "R", x, y):
-            rocks += 1
-
-    scen = 0
-    for kind, glyph, want in (("boulderA", "Q", 22), ("boulderB", "q", 18),
-                              ("deadTree", "V", 24), ("felledTree", "v", 16)):
-        got = 0
-        for _ in range(14000):
-            if got >= want:
-                break
-            x, y = RNG.randrange(W), RNG.randrange(H)
-            if grid[y][x] == "." and place(kind, glyph, x, y):
-                got += 1
-        scen += got
-
+    # THE CAMPS GO DOWN BEFORE THE WOOD, and that ordering is load-bearing.
+    # They used to run last, after four hundred dead trees had each painted a
+    # 3x3 of clearance across the island, and the result was THREE tents on a
+    # map that is supposed to be an army gathering — a 2x2 footprint simply
+    # could not find open ground any more. It is also the truer order: the
+    # camps are the REASON the wood is dead, so they choose their ground first
+    # and the trees fill in around them.
     # THE CAMPS THICKEN TOWARD THE DESCENT — totems, fires and tents, weighted
     # by walking distance from the hole rather than scattered flat. This is the
     # island saying what Chronos says: near the shore it is a few war-bands,
@@ -517,8 +469,8 @@ def build_orc_isle():
                 got += 1
         camps += got
     fires = 0
-    for _ in range(30000):
-        if fires >= 16:
+    for _ in range(40000):
+        if fires >= 34:
             break
         x, y = RNG.randrange(W), RNG.randrange(H)
         if grid[y][x] != "." or (x, y) in taken or not near(x, y, 100):
@@ -540,6 +492,108 @@ def build_orc_isle():
         taken.add((x, y))
         bones += 1
 
+
+    # THE WOOD ON THIS ISLAND IS MOSTLY DEAD, and that is the note Radek came
+    # back with after walking it: too much green for orc country. It is the
+    # right note. The five ranks below have been felling, burning and camping
+    # across this ground long enough to have used it up, and a full leafy
+    # canopy says nobody has been here — which is the exact opposite of what
+    # the errand is about.
+    #
+    # So the proportion is INVERTED against Crete's. Bare trunks are the
+    # default cover, green stands are the exception, and the felled stumps
+    # scattered between them are the reason for both.
+    #
+    # STILL IN STANDS, NOT WALLPAPER. Dry woodland grows in stands exactly as
+    # live woodland does, and an even sprinkle over seven thousand squares
+    # reads as texture rather than as country — the note Calanais got in Etap
+    # 51 and Crete got again in Etap 53.
+
+    def stands(n, spacing):
+        """Deterministic clump centres, no two closer than `spacing`."""
+        out = []
+        for _ in range(9000):
+            if len(out) >= n:
+                break
+            x, y = RNG.randrange(W), RNG.randrange(H)
+            if not (walk(x, y) and dry(x, y)):
+                continue
+            if any((x - c[0]) ** 2 + (y - c[1]) ** 2 < spacing * spacing for c in out):
+                continue
+            out.append((x, y))
+        return out
+
+    # Dead wood first, and it gets the pick of the ground. A dead tree paints a
+    # 3x3 of clearance where a live one paints two squares — the trunk is 46x72
+    # and spills forty pixels above its own tile — so if the green went down
+    # first there would be nowhere left to stand the bare ones.
+    dead = 0
+    for cx, cy in stands(38, 12):
+        for _ in range(60):
+            x, y = cx + RNG.randint(-4, 4), cy + RNG.randint(-4, 4)
+            if not (0 <= x < W and 0 <= y < H) or grid[y][x] != ".":
+                continue
+            if RNG.random() < 0.55 and place("deadTree", "V", x, y):
+                dead += 1
+    for _ in range(40000):
+        if dead >= 430:
+            break
+        x, y = RNG.randrange(W), RNG.randrange(H)
+        if grid[y][x] == "." and place("deadTree", "V", x, y):
+            dead += 1
+
+    # …and the green that is left, in a handful of hollows. Few enough that
+    # coming over a rise into one of them is worth something.
+    trees = 0
+    for cx, cy in stands(7, 22):
+        for _ in range(70):
+            x, y = cx + RNG.randint(-3, 3), cy + RNG.randint(-3, 3)
+            if not (0 <= x < W and 0 <= y < H) or grid[y][x] != ".":
+                continue
+            if RNG.random() < 0.6 and place("tree", "T", x, y):
+                trees += 1
+    for _ in range(9000):
+        if trees >= 95:
+            break
+        x, y = RNG.randrange(W), RNG.randrange(H)
+        if grid[y][x] == "." and place("tree", "T", x, y):
+            trees += 1
+
+    # The stumps that explain both. They go down HERE rather than with the
+    # boulders below, because by the time the scenery pass runs the ground is
+    # already spoken for and the felled wood was coming out at a third of what
+    # it asked for — which left the island covered in dead trees with nothing
+    # saying why they are dead.
+    felled = 0
+    for _ in range(20000):
+        if felled >= 70:
+            break
+        x, y = RNG.randrange(W), RNG.randrange(H)
+        if grid[y][x] == "." and place("felledTree", "v", x, y):
+            felled += 1
+
+    # STONE, over the whole of it. The orcish line is iron and this is where it
+    # comes out of, so an island worth walking repeatedly has to be worth more
+    # than experience.
+    rocks = 0
+    for _ in range(14000):
+        if rocks >= 130:
+            break
+        x, y = RNG.randrange(W), RNG.randrange(H)
+        if grid[y][x] == "." and place("rock", "R", x, y):
+            rocks += 1
+
+    scen = 0
+    for kind, glyph, want in (("boulderA", "Q", 22), ("boulderB", "q", 18)):
+        got = 0
+        for _ in range(14000):
+            if got >= want:
+                break
+            x, y = RNG.randrange(W), RNG.randrange(H)
+            if grid[y][x] == "." and place(kind, glyph, x, y):
+                got += 1
+        scen += got
+
     freed = relieve_pockets(grid, W, H, DOOR_HOLE, seal)
 
     # the doors last, so nothing can have been painted over one
@@ -550,10 +604,11 @@ def build_orc_isle():
     check_glyphs(rows, set("rceSkQqVvNYPD"), "the Orc Isle")
     verify(rows, W, H, [("the pad", DOOR_PAD), ("the descent", DOOR_HOLE)],
            "the Orc Isle", seal)
-    print(f"      {trees} wood, {rocks} stone, {scen} standing props, {camps} camp props,"
+    print(f"      {dead} dead + {trees} green + {felled} felled wood,"
+          f" {rocks} stone, {scen} standing props, {camps} camp props,"
           f" {fires} fires, {bones} bone piles, {len(posts)} posts;"
           f" {freed} props lifted to drain pockets")
-    return rows, posts, post_at, trees, rocks, scen
+    return rows, posts, post_at, dead, trees, rocks, scen
 
 
 # ======================================================================= #
@@ -673,7 +728,7 @@ def build_gorak_hall():
     # thirty tiles: the hall stops being a tunnel and starts being a hall
     # somebody lives at the end of.
     camps = 0
-    for kind, glyph, want in (("skullPole", "Y", 14), ("tent", "N", 6)):
+    for kind, glyph, want in (("skullPole", "Y", 18), ("tent", "N", 8)):
         got = 0
         for _ in range(20000):
             if got >= want:
@@ -686,14 +741,22 @@ def build_gorak_hall():
             if place(kind, glyph, x, y):
                 got += 1
         camps += got
+    # FIRE IS WHAT THIS ROOM IS LIT BY, and there is a lot more of it than
+    # there was — Radek's note, and especially down here. Eight of them lit
+    # Gorak's own end and left seventy tiles of the approach in the dark,
+    # which read as an empty corridor rather than as somewhere an army is
+    # camped. Twenty-eight, and the floor is 0.12 rather than 0.02: they still
+    # crowd his end, but the whole length of the walk has something burning on
+    # it now. A hall you can see the far end of should look occupied all the
+    # way down it.
     fires = 0
-    for _ in range(20000):
-        if fires >= 8:
+    for _ in range(40000):
+        if fires >= 28:
             break
         x, y = RNG.randrange(W), RNG.randrange(H)
         if grid[y][x] != "=" or (x, y) in taken or fromBoss[y][x] < 0:
             continue
-        if RNG.random() > max(0.02, 1.0 - fromBoss[y][x] / 40):
+        if RNG.random() > max(0.12, 1.0 - fromBoss[y][x] / 46):
             continue
         grid[y][x] = "F"
         taken.add((x, y))
@@ -773,7 +836,13 @@ ISLE_HEAD = '''/**
  *   c orcArcher    tier 25, 280 exp — the only RANGED rank here
  *   e orcWarrior   tier 28, 295 exp — thickening toward the descent
  *   S orcShaman    tier 27, 440 exp — exactly ONE
- *   B orcBerserker tier 36, 460 exp — exactly ONE, and nearest the hole
+ *   k orcBerserker tier 36, 460 exp — exactly ONE, and nearest the hole
+ *
+ * THE BERSERKER IS `k` AND NOT `B`, which is not a style choice. `handmade.ts`
+ * handles `B` in its own switch as a BUILD SPOT, before a spec's `monsters`
+ * map is ever consulted, so a berserker written as `B` does not fail — it
+ * silently becomes a plot of empty ground. The first cut of this map shipped
+ * a rank short that way with every test green.
  *
  * ONE BERSERKER AND ONE SHAMAN. That is Radek's cap and it is also the story:
  * what is on the island is the tribes still arriving, and the heavy things are
@@ -781,8 +850,9 @@ ISLE_HEAD = '''/**
  * dozen berserkers would have answered the question the errand is asking.
  *
  * THE GRADIENT RUNS BY WALKING DISTANCE FROM THE DESCENT, not from the pad and
- * not in a straight line. Seventy posts, maximin-sampled so they spread rather
- * than clump, sorted by BFS distance from the hole and cut into bands: the
+ * not in a straight line. Seventy posts on a hexagonal lattice with a small
+ * jitter — maximin, which every ground before this one used, ran out at
+ * fifty-nine on six and a half thousand legal squares — sorted by BFS distance from the hole and cut into bands: the
  * berserker is the nearest post to it, the shaman behind him, then twenty
  * warriors, twenty archers, and twenty-eight plain orcs holding the far half
  * of the island. Nothing stands within nine tiles of another post, comfortably
@@ -796,16 +866,33 @@ ISLE_HEAD = '''/**
  * can rest at are where you LAND, and the orc camps run the other way.
  *
  * THE CAMPS THICKEN TOWARD THE DESCENT. Totems, fires, tents and bone, all
- * weighted by walking distance from the hole rather than scattered flat. Near
- * the shore it reads as a few war-bands; by the time the descent is in sight
- * it reads as one host. The island says what Chronos says out loud.
+ * weighted by walking distance from the hole rather than scattered flat, and
+ * on a SQUARED falloff — there is far more island far from the hole than near
+ * it, so a linear weight put most of the camp out on the shore where it said
+ * nothing. Near the coast it reads as a few war-bands; by the time the descent
+ * is in sight it reads as one host. The island says what Chronos says out loud.
+ *
+ * AND THE WOOD IS MOSTLY DEAD, which is the note Radek came back with after
+ * walking it: too much green for orc country. Three hundred bare trunks
+ * against ninety-five leafy ones and seventy stumps — dry woodland is the
+ * default cover here and the green stands are the exception, because five
+ * ranks have been felling, burning and camping across this ground long enough
+ * to use it up. A full canopy would say nobody has been here, which is the
+ * opposite of the errand.
+ *
+ * THE CAMPS ARE PLACED BEFORE THE WOOD, and that ordering is load-bearing. Run
+ * the other way round, four hundred dead trees paint a 3x3 of clearance apiece
+ * and a tent's 2x2 footprint can no longer find open ground: the island came
+ * out with THREE tents on it. It is also the truer order — the camps are the
+ * reason the wood is dead, so they choose their ground first.
  *
  * THE DESCENT IS A MISSION DOOR. It ships dormant and `applyMissionPads` puts
  * it to sleep whenever the echo behind it is not enterable — dark before
  * Chronos speaks and dark again once the tusk is on his table.
  *
  *   P pad back to the cellar (2x2)   D down into Gorak's hall
- *   T wood   R stone   V dead tree   v felled wood   Q q boulder
+ *   V dead tree (the default cover)   T green wood   v stump
+ *   R stone   Q q boulder
  *   N tent   F campfire   Y totem   o bones   x crag (impassable, drawn)
  *   creatures: r orc   c archer   e warrior   S shaman   k berserker
  */
@@ -884,6 +971,13 @@ HALL_HEAD = '''/**
  * scenery. It is the first echo in the game to carry mineable stone, and it
  * earns it, being one long walk with nowhere on it to restock.
  *
+ * AND IT IS LIT ALONG ITS WHOLE LENGTH. Eight fires lit Gorak's own end and
+ * left seventy tiles of the approach dark, which read as an empty corridor
+ * rather than as somewhere an army is camped; there are twenty-eight now, on a
+ * floor high enough that the walk has something burning on it the whole way
+ * down. A room you can see the far end of should look occupied all the way to
+ * it.
+ *
  * THE BONE RUNS BACKWARDS FROM THE CAMPS. Totems and fires thicken toward
  * Gorak, because that is where somebody lives; the bone piles thicken toward
  * the LADDER, because that is what the army has already been fed. The two
@@ -936,7 +1030,7 @@ HALL_TAIL = '''  ],
 
 def main():
     print("tracing the two exports…")
-    isle_rows, posts, post_at, trees, rocks, scen = build_orc_isle()
+    isle_rows, posts, post_at, dead, trees, rocks, scen = build_orc_isle()
     hall_rows, hposts, hpost_at, hrocks, hscen = build_gorak_hall()
 
     with open("src/world/orcIsleSpec.ts", "w") as f:

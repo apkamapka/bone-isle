@@ -1753,17 +1753,23 @@ See the LPC section above for the full attribution list and the per-layer note.
 
 Reproducible generator URL (paste it in and the exact character loads):
 
-<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&legs=Pants_leather&gloves=Gloves_iron>
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&legs=Wide_pants_charcoal&gloves=Gloves_steel&bracers=Bracers_steel&shoulders=Legion_steel>
 
 Layers used: muscular build, dark-green body, dark-green male orc head, neutral
-dark-green expression, leather pants, iron gloves.
+dark-green expression, charcoal wide pants, steel gloves, steel bracers, steel
+legion shoulders.
 
-He is deliberately built out of the SAME generator parts as the five orc ranks
-that walk the island above him — same body colour, same head — and dressed in
-almost nothing: leather trousers and a pair of iron gloves. That is the
-opposite of Asterion, who is the argument's other half. Somebody dressed the
-thing in the labyrinth, and the relic proves it; nobody dressed Gorak, and the
-relic is a piece of him. The five ranks below him wear more than he does.
+He is deliberately built on the SAME generator parts as the five orc ranks that
+walk the island above him — same body colour, same head — so the only things
+telling you which one is the warlord are his size and his steel. The first cut
+dressed him in leather trousers and iron gloves; that was replaced in the same
+Etap, because the chronicle claims he is behind more iron than anyone in the
+game and a sprite in work clothes makes the page a lie.
+
+The legion shoulders sit inside the arm silhouette rather than out past it, so
+adding all four steel layers left the union bounding box unchanged and the
+sheet is still 405 x 256. Worth knowing before anyone swaps a pauldron set that
+does spill.
 
 ### Cutting method
 

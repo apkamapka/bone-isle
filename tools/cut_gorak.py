@@ -18,6 +18,15 @@ the size of his own rank and file is not a warlord. He is drawn 40% larger:
 45x64 per frame, against the berserker's 52x47 (wider, because of the axes)
 and the plain orc's 32x46 (the same silhouette, smaller).
 
+THE STEEL DOES NOT CHANGE THE CROP, which is worth knowing before anybody
+re-runs this after adding a layer. Etap 54 dressed him in legion shoulders,
+bracers, gloves and wide trousers to make the chronicle's claim about his iron
+true on screen, and the union bounding box came back identical: LPC's legion
+shoulders sit INSIDE the arm silhouette rather than out past it, so the frame
+is still 32x46 before scaling and the sheet is still 405x256. A pauldron set
+that did spill would widen the crop, and the smoke suite's frame check is what
+would say so.
+
 WHY THE WHOLE SHEET IS RESIZED IN ONE CALL rather than frame by frame. The
 target is chosen so both divisions are exact — 405 = 9 x 45 and 256 = 4 x 64 —
 and NEAREST on the assembled sheet is then arithmetically identical to

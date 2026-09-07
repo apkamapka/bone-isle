@@ -16951,10 +16951,28 @@ async function main(): Promise<void> {
     ok(ladder54.every((d, i) => i === 0 || d > ladder54[i - 1]),
       `the heavier the rank the nearer the descent, by WALKING (${ladder54.map((d) => d.toFixed(0)).join(" < ")})`);
 
-    /* --- the island is dressed ---------------------------------------------- */
-    ok(isle.trees.length > 450 && isle.trees.length < 750,
-      `the isle is wooded rather than mown (${isle.trees.length} trees)`);
+    /* --- the island is dressed ----------------------------------------------
+     * THE WOOD IS MOSTLY DEAD, which is what separates this island from every
+     * other ground in the game and is the easiest thing in the whole map to
+     * lose in a re-generate. Five orc ranks have been felling, burning and
+     * camping across this ground long enough to have used it up; a leafy
+     * canopy would say nobody has been here, which is the opposite of what
+     * the errand is about. Ratio rather than counts, so tuning the density
+     * does not have to touch this. */
+    const deadWood = (isle.scenery ?? []).filter((sc) => sc.kind === "deadTree").length;
+    const stumps = (isle.scenery ?? []).filter((sc) => sc.kind === "felledTree").length;
+    ok(deadWood + isle.trees.length > 300,
+      `the isle is wooded rather than mown (${deadWood} dead + ${isle.trees.length} green)`);
+    ok(deadWood > isle.trees.length * 2.5,
+      `…and the wood is dry country, not forest (${deadWood} bare trunks to ${isle.trees.length} leafy)`);
+    ok(stumps > 40, `…with the stumps that say why (${stumps} felled)`);
     ok(isle.rocks.length > 90, `…and carries real stone (${isle.rocks.length} nodes)`);
+    /* A 2x2 tent cannot find ground once three hundred dead trees have each
+     * painted a 3x3 of clearance, so the camps are placed BEFORE the wood.
+     * Run the other way round the island came out with three tents on it,
+     * which is not an army gathering. */
+    ok((isle.scenery ?? []).filter((sc) => sc.kind === "tent").length >= 10,
+      "the camps got their ground before the trees took it");
 
     /* THE BREATHER IS AT THE PAD, WHICH INVERTS CRETE — and this is the one
      * assertion in the block that is about the DESIGN rather than the numbers.
@@ -17048,6 +17066,17 @@ async function main(): Promise<void> {
      * jobs instead, because he asked for both, and this is the FIRST echo in
      * the game to carry stone you can actually work. */
     ok(hall.trees.length === 0, "nothing grows in a hall cut out of rock");
+    /* AND IT IS LIT THE WHOLE WAY DOWN. Eight fires lit Gorak's own end and
+     * left seventy tiles of the approach dark, which read as an empty
+     * corridor rather than as somewhere an army is camped. The count is only
+     * half of it — what matters is that the near half of the walk has fire on
+     * it too, so the check is on the spread rather than the total. */
+    ok(hall.fires.length >= 24, `the hall is lit like a camp (${hall.fires.length} fires)`);
+    const nearHalf = hall.fires.filter((f) =>
+      (hallReach.get(`${f.tx},${f.ty}`) ?? 1e9) < toGorak / 2).length;
+    ok(nearHalf >= 4,
+      `…and the first half of the walk is lit too, not just his end (${nearHalf})`);
+    ok(isle.fires.length >= 30, `and there is more fire above ground as well (${isle.fires.length})`);
     ok(hall.rocks.length > 25, `…and it is the first echo with workable stone in it (${hall.rocks.length} nodes)`);
     ok((hall.scenery ?? []).some((sc) => sc.kind === "boulderA" || sc.kind === "boulderB"),
       "…and boulders as well, which is the other half of the same ask");
