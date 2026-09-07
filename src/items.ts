@@ -143,9 +143,14 @@ export interface GearStats {
    *  the defense pool — and those two do NOT stack, the larger one wins.
    *  See defenseShield() for why, and for what defBonus does differently. */
   def?: number;
-  /** A weapon's always-on guard, added on top of whichever pool won. Small by
-   *  design: it is the reason a sword still defends better than a maul when
-   *  both are held behind the same shield. */
+  /** An always-on guard, added on top of whichever pool won. Small by design:
+   *  it is the reason a sword still defends better than a maul when both are
+   *  held behind the same shield.
+   *
+   *  Weapons carry it, and since Etap 53 so does the ring slot — that is what
+   *  makes a piece of jewellery able to give DEFENSE rather than armor, which
+   *  `def` on a worn piece cannot: `defenseArmor` reads `def` across every
+   *  worn slot and would quietly turn any ring's guard into plate. */
   defBonus?: number;
   speed?: number;
   maxhp?: number;
@@ -447,9 +452,19 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * Priced above the Power Ring but not by much. It is worth more because
    * there is exactly one source — a one-time chest, no shop, no drop — and
    * the Power Ring at least still has Kárr's howe as well as its old shelf.
-   * Icon by Radek: a banded ring, three-quarter on like the Power Ring's, in
-   * cold teal and bone against that one's gold and green. */
-  guardRing: { name: "Guard Ring",   stack: 1, value: 120, weight: 2, slot: "ring",    gear: { def: 2 } },
+   * Icon: a banded ring, three-quarter on like the Power Ring's, in cold teal
+   * and bone against that one's gold and green.
+   *
+   * IT PAYS `defBonus`, NOT `def`, and the difference is the whole item. `def`
+   * on a worn piece is read by `defenseArmor` and becomes ARMOR: a flat
+   * subtraction off every hit that lands, which is a fifth helmet. `defBonus`
+   * goes into the shield pool as an always-on guard, so what the ring buys is
+   * a better BLOCK — it scales with Shielding, it does nothing for a character
+   * who never trained it, and it makes the ring a shield-line choice instead
+   * of two more points of the stat every armour piece in the game already
+   * gives. Two points puts it between the short sword's one and the marrow
+   * blade's four. */
+  guardRing: { name: "Guard Ring",   stack: 1, value: 120, weight: 2, slot: "ring",    gear: { defBonus: 2 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 250, weight: 4, slot: "amulet", deathProtect: true },
   // Backpack: buy it at the smith. A CONTAINER, not a capacity upgrade — it

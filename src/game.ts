@@ -161,7 +161,10 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize
    *
    * The RING is the other half and the part that lasts. It is the Power
    * Ring's opposite number — the same slot, the same weight class, guard
-   * where that one gives attack — and like the Power Ring in Kárr's howe it
+   * where that one gives attack, and specifically guard in the SHIELD pool
+   * rather than armor, so it rewards a trained Shielding instead of handing
+   * out two more points of the stat every worn piece already gives — and like
+   * the Power Ring in Kárr's howe it
    * is a chest prize and nothing else: no shop stocks it and no creature
    * drops it, so the only one in the game is the one at the end of the maze.
    *

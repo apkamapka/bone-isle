@@ -288,7 +288,15 @@ export function defenseShield(eq: Equipment): number {
   // what makes "big two-hander, no shield" a real build instead of a downgrade.
   // What does always add is defBonus: the small always-on guard a weapon gives
   // even from behind a shield (Tibia writes it as the "+3" in "Def: 25 +3").
-  return Math.max(shield, weapon) + gearStatOf(eq, "defBonus", ["weapon"]);
+  //
+  // Etap 53 adds the RING slot to that sum, and only that sum. It is the one
+  // way a piece of jewellery can give defense rather than armor: `def` on
+  // anything worn is picked up by defenseArmor below and becomes a flat
+  // subtraction, so a ring written that way is a fifth helmet however it is
+  // described. Read as defBonus it goes into the pool instead, scales with
+  // Shielding like the rest of the pool does, and cannot displace a shield —
+  // it is added after the max(), never entered into it.
+  return Math.max(shield, weapon) + gearStatOf(eq, "defBonus", ["weapon", "ring"]);
 }
 
 /** Armor-side rating: worn pieces (helmet, armor, legs, boots, jewellery).

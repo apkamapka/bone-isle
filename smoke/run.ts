@@ -16662,8 +16662,41 @@ async function main(): Promise<void> {
      * becomes a choice rather than a thing you have or have not found. */
     ok(IT53.guardRing.slot === "ring" && IT53.guardRing.weight === IT53.ring.weight,
       "the guard ring is the Power Ring's opposite number in the same slot");
-    ok((IT53.guardRing.gear?.def ?? 0) > 0 && !IT53.guardRing.gear?.atk,
+    ok((IT53.guardRing.gear?.defBonus ?? 0) > 0 && !IT53.guardRing.gear?.atk,
       "…guard where that one gives attack");
+    /* AND THE GUARD IS DEFENSE, NOT ARMOR. This is the assertion the item is
+     * really about. Written the obvious way — `def: 2` on a ring — the number
+     * would be swept up by `defenseArmor`, which reads `def` across every worn
+     * slot, and the ring would silently be a fifth helmet: a flat subtraction
+     * off every hit, worth the same to a character who has never trained
+     * Shielding. Written as `defBonus` it lands in the shield pool, scales
+     * with the skill, and cannot displace an actual shield because it is
+     * added after the max() rather than entered into it.
+     *
+     * Both halves are checked, because only checking the first would pass on
+     * an item that did both. */
+    {
+      const SK53 = await import("../src/systems/skills.ts");
+      const pr = createPlayer({ x: 0, y: 0 });
+      const armorBare = SK53.defenseArmor(pr.eq), poolBare = SK53.defenseShield(pr.eq);
+      pr.eq.ring = "guardRing";
+      ok(SK53.defenseShield(pr.eq) === poolBare + 2,
+        `wearing it adds two to the SHIELD pool (${poolBare} -> ${SK53.defenseShield(pr.eq)})`);
+      ok(SK53.defenseArmor(pr.eq) === armorBare,
+        `…and nothing at all to armor (${SK53.defenseArmor(pr.eq)})`);
+      /* It stacks on top of a shield rather than competing with one — the
+       * max() is between the shield and the weapon, and this is outside it. */
+      pr.eq.shield = "leatherShield";
+      const withShield = SK53.defenseShield(pr.eq);
+      pr.eq.ring = null;
+      ok(withShield === SK53.defenseShield(pr.eq) + 2,
+        "…and it is still worth its two points from behind a shield");
+      /* The Power Ring is untouched: it is the pair's other half and it must
+       * stay a pure attack ring, or the choice the slot is supposed to offer
+       * stops being a choice. */
+      ok(!IT53.ring.gear?.def && !IT53.ring.gear?.defBonus,
+        "the Power Ring still guards nothing — the slot is a real trade");
+    }
 
     /* --- art: registered, shipped, credited ---------------------------------- */
     const sheet53 = fs53.readFileSync(new URL("../src/gfx/mobSheet.ts", import.meta.url), "utf8");
