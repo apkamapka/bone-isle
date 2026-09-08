@@ -52,6 +52,13 @@ export type WorldKey =
   // Cinder Hollow below it. The dead hold the maze in equal thirds; the hollow
   // holds one dragon and nothing else.
   | "deaddeep1" | "deaddeep2"
+  // Goblin Deep -1 and -2 — the warren under the Reach's EASTERN descent, and
+  // the third and last use of the minotaur branch's two mazes. Minotaurs walk
+  // them as drawn, orcs a quarter turn round, goblins a half turn; there is no
+  // fourth rotation that is not one of those three, so the ground under this
+  // island is now spent. The branch is the lightest of the three and the only
+  // one with no caster on it at any depth.
+  | "goblindeep1" | "goblindeep2"
   // Liddesdale — the Bloody Valley, the Time Sage's first MISSION ground, and
   // the redcap's lair cut into the bog under it. The first pair of keys that
   // exist because a mission needed them rather than because a level range did.

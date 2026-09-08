@@ -1588,11 +1588,13 @@ async function main(): Promise<void> {
     const alsoSold = gear.filter((k) => onSale.has(k as never));
     ok(alsoSold.length === 0,
       `…and nothing buried is also on a shelf${alsoSold.length ? " — " + alsoSold.join(",") : ""}`);
-    /* Seven purses since Etap 54, and five pieces of gear: Gorak's hoard is
-     * the third chest in the game to hold both, after Kárr's and the
-     * labyrinth's. */
-    ok(held === gear.length + 7,
-      `every hoard is gear plus a purse, and seven purses in all (${held})`);
+    /* Eight purses now, and six pieces of gear. The goblin branch's hoard is
+     * the newest and it is built to the shape the other two deep floors set
+     * rather than to a shape of its own: shield plus ten platinum, which is
+     * what makes `gear.length + N` the honest form of this assertion. A branch
+     * that paid differently would have to be argued for here, and none does. */
+    ok(held === gear.length + 8,
+      `every hoard is gear plus a purse, and eight purses in all (${held})`);
     // and nothing else in the game hides a chest that no prize is named for
     let orphan = "";
     for (const w of Object.values(worlds)) {
@@ -4701,8 +4703,10 @@ async function main(): Promise<void> {
     ok(r.fires.length === 48, "all 48 campfires were placed");
     ok(r.scenery.filter((s) => s.kind === "skullPole").length === 13,
       "…and all 13 skull totems");
-    ok(r.mobPosts?.length === 75, "75 creature posts were written into the grid");
-    ok(r.monsters.length === 75, "…and every one of them spawned");
+    // Seventy-one, down from seventy-five: the six bandits became six goblins,
+    // which costs nothing, and four of the eight snakes came off the island.
+    ok(r.mobPosts?.length === 71, "71 creature posts were written into the grid");
+    ok(r.monsters.length === 71, "…and every one of them spawned");
     ok(r.monsters.filter((m) => m.kind === "demonSkeleton").length === 1,
       "exactly one demon skeleton, as the map asks");
 
@@ -4788,22 +4792,30 @@ async function main(): Promise<void> {
       "snakes sit nearer the way home than orc warriors");
     // the demon skeleton is ranked by depth inland now, not by distance from
     // the pad, so the ladder that still holds across regions is the outer one
-    /* --- five regions, one family each, spread not knotted --- */
+    /* --- four regions, one family each, spread not knotted --- */
     {
       const p = r.mobPosts!;
       // The outlines Radek drew over the minimap, as the box each family may
       // stand in. One family per region; nothing of that family outside it.
-      const REGION: Record<string, [number, number, number, number]> = {
-        easy:     [0, 0, 52, 37],   // snakes and bandits, the north-west
-        undead:   [50, 0, 99, 27],  // the dark strip along the north shore
-        goblin:   [56, 27, 99, 53], // the green belt on the east flank
-        minotaur: [3, 31, 47, 99],  // the whole south-west landmass
-        orc:      [46, 50, 99, 99], // the south-east
+      //
+      // TWO THINGS CHANGED HERE AND THEY ARE THE SAME CHANGE. The bandits are
+      // gone from the island, so the north-west "easy" box has no family of
+      // its own left — and rather than leave that ground bare it went to the
+      // goblins, who are therefore the only family in the game holding two
+      // boxes. `REGION` maps a family to a LIST for that reason: one box is
+      // still the normal case and the list is what lets the exception be
+      // stated rather than smuggled in by widening somebody's rectangle until
+      // it swallowed half the island.
+      const REGION: Record<string, [number, number, number, number][]> = {
+        undead:   [[50, 0, 99, 27]],  // the dark strip along the north shore
+        goblin:   [[56, 27, 99, 53],  // the green belt on the east flank…
+                   [16, 12, 52, 37]], // …and the country the bandits held
+        minotaur: [[3, 31, 47, 99]],  // the whole south-west landmass
+        orc:      [[46, 50, 99, 99]], // the south-east
       };
       // Each family weakest first. That order is the order they are laid down
       // as the ground climbs away from the sea.
       const LADDER: Record<string, string[]> = {
-        easy: ["snake", "bandit"],
         undead: ["skeleton", "ghoul", "skeletonWarrior", "demonSkeleton"],
         goblin: ["goblin", "goblinLegionary"],
         // Two ranks, not three. The guard is a floor and a half down now.
@@ -4812,15 +4824,23 @@ async function main(): Promise<void> {
         // island with the same move that took the minotaur guard off it.
         orc: ["orc", "orcArcher", "orcWarrior"],
       };
+      // The snake answers "" — it belongs to no family and stands in no box,
+      // which is a rule and not a hole in one. Everything else must name a
+      // region, and `familyOf` returning "undead" for an unrecognised kind is
+      // exactly why the roster check below refuses any kind it was not told
+      // about: a new creature must be added HERE, not merely tolerated.
       const familyOf = (k: string): string =>
-        k.startsWith("orc") ? "orc" : k.startsWith("minotaur") ? "minotaur"
-        : k.startsWith("goblin") ? "goblin"
-        : (k === "snake" || k === "bandit") ? "easy" : "undead";
+        k === "snake" ? ""
+        : k.startsWith("orc") ? "orc" : k.startsWith("minotaur") ? "minotaur"
+        : k.startsWith("goblin") ? "goblin" : "undead";
 
       const HEAD: Record<string, number> = {
-        snake: 8, bandit: 6,
+        // Four snakes, not eight, and `bandit` absent rather than zero so that
+        // one reappearing on the island trips the roster check below.
+        snake: 4,
         skeleton: 6, ghoul: 3, skeletonWarrior: 3, demonSkeleton: 1,
-        goblin: 5, goblinLegionary: 3,
+        // Five goblins on the belt plus the six that were bandits.
+        goblin: 11, goblinLegionary: 3,
         // The guard came off the island entirely: the four that used to picket
         // the camp around the mouth at (8,85) are plain horns now, and the rank
         // holds Minotaur Deep -2 instead. Nine minotaurs plus those four is
@@ -4840,10 +4860,28 @@ async function main(): Promise<void> {
       ok(wrong.length === 0, `every kind musters the number drawn for it${wrong.length ? ` — off: ${wrong.join(", ")}` : ""}`);
 
       const outside = p.filter((m) => {
-        const b = REGION[familyOf(m.kind)];
-        return m.tx < b[0] || m.ty < b[1] || m.tx > b[2] || m.ty > b[3];
+        const boxes = REGION[familyOf(m.kind)];
+        if (!boxes) return false; // the snake, and only the snake
+        return !boxes.some((b) => m.tx >= b[0] && m.ty >= b[1] && m.tx <= b[2] && m.ty <= b[3]);
       }).length;
       ok(outside === 0, "no creature strays out of its family's region");
+
+      /* --- and the one creature that answers to no region --- */
+      // Four snakes, one to a region, and the charnel shore deliberately
+      // without. Checked as "four different regions" rather than by naming the
+      // four tiles, because WHICH ones is a drawing decision and the rule is
+      // that they are apart.
+      {
+        const snakes = p.filter((m) => m.kind === "snake");
+        const where = snakes.map((m) => Object.entries(REGION)
+          .find(([, bs]) => bs.some((b) => m.tx >= b[0] && m.ty >= b[1] && m.tx <= b[2] && m.ty <= b[3]))?.[0]
+          ?? "loose");
+        ok(snakes.length === 4, `four snakes on the whole island (${snakes.length})`);
+        ok(new Set(where).size === 4,
+          `…and no two of them in the same country (${where.join(", ")})`);
+        ok(!where.includes("undead"),
+          "…none of them on the charnel shore, which is the point of the charnel shore");
+      }
 
       /* --- spread, not knotted: this is what the camps got wrong --- */
       const gap = (a: typeof p[0], list: typeof p) =>
@@ -4861,17 +4899,18 @@ async function main(): Promise<void> {
       }
 
       /* --- rank closes in on the lair: the heaviest stand over the descent --- */
-      // Three regions have a hole cut down to -1; those are the cores. The two
-      // that do not take the squarest ground they own instead.
+      // EVERY family now has a hole of its own, which it did not before: the
+      // goblins' core used to be a guess — the squarest ground their belt owned
+      // — and the hole was then cut on that exact tile rather than somewhere
+      // convenient. So this table no longer has a special case in it, and the
+      // loop below can demand that all four cores are real descents.
       const CORE: Record<string, [number, number]> = {
-        easy: [33, 32], undead: [89, 13], goblin: [60, 44],
-        minotaur: [8, 85], orc: [79, 90],
+        undead: [89, 13], goblin: [60, 44], minotaur: [8, 85], orc: [79, 90],
       };
-      // Sealed or dug, a descent is a descent: the orcs' is open now and the
-      // ranks around it must not have moved because of that.
       const holes = r.portals.filter((q) => q.style === "caveMouth")
         .map((q) => `${Math.floor(q.x / 32)},${Math.floor(q.y / 32)}`);
-      for (const fam of ["undead", "minotaur", "orc"]) {
+      ok(holes.length === 4, `four descents are cut into the island (${holes.length})`);
+      for (const fam of Object.keys(CORE)) {
         ok(holes.includes(CORE[fam].join(",")),
           `${fam}: the core is the descent itself, not a spot picked near it`);
       }
@@ -4908,6 +4947,18 @@ async function main(): Promise<void> {
           .map((m) => Math.hypot(m.tx - c[0], m.ty - c[1])));
         ok(nearest <= 12,
           `${fam}: the heaviest of them is posted within a dozen tiles of the lair mouth (${top}, ${nearest.toFixed(1)})`);
+      }
+
+      /* --- …but not ON it: you come up a hole with room to turn round --- */
+      // The goblins' mouth is the one that needed this said out loud. It was
+      // cut on the tile their ranks had already closed on, which left a
+      // legionary standing diagonally adjacent to it — a fight that starts
+      // before the screen finishes redrawing. He stepped back to (63,47), and
+      // three tiles is the floor the other three mouths had always kept.
+      for (const [fam, c] of Object.entries(CORE)) {
+        const nearest = Math.min(...p.map((m) => Math.hypot(m.tx - c[0], m.ty - c[1])));
+        ok(nearest >= 3,
+          `${fam}: nothing is posted on the lip of the mouth itself (${nearest.toFixed(1)} tiles)`);
       }
 
       /* --- and nobody stands in the surf --- */
@@ -5002,12 +5053,12 @@ async function main(): Promise<void> {
     ok(r.monsters.filter((m) => m.kind === "goblinLegionary").length === 3,
       "three of that band wear the legionary's armour");
 
-    /* --- all three descents are dug now --- */
+    /* --- all four descents are dug now --- */
     ok(r.portals.filter((p) => p.inactive).length === 0,
-      "nothing on the island stands sealed any more — the dead's hole was the last");
+      "nothing on the island stands sealed any more — the goblins' hole was the last");
     for (const [dest, tx, ty, who] of [
       ["orcdeep1", 79, 90, "orcs"], ["minodeep1", 8, 85, "minotaurs"],
-      ["deaddeep1", 89, 13, "dead"],
+      ["deaddeep1", 89, 13, "dead"], ["goblindeep1", 60, 44, "goblins"],
     ] as const) {
       const down = r.portals.find((p) => p.dest === dest);
       ok(down !== undefined && !down.inactive, `the ${who}' descent is open and leads to ${dest}`);
@@ -6214,11 +6265,12 @@ async function main(): Promise<void> {
     ok(seen[kn.ty][kn.tx], "…the knight's own among them");
   }
 
-  console.log("The two floors under the Reach are traced faithfully from Tiled:");
+  console.log("The three floors under the Reach are traced faithfully from Tiled:");
   {
     const fs = await import("node:fs");
     const { ORCDEEP_SPEC } = await import("../src/world/orcDeepSpec.ts");
     const { MINODEEP_SPEC } = await import("../src/world/minoDeepSpec.ts");
+    const { GOBLINDEEP_SPEC } = await import("../src/world/goblinDeepSpec.ts");
     const { REACH_SPEC } = await import("../src/world/reachSpec.ts");
     const { Tile: T3 } = await import("../src/world/types.ts");
     const { populateAll, CHEST_PRIZES } = await import("../src/game.ts");
@@ -6226,11 +6278,13 @@ async function main(): Promise<void> {
     const worlds = buildWorlds(WORLD_SEED);
     populateAll(worlds);
 
-    // Both -1 floors are 80x80 traces now, and neither buries anything: each
-    // branch keeps ONE hoard and it sits at the bottom of its -2, so `chest`
-    // is null here and the assertion below reads the other way round. The orc
-    // floor is the minotaur floor turned a quarter turn, which is why the two
-    // rows below share a wall count to the square.
+    // All three -1 floors are 80x80 traces now, and none of them buries
+    // anything: each branch keeps ONE hoard and it sits at the bottom of its
+    // -2, so `chest` is null here and the assertion below reads the other way
+    // round. The orc floor is the minotaur floor turned a quarter turn and the
+    // goblin floor is it turned a half, which is why all three rows share a
+    // wall count, a fire count and a boulder count to the square — one drawing,
+    // three orientations, three garrisons.
     const FLOORS = [
       {
         key: "orcdeep1" as const, spec: ORCDEEP_SPEC, png: "orcdeep-terrain.png",
@@ -6243,6 +6297,12 @@ async function main(): Promise<void> {
         w: 80, h: 80, walls: 2642, ladder: [55, 70], glyph: "1", chest: null,
         prizes: 0, fires: 34, wells: 4, boulders: 22,
         head: { minotaur: 52, minotaurArcher: 33 }, total: 85,
+      },
+      {
+        key: "goblindeep1" as const, spec: GOBLINDEEP_SPEC, png: "goblindeep-terrain.png",
+        w: 80, h: 80, walls: 2642, ladder: [24, 9], glyph: "4", chest: null,
+        prizes: 0, fires: 34, wells: 4, boulders: 22,
+        head: { goblin: 62, goblinLegionary: 23 }, total: 85,
       },
     ];
 
@@ -6355,13 +6415,17 @@ async function main(): Promise<void> {
       }
     }
 
-    /* --- nothing stands in the flames on any of the four ---
+    /* --- nothing stands in the flames on any of the six ---
      * The four nudged markers this used to name were artefacts of the old
      * 60x50 drawing, where Tiled had dropped creatures onto props. The 80x80
      * redraw lays its posts down after the furniture instead of beside it, so
      * there is nothing to nudge — but the property those nudges existed to buy
-     * still has to hold, and it is checked directly here. */
-    for (const key of ["minodeep1", "minodeep2", "orcdeep1", "orcdeep2"] as const) {
+     * still has to hold, and it is checked directly here. The two goblin
+     * floors join the list rather than getting a check of their own: their
+     * generator places furniture first and refuses a post on a claimed square,
+     * and this is what says so. */
+    for (const key of ["minodeep1", "minodeep2", "orcdeep1", "orcdeep2",
+      "goblindeep1", "goblindeep2"] as const) {
       const m = worlds[key];
       const onFire = m.mobPosts!.filter((q) =>
         m.fires.some((fi) => fi.tx === q.tx && fi.ty === q.ty));
@@ -6689,6 +6753,220 @@ async function main(): Promise<void> {
       stand("orcdeep1", "reach");
       const back = Math.hypot(g.player.x / 32 - 79, g.player.y / 32 - 90);
       ok(back < 3, `…and on the island you come up the orcs' hole (${back.toFixed(1)} tiles off)`);
+    }
+  }
+
+  console.log("The goblin branch, the same two mazes turned end for end:");
+  {
+    const fs = await import("node:fs");
+    const { GOBLINDEEP_SPEC } = await import("../src/world/goblinDeepSpec.ts");
+    const { GOBLINDEEP2_SPEC } = await import("../src/world/goblinDeep2Spec.ts");
+    const { MINODEEP_SPEC: MD1 } = await import("../src/world/minoDeepSpec.ts");
+    const { MINODEEP2_SPEC: MD2 } = await import("../src/world/minoDeep2Spec.ts");
+    const { ORCDEEP_SPEC: OD1 } = await import("../src/world/orcDeepSpec.ts");
+    const { populateAll, travelTo, createGame, CHEST_PRIZES } = await import("../src/game.ts");
+    const { ITEMS } = await import("../src/items.ts");
+    const worlds = buildWorlds(WORLD_SEED);
+    populateAll(worlds);
+    const b1 = worlds.goblindeep1;
+    const b2 = worlds.goblindeep2;
+
+    /* --- the half turn is exact, square for square --- */
+    // Checked against the FLOOR grids, which carry rock and cave and nothing
+    // else, so a boulder or a goblin moving cannot make this pass or fail.
+    const rock = (spec: { floor?: readonly string[] }, x: number, y: number) =>
+      spec.floor![y][x] === "#";
+    let half1 = 0, half2 = 0;
+    for (let y = 0; y < 80; y++) for (let x = 0; x < 80; x++) {
+      if (rock(MD1, x, y) === rock(GOBLINDEEP_SPEC, 79 - x, 79 - y)) half1++;
+      if (rock(MD2, x, y) === rock(GOBLINDEEP2_SPEC, 79 - x, 79 - y)) half2++;
+    }
+    ok(half1 === 6400, `Goblin Deep -1 is Minotaur Deep -1 turned end for end (${half1}/6400)`);
+    ok(half2 === 6400, `Goblin Deep -2 is Minotaur Deep -2 turned end for end (${half2}/6400)`);
+
+    /* --- three orientations, three mazes that are actually different --- */
+    // This is the assertion that stops somebody "simplifying" the branch by
+    // turning the orc floor back the other way: anticlockwise from the orcs is
+    // the minotaurs' own labyrinth square for square, and a third branch that
+    // is a copy of the first is not a third branch. Rather than restate the
+    // rotation algebra — which the three exactness checks above already pin —
+    // this measures the thing the algebra exists to buy. Two floors laid on
+    // top of each other agree on about 78% of their squares; a duplicate would
+    // agree on all 6400, and that is what a wrong turn would look like here.
+    const overlap = (a: { floor?: readonly string[] }, b: { floor?: readonly string[] }) => {
+      let n = 0;
+      for (let y = 0; y < 80; y++) for (let x = 0; x < 80; x++) if (rock(a, x, y) === rock(b, x, y)) n++;
+      return n;
+    };
+    for (const [tag, a, b] of [
+      ["-1 goblin vs minotaur", GOBLINDEEP_SPEC, MD1],
+      ["-1 goblin vs orc", GOBLINDEEP_SPEC, OD1],
+      ["-2 goblin vs minotaur", GOBLINDEEP2_SPEC, MD2],
+    ] as const) {
+      const n = overlap(a, b);
+      ok(n < 5600,
+        `${tag}: a different maze to walk, not the same one relabelled (${n}/6400 squares alike)`);
+    }
+
+    /* --- both exports ship, turned the same way as the grids --- */
+    for (const [file, w] of [
+      ["goblindeep-terrain.png", b1], ["goblindeep2-terrain.png", b2],
+    ] as const) {
+      const url = new URL(`../public/${file}`, import.meta.url);
+      ok(fs.existsSync(url), `public/${file} ships with it`);
+      if (fs.existsSync(url)) {
+        const png = fs.readFileSync(url);
+        ok(png.readUInt32BE(16) === w.w * 32 && png.readUInt32BE(20) === w.h * 32,
+          `…exactly ${w.w * 32}x${w.h * 32}, so it lines up 1:1 with the grid`);
+      }
+    }
+
+    /* --- the markers came round with the rotation --- */
+    const at = (p: { x: number; y: number }): [number, number] =>
+      [Math.floor(p.x / 32), Math.floor(p.y / 32)];
+    const up1 = b1.portals.find((p) => p.dest === "reach")!;
+    const dn1 = b1.portals.find((p) => p.dest === "goblindeep2")!;
+    const up2 = b2.portals.find((p) => p.dest === "goblindeep1")!;
+    ok(at(up1).join(",") === "24,9", "the ladder up to the Reach turned to (24,9)");
+    ok(at(dn1).join(",") === "63,69", "…and the hole down to (63,69)");
+    ok(at(up2).join(",") === "63,69", "the lower floor comes up on that same tile");
+    ok(b1.portals.length === 2 && b2.portals.length === 1,
+      "two ways off -1, one off -2 — the bottom is a dead end, as both others are");
+    ok([...b1.portals, ...b2.portals].every((p) => !p.inactive),
+      "neither floor carries a dormant pad");
+
+    /* --- one space each: no boulder pinched a corridor shut --- */
+    const walkFrom = (w: typeof b1, sx: number, sy: number): number[][] => {
+      const d: number[][] = Array.from({ length: w.h }, () => new Array(w.w).fill(-1));
+      d[sy][sx] = 0;
+      const q: [number, number][] = [[sx, sy]];
+      for (let i = 0; i < q.length; i++) {
+        const [x, y] = q[i];
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + ax, ny = y + ay;
+          if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h || d[ny][nx] >= 0 || w.solid[ny][nx]) continue;
+          d[ny][nx] = d[y][x] + 1; q.push([nx, ny]);
+        }
+      }
+      return d;
+    };
+    const d1 = walkFrom(b1, ...at(up1));
+    const d2 = walkFrom(b2, ...at(up2));
+    for (const [w, d, tag] of [[b1, d1, "-1"], [b2, d2, "-2"]] as const) {
+      let open = 0, seen = 0;
+      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) {
+        if (!w.solid[y][x]) open++;
+        if (d[y][x] >= 0) seen++;
+      }
+      ok(open === seen,
+        `Goblin Deep ${tag}: every open square walks to the ladder (${seen}/${open})`);
+    }
+
+    /* --- who lives on -1, and that the ranks GRADE rather than band --- */
+    {
+      const n = (k: string) => b1.mobPosts!.filter((p) => p.kind === k).length;
+      ok(n("goblin") === 62 && n("goblinLegionary") === 23,
+        `sixty-two goblins and twenty-three legionaries on -1 (${b1.mobPosts!.length} posts)`);
+      ok(b1.mobPosts!.every((p) => p.kind === "goblin" || p.kind === "goblinLegionary"),
+        "…and nothing else at all: this branch borrows no rank from the other two");
+      ok(b1.monsters.length === b1.mobPosts!.length,
+        "…and the populated floor spawns exactly those, no roamer rolled in");
+      const nearest = Math.min(...b1.mobPosts!.map((p) => d1[p.ty][p.tx]));
+      ok(nearest >= 8, `eight steps around the ladder stay clear, so you can land and draw (${nearest})`);
+      // …and the same courtesy at the OTHER place you arrive on this floor.
+      // Coming up from -2 puts you on the hole down, which the walk-distance
+      // clearance around the ladder says nothing about: the first pass of the
+      // scatter put a legionary orthogonally adjacent to it. Both older -1
+      // floors keep three or four tiles there, so that is the floor.
+      const mouth = at(dn1);
+      const offMouth = Math.min(...b1.mobPosts!
+        .map((p) => Math.hypot(p.tx - mouth[0], p.ty - mouth[1])));
+      ok(offMouth >= 3,
+        `…and nothing is posted on the lip of the hole down either (${offMouth.toFixed(1)} tiles)`);
+      const mean = (k: string) => {
+        const ps = b1.mobPosts!.filter((p) => p.kind === k);
+        return ps.reduce((s, p) => s + d1[p.ty][p.tx], 0) / ps.length;
+      };
+      ok(mean("goblinLegionary") > mean("goblin") + 8,
+        `the iron leans toward the hole down (${mean("goblin").toFixed(0)} vs ${mean("goblinLegionary").toFixed(0)} steps)`);
+      // …and the other half of "graded, not banded", which is the half a mean
+      // cannot say: the front of the floor is NOT provably safe from the
+      // heavier rank. A straight cut at the 23 deepest posts would pass the
+      // assertion above and fail this one.
+      const shallow = Math.min(...b1.mobPosts!
+        .filter((p) => p.kind === "goblinLegionary").map((p) => d1[p.ty][p.tx]));
+      const deepest = Math.max(...b1.mobPosts!.map((p) => d1[p.ty][p.tx]));
+      ok(shallow < deepest / 2,
+        `…without the near half being a promise: a legionary stands ${shallow} steps in, of ${deepest}`);
+    }
+
+    /* --- who lives on -2: one rank, and no caster anywhere on the branch --- */
+    {
+      const n = (k: string) => b2.mobPosts!.filter((p) => p.kind === k).length;
+      ok(n("goblinLegionary") === 77 && b2.mobPosts!.length === 77,
+        `seventy-seven legionaries on -2 and nothing softer (${b2.mobPosts!.length} posts)`);
+      ok(b2.monsters.length === b2.mobPosts!.length, "…and every one of them stood up");
+      ok(Math.min(...b2.mobPosts!.map((p) => d2[p.ty][p.tx])) >= 8,
+        "…with the same clear landing at the foot of the ladder");
+      // THE DEFINING PROPERTY OF THIS BRANCH, pinned so that adding a goblin
+      // caster later is a deliberate act with a failing test attached rather
+      // than a quiet drift. Minotaur -2 fields six mages and orc -2 ten
+      // shamans; both floors are built around them. This one is built around
+      // not having them, which is why it is also the lightest of the three.
+      const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+      const casts = (k: string) => !!(MONSTER_DEFS as Record<string, { spells?: unknown }>)[k]?.spells;
+      ok([...b1.mobPosts!, ...b2.mobPosts!].every((p) => !casts(p.kind)),
+        "not one caster on either goblin floor — the branch with no magic on it");
+    }
+
+    /* --- the hoard, and the three that hold the chamber it stands in --- */
+    {
+      const chest = b2.structures.find((st) => st.key === "treasure")!;
+      ok(chest !== undefined && chest.tx === 6 && chest.ty === 66,
+        "the hoard turned to (6,66) with the rest of the map");
+      ok(b2.solid[chest.ty][chest.tx], "…and it is furniture: you open it from the tile beside it");
+      const approach = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const)
+        .map(([dx, dy]) => [chest.tx + dx, chest.ty + dy] as const)
+        .filter(([x, y]) => !b2.solid[y][x]);
+      ok(approach.length > 0, `…from ${approach.length} open square(s) beside it`);
+      ok(!b2.mobPosts!.some((p) => p.tx === approach[0][0] && p.ty === approach[0][1]),
+        "…and the square you open it from is left bare, so the fight ends before the lid does");
+      const dc = walkFrom(b2, approach[0][0], approach[0][1]);
+      const held = b2.mobPosts!.filter((p) => dc[p.ty][p.tx] <= 8).length;
+      ok(held >= 3, `three of them hold the chamber rather than one (${held} within eight steps)`);
+
+      const prizes = CHEST_PRIZES.goblindeep2!;
+      ok(CHEST_PRIZES.goblindeep1 === undefined, "-1 is keyed to no prize — it buries nothing");
+      const kinds = prizes.map((p) => (Array.isArray(p) ? p[0] : p));
+      const counts = prizes.map((p) => (Array.isArray(p) ? p[1] : 1));
+      ok(kinds.join(",") === "goblinShield,platinumCoin" && counts.join(",") === "1,10",
+        "the goblin hoard is the goblin shield and ten platinum, as both older branches pay");
+      ok((ITEMS.platinumCoin.coin ?? 0) * 10 === 1000,
+        "…which is the same thousand gold the other two bury");
+    }
+
+    /* --- and the branch walks end to end --- */
+    {
+      const g = createGame(WORLD_SEED);
+      populateAll(g.worlds);
+      const stand = (from: string, dest: string) => {
+        const w = g.worlds[from as keyof typeof g.worlds];
+        const pad = w.portals.find((p) => p.dest === dest)!;
+        g.current = w; g.player.x = pad.x; g.player.y = pad.y;
+        travelTo(g, dest as never);
+        const inWall = g.current.solid[Math.floor(g.player.y / 32)][Math.floor(g.player.x / 32)];
+        ok(g.current.key === dest && !inWall, `${from} -> ${dest}, and you land on open ground`);
+      };
+      stand("reach", "goblindeep1");
+      stand("goblindeep1", "goblindeep2");
+      stand("goblindeep2", "goblindeep1");
+      // -1 has two portals sixty tiles apart, so coming up from -2 must put you
+      // on the hole you went down and not on the ladder to the island.
+      const backOn1 = Math.hypot(g.player.x / 32 - 63, g.player.y / 32 - 69);
+      ok(backOn1 < 3, `…coming up you stand at the hole you went down (${backOn1.toFixed(1)} tiles off)`);
+      stand("goblindeep1", "reach");
+      const back = Math.hypot(g.player.x / 32 - 60, g.player.y / 32 - 44);
+      ok(back < 3, `…and on the island you come up the goblins' hole (${back.toFixed(1)} tiles off)`);
     }
   }
 
@@ -7829,10 +8107,15 @@ async function main(): Promise<void> {
     // Etap 54 adds the seventh pair — the Orc Isle and Gorak's hall under it.
     // Back to Liddesdale's shape after the labyrinth's detour: a ground to
     // walk and one room at the end. What is new is that the room is FULL.
+    // Etap 55 adds a PAIR THAT IS NOT A MISSION PAIR — the two goblin floors —
+    // and it is the first addition since the cull that costs no new ground at
+    // all. Both are the minotaur mazes turned a half turn, which is the last
+    // rotation those two drawings had left; there is no ninth map hiding in
+    // them, so the Bone Reach's four descents are all the descents it gets.
     ok(keys.join(" ") === "bandit banditdeep1 banditdeep2 banditdeep3 bower calanais cellar "
-      + "crete daneHills deaddeep1 deaddeep2 gorak haramsey haugr hermitage home labyrinth liddesdale "
-      + "minodeep1 minodeep2 orcIsle orcdeep1 orcdeep2 reach town tursachan",
-      `twenty-six maps and no others (${keys.length}: ${keys.join(" ")})`);
+      + "crete daneHills deaddeep1 deaddeep2 goblindeep1 goblindeep2 gorak haramsey haugr hermitage "
+      + "home labyrinth liddesdale minodeep1 minodeep2 orcIsle orcdeep1 orcdeep2 reach town tursachan",
+      `twenty-eight maps and no others (${keys.length}: ${keys.join(" ")})`);
     for (const dead of ["cave.ts", "deepwild.ts"]) {
       ok(!nfs.existsSync(new URL(`../src/world/${dead}`, import.meta.url)),
         `${dead} is gone, not merely unreferenced`);

@@ -1,10 +1,19 @@
 /**
  * The Bone Reach — the hunting ground behind the Time Sage's fourth pad.
  *
- * All three descents are open: glyph `1` drops into Minotaur Deep -1, `2` into
- * Orc Deep -1 and `3` into Charnel Deep -1. The dead's was the last to be dug;
- * the demon skeleton posted six tiles off it has been standing over a sealed
- * hole since the island was traced, and now stands over a real one.
+ * All four descents are open: glyph `1` drops into Minotaur Deep -1, `2` into
+ * Orc Deep -1, `3` into Charnel Deep -1 and `4` into Goblin Deep -1.
+ *
+ * THE GOBLINS' IS THE NEW ONE, and it is cut at (60,44) — which is not a spot
+ * picked near their camp, it is the exact square this comment used to call
+ * "the squarest ground their region owns" and predict they would leave once a
+ * hole was dug there. Nothing had to move for it: the belt was already ranked
+ * around that tile, so the only edit the drawing needed was the one legionary
+ * standing on the lip, who stepped back to (63,47) and is now four tiles off
+ * the mouth rather than one. That is the distance the other three keep — the
+ * demon skeleton six tiles off (89,13), an orc warrior three and a half off
+ * (79,90) — and it exists so that coming UP the hole is not a fight you are
+ * already losing before the screen redraws.
  *
  * Traced from `mapa_srednia.tmx` (100x100). The terrain, the coastline and the
  * collision come from that file; so does every campfire, totem, creature post
@@ -20,35 +29,58 @@
  * within two tiles of the sea, because the coastline is a ragged fringe of
  * grass over water and a trunk planted on it looks like it is wading.
  *
- * And creatures are not scattered at random either. Five regions, traced off
- * the outlines drawn over the minimap, one family to each: snakes and bandits
- * in the north-west, the dead along the north shore, goblins on the east belt,
- * minotaurs across the whole south-west landmass, orcs in the south-east.
- * Inside a region the posts are spread as evenly as the ground allows — nine
- * or ten tiles between kin, never a knot — and then ranked toward the hole cut
- * down to -1. The lightest of a family keeps the region's rim, the heaviest
- * stands over its own descent: orc warriors on (79,90), the demon skeleton six
- * tiles off (89,13). The orcs' shamans and berserkers came off the island
- * with the same move that took the minotaur guard off it — both ranks now
- * hold Orc Deep -2 — so the warrior is the heaviest thing the surface camp
- * fields, and it is what stands on the mouth. The minotaurs go one further,
- * and deliberately:
- * their camp around the mouth at (8,85) was picketed by four guards and is
- * now plain horns throughout, because the guard was moved a floor and a half
- * down. The surface camp is the doorway to the branch, not a wall across it. The snakes
- * and the goblins have no lair dug yet, so their ranks close on the squarest
- * ground their region owns instead, and will move once those holes are cut.
- * Eight tiles around the pad home stay clear, so you can land and draw.
+ * And creatures are not scattered at random either. Four regions, traced off
+ * the outlines drawn over the minimap, one family to each: the dead along the
+ * north shore, goblins on the east belt, minotaurs across the whole south-west
+ * landmass, orcs in the south-east. Inside a region the posts are spread as
+ * evenly as the ground allows — nine or ten tiles between kin, never a knot —
+ * and then ranked toward the hole cut down to -1. The lightest of a family
+ * keeps the region's rim, the heaviest stands over its own descent. The orcs'
+ * shamans and berserkers came off the island with the same move that took the
+ * minotaur guard off it — both ranks now hold Orc Deep -2 — so the warrior is
+ * the heaviest thing the surface camp fields, and it is what stands on the
+ * mouth. The minotaurs go one further, and deliberately: their camp around the
+ * mouth at (8,85) was picketed by four guards and is now plain horns
+ * throughout, because the guard was moved a floor and a half down. The surface
+ * camp is the doorway to the branch, not a wall across it.
  *
- *   P pad back to the cellar   @ spawn   1 2 3 descents to -1
+ * THE GOBLINS NOW HOLD TWO STRETCHES OF GROUND, and they are the only family
+ * that does. The bandits are gone from this island — six of them stood between
+ * the pad and the minotaur line and they are goblins now — and rather than
+ * leave that ground empty it reads as what it plainly is: the belt has a hole
+ * in it, the camp around the hole has grown, and the overflow has crossed the
+ * island into the country nobody is holding any more. So the goblin box is two
+ * boxes, the east belt and the old bandit ground, and the rank ladder still
+ * runs the way every other family's does — the legionaries average eleven
+ * tiles from the mouth and the plain goblins twenty-nine, because more than
+ * half the plain goblins are now on the wrong side of the island.
+ *
+ * WHAT THAT COSTS, stated plainly so nobody rediscovers it as a bug: the
+ * bandit was a level-SIX creature and the goblin is a level-sixteen one, and
+ * they were the near end of the island's ladder. The Reach now opens on snakes
+ * and goblins with nothing between them. That is a deliberate edit, not an
+ * oversight, and the Gallows Coast is where the missing rungs live.
+ *
+ * THE SNAKES BELONG TO NO REGION AT ALL, which is the second thing that
+ * changed. There were eight of them and they were all in the north-west, which
+ * made the one animal on the island read as a north-west animal. There are
+ * four now and they are posted one to a region — (12,19) in the old bandit
+ * country, (82,43) on the goblin belt, (20,66) among the minotaurs, (68,79)
+ * among the orcs — so a snake is a thing you come across anywhere rather than
+ * a thing that lives somewhere. Only the charnel shore has none, and that is
+ * the point of the charnel shore. Eight tiles around the pad home stay clear,
+ * so you can land and draw.
+ *
+ *   P pad back to the cellar   @ spawn   1 2 3 4 descents to -1
  *   F campfire   Y skull totem   V dead tree   v felled tree
  *   N tent   W well   Q q black boulder (two variants)
  *   T tree   R rock   H herb
- *   creatures: s snake n bandit k skeleton K skeletonWarrior g ghoul d demonSkeleton G goblin L goblinLegionary m minotaur a minotaurArcher r orc c orcArcher e orcWarrior
- *   (`u`, `h` and `z` stay mapped to the minotaur guard, the orc shaman and
- *   the berserker though nothing on the island paints one any more — the
- *   three ranks live a floor or two down, and one keystroke brings any of
- *   them back to the surface if that is ever wanted)
+ *   creatures: s snake k skeleton K skeletonWarrior g ghoul d demonSkeleton G goblin L goblinLegionary m minotaur a minotaurArcher r orc c orcArcher e orcWarrior
+ *   (`n`, `u`, `h` and `z` stay mapped to the bandit, the minotaur guard, the
+ *   orc shaman and the berserker though nothing on the island paints one any
+ *   more — three of those ranks live a floor or two down and the fourth was
+ *   written out on purpose, and one keystroke brings any of them back to the
+ *   surface if that is ever wanted)
  */
 import type { HandmadeSpec } from "./handmade.ts";
 import { Tile } from "./types.ts";
@@ -63,6 +95,7 @@ export const REACH_SPEC: HandmadeSpec = {
     1: { dest: "minodeep1", label: "down among the minotaurs", style: "caveMouth", floor: Tile.Dirt },
     2: { dest: "orcdeep1", label: "down among the orcs", style: "caveMouth", floor: Tile.Dirt },
     3: { dest: "deaddeep1", label: "down among the dead", style: "caveMouth", floor: Tile.Dirt },
+    4: { dest: "goblindeep1", label: "down among the goblins", style: "caveMouth", floor: Tile.Dirt },
   },
   scenery: {
     Y: "skullPole", V: "deadTree", v: "felledTree",
@@ -91,24 +124,24 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     "~~~~...........~~~~~~~~~~............~~~~~~~~~~~~~.........~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-    "~~~~...........~~~~~~~~...........s..~~~~~~~~~~~...k.........~~~~~~~~~~~~~~~~~~.............~~~~~~~~",
-    "~~~~.s...........~~~~........R........~~~~~~~~~.......Y........~~~~~~~~~~~~~........K.......~~~~~~~~",
-    "~~~~....T...................H..T.R....~~~~~~~~.s.................~~~~~~~................V.....~~~~~~",
-    "~~~~..............s.......PT...........~~~~~~......T.......F...F...............................~~~~~",
+    "~~~~...........~~~~~~~~..............~~~~~~~~~~~...k.........~~~~~~~~~~~~~~~~~~.............~~~~~~~~",
+    "~~~~.............~~~~........R........~~~~~~~~~.......Y........~~~~~~~~~~~~~........K.......~~~~~~~~",
+    "~~~~....T...................H..T.R....~~~~~~~~...................~~~~~~~................V.....~~~~~~",
+    "~~~~......................PT...........~~~~~~......T.......F...F...............................~~~~~",
     "~~~~........T....H......R.@.......................Y........V...k...............V................~~~~",
     "~~~~...........v...T............T...H...........T.......vF..............................R........~~~",
     "~~~~...Q...RH................................T....R...V..................Y............Q......V...~~~",
     "~~~~........................q.......T...T.....W.....T...........................................K.~~",
     "~~~~................R................................Y.......V........V.....R..........F...F......~~",
     "~~~.............W...............R..................R....VFq.......................V...VR.3........~~",
-    "~~....R...............T..........n..R............T...T....................g.......vd..H...q.......~~",
-    "~~.s...............T.............T............T....Y...k..................q......Y...........R...~~~",
-    "~~....T............................................s.............k........R.....V......F...F.....~~~",
+    "~~....R...............T..........G..R............T...T....................g.......vd..H...q.......~~",
+    "~~.................T.............T............T....Y...k..................q......Y...........R...~~~",
+    "~~....T..........................................................k........R.....V......F...F.....~~~",
     "~~...........R....R.............................R.........F..V..v....Y.....V.....................~~~",
     "~~............T...........T.............T........T.Q...Y.R......R...R............................~~~",
-    "~~..........s....T.....T.................n...................R..V..............V........R.....K.~~~~",
+    "~~..........s....T.....T.................G...................R..V..............V........R.....K.~~~~",
     "~~..................H......H...Q...............H...............................v..V............~~~~~",
-    "~~.........................n................T....R..........F.................g...............~~~~~~",
+    "~~.........................G................T....R..........F.................g...............~~~~~~",
     "~~..........H..................................T..T..Y...........Q....................g.....~~~~~~~~",
     "~~~..T........W..............................q...........Y............k....................~~~~~~~~~",
     "~~~.........R..................T............................k..R...F...................~~~~~~~~~~~~~",
@@ -116,12 +149,12 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~..........................R..................T.....T............~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     "~~~.........q........T........T.......................R..YT.Y....~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     "~~~...................R......H..................................~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-    "~~~...............n..........................................R..~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-    "~~~~............T................................n......R..L..Y..~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+    "~~~...............G..........................................R..~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+    "~~~~............T................................G......R..L..Y..~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     "~~~~.......R.........H......R..............T.............T........~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-    "~~~~.s................R...........R..................................................~~~~~~~~~~~~~~~",
+    "~~~~..................R...........R..................................................~~~~~~~~~~~~~~~",
     "~~~~~.........................................H...T..................L..........G....~~~~~~~~~~~~~~~",
-    "~~~~~~....m....................R..n............T........................R........T....~~~~~~~~~~~~~~",
+    "~~~~~~....m....................R..G............T........................R........T....~~~~~~~~~~~~~~",
     "~~~~~~....................m..............T......W.............q........................~~~~~~~~~~~~~",
     "~~~~~~......F............................................................................~~~~~~~~~~~",
     "~~~~~~~..R......N...........F........................T...R..T......T....................G...~~~~~~~~",
@@ -130,11 +163,11 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~~~~~...R.......................V.............Q...............T......R....Q.................~~~~~~",
     "~~~~~~~~..................V.......N.......R........T.......................G......R...........~~~~~~",
     "~~~~~~~~...............F.R..v..V..................H............R.................H.....W.T....~~~~~~",
-    "~~~~~~~~~..........V.....................................H.....................................~~~~~",
-    "~~~~~~~~~....................R........V.F..............T.............................T.........~~~~~",
-    "~~~~~~~~~~.mF.......R.................N......T...............L......T...T......................~~~~~",
+    "~~~~~~~~~..........V.....................................H........................s............~~~~~",
+    "~~~~~~~~~....................R........V.F..............T....4........................T.........~~~~~",
+    "~~~~~~~~~~.mF.......R.................N......T......................T...T......................~~~~~",
     "~~~~~~~~~~~......N..............................T....R......RT.R...............................~~~~~",
-    "~~~~~~~~~~~............N..R........V...............................................R...........~~~~~",
+    "~~~~~~~~~~~............N..R........V...........................L...................R...........~~~~~",
     "~~~~~~~~~~~~..........m..V..V..........................v...........T......................T....~~~~~",
     "~~~~~~~~~~~~~.....W.............N.m...................T......T................................~~~~~~",
     "~~~~~~~~~~~~~~.............R........V...................................R.....................~~~~~~",
@@ -153,7 +186,7 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~~~~~~~~~~~~~~~~~~~...................Q..T...VF..........................R..........R.......~~~~~~",
     "~~~~~~~~~~~~~~~~~~~...............N......R.........V.....................................T.....~~~~~",
     "~~~~~~~~~~~~~~~~~~......V..v.V......................R...F.VN................W.T................~~~~~",
-    "~~~~~~~~~~~~~~~~...........a...................R......N..v......c.N....v.................R......~~~~",
+    "~~~~~~~~~~~~~~~~....s......a...................R......N..v......c.N....v.................R......~~~~",
     "~~~~~~~~~~~~~~~.F.....N..R............m........F............R...........N.......H.....T...q.H...~~~~",
     "~~~~~~~~~~~~~......W..................................R.........v...................cR...........~~~",
     "~~~~~~~~~~~~............F...............................................F..................R.....~~~",
@@ -166,7 +199,7 @@ export const REACH_SPEC: HandmadeSpec = {
     "~~~~~....................................R......T..T..........Q..T................................~~",
     "~~~~.....................V.........R............r............................N..............T.....~~",
     "~~~....................v...........V................F.............V.....N.F.......................~~",
-    "~~~..........................N.................T.........................................V.....T..~~",
+    "~~~..........................N.................T....................s....................V.....T..~~",
     "~~~......R......R...................F.............F.........RF.........R.....R............R.......~~",
     "~~~.......N...m..N.......R..........N................................................V....T.....e.~~",
     "~~~..........F................V...................V.....................VN........V..r.......T...~~~",

@@ -5,6 +5,8 @@ import { MINODEEP_SPEC } from "./world/minoDeepSpec.ts";
 import { MINODEEP2_SPEC } from "./world/minoDeep2Spec.ts";
 import { ORCDEEP_SPEC } from "./world/orcDeepSpec.ts";
 import { ORCDEEP2_SPEC } from "./world/orcDeep2Spec.ts";
+import { GOBLINDEEP_SPEC } from "./world/goblinDeepSpec.ts";
+import { GOBLINDEEP2_SPEC } from "./world/goblinDeep2Spec.ts";
 import { BANDITDEEP2_SPEC } from "./world/banditDeep2Spec.ts";
 import { BANDITDEEP3_SPEC } from "./world/banditDeep3Spec.ts";
 import { BANDITDEEP_SPEC } from "./world/banditDeepSpec.ts";
@@ -124,6 +126,13 @@ export type ChestPrize = ItemKind | readonly [ItemKind, number];
 export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize[]>>> = {
   minodeep2: ["minotaurShield", ["platinumCoin", 10]],
   orcdeep2: ["orcishShield", ["platinumCoin", 10]],
+  /* The third branch pays the same way, which is the point of it paying at
+   * all: one hoard to a branch, at the bottom of its -2, holding the shield
+   * that branch's family carries and ten platinum. The goblin shield is the
+   * lightest of the three and the coin is not, and that is deliberate — the
+   * walk down is two floors either way, and the branch you take should decide
+   * what you come back wearing rather than how much you come back with. */
+  goblindeep2: ["goblinShield", ["platinumCoin", 10]],
   // The redcap's hoard: everything he ever took off the road, in one pile.
   // Thirty platinum is three thousand gold and it is the biggest single prize
   // in the game, which is exactly why it lives HERE and not in his loot table
@@ -240,6 +249,8 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     minodeep2: makeHandmadeWorld(MINODEEP2_SPEC),
     deaddeep1: makeHandmadeWorld(DEADDEEP_SPEC),
     deaddeep2: makeHandmadeWorld(DEADDEEP2_SPEC),
+    goblindeep1: makeHandmadeWorld(GOBLINDEEP_SPEC),
+    goblindeep2: makeHandmadeWorld(GOBLINDEEP2_SPEC),
     liddesdale: makeHandmadeWorld(LIDDESDALE_SPEC),
     hermitage: makeHandmadeWorld(HERMITAGE_SPEC),
     haramsey: makeHandmadeWorld(HARAMSEY_SPEC),

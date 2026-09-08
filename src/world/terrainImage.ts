@@ -41,6 +41,8 @@ export const TERRAIN_SRC: Partial<Record<WorldKey, string>> = {
   minodeep2: "./minodeep2-terrain.png",
   deaddeep1: "./deaddeep-terrain.png",
   deaddeep2: "./deaddeep2-terrain.png",
+  goblindeep1: "./goblindeep-terrain.png",
+  goblindeep2: "./goblindeep2-terrain.png",
   liddesdale: "./liddesdale-terrain.png",
   hermitage: "./hermitage-terrain.png",
   haramsey: "./haramsey-terrain.png",
