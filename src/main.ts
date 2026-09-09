@@ -398,7 +398,7 @@ function probeSlotDrag(sx: number, sy: number, isTouch: boolean): boolean {
     if (sx >= it.x && sx < it.x + it.w && sy >= it.y && sy < it.y + it.h) {
       // empty cells are registered so things can be dropped INTO them; there
       // is nothing in one to pick up
-      if (it.n <= 0) return false;
+      if (it.n <= 0 || it.lookOnly) return false;
       itemDrag = { index: it.index, kind: it.kind, n: it.n, sx, sy, active: false, touch: isTouch, ref: it.ref, eqSlot: it.eqSlot };
       return true;
     }

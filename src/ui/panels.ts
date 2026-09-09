@@ -520,6 +520,10 @@ export interface ItemSlot {
   ref?: ContainerRef;
   /** A paperdoll cell: a worn gear slot, or "pack" for the worn backpack. */
   eqSlot?: EqSlot | "pack";
+  /** Findable by the context menu's Look lookup, but never a drag source or
+   *  drop target — for cells like Ammo that have no single ref/eqSlot to hand
+   *  a drag off to (the stack is chosen by cycling, not by dragging one in). */
+  lookOnly?: boolean;
 }
 
 /** One open, draggable window. Multiple can be open at once (z-order = array order). */
@@ -1430,6 +1434,12 @@ function drawEquip(p: PanelInput): void {
       if (ammoKind) {
         const n = bagCount(player.bag, ammoKind);
         hudText(hud, `${n}`, cx + slot - 3 * S, cy + slot - 6 * S, 7 * S, "#ffe9a8", "right");
+        // Registered so the long-press/right-click context menu can find it —
+        // without this the Ammo cell was the one paperdoll slot "Look" could
+        // never reach, even though the same arrows in the bag work fine.
+        // lookOnly keeps it out of probeSlotDrag: this stack is chosen by
+        // cycling, not by dragging a single item in or out.
+        p.itemSlots.push({ x: cx, y: cy, w: slot, h: slot, index: 0, kind: ammoKind, n, lookOnly: true });
       }
       // Clicking cycles through the ammo actually in the bag. Look mode still
       // inspects, so the slot never stops being readable.

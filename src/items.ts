@@ -1157,9 +1157,15 @@ export function itemInfoLines(kind: ItemKind, st?: ItemStack | null): string[] {
     // into armor, while a shield and a weapon compete for one guard pool and
     // only the larger of the two is ever consulted.
     const handHeld = d.slot === "shield" || d.slot === "weapon";
-    lines.push(handHeld ? `Defense ${d.gear.def}` : `Armor +${d.gear.def}`);
+    // A weapon can carry BOTH numbers at once (its own hand-held Defense, and
+    // the small always-on defBonus that stacks even behind a shield). Two
+    // separate lines read as a duplicate now that neither carries its old
+    // explanatory suffix, so they merge into one — Tibia's own "Def: 25 +3".
+    if (handHeld && d.gear.defBonus) lines.push(`Defense ${d.gear.def} +${d.gear.defBonus}`);
+    else lines.push(handHeld ? `Defense ${d.gear.def}` : `Armor +${d.gear.def}`);
+  } else if (d.gear?.defBonus) {
+    lines.push(`Defense +${d.gear.defBonus}`);
   }
-  if (d.gear?.defBonus) lines.push(`Defense +${d.gear.defBonus}`);
   if (d.gear?.speed) lines.push(`Speed +${d.gear.speed}`);
   if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
   if (d.crystal) lines.push(`Charge item (1 use per unit)`);
