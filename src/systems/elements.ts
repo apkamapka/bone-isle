@@ -117,8 +117,14 @@ export const TIER_LABEL: readonly string[] = ["I", "II", "III"];
 /**
  * Damage multiplier per tier. Each step slightly more than doubles, which is
  * what makes a tower upgrade feel like an upgrade rather than a percentage.
+ *
+ * Base values (1, 2.2, 4.8) scaled by 1.15 across the board: Radek reported
+ * exping felt too slow at the old numbers. Scaling the whole array by one
+ * constant raises every tier's output ~15% while leaving the tier-to-tier
+ * ratio exactly as it was (III is still 4.8x I) — a tower upgrade should keep
+ * reading as the same kind of jump it always did.
  */
-export const TIER_MULT: readonly number[] = [1, 2.2, 4.8];
+export const TIER_MULT: readonly number[] = [1.15, 2.53, 5.52];
 
 /**
  * Resistance, as a multiplier on incoming elemental damage.
