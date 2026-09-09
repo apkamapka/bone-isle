@@ -2245,6 +2245,25 @@ let ctxMenu: ContextMenu | null = null;
  * stand. That rule used to live only in the desktop right-click branch, which
  * is exactly where it got lost when right-click became a menu.
  */
+/**
+ * Click-to-walk on the minimap, Tibia's own gesture for it.
+ *
+ * The minimap is a straight scaled blit of the world (see drawMinimapAt), so
+ * inverting that same sx/sy turns a point inside the rect back into a world
+ * pixel. Reuses walkToPoint rather than setting P.dest directly, so a click
+ * here gets the same ranged-target-keeping behaviour as every other "go
+ * there" gesture.
+ */
+function walkToMinimapPoint(
+  sx: number, sy: number, mapX: number, mapY: number, w: number, mh: number,
+): void {
+  const world = game.current;
+  walkToPoint({
+    x: ((sx - mapX) / w) * world.w * TILE,
+    y: ((sy - mapY) / mh) * world.h * TILE,
+  });
+}
+
 function walkToPoint(at: Vec): void {
   P.dest = { x: at.x, y: at.y };
   P.gather = null;
@@ -2418,7 +2437,7 @@ function handleWorldTap(sx: number, sy: number): void {
       const hsp = hotspots[i];
       if (!hsp.editBar) continue;
       if (sx >= hsp.x && sx < hsp.x + hsp.w && sy >= hsp.y && sy < hsp.y + hsp.h) {
-        hsp.fn();
+        hsp.fn(sx, sy);
         return;
       }
     }
@@ -2428,7 +2447,7 @@ function handleWorldTap(sx: number, sy: number): void {
   for (let i = hotspots.length - 1; i >= 0; i--) {
     const hsp = hotspots[i];
     if (sx >= hsp.x && sx < hsp.x + hsp.w && sy >= hsp.y && sy < hsp.y + hsp.h) {
-      hsp.fn();
+      hsp.fn(sx, sy);
       return;
     }
   }
@@ -5856,7 +5875,13 @@ function drawSidebar(h: HudCtx, d: DockLayout): void {
   header("minimap", "MAP");
   {
     const r = d.blocks.minimap;
-    if (!r.collapsed) drawMinimapAt(h, game, P, d.innerX, r.bodyY, d.innerW, r.bodyH);
+    if (!r.collapsed) {
+      drawMinimapAt(h, game, P, d.innerX, r.bodyY, d.innerW, r.bodyH);
+      hotspots.push({
+        x: d.innerX, y: r.bodyY, w: d.innerW, h: r.bodyH,
+        fn: (sx, sy) => walkToMinimapPoint(sx, sy, d.innerX, r.bodyY, d.innerW, r.bodyH),
+      });
+    }
   }
 
   header("status", "STATUS");
@@ -6299,6 +6324,10 @@ function drawDeck(): void {
   });
   drawMinimapAt(h, game, P, d.minimap.x, d.minimap.y, d.minimap.w);
   touchButtons.push({ ...d.minimap });
+  hotspots.push({
+    ...d.minimap,
+    fn: (sx, sy) => { if (!editing) walkToMinimapPoint(sx, sy, d.minimap.x, d.minimap.y, d.minimap.w, d.minimap.h); },
+  });
 
   /* --- the drop-down, over the world, only while it is open ---------------- */
   if (deckMenu) {

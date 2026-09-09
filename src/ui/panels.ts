@@ -485,7 +485,16 @@ export interface Hotspot {
   y: number;
   w: number;
   h: number;
-  fn: () => void;
+  /**
+   * (x, y) is the actual point pressed, in the same screen space as this
+   * rect — not just "this hotspot fired". Most closures ignore it (a toggle
+   * or an equip slot only cares THAT it was hit), which is why every existing
+   * `fn: () => {...}` keeps compiling unchanged: a function is always
+   * assignable where fewer parameters are declared than the caller supplies.
+   * Added for the minimap's click-to-walk, the first hotspot that needs to
+   * know WHERE inside its own rect the press landed.
+   */
+  fn: (x: number, y: number) => void;
   /**
    * The sidebar's scroll track. Marked rather than positioned-by-guesswork so
    * the pointer layer can start a DRAG on it — a plain hotspot only knows how
