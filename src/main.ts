@@ -4955,12 +4955,17 @@ function render(): void {
    * bug this replaced. A surface island sits IN the sea, so the void beyond
    * its coast is sea too: the same backing colour, but now covering the whole
    * viewport rather than stopping at the map's own footprint, so the water
-   * animation below can carry on past the edge instead of hitting a rectangle. */
+   * animation below can carry on past the edge instead of hitting a rectangle.
+   * #0f3f52 is the deep-water tile itself, sampled from the exports (home,
+   * bandit, reach, town, orcIsle and crete all agree on it) — #1c6060 was a
+   * guess made back when this colour sat under baked art and was never seen
+   * on its own; stretched across open screen the guess read as a flat,
+   * wrong-toned teal next to the real water beside it. */
   const underground = isUnderground(world.key);
   vctx.fillStyle = "#000";
   vctx.fillRect(0, 0, VW, VH);
   if (!underground) {
-    vctx.fillStyle = "#1c6060";
+    vctx.fillStyle = "#0f3f52";
     vctx.fillRect(0, 0, VW, VH);
   }
   // baked terrain — blit ONLY the visible source rect. Drawing the whole
