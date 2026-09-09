@@ -1157,9 +1157,9 @@ export function itemInfoLines(kind: ItemKind, st?: ItemStack | null): string[] {
     // into armor, while a shield and a weapon compete for one guard pool and
     // only the larger of the two is ever consulted.
     const handHeld = d.slot === "shield" || d.slot === "weapon";
-    lines.push(handHeld ? `Defense ${d.gear.def} (higher of shield/weapon counts)` : `Armor +${d.gear.def}`);
+    lines.push(handHeld ? `Defense ${d.gear.def}` : `Armor +${d.gear.def}`);
   }
-  if (d.gear?.defBonus) lines.push(`Defense +${d.gear.defBonus} even behind a shield`);
+  if (d.gear?.defBonus) lines.push(`Defense +${d.gear.defBonus}`);
   if (d.gear?.speed) lines.push(`Speed +${d.gear.speed}`);
   if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
   if (d.crystal) lines.push(`Charge item (1 use per unit)`);
@@ -1175,9 +1175,8 @@ export function itemInfoLines(kind: ItemKind, st?: ItemStack | null): string[] {
   const inside = st?.items ? bagWeight(st.items) : 0;
   if (inside > 0) {
     lines.push(`Weight ${Math.round(d.weight + inside)} oz (${d.weight} empty + ${Math.round(inside)} inside)`);
-    lines.push(`Value ${d.value} gp`);
   } else {
-    lines.push(`Weight ${d.weight} oz · Value ${d.value} gp`);
+    lines.push(`Weight ${d.weight} oz`);
   }
   return lines;
 }
