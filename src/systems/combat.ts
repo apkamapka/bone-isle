@@ -8,6 +8,7 @@ import {
 import { beep } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
+import type { Element } from "./elements.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
 import { missionByEcho, wantsRelic, relicTaken, extractBound } from "./missions.ts";
@@ -59,6 +60,25 @@ export function applyMonsterArmor(m: Monster, raw: number): number {
   const armor = MONSTER_DEFS[m.kind].armor ?? 0;
   if (armor <= 0) return raw;
   return Math.max(MIN_DAMAGE_TO_MONSTER, raw - rollArmorReduction(armor));
+}
+
+/**
+ * A campfire or elemental field burning a monster standing in it — the mirror
+ * of the tick that already burns the player (`tickCampfireBurn` in main.ts).
+ * Armor is skipped exactly as it is for an elemental arrow; the monster's own
+ * resistance answers instead, so a fire elemental shrugs off the very totem a
+ * bandit would die next to. Returns true if this killed it.
+ */
+export function burnMonster(world: World, p: Player, m: Monster, el: Element, raw: number): boolean {
+  const dmg = Math.max(MIN_ELEMENTAL_DAMAGE, Math.round(raw * resistanceOf(MONSTER_DEFS[m.kind].resist, el)));
+  m.hp -= dmg;
+  m.hurtT = 0.15;
+  addFloat(world, m.x, m.y - 32, String(dmg), ELEMENT_COLOR[el]);
+  if (m.hp <= 0) {
+    killMonster(world, p, m);
+    return true;
+  }
+  return false;
 }
 
 /** Player strikes a monster. Returns true if the monster died. */

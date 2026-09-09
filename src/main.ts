@@ -17,7 +17,7 @@ import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName } from "./entities/monsters.ts";
-import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, grantExp, setRelicNotice } from "./systems/combat.ts";
+import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster, grantExp, setRelicNotice } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
 import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow } from "./gfx/buildingArt.ts";
@@ -4216,6 +4216,48 @@ function tickCampfireBurn(world: World, dt: number): void {
 }
 
 /**
+ * The same two hazards biting monsters instead of the player — Tibia burns
+ * anything standing in a fire, not just the character. Keyed per monster id
+ * (not just per tile, the way `fireClock` is) because two creatures can stand
+ * on two different fires on the same tick and each needs its own clock; the
+ * player only ever occupies one tile, so `fireClock` never needed the split.
+ * A fire and a field are never stacked on one square (see `tickCampfireBurn`),
+ * so at most one of the two loops below ever lands a hit per monster per
+ * tick — the `break`s are just cheap insurance against that changing later.
+ */
+const monsterFireClock = new Map<string, number>();
+
+function tickMonsterBurn(world: World): void {
+  for (const m of [...world.monsters]) {
+    if (m.hp <= 0) continue;
+    for (const f of world.fires) {
+      if (f.tx !== m.tx || f.ty !== m.ty) continue;
+      const key = `${world.key}|m${m.id}|${f.tx}|${f.ty}`;
+      const next = monsterFireClock.get(key) ?? 0;
+      if (fireT < next) continue;
+      monsterFireClock.set(key, fireT + FIRE_BURN_TICK_S);
+      burnMonster(world, P, m, "fire", rndi(FIRE_BURN_DMG[0], FIRE_BURN_DMG[1]));
+      break;
+    }
+    if (m.hp <= 0) continue;
+    for (const nd of world.ambientFx) {
+      if (nd.tx !== m.tx || nd.ty !== m.ty) continue;
+      const key = `${world.key}|m${m.id}|fx|${nd.tx}|${nd.ty}`;
+      const next = monsterFireClock.get(key) ?? 0;
+      if (fireT < next) continue;
+      monsterFireClock.set(key, fireT + FIELD_BURN_TICK_S);
+      burnMonster(world, P, m, nd.el, rndi(FIELD_BURN_DMG[0], FIELD_BURN_DMG[1]));
+      break;
+    }
+  }
+  // same cheap retirement as fireClock, on the same trigger — a boss room's
+  // worth of posts is nowhere near either cap in ordinary play
+  if (monsterFireClock.size > 256) {
+    for (const k of monsterFireClock.keys()) if (!k.startsWith(`${world.key}|`)) monsterFireClock.delete(k);
+  }
+}
+
+/**
  * The circle whose refusal has already been spoken, as `"tx,ty"`, or null when
  * the player is not standing in one. Purely a UI latch — transient, never
  * saved, and reset by simply walking off.
@@ -4620,6 +4662,7 @@ function update(dt: number): void {
   });
 
   tickCampfireBurn(world, dt);
+  tickMonsterBurn(world);
   checkAttuneCircles(world);
 
   tickRegrowth(world, dt, P.x, P.y, true);

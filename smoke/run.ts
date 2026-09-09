@@ -1715,6 +1715,34 @@ async function main(): Promise<void> {
         "…back onto its own lair tile");
       ok(hollow.corpses.length === 1 && hollow.corpses[0].name === "dragon", "the dragon leaves a lootable corpse");
     }
+    // burnMonster: a fire or elemental field bites a monster exactly as it
+    // already bites the player — the monster's own resistance answers instead
+    // of its armor (same rule an elemental arrow already follows), with the
+    // same MIN_ELEMENTAL_DAMAGE floor, and a kill runs through killMonster
+    // unchanged: same corpse, same respawn clock, no environmental shortcut.
+    {
+      const { burnMonster } = await import("../src/systems/combat.ts");
+      const worlds = buildWorlds(WORLD_SEED);
+      const hollow = worlds.deaddeep2; // armor 28, resist { fire: 0.25, ice: 1.6 }
+      hollow.monsters.length = 0; hollow.respawns.length = 0; hollow.corpses.length = 0;
+      const lair = (hollow.mobPosts ?? []).find((q) => q.kind === "dragon")!;
+      spawnAtPost(hollow, "dragon", lair.tx, lair.ty);
+      const drag = hollow.monsters[0];
+      const p = createPlayer({ x: 0, y: 0 });
+      const startHp = drag.hp;
+      burnMonster(hollow, p, drag, "fire", 1000);
+      ok(drag.hp === startHp - 250, "1000 fire on a dragon (0.25x resist) lands for exactly 250 — armor untouched");
+      burnMonster(hollow, p, drag, "ice", 100);
+      ok(drag.hp === startHp - 250 - 160, "100 ice on the same dragon (its one weak spot, 1.6x) lands for 160");
+      burnMonster(hollow, p, drag, "fire", 1);
+      ok(drag.hp === startHp - 250 - 160 - 1, "a near-zero fire tick still lands 1 — the elemental floor, not 0");
+      const dead = burnMonster(hollow, p, drag, "fire", 5000);
+      ok(dead === true, "enough fire still kills it");
+      ok(hollow.monsters.length === 0, "…removed exactly like a sword kill");
+      ok(hollow.corpses.length === 1 && hollow.corpses[0].name === "dragon", "…leaving the same lootable corpse");
+      ok(hollow.respawns.length === 1 && hollow.respawns[0].t === 600,
+        "…and the same 600 s clock — an environmental kill is not a shortcut");
+    }
     // a shooter holds its ground and fires: park an archer mid-range and step
     // the AI — it must land ranged hits without ever closing to melee reach
     {
