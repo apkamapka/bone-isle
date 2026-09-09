@@ -93,6 +93,29 @@ export type WorldKey =
   // long is his army standing in it.
   | "orcIsle" | "gorak";
 
+/**
+ * Every map that is a room cut UNDER an island rather than the island itself
+ * — cellars, deeps, hermitages, howes, sanctums, bowers, the labyrinth and
+ * Gorak's hall. Surface islands are everything in `WorldKey` not listed here.
+ * Used only to pick how the void beyond a map's authored edge is rendered
+ * (open sea for a surface island, plain dark for a room cut into the rock) —
+ * nothing about gameplay reads this, so getting a future map's category wrong
+ * only ever costs a visual, never a rule.
+ */
+export const UNDERGROUND_WORLDS: ReadonlySet<WorldKey> = new Set<WorldKey>([
+  "cellar",
+  "banditdeep1", "banditdeep2", "banditdeep3",
+  "orcdeep1", "orcdeep2",
+  "minodeep1", "minodeep2",
+  "deaddeep1", "deaddeep2",
+  "goblindeep1", "goblindeep2",
+  "hermitage", "haugr", "tursachan", "bower", "labyrinth", "gorak",
+]);
+
+export function isUnderground(key: WorldKey): boolean {
+  return UNDERGROUND_WORLDS.has(key);
+}
+
 /** A point in world (pixel) space. */
 export interface Vec {
   x: number;

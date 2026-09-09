@@ -90,7 +90,7 @@ import {
 } from "./ui/dialogue.ts";
 import { t } from "./text/speech.ts";
 import { lang } from "./systems/panelPrefs.ts";
-import { Tile } from "./world/types.ts";
+import { Tile, isUnderground } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
 import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
 import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays, depthOf, MAX_NEST_DEPTH } from "./systems/containers.ts";
@@ -4950,13 +4950,19 @@ function render(): void {
   cam.x = P.x - VW * mapFocusFracX(deck, screen.width, stripWidth());
   cam.y = P.y - VH * mapFocusFrac(deck, screen.height);
 
-  /* Void first, then the map's own footprint in the old sea colour. Painting
-   * the whole canvas teal would put sea outside a cellar; painting it all
-   * black would drop the backing that unbaked water sits on. */
+  /* Void first. A room cut into the rock has nothing but dark past its own
+   * walls, so it stays plain black — painting sea under a cellar was the old
+   * bug this replaced. A surface island sits IN the sea, so the void beyond
+   * its coast is sea too: the same backing colour, but now covering the whole
+   * viewport rather than stopping at the map's own footprint, so the water
+   * animation below can carry on past the edge instead of hitting a rectangle. */
+  const underground = isUnderground(world.key);
   vctx.fillStyle = "#000";
   vctx.fillRect(0, 0, VW, VH);
-  vctx.fillStyle = "#1c6060";
-  vctx.fillRect(Math.round(-cam.x), Math.round(-cam.y), world.w * TILE, world.h * TILE);
+  if (!underground) {
+    vctx.fillStyle = "#1c6060";
+    vctx.fillRect(0, 0, VW, VH);
+  }
   // baked terrain — blit ONLY the visible source rect. Drawing the whole
   // canvas with an offset made the browser shuffle the full baked bitmap
   // every frame; on the 368x272-tile continent that's a ~5900x4350 px image
@@ -5006,10 +5012,24 @@ function render(): void {
    * by the thing they are supposed to be catching light above.
    */
   if (art) {
-    const tx0 = Math.max(0, Math.floor(cam.x / TILE));
-    const ty0 = Math.max(0, Math.floor(cam.y / TILE));
-    const tx1 = Math.min(world.w - 1, Math.ceil((cam.x + VW) / TILE));
-    const ty1 = Math.min(world.h - 1, Math.ceil((cam.y + VH) / TILE));
+    /* Underground stays clamped to the map's own grid, same as before — a
+     * cellar has no open water past its walls for this to touch. A surface
+     * island drops the clamp so these three layers keep animating past the
+     * coast, into the extended sea painted above, instead of stopping dead at
+     * the map's authored edge. */
+    const tx0 = underground ? Math.max(0, Math.floor(cam.x / TILE)) : Math.floor(cam.x / TILE);
+    const ty0 = underground ? Math.max(0, Math.floor(cam.y / TILE)) : Math.floor(cam.y / TILE);
+    const tx1 = underground ? Math.min(world.w - 1, Math.ceil((cam.x + VW) / TILE)) : Math.ceil((cam.x + VW) / TILE);
+    const ty1 = underground ? Math.min(world.h - 1, Math.ceil((cam.y + VH) / TILE)) : Math.ceil((cam.y + VH) / TILE);
+    /* Bounds-safe water check, shared by the swell, glint and foam/bank tests
+     * below: inside the grid it reads the real tile, past its edge it reads
+     * as open sea for an island and as dry (never water) for a cellar, which
+     * is what keeps the foam/bank pass from drawing a shoreline along a
+     * cellar's authored border. */
+    const wet = (ax: number, ay: number): boolean => {
+      if (ay < 0 || ay >= world.h || ax < 0 || ax >= world.w) return !underground;
+      return world.tile[ay][ax] === Tile.Water;
+    };
 
     /* 1. THE SWELL — a slow dark band crossing diagonally. This is the layer
      * that was missing, and its absence is the whole reason a denser field of
@@ -5019,7 +5039,7 @@ function render(): void {
       vctx.fillStyle = WATER_SWELL_COLOR;
       for (let ty = ty0; ty <= ty1; ty++) {
         for (let tx = tx0; tx <= tx1; tx++) {
-          if (world.tile[ty][tx] !== Tile.Water) continue;
+          if (!wet(tx, ty)) continue;
           const band = (tx + ty * 0.6) / WATER_SWELL_LEN - waveT * WATER_SWELL_SPEED;
           const a = 0.5 + 0.5 * Math.sin(band * Math.PI * 2);
           if (a < 0.5) continue;                    // the light half stays clear
@@ -5038,7 +5058,7 @@ function render(): void {
     vctx.fillStyle = WATER_GLINT_COLOR;
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
-        if (world.tile[ty][tx] !== Tile.Water) continue;
+        if (!wet(tx, ty)) continue;
         // a cheap spatial hash: stable per tile, no per-tile state to store
         const h = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
         if (h % 100 >= WATER_GLINT_PCT) continue;
@@ -5086,7 +5106,6 @@ function render(): void {
      * No new data either way: the collision grid already knows, and the offsets
      * come from the same kind of spatial hash as the glints. */
     vctx.fillStyle = COAST_FOAM_COLOR;
-    const wet = (ax: number, ay: number): boolean => world.tile[ay]?.[ax] === Tile.Water;
     const bank = (ax: number, ay: number): boolean => wet(ax, ay)
       && (!wet(ax - 1, ay) || !wet(ax + 1, ay) || !wet(ax, ay - 1) || !wet(ax, ay + 1));
     for (let ty = ty0; ty <= ty1; ty++) {
