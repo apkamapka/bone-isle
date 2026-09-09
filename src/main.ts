@@ -57,7 +57,7 @@ import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } fro
 import { nextEntityId, byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { TARGET_SEEK_PX } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
-import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag } from "./items.ts";
+import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, consolidateCoins } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
   SELF, activeChannel, bubbleFor, formatLine, lineAlpha, logServer,
@@ -1083,6 +1083,14 @@ function moveItems(
   if (rootOf(to) === "player" || rootOf(from) === "player") {
     syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   }
+  /* The same fold `giveGold`/`takeGold` already do on every shop trade and
+   * quest payout, now on the other way money reaches a bag: looting a corpse
+   * or a chest. Those two never ran through either function — they move an
+   * `ItemStack` object directly — so a hundred looted gold pieces sat there
+   * as a hundred gold pieces forever instead of becoming the platinum coin
+   * `giveGold` would have handed over. Root-gated the same way the weight
+   * check above is: only the player's own carry cap is what this is for. */
+  if (rootOf(to) === "player") consolidateCoins(P.bag);
   beep(rootOf(to) === "player" ? 440 : 360, 0.06, "sine", 0.04);
   return true;
 }
@@ -1281,6 +1289,7 @@ function pickupGround(gi: GroundItem): void {
   const took = gi.n - left;
   if (took <= 0) { flash("bag full"); return; }
   compactBag(P.bag);
+  consolidateCoins(P.bag); // a gold pile picked up off the ground folds the same as looted gold
   syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   if (left > 0) gi.n = left;
   else { const idx = world.ground.indexOf(gi); if (idx >= 0) world.ground.splice(idx, 1); }

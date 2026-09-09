@@ -2654,6 +2654,18 @@ async function main(): Promise<void> {
     ok(items.walletValue(body) === 150, "a slain thing's gold sits in the body as coins");
     ok(body.some((q) => q?.kind === "platinumCoin"),
       "…folded, so looting a dragon does not cost you 21 oz of pockets");
+
+    // ---- the same fold now also runs on the two paths that never called
+    // giveGold/takeGold at all: dragging loot into the bag and one-click
+    // ground pickup. Both move a raw ItemStack rather than a gp number, so
+    // neither could go through consolidateCoins until it was wired in by
+    // hand — this is that wiring, checked the way DOM-bound main.ts code
+    // already is elsewhere in this suite: on its source text.
+    const fs27 = await import("node:fs");
+    const mainSrc27 = fs27.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const foldCalls = mainSrc27.match(/consolidateCoins\(P\.bag\)/g) ?? [];
+    ok(foldCalls.length === 2,
+      `consolidateCoins(P.bag) is wired into both moveItems and pickupGround (found ${foldCalls.length})`);
   }
 
   console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");
