@@ -402,6 +402,15 @@ export interface Monster {
   /** Facing, for creatures drawn from a directional walk sheet. */
   dir: MobDir;
   hurtT: number;
+  /**
+   * Next `fireT` this creature may be bitten by a campfire or elemental
+   * field again — the monster-side twin of the tile-keyed clock the player
+   * burns on (`fireClock` in main.ts). Kept ON the creature rather than in an
+   * external map: a monster's id is unique forever, so a map keyed by it
+   * would grow by one entry per respawn for the rest of the session and
+   * never shrink. A field here costs nothing extra once the creature itself
+   * is gone — there is no entry to clean up. */
+  burnAt?: number;
   /** Seconds of forced aggression left after taking a hit — the creature
    *  chases even beyond its normal sight range, so shooting anything always
    *  provokes it regardless of bow reach. */
