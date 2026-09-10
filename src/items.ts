@@ -826,29 +826,32 @@ export function walletValue(bag: Bag): number {
 }
 
 /**
- * Fold small coins into large ones wherever they will go.
+ * Change one slot's coins by hand: a hundred gold for the platinum coin they
+ * are worth, or a platinum coin for the hundred gold it is worth. Tibia made
+ * this a trip to a banker; here it is a right-click, but it is still a
+ * choice the player makes, not something that happens to their wallet on its
+ * own — a run of loot sits exactly as looted until they say otherwise.
  *
- * Called after every payment and pickup, and it is what keeps money from
- * eating the carry cap: a hundred gold pieces weigh 10 oz, the platinum coin
- * they become weighs a tenth of one. Tibia made you walk to a banker for
- * this; doing it silently costs the player nothing they would have chosen
- * differently, and saves a trip that was never a decision.
+ * Returns false, touching nothing, when the slot is not the right coin, does
+ * not hold enough of it, or the result has nowhere to go — a full bag keeps
+ * its coins exactly as they were rather than losing the difference.
  */
-export function consolidateCoins(bag: Bag): void {
-  for (let i = COIN_KINDS.length - 1; i > 0; i--) {
-    const small = COIN_KINDS[i];
-    const big = COIN_KINDS[i - 1];
-    const per = (ITEMS[big].coin ?? 0) / (ITEMS[small].coin ?? 1);
-    if (per < 2) continue;
-    const have = bagCount(bag, small);
-    const up = Math.floor(have / per);
-    if (up <= 0) continue;
-    // only fold what there is room to fold INTO — a full bag keeps its change
-    removeItem(bag, small, up * per);
-    const left = addItem(bag, big, up);
-    if (left > 0) addItem(bag, small, left * per);
-  }
-  for (const s of bag) if (s?.items) consolidateCoins(s.items);
+export function exchangeCoinSlot(bag: Bag, index: number, to: "goldCoin" | "platinumCoin"): boolean {
+  const cell = bag[index];
+  const from: ItemKind = to === "platinumCoin" ? "goldCoin" : "platinumCoin";
+  const take = to === "platinumCoin" ? 100 : 1;
+  const give = to === "platinumCoin" ? 1 : 100;
+  if (!cell || cell.kind !== from || cell.n < take) return false;
+  // the slot being spent from empties out exactly when the rate divides it
+  // evenly — check room as it will be AFTER that, not as it is now, so the
+  // very last hundred in a full bag can still become the coin it is worth
+  const willFreeSlot = cell.n === take;
+  const probe = willFreeSlot ? bag.map((s, i) => (i === index ? null : s)) : bag;
+  if (!bagRoomFor(probe, to, give)) return false;
+  cell.n -= take;
+  if (cell.n <= 0) bag[index] = null;
+  addItem(bag, to, give);
+  return true;
 }
 
 /** Room enough to receive `gp` worth of coin, once it is folded up? */
@@ -872,7 +875,6 @@ export function giveGold(bag: Bag, gp: number): number {
     const unplaced = addItem(bag, k, want);
     left -= (want - unplaced) * worth;
   }
-  consolidateCoins(bag);
   return left;
 }
 
@@ -901,7 +903,6 @@ export function takeGold(bag: Bag, gp: number): boolean {
     removeItem(bag, k, 1);
     left = giveGold(bag, worth - left) === 0 ? 0 : left;
   }
-  consolidateCoins(bag);
   return left === 0;
 }
 

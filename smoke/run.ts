@@ -2655,17 +2655,62 @@ async function main(): Promise<void> {
     ok(body.some((q) => q?.kind === "platinumCoin"),
       "…folded, so looting a dragon does not cost you 21 oz of pockets");
 
-    // ---- the same fold now also runs on the two paths that never called
-    // giveGold/takeGold at all: dragging loot into the bag and one-click
-    // ground pickup. Both move a raw ItemStack rather than a gp number, so
-    // neither could go through consolidateCoins until it was wired in by
-    // hand — this is that wiring, checked the way DOM-bound main.ts code
-    // already is elsewhere in this suite: on its source text.
+    // ---- gold and platinum change denomination by hand now, not silently.
+    // exchangeCoinSlot is the one place that math lives — a hundred gold for
+    // the platinum coin they are worth, or back — and giveGold/takeGold no
+    // longer fold anything on their own; the coins a payout hands over are
+    // whatever its own largest-denomination-first loop produces, full stop.
+    const bag27 = items.emptyBag();
+    bag27[0] = { kind: "goldCoin", n: 150 };
+    ok(items.exchangeCoinSlot(bag27, 0, "platinumCoin"), "150 gold changes up on request");
+    ok(bag27[0]?.kind === "goldCoin" && bag27[0].n === 50, "…leaving the 50 that didn't fit the rate behind");
+    ok(items.bagCount(bag27, "platinumCoin") === 1, "…as one platinum coin, in a cell of its own");
+
+    const exact27 = items.emptyBag();
+    exact27[0] = { kind: "goldCoin", n: 100 };
+    ok(items.exchangeCoinSlot(exact27, 0, "platinumCoin"), "exactly 100 changes up too");
+    ok(exact27[0]?.kind === "platinumCoin" && exact27[0].n === 1,
+      "…emptying the cell it came from and landing the platinum right back in it");
+    ok(items.bagCount(exact27, "platinumCoin") === 1, "…for the one platinum coin it's worth");
+
+    const back27 = items.emptyBag();
+    back27[0] = { kind: "platinumCoin", n: 1 };
+    ok(items.exchangeCoinSlot(back27, 0, "goldCoin"), "a platinum coin changes back down on request");
+    ok(back27[0]?.kind === "goldCoin" && back27[0].n === 100,
+      "…into exactly the hundred gold it's worth, filling the same cell it left");
+
+    const short27 = items.emptyBag();
+    short27[0] = { kind: "goldCoin", n: 50 };
+    ok(!items.exchangeCoinSlot(short27, 0, "platinumCoin"), "50 gold is not enough to change up");
+    ok(short27[0]?.n === 50, "…and a refusal touches nothing");
+
+    // a bag with no room anywhere else: 150 up leaves 50 behind in the same
+    // cell, so the new platinum coin has nowhere at all to land
+    const jammed27 = items.emptyBag();
+    jammed27[0] = { kind: "goldCoin", n: 150 };
+    for (let i = 1; i < jammed27.length; i++) jammed27[i] = { kind: "ironSword", n: 1 };
+    ok(!items.exchangeCoinSlot(jammed27, 0, "platinumCoin"),
+      "a full bag refuses a change that can't fully clear the cell it started in");
+    ok(jammed27[0]?.n === 150, "…and a refusal here touches nothing either");
+
+    // but EXACTLY 100 in that same jammed bag empties its own cell on the way
+    // out, which is exactly enough room for the coin it becomes
+    const tight27 = items.emptyBag();
+    tight27[0] = { kind: "goldCoin", n: 100 };
+    for (let i = 1; i < tight27.length; i++) tight27[i] = { kind: "ironSword", n: 1 };
+    ok(items.exchangeCoinSlot(tight27, 0, "platinumCoin"),
+      "a full bag still allows the one change that empties its own cell exactly");
+    ok(tight27[0]?.kind === "platinumCoin" && tight27[0].n === 1, "…landing the platinum right where the gold was");
+
+    // the right-click menu that calls this lives in DOM-bound main.ts, so it
+    // is checked the way this suite already checks such code: on its source
+    // text, for both the labels and the fold's total absence.
     const fs27 = await import("node:fs");
     const mainSrc27 = fs27.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    const foldCalls = mainSrc27.match(/consolidateCoins\(P\.bag\)/g) ?? [];
-    ok(foldCalls.length === 2,
-      `consolidateCoins(P.bag) is wired into both moveItems and pickupGround (found ${foldCalls.length})`);
+    ok(mainSrc27.includes('"Change to platinum"') && mainSrc27.includes('"Change to gold"'),
+      "the right-click menu offers both directions by name");
+    ok(mainSrc27.includes("exchangeCoinSlot("), "…calling the same exchangeCoinSlot the math above tests");
+    ok(!/consolidateCoins/.test(mainSrc27), "…and no silent fold is left anywhere in main.ts");
   }
 
   console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");

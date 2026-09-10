@@ -57,7 +57,7 @@ import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } fro
 import { nextEntityId, byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { TARGET_SEEK_PX } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
-import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, consolidateCoins } from "./items.ts";
+import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, exchangeCoinSlot } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
   SELF, activeChannel, bubbleFor, formatLine, lineAlpha, logServer,
@@ -1083,14 +1083,6 @@ function moveItems(
   if (rootOf(to) === "player" || rootOf(from) === "player") {
     syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   }
-  /* The same fold `giveGold`/`takeGold` already do on every shop trade and
-   * quest payout, now on the other way money reaches a bag: looting a corpse
-   * or a chest. Those two never ran through either function — they move an
-   * `ItemStack` object directly — so a hundred looted gold pieces sat there
-   * as a hundred gold pieces forever instead of becoming the platinum coin
-   * `giveGold` would have handed over. Root-gated the same way the weight
-   * check above is: only the player's own carry cap is what this is for. */
-  if (rootOf(to) === "player") consolidateCoins(P.bag);
   beep(rootOf(to) === "player" ? 440 : 360, 0.06, "sine", 0.04);
   return true;
 }
@@ -1289,7 +1281,6 @@ function pickupGround(gi: GroundItem): void {
   const took = gi.n - left;
   if (took <= 0) { flash("bag full"); return; }
   compactBag(P.bag);
-  consolidateCoins(P.bag); // a gold pile picked up off the ground folds the same as looted gold
   syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   if (left > 0) gi.n = left;
   else { const idx = world.ground.indexOf(gi); if (idx >= 0) world.ground.splice(idx, 1); }
@@ -2309,23 +2300,46 @@ function openContextMenu(sx: number, sy: number): void {
    * for the same reason the tap sweep uses it: the topmost window's slots are
    * registered last, and on overlapping panels the top one owns the pixel.
    *
-   * Look is the only entry. Every other verb an item has — use, equip, split,
-   * drop — already has a one-click or drag gesture that works, and adding a
-   * second way to do each would be two code paths per verb to keep in step.
-   * Describing an item was the one thing with no gesture at all: it used to
-   * happen by ITSELF whenever the cursor drifted over a slot, which is not a
-   * gesture, it is an accident that happens to be useful sometimes. */
+   * Look is nearly the only entry. Every other verb an item has — use, equip,
+   * split, drop — already has a one-click or drag gesture that works, and
+   * adding a second way to do each would be two code paths per verb to keep
+   * in step. Describing an item was the one thing with no gesture at all: it
+   * used to happen by ITSELF whenever the cursor drifted over a slot, which
+   * is not a gesture, it is an accident that happens to be useful sometimes.
+   *
+   * Gold and platinum are the one deliberate exception, and only because
+   * changing a coin's denomination genuinely has no gesture of its own —
+   * dragging a coin does not "split" it into a different coin, the way
+   * dragging a stack of arrows splits it into two stacks of the same arrow.
+   * Radek wants this at his own hand rather than folded silently on every
+   * pickup, so it lives here as the one manual verb coins get. */
   for (let i = itemSlots.length - 1; i >= 0; i--) {
     const it = itemSlots[i];
     if (sx < it.x || sx >= it.x + it.w || sy < it.y || sy >= it.y + it.h) continue;
     if (it.n <= 0) return; // an empty cell has nothing to describe
     const kind = it.kind;
-    ctxMenu = {
-      sx, sy, at: { x: 0, y: 0 },
-      entries: [{ verb: "look", label: `Look at ${ITEMS[kind].name}`, enabled: true,
-        run: () => { ui.inspect = kind; } }],
-      rects: [],
-    };
+    const entries: MenuEntry[] = [{ verb: "look", label: `Look at ${ITEMS[kind].name}`, enabled: true,
+      run: () => { ui.inspect = kind; } }];
+    if (it.ref && (kind === "goldCoin" ? it.n >= 100 : kind === "platinumCoin")) {
+      const ref = it.ref;
+      const index = it.index;
+      const to: "goldCoin" | "platinumCoin" = kind === "goldCoin" ? "platinumCoin" : "goldCoin";
+      entries.push({ verb: "use", label: to === "platinumCoin" ? "Change to platinum" : "Change to gold", enabled: true,
+        run: () => {
+          const slots = refSlots(ref);
+          if (!slots) return;
+          // only the player's own carry weight can be pushed over by this —
+          // a chest has a slot budget, not an ounce budget, and bagRoomFor
+          // inside exchangeCoinSlot already speaks for that
+          if (to === "goldCoin" && rootOf(ref) === "player") {
+            const added = ITEMS.goldCoin.weight * 100 - ITEMS.platinumCoin.weight;
+            if (added > freeCap(P)) { flash("too heavy", "#d96a5a"); return; }
+          }
+          if (!exchangeCoinSlot(slots, index, to)) { flash("bag full", "#d96a5a"); return; }
+          beep(440, 0.06, "sine", 0.04);
+        } });
+    }
+    ctxMenu = { sx, sy, at: { x: 0, y: 0 }, entries, rects: [] };
     return;
   }
 
