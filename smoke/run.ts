@@ -3114,7 +3114,7 @@ async function main(): Promise<void> {
     // the current format round-trips without scaling a second time
     saveGame(g2);
     const stored = JSON.parse(localStorage.getItem(KEY)!) as { v: number };
-    ok(stored.v === 13, "saving writes the current v13 format");
+    ok(stored.v === 14, "saving writes the current v14 format");
     const g3 = loadGame()!;
     ok(g3.player.tx === ttx && g3.player.ty === tty, "a v3 save reloads on the same tile (no double scaling)");
     ok(toTile(g3.worlds.home.ground[0].x) === ttx, "…and its ground stack stays put");
@@ -12538,7 +12538,7 @@ async function main(): Promise<void> {
     const SK = "bone-isle-save-v2";
     deleteSave();
 
-    ok(save.includes("const SAVE_V = 13;"), "the format carries the chronicles (bumped again at v13)");
+    ok(save.includes("const SAVE_V = 14;"), "the format has moved on since the chronicles bump at v13");
     ok(save.includes("v11: the hotbar has a length"), "…and the bump is on the record");
     ok(save.includes("v13: the chronicles"), "…and so is this one");
 
@@ -12563,6 +12563,51 @@ async function main(): Promise<void> {
       "a save written before the bar had a length reads as six, which is what it had");
     deleteSave();
     A.setActionSlotCount(6);
+  }
+
+  {
+    console.log("Etap 43 — the minimap has fog of war:");
+    const { createGame } = await import("../src/game.ts");
+    const { saveGame, loadGame, deleteSave } = await import("../src/save.ts");
+    const hud43 = await import("../src/ui/hud.ts");
+    deleteSave();
+
+    const g43 = createGame();
+    const home43 = g43.worlds.home;
+    const tx43 = Math.floor(home43.w / 2);
+    const ty43 = Math.floor(home43.h / 2);
+    const R43 = hud43.EXPLORE_RADIUS;
+
+    const before43 = home43.explored.reduce((n, v) => n + v, 0);
+    ok(before43 === 0, "a fresh world starts with nothing uncovered on the minimap");
+
+    hud43.revealMinimap(home43, tx43, ty43);
+    ok(home43.explored[ty43 * home43.w + tx43] === 1, "the tile stood on is revealed");
+    ok(home43.explored[ty43 * home43.w + (tx43 - R43)] === 1, "…and one radius away along an axis");
+    ok(home43.explored[ty43 * home43.w + (tx43 - R43 - 1)] === 0, "…but one tile past the radius is not");
+    ok(home43.explored[(ty43 - R43) * home43.w + (tx43 - R43)] === 0,
+      "the reveal is a circle, not the square box it's computed over — a corner of that box stays fogged");
+
+    const afterFirst43 = home43.explored.reduce((n, v) => n + v, 0);
+    hud43.revealMinimap(home43, tx43, ty43);
+    const afterSecond43 = home43.explored.reduce((n, v) => n + v, 0);
+    ok(afterFirst43 > 0 && afterFirst43 === afterSecond43, "revealing the same spot twice adds nothing");
+
+    // persistence: survives a save/load round trip, and costs nothing for a
+    // world that was never explored at all
+    saveGame(g43);
+    const stored43 = JSON.parse(localStorage.getItem("bone-isle-save-v2")!);
+    ok(typeof stored43.explored?.home === "string", "a walked world writes its mask");
+    ok(!("bandit" in (stored43.explored ?? {})), "…and an untouched world writes no entry at all");
+
+    const g43b = loadGame()!;
+    ok(!!g43b, "the save with exploration on it still loads");
+    const home43b = g43b.worlds.home;
+    ok(home43b.explored[ty43 * home43b.w + tx43] === 1, "…the revealed tile is still revealed after a reload");
+    ok(home43b.explored[(ty43 - R43) * home43b.w + (tx43 - R43)] === 0,
+      "…while the untouched corner is still fogged, not accidentally revealed by the round trip");
+
+    deleteSave();
   }
 
   {

@@ -638,6 +638,16 @@ export interface World {
    * Built once from the spec's `safeRects` when the world is parsed.
    */
   safeMask?: Uint8Array;
+  /**
+   * Minimap fog of war: 1 once a tile has been within sight, 0 otherwise.
+   * Same one-byte-per-tile convention as `safeMask` (`ty * w + tx`), and for
+   * the same reason — direct indexing over bit-packing, since a whole map's
+   * worth is a few hundred bytes at most and never leaves this process except
+   * through the save file, where it is run-length encoded (see save.ts).
+   * Always present, unlike `safeMask`: every world needs fog, not just the
+   * ones with a haven.
+   */
+  explored: Uint8Array;
   /** Authored creature posts: exactly where the map says a creature stands.
    *  Maps carrying these populate from them instead of scattering a roster,
    *  and each creature respawns back onto its own post. */

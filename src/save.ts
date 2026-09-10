@@ -85,11 +85,20 @@ const KEY = "bone-isle-save-v2";
  *
  * The LANGUAGE those histories are read in is deliberately NOT here. It is a
  * device preference and lives with the panel zooms — see systems/panelPrefs.
+ *
+ * v14: the minimap has fog of war (Etap 43) — a world is revealed as it is
+ * walked, the way Tibia's own minimap works, rather than shown whole from the
+ * first step. Additive and per-world; an absent entry reads as "nothing
+ * uncovered yet", which is the truthful answer for every world on every save
+ * written before fog existed. Run-length encoded (see encodeExplored /
+ * decodeExplored) because the mask itself is one byte per tile and a save
+ * should not carry a spare copy of the whole map just to remember which
+ * corners of it were already walked.
  */
-const SAVE_V = 13;
+const SAVE_V = 14;
 
 interface SaveData {
-  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
+  v: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
   seed: number;
   current: WorldKey;
   player: {
@@ -144,6 +153,48 @@ interface SaveData {
   outfit?: OutfitSave;
   /** One-time treasure chests already opened. */
   opened?: string[];
+  /** Minimap fog of war, per world, run-length encoded. Absent before v14
+   *  and absent for any world nothing has ever been revealed on. */
+  explored?: Partial<Record<WorldKey, string>>;
+}
+
+/**
+ * Run-length encode a fog mask as alternating run lengths, starting with the
+ * (possibly zero-length) run of UNEXPLORED tiles. A fog mask is one byte per
+ * tile but only ever two values, and typically long unbroken stretches of
+ * one or the other — a handful of numbers describes a whole map.
+ */
+function encodeExplored(a: Uint8Array): string {
+  const runs: number[] = [];
+  let cur = 0;
+  let run = 0;
+  for (let i = 0; i < a.length; i++) {
+    const v = a[i] ? 1 : 0;
+    if (v === cur) { run++; continue; }
+    runs.push(run);
+    cur = v;
+    run = 1;
+  }
+  runs.push(run);
+  return runs.join(",");
+}
+
+/** The inverse of `encodeExplored`, sized to `size` tiles. An unparsable or
+ *  short string leaves the tail unexplored rather than throwing — a fog mask
+ *  is the one save field where losing data means a re-walked corridor, not a
+ *  lost character, so corruption here is never worth refusing the load over. */
+function decodeExplored(s: string, size: number): Uint8Array {
+  const out = new Uint8Array(size);
+  let i = 0;
+  let v = 0;
+  for (const part of s.split(",")) {
+    const run = Number(part);
+    if (!Number.isFinite(run) || run < 0) break;
+    if (v) out.fill(1, i, Math.min(size, i + run));
+    i += run;
+    v = v ? 0 : 1;
+  }
+  return out;
 }
 
 export function hasSave(): boolean {
@@ -163,10 +214,12 @@ export function saveGame(g: Game): void {
   const structDump = {} as SaveData["structures"];
   const groundDump: SaveData["ground"] = {};
   const corpseDump: SaveData["corpses"] = {};
+  const exploredDump: SaveData["explored"] = {};
   (Object.keys(g.worlds) as WorldKey[]).forEach((k) => {
     structDump[k] = g.worlds[k].structures;
     if (g.worlds[k].ground.length) groundDump[k] = g.worlds[k].ground;
     if (g.worlds[k].corpses.length) corpseDump[k] = g.worlds[k].corpses;
+    if (g.worlds[k].explored.some((v) => v)) exploredDump[k] = encodeExplored(g.worlds[k].explored);
   });
   const data: SaveData = {
     v: SAVE_V,
@@ -189,6 +242,7 @@ export function saveGame(g: Game): void {
     structures: structDump,
     ground: groundDump,
     corpses: corpseDump,
+    explored: exploredDump,
     research: researchState(),
     attuned: attunedState(),
     tasks: taskState(),
@@ -279,6 +333,8 @@ export function loadGame(): Game | null {
           t: typeof c.t === "number" ? c.t : 60,
         }));
     }
+    const ex = data.explored?.[k];
+    if (typeof ex === "string") worlds[k].explored = decodeExplored(ex, worlds[k].w * worlds[k].h);
   });
 
   // Migrate the one-time-chest "opened" flags to the regenerated chest coords.

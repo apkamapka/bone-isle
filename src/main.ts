@@ -73,7 +73,7 @@ import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { planSwap, refused, freeSlots } from "./systems/loadout.ts";
 import { createGame, travelTo, applyGates, applyMissionPads, padRefusal, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
-import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, type HudCtx } from "./ui/hud.ts";
+import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, revealMinimap, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
 import { deckEnabled, mobileLayout, noDeck, overDeck, TOUCH_MIN_CSS, mapFocusFrac, mapFocusFracX, sheetSlots, sheetBand, stripRect, stripHandle, stripClaim, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
 import { drawControlIcon, ICON_SRC, type ControlIcon } from "./ui/icons.ts";
@@ -4686,6 +4686,7 @@ function update(dt: number): void {
 
   tickCampfireBurn(world, dt);
   tickMonsterBurn(world);
+  revealMinimap(world, P.tx, P.ty);
   checkAttuneCircles(world);
 
   tickRegrowth(world, dt, P.x, P.y, true);

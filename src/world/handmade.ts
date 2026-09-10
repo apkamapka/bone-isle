@@ -207,6 +207,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     portals: [],
     gates: [],
     coastWater: [],
+    explored: new Uint8Array(W * H),
     // Authored maps have no radial silhouette; the baker no longer needs one.
     landR: () => Math.max(W, H),
     mapCanvas: document.createElement("canvas"),

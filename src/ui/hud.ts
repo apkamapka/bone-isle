@@ -132,7 +132,8 @@ export function hudText(
  * that was ~25,000 fillRect calls per frame and the main cause of big-map lag.
  * Terrain is static per world, so it's now baked ONCE (via ImageData, so the
  * bake itself is instant) at one pixel per tile and each frame just blits it
- * scaled; only the dynamic dots (portals, monsters, player) draw on top.
+ * scaled; only the dynamic dots (portals, player) and the fog overlay below
+ * draw on top.
  */
 const miniCache = new Map<string, HTMLCanvasElement>();
 function minimapTerrain(w: Game["current"]): HTMLCanvasElement {
@@ -162,6 +163,70 @@ function minimapTerrain(w: Game["current"]): HTMLCanvasElement {
   return c;
 }
 
+/**
+ * Fog of war, the same one-canvas-per-world cache as `minimapTerrain` above.
+ * Starts solid black and gets a hole punched (`clearRect`, one tile at a
+ * time) the moment that tile is first seen — never redrawn wholesale, so an
+ * already-explored world costs nothing extra per frame. First creation reads
+ * `w.explored` (which a loaded save may already have entries in) and clears
+ * every tile it names, so resuming a save shows exactly what was uncovered
+ * last time rather than starting the fog over.
+ */
+const fogCache = new Map<string, HTMLCanvasElement>();
+function fogCanvas(w: Game["current"]): HTMLCanvasElement {
+  const hit = fogCache.get(w.key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = w.w;
+  c.height = w.h;
+  const cx = c.getContext("2d")!;
+  cx.fillStyle = "#000";
+  cx.fillRect(0, 0, w.w, w.h);
+  for (let ty = 0; ty < w.h; ty++) {
+    for (let tx = 0; tx < w.w; tx++) {
+      if (w.explored[ty * w.w + tx]) cx.clearRect(tx, ty, 1, 1);
+    }
+  }
+  fogCache.set(w.key, c);
+  return c;
+}
+
+/** Minimap reveal radius, in tiles — roughly a screen's worth in every
+ *  direction, the same rough "walk near it, see it forever" feel as Tibia's
+ *  own minimap. A circle, via squared distance, so a corridor doesn't light
+ *  up the room sitting behind its far wall. */
+export const EXPLORE_RADIUS = 8;
+
+/**
+ * Mark every tile within `EXPLORE_RADIUS` of (tx,ty) as seen, for good.
+ *
+ * Meant to be called once a frame from the game loop with the player's own
+ * tile. Almost always a no-op: the loop below only ever writes to `w.explored`
+ * or the fog canvas for a tile that crosses from unseen to seen, so standing
+ * still or re-walking familiar ground touches neither.
+ */
+export function revealMinimap(w: Game["current"], tx: number, ty: number): void {
+  const r = EXPLORE_RADIUS;
+  const r2 = r * r;
+  const y0 = Math.max(0, ty - r);
+  const y1 = Math.min(w.h - 1, ty + r);
+  const x0 = Math.max(0, tx - r);
+  const x1 = Math.min(w.w - 1, tx + r);
+  let cx: CanvasRenderingContext2D | null = null;
+  for (let y = y0; y <= y1; y++) {
+    const dy = y - ty;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - tx;
+      if (dx * dx + dy * dy > r2) continue;
+      const i = y * w.w + x;
+      if (w.explored[i]) continue;
+      w.explored[i] = 1;
+      cx ??= fogCanvas(w).getContext("2d")!;
+      cx.clearRect(x, y, 1, 1);
+    }
+  }
+}
+
 /** Minimap blitted at an arbitrary (x,y) with a given pixel size. */
 /**
  * The minimap, filling the rect it is given.
@@ -185,15 +250,14 @@ export function drawMinimapAt(
   const wasSmooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(minimapTerrain(w), x, y, size, mh);
+  // fog of war on top, same blit, same pixelation
+  ctx.drawImage(fogCanvas(w), x, y, size, mh);
   ctx.imageSmoothingEnabled = wasSmooth;
   // portals
   for (const pt of w.portals) {
     ctx.fillStyle = "#7fd0ff";
     ctx.fillRect(x + pt.x * sx - 1, y + pt.y * sy - 1, 3, 3);
   }
-  // monsters
-  ctx.fillStyle = "#e05a4a";
-  for (const m of w.monsters) ctx.fillRect(x + m.x * sx - 1, y + m.y * sy - 1, 2, 2);
   // player
   ctx.fillStyle = "#ffe9a8";
   ctx.fillRect(x + p.x * sx - 1.5, y + p.y * sy - 1.5, 3, 3);
