@@ -43,6 +43,9 @@
  * secure mode meant.
  */
 import { active, safeMode, setSafeMode } from "./playerState.ts";
+import { resistanceOf } from "./elements.ts";
+import type { Element, Resistances } from "./elements.ts";
+import { attunedState } from "./tower.ts";
 
 export type Skull = "none" | "white" | "red";
 
@@ -225,4 +228,73 @@ export function skullIcon(s: Skull): "skullWhite" | "skullRed" | null {
   if (s === "white") return "skullWhite";
   if (s === "red") return "skullRed";
   return null;
+}
+
+/**
+ * Elemental edge: a light rock-paper-scissors layer on top of the five
+ * elements, decided now for the same reason the skull was — the blow that
+ * will read it does not exist yet (see the file header), but the rule it
+ * will read should not be invented on the day it does.
+ *
+ * PVP_RING is the one place the wheel is spelled out: each element beats the
+ * next one round and loses to the previous one, and the two elements that
+ * are neither neighbour are a neutral matchup. PVP_ELEMENT_EDGE is BUILT
+ * from this ring rather than typed out by hand five times — one direction
+ * written backwards in a hand-typed table is a bug nothing else would catch;
+ * derived from one ring, it cannot happen.
+ */
+export const PVP_RING: readonly Element[] = ["fire", "shadow", "storm", "earth", "ice"];
+
+const PVP_EDGE_PCT = 0.1;
+
+function buildPvpEdge(ring: readonly Element[]): Readonly<Record<Element, Resistances>> {
+  const table = {} as Record<Element, Resistances>;
+  ring.forEach((el, i) => {
+    const beats = ring[(i + 1) % ring.length];
+    const losesTo = ring[(i - 1 + ring.length) % ring.length];
+    const row: Resistances = {};
+    row[beats] = 1 + PVP_EDGE_PCT;
+    row[losesTo] = 1 - PVP_EDGE_PCT;
+    table[el] = row;
+  });
+  return table;
+}
+
+/** el → its one +10% matchup and its one -10% matchup. The other two
+ *  elements are absent from the row, which `resistanceOf` reads as 1. */
+export const PVP_ELEMENT_EDGE: Readonly<Record<Element, Resistances>> = buildPvpEdge(PVP_RING);
+
+/**
+ * A character's PvP element: the FIRST one ever attuned, not the latest.
+ * `attunedState()` is a Set read in insertion order, and nothing in normal
+ * play removes from it or reorders it — `clearAttuned` is the developer
+ * reset in tower.ts, unreachable from a real character — so this stays the
+ * same answer for as long as the character exists, even after they go on to
+ * open every other lane too.
+ *
+ * Undefined until the first stone is spent: the same "nothing to report
+ * yet" as a skull of "none".
+ */
+export function pvpElement(): Element | undefined {
+  return attunedState()[0];
+}
+
+/**
+ * Outgoing PvP damage multiplier, elements only. Everything else about the
+ * blow — skill, gear, armor, shield — is untouched; this is one more factor
+ * alongside them, not a replacement for any of them. Either side without a
+ * PvP element yet (nothing attuned) is ordinary, unmodified damage: there is
+ * nothing yet to be strong or weak against.
+ *
+ * Single-sided by design: only the attacker's edge over the defender is
+ * read here. The reverse fact — the defender's edge over the attacker —
+ * belongs to the defender's OWN attack, a separate blow with its own call to
+ * this same function; folding it into this one would count the same
+ * rock-paper-scissors relationship twice on a single hit.
+ */
+export function pvpElementMultiplier(
+  attacker: Element | undefined, defender: Element | undefined,
+): number {
+  if (!attacker || !defender) return 1;
+  return resistanceOf(PVP_ELEMENT_EDGE[attacker], defender);
 }

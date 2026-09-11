@@ -17728,6 +17728,46 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("pvp elemental edge (rule only — nothing can land this blow yet):");
+  {
+    const PVP2 = await import("../src/systems/pvp.ts");
+    const TW2 = await import("../src/systems/tower.ts");
+    const EL2 = await import("../src/systems/elements.ts");
+
+    ok(PVP2.PVP_RING.length === 5 && new Set(PVP2.PVP_RING).size === 5,
+      "the ring names five elements, none twice");
+    ok(EL2.ELEMENTS.every((el) => PVP2.PVP_RING.includes(el)),
+      "…and every element in elements.ts is on it");
+
+    // every element: exactly one +10%, one -10%, two neutral, none on itself
+    for (let i = 0; i < PVP2.PVP_RING.length; i++) {
+      const el = PVP2.PVP_RING[i];
+      const beats = PVP2.PVP_RING[(i + 1) % PVP2.PVP_RING.length];
+      const losesTo = PVP2.PVP_RING[(i - 1 + PVP2.PVP_RING.length) % PVP2.PVP_RING.length];
+      ok(PVP2.pvpElementMultiplier(el, beats) === 1.1, `${el} hits ${beats} 10% harder`);
+      ok(PVP2.pvpElementMultiplier(el, losesTo) === 0.9, `${el} hits ${losesTo} 10% softer`);
+      ok(PVP2.pvpElementMultiplier(el, el) === 1, `${el} has no edge on itself`);
+      for (const other of EL2.ELEMENTS) {
+        if (other === beats || other === losesTo || other === el) continue;
+        ok(PVP2.pvpElementMultiplier(el, other) === 1, `${el} vs ${other} is a neutral matchup`);
+      }
+    }
+
+    // no identity yet on either side → no bonus, no penalty
+    ok(PVP2.pvpElementMultiplier(undefined, "fire") === 1, "an unattuned attacker gets no edge");
+    ok(PVP2.pvpElementMultiplier("fire", undefined) === 1, "…nor against an unattuned target");
+
+    // pvpElement(): first stone ever spent, stable no matter what follows it
+    TW2.clearAttuned();
+    ok(PVP2.pvpElement() === undefined, "nothing attuned yet means no pvp element");
+    TW2.markAttuned("storm");
+    ok(PVP2.pvpElement() === "storm", "the first stone spent sets it");
+    TW2.markAttuned("fire");
+    TW2.markAttuned("ice");
+    ok(PVP2.pvpElement() === "storm", "…and later stones don't move it — first, not latest");
+    TW2.clearAttuned();
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
