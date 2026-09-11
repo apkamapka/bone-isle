@@ -2711,6 +2711,20 @@ async function main(): Promise<void> {
       "the right-click menu offers both directions by name");
     ok(mainSrc27.includes("exchangeCoinSlot("), "…calling the same exchangeCoinSlot the math above tests");
     ok(!/consolidateCoins/.test(mainSrc27), "…and no silent fold is left anywhere in main.ts");
+
+    // touch claims any slot press as a possible drag ON CONTACT (see
+    // initTouch's drag.probe in ui/touch.ts), which means the long-press
+    // timer that opens the menu above never starts for an inventory slot —
+    // the menu entry just checked is unreachable by touch, full stop. The
+    // quantity dialog is the one place touch already lands on a multi-coin
+    // stack, so the same exchange needs its own button there too.
+    ok(mainSrc27.includes("function exchangeSplit()"), "the quantity dialog has its own exchange action");
+    ok(/function exchangeSplit[\s\S]{0,400}runCoinExchange\(/.test(mainSrc27),
+      "…sharing the same weight-checked exchange the menu button calls");
+    const panelsSrc27 = fs27.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
+    ok(panelsSrc27.includes('"To platinum"') && panelsSrc27.includes('"To gold"'),
+      "…and the dialog itself offers both directions by name");
+    ok(panelsSrc27.includes("exchangeSplit()"), "…wired to an action reachable by touch or mouse alike");
   }
 
   console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");

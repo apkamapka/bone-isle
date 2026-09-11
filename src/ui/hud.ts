@@ -253,8 +253,13 @@ export function drawMinimapAt(
   // fog of war on top, same blit, same pixelation
   ctx.drawImage(fogCanvas(w), x, y, size, mh);
   ctx.imageSmoothingEnabled = wasSmooth;
-  // portals
+  // portals — only once the ground under them has actually been walked;
+  // otherwise the dot is a free spoiler; tap it and the character just walks
+  // there, which defeats the entire point of a map that starts covered
   for (const pt of w.portals) {
+    const ptx = Math.floor(pt.x / TILE);
+    const pty = Math.floor(pt.y / TILE);
+    if (!w.explored[pty * w.w + ptx]) continue;
     ctx.fillStyle = "#7fd0ff";
     ctx.fillRect(x + pt.x * sx - 1, y + pt.y * sy - 1, 3, 3);
   }

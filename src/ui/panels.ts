@@ -709,6 +709,9 @@ export interface PanelActions {
   openBag: () => void;
   cycleAmmo: () => void;
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => void;
+  /** The quantity dialog's own gold⇄platinum button — see the doc comment on
+   *  `exchangeSplit` in main.ts for why touch needs a second way in. */
+  exchangeSplit: () => void;
   /** Put a mission's chronicle back on screen. */
   readLore: (id: string) => void;
   close: (kind: PanelKind) => void;
@@ -981,7 +984,7 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   stepBtn(hx, hy, hw, "Half", () => { sp.n = clampN(Math.floor(sp.max / 2) || 1); }); hx += hw + 8 * S;
   stepBtn(hx, hy, hw, "All", () => { sp.n = sp.max; });
 
-  const acts: [string, "store" | "take" | "drop" | "throw" | "move"][] = [];
+  const acts: [string, "store" | "take" | "drop" | "throw" | "move" | "exchange"][] = [];
   if (sp.at) acts.push(["Throw", "throw"]); // target already aimed by the drag
   else if (sp.to) acts.push(["Move", "move"]); // destination already aimed by the drag
   // anything OUT in the world offers only "take": you cannot drop from a chest
@@ -992,6 +995,13 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
     acts.push(["Drop", "drop"]);
     acts.push(["Throw", "throw"]); // arm a throw: the next map tap is the target
   }
+  // gold and platinum's one manual verb, offered here too: touch claims any
+  // slot press as a possible drag on contact (see initTouch's drag.probe),
+  // so the long-press menu's matching entry never gets a chance to fire on a
+  // phone. This dialog is not gated on that at all — same button, same rate,
+  // reachable by mouse or finger either way.
+  if (sp.kind === "goldCoin" && sp.max >= 100) acts.push(["To platinum", "exchange"]);
+  else if (sp.kind === "platinumCoin") acts.push(["To gold", "exchange"]);
   acts.push(["Cancel", "drop"]);
   const aw = (w - 20 * S - (acts.length - 1) * 6 * S) / acts.length;
   let ax = x + 10 * S;
@@ -1006,6 +1016,7 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
     const capturedMode = mode;
     base.hotspots.push({ x: ax, y: ay, w: aw, h: 15 * S, fn: () => {
       if (isCancel) { base.ui.split = null; return; }
+      if (capturedMode === "exchange") { base.act.exchangeSplit(); return; }
       base.act.splitConfirm(capturedMode);
     } });
     ax += aw + 6 * S;

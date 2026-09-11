@@ -847,6 +847,7 @@ const act: PanelActions = {
   navUp: (ref: ContainerRef) => { navUp(ref); },
   removePack: () => { dropWornPack(); },
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => { splitConfirm(mode); },
+  exchangeSplit: () => { exchangeSplit(); },
   readLore: (id: string) => {
     openDialogue({ titleKey: `lore.title.${id}`, bodyKey: `lore.${id}` });
   },
@@ -1713,6 +1714,26 @@ function splitConfirm(mode: "store" | "take" | "drop" | "throw" | "move"): void 
   ui.split = null;
 }
 
+/**
+ * The quantity dialog's own Exchange button. Exists because a touch that
+ * starts on an inventory slot claims a potential drag on `touchstart` (see
+ * `initTouch`'s `drag.probe`) and so never starts the long-press timer at
+ * all — the right-click/long-press menu's "Change to platinum/gold" entry is
+ * consequently unreachable by touch. This dialog is the one place touch
+ * already lands on a multi-coin stack (see `openMoveChooser`), so the same
+ * exchange is offered here too rather than needing a second gesture invented
+ * just for phones. Ignores the chosen quantity — the rate is always fixed at
+ * 100:1 — the same way Cancel ignores it.
+ */
+function exchangeSplit(): void {
+  const sp = ui.split;
+  if (!sp) return;
+  if (sp.kind !== "goldCoin" && sp.kind !== "platinumCoin") return;
+  const to: "goldCoin" | "platinumCoin" = sp.kind === "goldCoin" ? "platinumCoin" : "goldCoin";
+  runCoinExchange(sp.ref, sp.index, to);
+  ui.split = null;
+}
+
 import { craftAcross } from "./items.ts";
 function craftAt(r: Recipe): boolean {
   const goldCost = r.gold ?? 0;
@@ -2286,6 +2307,28 @@ function walkToPoint(at: Vec): void {
  * bottom where the thumb naturally rests and the object's own verbs sit above
  * it, closest to the thing they act on.
  */
+/**
+ * The one place gold and platinum actually change denomination: pulled out
+ * so the two gestures that can reach it — the right-click/long-press menu on
+ * a slot, and the mobile quantity dialog's own button (long-press never
+ * fires on a slot at all; see the touch note by the quantity dialog's
+ * Exchange button) — share the exact same weight check and refusal messages
+ * instead of two copies drifting apart.
+ */
+function runCoinExchange(ref: ContainerRef, index: number, to: "goldCoin" | "platinumCoin"): void {
+  const slots = refSlots(ref);
+  if (!slots) return;
+  // only the player's own carry weight can be pushed over by this — a chest
+  // has a slot budget, not an ounce budget, and bagRoomFor inside
+  // exchangeCoinSlot already speaks for that
+  if (to === "goldCoin" && rootOf(ref) === "player") {
+    const added = ITEMS.goldCoin.weight * 100 - ITEMS.platinumCoin.weight;
+    if (added > freeCap(P)) { flash("too heavy", "#d96a5a"); return; }
+  }
+  if (!exchangeCoinSlot(slots, index, to)) { flash("bag full", "#d96a5a"); return; }
+  beep(440, 0.06, "sine", 0.04);
+}
+
 function openContextMenu(sx: number, sy: number): void {
   if (P.dead || hudEditing()) return;
   /* Not under a modal box. The box is drawn last and over everything, so a
@@ -2325,19 +2368,7 @@ function openContextMenu(sx: number, sy: number): void {
       const index = it.index;
       const to: "goldCoin" | "platinumCoin" = kind === "goldCoin" ? "platinumCoin" : "goldCoin";
       entries.push({ verb: "use", label: to === "platinumCoin" ? "Change to platinum" : "Change to gold", enabled: true,
-        run: () => {
-          const slots = refSlots(ref);
-          if (!slots) return;
-          // only the player's own carry weight can be pushed over by this —
-          // a chest has a slot budget, not an ounce budget, and bagRoomFor
-          // inside exchangeCoinSlot already speaks for that
-          if (to === "goldCoin" && rootOf(ref) === "player") {
-            const added = ITEMS.goldCoin.weight * 100 - ITEMS.platinumCoin.weight;
-            if (added > freeCap(P)) { flash("too heavy", "#d96a5a"); return; }
-          }
-          if (!exchangeCoinSlot(slots, index, to)) { flash("bag full", "#d96a5a"); return; }
-          beep(440, 0.06, "sine", 0.04);
-        } });
+        run: () => runCoinExchange(ref, index, to) });
     }
     ctxMenu = { sx, sy, at: { x: 0, y: 0 }, entries, rects: [] };
     return;
