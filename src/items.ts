@@ -111,7 +111,7 @@ export type ItemKind =
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet"
   // containers & test gear (Etap 11)
-  | "backpack" | "booster"
+  | "backpack" | "levelStone" | "skillStone"
   // currency (Etap 27): money is carried, weighed and dropped like anything else
   | "goldCoin" | "platinumCoin";
 
@@ -202,8 +202,10 @@ export interface ItemDef {
   pack?: { slots: number };
   /** Currency: what one of these is worth in gold pieces. Only coins have it. */
   coin?: number;
-  /** TEST item: eating grants +5 levels and +20 to every skill. */
-  boost?: true;
+  /** TEST item: using one grants this many character levels, instantly. */
+  testLevel?: number;
+  /** TEST item: using one adds this much to every skill you have started. */
+  testSkill?: number;
 }
 
 export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
@@ -524,9 +526,17 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * added the day totals justify it; today's richest kill drops ~210. */
   goldCoin:     { name: "Gold Coin",     stack: 100, value: 1, weight: 0.1, coin: 1 },
   platinumCoin: { name: "Platinum Coin", stack: 100, value: 100, weight: 0.1, coin: 100 },
-  // TEST ONLY (Radek): a 1-gold forge brew that force-feeds levels & skills so
-  // late-game content can be reached instantly. Slated for removal.
-  booster:   { name: "Dopalacz",     stack: 999, value: 0, weight: 1, boost: true },
+  /* TEST ONLY (Radek): the two stones the `/test` window hands out.
+   *
+   * They replaced the Dopalacz, which did both jobs at once in one five-level,
+   * twenty-skill lump — too coarse to test anything with. One level and three
+   * skill points at a time is a DIAL: use one for a small step, ten for a big
+   * one, and the two axes move independently.
+   *
+   * Neither is crafted, sold, dropped or looted anywhere. `/test` is the only
+   * door to them, which is what keeps them out of a real game. */
+  levelStone: { name: "Level Stone", stack: 100, value: 0, weight: 1, testLevel: 1 },
+  skillStone: { name: "Skill Stone", stack: 100, value: 0, weight: 1, testSkill: 3 },
 };
 
 /** Weight of `n` of a given item kind, in oz. */
@@ -1106,8 +1116,6 @@ export const RECIPES: readonly Recipe[] = [
   { out: "arrow",         outN: 10, cost: { wood: 2 } },
   // practice ammo is deliberately dirt cheap: one log → a whole quiver
   { out: "trainingArrow", outN: 25, cost: { wood: 1 } },
-  // TEST ONLY: the Dopalacz — 1 gold, +5 levels, +20 every skill
-  { out: "booster",       cost: {}, gold: 1 },
 ];
 
 export function canCraft(bag: Bag, r: Recipe): boolean {
@@ -1208,7 +1216,8 @@ export function itemInfoLines(kind: ItemKind, st?: ItemStack | null): string[] {
     lines.push(`Container — ${used !== null ? `${used}/` : ""}${d.pack.slots} slots`);
     lines.push(held && used ? `Open it to see inside` : `Empty — open it to fill it`);
   }
-  if (d.boost) lines.push(`TEST: +5 levels, +20 every skill`);
+  if (d.testLevel) lines.push(`TEST: +${d.testLevel} level${d.testLevel > 1 ? "s" : ""}`);
+  if (d.testSkill) lines.push(`TEST: +${d.testSkill} to every skill`);
   if (d.heal) lines.push(`Restores ${d.heal} HP`);
   const inside = st?.items ? bagWeight(st.items) : 0;
   if (inside > 0) {

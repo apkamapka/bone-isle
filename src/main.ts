@@ -482,6 +482,7 @@ function defaultOffset(kind: PanelKind): { x: number; y: number } {
     case "tasks": return { x: 20 * S, y: -20 * S };
     case "wardrobe": return { x: 0, y: 10 * S };
     case "exchange": return { x: 10 * S, y: 0 };
+    case "test": return { x: 0, y: -10 * S };
     case "loot": return { x: 60 * S, y: 40 * S };
     default: return { x: 0, y: 0 };
   }
@@ -716,22 +717,34 @@ const act: PanelActions = {
       beep(360, 0.08, "sine", 0.05, 60);
       return;
     }
-    if (def.boost) {
-      // TEST item (Dopalacz): +5 levels and +20 to every skill, instantly.
+    if (def.testLevel) {
+      // TEST item (Level Stone): one level per stone, granted as the exact
+      // experience still missing — so the level-up path, its effects and its
+      // derived stats all run exactly as they do off a kill.
       if (!removeItem(P.bag, kind, 1)) return;
-      const targetLv = P.level + 5;
+      const targetLv = P.level + def.testLevel;
       const missing = totalExpFor(targetLv) - (totalExpFor(P.level) + P.exp);
       if (missing > 0) grantExp(cw(), P, missing);
+      refreshDerived(P);
+      P.hp = P.maxhp;
+      flash(`TEST +${def.testLevel} level${def.testLevel > 1 ? "s" : ""}`, "#e3b341");
+      beep(700, 0.2, "square", 0.06, 160);
+      return;
+    }
+    if (def.testSkill) {
+      // TEST item (Skill Stone): three points on every skill already started.
+      // A skill you have never used stays at zero — the stone is a shortcut
+      // through the grind, not a way to own skills you never trained.
+      if (!removeItem(P.bag, kind, 1)) return;
       for (const k of Object.keys(skills) as SkillKey[]) {
         const sk = skills[k];
         if (!sk.active) continue;
-        sk.lv += 20;
+        sk.lv += def.testSkill;
         sk.pts = 0;
       }
       refreshDerived(P);
-      P.hp = P.maxhp;
-      flash("DOPALACZ! +5 levels, +20 skills", "#ff9e3a");
-      beep(700, 0.25, "square", 0.07, 200);
+      flash(`TEST +${def.testSkill} to every skill`, "#4fb6e0");
+      beep(520, 0.2, "square", 0.06, 160);
       return;
     }
     // don't waste a potion charge when already at full health
@@ -2695,6 +2708,16 @@ function sendChat(text: string): void {
    * local channel and is never spoken aloud on a shard. */
   if (text.trim().toLowerCase() === "/tp") {
     tpHome();
+    closeChat();
+    return;
+  }
+  /* TEST ONLY — `/test`. The catalog grid used to be a fourth tab on the Forge
+   * and is a window of its own now; this is its only opener. Same shape as
+   * `/tp` above and checked before `say` for the same reason: the word never
+   * reaches the local channel and is never spoken aloud on a shard. */
+  if (text.trim().toLowerCase() === "/test") {
+    openWindow("test");
+    flash("TEST window", "#e08a7a");
     closeChat();
     return;
   }

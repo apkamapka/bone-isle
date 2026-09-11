@@ -85,6 +85,8 @@ export type PanelKind =
   | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks" | "wardrobe"
   /** Morgan's counter in Bonetown: the one place coins change denomination. */
   | "exchange"
+  /** TEST ONLY — the whole catalog, one gold a stack. Opened by `/test`. */
+  | "test"
   /** A container lying on the ground — the loot bag you left by the corpses. */
   | "floor"
   /**
@@ -641,8 +643,8 @@ export interface UiState {
   floor: GroundItem | null;
   shopTab: "buy" | "sell";
   /** Which tab of the Forge window is showing (Etap 24). */
-  forgeTab: "craft" | "smelt" | "gems" | "test";
-  /** Which page of the Forge's TEST grid is showing. */
+  forgeTab: "craft" | "smelt" | "gems";
+  /** Which page of the TEST window's grid is showing. */
   testPage: number;
   /** Which elemental lane the Alchemy Tower window is showing. */
   towerTab: string;
@@ -1120,6 +1122,7 @@ export function drawPanels(
       case "stash": drawStash(p); break;
       case "wardrobe": drawWardrobe(p); break;
       case "exchange": drawExchange(p); break;
+      case "test": drawTest(p); break;
       default: break;
     }
     if (clipDock && !(overflowing && sheet)) {
@@ -1617,7 +1620,7 @@ function drawBag(p: PanelInput): void {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.openNested(ref, idx, p.win) });
       } else if (def.slot) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.equipItem(k, idx) });
-      } else if (def.heal || def.food || def.crystal || def.boost) {
+      } else if (def.heal || def.food || def.crystal || def.testLevel || def.testSkill) {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.useItem(k, idx, ref) });
       } else {
         p.hotspots.push({ x: cx, y: cy, w: cell, h: cell, fn: () => p.act.moveStack(ref, idx) });
@@ -1678,7 +1681,6 @@ function drawForge(p: PanelInput): void {
   const rowH = 26 * S;
   const bodyRows = ui.forgeTab === "craft" ? RECIPES.length
     : ui.forgeTab === "smelt" ? Math.max(1, smeltables.length)
-    : ui.forgeTab === "test" ? 10
     : Math.max(1, GEM_TROPHIES.length);
   const w = 292 * S;
   const h = 20 * S + 19 * S + Math.min(bodyRows, 12) * rowH + 22 * S;
@@ -1689,17 +1691,14 @@ function drawForge(p: PanelInput): void {
     { id: "craft", label: "CRAFT", on: true },
     { id: "smelt", label: "SMELT", on: true },
     { id: "gems", label: "GEMS", on: tier >= 3 },
-    { id: "test", label: "TEST", on: true },
-  ], ui.forgeTab, (id) => { ui.forgeTab = id as "craft" | "smelt" | "gems" | "test"; });
+  ], ui.forgeTab, (id) => { ui.forgeTab = id as "craft" | "smelt" | "gems"; });
 
   if (ui.forgeTab === "craft") ry = forgeCraft(p, x, ry, w, rowH);
   else if (ui.forgeTab === "smelt") ry = forgeSmelt(p, x, ry, w, rowH, tier, smeltables);
-  else if (ui.forgeTab === "test") ry = forgeTest(p, x, ry, w);
   else ry = forgeGems(p, x, ry, w);
 
   const foot = ui.forgeTab === "craft" ? "Uses backpack + storage chest"
     : ui.forgeTab === "smelt" ? `Burns ${COAL_PER_SMELT} coal per piece · tier ${tier} furnace`
-    : ui.forgeTab === "test" ? "TEST ONLY — 1 gold buys a full stack, gear one piece"
     : `${GEM_TROPHY_KINDS} different trophies + ${GEM_COAL} coal per gem`;
   hudText(hud, foot, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }
@@ -1789,63 +1788,6 @@ function forgeSmelt(
     ry += rowH;
   }
   return ry;
-}
-
-/**
- * TEST ONLY — a grid of the entire catalog, one slot's worth for a gold:
- * a full stack of anything that stacks, a single piece of anything that does not.
- *
- * This exists so a feature can be exercised without first farming for it: 500
- * steel is a legitimate evening of play and a ridiculous prerequisite for
- * checking that a panel lays out correctly. It is deliberately loud (its own
- * tab, red heading, "TEST" in the label) so it cannot be mistaken for a real
- * shop and cannot be shipped by accident.
- */
-export const TEST_KINDS = Object.keys(ITEMS) as ItemKind[];
-const TEST_COLS = 10;
-const TEST_ROWS = 8;
-const TEST_PER_PAGE = TEST_COLS * TEST_ROWS;
-
-function forgeTest(p: PanelInput, x: number, ry: number, w: number): number {
-  const { hud, player, ui } = p;
-  const S = hud.scale;
-  const pages = Math.ceil(TEST_KINDS.length / TEST_PER_PAGE);
-  ui.testPage = ((ui.testPage % pages) + pages) % pages;
-
-  hudText(hud, "TEST — click an item for a stack @ 1 gold", x + w / 2, ry, 8 * S, "#e08a7a", "center", true);
-  // page arrows
-  const ay = ry - 1 * S;
-  for (const [glyph, dir, ax] of [["<", -1, x + 10 * S], [">", 1, x + w - 22 * S]] as const) {
-    hud.ctx.fillStyle = "rgba(0,0,0,.3)";
-    hud.ctx.fillRect(ax, ay, 12 * S, 11 * S);
-    hudText(hud, glyph, ax + 6 * S, ay + 2 * S, 8 * S, "#e8dcc0", "center", true);
-    const d = dir;
-    p.hotspots.push({ x: ax, y: ay, w: 12 * S, h: 11 * S, fn: () => { ui.testPage += d; } });
-  }
-  hudText(hud, `${ui.testPage + 1}/${pages}`, x + w - 34 * S, ry, 7 * S, "rgba(220,214,190,.6)", "right");
-  ry += 13 * S;
-
-  const cell = (w - 20 * S) / TEST_COLS;
-  const start = ui.testPage * TEST_PER_PAGE;
-  for (let i = 0; i < TEST_PER_PAGE; i++) {
-    const kind = TEST_KINDS[start + i];
-    if (!kind) break;
-    const cx = x + 10 * S + (i % TEST_COLS) * cell;
-    const cy = ry + Math.floor(i / TEST_COLS) * cell;
-    const hot = hovering(p, cx, cy, cell - 1 * S, cell - 1 * S);
-    hud.ctx.fillStyle = hot ? "rgba(202,162,58,.25)" : "rgba(0,0,0,.22)";
-    hud.ctx.fillRect(cx, cy, cell - 1 * S, cell - 1 * S);
-    const spr = itemSprite(kind);
-    const sc = Math.max(1, Math.floor((cell - 4 * S) / iconH(spr, 1)));
-    icon(p, spr, cx + (cell - 1 * S - iconH(spr, sc)) / 2, cy + (cell - 1 * S - iconH(spr, sc)) / 2, sc);
-    if (hot) hudText(hud, ITEMS[kind].name, x + w / 2, ry + TEST_ROWS * cell + 2 * S, 8 * S, "#ffe9a8", "center", true);
-    const k = kind;
-    p.hotspots.push({ x: cx, y: cy, w: cell - 1 * S, h: cell - 1 * S, fn: () => p.act.testGrant(k) });
-  }
-  if (player.gold < 1) {
-    hudText(hud, "(no gold)", x + w / 2, ry + TEST_ROWS * cell + 2 * S, 8 * S, "#d96a5a", "center");
-  }
-  return ry + TEST_ROWS * cell + 12 * S;
 }
 
 function forgeGems(p: PanelInput, x: number, ry: number, w: number): number {
@@ -2523,7 +2465,8 @@ function drawGrid(
        * pack when it is already yours. Dragging still takes it, which is how
        * you loot a stack of ham rather than biting one off it. */
       const consumable = !nested && !ITEMS[kind].slot
-        && !!(ITEMS[kind].heal || ITEMS[kind].food || ITEMS[kind].crystal || ITEMS[kind].boost);
+        && !!(ITEMS[kind].heal || ITEMS[kind].food || ITEMS[kind].crystal
+          || ITEMS[kind].testLevel || ITEMS[kind].testSkill);
       p.hotspots.push({
         x: cx, y: cy, w: cell, h: cell,
         fn: () => (p.ui.lookMode ? p.act.look(kind)
@@ -2836,4 +2779,74 @@ function drawExchange(p: PanelInput): void {
 
   hudText(hud, "no fee - counted across your whole backpack",
     x + w / 2, y + h - 7 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
+}
+
+/* ---------------- TEST window (/test) ---------------- */
+
+/**
+ * TEST ONLY — a grid of the entire catalog, one slot's worth for a gold:
+ * a full stack of anything that stacks, a single piece of anything that does
+ * not.
+ *
+ * This exists so a feature can be exercised without first farming for it: 500
+ * steel is a legitimate evening of play and a ridiculous prerequisite for
+ * checking that a panel lays out correctly.
+ *
+ * It used to be a fourth tab on the Forge, which put a cheat next to a real
+ * crafting bench and made the Forge window a page taller than its own content.
+ * It is a window of its own now with no button anywhere in the HUD: `/test`
+ * typed into the chat is the only way to open it, the same shape as `/tp`.
+ * Still deliberately loud — red heading, "TEST" in the title — so it cannot be
+ * mistaken for a shop.
+ */
+export const TEST_KINDS = Object.keys(ITEMS) as ItemKind[];
+const TEST_COLS = 10;
+const TEST_ROWS = 8;
+const TEST_PER_PAGE = TEST_COLS * TEST_ROWS;
+
+function drawTest(p: PanelInput): void {
+  const { hud, player, ui } = p;
+  const S = hud.scale;
+  const pages = Math.ceil(TEST_KINDS.length / TEST_PER_PAGE);
+  ui.testPage = ((ui.testPage % pages) + pages) % pages;
+
+  const w = 292 * S;
+  const cell = (w - 20 * S) / TEST_COLS;
+  const h = 20 * S + 13 * S + TEST_ROWS * cell + 20 * S;
+  const { x, y } = anchor(p, w, h);
+  if (!goldPanel(p, x, y, w, h, "TEST")) return;
+
+  let ry = y + 20 * S;
+  hudText(hud, "TEST — click an item for a stack @ 1 gold", x + w / 2, ry, 8 * S, "#e08a7a", "center", true);
+  // page arrows
+  const ay = ry - 1 * S;
+  for (const [glyph, dir, ax] of [["<", -1, x + 10 * S], [">", 1, x + w - 22 * S]] as const) {
+    hud.ctx.fillStyle = "rgba(0,0,0,.3)";
+    hud.ctx.fillRect(ax, ay, 12 * S, 11 * S);
+    hudText(hud, glyph, ax + 6 * S, ay + 2 * S, 8 * S, "#e8dcc0", "center", true);
+    const d = dir;
+    p.hotspots.push({ x: ax, y: ay, w: 12 * S, h: 11 * S, fn: () => { ui.testPage += d; } });
+  }
+  hudText(hud, `${ui.testPage + 1}/${pages}`, x + w - 34 * S, ry, 7 * S, "rgba(220,214,190,.6)", "right");
+  ry += 13 * S;
+
+  const start = ui.testPage * TEST_PER_PAGE;
+  for (let i = 0; i < TEST_PER_PAGE; i++) {
+    const kind = TEST_KINDS[start + i];
+    if (!kind) break;
+    const cx = x + 10 * S + (i % TEST_COLS) * cell;
+    const cy = ry + Math.floor(i / TEST_COLS) * cell;
+    const hot = hovering(p, cx, cy, cell - 1 * S, cell - 1 * S);
+    hud.ctx.fillStyle = hot ? "rgba(202,162,58,.25)" : "rgba(0,0,0,.22)";
+    hud.ctx.fillRect(cx, cy, cell - 1 * S, cell - 1 * S);
+    const spr = itemSprite(kind);
+    const sc = Math.max(1, Math.floor((cell - 4 * S) / iconH(spr, 1)));
+    icon(p, spr, cx + (cell - 1 * S - iconH(spr, sc)) / 2, cy + (cell - 1 * S - iconH(spr, sc)) / 2, sc);
+    if (hot) hudText(hud, ITEMS[kind].name, x + w / 2, y + h - 9 * S, 8 * S, "#ffe9a8", "center", true);
+    const k = kind;
+    p.hotspots.push({ x: cx, y: cy, w: cell - 1 * S, h: cell - 1 * S, fn: () => p.act.testGrant(k) });
+  }
+  if (player.gold < 1) {
+    hudText(hud, "(no gold)", x + w / 2, y + h - 9 * S, 8 * S, "#d96a5a", "center");
+  }
 }

@@ -654,15 +654,30 @@ export const SPR = {
     "..WW..WW..",
     "..kk..kk..",
   ]),
-  // TEST item: the Dopalacz — a fizzing violet-gold brew, unmistakable in the bag
-  boosterPotion: bake([
-    "..y..",
-    ".kyk.",
-    ".uuu.",
-    "uUuuu",
-    "uuyuu",
-    ".uuu.",
-  ]),
+  /* TEST items: the two stones `/test` hands out.
+   *
+   * Drawn to be read apart at twelve pixels and to look like nothing else in
+   * the catalog, because a test item that resembles loot ends up in a real
+   * bag. Both are cut gems with a mark on the face: an arrow climbing for the
+   * level, three rungs for the skills. */
+  levelStone: bake([
+    "..ccc..",
+    ".cwCwc.",
+    "cwCCCwc",
+    "cCCCCCc",
+    "cwwCwwc",
+    ".cwCwc.",
+    "..ccc..",
+  ], { c: "#8a5a12", w: "#e3b341", C: "#fff4d0" }),
+  skillStone: bake([
+    "..bbb..",
+    ".bMMMb.",
+    "bmmmmmb",
+    "bMMMMMb",
+    "bmmmmmb",
+    ".bMMMb.",
+    "..bbb..",
+  ], { b: "#1d4f6b", m: "#4fb6e0", M: "#eafaff" }),
   // Chronos the Time Sage — the wizard under Bonetown. Slate star-hat, white
   // beard down the chest, ice-pale robe. Only a stand-in: the LPC walk sheet
   // (public/npc-timesage.png) replaces him the moment it loads.
@@ -1362,7 +1377,7 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   shadowEclipseArrow: elementalArrow("shadow", 2),
   bow: SPR.bow, longbow: SPR.longbow, arrow: SPR.arrow, boneArrow: SPR.boneArrow,
   trainingArrow: SPR.trainingArrow,
-  backpack: SPR.pack, booster: SPR.boosterPotion,
+  backpack: SPR.pack, levelStone: SPR.levelStone, skillStone: SPR.skillStone,
   goldCoin: SPR.coin, platinumCoin: SPR.platinumCoin,
 };
 

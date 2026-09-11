@@ -1312,7 +1312,7 @@ async function main(): Promise<void> {
         .document.createElement("canvas").getContext("2d"),
       scale: 2, screenW: 800, screenH: 600, touchInput: false,
     } as never;
-    for (const kind of ["forge", "build", "tower", "bag", "skills"]) {
+    for (const kind of ["forge", "build", "tower", "bag", "skills", "test", "exchange"]) {
       const ui = {
         windows: [{ kind, offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
         npc: null, stash: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
@@ -1326,7 +1326,7 @@ async function main(): Promise<void> {
       ok(threw === "", `the ${kind} panel draws without throwing${threw ? " — " + threw : ""}`);
     }
     // …and each forge tab in turn, since only one is drawn per frame
-    for (const tab of ["craft", "smelt", "gems", "test"] as const) {
+    for (const tab of ["craft", "smelt", "gems"] as const) {
       const ui = {
         windows: [{ kind: "forge", offset: { x: 0, y: 0 } }], placing: null, selSlot: null,
         loot: null, npc: null, stash: null, shopTab: "buy", forgeTab: tab, testPage: 0,
@@ -1382,7 +1382,21 @@ async function main(): Promise<void> {
     ok(T.isResearched("recall"), "Recall is stocked from the first visit — the price is the gate");
     ok(!T.isResearched("life"), "…while Life still has to be researched once");
 
-    // TEST grid: every single item is reachable, none listed twice
+    /* TEST grid: every single item is reachable, none listed twice — and it
+     * is a WINDOW now, not a forge tab. The forge is a crafting bench a player
+     * uses for real; a cheat sitting on it as a fourth tab was one misclick
+     * from a ruined character, and it made the window a page taller than its
+     * own content. `/test` is the only opener, exactly like `/tp`. */
+    const fs24c = await import("node:fs");
+    const panelsSrc24c = fs24c.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
+    ok(!panelsSrc24c.includes('{ id: "test", label: "TEST"'), "the forge has no TEST tab any more");
+    ok(!panelsSrc24c.includes("function forgeTest"), "…and no forge-tab body left behind");
+    ok(panelsSrc24c.includes('case "test": drawTest(p); break;'), "…the grid draws as its own window");
+    const mainSrc24c = fs24c.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(/=== "\/test"[\s\S]{0,120}openWindow\("test"\)/.test(mainSrc24c),
+      "typing /test in the chat opens it");
+    ok(mainSrc24c.includes('=== "/tp"'), "…alongside the /tp escape hatch, which is untouched");
+
     const kinds = panels as never as { TEST_KINDS: string[] };
     ok(kinds.TEST_KINDS.length === Object.keys(items.ITEMS).length,
       `the TEST grid covers the whole catalog (${kinds.TEST_KINDS.length})`);
@@ -2766,17 +2780,32 @@ async function main(): Promise<void> {
       "…and it closes itself when you walk away from him");
   }
 
-  console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");
+  console.log("Etap 11 — backpacks, the test stones & shop stock:");
   {
     ok(items.ITEMS.backpack.pack?.slots === cfgBagSize && items.ITEMS.backpack.stack === 1,
       "a Backpack is a container of its own, BAG_SIZE slots wide");
-    ok(items.ITEMS.booster.boost === true, "the Dopalacz carries the boost flag");
-    const br = items.RECIPES.find((r) => r.out === "booster")!;
-    ok(!!br && br.gold === 1 && Object.keys(br.cost).length === 0,
-      "the Dopalacz forges for 1 gold and nothing else");
-    const bag = items.emptyBag();
-    ok(items.craft(bag, br) && items.bagCount(bag, "booster") === 1,
-      "crafting it lands one in the bag (gold is charged by the forge)");
+
+    // ---- the Dopalacz is GONE, catalog and forge alike ----
+    ok(!("booster" in items.ITEMS), "the Dopalacz is no longer an item at all");
+    ok(!items.RECIPES.some((r) => r.out === ("booster" as never)),
+      "…and nothing in the forge still makes one");
+    ok(items.RECIPES.every((r) => !!r.cost && Object.keys(r.cost).length > 0),
+      "…leaving no gold-only recipe on the CRAFT tab");
+
+    // ---- the two stones that replaced it ----
+    ok(items.ITEMS.levelStone.testLevel === 1, "the Level Stone is worth exactly one level");
+    ok(items.ITEMS.skillStone.testSkill === 3, "the Skill Stone is worth three points of every skill");
+    ok(!items.ITEMS.levelStone.testSkill && !items.ITEMS.skillStone.testLevel,
+      "…and neither stone does the other's job — two dials, not one lump");
+    ok(items.ITEMS.levelStone.value === 0 && items.ITEMS.skillStone.value === 0,
+      "…both worthless to a shopkeeper, so neither can be sold into the economy");
+    for (const k of ["levelStone", "skillStone"] as const) {
+      ok(!items.RECIPES.some((r) => r.out === k), `${items.ITEMS[k].name} is not craftable`);
+      const { SHOPS: S11 } = await import("../src/entities/npcs.ts");
+      ok(!Object.values(S11).some((sh) => sh?.entries.some((e) => e.kind === k)),
+        `…and no shop stocks or buys the ${items.ITEMS[k].name}`);
+    }
+
     const { SHOPS } = await import("../src/entities/npcs.ts");
     ok(!!SHOPS.smith?.entries.find((e) => e.kind === "backpack" && e.buy === 40),
       "the smith sells Backpacks for 40g");
@@ -9305,7 +9334,7 @@ async function main(): Promise<void> {
     /* Fractional scales are what the per-window zoom actually produces, and
      * they are where a rounding bug in the bevels would surface. */
     for (const scale of [1, 2, 1.7]) {
-      for (const kind of ["build", "skills", "equip", "bag", "quest", "forge", "tower", "tasks", "wardrobe"]) {
+      for (const kind of ["build", "skills", "equip", "bag", "quest", "forge", "tower", "tasks", "wardrobe", "test", "exchange"]) {
         const ui = {
           windows: [{ kind, offset: { x: 0, y: 0 } }], placing: null, selSlot: null, loot: null,
           npc: null, stash: null, floor: null, shopTab: "buy", forgeTab: "craft", testPage: 0,
