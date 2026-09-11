@@ -473,7 +473,7 @@ export interface Corpse {
 }
 
 /** Town NPC kinds. */
-export type NpcKey = "smith" | "herbalist" | "elder" | "taskmaster" | "tailor" | "timesage";
+export type NpcKey = "smith" | "herbalist" | "elder" | "taskmaster" | "tailor" | "timesage" | "morgan";
 
 /** Facing of a townsperson — the LPC sheet's row order. */
 export type NpcDir = "up" | "left" | "down" | "right";

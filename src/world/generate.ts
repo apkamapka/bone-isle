@@ -19,6 +19,10 @@ export const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement
   ["elder", "Elder Oswin", SPR.npcElder, 1],
   ["taskmaster", "Grizelda the Huntress", SPR.npcTaskmaster, 1],
   ["tailor", "Vesper the Tailor", SPR.npcTailor, 1],
+  // The money changer. He paces the same 3x3 box as the other stallholders —
+  // and, like them, stands perfectly still for as long as his window is open,
+  // because an open panel holds `talk` and a talking townsperson never steps.
+  ["morgan", "Morgan the Changer", SPR.npcMorgan, 1],
   // Rooted by default — the cellar copy never moves. The town copy overrides
   // the beat in its own spec (four tiles east and west, one row).
   ["timesage", "Chronos the Time Sage", SPR.npcTimesage, 0],

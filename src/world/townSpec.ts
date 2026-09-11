@@ -153,7 +153,7 @@ const TOWN_ROWS: readonly string[] = [
   "~~~~~~~~~~:::::::::::::::::::.~~~~...T.T::::p::::q::::r:::::::::::::::::P:::~~~~~~~~~..........~~~~~~~~~~~",
   "~~~~~~~~~~::::::::::::::::::..~~~~..TR..:e::::::::::::::::::::::::::::::::::~~~~~~~~~~....F....~~~~~~~~~~~",
   "~~~~~~~~~~:::::::::::::::::....~~~..TTT.:::::::::::::::::::::::::::::::::::.~~~~~~~~~~~........~~~~~~~~~~~",
-  "~~~~~~~~~~.:::::::::::::::.R...~~~......:::::s::::t::::h:::::::::::::::.::..~~~~~~~~~~~~.......~~~~~~~~~~~",
+  "~~~~~~~~~~.:::::::::::::::.R...~~~......:::::s::::t::::h::::b::::::::::.::..~~~~~~~~~~~~.......~~~~~~~~~~~",
   "~~~~~~~~~~..:::::::::::::......~~~~.....:::::::::::::::::::::::::::::::.T...~~~~~~~~~~~~~......~~~~~~~~~~~",
   "~~~~~~~~~~...R::::::RR....T..T.~~~~.....:::::::::::::::::::::::::::::::.....~~~~~~~~~~~~~~.....~~~~~~~~~~~",
   "~~~~~~~~~~~..T.T.......T........~~~~..T.:::::::::::::::::::::::::::::::oT..~~~~~~~~~~~~~~~~w..~~~~~~~~~~~~",
@@ -346,6 +346,10 @@ export const TOWN_SPEC: HandmadeSpec = {
   },
   npcs: {
     s: "smith", t: "tailor", h: "herbalist", g: "taskmaster", e: "elder",
+    // Morgan the Changer, fourth along the same market row as the smith, the
+    // tailor and the herbalist — five tiles on, the spacing that row already
+    // keeps, and far enough from Mira that their beats cannot touch.
+    b: "morgan",
     // Chronos keeps his own island. Four tiles by four, off the corner the pin
     // put him on, so he drifts around the trapdoor without ever leaving it.
     z: { key: "timesage", beat: { west: 1, east: 2, north: 1, south: 2 }, floor: Tile.Dirt },

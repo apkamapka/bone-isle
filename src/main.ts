@@ -57,7 +57,7 @@ import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } fro
 import { nextEntityId, byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { TARGET_SEEK_PX, MIN_ELEMENTAL_DAMAGE } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
-import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, exchangeCoinSlot } from "./items.ts";
+import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, exchangeCoins } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
   SELF, activeChannel, bubbleFor, formatLine, lineAlpha, logServer,
@@ -481,6 +481,7 @@ function defaultOffset(kind: PanelKind): { x: number; y: number } {
     case "stash": return { x: 40 * S, y: 20 * S };
     case "tasks": return { x: 20 * S, y: -20 * S };
     case "wardrobe": return { x: 0, y: 10 * S };
+    case "exchange": return { x: 10 * S, y: 0 };
     case "loot": return { x: 60 * S, y: 40 * S };
     default: return { x: 0, y: 0 };
   }
@@ -847,7 +848,7 @@ const act: PanelActions = {
   navUp: (ref: ContainerRef) => { navUp(ref); },
   removePack: () => { dropWornPack(); },
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => { splitConfirm(mode); },
-  exchangeSplit: () => { exchangeSplit(); },
+  exchangeCoins: (to: "goldCoin" | "platinumCoin", n: number) => { runCoinExchange(to, n); },
   readLore: (id: string) => {
     openDialogue({ titleKey: `lore.title.${id}`, bodyKey: `lore.${id}` });
   },
@@ -1714,26 +1715,6 @@ function splitConfirm(mode: "store" | "take" | "drop" | "throw" | "move"): void 
   ui.split = null;
 }
 
-/**
- * The quantity dialog's own Exchange button. Exists because a touch that
- * starts on an inventory slot claims a potential drag on `touchstart` (see
- * `initTouch`'s `drag.probe`) and so never starts the long-press timer at
- * all — the right-click/long-press menu's "Change to platinum/gold" entry is
- * consequently unreachable by touch. This dialog is the one place touch
- * already lands on a multi-coin stack (see `openMoveChooser`), so the same
- * exchange is offered here too rather than needing a second gesture invented
- * just for phones. Ignores the chosen quantity — the rate is always fixed at
- * 100:1 — the same way Cancel ignores it.
- */
-function exchangeSplit(): void {
-  const sp = ui.split;
-  if (!sp) return;
-  if (sp.kind !== "goldCoin" && sp.kind !== "platinumCoin") return;
-  const to: "goldCoin" | "platinumCoin" = sp.kind === "goldCoin" ? "platinumCoin" : "goldCoin";
-  runCoinExchange(sp.ref, sp.index, to);
-  ui.split = null;
-}
-
 import { craftAcross } from "./items.ts";
 function craftAt(r: Recipe): boolean {
   const goldCost = r.gold ?? 0;
@@ -2308,24 +2289,27 @@ function walkToPoint(at: Vec): void {
  * it, closest to the thing they act on.
  */
 /**
- * The one place gold and platinum actually change denomination: pulled out
- * so the two gestures that can reach it — the right-click/long-press menu on
- * a slot, and the mobile quantity dialog's own button (long-press never
- * fires on a slot at all; see the touch note by the quantity dialog's
- * Exchange button) — share the exact same weight check and refusal messages
- * instead of two copies drifting apart.
+ * The one place gold and platinum actually change denomination: Morgan's
+ * counter in Bonetown.
+ *
+ * It used to be a right-click on a coin slot and a button in the quantity
+ * dialog. Both are gone — a wallet that folds itself up anywhere in the world
+ * makes the weight of money meaningless, and Tibia always made you walk back
+ * to a banker for it. `n` is how many platinum coins are being made or broken;
+ * the amount buttons in the window work it out from what the bag can take.
+ *
+ * The weight check is only ever needed going DOWN: a hundred gold weigh ten
+ * ounces against the platinum coin's tenth of one. `maxExchange` applies the
+ * same limit when it sizes the Max button, so this is the backstop for x1 and
+ * x10, not the usual path.
  */
-function runCoinExchange(ref: ContainerRef, index: number, to: "goldCoin" | "platinumCoin"): void {
-  const slots = refSlots(ref);
-  if (!slots) return;
-  // only the player's own carry weight can be pushed over by this — a chest
-  // has a slot budget, not an ounce budget, and bagRoomFor inside
-  // exchangeCoinSlot already speaks for that
-  if (to === "goldCoin" && rootOf(ref) === "player") {
-    const added = ITEMS.goldCoin.weight * 100 - ITEMS.platinumCoin.weight;
+function runCoinExchange(to: "goldCoin" | "platinumCoin", n: number): void {
+  if (to === "goldCoin") {
+    const added = (ITEMS.goldCoin.weight * 100 - ITEMS.platinumCoin.weight) * n;
     if (added > freeCap(P)) { flash("too heavy", "#d96a5a"); return; }
   }
-  if (!exchangeCoinSlot(slots, index, to)) { flash("bag full", "#d96a5a"); return; }
+  if (!exchangeCoins(P.bag, to, n)) { flash("no room in bag", "#d96a5a"); return; }
+  flash(to === "platinumCoin" ? `+${n} platinum` : `+${n * 100} gold`, "#ffe9a8");
   beep(440, 0.06, "sine", 0.04);
 }
 
@@ -2350,12 +2334,10 @@ function openContextMenu(sx: number, sy: number): void {
    * used to happen by ITSELF whenever the cursor drifted over a slot, which
    * is not a gesture, it is an accident that happens to be useful sometimes.
    *
-   * Gold and platinum are the one deliberate exception, and only because
-   * changing a coin's denomination genuinely has no gesture of its own —
-   * dragging a coin does not "split" it into a different coin, the way
-   * dragging a stack of arrows splits it into two stacks of the same arrow.
-   * Radek wants this at his own hand rather than folded silently on every
-   * pickup, so it lives here as the one manual verb coins get. */
+   * Gold and platinum used to be the one deliberate exception, with an entry
+   * of their own for changing denomination. That verb moved out of the
+   * inventory entirely: it is Morgan the Changer's counter in Bonetown now,
+   * so this menu is back to describing things and nothing else. */
   for (let i = itemSlots.length - 1; i >= 0; i--) {
     const it = itemSlots[i];
     if (sx < it.x || sx >= it.x + it.w || sy < it.y || sy >= it.y + it.h) continue;
@@ -2363,13 +2345,6 @@ function openContextMenu(sx: number, sy: number): void {
     const kind = it.kind;
     const entries: MenuEntry[] = [{ verb: "look", label: `Look at ${ITEMS[kind].name}`, enabled: true,
       run: () => { ui.inspect = kind; } }];
-    if (it.ref && (kind === "goldCoin" ? it.n >= 100 : kind === "platinumCoin")) {
-      const ref = it.ref;
-      const index = it.index;
-      const to: "goldCoin" | "platinumCoin" = kind === "goldCoin" ? "platinumCoin" : "goldCoin";
-      entries.push({ verb: "use", label: to === "platinumCoin" ? "Change to platinum" : "Change to gold", enabled: true,
-        run: () => runCoinExchange(ref, index, to) });
-    }
     ctxMenu = { sx, sy, at: { x: 0, y: 0 }, entries, rects: [] };
     return;
   }
@@ -4158,7 +4133,7 @@ function nearNpc(match: (n: Npc) => boolean): boolean {
  * Refresh the "someone is talking to me" hold. A townsperson is in conversation
  * while you hold them as a target OR while the window they opened is up — the
  * shop for its own NPC, the board for the taskmaster, the wardrobe for the
- * tailor. The hold decays on its own once all of that stops being true, so
+ * tailor, the counter for Morgan. The hold decays on its own once all of that stops being true, so
  * nobody needs to remember to release it.
  */
 function tickNpcTalk(world: World): void {
@@ -4169,6 +4144,7 @@ function tickNpcTalk(world: World): void {
   if (hasWindow("shop")) hold(ui.npc);
   if (hasWindow("tasks")) hold(world.npcs.find((n) => n.key === "taskmaster"));
   if (hasWindow("wardrobe")) hold(world.npcs.find((n) => n.key === "tailor"));
+  if (hasWindow("exchange")) hold(world.npcs.find((n) => n.key === "morgan"));
 }
 
 let proximityT = 0;
@@ -4194,6 +4170,7 @@ function tickProximityPanels(dt: number): void {
     ["shop", () => !!ui.npc && cw().npcs.includes(ui.npc) && nearNpc((n) => n === ui.npc)],
     ["tasks", () => nearNpc((n) => n.key === "taskmaster")],
     ["wardrobe", () => nearNpc((n) => n.key === "tailor")],
+    ["exchange", () => nearNpc((n) => n.key === "morgan")],
     ["loot", () => !!ui.loot && cw().corpses.includes(ui.loot)
       && withinReach(ui.loot.x, ui.loot.y)],
     ["floor", () => !!ui.floor && cw().ground.includes(ui.floor)
@@ -4831,6 +4808,7 @@ function resolveTarget(): void {
     if (!n) { P.target = null; return; }
     if (n.key === "taskmaster") { openWindow("tasks"); }
     else if (n.key === "tailor") { openWindow("wardrobe"); }
+    else if (n.key === "morgan") { openWindow("exchange"); }
     /* Chronos stands in two places, and only ONE of them gives missions.
      *
      * The plaza is a signpost: he greets you and points at the trapdoor, and

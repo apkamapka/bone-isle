@@ -826,32 +826,63 @@ export function walletValue(bag: Bag): number {
 }
 
 /**
- * Change one slot's coins by hand: a hundred gold for the platinum coin they
- * are worth, or a platinum coin for the hundred gold it is worth. Tibia made
- * this a trip to a banker; here it is a right-click, but it is still a
- * choice the player makes, not something that happens to their wallet on its
- * own — a run of loot sits exactly as looted until they say otherwise.
+ * Change coins by hand, anywhere in the bag: `n` platinum minted out of `n`
+ * hundred gold, or `n` platinum broken back into `n` hundred gold.
  *
- * Returns false, touching nothing, when the slot is not the right coin, does
- * not hold enough of it, or the result has nowhere to go — a full bag keeps
- * its coins exactly as they were rather than losing the difference.
+ * Tibia made this a trip to a banker and so does this game now — Morgan the
+ * Changer in Bonetown is the only door to it, which is why the amount is a
+ * parameter rather than one slot's whole stack. Coins are drawn from the bag
+ * and every pack nested inside it, shallow first, the way every other cost in
+ * the game is paid.
+ *
+ * All or nothing, and rehearsed on a copy first: a bag that cannot hold what
+ * comes back keeps exactly the coins it had rather than losing the difference.
  */
-export function exchangeCoinSlot(bag: Bag, index: number, to: "goldCoin" | "platinumCoin"): boolean {
-  const cell = bag[index];
+export function exchangeCoins(bag: Bag, to: "goldCoin" | "platinumCoin", n: number): boolean {
+  if (!Number.isFinite(n) || n <= 0) return false;
   const from: ItemKind = to === "platinumCoin" ? "goldCoin" : "platinumCoin";
-  const take = to === "platinumCoin" ? 100 : 1;
-  const give = to === "platinumCoin" ? 1 : 100;
-  if (!cell || cell.kind !== from || cell.n < take) return false;
-  // the slot being spent from empties out exactly when the rate divides it
-  // evenly — check room as it will be AFTER that, not as it is now, so the
-  // very last hundred in a full bag can still become the coin it is worth
-  const willFreeSlot = cell.n === take;
-  const probe = willFreeSlot ? bag.map((s, i) => (i === index ? null : s)) : bag;
-  if (!bagRoomFor(probe, to, give)) return false;
-  cell.n -= take;
-  if (cell.n <= 0) bag[index] = null;
+  const take = to === "platinumCoin" ? n * 100 : n;
+  const give = to === "platinumCoin" ? n : n * 100;
+  if (bagCount(bag, from) < take) return false;
+  // spend BEFORE receiving, on the copy as well as for real: the hundred gold
+  // going out frees the very cell the platinum coming back needs
+  const probe = cloneBag(bag);
+  if (!removeItem(probe, from, take)) return false;
+  if (addItem(probe, to, give) !== 0) return false;
+  removeItem(bag, from, take);
   addItem(bag, to, give);
   return true;
+}
+
+/**
+ * The largest exchange this bag can actually take right now.
+ *
+ * Three limits, and the smallest wins: the coins you own, the room that comes
+ * back (a hundred gold needs a cell a single platinum does not), and — going
+ * DOWN only — what your arms can carry, since a platinum coin weighs a tenth
+ * of an ounce and the hundred gold it is worth weigh ten. `freeOz` is the
+ * player's remaining capacity; leave it out for a bag nobody is carrying.
+ *
+ * Room is found by bisection rather than arithmetic because room is not
+ * linear: nested packs, partial stacks and the cells the payment itself
+ * empties all move it.
+ */
+export function maxExchange(bag: Bag, to: "goldCoin" | "platinumCoin", freeOz = Infinity): number {
+  const from: ItemKind = to === "platinumCoin" ? "goldCoin" : "platinumCoin";
+  const per = to === "platinumCoin" ? 100 : 1;
+  let hi = Math.floor(bagCount(bag, from) / per);
+  if (to === "goldCoin") {
+    const added = ITEMS.goldCoin.weight * 100 - ITEMS.platinumCoin.weight;
+    hi = Math.min(hi, added > 0 ? Math.floor(freeOz / added) : hi);
+  }
+  if (hi <= 0) return 0;
+  let lo = 0;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (exchangeCoins(cloneBag(bag), to, mid)) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
 }
 
 /** Room enough to receive `gp` worth of coin, once it is folded up? */

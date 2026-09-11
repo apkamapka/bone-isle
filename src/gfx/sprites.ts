@@ -636,6 +636,24 @@ export const SPR = {
     "..uU..Uu..",
     "..kk..kk..",
   ]),
+  // Morgan the Changer — Bonetown's money changer. Black tophat, pale frock
+  // coat, gold moustache. A stand-in only: the LPC walk sheet
+  // (public/npc-morgan.png) replaces him the moment it loads.
+  npcMorgan: bake([
+    "..kkkkkk..",
+    ".kkkkkkkk.",
+    ".kssssssk.",
+    ".ksessesk.",
+    "..ssyyss..",
+    ".WWWWWWWW.",
+    "sWWWyWWWWs",
+    ".WWWWWWWW.",
+    ".WWyWWyWW.",
+    "..WWWWWW..",
+    ".WWWWWWWW.",
+    "..WW..WW..",
+    "..kk..kk..",
+  ]),
   // TEST item: the Dopalacz — a fizzing violet-gold brew, unmistakable in the bag
   boosterPotion: bake([
     "..y..",
@@ -1359,7 +1377,7 @@ const ACTORS = [
   "orcArcher", "orcWarrior", "minotaurArcher", "orcShaman",
   "orcBerserker", "minotaurGuard", "minotaurMage", "dragon",
   "corpse", "npcSmith", "npcHerbalist", "npcElder",
-  "npcTailor", "npcTaskmaster", "npcTimesage",
+  "npcTailor", "npcTaskmaster", "npcTimesage", "npcMorgan",
 ] as const;
 
 {

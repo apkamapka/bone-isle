@@ -1859,7 +1859,7 @@ async function main(): Promise<void> {
     const town = makeHandmadeWorld(TOWN_SPEC);
     const tailor = town.npcs.find((n) => n.key === "tailor");
     ok(!!tailor, "Vesper is placed on the town map");
-    ok(town.npcs.length === 6, "all six town NPCs parse from the grid");
+    ok(town.npcs.length === 7, "all seven town NPCs parse from the grid");
     const { SHOPS } = await import("../src/entities/npcs.ts");
     ok(!SHOPS.tailor, "the tailor runs the wardrobe, not a shop");
     ok(!!SHOPS.smith?.entries.find((e) => e.kind === "trainingArrow" && e.buy === 1 && e.sell === 0),
@@ -1880,7 +1880,7 @@ async function main(): Promise<void> {
       const road = findPath(town, toTile(n.x), toTile(n.y), toTile(plaza.x), toTile(plaza.y));
       ok(road.length > 0, `${n.name} can walk to the gate (${road.length} steps)`);
     }
-    ok(town.npcs.length === 6, "every townsperson is on the map");
+    ok(town.npcs.length === 7, "every townsperson is on the map");
 
     /* LEVEL GATES, tested WITHOUT the Bone Sanctum.
      *
@@ -2656,41 +2656,49 @@ async function main(): Promise<void> {
     ok(body.some((q) => q?.kind === "platinumCoin"),
       "…folded, so looting a dragon does not cost you 21 oz of pockets");
 
-    // ---- gold and platinum change denomination by hand now, not silently.
-    // exchangeCoinSlot is the one place that math lives — a hundred gold for
-    // the platinum coin they are worth, or back — and giveGold/takeGold no
-    // longer fold anything on their own; the coins a payout hands over are
-    // whatever its own largest-denomination-first loop produces, full stop.
+    // ---- gold and platinum change denomination at Morgan's counter, and
+    // nowhere else. `exchangeCoins` is the one place that math lives — a
+    // hundred gold for the platinum coin they are worth, or back — and
+    // giveGold/takeGold still fold nothing on their own.
     const bag27 = items.emptyBag();
     bag27[0] = { kind: "goldCoin", n: 150 };
-    ok(items.exchangeCoinSlot(bag27, 0, "platinumCoin"), "150 gold changes up on request");
-    ok(bag27[0]?.kind === "goldCoin" && bag27[0].n === 50, "…leaving the 50 that didn't fit the rate behind");
-    ok(items.bagCount(bag27, "platinumCoin") === 1, "…as one platinum coin, in a cell of its own");
+    ok(items.exchangeCoins(bag27, "platinumCoin", 1), "150 gold makes one platinum on request");
+    ok(items.bagCount(bag27, "goldCoin") === 50, "…leaving the 50 that didn't fit the rate behind");
+    ok(items.bagCount(bag27, "platinumCoin") === 1, "…as one platinum coin");
 
-    const exact27 = items.emptyBag();
-    exact27[0] = { kind: "goldCoin", n: 100 };
-    ok(items.exchangeCoinSlot(exact27, 0, "platinumCoin"), "exactly 100 changes up too");
-    ok(exact27[0]?.kind === "platinumCoin" && exact27[0].n === 1,
-      "…emptying the cell it came from and landing the platinum right back in it");
-    ok(items.bagCount(exact27, "platinumCoin") === 1, "…for the one platinum coin it's worth");
+    const many27 = items.emptyBag();
+    many27[0] = { kind: "goldCoin", n: 100 };
+    many27[1] = { kind: "goldCoin", n: 100 };
+    many27[2] = { kind: "goldCoin", n: 70 };
+    ok(items.exchangeCoins(many27, "platinumCoin", 2), "an amount larger than one is served in one go");
+    ok(items.bagCount(many27, "platinumCoin") === 2 && items.bagCount(many27, "goldCoin") === 70,
+      "…drawn across the stacks it took to pay for it");
 
     const back27 = items.emptyBag();
-    back27[0] = { kind: "platinumCoin", n: 1 };
-    ok(items.exchangeCoinSlot(back27, 0, "goldCoin"), "a platinum coin changes back down on request");
-    ok(back27[0]?.kind === "goldCoin" && back27[0].n === 100,
-      "…into exactly the hundred gold it's worth, filling the same cell it left");
+    back27[0] = { kind: "platinumCoin", n: 3 };
+    ok(items.exchangeCoins(back27, "goldCoin", 2), "platinum changes back down on request");
+    ok(items.bagCount(back27, "goldCoin") === 200 && items.bagCount(back27, "platinumCoin") === 1,
+      "…into exactly the two hundred gold they're worth, the third coin untouched");
+
+    // the rate is symmetrical and free: nothing is skimmed in either direction
+    const rate27 = items.emptyBag();
+    rate27[0] = { kind: "goldCoin", n: 100 };
+    items.exchangeCoins(rate27, "platinumCoin", 1);
+    items.exchangeCoins(rate27, "goldCoin", 1);
+    ok(items.walletValue(rate27) === 100, "a round trip through Morgan costs nothing — no fee either way");
 
     const short27 = items.emptyBag();
     short27[0] = { kind: "goldCoin", n: 50 };
-    ok(!items.exchangeCoinSlot(short27, 0, "platinumCoin"), "50 gold is not enough to change up");
+    ok(!items.exchangeCoins(short27, "platinumCoin", 1), "50 gold is not enough to change up");
     ok(short27[0]?.n === 50, "…and a refusal touches nothing");
+    ok(!items.exchangeCoins(short27, "platinumCoin", 0), "nor is a nonsense amount served");
 
     // a bag with no room anywhere else: 150 up leaves 50 behind in the same
     // cell, so the new platinum coin has nowhere at all to land
     const jammed27 = items.emptyBag();
     jammed27[0] = { kind: "goldCoin", n: 150 };
     for (let i = 1; i < jammed27.length; i++) jammed27[i] = { kind: "ironSword", n: 1 };
-    ok(!items.exchangeCoinSlot(jammed27, 0, "platinumCoin"),
+    ok(!items.exchangeCoins(jammed27, "platinumCoin", 1),
       "a full bag refuses a change that can't fully clear the cell it started in");
     ok(jammed27[0]?.n === 150, "…and a refusal here touches nothing either");
 
@@ -2699,33 +2707,63 @@ async function main(): Promise<void> {
     const tight27 = items.emptyBag();
     tight27[0] = { kind: "goldCoin", n: 100 };
     for (let i = 1; i < tight27.length; i++) tight27[i] = { kind: "ironSword", n: 1 };
-    ok(items.exchangeCoinSlot(tight27, 0, "platinumCoin"),
+    ok(items.exchangeCoins(tight27, "platinumCoin", 1),
       "a full bag still allows the one change that empties its own cell exactly");
-    ok(tight27[0]?.kind === "platinumCoin" && tight27[0].n === 1, "…landing the platinum right where the gold was");
+    ok(items.bagCount(tight27, "platinumCoin") === 1, "…landing the platinum where the gold was");
 
-    // the right-click menu that calls this lives in DOM-bound main.ts, so it
-    // is checked the way this suite already checks such code: on its source
-    // text, for both the labels and the fold's total absence.
+    // coins in a pack inside the pack count too — the window says "across your
+    // whole backpack" and means it
+    const nested27 = items.emptyBag();
+    const pack27 = items.newContainer("backpack")!;
+    pack27.items![0] = { kind: "goldCoin", n: 100 };
+    nested27[0] = pack27;
+    ok(items.exchangeCoins(nested27, "platinumCoin", 1), "gold in a nested pack is reachable");
+    ok(items.bagCount(nested27, "platinumCoin") === 1 && items.bagCount(nested27, "goldCoin") === 0,
+      "…spent from where it lay");
+
+    // ---- maxExchange: coins owned, room in the bag, and weight going down ----
+    const cap27 = items.emptyBag();
+    cap27[0] = { kind: "goldCoin", n: 100 };
+    cap27[1] = { kind: "goldCoin", n: 100 };
+    cap27[2] = { kind: "goldCoin", n: 50 };
+    ok(items.maxExchange(cap27, "platinumCoin") === 2, "Max up is what the coins actually buy");
+    const down27 = items.emptyBag();
+    down27[0] = { kind: "platinumCoin", n: 5 };
+    ok(items.maxExchange(down27, "goldCoin") === 5, "Max down is every platinum, given room and capacity");
+    ok(items.maxExchange(down27, "goldCoin", 20) === 2,
+      "…but arms come first: 9.9 oz per coin means 20 oz free buys two");
+    ok(items.maxExchange(down27, "goldCoin", 0) === 0, "…and nothing at all when nothing can be carried");
+    ok(items.maxExchange(items.emptyBag(), "platinumCoin") === 0, "an empty purse offers no exchange");
+
+    // ---- and the ONE door to it: Morgan, in Bonetown ----
+    const { makeHandmadeWorld: mkw27, TOWN_SPEC: TS27 } = await import("../src/world/handmade.ts");
+    const town27 = mkw27(TS27);
+    const morgan27 = town27.npcs.find((n) => n.key === "morgan");
+    ok(!!morgan27, "Morgan the Changer stands on the town map");
+    ok(morgan27!.name === "Morgan the Changer", "…under his own name");
+    const { SHOPS: SHOPS27 } = await import("../src/entities/npcs.ts");
+    ok(!SHOPS27.morgan, "…and he keeps a counter, not a shop");
+
+    // the window and the click that opens it live in DOM-bound main.ts, so they
+    // are checked the way this suite already checks such code: on source text.
     const fs27 = await import("node:fs");
     const mainSrc27 = fs27.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    ok(mainSrc27.includes('"Change to platinum"') && mainSrc27.includes('"Change to gold"'),
-      "the right-click menu offers both directions by name");
-    ok(mainSrc27.includes("exchangeCoinSlot("), "…calling the same exchangeCoinSlot the math above tests");
+    ok(/n\.key === "morgan"[\s\S]{0,60}openWindow\("exchange"\)/.test(mainSrc27),
+      "clicking Morgan opens the exchange window");
+    ok(mainSrc27.includes("exchangeCoins(P.bag,"), "…which spends through the same exchange the math above tests");
     ok(!/consolidateCoins/.test(mainSrc27), "…and no silent fold is left anywhere in main.ts");
 
-    // touch claims any slot press as a possible drag ON CONTACT (see
-    // initTouch's drag.probe in ui/touch.ts), which means the long-press
-    // timer that opens the menu above never starts for an inventory slot —
-    // the menu entry just checked is unreachable by touch, full stop. The
-    // quantity dialog is the one place touch already lands on a multi-coin
-    // stack, so the same exchange needs its own button there too.
-    ok(mainSrc27.includes("function exchangeSplit()"), "the quantity dialog has its own exchange action");
-    ok(/function exchangeSplit[\s\S]{0,400}runCoinExchange\(/.test(mainSrc27),
-      "…sharing the same weight-checked exchange the menu button calls");
+    // the two old gestures are GONE, not merely unused: a wallet that folds
+    // itself up in the wildlands would make the weight of money meaningless
+    ok(!mainSrc27.includes("Change to platinum") && !mainSrc27.includes("Change to gold"),
+      "the right-click menu no longer changes coins");
+    ok(!mainSrc27.includes("function exchangeSplit"), "…and the quantity dialog's button is gone with it");
     const panelsSrc27 = fs27.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
-    ok(panelsSrc27.includes('"Platinum"') && panelsSrc27.includes('"Gold"'),
-      "…and the dialog itself offers both directions by name");
-    ok(panelsSrc27.includes("exchangeSplit()"), "…wired to an action reachable by touch or mouse alike");
+    ok(!panelsSrc27.includes("exchangeSplit"), "…on the panel side too");
+    ok(panelsSrc27.includes('case "exchange": drawExchange(p); break;'),
+      "the exchange window is drawn from its own panel");
+    ok(/exchange["'],\s*\(\) => nearNpc\(\(n\) => n\.key === "morgan"\)/.test(mainSrc27),
+      "…and it closes itself when you walk away from him");
   }
 
   console.log("Etap 11 — backpacks, the Dopalacz & shop stock:");
@@ -3358,8 +3396,8 @@ async function main(): Promise<void> {
     ok(town.w === 106 && town.h === 106, `the town is the 106x106 grid exported from Tiled (${town.w}x${town.h})`);
     ok(town.trees.length === 451 && town.rocks.length === 230,
       `every authored tree and rock came across (${town.trees.length}/${town.rocks.length})`);
-    ok(town.npcs.length === 6, "all six townsfolk are present");
-    ok(new Set(town.npcs.map((n) => n.name)).size === 6, "…and none is a duplicate");
+    ok(town.npcs.length === 7, "all seven townsfolk are present");
+    ok(new Set(town.npcs.map((n) => n.name)).size === 7, "…and none is a duplicate");
     ok(town.portals.length === 2 && town.portals.some((p) => p.dest === "home")
       && town.portals.some((p) => p.dest === "cellar"),
       "two gates: Home Isle and the Time Sage's cellar");
@@ -4074,9 +4112,9 @@ async function main(): Promise<void> {
     const smith = town.npcs.find((n) => n.key === "smith")!;
     ok(smith !== undefined, "the smith is on the town map");
     const shopkeepers = town.npcs.filter((n) => n.key !== "timesage");
-    ok(shopkeepers.length === 5 && shopkeepers.every((n) =>
+    ok(shopkeepers.length === 6 && shopkeepers.every((n) =>
       n.bx0 === n.hx - 1 && n.bx1 === n.hx + 1 && n.by0 === n.hy - 1 && n.by1 === n.hy + 1),
-      "the five shopkeepers walk a 3x3 beat");
+      "the six stallholders walk a 3x3 beat");
     ok(town.npcs.every((n) => n.dir === "down"),
       "everyone spawns facing camera, so the first draw has a valid row");
     ok(town.npcs.every((n) => n.hx === n.tx && n.hy === n.ty),
@@ -4106,8 +4144,8 @@ async function main(): Promise<void> {
       }
     }
     ok(unwalkable === "", `every beat is walkable end to end${unwalkable && " — " + unwalkable}`);
-    // 5 shopkeepers x 9 tiles + the sage's 9-tile line
-    ok(beatTiles === 61, `every beat covers the tiles it should (${beatTiles})`);
+    // 6 stallholders x 9 tiles + the sage's 4x4 plaza
+    ok(beatTiles === 70, `every beat covers the tiles it should (${beatTiles})`);
 
     // Half a minute of pacing. Nobody may leave their beat on any single tick —
     // not merely end up back inside it — and nobody may share a square.
@@ -4129,7 +4167,7 @@ async function main(): Promise<void> {
       }
     }
     ok(strayed === "", `thirty seconds of pacing never leaves the beat${strayed && " — " + strayed}`);
-    ok(stepped.size === 6, "…and all six actually move");
+    ok(stepped.size === 7, "…and all seven actually move");
     ok(!offCentre, "…and no render position runs away from its tile");
     ok(!collided, "…and no two townsfolk ever share a square");
 

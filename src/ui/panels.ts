@@ -10,8 +10,8 @@ import { RESEARCH, isResearched, towerTierOk,
 import { ELEMENT_LABEL, ELEMENTS, type Element } from "../systems/elements.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
 import type { TaskReward } from "../systems/tasks.ts";
-import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed, walletAcross } from "../items.ts";
-import { carryCap, carriedWeight } from "../entities/player.ts";
+import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed, walletAcross, maxExchange } from "../items.ts";
+import { carryCap, carriedWeight, freeCap } from "../entities/player.ts";
 import { questList } from "../systems/quests.ts";
 import { loreRead, stageOf, currentMission } from "../systems/missions.ts";
 import { t } from "../text/speech.ts";
@@ -83,6 +83,8 @@ export function stripCandidate(windows: readonly PanelWindow[]): PanelWindow | u
 export type PanelKind =
   | "build" | "skills" | "equip" | "bag" | "quest"
   | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks" | "wardrobe"
+  /** Morgan's counter in Bonetown: the one place coins change denomination. */
+  | "exchange"
   /** A container lying on the ground — the loot bag you left by the corpses. */
   | "floor"
   /**
@@ -709,9 +711,10 @@ export interface PanelActions {
   openBag: () => void;
   cycleAmmo: () => void;
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => void;
-  /** The quantity dialog's own gold⇄platinum button — see the doc comment on
-   *  `exchangeSplit` in main.ts for why touch needs a second way in. */
-  exchangeSplit: () => void;
+  /** Mint `n` platinum out of `n` hundred gold, or break `n` platinum back
+   *  into gold. Morgan's counter is the only caller — coins have no
+   *  denomination verb of their own anywhere else in the game. */
+  exchangeCoins: (to: "goldCoin" | "platinumCoin", n: number) => void;
   /** Put a mission's chronicle back on screen. */
   readLore: (id: string) => void;
   close: (kind: PanelKind) => void;
@@ -954,7 +957,7 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   // backdrop: tapping outside the chooser cancels it (and is consumed)
   base.hotspots.push({ x: 0, y: 0, w: screenW, h: screenH, fn: () => { base.ui.split = null; } });
 
-  const acts: [string, "store" | "take" | "drop" | "throw" | "move" | "exchange"][] = [];
+  const acts: [string, "store" | "take" | "drop" | "throw" | "move"][] = [];
   if (sp.at) acts.push(["Throw", "throw"]); // target already aimed by the drag
   else if (sp.to) acts.push(["Move", "move"]); // destination already aimed by the drag
   // anything OUT in the world offers only "take": you cannot drop from a chest
@@ -965,13 +968,11 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
     acts.push(["Drop", "drop"]);
     acts.push(["Throw", "throw"]); // arm a throw: the next map tap is the target
   }
-  // gold and platinum's one manual verb, offered here too: touch claims any
-  // slot press as a possible drag on contact (see initTouch's drag.probe),
-  // so the long-press menu's matching entry never gets a chance to fire on a
-  // phone. This dialog is not gated on that at all — same button, same rate,
-  // reachable by mouse or finger either way.
-  if (sp.kind === "goldCoin" && sp.max >= 100) acts.push(["Platinum", "exchange"]);
-  else if (sp.kind === "platinumCoin") acts.push(["Gold", "exchange"]);
+  /* NO COIN VERB HERE any more. Changing denomination used to be offered in
+   * this dialog and in the long-press menu; both are gone. It is a service
+   * Morgan the Changer performs in Bonetown, at his counter, which is where
+   * Tibia always put it — a stack of gold in the wildlands is a stack of gold
+   * until you carry it back to town. */
   acts.push(["Cancel", "drop"]);
 
   const actFs = 8 * S;
@@ -980,10 +981,9 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   /* THE ROW IS SIZED FROM ITS OWN LABELS, THE SAME LESSON THE INSPECT CARD
    * LEARNED (see drawInspect above): five short verbs fit 210 design-px fine,
    * which is where that number came from, but "Platinum" next to "Cancel"
-   * does not, and a five-button chest row (Store/Drop/Throw/Platinum/Cancel)
-   * is tighter still. Measuring first and only growing the dialog when the
-   * labels actually need it keeps the common 3-button case exactly the size
-   * it always was. */
+   * does not. Measuring first and only growing the dialog when the labels
+   * actually need it keeps the common 3-button case exactly the size it
+   * always was. */
   ctx.font = hudFont(actFs, true);
   let widestAct = 0;
   for (const [lbl] of acts) widestAct = Math.max(widestAct, ctx.measureText(lbl).width);
@@ -1033,7 +1033,6 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
     const capturedMode = mode;
     base.hotspots.push({ x: ax, y: ay, w: aw, h: 15 * S, fn: () => {
       if (isCancel) { base.ui.split = null; return; }
-      if (capturedMode === "exchange") { base.act.exchangeSplit(); return; }
       base.act.splitConfirm(capturedMode);
     } });
     ax += aw + 6 * S;
@@ -1120,6 +1119,7 @@ export function drawPanels(
       case "tasks": drawTasks(p); break;
       case "stash": drawStash(p); break;
       case "wardrobe": drawWardrobe(p); break;
+      case "exchange": drawExchange(p); break;
       default: break;
     }
     if (clipDock && !(overflowing && sheet)) {
@@ -2754,4 +2754,86 @@ function drawWardrobe(p: PanelInput): void {
   hudText(hud, "Classic look", bx + bw / 2, ry + bh / 2, 7 * S, "#e8dcc0", "center", true);
   p.hotspots.push({ x: bx, y: ry, w: bw, h: bh, fn: () => p.act.resetOutfitColors() });
   hudText(hud, "Pick a zone, then a dye — free, any time", x + w / 2, y + h - 6 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
+}
+
+/* ---------------- Morgan's counter (gold ⇄ platinum) ---------------- */
+
+/**
+ * The money changer's window.
+ *
+ * The rate is the coins' own values and there is no fee: a hundred gold is a
+ * platinum coin and a platinum coin is a hundred gold, in both directions,
+ * for nothing. Morgan is not a market, he is a convenience — the point of him
+ * is the eleven pounds of pockets a fat purse costs you, not a spread.
+ *
+ * Both rows offer the same three amounts. `Max` is the interesting one: it
+ * asks `maxExchange` rather than dividing, because what you can change is
+ * limited by room in the bag and, going DOWN, by what your arms can still
+ * carry — a hundred gold weigh ten ounces where the platinum coin they
+ * replace weighs a tenth of one.
+ */
+function drawExchange(p: PanelInput): void {
+  const { hud, player } = p;
+  const { ctx, scale: S } = hud;
+
+  const gold = bagCount(player.bag, "goldCoin");
+  const plat = bagCount(player.bag, "platinumCoin");
+  const maxUp = maxExchange(player.bag, "platinumCoin", freeCap(player));
+  const maxDown = maxExchange(player.bag, "goldCoin", freeCap(player));
+
+  const w = 250 * S;
+  const purseH = 30 * S;
+  const rowH = 40 * S;
+  const h = 18 * S + purseH + rowH * 2 + 16 * S;
+  const { x, y } = anchor(p, w, h);
+  if (!goldPanel(p, x, y, w, h, "MONEY CHANGER — Morgan")) return;
+
+  // what you are carrying, in the two coins this window is about
+  let py = y + 18 * S;
+  ctx.fillStyle = "rgba(20,30,40,.5)";
+  ctx.fillRect(x + 8 * S, py, w - 16 * S, purseH - 6 * S);
+  const coinLine = (kind: "goldCoin" | "platinumCoin", cx: number, n: number): void => {
+    const spr = itemSprite(kind);
+    icon(p, spr, cx, py + (purseH - 6 * S - iconH(spr, 2 * S)) / 2, 2 * S);
+    hudText(hud, `${n}`, cx + iconW(spr, 2 * S) + 6 * S, py + (purseH - 6 * S) / 2,
+      9 * S, "#ffe9a8", "left", true);
+  };
+  coinLine("goldCoin", x + 14 * S, gold);
+  coinLine("platinumCoin", x + w / 2 + 6 * S, plat);
+  py += purseH;
+
+  // one row per direction, three amounts each
+  const row = (
+    label: string, to: "goldCoin" | "platinumCoin", cap: number,
+  ): void => {
+    hudText(hud, label, x + 12 * S, py + 8 * S, 7.5 * S, "#f3eedd", "left", true);
+    const amounts: [string, number][] = [["x1", 1], ["x10", 10], ["Max", cap]];
+    const bw = 46 * S;
+    const bh = 15 * S;
+    const gap = 8 * S;
+    let bx = x + (w - (bw * amounts.length + gap * (amounts.length - 1))) / 2;
+    const by = py + 18 * S;
+    for (const [lbl, n] of amounts) {
+      const can = n > 0 && cap >= n;
+      buttonBox(ctx, bx, by, bw, bh, S, {
+        face: can ? "rgba(30,44,30,.95)" : "rgba(48,48,48,.7)",
+        accent: can ? "#caa15a" : undefined,
+        hover: can && hovering(p, bx, by, bw, bh),
+      });
+      const text = lbl === "Max" ? (cap > 0 ? `Max ${cap}` : "Max") : lbl;
+      hudText(hud, text, bx + bw / 2, by + bh / 2, 7 * S, can ? "#ffe9a8" : "#8a8070", "center", true);
+      if (can) {
+        const amount = n;
+        const bxx = bx;
+        p.hotspots.push({ x: bxx, y: by, w: bw, h: bh, fn: () => p.act.exchangeCoins(to, amount) });
+      }
+      bx += bw + gap;
+    }
+    py += rowH;
+  };
+  row("100 Gold  ->  1 Platinum", "platinumCoin", maxUp);
+  row("1 Platinum  ->  100 Gold", "goldCoin", maxDown);
+
+  hudText(hud, "no fee - counted across your whole backpack",
+    x + w / 2, y + h - 7 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
 }

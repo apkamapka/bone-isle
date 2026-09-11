@@ -152,6 +152,7 @@ const SHEET_SRC: Record<string, string> = {
   "npc:taskmaster": "./npc-taskmaster.png",
   "npc:tailor": "./npc-tailor.png",
   "npc:timesage": "./npc-timesage.png",
+  "npc:morgan": "./npc-morgan.png",
 };
 
 type Cut = HTMLCanvasElement[][]; // [row][col]

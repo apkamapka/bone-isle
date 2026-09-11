@@ -524,6 +524,31 @@ of the ULPC project to the collections already listed above.
 itself published under **CC-BY-SA 3.0**. It must stay publicly available on
 those terms even if this repository is later made private.
 
+## Morgan the Changer
+
+`public/npc-morgan.png` comes from the same **Universal LPC Spritesheet
+Character Generator** under the same licences, packed the same way: walk rows
+8-11 only, repacked into a 9x4 grid, cropped to one 32x55 rectangle shared by
+every frame. Column 0 of each row is the standing pose he shows while you are
+at his counter. He runs the gold/platinum exchange in Bonetown.
+
+Reproducible character configuration:
+
+- Morgan the Changer —
+  <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&head=Human_Male_light&expression=Neutral_light&mustache=Chevron_Mustache_gold&hair=Cowlick_gold&shoes=Basic_Shoes_white&legs=Long_Pants_white&clothes=Longsleeve_2_Scoop_white&jacket=Frock_coat_white&hat=Formal_Tophat_base>
+
+He adds the chevron-moustache, cowlick-hair, scoop-longsleeve and formal-tophat
+layers of the ULPC project to the collections already listed above; the frock
+coat, long pants and basic shoes are shared with the townsfolk above.
+
+> **TODO before release:** download "Credits (CSV)" from the generator for this
+> configuration and paste the per-layer author list here. The URL reproduces the
+> character, but a URL is not an attribution.
+
+**ShareAlike:** this file is a derivative work of CC-BY-SA 3.0 artwork and is
+itself published under **CC-BY-SA 3.0**. It must stay publicly available on
+those terms even if this repository is later made private.
+
 ## Terrain and props
 
 `public/home-terrain.png`, `public/town-terrain.png`, `public/cellar-terrain.png`,
