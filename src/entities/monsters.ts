@@ -12,6 +12,7 @@ import { beginCast, isCasting, type MonsterSpell } from "../systems/monsterSpell
 import type { Occupied } from "../world/grid.ts";
 import type { World, Monster, MonsterKind } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
+import { elementDefenseProfile } from "../systems/elements.ts";
 import type { Resistances, Element, Tier } from "../systems/elements.ts";
 
 /** A weighted loot entry: item, drop chance, and min/max quantity. */
@@ -104,8 +105,25 @@ export interface MonsterDef {
    * means ordinary flesh (1.0 to everything). Kept sparse on purpose: if every
    * creature had a full table the player would carry five pouches and consult
    * a chart before each fight, which is bookkeeping, not a decision.
+   *
+   * Ignored when `element` below is set — see `monsterResist()`.
    */
   resist?: Resistances;
+  /**
+   * This creature's own place on the world's elemental ring, for the rare
+   * few whose fiction and their spells agree on being ONE element rather
+   * than a hand-picked set of resistances — today just the dragon (fire) and
+   * blackKnight (storm), the two with matching spells in `spells` below.
+   *
+   * When set, `monsterResist()` computes the whole resist row from the same
+   * ring every player and every elemental hit already reads, instead of
+   * `resist` above — so a fire-attuned character farming the dragon takes
+   * the same 10% everyone else's mirror match takes, not a hand-tuned number
+   * that happened to be authored before the ring existed. `resist` is left
+   * unset on these two on purpose: a stale table sitting beside `element`
+   * and never read is worse than no table at all.
+   */
+  element?: Element;
   /** Present on distance fighters: they hold ground and shoot (Tibia-style),
    *  back away when the player closes in, and fall back to `dmg` in melee. */
   ranged?: RangedDef;
@@ -125,6 +143,16 @@ export interface MonsterDef {
    * and in range, so ordering IS priority.
    */
   spells?: readonly MonsterSpell[];
+}
+
+/**
+ * A creature's resist row for one incoming element: the world ring for the
+ * handful with a declared `element`, the hand-authored table for everything
+ * else. The one place either is read, so nothing downstream has to know
+ * which of the two a given creature happens to use.
+ */
+export function monsterResist(def: MonsterDef): Resistances | undefined {
+  return def.element !== undefined ? elementDefenseProfile(def.element) : def.resist;
 }
 
 /**
@@ -1228,7 +1256,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // warning, and the whole thing read as harmless. Both were roughly halved,
   // the windups cut to a beat, and the floor overlay dropped.
   dragon: {
-    spr: SPR.dragon, hp: 1000, dmg: [41, 109], speed: 51, atkRate: 2.0, exp: 900, gold: [90, 210], danger: 0.99, armor: 28, resist: { fire: 0.25, ice: 1.6 },
+    spr: SPR.dragon, hp: 1000, dmg: [41, 109], speed: 51, atkRate: 2.0, exp: 900, gold: [90, 210], danger: 0.99, armor: 28, element: "fire",
     ranged: { range: 320, dmg: [47, 122], color: "#ff5a2a", wide: true, brute: true, fx: { el: "fire", tier: 0 } }, // dragon fire
     spells: [
       // The eight tiles touching it. `range` on a caster-anchored shape is not
@@ -1278,7 +1306,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // stops being decided by feel, and his identity does not need to rest on
   // the one stat the curve caps hardest.
   blackKnight: {
-    spr: SPR.humanFoe, hp: 950, dmg: [44, 112], speed: 58, atkRate: 2.0, exp: 880, gold: [80, 190], danger: 0.98, armor: 28, resist: { storm: 0.3, shadow: 0.6, earth: 1.35 },
+    spr: SPR.humanFoe, hp: 950, dmg: [44, 112], speed: 58, atkRate: 2.0, exp: 880, gold: [80, 190], danger: 0.98, armor: 28, element: "storm",
     ranged: { range: 300, dmg: [42, 106], color: "#7dd8ff", fx: { el: "storm", tier: 0 }, brute: true }, // arcing bolt
     spells: [
       // The ring, for when he is being hugged — same role as the dragon's
