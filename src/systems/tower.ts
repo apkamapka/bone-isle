@@ -133,6 +133,20 @@ export function attunedState(): Element[] {
   return [...attuned];
 }
 
+/**
+ * This character's own element, for anything that needs ONE identity rather
+ * than the whole set — PvP, a monster's elemental spell landing on the
+ * player, standing in an ambient field. The FIRST lane ever attuned, not the
+ * latest: `attuned` is a Set read in insertion order, and nothing in normal
+ * play removes from it or reorders it (`clearAttuned` is the developer reset
+ * above, unreachable from a real character), so this stays the same answer
+ * for as long as the character exists, even after every other lane opens
+ * too. Undefined until the first stone is ever spent.
+ */
+export function playerElement(): Element | undefined {
+  return attunedState()[0];
+}
+
 /** Restore from a save (clears any current state first). */
 export function loadAttunedState(els: readonly string[] | undefined): void {
   attuned.clear();

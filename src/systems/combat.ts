@@ -10,7 +10,7 @@ import { addFloat } from "../fx.ts";
 import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import type { Element } from "./elements.ts";
 import { nextEntityId } from "../world/entities.ts";
-import { MONSTER_DEFS, rollLoot } from "../entities/monsters.ts";
+import { MONSTER_DEFS, rollLoot, monsterResist } from "../entities/monsters.ts";
 import { missionByEcho, wantsRelic, relicTaken, extractBound } from "./missions.ts";
 import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, bagCount, newContainer, contentsOf } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
@@ -70,7 +70,7 @@ export function applyMonsterArmor(m: Monster, raw: number): number {
  * bandit would die next to. Returns true if this killed it.
  */
 export function burnMonster(world: World, p: Player, m: Monster, el: Element, raw: number): boolean {
-  const dmg = Math.max(MIN_ELEMENTAL_DAMAGE, Math.round(raw * resistanceOf(MONSTER_DEFS[m.kind].resist, el)));
+  const dmg = Math.max(MIN_ELEMENTAL_DAMAGE, Math.round(raw * resistanceOf(monsterResist(MONSTER_DEFS[m.kind]), el)));
   m.hp -= dmg;
   m.hurtT = 0.15;
   addFloat(world, m.x, m.y - 32, String(dmg), ELEMENT_COLOR[el]);
@@ -134,7 +134,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   const el = ITEMS[arrowKind].element;
   const raw = rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg));
   const dmg = el
-    ? Math.max(MIN_ELEMENTAL_DAMAGE, Math.round(raw * resistanceOf(MONSTER_DEFS[m.kind].resist, el)))
+    ? Math.max(MIN_ELEMENTAL_DAMAGE, Math.round(raw * resistanceOf(monsterResist(MONSTER_DEFS[m.kind]), el)))
     : applyMonsterArmor(m, raw);
   m.hp -= dmg;
   markBloodHit(); // you drew blood — Shielding may train for the next minute

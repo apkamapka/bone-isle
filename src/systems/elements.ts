@@ -163,3 +163,88 @@ export function crystalDamage(
   const dmg = roll * TIER_MULT[tier] * (1 + level / CRYSTAL_LEVEL_SCALE) * resistanceOf(res, el);
   return Math.max(1, Math.round(dmg));
 }
+
+/**
+ * The world rule: one rock-paper-scissors ring across all five elements,
+ * read everywhere a hit that already carries an element meets something
+ * with an elemental identity — a player's crystal or elemental arrow
+ * against another player or against a monster, a monster's own elemental
+ * spell against a player, an ambient fire field under a player's feet. A
+ * sword swing carries no element at all and never reaches this table — this
+ * file only decides the SIZE of the effect once something elemental lands,
+ * never whether a hit counts as elemental in the first place.
+ *
+ * ELEMENT_RING is the one place the wheel is spelled out: each element
+ * beats the next one round and loses to the previous one, and the two
+ * elements that are neither neighbour are a neutral matchup. A mirror match
+ * (fire vs fire) resists too, by the same edge. ELEMENT_EDGE is BUILT from
+ * the ring rather than typed out five times by hand — one direction written
+ * backwards in a hand-typed table is a bug nothing else would catch;
+ * derived from one ring, it cannot happen.
+ */
+export const ELEMENT_RING: readonly Element[] = ["fire", "shadow", "storm", "earth", "ice"];
+
+const ELEMENT_EDGE_PCT = 0.1;
+
+function buildElementEdge(ring: readonly Element[]): Readonly<Record<Element, Resistances>> {
+  const table = {} as Record<Element, Resistances>;
+  ring.forEach((el, i) => {
+    const beats = ring[(i + 1) % ring.length];
+    const losesTo = ring[(i - 1 + ring.length) % ring.length];
+    const row: Resistances = {};
+    row[beats] = 1 + ELEMENT_EDGE_PCT;
+    row[losesTo] = 1 - ELEMENT_EDGE_PCT;
+    row[el] = 1 - ELEMENT_EDGE_PCT; // mirror match: same element resists itself too
+    table[el] = row;
+  });
+  return table;
+}
+
+/** el → its one +10% matchup, its one -10% matchup, and -10% against itself
+ *  (a mirror match). The other two elements are absent from the row, which
+ *  `resistanceOf` reads as 1 — neutral. Attacker-indexed: ELEMENT_EDGE[X] is
+ *  what X does when X attacks, not what X suffers when attacked — see
+ *  `elementDefenseProfile` below for that direction. */
+export const ELEMENT_EDGE: Readonly<Record<Element, Resistances>> = buildElementEdge(ELEMENT_RING);
+
+/**
+ * Outgoing damage multiplier for one hit of element `attacker` landing on
+ * something whose own element is `defender` — a player's crystal on another
+ * player, a monster's spell on a player, a field under a player's feet.
+ * Either side without an element yet (a player who has never attuned, or a
+ * hit with no element at all) is ordinary, unmodified damage: there is
+ * nothing yet to be strong or weak against.
+ *
+ * Single-sided by design: only the attacking element's edge over the
+ * defending one is read here. The reverse fact — what the defender's OWN
+ * element would do if IT were attacking — belongs to a different blow, not
+ * a second multiplier stacked on this one.
+ */
+export function elementEdgeMultiplier(
+  attacker: Element | undefined, defender: Element | undefined,
+): number {
+  if (!attacker || !defender) return 1;
+  return resistanceOf(ELEMENT_EDGE[attacker], defender);
+}
+
+/**
+ * The flip side of ELEMENT_EDGE: not "what does X do when attacking" but
+ * "what does X suffer, across every possible incoming element" — the shape
+ * `MonsterDef.resist` already expects. Built by calling
+ * `elementEdgeMultiplier` once per incoming element rather than re-derived
+ * by hand, so it can never disagree with the ring above by a transposition
+ * mistake.
+ *
+ * This is why a storm-identified creature comes out RESISTANT to earth
+ * rather than weak to it: storm beats earth on the ring, and beating
+ * something means shrugging off its attacks, the same direction every other
+ * pair on the ring already runs.
+ */
+export function elementDefenseProfile(identity: Element): Resistances {
+  const profile: Resistances = {};
+  for (const el of ELEMENTS) {
+    const m = elementEdgeMultiplier(el, identity);
+    if (m !== 1) profile[el] = m;
+  }
+  return profile;
+}

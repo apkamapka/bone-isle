@@ -9,7 +9,7 @@ import { beep } from "../audio.ts";
 import { markBloodHit } from "./skills.ts";
 import { monsterById } from "../world/entities.ts";
 import { ELEMENTS, ELEMENT_COLOR, TIER_CODE, crystalDamage, type Element, type Tier } from "./elements.ts";
-import { MONSTER_DEFS } from "../entities/monsters.ts";
+import { MONSTER_DEFS, monsterResist } from "../entities/monsters.ts";
 import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
 import { TILE } from "../config.ts";
@@ -239,11 +239,12 @@ function caughtOn(world: World, tiles: readonly Struck[]): World["monsters"] {
 function damageWithElement(
   world: World, p: Player, m: World["monsters"][number], spec: CrystalSpec, col: string,
 ): void {
-  const dmg = crystalDamage(spec.base, spec.tier, p.level, MONSTER_DEFS[m.kind].resist, spec.element);
+  const resist = monsterResist(MONSTER_DEFS[m.kind]);
+  const dmg = crystalDamage(spec.base, spec.tier, p.level, resist, spec.element);
   m.hp -= dmg;
   m.hurtT = 0.2;
   m.aggroT = MONSTER_AGGRO_HIT_S;
-  const resisted = (MONSTER_DEFS[m.kind].resist?.[spec.element] ?? 1) < 1;
+  const resisted = (resist?.[spec.element] ?? 1) < 1;
   addFloat(world, m.x, m.y - 32, resisted ? `${dmg}!` : String(dmg), col);
   if (m.hp <= 0) killMonster(world, p, m);
 }
