@@ -953,7 +953,43 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   const { ctx, scale: S, screenW, screenH } = base.hud;
   // backdrop: tapping outside the chooser cancels it (and is consumed)
   base.hotspots.push({ x: 0, y: 0, w: screenW, h: screenH, fn: () => { base.ui.split = null; } });
-  const w = 210 * S;
+
+  const acts: [string, "store" | "take" | "drop" | "throw" | "move" | "exchange"][] = [];
+  if (sp.at) acts.push(["Throw", "throw"]); // target already aimed by the drag
+  else if (sp.to) acts.push(["Move", "move"]); // destination already aimed by the drag
+  // anything OUT in the world offers only "take": you cannot drop from a chest
+  // onto the floor in one gesture, and a corpse has nothing to store into
+  else if (rootOf(sp.ref) === "world") acts.push(["Take", "take"]);
+  else {
+    if (sp.canStore) acts.push(["Store", "store"]);
+    acts.push(["Drop", "drop"]);
+    acts.push(["Throw", "throw"]); // arm a throw: the next map tap is the target
+  }
+  // gold and platinum's one manual verb, offered here too: touch claims any
+  // slot press as a possible drag on contact (see initTouch's drag.probe),
+  // so the long-press menu's matching entry never gets a chance to fire on a
+  // phone. This dialog is not gated on that at all — same button, same rate,
+  // reachable by mouse or finger either way.
+  if (sp.kind === "goldCoin" && sp.max >= 100) acts.push(["Platinum", "exchange"]);
+  else if (sp.kind === "platinumCoin") acts.push(["Gold", "exchange"]);
+  acts.push(["Cancel", "drop"]);
+
+  const actFs = 8 * S;
+  const actGap = 6 * S;
+  const actPad = 14 * S; // side padding inside each button, so text never touches its own border
+  /* THE ROW IS SIZED FROM ITS OWN LABELS, THE SAME LESSON THE INSPECT CARD
+   * LEARNED (see drawInspect above): five short verbs fit 210 design-px fine,
+   * which is where that number came from, but "Platinum" next to "Cancel"
+   * does not, and a five-button chest row (Store/Drop/Throw/Platinum/Cancel)
+   * is tighter still. Measuring first and only growing the dialog when the
+   * labels actually need it keeps the common 3-button case exactly the size
+   * it always was. */
+  ctx.font = hudFont(actFs, true);
+  let widestAct = 0;
+  for (const [lbl] of acts) widestAct = Math.max(widestAct, ctx.measureText(lbl).width);
+  const neededActW = (widestAct + actPad) * acts.length + actGap * (acts.length - 1);
+
+  const w = Math.min(screenW - 16 * S, Math.max(210 * S, neededActW + 20 * S));
   const h = 118 * S;
   const x = (screenW - w) / 2;
   const y = (screenH - h) / 2;
@@ -984,26 +1020,7 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   stepBtn(hx, hy, hw, "Half", () => { sp.n = clampN(Math.floor(sp.max / 2) || 1); }); hx += hw + 8 * S;
   stepBtn(hx, hy, hw, "All", () => { sp.n = sp.max; });
 
-  const acts: [string, "store" | "take" | "drop" | "throw" | "move" | "exchange"][] = [];
-  if (sp.at) acts.push(["Throw", "throw"]); // target already aimed by the drag
-  else if (sp.to) acts.push(["Move", "move"]); // destination already aimed by the drag
-  // anything OUT in the world offers only "take": you cannot drop from a chest
-  // onto the floor in one gesture, and a corpse has nothing to store into
-  else if (rootOf(sp.ref) === "world") acts.push(["Take", "take"]);
-  else {
-    if (sp.canStore) acts.push(["Store", "store"]);
-    acts.push(["Drop", "drop"]);
-    acts.push(["Throw", "throw"]); // arm a throw: the next map tap is the target
-  }
-  // gold and platinum's one manual verb, offered here too: touch claims any
-  // slot press as a possible drag on contact (see initTouch's drag.probe),
-  // so the long-press menu's matching entry never gets a chance to fire on a
-  // phone. This dialog is not gated on that at all — same button, same rate,
-  // reachable by mouse or finger either way.
-  if (sp.kind === "goldCoin" && sp.max >= 100) acts.push(["To platinum", "exchange"]);
-  else if (sp.kind === "platinumCoin") acts.push(["To gold", "exchange"]);
-  acts.push(["Cancel", "drop"]);
-  const aw = (w - 20 * S - (acts.length - 1) * 6 * S) / acts.length;
+  const aw = (w - 20 * S - (acts.length - 1) * actGap) / acts.length;
   let ax = x + 10 * S;
   const ay = y + h - 20 * S;
   for (const [lbl, mode] of acts) {
@@ -1012,7 +1029,7 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
     buttonBox(ctx, ax, ay, aw, 15 * S, S, {
       face: isCancel ? "rgba(60,30,26,.95)" : "rgba(30,44,30,.95)", accent: col,
     });
-    hudText(base.hud, lbl, ax + aw / 2, ay + 7 * S, 8 * S, col, "center", true);
+    hudText(base.hud, lbl, ax + aw / 2, ay + 7 * S, actFs, col, "center", true);
     const capturedMode = mode;
     base.hotspots.push({ x: ax, y: ay, w: aw, h: 15 * S, fn: () => {
       if (isCancel) { base.ui.split = null; return; }

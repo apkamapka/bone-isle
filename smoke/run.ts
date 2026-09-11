@@ -2722,7 +2722,7 @@ async function main(): Promise<void> {
     ok(/function exchangeSplit[\s\S]{0,400}runCoinExchange\(/.test(mainSrc27),
       "…sharing the same weight-checked exchange the menu button calls");
     const panelsSrc27 = fs27.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
-    ok(panelsSrc27.includes('"To platinum"') && panelsSrc27.includes('"To gold"'),
+    ok(panelsSrc27.includes('"Platinum"') && panelsSrc27.includes('"Gold"'),
       "…and the dialog itself offers both directions by name");
     ok(panelsSrc27.includes("exchangeSplit()"), "…wired to an action reachable by touch or mouse alike");
   }
