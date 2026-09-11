@@ -17739,19 +17739,30 @@ async function main(): Promise<void> {
     ok(EL2.ELEMENTS.every((el) => PVP2.PVP_RING.includes(el)),
       "…and every element in elements.ts is on it");
 
-    // every element: exactly one +10%, one -10%, two neutral, none on itself
+    // every element: one +10%, one -10%, a -10% mirror match, two neutral
     for (let i = 0; i < PVP2.PVP_RING.length; i++) {
       const el = PVP2.PVP_RING[i];
       const beats = PVP2.PVP_RING[(i + 1) % PVP2.PVP_RING.length];
       const losesTo = PVP2.PVP_RING[(i - 1 + PVP2.PVP_RING.length) % PVP2.PVP_RING.length];
       ok(PVP2.pvpElementMultiplier(el, beats) === 1.1, `${el} hits ${beats} 10% harder`);
       ok(PVP2.pvpElementMultiplier(el, losesTo) === 0.9, `${el} hits ${losesTo} 10% softer`);
-      ok(PVP2.pvpElementMultiplier(el, el) === 1, `${el} has no edge on itself`);
+      ok(PVP2.pvpElementMultiplier(el, el) === 0.9, `${el} vs itself is a mirror match — 10% resistant`);
       for (const other of EL2.ELEMENTS) {
         if (other === beats || other === losesTo || other === el) continue;
         ok(PVP2.pvpElementMultiplier(el, other) === 1, `${el} vs ${other} is a neutral matchup`);
       }
     }
+
+    /* The mirror-match resist is a WORLD rule in spirit (dragon and
+     * blackKnight already resist their own signature element, far more
+     * strongly) but this module owns only the PvP 10% and must never reach
+     * into the monster bestiary to apply, override or blend with it — two
+     * independent systems, not one shared table. */
+    const MON2 = await import("../src/entities/monsters.ts");
+    ok((MON2.MONSTER_DEFS.dragon.resist?.fire ?? 1) === 0.25,
+      "the dragon's own fire resistance is untouched by the PvP table (still 0.25)");
+    ok(!("pvpElement" in MON2.MONSTER_DEFS.dragon) && !("pvpElement" in MON2.MONSTER_DEFS.blackKnight),
+      "monsters were given no pvp-element concept of their own");
 
     // no identity yet on either side → no bonus, no penalty
     ok(PVP2.pvpElementMultiplier(undefined, "fire") === 1, "an unattuned attacker gets no edge");
