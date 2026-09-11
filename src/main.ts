@@ -38,8 +38,8 @@ import {
   type HudGroup,
 } from "./systems/hudLayout.ts";
 import { researchById, isResearched, markResearched, towerTierOk, towerTierFor,
-  ATTUNEMENT, isAttuned, markAttuned, clearAttuned, attunementOk, offerById } from "./systems/tower.ts";
-import { ELEMENT_LABEL, ELEMENT_COLOR, FIELD_BURN_TICK_S, FIELD_BURN_DMG,
+  ATTUNEMENT, isAttuned, markAttuned, clearAttuned, attunementOk, offerById, playerElement } from "./systems/tower.ts";
+import { ELEMENT_LABEL, ELEMENT_COLOR, FIELD_BURN_TICK_S, FIELD_BURN_DMG, elementEdgeMultiplier,
   type Element } from "./systems/elements.ts";
 import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
@@ -55,7 +55,7 @@ import {
 import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
 import { nextEntityId, byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
-import { TARGET_SEEK_PX } from "./config.ts";
+import { TARGET_SEEK_PX, MIN_ELEMENTAL_DAMAGE } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
 import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, exchangeCoinSlot } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
@@ -4236,7 +4236,10 @@ function tickCampfireBurn(world: World, dt: number): void {
     const next = fireClock.get(key) ?? 0;
     if (fireT < next) continue;
     fireClock.set(key, fireT + FIRE_BURN_TICK_S);
-    hurtPlayer(world, P, rndi(FIRE_BURN_DMG[0], FIRE_BURN_DMG[1]), true);
+    const raw = rndi(FIRE_BURN_DMG[0], FIRE_BURN_DMG[1]);
+    const dmg = Math.max(MIN_ELEMENTAL_DAMAGE,
+      Math.round(raw * elementEdgeMultiplier("fire", playerElement())));
+    hurtPlayer(world, P, dmg, true);
   }
   /* THE OTHER FOUR ELEMENTS BITE TOO, on the same terms.
    *
@@ -4261,7 +4264,10 @@ function tickCampfireBurn(world: World, dt: number): void {
     const next = fireClock.get(key) ?? 0;
     if (fireT < next) continue;
     fireClock.set(key, fireT + FIELD_BURN_TICK_S);
-    hurtPlayer(world, P, rndi(FIELD_BURN_DMG[0], FIELD_BURN_DMG[1]), true);
+    const raw = rndi(FIELD_BURN_DMG[0], FIELD_BURN_DMG[1]);
+    const dmg = Math.max(MIN_ELEMENTAL_DAMAGE,
+      Math.round(raw * elementEdgeMultiplier(nd.el, playerElement())));
+    hurtPlayer(world, P, dmg, true);
   }
   // the map's fires never move, but travelling between worlds retires the keys
   if (fireClock.size > 64) {
@@ -4695,7 +4701,9 @@ function update(dt: number): void {
   // deliberately the same `hurtPlayer` the melee exchange uses — elemental
   // damage ignores armor on its own, inside the damage roll.
   updateMonsterSpells(world, dt, { tx: P.tx, ty: P.ty, dead: P.dead }, (dmg, el, name) => {
-    hurtPlayer(world, P, dmg, true);
+    const adjusted = Math.max(MIN_ELEMENTAL_DAMAGE,
+      Math.round(dmg * elementEdgeMultiplier(el, playerElement())));
+    hurtPlayer(world, P, adjusted, true);
     // Only the discrete hits announce themselves. The per-second burn passes
     // `null`: it already draws a number every tick, and stacking the word
     // "burning" on top of it once a second buried the player under his own
