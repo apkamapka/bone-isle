@@ -990,7 +990,8 @@ async function main(): Promise<void> {
     ok(sane, "no resistance is zero (immune) or beyond 2× (a free kill)");
     ok(anyStrong && anyWeak, "both resistances and weaknesses exist — the element choice is real");
     ok(E.resistanceOf(undefined, "fire") === 1, "ordinary flesh resists nothing");
-    ok((M.MONSTER_DEFS.dragon.resist?.fire ?? 1) < 1 && (M.MONSTER_DEFS.dragon.resist?.ice ?? 1) > 1,
+    ok((M.monsterResist(M.MONSTER_DEFS.dragon)?.fire ?? 1) < 1
+      && (M.monsterResist(M.MONSTER_DEFS.dragon)?.ice ?? 1) > 1,
       "a dragon shrugs off fire and hates the cold");
     ok((M.MONSTER_DEFS.snake.resist?.earth ?? 1) < 1, "earth barely touches a thing that lives in it");
 
@@ -1723,7 +1724,7 @@ async function main(): Promise<void> {
     {
       const { burnMonster } = await import("../src/systems/combat.ts");
       const worlds = buildWorlds(WORLD_SEED);
-      const hollow = worlds.deaddeep2; // armor 28, resist { fire: 0.25, ice: 1.6 }
+      const hollow = worlds.deaddeep2; // armor 28, element "fire" (ring-derived: 0.9× fire, 1.1× ice)
       hollow.monsters.length = 0; hollow.respawns.length = 0; hollow.corpses.length = 0;
       const lair = (hollow.mobPosts ?? []).find((q) => q.kind === "dragon")!;
       spawnAtPost(hollow, "dragon", lair.tx, lair.ty);
@@ -1731,11 +1732,11 @@ async function main(): Promise<void> {
       const p = createPlayer({ x: 0, y: 0 });
       const startHp = drag.hp;
       burnMonster(hollow, p, drag, "fire", 1000);
-      ok(drag.hp === startHp - 250, "1000 fire on a dragon (0.25x resist) lands for exactly 250 — armor untouched");
-      burnMonster(hollow, p, drag, "ice", 100);
-      ok(drag.hp === startHp - 250 - 160, "100 ice on the same dragon (its one weak spot, 1.6x) lands for 160");
-      burnMonster(hollow, p, drag, "fire", 1);
-      ok(drag.hp === startHp - 250 - 160 - 1, "a near-zero fire tick still lands 1 — the elemental floor, not 0");
+      ok(drag.hp === startHp - 900, "1000 fire on a dragon (0.9x mirror match) lands for exactly 900 — armor untouched");
+      burnMonster(hollow, p, drag, "ice", 50);
+      ok(drag.hp === startHp - 900 - 55, "50 ice on the same dragon (its one weak spot, 1.1x) lands for 55");
+      burnMonster(hollow, p, drag, "fire", 0);
+      ok(drag.hp === startHp - 900 - 55 - 1, "a zero-roll fire tick still lands 1 — the elemental floor, not 0");
       const dead = burnMonster(hollow, p, drag, "fire", 5000);
       ok(dead === true, "enough fire still kills it");
       ok(hollow.monsters.length === 0, "…removed exactly like a sword kill");
@@ -5383,7 +5384,8 @@ async function main(): Promise<void> {
     const field = /FIELD_TICK_DMG: readonly \[number, number\] = \[(\d+), (\d+)\]/.exec(spells)!;
     ok(FIRE_BURN_DMG[1] < Number(field[2]),
       `…less than the ${field[1]}-${field[2]} a monster's burning ground bites`);
-    ok(/hurtPlayer\(world, P, rndi\(FIRE_BURN_DMG\[0\], FIRE_BURN_DMG\[1\]\), true\)/.test(main),
+    ok(/const raw = rndi\(FIRE_BURN_DMG\[0\], FIRE_BURN_DMG\[1\]\);/.test(main)
+      && /hurtPlayer\(world, P, dmg, true\)/.test(main),
       "…and it lands elemental, so no shield or armour is raised against it");
     ok(/const key = `\$\{world\.key\}\|\$\{f\.tx\}\|\$\{f\.ty\}`/.test(main),
       "…on a clock kept per tile, so crossing three fires costs three bites");
@@ -8074,8 +8076,15 @@ async function main(): Promise<void> {
     ok(D.exp > drg.exp * 0.85, "…and pays out like it");
     ok(D.speed > drg.speed, "…but closes faster, being a man and not a lizard");
     ok(D.armor === drg.armor, "…behind armor tied with the dragon's, at the curve's ceiling");
-    ok(D.resist!.storm! < 1, "his own element barely touches him");
-    ok(D.resist!.earth! > 1, "…and the ground he is armoured against goes through him");
+    const EL8 = await import("../src/systems/elements.ts");
+    /* Derived from `element: "storm"` now (see the world-ring section below)
+     * rather than a hand-typed table — which is also why earth flips from
+     * a weakness to a resistance: storm beats earth on the ring, and beating
+     * something means shrugging off its attacks, the same direction every
+     * other pair on the ring runs. */
+    ok(EL8.elementDefenseProfile("storm").storm! < 1, "his own element barely touches him");
+    ok(EL8.elementDefenseProfile("storm").earth! < 1,
+      "…and the ground he is armoured against no longer goes through him — storm beats earth");
     ok(D.ranged!.fx!.el === "storm", "his jab arcs rather than flies");
     ok(D.spells!.every((x) => x.element === "storm"), "every spell he owns is lightning");
     ok(D.spells!.every((x) => x.tier === 0), "…all of it tier 1");
@@ -15162,7 +15171,8 @@ async function main(): Promise<void> {
       mainBurn.indexOf("let refusedCircle"));
     ok(burnBody.length > 0 && /for \(const nd of world\.ambientFx\)/.test(burnBody),
       "the burn tick walks the element fields, not only the fires");
-    ok(/hurtPlayer\(world, P, rndi\(FIELD_BURN_DMG\[0\], FIELD_BURN_DMG\[1\]\), true\)/.test(burnBody),
+    ok(/const raw = rndi\(FIELD_BURN_DMG\[0\], FIELD_BURN_DMG\[1\]\);/.test(burnBody)
+      && /hurtPlayer\(world, P, dmg, true\)/.test(burnBody),
       "…and the `true` is the elemental bypass: no shield against a floor");
     /* THE CIRCLES ARE NOT FIELDS, and this is the line that matters most.
      * `attuneNodes` is the five rune circles — the thing the errand is FOR.
@@ -17728,54 +17738,83 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log("pvp elemental edge (rule only — nothing can land this blow yet):");
+  console.log("the world's elemental ring (crystals, arrows, monster spells, fields — never swords):");
   {
-    const PVP2 = await import("../src/systems/pvp.ts");
-    const TW2 = await import("../src/systems/tower.ts");
     const EL2 = await import("../src/systems/elements.ts");
+    const MON2 = await import("../src/entities/monsters.ts");
 
-    ok(PVP2.PVP_RING.length === 5 && new Set(PVP2.PVP_RING).size === 5,
+    ok(EL2.ELEMENT_RING.length === 5 && new Set(EL2.ELEMENT_RING).size === 5,
       "the ring names five elements, none twice");
-    ok(EL2.ELEMENTS.every((el) => PVP2.PVP_RING.includes(el)),
+    ok(EL2.ELEMENTS.every((el) => EL2.ELEMENT_RING.includes(el)),
       "…and every element in elements.ts is on it");
 
     // every element: one +10%, one -10%, a -10% mirror match, two neutral
-    for (let i = 0; i < PVP2.PVP_RING.length; i++) {
-      const el = PVP2.PVP_RING[i];
-      const beats = PVP2.PVP_RING[(i + 1) % PVP2.PVP_RING.length];
-      const losesTo = PVP2.PVP_RING[(i - 1 + PVP2.PVP_RING.length) % PVP2.PVP_RING.length];
-      ok(PVP2.pvpElementMultiplier(el, beats) === 1.1, `${el} hits ${beats} 10% harder`);
-      ok(PVP2.pvpElementMultiplier(el, losesTo) === 0.9, `${el} hits ${losesTo} 10% softer`);
-      ok(PVP2.pvpElementMultiplier(el, el) === 0.9, `${el} vs itself is a mirror match — 10% resistant`);
+    for (let i = 0; i < EL2.ELEMENT_RING.length; i++) {
+      const el = EL2.ELEMENT_RING[i];
+      const beats = EL2.ELEMENT_RING[(i + 1) % EL2.ELEMENT_RING.length];
+      const losesTo = EL2.ELEMENT_RING[(i - 1 + EL2.ELEMENT_RING.length) % EL2.ELEMENT_RING.length];
+      ok(EL2.elementEdgeMultiplier(el, beats) === 1.1, `${el} hits ${beats} 10% harder`);
+      ok(EL2.elementEdgeMultiplier(el, losesTo) === 0.9, `${el} hits ${losesTo} 10% softer`);
+      ok(EL2.elementEdgeMultiplier(el, el) === 0.9, `${el} vs itself is a mirror match — 10% resistant`);
       for (const other of EL2.ELEMENTS) {
         if (other === beats || other === losesTo || other === el) continue;
-        ok(PVP2.pvpElementMultiplier(el, other) === 1, `${el} vs ${other} is a neutral matchup`);
+        ok(EL2.elementEdgeMultiplier(el, other) === 1, `${el} vs ${other} is a neutral matchup`);
       }
     }
 
-    /* The mirror-match resist is a WORLD rule in spirit (dragon and
-     * blackKnight already resist their own signature element, far more
-     * strongly) but this module owns only the PvP 10% and must never reach
-     * into the monster bestiary to apply, override or blend with it — two
-     * independent systems, not one shared table. */
-    const MON2 = await import("../src/entities/monsters.ts");
-    ok((MON2.MONSTER_DEFS.dragon.resist?.fire ?? 1) === 0.25,
-      "the dragon's own fire resistance is untouched by the PvP table (still 0.25)");
-    ok(!("pvpElement" in MON2.MONSTER_DEFS.dragon) && !("pvpElement" in MON2.MONSTER_DEFS.blackKnight),
-      "monsters were given no pvp-element concept of their own");
-
     // no identity yet on either side → no bonus, no penalty
-    ok(PVP2.pvpElementMultiplier(undefined, "fire") === 1, "an unattuned attacker gets no edge");
-    ok(PVP2.pvpElementMultiplier("fire", undefined) === 1, "…nor against an unattuned target");
+    ok(EL2.elementEdgeMultiplier(undefined, "fire") === 1, "an unattuned attacker gets no edge");
+    ok(EL2.elementEdgeMultiplier("fire", undefined) === 1, "…nor against an unattuned target");
 
-    // pvpElement(): first stone ever spent, stable no matter what follows it
+    // elementDefenseProfile is the ring's transpose, not a re-typed second copy
+    for (const identity of EL2.ELEMENTS) {
+      const profile = EL2.elementDefenseProfile(identity);
+      for (const incoming of EL2.ELEMENTS) {
+        ok((profile[incoming] ?? 1) === EL2.elementEdgeMultiplier(incoming, identity),
+          `${identity}'s defense profile agrees with the ring on incoming ${incoming}`);
+      }
+    }
+
+    /* dragon and blackKnight: the two bosses whose OWN spells confirm a
+     * single element, now DERIVED from the same ring everything else reads
+     * — the point of today's change. A fire character farming the dragon
+     * spot pays the standard 10% mirror hit now, not the old 75% reduction
+     * nothing could farm through. */
+    ok(MON2.MONSTER_DEFS.dragon.element === "fire", "the dragon's identity is fire");
+    ok(MON2.MONSTER_DEFS.dragon.resist === undefined,
+      "…with no separate hand-typed table left behind to drift out of sync");
+    ok(MON2.monsterResist(MON2.MONSTER_DEFS.dragon)?.fire === 0.9,
+      "so a fire crystal on the dragon now takes the standard 10% mirror hit…");
+    ok(MON2.monsterResist(MON2.MONSTER_DEFS.dragon)?.ice === 1.1,
+      "…ice is 10% more effective, not the old 60%…");
+    ok(MON2.monsterResist(MON2.MONSTER_DEFS.dragon)?.shadow === 0.9,
+      "…and it picks up a small new resistance to wind it never had before");
+    ok((MON2.monsterResist(MON2.MONSTER_DEFS.dragon)?.storm ?? 1) === 1
+      && (MON2.monsterResist(MON2.MONSTER_DEFS.dragon)?.earth ?? 1) === 1,
+      "…lightning and earth stay neutral, same as any other mirror-match pair");
+
+    ok(MON2.MONSTER_DEFS.blackKnight.element === "storm", "blackKnight's identity is storm");
+    ok(MON2.monsterResist(MON2.MONSTER_DEFS.blackKnight)?.earth === 0.9,
+      "storm beats earth on the ring, so blackKnight now RESISTS earth (was 1.35× weak before)");
+    ok(MON2.monsterResist(MON2.MONSTER_DEFS.blackKnight)?.shadow === 1.1,
+      "…and is weak to wind, which is what beats storm");
+
+    // no declared element → the creature's own hand-authored table, untouched
+    ok(MON2.MONSTER_DEFS.snake.element === undefined
+      && MON2.monsterResist(MON2.MONSTER_DEFS.snake) === MON2.MONSTER_DEFS.snake.resist,
+      "a creature with no ring identity keeps its own resist table, returned as-is");
+  }
+
+  console.log("player's own element (first attunement, read by every elemental hit that reaches them):");
+  {
+    const TW2 = await import("../src/systems/tower.ts");
     TW2.clearAttuned();
-    ok(PVP2.pvpElement() === undefined, "nothing attuned yet means no pvp element");
+    ok(TW2.playerElement() === undefined, "nothing attuned yet means no element");
     TW2.markAttuned("storm");
-    ok(PVP2.pvpElement() === "storm", "the first stone spent sets it");
+    ok(TW2.playerElement() === "storm", "the first stone spent sets it");
     TW2.markAttuned("fire");
     TW2.markAttuned("ice");
-    ok(PVP2.pvpElement() === "storm", "…and later stones don't move it — first, not latest");
+    ok(TW2.playerElement() === "storm", "…and later stones don't move it — first, not latest");
     TW2.clearAttuned();
   }
 
