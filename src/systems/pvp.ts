@@ -242,6 +242,13 @@ export function skullIcon(s: Skull): "skullWhite" | "skullRed" | null {
  * from this ring rather than typed out by hand five times — one direction
  * written backwards in a hand-typed table is a bug nothing else would catch;
  * derived from one ring, it cannot happen.
+ *
+ * A mirror match (fire vs fire) resists too, by the same PVP_EDGE_PCT — a
+ * world rule, not a PvP-only quirk: MONSTER_DEFS already runs on the exact
+ * same idea for the two spellcasting bosses (dragon.resist.fire = 0.25,
+ * blackKnight.resist.storm = 0.3), independently and tuned far stronger for
+ * a hand-built fight. This file never reads or touches that table — its 10%
+ * is scoped to player-vs-player only.
  */
 export const PVP_RING: readonly Element[] = ["fire", "shadow", "storm", "earth", "ice"];
 
@@ -255,13 +262,15 @@ function buildPvpEdge(ring: readonly Element[]): Readonly<Record<Element, Resist
     const row: Resistances = {};
     row[beats] = 1 + PVP_EDGE_PCT;
     row[losesTo] = 1 - PVP_EDGE_PCT;
+    row[el] = 1 - PVP_EDGE_PCT; // mirror match: same element resists itself too
     table[el] = row;
   });
   return table;
 }
 
-/** el → its one +10% matchup and its one -10% matchup. The other two
- *  elements are absent from the row, which `resistanceOf` reads as 1. */
+/** el → its one +10% matchup, its one -10% matchup, and -10% against itself
+ *  (a mirror match). The other two elements are absent from the row, which
+ *  `resistanceOf` reads as 1 — neutral. */
 export const PVP_ELEMENT_EDGE: Readonly<Record<Element, Resistances>> = buildPvpEdge(PVP_RING);
 
 /**
@@ -284,7 +293,9 @@ export function pvpElement(): Element | undefined {
  * blow — skill, gear, armor, shield — is untouched; this is one more factor
  * alongside them, not a replacement for any of them. Either side without a
  * PvP element yet (nothing attuned) is ordinary, unmodified damage: there is
- * nothing yet to be strong or weak against.
+ * nothing yet to be strong or weak against. A mirror match (same element on
+ * both sides) is also covered — see PVP_ELEMENT_EDGE — and comes back 0.9,
+ * not 1.
  *
  * Single-sided by design: only the attacker's edge over the defender is
  * read here. The reverse fact — the defender's edge over the attacker —
