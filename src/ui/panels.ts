@@ -1679,9 +1679,13 @@ function drawForge(p: PanelInput): void {
 
   const smeltables = smeltableRows(player, homeChests(game));
   const rowH = 26 * S;
+  /* The GEMS tab counts two rows more than it has trophies: the coal line and
+   * the Cut button, both of which live in the body rather than the footer. It
+   * used to count trophies alone, which is why the list was crammed into less
+   * height than it needed and the icons grew into each other. */
   const bodyRows = ui.forgeTab === "craft" ? RECIPES.length
     : ui.forgeTab === "smelt" ? Math.max(1, smeltables.length)
-    : Math.max(1, GEM_TROPHIES.length);
+    : GEM_TROPHIES.length + 2;
   const w = 292 * S;
   const h = 20 * S + 19 * S + Math.min(bodyRows, 12) * rowH + 22 * S;
   const { x, y } = anchor(p, w, h);
@@ -1695,7 +1699,7 @@ function drawForge(p: PanelInput): void {
 
   if (ui.forgeTab === "craft") ry = forgeCraft(p, x, ry, w, rowH);
   else if (ui.forgeTab === "smelt") ry = forgeSmelt(p, x, ry, w, rowH, tier, smeltables);
-  else ry = forgeGems(p, x, ry, w);
+  else ry = forgeGems(p, x, ry, w, rowH);
 
   const foot = ui.forgeTab === "craft" ? "Uses backpack + storage chest"
     : ui.forgeTab === "smelt" ? `Burns ${COAL_PER_SMELT} coal per piece · tier ${tier} furnace`
@@ -1790,8 +1794,26 @@ function forgeSmelt(
   return ry;
 }
 
-function forgeGems(p: PanelInput, x: number, ry: number, w: number): number {
+/**
+ * The GEMS tab: what you are holding, and one button that turns it into an
+ * Essential Gem.
+ *
+ * TWO THINGS THIS FIXES, both reported off a screenshot. The rows used to
+ * advance by a flat 15 design-px while the icons were drawn at a flat 2x, so
+ * anything tall — the dragon scale, the ghoul claw — ran straight through the
+ * line below it and the list read as one heap. Every row now owns a full
+ * `rowH` band, and the icon is scaled to FIT that band rather than to a
+ * constant, so a tall trophy is drawn smaller instead of drawn over.
+ *
+ * And the button was not recognisable as a button: a flat violet bar in the
+ * header position, which is where every other panel here puts a title. It is
+ * a proper raised button now, at the BOTTOM where a confirm belongs, with the
+ * gem it makes drawn on it — and when the ingredients are short it says what
+ * is missing, disabled, instead of pretending to be a heading.
+ */
+function forgeGems(p: PanelInput, x: number, ry: number, w: number, rowH: number): number {
   const { hud, player } = p;
+  const { ctx } = hud;
   const S = hud.scale;
   const bags = [player.bag, ...homeChests(p.game)];
   const coal = countAcross(bags, "coal");
@@ -1799,24 +1821,52 @@ function forgeGems(p: PanelInput, x: number, ry: number, w: number): number {
   const kinds = held.filter((h) => h.n > 0).length;
   const ready = kinds >= GEM_TROPHY_KINDS && coal >= GEM_COAL;
 
-  const btnH = 20 * S;
-  hud.ctx.fillStyle = ready ? "rgba(160,120,220,.32)" : "rgba(0,0,0,.3)";
-  hud.ctx.fillRect(x + 8 * S, ry, w - 16 * S, btnH);
-  hudText(hud, ready ? "CUT AN ESSENTIAL GEM" : `${kinds}/${GEM_TROPHY_KINDS} trophy kinds · ${coal}/${GEM_COAL} coal`,
-    x + w / 2, ry + 7 * S, 9 * S, ready ? "#e0ccff" : "#8a8070", "center", true);
-  if (ready) {
-    const ryy = ry;
-    p.hotspots.push({ x: x + 8 * S, y: ryy, w: w - 16 * S, h: btnH, fn: () => p.act.makeGem() });
-  }
-  ry += btnH + 6 * S;
+  /** One stock line: banded background, icon fitted to the band, name, count. */
+  const stockRow = (kind: ItemKind, n: number, enough: boolean, i: number): void => {
+    if (i % 2 === 1) {
+      ctx.fillStyle = "rgba(0,0,0,.16)";
+      ctx.fillRect(x + 8 * S, ry, w - 16 * S, rowH - 2 * S);
+    }
+    const spr = itemSprite(kind);
+    // fit the icon to the row in BOTH axes: a wide trophy must not reach the
+    // name column any more than a tall one may reach the row below
+    const box = rowH - 8 * S;
+    const sc = Math.max(1, Math.min(
+      Math.floor(box / iconH(spr, 1)),
+      Math.floor((22 * S) / iconW(spr, 1)),
+    ));
+    icon(p, spr, x + 12 * S + (22 * S - iconW(spr, sc)) / 2,
+      ry + (rowH - 2 * S - iconH(spr, sc)) / 2, sc);
+    hudText(hud, ITEMS[kind].name, x + 40 * S, ry + (rowH - 2 * S) / 2 - 4 * S, 8 * S,
+      n > 0 ? "#f3eedd" : "#6d6659", "left");
+    hudText(hud, String(n), x - 14 * S + w, ry + (rowH - 2 * S) / 2 - 4 * S, 8 * S,
+      enough ? "#b9e07f" : n > 0 ? "#e8dcc0" : "#6d6659", "right");
+    ry += rowH;
+  };
 
-  for (const h of held) {
-    const spr = itemSprite(h.t);
-    icon(p, spr, x + 12 * S, ry + 2 * S, 2 * S);
-    hudText(hud, ITEMS[h.t].name, x + 34 * S, ry + 5 * S, 8 * S, h.n > 0 ? "#f3eedd" : "#6d6659", "left");
-    hudText(hud, String(h.n), x + w - 14 * S, ry + 5 * S, 8 * S, h.n > 0 ? "#b9e07f" : "#6d6659", "right");
-    ry += 15 * S;
-  }
+  held.forEach((h, i) => stockRow(h.t, h.n, h.n > 0, i));
+  // coal is an ingredient too, and the one people actually run out of
+  stockRow("coal", coal, coal >= GEM_COAL, held.length);
+
+  // the Cut button, sized to its own label and centred
+  const bh = Math.max(18 * S, rowH - 6 * S);
+  const bw = 160 * S;
+  const bx = x + (w - bw) / 2;
+  const by = ry + 2 * S;
+  buttonBox(ctx, bx, by, bw, bh, S, {
+    face: ready ? "rgba(78,52,120,.95)" : "rgba(48,48,48,.7)",
+    accent: ready ? "#c9a6ff" : undefined,
+    hover: ready && hovering(p, bx, by, bw, bh),
+  });
+  const gemSpr = itemSprite("essentialGem");
+  const gsc = Math.max(1, Math.floor((bh - 6 * S) / iconH(gemSpr, 1)));
+  icon(p, gemSpr, bx + 8 * S, by + (bh - iconH(gemSpr, gsc)) / 2, gsc);
+  hudText(hud, ready ? "CUT GEM" : `${kinds}/${GEM_TROPHY_KINDS} kinds · ${coal}/${GEM_COAL} coal`,
+    bx + bw / 2 + 6 * S, by + bh / 2 - 4 * S, 8.5 * S,
+    ready ? "#e0ccff" : "#9a9a9a", "center", true);
+  if (ready) p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.makeGem() });
+  ry += bh + 4 * S;
+
   return ry;
 }
 

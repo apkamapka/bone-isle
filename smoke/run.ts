@@ -2780,6 +2780,31 @@ async function main(): Promise<void> {
       "…and it closes itself when you walk away from him");
   }
 
+  console.log("the GEMS tab lays its stock out one row at a time:");
+  {
+    const fsG = await import("node:fs");
+    const panelsSrcG = fsG.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
+    /* Reported off a screenshot: tall trophies drew straight through the line
+     * below them, because the rows advanced by a flat 15 design-px while the
+     * icons were drawn at a flat 2x. The row height and the icon scale have to
+     * come from the SAME number or the two drift apart again. */
+    ok(panelsSrcG.includes("function forgeGems(p: PanelInput, x: number, ry: number, w: number, rowH: number)"),
+      "the gems list is laid out on the forge's own row height");
+    ok(!/function forgeGems[\s\S]{0,3000}ry \+= 15 \* S;/.test(panelsSrcG),
+      "…not on a flat advance the icons can outgrow");
+    ok(/function forgeGems[\s\S]{0,3000}Math\.floor\(box \/ iconH\(spr, 1\)\)/.test(panelsSrcG),
+      "…and every icon is scaled to fit its band rather than to a constant");
+    ok(panelsSrcG.includes("GEM_TROPHIES.length + 2"),
+      "the tab reserves height for the coal line and the button too");
+    // the cut control is a BUTTON, at the bottom, where a confirm belongs — it
+    // used to be a flat bar in the header position and read as a title
+    ok(/function forgeGems[\s\S]{0,3000}buttonBox\(ctx, bx, by, bw, bh, S/.test(panelsSrcG),
+      "cutting a gem is a raised button now");
+    ok(/function forgeGems[\s\S]{0,3000}"CUT GEM"/.test(panelsSrcG), "…labelled as an action");
+    ok(/function forgeGems[\s\S]{0,3000}fn: \(\) => p\.act\.makeGem\(\)/.test(panelsSrcG),
+      "…and it is the only thing on the tab you can click");
+  }
+
   console.log("Etap 11 — backpacks, the test stones & shop stock:");
   {
     ok(items.ITEMS.backpack.pack?.slots === cfgBagSize && items.ITEMS.backpack.stack === 1,
