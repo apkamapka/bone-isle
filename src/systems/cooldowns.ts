@@ -96,7 +96,17 @@ function st(): CdState {
 export function groupOf(kind: ItemKind): CdGroup {
   if (kind === "healCrystal") return "heal";
   const spec = CRYSTAL_SPECS[kind];
-  return spec ? (spec.role as CdGroup) : "shard";
+  if (!spec) return "shard";
+  /* A KNELL COOLS ON THE SHARD'S CLOCK, and this is the one line that keeps
+   * it honest. Given a group of its own it would be a second Shard fired in
+   * the same breath for double damage — the exact stacking the role clock was
+   * built to stop, arriving through the front door instead of through a
+   * friend's backpack. The gem price rations how MANY you own; the shared
+   * clock rations how fast you can throw the ones you have, and a thing that
+   * costs two Essential Gems should be spent on the creature you chose, not
+   * chained into the one already dying. */
+  if (spec.role === "rune") return "shard";
+  return spec.role as CdGroup;
 }
 
 /**

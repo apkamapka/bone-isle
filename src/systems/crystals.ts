@@ -62,11 +62,18 @@ export function resetCrystalCooldown(): void {
  * where it lands and splits its damage across everything in the blast — worse
  * against one target, decisive against a pack. That is the whole role split:
  * not "more damage", but "damage arranged differently".
+ *
+ * A Knell is the one exception to that rule, and it is allowed to be because
+ * it is not paid for in the same currency. It IS a Shard with double the
+ * damage — same target, same clock, one tile less reach — and what stops that
+ * from retiring the Shard is the shelf: a Knell costs two Essential Gems, so
+ * you own three of them, not thirty. The decision it offers is "is this the
+ * creature worth it", which is a decision a bigger number can carry.
  */
 export interface CrystalSpec {
   element: Element;
   tier: Tier;
-  role: "shard" | "burst" | "nova" | "wave";
+  role: "shard" | "burst" | "nova" | "wave" | "rune";
   base: readonly [number, number];
   /** Cast range in px. 0 for the shapes anchored on the caster. */
   range: number;
@@ -144,6 +151,20 @@ const FORM_BASE: Readonly<Record<CrystalSpec["role"], readonly [number, number]>
   burst: [9, 15],   // thrown, lands on a pack at range
   nova: [11, 17],   // everything touching you, no aiming, worst position
   wave: [8, 14],    // eleven tiles, but only where you are looking
+  rune: [28, 44],   // exactly twice a Shard, and rationed by the gem price
+};
+
+/**
+ * The picture a shape leaves where it lands.
+ *
+ * Four of the five names match their slot, which is why this used to be
+ * `spec.role` passed straight through — but a Shard has always painted `hit`
+ * rather than `shard`, so the mapping was already a lie in one place. Written
+ * out, it is a lie in none, and a sixth shape cannot be added without saying
+ * what it looks like.
+ */
+const FX_SLOT: Readonly<Record<CrystalSpec["role"], "burst" | "wave" | "nova" | "hit" | "rune">> = {
+  shard: "hit", burst: "burst", nova: "nova", wave: "wave", rune: "rune",
 };
 
 export const CRYSTAL_SPECS: Readonly<Record<string, CrystalSpec>> = (() => {
@@ -155,6 +176,10 @@ export const CRYSTAL_SPECS: Readonly<Record<string, CrystalSpec>> = (() => {
       out[`${el}${n}Burst`] = { element: el, tier: t, role: "burst", base: FORM_BASE.burst, range: 220 + t * 30 };
       out[`${el}${n}Nova`] = { element: el, tier: t, role: "nova", base: FORM_BASE.nova, range: 0 };
       out[`${el}${n}Wave`] = { element: el, tier: t, role: "wave", base: FORM_BASE.wave, range: 0 };
+      // One tile shorter than the Shard it doubles. A Knell that reached
+      // just as far would be strictly better at the only thing a Shard does,
+      // and the Shard would become the crystal you carry to save Knells.
+      out[`${el}${n}Rune`] = { element: el, tier: t, role: "rune", base: FORM_BASE.rune, range: 260 + t * 30 - TILE };
     }
   }
   return out;
@@ -217,7 +242,8 @@ interface Struck {
  * room ends — that part was right, and walls keep doing it.
  */
 function paint(
-  world: World, tiles: readonly Struck[], el: Element, tier: Tier, slot: "burst" | "wave" | "nova" | "hit",
+  world: World, tiles: readonly Struck[], el: Element, tier: Tier,
+  slot: "burst" | "wave" | "nova" | "hit" | "rune",
 ): void {
   for (const s of tiles) {
     if (groundBlocked(world, s.tx, s.ty)) continue;
@@ -347,7 +373,7 @@ export function useCrystal(
       // wave you fire blindly.
       removeItem(p.bag, kind, 1);
       startCooldown(kind);
-      paint(world, shape, spec.element, spec.tier, spec.role);
+      paint(world, shape, spec.element, spec.tier, FX_SLOT[spec.role]);
       if (hit.length) markBloodHit();
       for (const m of hit) damageWithElement(world, p, m, spec, col);
       beep(spec.role === "nova" ? 150 : 240, 0.22, "sawtooth", 0.07, spec.role === "nova" ? -200 : 180);
@@ -391,7 +417,15 @@ export function useCrystal(
     // The projectile is cosmetic and the hit is already resolved, exactly as
     // an arrow's is — but the BLOOM waits for it to arrive, so an explosion
     // never beats its own fireball to the ground.
-    const flight = addBolt(world, p.x, p.y - 16, toX, toY - 12, spec.element, spec.tier);
+    //
+    // A Knell throws NOTHING. Its skull opens on the creature itself, the way
+    // Tibia's Sudden Death does, and that absence is the whole of how it reads
+    // differently from the Shard it shares a clock with: no flight, no warning,
+    // the thing is simply already on you. `flight` stays the timing seam either
+    // way — zero here, the bolt's travel for the other two.
+    const flight = spec.role === "rune"
+      ? 0
+      : addBolt(world, p.x, p.y - 16, toX, toY - 12, spec.element, spec.tier);
     const ox = Math.floor(toX / TILE);
     const oy = Math.floor(toY / TILE);
     const shape: Struck[] = spec.role === "burst"
@@ -400,7 +434,7 @@ export function useCrystal(
         delay: flight + (Math.abs(dx) + Math.abs(dy)) * 0.045,
       }))
       : [{ tx: ox, ty: oy, delay: flight }];
-    paint(world, shape, spec.element, spec.tier, spec.role === "burst" ? "burst" : "hit");
+    paint(world, shape, spec.element, spec.tier, FX_SLOT[spec.role]);
 
     // A burst catches everything on its footprint, a shard puts it all into
     // one creature. Both go STRAIGHT to hp — elemental damage is the channel
@@ -408,7 +442,10 @@ export function useCrystal(
     // spend gold on crystals at all.
     const caught = spec.role === "burst" ? caughtOn(world, shape) : [target!];
     for (const m of caught) damageWithElement(world, p, m, spec, col);
-    beep(spec.role === "burst" ? 180 : 320, 0.2, "sawtooth", 0.06, spec.role === "burst" ? -160 : 120);
+    // The Knell tolls: low, long, and falling. It is the only crystal whose
+    // sound is meant to land AFTER you have already seen the thing die.
+    if (spec.role === "rune") beep(110, 0.38, "sawtooth", 0.09, -70);
+    else beep(spec.role === "burst" ? 180 : 320, 0.2, "sawtooth", 0.06, spec.role === "burst" ? -160 : 120);
     return true;
   }
 

@@ -950,7 +950,7 @@ async function main(): Promise<void> {
     const M = await import("../src/entities/monsters.ts");
 
     ok(E.ELEMENTS.length === 5, "five elements");
-    ok(Object.keys(C.CRYSTAL_SPECS).length === 60, "5 elements × 3 tiers × 4 cast forms = 60 crystals");
+    ok(Object.keys(C.CRYSTAL_SPECS).length === 75, "5 elements × 3 tiers × 5 cast forms = 75 crystals");
     for (const k of Object.keys(C.CRYSTAL_SPECS)) {
       ok(!!items.ITEMS[k as keyof typeof items.ITEMS]?.crystal, `${k} exists as a crystal item`);
     }
@@ -958,7 +958,7 @@ async function main(): Promise<void> {
     const sold = new Set(T.OFFERS.map((o) => o.crystal as string));
     ok(Object.keys(C.CRYSTAL_SPECS).every((k) => sold.has(k)),
       "every crystal is on the shelf — none are unobtainable");
-    ok(T.OFFERS.length === 75, "…and the shelf carries all 75, arrows included");
+    ok(T.OFFERS.length === 90, "…and the shelf carries all 90, arrows and knells included");
     ok(E.ELEMENTS.every((el) => [0, 1, 2].every((t) =>
       T.OFFERS.some((o) => o.element === el && o.tier === t && o.crystal.endsWith("Arrow")))),
       "every element has an arrowhead at every tier");
@@ -1234,14 +1234,14 @@ async function main(): Promise<void> {
       "the four original crystals stay at tier I");
     tw.loadAttunedState(["fire"]);
     ok(tw.offersFor("fire", 1).every((o) => o.tier === 0), "a tier-I tower shows only the first five");
-    ok(tw.offersFor("fire", 1).length === 5, "…and exactly five, one per form");
+    ok(tw.offersFor("fire", 1).length === 6, "…and exactly six, one per form");
     ok(tw.offersFor("fire", 3).every((o) => o.tier === 2), "a tier-III tower shows only the last five");
     ok(tw.offersFor("ice", 3).length === 0, "an unattuned element shows nothing at any tier");
     // every lane is priced and gated identically — no element is secretly cheaper
     for (const el of ["fire", "ice", "earth", "storm", "shadow"] as const) {
       tw.loadAttunedState([el]);
       for (const t of [1, 2, 3]) {
-        ok(tw.offersFor(el, t).length === 5, `${el} shows five at tower ${t}`);
+        ok(tw.offersFor(el, t).length === 6, `${el} shows six at tower ${t}`);
       }
     }
     tw.loadAttunedState([]);
@@ -1371,7 +1371,7 @@ async function main(): Promise<void> {
       T.loadAttunedState([el]);
       for (const t of [1, 2, 3]) {
         const rows = T.offersFor(el, t);
-        ok(rows.length === 5, `${el} tab at tower ${t} shows five`);
+        ok(rows.length === 6, `${el} tab at tower ${t} shows six`);
         ok(rows.every((r) => r.element === el), `${el} tab shows only ${el}`);
         // THE RULE: one tier at a time, and it is the tower's tier
         ok(rows.every((r) => r.tier === t - 1), `${el} tab at tower ${t} shows tier ${t} and nothing else`);
@@ -2071,9 +2071,9 @@ async function main(): Promise<void> {
     T.loadAttunedState([]);
     ok(T.offersFor("fire", 1).length === 0, "a sealed element shows an empty shelf, not a locked one");
     T.markAttuned("fire");
-    ok(T.offersFor("fire", 1).length === 5, "spending the stone stocks the shelf");
+    ok(T.offersFor("fire", 1).length === 6, "spending the stone stocks the shelf");
     ok(T.offersFor("ice", 1).length === 0, "…and only that element");
-    ok([1, 2, 3].every((t) => T.offersFor("fire", t).length === 5),
+    ok([1, 2, 3].every((t) => T.offersFor("fire", t).length === 6),
       "one stone covers every tier, so upgrading the tower can never strand a lane");
     T.loadAttunedState([]);
 
@@ -17908,6 +17908,85 @@ async function main(): Promise<void> {
     TW2.markAttuned("ice");
     ok(TW2.playerElement() === "storm", "…and later stones don't move it — first, not latest");
     TW2.clearAttuned();
+  }
+
+  console.log("Etap 55 — the Knell: one creature, twice a Shard, on the Shard's clock:");
+  {
+    const CS = await import("../src/systems/crystals.ts");
+    const CD = await import("../src/systems/cooldowns.ts");
+    const TW = await import("../src/systems/tower.ts");
+    const EL = await import("../src/systems/elements.ts");
+    const IT = await import("../src/items.ts");
+    const ART = await import("../src/gfx/spellArt.ts");
+
+    const runes = Object.keys(CS.CRYSTAL_SPECS).filter((k) => CS.CRYSTAL_SPECS[k].role === "rune");
+    ok(runes.length === 15, "one Knell per element per tier");
+    ok(runes.every((k) => !!IT.ITEMS[k as keyof typeof IT.ITEMS]?.crystal),
+      "…each one exists as a crystal item");
+    ok(runes.every((k) => IT.ITEMS[k as keyof typeof IT.ITEMS].name.endsWith(" Knell")),
+      "…and reads as a Knell to the player, whatever the id says");
+
+    // the damage rule, stated as a RATIO rather than as two numbers: if the
+    // Shard is ever rebalanced, this fails instead of silently drifting
+    const shardBase = CS.CRYSTAL_SPECS.fireEmberShard.base;
+    const runeBase = CS.CRYSTAL_SPECS.fireEmberRune.base;
+    ok(runeBase[0] === shardBase[0] * 2 && runeBase[1] === shardBase[1] * 2,
+      "a Knell is exactly twice a Shard at both ends of the roll");
+
+    // one tile shorter, at every tier
+    for (const el of EL.ELEMENTS) {
+      for (let t = 0 as 0 | 1 | 2; t < 3; t = (t + 1) as 0 | 1 | 2) {
+        const n = EL.TIER_CODE[el][t];
+        const sh = CS.CRYSTAL_SPECS[`${el}${n}Shard`];
+        const rn = CS.CRYSTAL_SPECS[`${el}${n}Rune`];
+        ok(rn.range === sh.range - 32, `${el} ${n}: the Knell reaches one tile less than the Shard`);
+        ok(rn.element === el && rn.tier === t, `${el} ${n}: the Knell carries its own element and tier`);
+      }
+    }
+
+    // THE ANTI-STACK. A Knell on a clock of its own would be a second Shard
+    // fired in the same breath for double damage.
+    ok(CD.groupOf("fireEmberRune") === "shard", "a Knell cools on the Shard's clock, not its own");
+    ok(CD.groupOf("fireEmberRune") === CD.groupOf("stormTempestShard"),
+      "…and shares it across every element, the same way Shards already do");
+    CD.resetCooldowns();
+    CD.startCooldown("firePyreRune");
+    ok(CD.cooldownLeft("iceFrostShard") > 0, "throwing a Knell puts every Shard on cooldown");
+    ok(CD.cooldownLeft("fireEmberBurst") < CD.cooldownLeft("iceFrostShard"),
+      "…while a Burst only waits out the shared wheel");
+    CD.resetCooldowns();
+
+    // aiming: a Knell finds its own creature, exactly as a Shard does
+    ok(!CS.isAimedCrystal("fireEmberRune"), "a Knell is not aimed at ground — it takes a target");
+
+    // artwork: its own slot, with a fallback that cannot be a blank screen
+    ok(ART.FX_SLOTS.includes("rune"), "the Knell has an FX slot of its own");
+    ok(ART.fxFile("shadow", 2, "rune") === "fx-shadow-3-rune.png",
+      "…on the same lowercase-kebab filename rule as every other sheet");
+
+    // the shelf: gems at every tier, and the batch stays small
+    const offers = TW.OFFERS.filter((o) => o.id.endsWith("Rune"));
+    ok(offers.length === 15, "all fifteen Knells are on the shelf");
+    ok(offers.every((o) => o.cost.essentialGem === 2),
+      "every Knell costs two Essential Gems — the brake is the material, not the gold");
+    ok(offers.every((o) => !("magicEssence" in o.cost)),
+      "…and none of them touches the dragon's Essence, which gates Waves");
+    ok(offers.filter((o) => o.tier === 0).every((o) => o.buyN === 5)
+      && offers.filter((o) => o.tier === 1).every((o) => o.buyN === 4)
+      && offers.filter((o) => o.tier === 2).every((o) => o.buyN === 3),
+      "five, four, three — a Knell is counted on one hand");
+    for (const el of EL.ELEMENTS) {
+      const n = EL.TIER_CODE[el][2];
+      const rune = TW.offerById(`${el}${n}Rune`)!;
+      const shard = TW.offerById(`${el}${n}Shard`)!;
+      ok(rune.gold / rune.buyN > shard.gold / shard.buyN * 4,
+        `${el}: a Knell costs several times a Shard per charge, before the gems`);
+    }
+
+    // the Wave's Essence rule survived the shelf growing a sixth form
+    const essence = TW.OFFERS.filter((o) => "magicEssence" in o.cost);
+    ok(essence.length === 5 && essence.every((o) => o.tier === 2 && o.id.endsWith("Wave")),
+      "the Essence still gates exactly the five top-tier Waves and nothing else");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

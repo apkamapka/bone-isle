@@ -1210,6 +1210,43 @@ const BURST_BY_TIER: readonly string[][] = [
   ["a.aa.a", ".abba.", "abbbbc", "abbbbc", ".accc.", "c....c"],
 ];
 
+/**
+ * The Knell stone, baked. A disc that grows with its tier, with the cut mark
+ * lit in the element's own light — the same three colours as everything else
+ * on this shelf, so a bag of crystals and a bag of stones read as one family.
+ *
+ * Never seen on a real screen: all fifteen ship with drawn artwork. It is
+ * here because the table below must be total over `ItemKind`, and because a
+ * PNG that fails to load should draw a stone rather than nothing.
+ */
+const RUNE_BY_TIER: readonly string[][] = [
+  [
+    ".ccc.",
+    "cbbbc",
+    "cbabc",
+    "cbbbc",
+    ".ccc.",
+  ],
+  [
+    ".cccc.",
+    "cbbbbc",
+    "cbaabc",
+    "cbaabc",
+    "cbbbbc",
+    ".cccc.",
+  ],
+  [
+    "..cccc..",
+    ".cbbbbc.",
+    "cbbaabbc",
+    "cbaaaabc",
+    "cbaaaabc",
+    "cbbaabbc",
+    ".cbbbbc.",
+    "..cccc..",
+  ],
+];
+
 /** Light / body / shadow for each element, on the game's existing ramp. */
 const ELEMENT_RAMP: Readonly<Record<string, readonly [string, string, string]>> = {
   fire: ["#ffd48a", "#ff8a3a", "#a3401a"],
@@ -1238,6 +1275,11 @@ function elementalIcon(element: string, tier: number, role: "Shard" | "Burst" | 
   const [a, b, c] = ELEMENT_RAMP[element];
   const map = role === "Shard" ? SHARD_BY_TIER[tier] : BURST_BY_TIER[tier];
   return bake(map, { a, b, c });
+}
+
+function runeIcon(element: string, tier: number): HTMLCanvasElement {
+  const [a, b, c] = ELEMENT_RAMP[element];
+  return bake(RUNE_BY_TIER[tier], { a, b, c });
 }
 
 /**
@@ -1375,6 +1417,23 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   shadowEclipseNova: elementalIcon("shadow", 2, "Nova"),
   shadowEclipseWave: elementalIcon("shadow", 2, "Wave"),
   shadowEclipseArrow: elementalArrow("shadow", 2),
+  // The Knells, all fifteen. See RUNE_BY_TIER — none of these is ever drawn
+  // unless a PNG is missing.
+  fireEmberRune: runeIcon("fire", 0),
+  fireFlameRune: runeIcon("fire", 1),
+  firePyreRune: runeIcon("fire", 2),
+  iceFrostRune: runeIcon("ice", 0),
+  iceRimeRune: runeIcon("ice", 1),
+  iceGlacierRune: runeIcon("ice", 2),
+  earthLoamRune: runeIcon("earth", 0),
+  earthStoneRune: runeIcon("earth", 1),
+  earthBedrockRune: runeIcon("earth", 2),
+  stormSparkRune: runeIcon("storm", 0),
+  stormBoltRune: runeIcon("storm", 1),
+  stormTempestRune: runeIcon("storm", 2),
+  shadowGloomRune: runeIcon("shadow", 0),
+  shadowUmbraRune: runeIcon("shadow", 1),
+  shadowEclipseRune: runeIcon("shadow", 2),
   bow: SPR.bow, longbow: SPR.longbow, arrow: SPR.arrow, boneArrow: SPR.boneArrow,
   trainingArrow: SPR.trainingArrow,
   backpack: SPR.pack, levelStone: SPR.levelStone, skillStone: SPR.skillStone,

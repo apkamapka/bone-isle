@@ -62,6 +62,10 @@ const SCALE: Readonly<Record<FxSlot, number>> = {
   hit: 1.35,
   wave: 1.4,
   nova: 1.4,
+  // The biggest thing on the shelf draws biggest. A Knell that came up the
+  // size of a Shard's impact would be a spell you have to read the damage
+  // number to notice you cast.
+  rune: 1.6,
   // Under one tile on purpose, and the only slot that is. Every other effect
   // is a moment and can spill past its square; a field PERSISTS, five at a
   // time, around a player who has to keep reading the fight through them.

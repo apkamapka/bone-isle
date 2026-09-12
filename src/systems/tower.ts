@@ -254,7 +254,7 @@ export interface Offer {
   buyN: number;
 }
 
-const FORMS = ["Shard", "Burst", "Nova", "Wave", "Arrow"] as const;
+const FORMS = ["Shard", "Burst", "Nova", "Wave", "Arrow", "Rune"] as const;
 
 const FORM_DESC: Readonly<Record<(typeof FORMS)[number], string>> = {
   Shard: "One creature, longest reach.",
@@ -262,6 +262,7 @@ const FORM_DESC: Readonly<Record<(typeof FORMS)[number], string>> = {
   Nova: "Every tile touching you at once. No aiming, and no safe distance.",
   Wave: "Sixteen tiles the way you are facing, four deep, widening as it goes.",
   Arrow: "Arrowheads that carry the element. They meet resistance, never armour.",
+  Rune: "One creature, twice a Shard, one tile shorter. Cools on the Shard's clock.",
 };
 
 
@@ -272,11 +273,34 @@ const PRICE: Readonly<Record<(typeof FORMS)[number], readonly [number, number, n
   Nova: [140, 460, 1400],
   Wave: [170, 560, 1700],
   Arrow: [60, 150, 400],
+  Rune: [350, 1100, 3200],
 };
 
 const BATCH: Readonly<Record<(typeof FORMS)[number], readonly [number, number, number]>> = {
   Shard: [10, 8, 6], Burst: [10, 8, 6], Nova: [10, 8, 6], Wave: [10, 8, 6], Arrow: [25, 25, 25],
+  // Five, four, three. A Knell is meant to be counted on one hand: the moment
+  // you have ten of them it stops being the hit you save for something and
+  // becomes the hit you open with, and the Shard has nothing left to do.
+  Rune: [5, 4, 3],
 };
+
+/**
+ * The materials a batch wants on top of its gold.
+ *
+ * TWO DIFFERENT JOBS, which is why they are written as two rules rather than
+ * one table. The Essence gates the single most destructive SHAPE of each
+ * element and nothing else — one dragon-only material on one crystal is a
+ * landmark, and spread across five it would be a tax. The Gems gate the Knell
+ * at EVERY tier, because there the material is not a landmark at all: it is
+ * the brake. Gold alone cannot ration a Knell — gold is the thing a player
+ * eventually has piles of — and an unrationed Knell is simply a Shard that
+ * won.
+ */
+function materialsFor(form: (typeof FORMS)[number], tier: Tier): Cost {
+  if (form === "Rune") return { essentialGem: 2 };
+  if (tier === 2 && form === "Wave") return { magicEssence: 1 };
+  return {};
+}
 
 export const OFFERS: readonly Offer[] = (() => {
   const out: Offer[] = [];
@@ -291,10 +315,7 @@ export const OFFERS: readonly Offer[] = (() => {
           crystal: `${el}${n}${f}` as ItemKind,
           desc: FORM_DESC[f],
           gold: PRICE[f][t],
-          // The Essence gates the single most destructive shape of each
-          // element, and nothing else. One dragon-only material sitting on
-          // one crystal is a landmark; spread across five it is a tax.
-          cost: t === 2 && f === "Wave" ? { magicEssence: 1 } : {},
+          cost: materialsFor(f, t),
           buyN: BATCH[f][t],
         });
       }

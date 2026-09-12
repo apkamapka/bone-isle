@@ -59,6 +59,21 @@ export type ItemKind =
   | "shadowGloomShard" | "shadowGloomBurst" | "shadowGloomNova" | "shadowGloomWave" | "shadowGloomArrow"
   | "shadowUmbraShard" | "shadowUmbraBurst" | "shadowUmbraNova" | "shadowUmbraWave" | "shadowUmbraArrow"
   | "shadowEclipseShard" | "shadowEclipseBurst" | "shadowEclipseNova" | "shadowEclipseWave" | "shadowEclipseArrow"
+  /* ---- KNELLS (Etap 48) -------------------------------------------------
+   * One creature, one blow, twice a Shard. Bought with Essential Gems rather
+   * than gold alone and fired on the Shard's own cooldown, so a Knell is not
+   * a better Shard you graduate to — it is the hit you have three of and
+   * spend on the thing you actually need dead.
+   *
+   * The id says `Rune` because that is the object: a stone with a mark cut
+   * into it, thrown once and gone. The player reads "Knell", which is what
+   * the stone is FOR.
+   * -------------------------------------------------------------------- */
+  | "fireEmberRune" | "fireFlameRune" | "firePyreRune"
+  | "iceFrostRune" | "iceRimeRune" | "iceGlacierRune"
+  | "earthLoamRune" | "earthStoneRune" | "earthBedrockRune"
+  | "stormSparkRune" | "stormBoltRune" | "stormTempestRune"
+  | "shadowGloomRune" | "shadowUmbraRune" | "shadowEclipseRune"
   /* ---- ATTUNEMENT STONES (Etap 25) -------------------------------------
    * One per element, and the only key that opens that element's lane in the
    * Alchemy Tower. They replace the Fire Ruby, which gated exactly one
@@ -364,6 +379,25 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   shadowEclipseNova: { name: "Cyclone Nova", stack: 999, value: 76, weight: 2, crystal: true },
   shadowEclipseWave: { name: "Cyclone Wave", stack: 999, value: 100, weight: 2, crystal: true },
   shadowEclipseArrow: { name: "Cyclone Arrow", stack: 999, value: 25, weight: 1, ammo: { dmg: 42 }, element: "shadow" },
+  /* The Knells. Heavier than a crystal because they are stones, and worth
+   * more than a Shard because two Essential Gems went into each one — but
+   * still worth well under what the tower charges, so nobody farms gems to
+   * sell knells back to a shop. */
+  fireEmberRune: { name: "Ember Knell", stack: 999, value: 40, weight: 3, crystal: true },
+  fireFlameRune: { name: "Flame Knell", stack: 999, value: 150, weight: 3, crystal: true },
+  firePyreRune: { name: "Pyre Knell", stack: 999, value: 450, weight: 3, crystal: true },
+  iceFrostRune: { name: "Frost Knell", stack: 999, value: 40, weight: 3, crystal: true },
+  iceRimeRune: { name: "Rime Knell", stack: 999, value: 150, weight: 3, crystal: true },
+  iceGlacierRune: { name: "Glacier Knell", stack: 999, value: 450, weight: 3, crystal: true },
+  earthLoamRune: { name: "Loam Knell", stack: 999, value: 40, weight: 3, crystal: true },
+  earthStoneRune: { name: "Stone Knell", stack: 999, value: 150, weight: 3, crystal: true },
+  earthBedrockRune: { name: "Bedrock Knell", stack: 999, value: 450, weight: 3, crystal: true },
+  stormSparkRune: { name: "Spark Knell", stack: 999, value: 40, weight: 3, crystal: true },
+  stormBoltRune: { name: "Bolt Knell", stack: 999, value: 150, weight: 3, crystal: true },
+  stormTempestRune: { name: "Tempest Knell", stack: 999, value: 450, weight: 3, crystal: true },
+  shadowGloomRune: { name: "Zephyr Knell", stack: 999, value: 40, weight: 3, crystal: true },
+  shadowUmbraRune: { name: "Squall Knell", stack: 999, value: 150, weight: 3, crystal: true },
+  shadowEclipseRune: { name: "Cyclone Knell", stack: 999, value: 450, weight: 3, crystal: true },
   /* Attunement stones and the Essence carry value 0 on purpose. A shop that
    * buys them turns a quest reward into a lump of gold, and a lane you can
    * sell is a lane you can lose. They are keys, not loot. */

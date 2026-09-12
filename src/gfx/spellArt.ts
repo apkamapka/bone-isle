@@ -41,9 +41,9 @@
 import { ELEMENTS, ELEMENT_COLOR, type Element, type Tier } from "../systems/elements.ts";
 
 /** The five pictures a spell can ask for. */
-export type FxSlot = "bolt" | "burst" | "wave" | "nova" | "hit" | "field";
+export type FxSlot = "bolt" | "burst" | "wave" | "nova" | "hit" | "rune" | "field";
 
-export const FX_SLOTS: readonly FxSlot[] = ["bolt", "burst", "wave", "nova", "hit", "field"];
+export const FX_SLOTS: readonly FxSlot[] = ["bolt", "burst", "wave", "nova", "hit", "rune", "field"];
 
 /**
  * Which slot stands in when a file is missing, so artwork can arrive in any
@@ -60,6 +60,11 @@ const FALLBACK: Readonly<Record<FxSlot, FxSlot | null>> = {
   wave: "burst",
   nova: "wave",
   hit: "burst",
+  // A Rune with no sheet of its own falls back to a Shard's impact, which
+  // falls back to the bloom. It will look like a small hit rather than a
+  // death's head, which is wrong but is still a hit landing on the right
+  // creature at the right moment — the only failure a missing file is allowed.
+  rune: "hit",
   field: "wave",
 };
 
