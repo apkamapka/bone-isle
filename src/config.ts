@@ -373,6 +373,71 @@ export const CRYSTAL_GCD_S = 1.0;
  */
 export const HEAL_CRYSTAL_CD_S = 2.0;
 
+/* ------------------------------------------------------------------ *
+ *  THE UTILITY RUNES
+ *
+ *  Five stones that do something other than damage, sold on the tower's
+ *  OTHER shelf beside Life and Recall. Every number below is a dial; the
+ *  arithmetic each one is answering is written next to it, because these
+ *  are the constants most likely to be retuned by someone who has just
+ *  played for an hour and has no interest in rereading a module.
+ * ------------------------------------------------------------------ */
+
+/** Mending: HP = base + level x per-level. At 40 that is 440 against the
+ *  Life Crystal's 150 — "much more" as asked, and just under two thirds of
+ *  a level-40 health bar, so it is a save rather than a full reset. */
+export const HEAL_RUNE_BASE = 120;
+export const HEAL_RUNE_PER_LEVEL = 8;
+
+/** Swiftness: a flat multiplier on movement speed, for a minute. */
+export const HASTE_RUNE_S = 60;
+export const HASTE_RUNE_MULT = 1.35;
+
+/** Mire: everything within five tiles moves at half speed for eight
+ *  seconds. Short on purpose — it is a disengage, not a way to kite a pack
+ *  to death for free. */
+export const MIRE_RUNE_S = 8;
+export const MIRE_RUNE_TILES = 5;
+export const MIRE_RUNE_MULT = 0.5;
+
+/** Aegis: cuts what gets through shield and armour by this much. Fifteen
+ *  seconds is roughly seven monster swings — long enough to change the
+ *  outcome of a bad pull, too short to stand in a pack and read a book. */
+export const AEGIS_RUNE_S = 15;
+export const AEGIS_RUNE_CUT = 0.4;
+
+/* FURY, and the arithmetic that matters most in this file.
+ *
+ * Twenty seconds at triple weapon damage, then a five-minute debt that
+ * takes 30% OF THE FULL BAR every five seconds. That is sixty ticks, or
+ * eighteen times your own maximum HP — so the debt is not survivable by
+ * standing still, at any level, ever. It is survivable by HEALING THROUGH
+ * IT and nothing else:
+ *
+ *     level 40: maxhp 680, tick 204, drain 41 HP/s
+ *     Mending  440 on a 2s clock          = 220 HP/s available
+ *     total to heal off                   = 12240 HP  ~= 28 Mending Runes
+ *
+ * So the real price of a Fury is twenty seconds of triple damage in
+ * exchange for about thirty Mending Runes and five minutes of pressing
+ * heal. Use one with an empty bag and you die in four ticks. That is the
+ * intended trap and it is why the two runes shipped together.
+ *
+ * FURY_DEBT_FRAC is the one dial to touch. Lower it and Fury becomes a
+ * buff with a scary animation; raise it and no amount of healing wins. */
+export const FURY_RUNE_S = 20;
+export const FURY_RUNE_MULT = 3;
+export const FURY_DEBT_S = 300;
+export const FURY_DEBT_TICK_S = 5;
+export const FURY_DEBT_FRAC = 0.30;
+/** Half an hour between Furies, and it counts play time, not wall time —
+ *  the same rule the PvP skull runs under, for the same reason. */
+export const FURY_LOCK_S = 1800;
+
+/** How long a utility rune locks itself and its siblings out. Mending is
+ *  NOT in this group: it runs on the Life Crystal's clock instead. */
+export const UTILITY_RUNE_CD_S = 4.0;
+
 /**
  * Ranged combat. A bow is a two-handed weapon (locks out the shield) that
  * fires arrows — real ammo consumed one per shot. A shot's damage is the

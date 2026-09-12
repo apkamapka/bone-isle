@@ -1339,6 +1339,12 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   boneSword: SPR.gearStubWeapon, minotaurAxe: SPR.gearStubWeapon, warlordBlade: SPR.gearStubWeapon, steelMaul: SPR.gearStubWeapon,
   demonCleaver: SPR.gearStubWeapon, knightSword: SPR.gearStubWeapon, fireSword: SPR.gearStubWeapon, marrowBlade: SPR.gearStubWeapon,
   healCrystal: SPR.crystalHeal, recallCrystal: SPR.crystalRecall,
+  // The utility runes. Like the Knells these all ship with drawn artwork and
+  // none of these bakes is ever seen; they exist because this table has to be
+  // total over `ItemKind`, and a missing PNG should draw a stone.
+  healRune: runeIcon("earth", 1), hasteRune: runeIcon("ice", 1),
+  mireRune: runeIcon("ice", 2), aegisRune: runeIcon("earth", 2),
+  furyRune: runeIcon("earth", 0),
   fireCrystal: attuneIcon("fire"), waterCrystal: attuneIcon("ice"), earthCrystal: attuneIcon("earth"),
   windCrystal: attuneIcon("shadow"), lightningCrystal: attuneIcon("storm"),
   magicEssence: SPR.magicEssence,

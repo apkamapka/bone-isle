@@ -8,6 +8,7 @@ rather than drawn here:
 
     public/fx-<element>-<tier>-rune.png    288 x 32, nine frames, one strip
     public/item-<element>-<code>-rune.png  32 x 32, the stone in the bag
+    public/item-<name>-rune.png            32 x 32, the five utility runes
 
 WHY DERIVE AND NOT DRAW.  The other two generators in this folder draw their
 effects from scratch because there was nothing to start from.  Here there is:
@@ -44,6 +45,31 @@ from PIL import Image, ImageDraw
 # folder to re-run.
 SRC = "tools/fx/src"
 OUT = "public"
+
+# The three bodies the utility runes are cut from, beside the Knells' stone.
+UTILITY_BODY = {
+    "nugget": "rune-nugget.png",
+    "gem": "rune-gem.png",
+    "tablet": "rune-tablet.png",
+}
+
+# GREY, AND THE REASON IT IS GREY.  Fifteen elemental ramps between them have
+# taken red, blue, pale blue, amber, violet, magenta, navy, silver and dark
+# brown; what is left over is grey, green and teal.  So the utility runes are
+# grey rock with a coloured mark, which is exactly what Life and Recall already
+# are — the family reads as the older, plainer shelf it belongs to, and the
+# mark carries the meaning.  Greens and teals for the four that help you,
+# acid yellow-green for the one that does not.
+UTILITY_STONE = ["#101010", "#2e2e2c", "#55574f", "#7d8375", "#c2c7b8"]
+
+#            body      groove     mark       core
+UTILITY = {
+    "heal":  ("nugget", "#1f6b3a", "#3ee07a", "#b6ffcf"),
+    "haste": ("gem",    "#0f5c48", "#2fd8a0", "#a8ffdc"),
+    "mire":  ("gem",    "#0d4450", "#1f96ae", "#8fe0e8"),
+    "aegis": ("nugget", "#3a3f48", "#c6ccd8", "#ffffff"),
+    "fury":  ("tablet", "#4a5a08", "#b8e01e", "#f0ff8a"),
+}
 
 ELEMENTS = ["fire", "ice", "earth", "storm", "shadow"]
 
@@ -277,6 +303,90 @@ def _wind_core():
     return im
 
 
+def _u_heal():
+    im, d = _canvas()
+    d.rectangle([_px(6.2), _px(1.8), _px(8.8), _px(13.2)], fill=255)
+    d.rectangle([_px(1.8), _px(6.2), _px(13.2), _px(8.8)], fill=255)
+    return im
+
+
+def _u_heal_core():
+    im, d = _canvas()
+    d.rectangle([_px(7.0), _px(3.0), _px(8.0), _px(12.0)], fill=255)
+    d.rectangle([_px(3.0), _px(7.0), _px(12.0), _px(8.0)], fill=255)
+    return im
+
+
+def _chevron(d, cx, w, t):
+    d.line([_px(cx - w), _px(3.0), _px(cx + w), _px(7.5), _px(cx - w), _px(12.0)],
+           fill=255, width=int(_px(t)), joint="curve")
+
+
+def _u_haste():
+    im, d = _canvas()
+    _chevron(d, 4.6, 2.4, 1.2)
+    _chevron(d, 9.4, 2.4, 1.2)
+    return im
+
+
+def _u_haste_core():
+    im, d = _canvas()
+    _chevron(d, 9.4, 2.4, 0.6)
+    return im
+
+
+def _u_mire():
+    """An hourglass. Everything else legible at fifteen pixels that means
+    "slow" is an arrow, and arrows are already the Novas and the Waves."""
+    im, d = _canvas()
+    d.polygon([(_px(2.6), _px(2.0)), (_px(12.4), _px(2.0)), (_px(7.5), _px(7.5))], fill=255)
+    d.polygon([(_px(2.6), _px(13.0)), (_px(12.4), _px(13.0)), (_px(7.5), _px(7.5))], fill=255)
+    return im
+
+
+def _u_mire_core():
+    im, d = _canvas()
+    d.polygon([(_px(4.6), _px(3.6)), (_px(10.4), _px(3.6)), (_px(7.5), _px(6.6))], fill=255)
+    return im
+
+
+def _u_aegis():
+    """Outlined, not filled. A solid shield at this size is a blob with a
+    groove round it and reads as a gemstone."""
+    im, d = _canvas()
+    d.line([(_px(7.5), _px(1.8)), (_px(12.4), _px(4.0)), (_px(12.4), _px(8.0)),
+            (_px(7.5), _px(13.2)), (_px(2.6), _px(8.0)), (_px(2.6), _px(4.0)),
+            (_px(7.5), _px(1.8))], fill=255, width=int(_px(1.15)), joint="curve")
+    return im
+
+
+def _u_fury():
+    im, d = _canvas()
+    for x0, bow in ((3.2, 0.9), (7.5, 1.3), (11.8, 0.9)):
+        d.line([(_px(x0 + 1.8), _px(1.6)), (_px(x0 + bow - 0.4), _px(7.4)),
+                (_px(x0 - 1.4), _px(13.4))], fill=255, width=int(_px(1.15)), joint="curve")
+    return im
+
+
+def _u_fury_core():
+    im, d = _canvas()
+    d.line([_px(8.6), _px(2.6), _px(6.2), _px(12.4)], fill=255, width=int(_px(0.7)))
+    return im
+
+
+def _blank():
+    return _canvas()[0]
+
+
+UTILITY_GLYPH = {
+    "heal": (_u_heal, _u_heal_core),
+    "haste": (_u_haste, _u_haste_core),
+    "mire": (_u_mire, _u_mire_core),
+    "aegis": (_u_aegis, _blank),
+    "fury": (_u_fury, _u_fury_core),
+}
+
+
 BUILD = {
     "fire": (_fire, _fire_core),
     "ice": (_ice, _ice_core),
@@ -286,8 +396,8 @@ BUILD = {
 }
 
 
-def glyph(el):
-    body_f, core_f = BUILD[el]
+def glyph(el, table=None):
+    body_f, core_f = (table or BUILD)[el]
 
     def shrink(im):
         return np.asarray(im.resize((G, G), Image.BOX), dtype=np.float32) / 255.0 > 0.34
@@ -306,6 +416,42 @@ def _outline(mask):
     grown = (p[:-2, 1:-1] | p[2:, 1:-1] | p[1:-1, :-2] | p[1:-1, 2:] |
              p[:-2, :-2] | p[:-2, 2:] | p[2:, :-2] | p[2:, 2:])
     return grown & ~mask
+
+
+def utility_icon(name):
+    """One utility rune: grey body, groove, mark, lit core.
+
+    Same construction as `rune_icon` below and deliberately so — these have to
+    look like the Knells' cousins, not like a second art style that happens to
+    share a shelf. The only differences are that the body ramp is fixed grey
+    instead of per-element, and the mark is a symbol rather than an element.
+    """
+    body_key, groove_c, mark_c, core_c = UTILITY[name]
+    raw = np.array(Image.open(f"{SRC}/{UTILITY_BODY[body_key]}").convert("RGBA"))
+    rgb = raw[..., :3].astype(np.float32)
+    a = raw[..., 3] > 128
+    rim = a & (lum(rgb) < 40)
+
+    px = np.zeros((32, 32, 4), np.uint8)
+    px[..., :3] = np.clip(gradient_map(rgb, [_h(c) for c in UTILITY_STONE], 0.06, 0.70),
+                          0, 255).astype(np.uint8)
+    px[..., 3] = np.where(a, 255, 0)
+    px[..., :3][rim] = (12, 12, 12)
+
+    gb, gc = glyph(name, UTILITY_GLYPH)
+    o = (32 - G) // 2
+    body = np.zeros((32, 32), bool)
+    core = np.zeros((32, 32), bool)
+    body[o:o + G, o:o + G] = gb
+    core[o:o + G, o:o + G] = gc
+    body &= a
+    core &= a
+
+    groove = _outline(body) & a & ~rim
+    px[..., :3][groove] = _h(groove_c)
+    px[..., :3][body] = _h(mark_c)
+    px[..., :3][core] = _h(core_c)
+    return Image.fromarray(px)
 
 
 def rune_icon(el, tier, stone):
@@ -352,3 +498,7 @@ if __name__ == "__main__":
             fx_strip(el, t, cache).save(f"{OUT}/fx-{el}-{t + 1}-rune.png")
             rune_icon(el, t, stone).save(f"{OUT}/item-{el}-{TIER_CODE[el][t]}-rune.png")
         print("done", el)
+
+    for name in UTILITY:
+        utility_icon(name).save(f"{OUT}/item-{name}-rune.png")
+    print("done utility runes")

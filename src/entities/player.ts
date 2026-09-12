@@ -1,4 +1,6 @@
 /** The player: state, backpack, equipment and derived stats. */
+import { newBuffs, hasteMult } from "../systems/buffs.ts";
+import type { Buffs } from "../systems/buffs.ts";
 import { HP_BASE, HP_PER_LEVEL, PLAYER_BASE_HP, PLAYER_BASE_SPEED, SPEED_PER_LEVEL, PLAYER_ATTACK_RATE, expNeeded, CAP_BASE, CAP_PER_LEVEL } from "../config.ts";
 import { bakeOutfitSprites } from "../systems/outfit.ts";
 import type { Facing, DirSprites } from "../systems/outfit.ts";
@@ -66,6 +68,8 @@ export interface Player {
   /** Seconds of "fed" time left — HP regenerates only while this is > 0.
    *  Eating food banks more, capped at FED_MAX_S (Tibia's 20 minutes). */
   fedS: number;
+  /** Timed effects from the utility runes. Saved — see systems/buffs.ts. */
+  buffs: Buffs;
   atkRate: number;
   regen: number;
   dest: Vec | null;
@@ -134,6 +138,7 @@ export function createPlayer(spawn: Vec): Player {
     expNext: expNeeded(1),
     atkCd: 0,
     fedS: 0,
+    buffs: newBuffs(),
     atkRate: PLAYER_ATTACK_RATE,
     regen: 0,
     dest: null,
@@ -174,7 +179,11 @@ export function refreshDerived(p: Player, bonus: DerivedBonus = activeBonus): vo
 
 /** Movement speed in px/s: base + character level (Tibia 8.6 style) + boots. */
 export function playerSpeed(p: Player): number {
-  return PLAYER_BASE_SPEED + (p.level - 1) * SPEED_PER_LEVEL + gearStat(p.eq, "speed");
+  const base = PLAYER_BASE_SPEED + (p.level - 1) * SPEED_PER_LEVEL + gearStat(p.eq, "speed");
+  // Swiftness multiplies the WHOLE figure, boots included. Adding a flat bonus
+  // instead would have made the rune worth least to the character who has
+  // invested in speed, which is the wrong way round for something you buy.
+  return base * hasteMult(p.buffs);
 }
 
 /** Maximum weight (oz) the player can carry in the backpack. Grows with level. */

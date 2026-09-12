@@ -31,6 +31,11 @@ export type ItemKind =
   | "gorakTusk"
   // forge materials (Etap 24): smelted from looted gear, never bought
   | "iron" | "steel" | "essentialGem"
+  /* ---- UTILITY RUNES -----------------------------------------------------
+   * Stones that do something other than damage. They sit on the tower's
+   * OTHER shelf beside Life and Recall, which is the older family they
+   * belong to — same grey rock, different mark cut into it. */
+  | "healRune" | "hasteRune" | "mireRune" | "aegisRune" | "furyRune"
   // furnace fuel: dropped by anything that makes camp — people, orcs,
   // goblins, minotaurs. Not by beasts, and not by the undead.
   | "coal"
@@ -293,6 +298,15 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   iron:         { name: "Iron",          stack: 9999, value: 12, weight: 5 },
   steel:        { name: "Steel",         stack: 9999, value: 100, weight: 6 },
   essentialGem: { name: "Essential Gem", stack: 999, value: 1000, weight: 3 },
+  /* The utility runes. `crystal: true` is what makes a thing bindable to the
+   * hotbar, which every one of these needs — a heal you have to open the
+   * backpack for is not a heal. Sell values sit well under what the tower
+   * charges so nobody farms the shelf to sell it back. */
+  healRune: { name: "Mending Rune", stack: 999, value: 45, weight: 3, crystal: true },
+  hasteRune: { name: "Swiftness Rune", stack: 999, value: 60, weight: 3, crystal: true },
+  mireRune: { name: "Mire Rune", stack: 999, value: 85, weight: 3, crystal: true },
+  aegisRune: { name: "Aegis Rune", stack: 999, value: 110, weight: 3, crystal: true },
+  furyRune: { name: "Fury Rune", stack: 999, value: 400, weight: 4, crystal: true },
   coal:         { name: "Coal",          stack: 9999, value: 4, weight: 4 },
   mushroom:  { name: "Mushroom",     stack: 999, value: 2, weight: 4, food: 60 },
   meat:      { name: "Raw Meat",     stack: 999, value: 3, weight: 8, food: 180 },

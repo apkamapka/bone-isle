@@ -1,4 +1,6 @@
 /** localStorage persistence: full game snapshot keyed by a single slot. */
+import { loadBuffs } from "./systems/buffs.ts";
+import type { Buffs } from "./systems/buffs.ts";
 import { buildWorlds, populateAll, type Game } from "./game.ts";
 import { WORLD_SEED, GROUND_DESPAWN_S, BAG_SIZE, SPRITE_SCALE } from "./config.ts";
 import { expNeeded } from "./config.ts";
@@ -108,6 +110,17 @@ interface SaveData {
     gold?: number;
     taskPoints?: number; level: number; exp: number; expNext: number;
     fedS?: number;
+    /**
+     * Rune effects. Absent in every save written before them, which loads as
+     * "nothing up" — see loadBuffs().
+     *
+     * THE FURY DEBT IS WHY THIS IS SAVED AT ALL. Five minutes of losing 30% of
+     * the bar every five seconds is the entire price of the buff, and a price
+     * a reload cancels is not a price. The half-hour lock travels with it for
+     * the same reason: without it, "once per thirty minutes" would read "once
+     * per reload".
+     */
+    buffs?: Partial<Buffs>;
     /** Ammo slot pick. Absent in pre-Etap-26 saves — those load as "auto". */
     ammo?: string;
     pack: ItemStack | null; bag?: Bag; eq: Equipment;
@@ -230,6 +243,7 @@ export function saveGame(g: Game): void {
       hp: p.hp, maxhp: p.maxhp,
       taskPoints: p.taskPoints, level: p.level, exp: p.exp, expNext: p.expNext,
       fedS: p.fedS,
+      buffs: { ...p.buffs },
       ammo: p.ammo ?? undefined,
       pack: p.pack, eq: p.eq,
     },
@@ -391,6 +405,7 @@ export function loadGame(): Game | null {
   placeWalker(player, sp.x * pos, sp.y * pos); // scale a v2 position, then snap to its tile centre
   player.taskPoints = sp.taskPoints ?? 0; player.level = sp.level;
   player.fedS = sp.fedS ?? 0; // older saves start hungry
+  player.buffs = loadBuffs(sp.buffs); // older saves come back with nothing up
   // Recompute expNext from level so older saves adopt the current XP curve.
   player.exp = sp.exp; player.expNext = expNeeded(player.level);
   // rebuild pack/eq defensively (older/partial saves)

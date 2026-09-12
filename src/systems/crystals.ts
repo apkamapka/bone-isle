@@ -14,7 +14,13 @@ import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
 import { TILE } from "../config.ts";
 import { bagCount, removeItem } from "../items.ts";
-import { HEAL_CRYSTAL_BASE, MONSTER_AGGRO_HIT_S } from "../config.ts";
+import {
+  HEAL_CRYSTAL_BASE, MONSTER_AGGRO_HIT_S,
+  HEAL_RUNE_BASE, HEAL_RUNE_PER_LEVEL, HASTE_RUNE_S, AEGIS_RUNE_S,
+  MIRE_RUNE_S, MIRE_RUNE_TILES, FURY_RUNE_S, FURY_DEBT_S, FURY_DEBT_FRAC,
+  FURY_DEBT_TICK_S,
+} from "../config.ts";
+import { furyReady, startFury } from "./buffs.ts";
 import { cooldownLeft, blockedBy, startCooldown, tickCooldowns, resetCooldowns } from "./cooldowns.ts";
 import { killMonster } from "./combat.ts";
 import { lineOfSight, groundBlocked } from "../world/collision.ts";
@@ -29,7 +35,10 @@ import type { ItemKind } from "../items.ts";
  * line covers offence now, and it does it behind an attunement stone, which
  * is the point: a crystal that hurts things is something you go and earn.
  */
-export const CRYSTAL_KINDS: readonly ItemKind[] = ["healCrystal", "recallCrystal"];
+export const CRYSTAL_KINDS: readonly ItemKind[] = [
+  "healCrystal", "recallCrystal",
+  "healRune", "hasteRune", "mireRune", "aegisRune", "furyRune",
+];
 
 export function isCrystal(kind: ItemKind): boolean {
   return CRYSTAL_KINDS.includes(kind);
@@ -291,6 +300,96 @@ export function isAimedCrystal(kind: ItemKind): boolean {
   return CRYSTAL_SPECS[kind]?.role === "burst";
 }
 
+const UTILITY_RUNE_KINDS: ReadonlySet<ItemKind> =
+  new Set<ItemKind>(["healRune", "hasteRune", "mireRune", "aegisRune", "furyRune"]);
+
+/**
+ * The five utility runes.
+ *
+ * Each one refuses BEFORE it spends the charge, and each refusal says which
+ * thing was wrong. That matters more here than anywhere else in the file: a
+ * Fury Rune is the single most expensive consumable in the game, and "nothing
+ * happened" after clicking one is not a failure a player forgives.
+ */
+function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
+  const b = p.buffs;
+
+  // Mending is a heal and answers to the heal clock, so its refusals are the
+  // Life Crystal's refusals, word for word.
+  if (kind === "healRune") {
+    if (p.hp >= p.maxhp) {
+      addFloat(world, p.x, p.y - 44, "full hp", "#7dff9e");
+      return false;
+    }
+    const why = blockedBy(kind);
+    if (why) {
+      addFloat(world, p.x, p.y - 44, why === "own" ? "still cooling" : "too soon", "#8ab6ff");
+      return false;
+    }
+    removeItem(p.bag, kind, 1);
+    startCooldown(kind);
+    const amount = HEAL_RUNE_BASE + p.level * HEAL_RUNE_PER_LEVEL;
+    p.hp = Math.min(p.maxhp, p.hp + amount);
+    addFloat(world, p.x, p.y - 40, `+${amount}`, "#3ee07a");
+    beep(520, 0.3, "sine", 0.07, 320);
+    return true;
+  }
+
+  // FURY IS CHECKED BEFORE THE COOLDOWN, not after. Its own half-hour lock is
+  // the interesting refusal and the four-second group clock is noise next to
+  // it: being told "still cooling" when what is actually wrong is that you
+  // used a Fury nine minutes ago teaches the player the wrong rule.
+  if (kind === "furyRune" && !furyReady(b)) {
+    const left = b.debt > 0 ? b.debt : b.furyLock;
+    const msg = b.debt > 0 ? "still burning" : `fury in ${Math.ceil(left / 60)} min`;
+    addFloat(world, p.x, p.y - 44, msg, "#b8e01e");
+    return false;
+  }
+
+  const why = blockedBy(kind);
+  if (why) {
+    addFloat(world, p.x, p.y - 44, why === "own" ? "still cooling" : "too soon", "#8ab6ff");
+    return false;
+  }
+  removeItem(p.bag, kind, 1);
+  startCooldown(kind);
+
+  if (kind === "hasteRune") {
+    b.haste = HASTE_RUNE_S;
+    addFloat(world, p.x, p.y - 40, "swift", "#2fd8a0");
+    beep(700, 0.18, "triangle", 0.06, 260);
+    return true;
+  }
+  if (kind === "aegisRune") {
+    b.aegis = AEGIS_RUNE_S;
+    addFloat(world, p.x, p.y - 40, "warded", "#c6ccd8");
+    beep(300, 0.26, "square", 0.05, 90);
+    return true;
+  }
+  if (kind === "mireRune") {
+    // Everything inside the ring, whether it has noticed you or not. A Mire
+    // that only caught creatures already chasing you would be useless for the
+    // one thing it is for: walking into a room and then out of it.
+    const reach = MIRE_RUNE_TILES * TILE;
+    let caught = 0;
+    for (const m of world.monsters) {
+      if (Math.hypot(m.x - p.x, m.y - p.y) > reach) continue;
+      m.slowS = MIRE_RUNE_S;
+      caught++;
+      addFloat(world, m.x, m.y - 30, "mired", "#1f96ae");
+    }
+    addFloat(world, p.x, p.y - 40, caught ? `mire x${caught}` : "mire", "#1f96ae");
+    beep(150, 0.34, "sine", 0.06, -70);
+    return true;
+  }
+  // furyRune
+  startFury(b, FURY_RUNE_S, FURY_DEBT_S);
+  addFloat(world, p.x, p.y - 40, "FURY", "#b8e01e");
+  addFloat(world, p.x, p.y - 56, `${Math.round(FURY_DEBT_FRAC * 100)}% every ${FURY_DEBT_TICK_S}s after`, "#f0ff8a");
+  beep(90, 0.55, "sawtooth", 0.1, 150);
+  return true;
+}
+
 /**
  * Apply a Life or elemental crystal. Returns true if a charge was consumed.
  * Recall is NOT handled here — the caller (main loop) does travel + charge.
@@ -336,6 +435,9 @@ export function useCrystal(
     beep(660, 0.2, "sine", 0.06, 220);
     return true;
   }
+
+  // ---- the utility runes ----
+  if (UTILITY_RUNE_KINDS.has(kind)) return useUtilityRune(world, p, kind);
 
   // ---- the elemental line ----
   const spec = CRYSTAL_SPECS[kind];

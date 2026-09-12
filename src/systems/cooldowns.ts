@@ -23,7 +23,7 @@
  * has no business surviving a reload — which is also why the old single timer
  * needed no save migration and neither does this.
  */
-import { CRYSTAL_CD_TIER, CRYSTAL_GCD_S, HEAL_CRYSTAL_CD_S } from "../config.ts";
+import { CRYSTAL_CD_TIER, CRYSTAL_GCD_S, HEAL_CRYSTAL_CD_S, UTILITY_RUNE_CD_S } from "../config.ts";
 import type { ItemKind } from "../items.ts";
 import { CRYSTAL_SPECS } from "./crystals.ts";
 import { active as activeState } from "./playerState.ts";
@@ -37,13 +37,36 @@ import { active as activeState } from "./playerState.ts";
  * is not how Tibia reads. Exura Vita runs on a one-second clock of its own;
  * two seconds here is the same idea with a wider margin.
  */
-export type CdGroup = "shard" | "burst" | "nova" | "wave" | "heal";
+export type CdGroup = "shard" | "burst" | "nova" | "wave" | "heal" | "utility";
 
 /** The wider bracket the wheel runs in. Healing does not share the attack's. */
-export type CdFamily = "attack" | "heal";
+export type CdFamily = "attack" | "heal" | "utility";
 
 export function familyOf(kind: ItemKind): CdFamily {
-  return kind === "healCrystal" ? "heal" : "attack";
+  if (kind === "healCrystal" || kind === "healRune") return "heal";
+  return UTILITY_RUNES.has(kind) ? "utility" : "attack";
+}
+
+/**
+ * The four runes that are neither an attack nor a heal.
+ *
+ * They get a family of their own for the same reason healing got one: a
+ * Swiftness you paid for should not cost you the swing you were about to make.
+ * They share ONE group between them, though — four self-buffs fired back to
+ * back is the same stacking problem the role clock already exists to stop,
+ * and Aegis on top of Fury on top of Swiftness in one second is exactly the
+ * combination nobody would be able to balance against afterwards.
+ *
+ * Mending is NOT here. It is a heal, it runs on the Life Crystal's clock, and
+ * putting it in this group would have made it a free extra heal on a separate
+ * timer — the one thing the heal clock is for.
+ */
+const UTILITY_RUNES: ReadonlySet<ItemKind> =
+  new Set<ItemKind>(["hasteRune", "mireRune", "aegisRune", "furyRune"]);
+
+/** Is this one of the four timed utility runes? */
+export function isUtilityRune(kind: ItemKind): boolean {
+  return UTILITY_RUNES.has(kind);
 }
 
 /**
@@ -94,7 +117,8 @@ function st(): CdState {
  * is a decision about who you know.
  */
 export function groupOf(kind: ItemKind): CdGroup {
-  if (kind === "healCrystal") return "heal";
+  if (kind === "healCrystal" || kind === "healRune") return "heal";
+  if (UTILITY_RUNES.has(kind)) return "utility";
   const spec = CRYSTAL_SPECS[kind];
   if (!spec) return "shard";
   /* A KNELL COOLS ON THE SHARD'S CLOCK, and this is the one line that keeps
@@ -119,6 +143,7 @@ export function groupOf(kind: ItemKind): CdGroup {
  */
 export function ownCooldown(kind: ItemKind): number {
   if (groupOf(kind) === "heal") return HEAL_CRYSTAL_CD_S;
+  if (groupOf(kind) === "utility") return UTILITY_RUNE_CD_S;
   const spec = CRYSTAL_SPECS[kind];
   return CRYSTAL_CD_TIER[spec ? spec.tier : 0];
 }
@@ -128,7 +153,10 @@ export function groupCooldown(kind: ItemKind): number {
   // A heal's own two seconds is already the brake; a second clock on top would
   // only ever be the smaller of the two and would never be the thing you wait
   // for. One number the player can learn is better than two they cannot see.
-  return familyOf(kind) === "heal" ? 0 : CRYSTAL_GCD_S;
+  // Utility runes have no wheel either: their own four seconds is the brake,
+  // and a second shorter number underneath it would never be the one you wait
+  // for.
+  return familyOf(kind) === "attack" ? CRYSTAL_GCD_S : 0;
 }
 
 /**

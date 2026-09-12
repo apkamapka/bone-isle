@@ -6,6 +6,7 @@ import {
   SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S, MIN_ELEMENTAL_DAMAGE, MIN_DAMAGE_TO_MONSTER,
 } from "../config.ts";
 import { beep } from "../audio.ts";
+import { aegisCut, clearBuffsOnDeath, furyMult } from "./buffs.ts";
 import { addFloat } from "../fx.ts";
 import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import type { Element } from "./elements.ts";
@@ -83,7 +84,12 @@ export function burnMonster(world: World, p: Player, m: Monster, el: Element, ra
 
 /** Player strikes a monster. Returns true if the monster died. */
 export function playerAttack(world: World, p: Player, m: Monster): boolean {
-  const dmg = applyMonsterArmor(m, rollMeleeDamage(attackPower(p.level, p.eq)));
+  // Fury multiplies the ROLL, before armour. Armour is a flat subtraction, so
+  // tripling after it would have been worth far more than triple — the whole
+  // point is three times the weapon, not three times the weapon plus three
+  // armour values back.
+  const dmg = applyMonsterArmor(m,
+    Math.round(rollMeleeDamage(attackPower(p.level, p.eq)) * furyMult(p.buffs)));
   addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
   if (dmg <= 0) {
     // the classic Tibia whiff — the swing lands for nothing
@@ -132,7 +138,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   // target's armor and meets its resistance instead. Costlier than a bone
   // arrow, and the answer to a creature you cannot dent with a plain one.
   const el = ITEMS[arrowKind].element;
-  const raw = rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg));
+  const raw = Math.round(rollDistanceDamage(distancePower(p.level, p.eq, arrowDmg)) * furyMult(p.buffs));
   const dmg = el
     ? Math.max(MIN_ELEMENTAL_DAMAGE, Math.round(raw * resistanceOf(monsterResist(MONSTER_DEFS[m.kind]), el)))
     : applyMonsterArmor(m, raw);
@@ -444,7 +450,16 @@ export function hurtPlayer(
   // Tibia — which is also why the two layers must not be summed.
   const fromArmor = !elemental && afterShield > 0 ? rollArmorReduction(defenseArmor(p.eq)) : 0;
   const reduced = fromShield + fromArmor;
-  const dmg = Math.max(0, Math.round(raw - reduced));
+  // Aegis takes its cut LAST, off whatever the shield and armour left. Taken
+  // off `raw` first it would have made the two layers underneath it smaller
+  // as well, so the same rune would have been worth most to the character
+  // wearing nothing — the reverse of how every other defence here works.
+  //
+  // It also applies to elemental damage, which shield and armour do not. That
+  // is deliberate and it is most of why the rune is worth buying: a dragon's
+  // fire is the one thing gear cannot answer at all.
+  const afterAegis = Math.max(0, raw - reduced) * (1 - aegisCut(p.buffs));
+  const dmg = Math.max(0, Math.round(afterAegis));
   p.hp -= dmg;
 
   // Shielding trains only on hits the shield actually engaged — more than
@@ -469,6 +484,10 @@ export function hurtPlayer(
     p.dest = null;
     p.gather = null;
     resetShieldWindow();
+    // Fury's burn dies with you; its half-hour lock does not. See buffs.ts —
+    // letting death clear the lock would make dying the cheap way out of a
+    // Fury gone wrong.
+    clearBuffsOnDeath(p.buffs);
     applyDeathPenalty(world, p);
     beep(120, 0.5, "sawtooth", 0.07, -90);
     return true;

@@ -5,7 +5,7 @@ import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax }
 import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import { MIN_HIT_RATIO } from "../config.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost, structSprite, countOwned } from "../systems/building.ts";
-import { RESEARCH, isResearched, towerTierOk,
+import { RESEARCH, isResearched, towerTierOk, levelOk,
   ATTUNEMENT, isAttuned, offersFor } from "../systems/tower.ts";
 import { ELEMENT_LABEL, ELEMENTS, type Element } from "../systems/elements.ts";
 import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
@@ -1325,7 +1325,10 @@ function drawSkills(p: PanelInput): void {
   const { scale: S } = hud;
   const w = 216 * S;
   const rows = Object.keys(skills) as (keyof typeof skills)[];
-  const h = 20 * S + rows.length * 26 * S + 62 * S;
+  // 74 rather than 62: the last ten pixels are the rune-effect line below the
+  // fed status. Reserved unconditionally even when nothing is up — a window
+  // that changes height as a buff expires is worse than ten idle pixels.
+  const h = 20 * S + rows.length * 26 * S + 74 * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "SKILLS")) return;
   let ry = y + 20 * S;
@@ -1374,6 +1377,31 @@ function drawSkills(p: PanelInput): void {
     hudText(hud, `Fed ${mm}:${ss} — regenerating`, x + 10 * S, ry + 53 * S, 7 * S, "#9ad08a");
   } else {
     hudText(hud, "Hungry — eat food to regenerate", x + 10 * S, ry + 53 * S, 7 * S, "rgba(224,160,106,.9)");
+  }
+
+  /* Whatever a rune is currently doing to you, on one line.
+   *
+   * FURY'S DEBT IS THE REASON THIS LINE EXISTS. Three of these effects are
+   * pleasant and a player who forgets one loses nothing; the debt takes 30%
+   * of the bar every five seconds for five minutes, and a number that large
+   * with no clock attached to it is indistinguishable from a bug. It is
+   * listed first and it is listed in red. */
+  const b = pl.buffs;
+  const secs = (v: number) => `${Math.ceil(v)}s`;
+  const marks: [string, string][] = [];
+  if (b.debt > 0) marks.push([`BURNING ${secs(b.debt)}`, "#ff6a5e"]);
+  if (b.fury > 0) marks.push([`Fury ${secs(b.fury)}`, "#b8e01e"]);
+  if (b.aegis > 0) marks.push([`Aegis ${secs(b.aegis)}`, "#c6ccd8"]);
+  if (b.haste > 0) marks.push([`Swift ${secs(b.haste)}`, "#2fd8a0"]);
+  if (b.fury <= 0 && b.debt <= 0 && b.furyLock > 0) {
+    marks.push([`Fury in ${Math.ceil(b.furyLock / 60)}m`, "rgba(184,224,30,.55)"]);
+  }
+  if (marks.length) {
+    let mx = x + 10 * S;
+    for (const [label, col] of marks) {
+      hudText(hud, label, mx, ry + 63 * S, 7 * S, col);
+      mx += (label.length * 4.4 + 8) * S;
+    }
   }
 }
 
@@ -1996,12 +2024,20 @@ function drawTower(p: PanelInput): void {
     const gold = researched ? r.buyGold : r.researchGold;
     const affordable = canAfford(player.bag, cost, homeChests(game))
       && walletAcross([player.bag, ...homeChests(game)]) >= (gold ?? 0);
-    const clickable = affordable && (researched || towerTierOk(r, tt));
+    // The level gate outranks money. A row the character is too low for says
+    // so and says nothing about gold — "need 2500 gold" in front of a level-12
+    // character reads as "save up", which is the wrong lesson and a long one
+    // to unlearn.
+    const tooLow = !levelOk(r, player.level);
+    const clickable = !tooLow && affordable && (researched || towerTierOk(r, tt));
     row(hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable);
     const spr = itemSprite(r.crystal);
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
-    hudText(hud, r.name, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true);
-    if (researched) {
+    hudText(hud, r.name, x + 34 * S, ry + 8 * S, 9 * S, tooLow ? "rgba(243,238,221,.45)" : "#f3eedd", "left", true);
+    if (tooLow) {
+      hudText(hud, `level ${r.minLevel}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
+      hudText(hud, `Needs level ${r.minLevel} — you are ${player.level}`, x + 34 * S, ry + 19 * S, 7 * S, "#c98a5a");
+    } else if (researched) {
       hudText(hud, `owned: ${bagCount(player.bag, r.crystal)}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#e8dcc0", "right");
       hudText(hud, `Buy x${r.buyN}:  ${priceText(r.buyCost, r.buyGold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a");
     } else {

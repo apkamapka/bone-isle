@@ -968,9 +968,16 @@ async function main(): Promise<void> {
       "each tier more than doubles — an upgrade, not a percentage");
     ok(T.RESEARCH.every((r) => r.element === undefined),
       "the elemental line left the research tree entirely");
-    ok(T.RESEARCH.length === 2, "…only Life and Recall are left on the originals' shelf");
-    ok(T.RESEARCH.every((r) => Object.keys(r.researchCost).length === 0 && Object.keys(r.buyCost).length === 0),
-      "…and neither of them asks for a material any more — gold only");
+    ok(T.RESEARCH.filter((r) => r.minLevel === undefined).length === 2,
+      "…only Life and Recall are left of the originals proper");
+    ok(T.RESEARCH.every((r) => Object.keys(r.researchCost).length === 0),
+      "…and nothing on this shelf is researched with materials any more");
+    // Gold-only is still the rule for everything except Fury, whose Essential
+    // Gem is the brake. Pinned as "exactly one exception, and it is that one"
+    // rather than loosened to "some have costs", which would assert nothing.
+    const withMats = T.RESEARCH.filter((r) => Object.keys(r.buyCost).length > 0);
+    ok(withMats.length === 1 && withMats[0].id === "fury",
+      "…and Fury is the only project on it that costs a material");
     ok(T.RESEARCH.every((r) => r.openFromStart || (r.researchGold ?? 0) > 0),
       "…every project either costs gold to unlock or needs no unlocking");
 
@@ -1378,7 +1385,8 @@ async function main(): Promise<void> {
       }
     }
     T.loadAttunedState([]);
-    ok(towerRows("other", 1).length === 2, "the OTHER tab keeps both originals at every tier");
+    ok(towerRows("other", 1).length === T.RESEARCH.length,
+      "the OTHER tab keeps every non-elemental project at every tier");
     ok(T.isResearched("recall"), "Recall is stocked from the first visit — the price is the gate");
     ok(!T.isResearched("life"), "…while Life still has to be researched once");
 
@@ -17987,6 +17995,143 @@ async function main(): Promise<void> {
     const essence = TW.OFFERS.filter((o) => "magicEssence" in o.cost);
     ok(essence.length === 5 && essence.every((o) => o.tier === 2 && o.id.endsWith("Wave")),
       "the Essence still gates exactly the five top-tier Waves and nothing else");
+  }
+
+  console.log("Etap 56 — the utility runes, and Fury's bill:");
+  {
+    const CS = await import("../src/systems/crystals.ts");
+    const CD = await import("../src/systems/cooldowns.ts");
+    const TW = await import("../src/systems/tower.ts");
+    const BF = await import("../src/systems/buffs.ts");
+    const IT = await import("../src/items.ts");
+    const PL = await import("../src/entities/player.ts");
+    const CF = await import("../src/config.ts");
+
+    const KINDS = ["healRune", "hasteRune", "mireRune", "aegisRune", "furyRune"] as const;
+    ok(KINDS.every((k) => !!IT.ITEMS[k]?.crystal),
+      "all five utility runes exist and are bindable to the hotbar");
+    ok(KINDS.every((k) => CS.isCrystal(k)), "…and all five count as crystals");
+    ok(KINDS.every((k) => CS.CRYSTAL_SPECS[k] === undefined),
+      "…and none of them is in the elemental table, so none is 'offensive'");
+
+    // THE CLOCKS. Mending on the heal clock, the other four sharing one of
+    // their own, and neither touching the attack line.
+    ok(CD.groupOf("healRune") === "heal" && CD.familyOf("healRune") === "heal",
+      "Mending runs on the Life Crystal's clock");
+    CD.resetCooldowns();
+    CD.startCooldown("healRune");
+    ok(CD.cooldownLeft("healCrystal") > 0, "…so a Mending puts Life on cooldown too");
+    ok(CD.cooldownLeft("fireEmberShard") <= 0, "…and costs no attack");
+    CD.resetCooldowns();
+    ok(["hasteRune", "mireRune", "aegisRune", "furyRune"].every((k) =>
+      CD.groupOf(k as never) === "utility" && CD.familyOf(k as never) === "utility"),
+      "the other four share one utility group of their own");
+    CD.startCooldown("hasteRune");
+    ok(CD.cooldownLeft("aegisRune") > 0, "…so Swiftness locks out Aegis — no stacking three buffs at once");
+    ok(CD.cooldownLeft("healRune") <= 0 && CD.cooldownLeft("fireEmberShard") <= 0,
+      "…while leaving both the heal and the attack lines alone");
+    CD.resetCooldowns();
+
+    // MENDING vs the crystal it replaces
+    const lvl = 40;
+    const runeHeal = CF.HEAL_RUNE_BASE + lvl * CF.HEAL_RUNE_PER_LEVEL;
+    const crystalHeal = CF.HEAL_CRYSTAL_BASE + lvl * 3;
+    ok(runeHeal > crystalHeal * 2.5, "Mending heals far more than a Life Crystal, not a little more");
+
+    // SWIFTNESS multiplies the whole figure, boots included
+    const p = PL.createPlayer({ x: 0, y: 0 });
+    p.level = 20;
+    const plain = PL.playerSpeed(p);
+    p.buffs.haste = CF.HASTE_RUNE_S;
+    ok(Math.abs(PL.playerSpeed(p) - plain * CF.HASTE_RUNE_MULT) < 0.001,
+      "Swiftness scales the whole speed figure");
+    p.buffs.haste = 0;
+    ok(PL.playerSpeed(p) === plain, "…and stops the moment it runs out");
+
+    // FURY: the burst, the debt, the lock — and the arithmetic
+    const b = BF.newBuffs();
+    ok(BF.furyReady(b), "a fresh character may use a Fury");
+    ok(BF.furyMult(b) === 1, "…and is not raging before they do");
+    BF.startFury(b, CF.FURY_RUNE_S, CF.FURY_DEBT_S);
+    ok(BF.furyMult(b) === CF.FURY_RUNE_MULT, "a Fury triples weapon damage");
+    ok(!BF.furyReady(b), "…and cannot be used again while it runs");
+    ok(b.furyLock >= CF.FURY_LOCK_S - 0.001, "…and locks the next one out for half an hour");
+    // no bite during the burst: twenty seconds of triple damage, clean
+    let bitesInBurst = 0;
+    for (let t = 0; t < CF.FURY_RUNE_S; t += 0.5) bitesInBurst += BF.tickBuffs(b, 0.5);
+    ok(bitesInBurst === 0, "nothing burns during the twenty seconds themselves");
+    ok(BF.furyMult(b) === 1, "…and the burst ends on time");
+    // then every five seconds for five minutes, and not one tick more
+    let bites = 0;
+    for (let t = 0; t < CF.FURY_DEBT_S + 30; t += 0.5) bites += BF.tickBuffs(b, 0.5);
+    ok(bites === CF.FURY_DEBT_S / CF.FURY_DEBT_TICK_S,
+      `the debt bites exactly ${CF.FURY_DEBT_S / CF.FURY_DEBT_TICK_S} times and then stops`);
+    ok(b.debt === 0 && BF.furyMult(b) === 1, "…and leaves nothing running behind it");
+    ok(!BF.furyReady(b), "…but the half-hour lock is still counting");
+
+    // a long frame owes the same total as many short ones
+    const b2 = BF.newBuffs();
+    BF.startFury(b2, CF.FURY_RUNE_S, CF.FURY_DEBT_S);
+    let coarse = 0;
+    for (let t = 0; t < CF.FURY_RUNE_S + CF.FURY_DEBT_S + 30; t += 11) coarse += BF.tickBuffs(b2, 11);
+    ok(coarse === CF.FURY_DEBT_S / CF.FURY_DEBT_TICK_S,
+      "a backgrounded tab does not make the debt cheaper");
+
+    // THE BITE IS UNSURVIVABLE STANDING STILL AND SURVIVABLE HEALING — the
+    // whole design of the pair, pinned as arithmetic so a retune of either
+    // constant fails here instead of in somebody's evening.
+    const maxhp = CF.HP_BASE + CF.HP_PER_LEVEL * lvl;
+    const bite = BF.debtBite(maxhp);
+    const ticks = CF.FURY_DEBT_S / CF.FURY_DEBT_TICK_S;
+    ok(bite * 4 > maxhp, "four bites kill you outright — Fury with an empty bag is suicide");
+    const healPerSec = runeHeal / CF.HEAL_CRYSTAL_CD_S;
+    ok(healPerSec > bite / CF.FURY_DEBT_TICK_S * 2,
+      "…while Mending on its own clock outpaces the drain twice over");
+    ok(Math.ceil((bite * ticks) / runeHeal) < 40,
+      "…so the debt costs under forty Mending Runes to heal off, not hundreds");
+
+    // AEGIS cuts what is left after shield and armour, elemental included
+    const b3 = BF.newBuffs();
+    ok(BF.aegisCut(b3) === 0, "no Aegis, no cut");
+    b3.aegis = CF.AEGIS_RUNE_S;
+    ok(BF.aegisCut(b3) === CF.AEGIS_RUNE_CUT, "Aegis cuts by its constant while it is up");
+
+    // DEATH clears the burn but never the lock
+    const b4 = BF.newBuffs();
+    BF.startFury(b4, CF.FURY_RUNE_S, CF.FURY_DEBT_S);
+    b4.haste = 10;
+    b4.aegis = 10;
+    BF.clearBuffsOnDeath(b4);
+    ok(b4.fury === 0 && b4.debt === 0 && b4.haste === 0 && b4.aegis === 0,
+      "death clears every running effect");
+    ok(b4.furyLock > 0, "…but NOT the Fury lock — dying is not the cheap way out of a Fury");
+
+    // a save round trip keeps the debt, which is the only reason it is saved
+    const restored = BF.loadBuffs({ debt: 120, debtTick: 3, furyLock: 900 });
+    ok(restored.debt === 120 && restored.debtTick === 3 && restored.furyLock === 900,
+      "a reload comes back owing the same debt");
+    ok(BF.loadBuffs(undefined).debt === 0, "…and an older save comes back with nothing up");
+    ok(BF.loadBuffs({ debt: -5, haste: NaN } as never).debt === 0,
+      "…and junk in a save file loads as zero rather than as a negative clock");
+
+    // THE SHELF: open from the start, gated by level, Fury alone costs a gem
+    const utility = TW.RESEARCH.filter((r) => r.minLevel !== undefined);
+    ok(utility.length === 5, "all five are on the OTHER shelf");
+    ok(utility.every((r) => r.openFromStart === true && TW.isResearched(r.id)),
+      "…stocked from the first visit, with no research step");
+    ok(utility.every((r) => r.element === undefined),
+      "…and none of them is in an elemental lane");
+    const levels = utility.map((r) => r.minLevel as number);
+    ok(new Set(levels).size === 5 && levels.every((l) => l >= 15 && l <= 40),
+      "…each behind a different level, spread between 15 and 40");
+    const fury = TW.RESEARCH.find((r) => r.id === "fury")!;
+    ok(fury.minLevel === 40 && fury.buyCost.essentialGem === 1 && (fury.buyGold ?? 0) >= 2000,
+      "Fury is the level-40 one, and it wants a gem as well as the gold");
+    ok(TW.levelOk(fury, 40) && !TW.levelOk(fury, 39),
+      "…and the level gate is exact, not approximate");
+    ok(utility.every((r) => !TW.levelOk(r, 1)), "a level-1 character can buy none of them");
+    ok(TW.levelOk(TW.RESEARCH.find((r) => r.id === "recall")!, 1),
+      "…while Recall, which has no gate, is still open at level 1");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

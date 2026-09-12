@@ -16,7 +16,7 @@ import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
-import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName } from "./entities/monsters.ts";
+import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName, tickMonsterSlows } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster, grantExp, setRelicNotice } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
@@ -37,8 +37,9 @@ import {
   hudUserScale, stepHudUserScale, hudMenuOpen, toggleHudMenu, applyHudPreset, snapHudGroup,
   type HudGroup,
 } from "./systems/hudLayout.ts";
-import { researchById, isResearched, markResearched, towerTierOk, towerTierFor,
+import { researchById, isResearched, markResearched, towerTierOk, towerTierFor, levelOk,
   ATTUNEMENT, isAttuned, markAttuned, clearAttuned, attunementOk, offerById, playerElement } from "./systems/tower.ts";
+import { tickBuffs, debtBite } from "./systems/buffs.ts";
 import { ELEMENT_LABEL, ELEMENT_COLOR, FIELD_BURN_TICK_S, FIELD_BURN_DMG, elementEdgeMultiplier,
   type Element } from "./systems/elements.ts";
 import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts";
@@ -1888,6 +1889,11 @@ function doResearch(id: string): void {
 function doBuyCrystal(id: string): void {
   const r = researchById(id);
   if (!r || !isResearched(r.id)) return;
+  // The level gate is checked here as well as drawn in the panel. The panel
+  // already refuses to make the row clickable, but a hotbar or a future
+  // shortcut could reach this function without going through it, and a gate
+  // that only exists in the renderer is not a gate.
+  if (!levelOk(r, P.level)) { flash(`needs level ${r.minLevel}`, "#c98a5a"); return; }
   if (!canAfford(P.bag, r.buyCost, homeChests(game))) { flash("need materials"); return; }
   if (walletAcross([P.bag, ...homeChests(game)]) < (r.buyGold ?? 0)) { flash("need gold", "#d96a5a"); return; }
   if (!canCarry(P, r.crystal, r.buyN)) { flash("too heavy"); return; }
@@ -4674,6 +4680,30 @@ function update(dt: number): void {
     // with it, or the player is left dragging things into nowhere
     if (ui.floor === world.ground[i]) { ui.floor = null; closeWindow("floor"); }
     world.ground.splice(i, 1);
+  }
+
+  /* Rune effects, and Fury's bill.
+   *
+   * The damage is dealt HERE rather than inside buffs.ts because that module
+   * must not import combat.ts — `hurtPlayer` asks it for the Aegis cut and the
+   * Fury multiplier, so the arrow only points one way. `tickBuffs` counts the
+   * ticks that came due and this is the one place that knows how to hurt
+   * somebody.
+   *
+   * It goes through `hurtPlayer` as ELEMENTAL, which is what it is: the burn
+   * is inside you and no shield answers it. Aegis does reduce it, and that is
+   * fine — fifteen seconds against a five-minute debt is under a twentieth of
+   * the bill, so it reads as a small mercy rather than a way out.
+   *
+   * Mire ticks with the creatures it slowed, which is why that call sits next
+   * to this one rather than in updateMonsters: both are "time passing for an
+   * effect somebody bought". */
+  tickMonsterSlows(world, dt);
+  const bites = tickBuffs(P.buffs, dt);
+  if (bites > 0 && !P.dead) {
+    for (let i = 0; i < bites && !P.dead; i++) {
+      hurtPlayer(world, P, debtBite(P.maxhp), true);
+    }
   }
 
   // fed regeneration (Tibia-style): HP trickles back only while fed. The fed

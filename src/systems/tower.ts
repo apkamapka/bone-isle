@@ -51,6 +51,16 @@ export interface Research {
    * gatekeeping.
    */
   openFromStart?: boolean;
+  /**
+   * Character level required to BUY this, independent of research.
+   *
+   * The utility runes all sit open on the shelf, so the level is the only
+   * gate they have — and it is the right one for them. A tower tier is a
+   * building you pay gold for, which means a level-6 character with a lucky
+   * chest could stand in front of an Alchemy Tower III and buy a Fury Rune;
+   * the level is the one number that cannot be bought.
+   */
+  minLevel?: number;
   /** Tier 0..2 for the elemental line; absent on the original crystals. */
   tier?: Tier;
   /** Element, for grouping the tower's project list by colour. */
@@ -223,7 +233,88 @@ export const RESEARCH: readonly Research[] = [
     buyGold: 800,
     buyN: 1,
   },
+  /* ---- THE UTILITY RUNES ------------------------------------------------
+   * Five stones that do something other than damage. All open from the
+   * first visit — the level is the gate, not a research step, because the
+   * interesting question about a Fury Rune is whether you are ready to
+   * survive one, and no amount of gold answers that.
+   *
+   * The ladder is deliberately spread out rather than bunched: Mending at
+   * 15 lands about when the Life Crystal stops keeping up, and Fury at 40
+   * lands when a character has the HP to eat a 30% bite and the income to
+   * stock the thirty Mending Runes it takes to live through the debt.
+   * ---------------------------------------------------------------------- */
+  {
+    id: "mending",
+    name: "Mending Runes",
+    desc: "Heals far more than a Life Crystal. Shares its cooldown.",
+    researchCost: {},
+    openFromStart: true,
+    minLevel: 15,
+    crystal: "healRune",
+    buyCost: {},
+    buyGold: 400,
+    buyN: 5,
+  },
+  {
+    id: "swiftness",
+    name: "Swiftness Runes",
+    desc: "Move 35% faster for 60 seconds.",
+    researchCost: {},
+    openFromStart: true,
+    minLevel: 20,
+    crystal: "hasteRune",
+    buyCost: {},
+    buyGold: 500,
+    buyN: 3,
+  },
+  {
+    id: "mire",
+    name: "Mire Runes",
+    desc: "Halves the speed of everything within 5 tiles for 8 seconds.",
+    researchCost: {},
+    openFromStart: true,
+    minLevel: 25,
+    crystal: "mireRune",
+    buyCost: {},
+    buyGold: 700,
+    buyN: 3,
+  },
+  {
+    id: "aegis",
+    name: "Aegis Runes",
+    desc: "Cuts all damage by 40% for 15 seconds, elemental included.",
+    researchCost: {},
+    openFromStart: true,
+    minLevel: 30,
+    crystal: "aegisRune",
+    buyCost: {},
+    buyGold: 900,
+    buyN: 3,
+  },
+  {
+    // The Essential Gem is doing the same job here it does on the Knells:
+    // gold is a thing a player eventually has piles of, and a rune this
+    // strong has to be rationed by something that is not gold. One gem a
+    // charge also puts Fury in the same currency as the Knells, which is
+    // correct — they are the two things you spend on a fight you chose.
+    id: "fury",
+    name: "Fury Runes",
+    desc: "Triple weapon damage for 20s. Then 30% of your HP every 5s, for 5 min. Once per 30 min.",
+    researchCost: {},
+    openFromStart: true,
+    minLevel: 40,
+    crystal: "furyRune",
+    buyCost: { essentialGem: 1 },
+    buyGold: 2500,
+    buyN: 1,
+  },
 ];
+
+/** Is the character high enough level to buy this project's charges? */
+export function levelOk(r: Research, level: number): boolean {
+  return level >= (r.minLevel ?? 1);
+}
 
 /* ------------------------------------------------------------------ *
  *  THE ELEMENTAL SHELF

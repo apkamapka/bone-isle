@@ -386,6 +386,12 @@ export interface Monster {
   hp: number;
   maxhp: number;
   speed: number;
+  /**
+   * Seconds left of a Mire. Optional so that every existing spawn site keeps
+   * compiling — a creature that has never been mired simply has no field, and
+   * `monsterSpeed()` is the only thing that ever reads it.
+   */
+  slowS?: number;
   atkRate: number;
   atkCd: number;
   /**

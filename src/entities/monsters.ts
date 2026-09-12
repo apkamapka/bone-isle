@@ -1,6 +1,6 @@
 /** Monster definitions, post spawning and the wander/chase/attack AI. */
 import { rnd, rndi, wrnd, dist } from "../util.ts";
-import { SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HOLD_RANGE, POST_LEASH_PX, SHOT_SPEED, TILE } from "../config.ts";
+import { SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HOLD_RANGE, POST_LEASH_PX, SHOT_SPEED, TILE, MIRE_RUNE_MULT } from "../config.ts";
 import { SPR } from "../gfx/sprites.ts";
 import { lineOfSight } from "../world/collision.ts";
 import { nextEntityId } from "../world/entities.ts";
@@ -1502,6 +1502,25 @@ export interface AttackTarget {
  * hard-blocked, so at most 8 bodies can ring the player and a free square is
  * always a genuine escape route.
  */
+/**
+ * How fast this creature actually moves right now.
+ *
+ * Four call sites read a walking budget and every one of them used `m.speed`
+ * directly, which is why the Mire rune needed this function before it needed
+ * anything else: a slow applied in three of four places is a slow that leaks
+ * out of whichever movement branch was forgotten.
+ */
+export function monsterSpeed(m: Monster): number {
+  return (m.slowS ?? 0) > 0 ? m.speed * MIRE_RUNE_MULT : m.speed;
+}
+
+/** Run every Mire down. Creatures are never saved, so this needs no restore. */
+export function tickMonsterSlows(w: World, dt: number): void {
+  for (const m of w.monsters) {
+    if ((m.slowS ?? 0) > 0) m.slowS = Math.max(0, (m.slowS as number) - dt);
+  }
+}
+
 export function updateMonsters(
   w: World,
   dt: number,
@@ -1646,7 +1665,7 @@ export function updateMonsters(
       }
       // an adjacent creature holds its square (no movement) — but still
       // finish any glide already in flight so it settles on its centre
-      glideWalker(m, m.speed * dt);
+      glideWalker(m, monsterSpeed(m) * dt);
       continue;
     }
     if (rd && !target.dead && provoked && cheb > 1 && d <= rd.range
@@ -1674,7 +1693,7 @@ export function updateMonsters(
         // tile by tile when the player closes in. With the retreat blocked
         // (walls, pack mates) it simply stands and keeps firing.
         const keepTiles = Math.max(2, Math.round(Math.min(rd.range * 0.5, 128) / TILE));
-        let budget = m.speed * dt;
+        let budget = monsterSpeed(m) * dt;
         for (;;) {
           budget = glideWalker(m, budget);
           if (budget <= 0) break;
@@ -1712,7 +1731,7 @@ export function updateMonsters(
         // arrived where they were last seen, and they are not here
         m.seen = undefined;
       } else {
-        let budget = m.speed * dt;
+        let budget = monsterSpeed(m) * dt;
         for (;;) {
           budget = glideWalker(m, budget);
           if (budget <= 0) break;
@@ -1729,7 +1748,7 @@ export function updateMonsters(
     }
 
     // ---- idle: wander / home leash ----
-    let budget = m.speed * 0.5 * dt;
+    let budget = monsterSpeed(m) * 0.5 * dt;
     budget = glideWalker(m, budget);
     if (budget > 0) {
       const leashed = m.hr && m.hx !== undefined && m.hy !== undefined
