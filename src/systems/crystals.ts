@@ -20,7 +20,7 @@ import {
   MIRE_RUNE_S, MIRE_RUNE_TILES, FURY_RUNE_S, FURY_DEBT_S, FURY_DEBT_FRAC,
   FURY_DEBT_TICK_S,
 } from "../config.ts";
-import { furyReady, startFury } from "./buffs.ts";
+import { aegisReady, furyReady, startAegis, startFury } from "./buffs.ts";
 import { cooldownLeft, blockedBy, startCooldown, tickCooldowns, resetCooldowns } from "./cooldowns.ts";
 import { killMonster } from "./combat.ts";
 import { lineOfSight, groundBlocked } from "../world/collision.ts";
@@ -345,6 +345,14 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
     addFloat(world, p.x, p.y - 44, msg, "#b8e01e");
     return false;
   }
+  // Same shape for Aegis, and for the same reason: its five-minute lock is the
+  // interesting refusal, and "still cooling" from the four-second group clock
+  // would teach the player the wrong number.
+  if (kind === "aegisRune" && !aegisReady(b)) {
+    const msg = b.aegis > 0 ? "already warded" : `aegis in ${Math.ceil(b.aegisLock / 60)} min`;
+    addFloat(world, p.x, p.y - 44, msg, "#c6ccd8");
+    return false;
+  }
 
   const why = blockedBy(kind);
   if (why) {
@@ -361,7 +369,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
     return true;
   }
   if (kind === "aegisRune") {
-    b.aegis = AEGIS_RUNE_S;
+    startAegis(b, AEGIS_RUNE_S);
     addFloat(world, p.x, p.y - 40, "warded", "#c6ccd8");
     beep(300, 0.26, "square", 0.05, 90);
     return true;

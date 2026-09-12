@@ -390,13 +390,13 @@ export const HEAL_RUNE_BASE = 120;
 export const HEAL_RUNE_PER_LEVEL = 8;
 
 /** Swiftness: a flat multiplier on movement speed, for a minute. */
-export const HASTE_RUNE_S = 60;
+export const HASTE_RUNE_S = 20;
 export const HASTE_RUNE_MULT = 1.35;
 
 /** Mire: everything within five tiles moves at half speed for eight
  *  seconds. Short on purpose — it is a disengage, not a way to kite a pack
  *  to death for free. */
-export const MIRE_RUNE_S = 8;
+export const MIRE_RUNE_S = 5;
 export const MIRE_RUNE_TILES = 5;
 export const MIRE_RUNE_MULT = 0.5;
 
@@ -405,6 +405,12 @@ export const MIRE_RUNE_MULT = 0.5;
  *  outcome of a bad pull, too short to stand in a pack and read a book. */
 export const AEGIS_RUNE_S = 15;
 export const AEGIS_RUNE_CUT = 0.4;
+/** …and five minutes before another one. Aegis is the only rune besides Fury
+ *  with a lock of its own: fifteen seconds at 40% off everything, elemental
+ *  included, is strong enough that on the four-second group clock alone you
+ *  would simply keep one running for as long as you had charges, and a
+ *  defence that is always up is not a decision. */
+export const AEGIS_LOCK_S = 300;
 
 /* FURY, and the arithmetic that matters most in this file.
  *

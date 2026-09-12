@@ -39,6 +39,8 @@ export const DOCK_PAD = 6;
 export const DOCK_W = DOCK_INNER + 2 * DOCK_PAD;
 
 /** Vitals are authored 190 wide; rescale them onto the column's ruler. */
+import { VITALS_H } from "./hud.ts";
+
 export const VITALS_FIT = DOCK_INNER / 190;
 
 /** Height of a collapsed block: its header bar and nothing else. */
@@ -49,7 +51,10 @@ const GAP = 4;
 /** Fixed-block heights, expanded, in design units. */
 export const MINIMAP_H = 120;
 export const GOLD_ROW_H = 14;
-export const STATUS_H = GOLD_ROW_H + GAP + Math.round(68 * VITALS_FIT);
+/** Mirrors VITALS_H from hud.ts. Imported rather than retyped: this file had
+ *  its own copy of the number and the two drifted the first time the vitals
+ *  panel grew a row. */
+export const STATUS_H = GOLD_ROW_H + GAP + Math.round(VITALS_H * VITALS_FIT);
 /**
  * Panel-button row and weapon swap.
  *

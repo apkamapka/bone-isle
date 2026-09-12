@@ -1974,6 +1974,17 @@ function drawTower(p: PanelInput): void {
     }
   };
 
+  /* WIDTH BUDGETS FOR EVERY LINE IN A ROW. hudText has taken a `maxW` since
+   * the upgrade panel leaked its cost line off the side of the screen; these
+   * rows simply never passed one, so the first description longer than the
+   * frame — Fury's — ran out over the world and read as a rendering fault.
+   *
+   * Two budgets because two of the lines share their row with a right-aligned
+   * figure (`owned:`, `level 40`) and must stop short of it, while the cost
+   * and description lines have the row to themselves. */
+  const lineW = w - 46 * S;
+  const nameW = w - 110 * S;
+
   if (showAttune && el) {
     const key = ATTUNEMENT[el];
     const held = canAfford(player.bag, { [key]: 1 }, homeChests(game));
@@ -2005,10 +2016,10 @@ function drawTower(p: PanelInput): void {
     row(hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && affordable);
     const spr = itemSprite(o.crystal);
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
-    hudText(hud, ITEMS[o.crystal].name, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true);
+    hudText(hud, ITEMS[o.crystal].name, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true, nameW);
     hudText(hud, `owned: ${bagCount(player.bag, o.crystal)}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#e8dcc0", "right");
-    hudText(hud, `Buy x${o.buyN}:  ${priceText(o.cost, o.gold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a");
-    hudText(hud, o.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
+    hudText(hud, `Buy x${o.buyN}:  ${priceText(o.cost, o.gold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a", "left", false, lineW);
+    hudText(hud, o.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)", "left", false, lineW);
     if (affordable) {
       const id = o.id;
       const ryy = ry;
@@ -2033,18 +2044,18 @@ function drawTower(p: PanelInput): void {
     row(hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && clickable);
     const spr = itemSprite(r.crystal);
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
-    hudText(hud, r.name, x + 34 * S, ry + 8 * S, 9 * S, tooLow ? "rgba(243,238,221,.45)" : "#f3eedd", "left", true);
+    hudText(hud, r.name, x + 34 * S, ry + 8 * S, 9 * S, tooLow ? "rgba(243,238,221,.45)" : "#f3eedd", "left", true, nameW);
     if (tooLow) {
       hudText(hud, `level ${r.minLevel}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
-      hudText(hud, `Needs level ${r.minLevel} — you are ${player.level}`, x + 34 * S, ry + 19 * S, 7 * S, "#c98a5a");
+      hudText(hud, `Needs level ${r.minLevel} — you are ${player.level}`, x + 34 * S, ry + 19 * S, 7 * S, "#c98a5a", "left", false, lineW);
     } else if (researched) {
       hudText(hud, `owned: ${bagCount(player.bag, r.crystal)}`, x + w - 12 * S, ry + 8 * S, 7 * S, "#e8dcc0", "right");
-      hudText(hud, `Buy x${r.buyN}:  ${priceText(r.buyCost, r.buyGold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a");
+      hudText(hud, `Buy x${r.buyN}:  ${priceText(r.buyCost, r.buyGold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#b9e07f" : "#d96a5a", "left", false, lineW);
     } else {
       hudText(hud, "LOCKED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
-      hudText(hud, `Research:  ${priceText(r.researchCost, r.researchGold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#c9a6ff" : "#d96a5a");
+      hudText(hud, `Research:  ${priceText(r.researchCost, r.researchGold)}`, x + 34 * S, ry + 19 * S, 7 * S, affordable ? "#c9a6ff" : "#d96a5a", "left", false, lineW);
     }
-    hudText(hud, r.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
+    hudText(hud, r.desc, x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)", "left", false, lineW);
     if (clickable) {
       const id = r.id;
       const ryy = ry;

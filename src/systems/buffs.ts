@@ -23,7 +23,7 @@
  * the only place it can be broken without a third module nobody would look in.
  */
 import {
-  AEGIS_RUNE_CUT, FURY_DEBT_FRAC, FURY_DEBT_TICK_S, FURY_LOCK_S,
+  AEGIS_LOCK_S, AEGIS_RUNE_CUT, FURY_DEBT_FRAC, FURY_DEBT_TICK_S, FURY_LOCK_S,
   FURY_RUNE_MULT, HASTE_RUNE_MULT,
 } from "../config.ts";
 
@@ -47,10 +47,13 @@ export interface Buffs {
   debtTick: number;
   /** Seconds until another Fury may be used. Outlives death deliberately. */
   furyLock: number;
+  /** Seconds until another Aegis may be used. Outlives death for the same
+   *  reason Fury's does — see clearBuffsOnDeath(). */
+  aegisLock: number;
 }
 
 export function newBuffs(): Buffs {
-  return { haste: 0, aegis: 0, fury: 0, debt: 0, debtTick: 0, furyLock: 0 };
+  return { haste: 0, aegis: 0, fury: 0, debt: 0, debtTick: 0, furyLock: 0, aegisLock: 0 };
 }
 
 /** Rebuild from a save. Missing or malformed input loads as "no effects". */
@@ -77,6 +80,7 @@ export function tickBuffs(b: Buffs, dt: number): number {
   b.aegis = Math.max(0, b.aegis - dt);
   b.fury = Math.max(0, b.fury - dt);
   b.furyLock = Math.max(0, b.furyLock - dt);
+  b.aegisLock = Math.max(0, b.aegisLock - dt);
   if (b.debt <= 0) return 0;
 
   // ONLY THE TIME ACTUALLY INSIDE THE DEBT COUNTS. Subtracting the raw `dt`
@@ -125,6 +129,16 @@ export function furyReady(b: Buffs): boolean {
   return b.furyLock <= 0 && b.fury <= 0 && b.debt <= 0;
 }
 
+export function aegisReady(b: Buffs): boolean {
+  return b.aegisLock <= 0 && b.aegis <= 0;
+}
+
+/** Raise an Aegis and start the five minutes before the next one. */
+export function startAegis(b: Buffs, secs: number): void {
+  b.aegis = secs;
+  b.aegisLock = AEGIS_LOCK_S;
+}
+
 /** Start a Fury: the burst, the debt that follows it, and the lock. */
 export function startFury(b: Buffs, burstS: number, debtS: number): void {
   b.fury = burstS;
@@ -138,12 +152,13 @@ export function startFury(b: Buffs, burstS: number, debtS: number): void {
 }
 
 /**
- * Death clears the effects but NOT the lock.
+ * Death clears the effects but NOT the locks.
  *
  * Dying to your own debt has to stay a loss. If death wiped `furyLock` then
  * the cheapest way out of a bad Fury would be to let it kill you, and the
  * half-hour rule would only ever bind on players who survived — which is
- * precisely backwards.
+ * precisely backwards. `aegisLock` follows the same rule for the same reason:
+ * a death that refreshed your defensive cooldown would reward dying.
  */
 export function clearBuffsOnDeath(b: Buffs): void {
   b.haste = 0;
@@ -157,4 +172,5 @@ export function clearBuffsOnDeath(b: Buffs): void {
 export function resetBuffs(b: Buffs): void {
   clearBuffsOnDeath(b);
   b.furyLock = 0;
+  b.aegisLock = 0;
 }

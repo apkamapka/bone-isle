@@ -18093,8 +18093,18 @@ async function main(): Promise<void> {
     // AEGIS cuts what is left after shield and armour, elemental included
     const b3 = BF.newBuffs();
     ok(BF.aegisCut(b3) === 0, "no Aegis, no cut");
-    b3.aegis = CF.AEGIS_RUNE_S;
+    ok(BF.aegisReady(b3), "…and a fresh character may raise one");
+    BF.startAegis(b3, CF.AEGIS_RUNE_S);
     ok(BF.aegisCut(b3) === CF.AEGIS_RUNE_CUT, "Aegis cuts by its constant while it is up");
+    ok(!BF.aegisReady(b3), "…and cannot be re-raised on top of itself");
+    // THE FIVE-MINUTE LOCK: without it, a stack of charges is permanent 40%
+    for (let t = 0; t < CF.AEGIS_RUNE_S + 1; t++) BF.tickBuffs(b3, 1);
+    ok(BF.aegisCut(b3) === 0, "it lapses on time");
+    ok(!BF.aegisReady(b3), "…and is still locked out well after it lapses");
+    for (let t = 0; t < CF.AEGIS_LOCK_S; t++) BF.tickBuffs(b3, 1);
+    ok(BF.aegisReady(b3), "…until the five minutes are up");
+    ok(CF.AEGIS_LOCK_S > CF.AEGIS_RUNE_S * 10,
+      "the gap between Aegises dwarfs the Aegis — a defence that is always up is not a decision");
 
     // DEATH clears the burn but never the lock
     const b4 = BF.newBuffs();
@@ -18105,6 +18115,10 @@ async function main(): Promise<void> {
     ok(b4.fury === 0 && b4.debt === 0 && b4.haste === 0 && b4.aegis === 0,
       "death clears every running effect");
     ok(b4.furyLock > 0, "…but NOT the Fury lock — dying is not the cheap way out of a Fury");
+    const b5 = BF.newBuffs();
+    BF.startAegis(b5, CF.AEGIS_RUNE_S);
+    BF.clearBuffsOnDeath(b5);
+    ok(b5.aegis === 0 && b5.aegisLock > 0, "…and the same for Aegis: the ward goes, the lock stays");
 
     // a save round trip keeps the debt, which is the only reason it is saved
     const restored = BF.loadBuffs({ debt: 120, debtTick: 3, furyLock: 900 });
@@ -18122,8 +18136,14 @@ async function main(): Promise<void> {
     ok(utility.every((r) => r.element === undefined),
       "…and none of them is in an elemental lane");
     const levels = utility.map((r) => r.minLevel as number);
-    ok(new Set(levels).size === 5 && levels.every((l) => l >= 15 && l <= 40),
-      "…each behind a different level, spread between 15 and 40");
+    ok(new Set(levels).size === 5 && levels.every((l) => l >= 20 && l <= 40),
+      "…each behind a different level, spread between 20 and 40");
+    // Mending arrives BEFORE Fury and not long before: it is the thing that
+    // makes Fury survivable, so the order of those two is load-bearing.
+    const mending = TW.RESEARCH.find((r) => r.id === "mending")!;
+    const furyR = TW.RESEARCH.find((r) => r.id === "fury")!;
+    ok((mending.minLevel as number) < (furyR.minLevel as number),
+      "Mending unlocks before Fury — the antidote first, then the poison");
     const fury = TW.RESEARCH.find((r) => r.id === "fury")!;
     ok(fury.minLevel === 40 && fury.buyCost.essentialGem === 1 && (fury.buyGold ?? 0) >= 2000,
       "Fury is the level-40 one, and it wants a gem as well as the gold");

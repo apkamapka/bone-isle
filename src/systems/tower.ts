@@ -239,10 +239,13 @@ export const RESEARCH: readonly Research[] = [
    * interesting question about a Fury Rune is whether you are ready to
    * survive one, and no amount of gold answers that.
    *
-   * The ladder is deliberately spread out rather than bunched: Mending at
-   * 15 lands about when the Life Crystal stops keeping up, and Fury at 40
-   * lands when a character has the HP to eat a 30% bite and the income to
-   * stock the thirty Mending Runes it takes to live through the debt.
+   * The ladder is deliberately spread out rather than bunched, and Mending
+   * sits near the TOP of it rather than the bottom. That looks backwards for
+   * a heal and is not: a 440-point heal handed to a level-15 character does
+   * not help them survive, it removes the part of the game where they learn
+   * to. It arrives at 35, five levels before Fury, because Fury is the thing
+   * it exists to make survivable — you unlock the antidote first and the
+   * poison second, with just enough room to stock up.
    * ---------------------------------------------------------------------- */
   {
     id: "mending",
@@ -250,7 +253,7 @@ export const RESEARCH: readonly Research[] = [
     desc: "Heals far more than a Life Crystal. Shares its cooldown.",
     researchCost: {},
     openFromStart: true,
-    minLevel: 15,
+    minLevel: 35,
     crystal: "healRune",
     buyCost: {},
     buyGold: 400,
@@ -259,7 +262,7 @@ export const RESEARCH: readonly Research[] = [
   {
     id: "swiftness",
     name: "Swiftness Runes",
-    desc: "Move 35% faster for 60 seconds.",
+    desc: "Move 35% faster for 20 seconds.",
     researchCost: {},
     openFromStart: true,
     minLevel: 20,
@@ -271,7 +274,7 @@ export const RESEARCH: readonly Research[] = [
   {
     id: "mire",
     name: "Mire Runes",
-    desc: "Halves the speed of everything within 5 tiles for 8 seconds.",
+    desc: "Halves everything within 5 tiles for 5 seconds.",
     researchCost: {},
     openFromStart: true,
     minLevel: 25,
@@ -283,7 +286,7 @@ export const RESEARCH: readonly Research[] = [
   {
     id: "aegis",
     name: "Aegis Runes",
-    desc: "Cuts all damage by 40% for 15 seconds, elemental included.",
+    desc: "Cuts all damage 40% for 15s, elemental too. Once per 5 min.",
     researchCost: {},
     openFromStart: true,
     minLevel: 30,
@@ -300,7 +303,9 @@ export const RESEARCH: readonly Research[] = [
     // correct — they are the two things you spend on a fight you chose.
     id: "fury",
     name: "Fury Runes",
-    desc: "Triple weapon damage for 20s. Then 30% of your HP every 5s, for 5 min. Once per 30 min.",
+    // Short enough to fit the shelf row. The full arithmetic lives in
+    // config.ts, which is where somebody retuning it will be looking anyway.
+    desc: "3x damage for 20s, then a 5 min burn. Once per 30 min.",
     researchCost: {},
     openFromStart: true,
     minLevel: 40,

@@ -1,6 +1,9 @@
 /** Screen-space HUD: HP/EXP bars, cap, gold, minimap, action bar, overlays. */
 import { isSafeTile } from "../world/collision.ts";
-import { TILE } from "../config.ts";
+import {
+  TILE, AEGIS_LOCK_S, AEGIS_RUNE_S, FURY_DEBT_S, FURY_LOCK_S, FURY_RUNE_S,
+  HASTE_RUNE_S,
+} from "../config.ts";
 import { SPR, iconW, iconH } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
 import { ITEMS, walletAcross } from "../items.ts";
@@ -270,7 +273,10 @@ export function drawMinimapAt(
 
 /** Reference vitals-panel size (design px) — multiply by a scale to place it. */
 export const VITALS_W = 190;
-export const VITALS_H = 68;
+/** 82 rather than 68: the last fourteen are the rune-effect strip. Reserved
+ *  whether or not anything is running — a HUD panel that changes height as a
+ *  buff expires shoves everything under it around mid-fight. */
+export const VITALS_H = 82;
 
 /** The HP / EXP / Cap / stance panel at an arbitrary top-left and scale. */
 export function drawVitals(h: HudCtx, p: Player, px: number, py: number, S: number): void {
@@ -299,6 +305,70 @@ export function drawVitals(h: HudCtx, p: Player, px: number, py: number, S: numb
   hudText(h, STANCE_LABEL[st], chipX + 8 * S, chipY + 6 * S, 7 * S, stColor, "left", true);
   hudText(h, `atk ×${stanceAtk().toFixed(2)}  def ×${stanceDef().toFixed(1)}`, px + 145 * S, chipY + 6 * S, 7 * S, "rgba(220,214,190,.65)", "right");
   hudText(h, "[X]", chipX + chipW + 4 * S, chipY + 6 * S, 6 * S, "rgba(220,214,190,.4)");
+  drawEffectStrip(h, p, px + 10 * S, py + 65 * S, VITALS_W * S - 20 * S, S);
+}
+
+/** What one chip needs to draw itself. `frac` fills the tab; 0 hides it. */
+interface Effect {
+  label: string;
+  color: string;
+  frac: number;
+  dim: boolean;
+}
+
+function clock(s: number): string {
+  if (s < 60) return `${Math.ceil(s)}s`;
+  const m = Math.floor(s / 60);
+  return s < 600 ? `${m}:${Math.floor(s % 60).toString().padStart(2, "0")}` : `${m}m`;
+}
+
+/**
+ * The rune-effect strip: what is running right now, and what is not ready yet.
+ *
+ * WHY IT SITS UNDER THE HP BAR and not over the action slots, where a buff bar
+ * normally lives. Two of these five entries are not buffs at all — Fury's burn
+ * is 30% of the bar every five seconds and Aegis's lock is the reason a button
+ * you are pressing does nothing — and both of those are questions about your
+ * health, answered next to your health. The action slots already carry their
+ * own cooldown sweep for the four-second group clock; this strip is for the
+ * long clocks that sweep cannot show.
+ *
+ * PRIORITY, NOT ORDER OF USE. Three chips fit across the panel and there can be
+ * five things to say, so they are sorted by what it costs to miss one: the burn
+ * first because it is killing you, then the buffs by how soon they lapse, then
+ * the locks — a lock is only ever the answer to "why did nothing happen", and
+ * you find that out by pressing the button anyway.
+ */
+function drawEffectStrip(h: HudCtx, p: Player, x: number, y: number, w: number, S: number): void {
+  const b = p.buffs;
+  const live: Effect[] = [];
+  if (b.debt > 0) live.push({ label: `BURN ${clock(b.debt)}`, color: "#ff6a5e", frac: b.debt / FURY_DEBT_S, dim: false });
+  if (b.fury > 0) live.push({ label: `FURY ${clock(b.fury)}`, color: "#b8e01e", frac: b.fury / FURY_RUNE_S, dim: false });
+  if (b.aegis > 0) live.push({ label: `AEGIS ${clock(b.aegis)}`, color: "#c6ccd8", frac: b.aegis / AEGIS_RUNE_S, dim: false });
+  if (b.haste > 0) live.push({ label: `SWIFT ${clock(b.haste)}`, color: "#2fd8a0", frac: b.haste / HASTE_RUNE_S, dim: false });
+  // the two long locks, shown only once the thing itself has stopped
+  if (b.aegis <= 0 && b.aegisLock > 0) {
+    live.push({ label: `aegis ${clock(b.aegisLock)}`, color: "#c6ccd8", frac: 1 - b.aegisLock / AEGIS_LOCK_S, dim: true });
+  }
+  if (b.fury <= 0 && b.debt <= 0 && b.furyLock > 0) {
+    live.push({ label: `fury ${clock(b.furyLock)}`, color: "#b8e01e", frac: 1 - b.furyLock / FURY_LOCK_S, dim: true });
+  }
+  if (!live.length) return;
+
+  const gap = 2 * S;
+  const cw = Math.floor((w - gap * 2) / 3);
+  for (let i = 0; i < live.length && i < 3; i++) {
+    const e = live[i];
+    const cx = x + i * (cw + gap);
+    h.ctx.fillStyle = "rgba(0,0,0,.4)";
+    h.ctx.fillRect(cx, y, cw, 12 * S);
+    // the tab drains downward, so a chip about to lapse is visibly nearly empty
+    const tabH = Math.max(1, Math.round(12 * S * clamp(e.frac, 0, 1)));
+    h.ctx.fillStyle = e.dim ? "rgba(120,120,120,.55)" : e.color;
+    h.ctx.fillRect(cx, y + 12 * S - tabH, 3 * S, tabH);
+    hudText(h, e.label, cx + 6 * S, y + 6 * S, 6.5 * S,
+      e.dim ? "rgba(220,214,190,.45)" : e.color, "left", !e.dim, cw - 8 * S);
+  }
 }
 
 /**
