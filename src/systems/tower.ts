@@ -233,14 +233,14 @@ export const RESEARCH: readonly Research[] = [
     buyGold: 800,
     buyN: 1,
   },
-  /* ---- THE UTILITY RUNES ------------------------------------------------
+  /* ---- THE UTILITY CRYSTALS ------------------------------------------------
    * Five stones that do something other than damage. All open from the
    * first visit — the level is the gate, not a research step, because the
    * interesting question about a Fury Rune is whether you are ready to
    * survive one, and no amount of gold answers that.
    *
-   * The ladder is deliberately spread out rather than bunched, and Mending
-   * sits near the TOP of it rather than the bottom. That looks backwards for
+   * The ladder is deliberately spread out rather than bunched, and the Grand
+   * Life Crystal sits near the TOP of it rather than the bottom. That looks backwards for
    * a heal and is not: a 440-point heal handed to a level-15 character does
    * not help them survive, it removes the part of the game where they learn
    * to. It arrives at 35, five levels before Fury, because Fury is the thing
@@ -249,7 +249,7 @@ export const RESEARCH: readonly Research[] = [
    * ---------------------------------------------------------------------- */
   {
     id: "mending",
-    name: "Mending Runes",
+    name: "Grand Life Crystals",
     desc: "Heals far more than a Life Crystal. Shares its cooldown.",
     researchCost: {},
     openFromStart: true,
@@ -261,7 +261,7 @@ export const RESEARCH: readonly Research[] = [
   },
   {
     id: "swiftness",
-    name: "Swiftness Runes",
+    name: "Acceleration Crystals",
     desc: "Move 35% faster for 20 seconds.",
     researchCost: {},
     openFromStart: true,
@@ -273,7 +273,7 @@ export const RESEARCH: readonly Research[] = [
   },
   {
     id: "mire",
-    name: "Mire Runes",
+    name: "Slowdown Crystals",
     desc: "Halves everything within 5 tiles for 5 seconds.",
     researchCost: {},
     openFromStart: true,
@@ -285,7 +285,7 @@ export const RESEARCH: readonly Research[] = [
   },
   {
     id: "aegis",
-    name: "Aegis Runes",
+    name: "Protective Crystals",
     desc: "Cuts all damage 40% for 15s, elemental too. Once per 5 min.",
     researchCost: {},
     openFromStart: true,
@@ -302,7 +302,7 @@ export const RESEARCH: readonly Research[] = [
     // charge also puts Fury in the same currency as the Knells, which is
     // correct — they are the two things you spend on a fight you chose.
     id: "fury",
-    name: "Fury Runes",
+    name: "Fury Crystals",
     // Short enough to fit the shelf row. The full arithmetic lives in
     // config.ts, which is where somebody retuning it will be looking anyway.
     desc: "3x damage for 20s, then a 5 min burn. Once per 30 min.",

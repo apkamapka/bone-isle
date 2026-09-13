@@ -15003,20 +15003,31 @@ async function main(): Promise<void> {
     const { fxFile: fxF, FX_SLOTS: slots } = await import("../src/gfx/spellArt.ts");
     const { ELEMENTS: elsHk } = await import("../src/systems/elements.ts");
     const present = new Set(pub);
-    /* TWO derived-name families now, not one. The attunement circles are also
-     * `fx-` and also one file per element, but they are built by
-     * `attuneSheet.ts` rather than by `fxFile()` — so a name this loop cannot
-     * construct is not automatically stranded, it might belong to the other
-     * builder. Both are checked; a picture reachable by neither still fails. */
+    /* THREE derived-name families now. The attunement circles are also `fx-`
+     * and also one file per element, but they are built by `attuneSheet.ts`
+     * rather than by `fxFile()`; the crystal auras are `fx-aura-<name>` and are
+     * built by `auraFx.ts`, keyed by effect rather than by element at all. So a
+     * name this loop cannot construct is not automatically stranded, it might
+     * belong to one of the other two builders. All three are checked; a picture
+     * reachable by none still fails. */
     const attuneNames = new Set(elsHk.map((e) => `fx-attune-${e}.png`));
+    const { AURA_NAMES: auraHk } = await import("../src/gfx/auraFx.ts");
+    const auraNames = new Set(auraHk.map((a) => `fx-aura-${a}.png`));
     const stranded = pub.filter((f) => /^fx-/.test(f)).filter((f) => {
       if (attuneNames.has(f)) return false;
+      if (auraNames.has(f)) return false;
       for (const e of elsHk) for (const t of [0, 1, 2] as const)
         for (const s of slots) if (fxF(e, t, s) === f) return false;
       return true;
     });
     ok(stranded.length === 0,
       `every fx picture answers to a name some builder can build (${stranded.join(", ") || "none"})`);
+    /* And the other direction, which is the one that actually bites: a name
+     * the code asks for with no file behind it fails silently at runtime — the
+     * effect simply never appears and nothing says why. */
+    const missingAuras = auraHk.filter((a) => !present.has(`fx-aura-${a}.png`));
+    ok(missingAuras.length === 0,
+      `every aura the code names has a sheet on disk (${missingAuras.join(", ") || "none"})`);
     /* …and the other direction for the circles: five elements, five strips,
      * every one of them actually in public/. A missing strip is silent at run
      * time — `attuneFrame` returns null and the circle simply is not drawn. */
@@ -18089,6 +18100,40 @@ async function main(): Promise<void> {
       "…while Mending on its own clock outpaces the drain twice over");
     ok(Math.ceil((bite * ticks) / runeHeal) < 40,
       "…so the debt costs under forty Mending Runes to heal off, not hundreds");
+
+    // NAMES: the shelf sells crystals, whatever the ids say
+    ok(KINDS.every((k) => IT.ITEMS[k].name.endsWith(" Crystal")),
+      "every one of them reads as a Crystal to the player");
+    ok(IT.ITEMS.healRune.name === "Grand Life Crystal",
+      "…and the big heal names itself after the Life Crystal it outgrows");
+
+    // THE PvP RULE: a Slowdown is answerable with an Acceleration.
+    const duel = BF.newBuffs();
+    ok(BF.applySlow(duel, CF.MIRE_RUNE_S), "a Slowdown lands on an unhasted player");
+    ok(BF.hasteMult(duel) === CF.MIRE_RUNE_MULT, "…and halves their speed");
+    BF.startHaste(duel, CF.HASTE_RUNE_S);
+    ok(duel.slow === 0 && BF.hasteMult(duel) === CF.HASTE_RUNE_MULT,
+      "…and an Acceleration BREAKS it outright rather than averaging with it");
+    ok(!BF.applySlow(duel, CF.MIRE_RUNE_S),
+      "…and a second Slowdown cannot land while the Acceleration runs");
+    duel.haste = 0;
+    ok(BF.applySlow(duel, CF.MIRE_RUNE_S), "…but lands again once it lapses");
+    BF.clearBuffsOnDeath(duel);
+    ok(duel.slow === 0, "death clears a Slowdown like anything else");
+
+    // AURAS: state loops, instants flare, and neither invents its own clock
+    const AF = await import("../src/gfx/auraFx.ts");
+    const showing = BF.newBuffs();
+    ok(AF.activeAuras(showing).length === 0, "no effect, no aura");
+    showing.aegis = CF.AEGIS_RUNE_S;
+    showing.fury = CF.FURY_RUNE_S;
+    const both = AF.activeAuras(showing);
+    ok(both.length === 2 && both.every((a) => a.alpha === 1),
+      "Protective and Fury each draw their own aura at full strength");
+    showing.aegis = 0.5;
+    ok(AF.activeAuras(showing).find((a) => a.name === "guard")!.alpha < 1,
+      "…and an aura about to lapse fades rather than cutting out");
+    ok(AF.AURA_NAMES.length === 5, "five colourways of the one loop");
 
     // AEGIS cuts what is left after shield and armour, elemental included
     const b3 = BF.newBuffs();

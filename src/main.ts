@@ -67,6 +67,7 @@ import {
 import { chatInput, initChatInput } from "./ui/chatInput.ts";
 import { groundEntries, playerEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
+import { tickAuraFx, drawAuras, drawFlares } from "./gfx/auraFx.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
@@ -4493,6 +4494,7 @@ function update(dt: number): void {
     if (P.deadT <= 0) respawnAtHome(game);
     updateFloats(dt);
     updateSpellFx(dt);  // the spell that killed you still gets to finish
+    tickAuraFx(dt);
     // …and so does the cast behind it: a creature rooted in its windup when
     // you died would still be rooted when you walked back in.
     updateMonsterSpells(game.current, dt, { tx: P.tx, ty: P.ty, dead: true }, () => {});
@@ -4726,6 +4728,7 @@ function update(dt: number): void {
 
   // spell bolts and the blooms they leave (also cosmetic, same rule)
   updateSpellFx(dt);
+  tickAuraFx(dt);
   // monster casts: windups landing, and the ground they left on fire. This is
   // the one place spell damage reaches the player from a creature, so it is
   // deliberately the same `hurtPlayer` the melee exchange uses — elemental
@@ -5652,6 +5655,11 @@ function render(): void {
      * the head starts at y-49 and its right edge sits about ten pixels out
      * from centre. A skull hung off the cell's own corner would float a
      * tile and a half above an empty shoulder. */
+    // The aura goes on last and inside the player's own draw entry, so it is
+    // occluded by whatever occludes him rather than floating over the scene —
+    // and centred on his CHEST rather than his feet, because a ward drawn on
+    // the ground reads as something he is standing in.
+    if (!P.dead) drawAuras(vctx, P.buffs, P.x - cam.x, P.y - cam.y - 22, performance.now() / 1000);
     if (!P.dead) skullMark(skull(), P.x + 10, P.y - 49);
     sayBubble(CHAT_SPEAKER_ID, P.x, P.y - 46);
   } });
@@ -5680,6 +5688,7 @@ function render(): void {
   // spell projectiles fly overhead, with the arrows — the blasts they leave
   // went into the depth sort above
   drawSpellBolts(vctx, world, cam.x, cam.y);
+  drawFlares(vctx, world, cam.x, cam.y);
 
   // Aiming a Burst: show the twenty-five tiles it would cover, under the
   // cursor, before a charge is spent. Tibia never drew this and never had to —

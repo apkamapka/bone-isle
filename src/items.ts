@@ -73,6 +73,12 @@ export type ItemKind =
    * The id says `Rune` because that is the object: a stone with a mark cut
    * into it, thrown once and gone. The player reads "Knell", which is what
    * the stone is FOR.
+   *
+   * The five UTILITY ids below keep `Rune` for a duller reason: they were
+   * shipped and played with under those keys, an ItemKind is what a save file
+   * stores a stack under, and renaming one silently empties a bag. Element
+   * ids are frozen for exactly this reason and these are frozen with them.
+   * The player reads "Crystal"; only `name` had to change.
    * -------------------------------------------------------------------- */
   | "fireEmberRune" | "fireFlameRune" | "firePyreRune"
   | "iceFrostRune" | "iceRimeRune" | "iceGlacierRune"
@@ -302,11 +308,11 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * hotbar, which every one of these needs — a heal you have to open the
    * backpack for is not a heal. Sell values sit well under what the tower
    * charges so nobody farms the shelf to sell it back. */
-  healRune: { name: "Mending Rune", stack: 999, value: 45, weight: 3, crystal: true },
-  hasteRune: { name: "Swiftness Rune", stack: 999, value: 60, weight: 3, crystal: true },
-  mireRune: { name: "Mire Rune", stack: 999, value: 85, weight: 3, crystal: true },
-  aegisRune: { name: "Aegis Rune", stack: 999, value: 110, weight: 3, crystal: true },
-  furyRune: { name: "Fury Rune", stack: 999, value: 400, weight: 4, crystal: true },
+  healRune: { name: "Grand Life Crystal", stack: 999, value: 45, weight: 3, crystal: true },
+  hasteRune: { name: "Acceleration Crystal", stack: 999, value: 60, weight: 3, crystal: true },
+  mireRune: { name: "Slowdown Crystal", stack: 999, value: 85, weight: 3, crystal: true },
+  aegisRune: { name: "Protective Crystal", stack: 999, value: 110, weight: 3, crystal: true },
+  furyRune: { name: "Fury Crystal", stack: 999, value: 400, weight: 4, crystal: true },
   coal:         { name: "Coal",          stack: 9999, value: 4, weight: 4 },
   mushroom:  { name: "Mushroom",     stack: 999, value: 2, weight: 4, food: 60 },
   meat:      { name: "Raw Meat",     stack: 999, value: 3, weight: 8, food: 180 },

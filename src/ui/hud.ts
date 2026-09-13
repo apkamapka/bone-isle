@@ -2,7 +2,7 @@
 import { isSafeTile } from "../world/collision.ts";
 import {
   TILE, AEGIS_LOCK_S, AEGIS_RUNE_S, FURY_DEBT_S, FURY_LOCK_S, FURY_RUNE_S,
-  HASTE_RUNE_S,
+  HASTE_RUNE_S, MIRE_RUNE_S,
 } from "../config.ts";
 import { SPR, iconW, iconH } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
@@ -344,11 +344,12 @@ function drawEffectStrip(h: HudCtx, p: Player, x: number, y: number, w: number, 
   const live: Effect[] = [];
   if (b.debt > 0) live.push({ label: `BURN ${clock(b.debt)}`, color: "#ff6a5e", frac: b.debt / FURY_DEBT_S, dim: false });
   if (b.fury > 0) live.push({ label: `FURY ${clock(b.fury)}`, color: "#b8e01e", frac: b.fury / FURY_RUNE_S, dim: false });
-  if (b.aegis > 0) live.push({ label: `AEGIS ${clock(b.aegis)}`, color: "#c6ccd8", frac: b.aegis / AEGIS_RUNE_S, dim: false });
-  if (b.haste > 0) live.push({ label: `SWIFT ${clock(b.haste)}`, color: "#2fd8a0", frac: b.haste / HASTE_RUNE_S, dim: false });
+  if (b.aegis > 0) live.push({ label: `GUARD ${clock(b.aegis)}`, color: "#c6ccd8", frac: b.aegis / AEGIS_RUNE_S, dim: false });
+  if (b.haste > 0) live.push({ label: `SPEED ${clock(b.haste)}`, color: "#2fd8a0", frac: b.haste / HASTE_RUNE_S, dim: false });
+  if (b.haste <= 0 && b.slow > 0) live.push({ label: `SLOWED ${clock(b.slow)}`, color: "#1f96ae", frac: b.slow / MIRE_RUNE_S, dim: false });
   // the two long locks, shown only once the thing itself has stopped
   if (b.aegis <= 0 && b.aegisLock > 0) {
-    live.push({ label: `aegis ${clock(b.aegisLock)}`, color: "#c6ccd8", frac: 1 - b.aegisLock / AEGIS_LOCK_S, dim: true });
+    live.push({ label: `guard ${clock(b.aegisLock)}`, color: "#c6ccd8", frac: 1 - b.aegisLock / AEGIS_LOCK_S, dim: true });
   }
   if (b.fury <= 0 && b.debt <= 0 && b.furyLock > 0) {
     live.push({ label: `fury ${clock(b.furyLock)}`, color: "#b8e01e", frac: 1 - b.furyLock / FURY_LOCK_S, dim: true });

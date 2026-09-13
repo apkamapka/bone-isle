@@ -1391,8 +1391,9 @@ function drawSkills(p: PanelInput): void {
   const marks: [string, string][] = [];
   if (b.debt > 0) marks.push([`BURNING ${secs(b.debt)}`, "#ff6a5e"]);
   if (b.fury > 0) marks.push([`Fury ${secs(b.fury)}`, "#b8e01e"]);
-  if (b.aegis > 0) marks.push([`Aegis ${secs(b.aegis)}`, "#c6ccd8"]);
-  if (b.haste > 0) marks.push([`Swift ${secs(b.haste)}`, "#2fd8a0"]);
+  if (b.aegis > 0) marks.push([`Guard ${secs(b.aegis)}`, "#c6ccd8"]);
+  if (b.haste > 0) marks.push([`Speed ${secs(b.haste)}`, "#2fd8a0"]);
+  if (b.haste <= 0 && b.slow > 0) marks.push([`Slowed ${secs(b.slow)}`, "#1f96ae"]);
   if (b.fury <= 0 && b.debt <= 0 && b.furyLock > 0) {
     marks.push([`Fury in ${Math.ceil(b.furyLock / 60)}m`, "rgba(184,224,30,.55)"]);
   }

@@ -36,6 +36,7 @@ import { loadSceneryArt } from "./gfx/sceneryArt.ts";
 import { loadBuildingArt } from "./gfx/buildingArt.ts";
 import { loadControlIcons } from "./ui/icons.ts";
 import { loadSpellArt } from "./gfx/spellArt.ts";
+import { loadAuraArt } from "./gfx/auraFx.ts";
 import { loadItemArt } from "./gfx/itemArt.ts";
 import { portalSpawn, worldSpawn } from "./world/collision.ts";
 import { spawnAtPost } from "./entities/monsters.ts";
@@ -273,6 +274,7 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
   loadControlIcons();        // the five sidebar buttons, 16x16 each
   loadItemArt();             // drawn icons over the baked stand-ins
   loadSpellArt();            // bolts and blooms, one strip per element and tier
+  loadAuraArt();             // the five crystal auras, one strip each
   loadAttuneArt();           // the five rune circles in the sanctum under Calanais
   return worlds;
 }

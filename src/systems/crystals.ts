@@ -20,7 +20,8 @@ import {
   MIRE_RUNE_S, MIRE_RUNE_TILES, FURY_RUNE_S, FURY_DEBT_S, FURY_DEBT_FRAC,
   FURY_DEBT_TICK_S,
 } from "../config.ts";
-import { aegisReady, furyReady, startAegis, startFury } from "./buffs.ts";
+import { aegisReady, furyReady, startAegis, startFury, startHaste } from "./buffs.ts";
+import { addFlare } from "../gfx/auraFx.ts";
 import { cooldownLeft, blockedBy, startCooldown, tickCooldowns, resetCooldowns } from "./cooldowns.ts";
 import { killMonster } from "./combat.ts";
 import { lineOfSight, groundBlocked } from "../world/collision.ts";
@@ -330,6 +331,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
     startCooldown(kind);
     const amount = HEAL_RUNE_BASE + p.level * HEAL_RUNE_PER_LEVEL;
     p.hp = Math.min(p.maxhp, p.hp + amount);
+    addFlare(world, p.x, p.y - 24, "mend");
     addFloat(world, p.x, p.y - 40, `+${amount}`, "#3ee07a");
     beep(520, 0.3, "sine", 0.07, 320);
     return true;
@@ -349,7 +351,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   // interesting refusal, and "still cooling" from the four-second group clock
   // would teach the player the wrong number.
   if (kind === "aegisRune" && !aegisReady(b)) {
-    const msg = b.aegis > 0 ? "already warded" : `aegis in ${Math.ceil(b.aegisLock / 60)} min`;
+    const msg = b.aegis > 0 ? "already guarded" : `guard in ${Math.ceil(b.aegisLock / 60)} min`;
     addFloat(world, p.x, p.y - 44, msg, "#c6ccd8");
     return false;
   }
@@ -363,14 +365,15 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   startCooldown(kind);
 
   if (kind === "hasteRune") {
-    b.haste = HASTE_RUNE_S;
+    startHaste(b, HASTE_RUNE_S);
+    addFlare(world, p.x, p.y - 24, "speed");
     addFloat(world, p.x, p.y - 40, "swift", "#2fd8a0");
     beep(700, 0.18, "triangle", 0.06, 260);
     return true;
   }
   if (kind === "aegisRune") {
     startAegis(b, AEGIS_RUNE_S);
-    addFloat(world, p.x, p.y - 40, "warded", "#c6ccd8");
+    addFloat(world, p.x, p.y - 40, "guarded", "#c6ccd8");
     beep(300, 0.26, "square", 0.05, 90);
     return true;
   }
@@ -384,9 +387,10 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
       if (Math.hypot(m.x - p.x, m.y - p.y) > reach) continue;
       m.slowS = MIRE_RUNE_S;
       caught++;
-      addFloat(world, m.x, m.y - 30, "mired", "#1f96ae");
+      addFloat(world, m.x, m.y - 30, "slowed", "#1f96ae");
     }
-    addFloat(world, p.x, p.y - 40, caught ? `mire x${caught}` : "mire", "#1f96ae");
+    addFlare(world, p.x, p.y - 24, "slow");
+    addFloat(world, p.x, p.y - 40, caught ? `slowed x${caught}` : "slowdown", "#1f96ae");
     beep(150, 0.34, "sine", 0.06, -70);
     return true;
   }

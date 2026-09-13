@@ -24,7 +24,7 @@
  */
 import {
   AEGIS_LOCK_S, AEGIS_RUNE_CUT, FURY_DEBT_FRAC, FURY_DEBT_TICK_S, FURY_LOCK_S,
-  FURY_RUNE_MULT, HASTE_RUNE_MULT,
+  FURY_RUNE_MULT, HASTE_RUNE_MULT, MIRE_RUNE_MULT,
 } from "../config.ts";
 
 /**
@@ -37,6 +37,13 @@ import {
 export interface Buffs {
   /** Swiftness — movement multiplier while above zero. */
   haste: number;
+  /**
+   * Slowdown, ON A PLAYER. Nothing sets this yet: today a Slowdown Crystal
+   * mires creatures, which carry their own `slowS`. It exists now because the
+   * rule it obeys is a PvP rule and PvP rules are the ones that get forgotten
+   * until the week they matter — see `startHaste`.
+   */
+  slow: number;
   /** Aegis — cuts incoming damage while above zero. */
   aegis: number;
   /** Fury — triple weapon damage while above zero. */
@@ -53,7 +60,10 @@ export interface Buffs {
 }
 
 export function newBuffs(): Buffs {
-  return { haste: 0, aegis: 0, fury: 0, debt: 0, debtTick: 0, furyLock: 0, aegisLock: 0 };
+  return {
+    haste: 0, slow: 0, aegis: 0, fury: 0,
+    debt: 0, debtTick: 0, furyLock: 0, aegisLock: 0,
+  };
 }
 
 /** Rebuild from a save. Missing or malformed input loads as "no effects". */
@@ -77,6 +87,7 @@ export function loadBuffs(saved: Partial<Buffs> | undefined): Buffs {
  */
 export function tickBuffs(b: Buffs, dt: number): number {
   b.haste = Math.max(0, b.haste - dt);
+  b.slow = Math.max(0, b.slow - dt);
   b.aegis = Math.max(0, b.aegis - dt);
   b.fury = Math.max(0, b.fury - dt);
   b.furyLock = Math.max(0, b.furyLock - dt);
@@ -112,8 +123,41 @@ export function debtBite(maxhp: number): number {
   return Math.max(1, Math.round(maxhp * FURY_DEBT_FRAC));
 }
 
+/**
+ * The movement multiplier, Swiftness and Slowdown together.
+ *
+ * SWIFTNESS WINS OUTRIGHT — it does not add to a Slowdown, it ends it. That is
+ * Tibia's rule (haste cures paralyse) and it is the right one for a duel: a
+ * slow that could not be answered would decide the fight at the moment it
+ * landed, and the answer has to be a thing you spend a charge on, not a thing
+ * you wait out.
+ */
 export function hasteMult(b: Buffs): number {
-  return b.haste > 0 ? HASTE_RUNE_MULT : 1;
+  if (b.haste > 0) return HASTE_RUNE_MULT;
+  return b.slow > 0 ? MIRE_RUNE_MULT : 1;
+}
+
+/**
+ * Raise a Swiftness, clearing any Slowdown on the way up.
+ *
+ * The clear is the whole point and it is why this is a function rather than an
+ * assignment at the call site: PvP has not shipped yet, and by the time it does
+ * the reason will be a comment nobody reads. Here it cannot be skipped.
+ */
+export function startHaste(b: Buffs, secs: number): void {
+  b.haste = secs;
+  b.slow = 0;
+}
+
+/**
+ * Land a Slowdown on a player. Refused outright while Swiftness is up, which
+ * is the same rule from the other side: you cannot re-mire someone who has
+ * just spent a charge escaping. Returns true if it stuck.
+ */
+export function applySlow(b: Buffs, secs: number): boolean {
+  if (b.haste > 0) return false;
+  b.slow = Math.max(b.slow, secs);
+  return true;
 }
 
 export function furyMult(b: Buffs): number {
@@ -162,6 +206,7 @@ export function startFury(b: Buffs, burstS: number, debtS: number): void {
  */
 export function clearBuffsOnDeath(b: Buffs): void {
   b.haste = 0;
+  b.slow = 0;
   b.aegis = 0;
   b.fury = 0;
   b.debt = 0;

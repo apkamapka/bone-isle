@@ -485,6 +485,84 @@ def rune_icon(el, tier, stone):
     return Image.fromarray(px)
 
 
+# ---------------------------------------------------------------------------
+#  The auras: what a crystal looks like once it is ON you
+# ---------------------------------------------------------------------------
+#
+# Eight frames of orbiting motes, from a sixteen-frame source whose second half
+# is a duplicate of its first — the loop is eight long, so shipping sixteen
+# would have doubled the file to say the same thing twice.
+#
+# ONE ANIMATION, FIVE COLOURWAYS, TWO PLAYBACK MODES. Protective and Fury LOOP
+# for as long as the effect runs; the other three play ONCE at the moment of
+# casting. That split is the whole reason the same motes can serve all five
+# without any of them reading as a copy of another: a thing that keeps circling
+# you is a state, a thing that flares and goes is an event, and the eye sorts
+# those two apart before it has looked at the colour.
+#
+# Unlike everything else in this file the alpha is kept SOFT here. The Knell is
+# hard-edged pixel art and had to stay that way; an aura is light around a
+# character, and light with a one-bit edge reads as a sticker.
+
+AURA_FRAMES = 8
+AURA = {
+    # green, because they are leaves and it is a shield of them
+    "guard": ["#0d3a1e", "#1f6b3a", "#3ee07a", "#b6ffcf", "#ffffff"],
+    # reds into violet. Fury is the only crystal that hurts you, and it is the
+    # only aura that does not have a green or a blue anywhere in it.
+    "fury":  ["#1a0008", "#8f0030", "#e01e5a", "#b83ee0", "#ffd0f0"],
+    # pale gold rather than another green: Mending and Protective would
+    # otherwise be two green flickers around the same character.
+    "mend":  ["#2a2410", "#8a6a1e", "#ffd070", "#fff6d0", "#ffffff"],
+    "speed": ["#0a3d30", "#0f5c48", "#2fd8a0", "#a8ffdc", "#ffffff"],
+    "slow":  ["#08303a", "#0d4450", "#1f96ae", "#8fe0e8", "#dffbff"],
+}
+
+
+def ramp_at(t, ramp):
+    """Sample a ramp at t in [0, 1]. Same interpolation as `gradient_map`, but
+    driven by a number you already have instead of by a pixel's brightness."""
+    stops = np.array(ramp, np.float32)
+    pos = np.clip(t, 0, 1) * (len(stops) - 1)
+    i = np.clip(np.floor(pos).astype(int), 0, len(stops) - 2)
+    f = (pos - i)[..., None]
+    return stops[i] * (1 - f) + stops[i + 1] * f
+
+
+def aura_strip(name):
+    """One 256 x 32 loop.
+
+    COLOURED BY ALPHA, NOT BY THE SOURCE'S OWN COLOUR, which is the opposite of
+    everything else in this file and is right here for one reason: the source's
+    motion trails are drawn as near-WHITE at low opacity, so mapping luminance
+    the usual way sent every trail to the top of the ramp and every palette
+    came out with the same grey smear through it. Alpha already says exactly
+    what the ramp wants to know — faint edge or solid core — so it drives the
+    colour directly and Fury comes out with no grey in it at all.
+    """
+    ramp = [_h(c) for c in AURA[name]]
+    out = Image.new("RGBA", (32 * AURA_FRAMES, 32), (0, 0, 0, 0))
+    for i in range(AURA_FRAMES):
+        src = Image.open(f"{SRC}/aura-{i + 1}.png").convert("RGBA")
+        # A centred square crop before the reduction. The source frames are
+        # 720x720 with the motes ranging over roughly the middle 560, so
+        # reducing the raw frame would have spent a quarter of every 32-px
+        # tile on empty margin.
+        m = (720 - 560) // 2
+        cell = src.crop((m, m, 720 - m, 720 - m)).resize((32, 32), Image.LANCZOS)
+        al = np.array(cell).astype(np.float32)[..., 3] / 255.0
+        # Below 8% is dust the reduction invented; keeping it turns a ring of
+        # motes into a smudge the width of the frame.
+        al = np.where(al < 0.08, 0.0, al)
+        px = np.zeros((32, 32, 4), np.uint8)
+        px[..., :3] = np.clip(ramp_at(al ** 0.65, ramp), 0, 255).astype(np.uint8)
+        # Lifted, because the motes lose most of their opacity to a 22x
+        # reduction and an aura you cannot see through a torso is not an aura.
+        px[..., 3] = np.clip(al ** 0.75 * 300, 0, 255).astype(np.uint8)
+        out.alpha_composite(Image.fromarray(px), (i * 32, 0))
+    return out
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     cache = frames()
@@ -502,3 +580,7 @@ if __name__ == "__main__":
     for name in UTILITY:
         utility_icon(name).save(f"{OUT}/item-{name}-rune.png")
     print("done utility runes")
+
+    for name in AURA:
+        aura_strip(name).save(f"{OUT}/fx-aura-{name}.png")
+    print("done auras")
