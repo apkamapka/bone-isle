@@ -67,7 +67,7 @@ import {
 import { chatInput, initChatInput } from "./ui/chatInput.ts";
 import { groundEntries, playerEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
-import { tickAuraFx, drawAuras, drawFlares } from "./gfx/auraFx.ts";
+import { tickAuraFx, drawAuras, drawFlares, addFlare } from "./gfx/auraFx.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
@@ -1989,6 +1989,12 @@ function doRecall(): void {
   if (bagCount(P.bag, "recallCrystal") <= 0) { flash("no recall crystal", "#8ab6ff"); return; }
   removeItem(P.bag, "recallCrystal", 1);
   travelTo(game, "home");
+  /* The flare goes off AFTER the travel, on Home Isle, and there is no
+   * matching one at the departure end — `drawFlares` filters by world, so an
+   * effect played on the island you are leaving is drawn into a world nobody
+   * is looking at. An arrival is the half of a teleport anyone actually
+   * sees. */
+  addFlare(game.current, P.x, P.y - 24, "recall", 1.2);
   flash("recalled home", "#c9a6ff");
 }
 

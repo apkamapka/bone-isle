@@ -30,9 +30,10 @@ import type { Buffs } from "../systems/buffs.ts";
 import type { World } from "../world/types.ts";
 
 /** Which aura art a thing uses. Matches `public/fx-aura-<name>.png`. */
-export type AuraName = "guard" | "fury" | "mend" | "speed" | "slow";
+export type AuraName = "guard" | "fury" | "mend" | "speed" | "slow" | "recall";
 
-export const AURA_NAMES: readonly AuraName[] = ["guard", "fury", "mend", "speed", "slow"];
+export const AURA_NAMES: readonly AuraName[] =
+  ["guard", "fury", "mend", "speed", "slow", "recall"];
 
 /** Frames per second for both kinds. Slower than a blast: a blast is an
  *  impact and wants to be over, an aura is weather and wants to circle. */
@@ -83,13 +84,24 @@ interface Flare {
   y: number;
   name: AuraName;
   t: number;
+  /** Multiplies the base size. The lesser version of a spell flares smaller. */
+  scale: number;
 }
 
 const flares: Flare[] = [];
 
-/** Play one pass of `name` centred on (x, y). */
-export function addFlare(world: World, x: number, y: number, name: AuraName): void {
-  flares.push({ world, x, y, name, t: 0 });
+/**
+ * Play one pass of `name` centred on (x, y).
+ *
+ * `scale` exists for the pairs where one crystal is plainly the small version
+ * of another: a Life Crystal and a Grand Life Crystal do the same thing to the
+ * same bar, and the honest way to draw that is the same green flare at two
+ * sizes rather than two different pictures the player has to learn apart.
+ */
+export function addFlare(
+  world: World, x: number, y: number, name: AuraName, scale = 1,
+): void {
+  flares.push({ world, x, y, name, t: 0, scale });
 }
 
 export function tickAuraFx(dt: number): void {
@@ -124,6 +136,7 @@ const AURA_SCALE: Readonly<Record<AuraName, number>> = {
   mend: 1.8,
   speed: 1.8,
   slow: 2.1,
+  recall: 2.2,
 };
 
 function blit(
@@ -188,6 +201,6 @@ export function drawFlares(
     // Flares brighten as they open and thin out as they close, so a one-pass
     // effect does not simply stop mid-swirl.
     const p = i / Math.max(1, frames.length - 1);
-    blit(ctx, frames[i], f.x - camX, f.y - camY, AURA_SCALE[f.name], 1 - p * 0.65);
+    blit(ctx, frames[i], f.x - camX, f.y - camY, AURA_SCALE[f.name] * f.scale, 1 - p * 0.65);
   }
 }

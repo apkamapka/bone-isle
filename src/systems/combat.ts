@@ -115,6 +115,20 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
  * from the bag, trains Distance Fighting, spawns a cosmetic projectile and
  * applies the hit instantly. Returns true if the monster died.
  */
+/**
+ * The colour an arrow flies in, or undefined for the plain ones.
+ *
+ * Fifteen elemental arrowheads shipped and every one of them crossed the screen
+ * as the same grey stick as a wooden arrow — the element was real, it changed
+ * the damage type and met resistance instead of armour, and NONE of that was
+ * visible. `shots` has carried a `color` field the whole time; nothing was
+ * setting it.
+ */
+function arrowTint(kind: ItemKind): string | undefined {
+  const el = ITEMS[kind].element;
+  return el ? ELEMENT_COLOR[el] : undefined;
+}
+
 export function playerShoot(world: World, p: Player, m: Monster, arrowKind: ItemKind): boolean {
   const arrowDmg = ITEMS[arrowKind].ammo?.dmg ?? 0;
   if (!removeItem(p.bag, arrowKind, 1)) return false;
@@ -123,6 +137,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
     fromX: p.x, fromY: p.y - 16,
     toX: m.x, toY: m.y - 12,
     p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow",
+    color: arrowTint(arrowKind),
   });
   if (m.x < p.x) p.face = -1; else p.face = 1;
   beep(430, 0.06, "triangle", 0.045, -120);
@@ -169,7 +184,7 @@ export function shootDummy(world: World, p: Player, s: Structure, arrowKind: Ite
   s.hurtT = 0.2;
   s.anim = 0;
   const flight = Math.hypot(tx - p.x, ty - p.y) / SHOT_SPEED;
-  world.shots.push({ fromX: p.x, fromY: p.y - 16, toX: tx, toY: ty - 12, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow" });
+  world.shots.push({ fromX: p.x, fromY: p.y - 16, toX: tx, toY: ty - 12, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow", color: arrowTint(arrowKind) });
   if (Math.random() > distanceHitChance()) {
     addFloat(world, c.x, s.ty * TILE - 8, "miss", "#9aa0a8");
     addSkillXp("dist", 1 * DUMMY_TIER_RATE[0], (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));

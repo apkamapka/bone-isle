@@ -373,6 +373,11 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   }
   if (kind === "aegisRune") {
     startAegis(b, AEGIS_RUNE_S);
+    // A flare on top of the aura, and not a duplicate of it. The aura fades in
+    // and says "this is on"; the flare is the moment it went on, and without it
+    // the two crystals that leave something behind are the only two whose CAST
+    // you cannot see.
+    addFlare(world, p.x, p.y - 24, "guard", 1.15);
     addFloat(world, p.x, p.y - 40, "guarded", "#dfe6f2");
     beep(300, 0.26, "square", 0.05, 90);
     return true;
@@ -396,6 +401,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   }
   // furyRune
   startFury(b, FURY_RUNE_S, FURY_DEBT_S);
+  addFlare(world, p.x, p.y - 24, "fury", 1.4);
   addFloat(world, p.x, p.y - 40, "FURY", "#e01e5a");
   addFloat(world, p.x, p.y - 56, `${Math.round(FURY_DEBT_FRAC * 100)}% every ${FURY_DEBT_TICK_S}s after`, "#ff9ad0");
   beep(90, 0.55, "sawtooth", 0.1, 150);
@@ -443,6 +449,11 @@ export function useCrystal(
     startCooldown(kind);
     const amount = HEAL_CRYSTAL_BASE + p.level * 3;
     p.hp = Math.min(p.maxhp, p.hp + amount);
+    // The same green flare the Grand Life Crystal throws, at two thirds the
+    // size. Two heals that do the same thing to the same bar should not be two
+    // pictures to learn — the size IS the difference, and it is the difference
+    // that matters.
+    addFlare(world, p.x, p.y - 24, "mend", 0.65);
     addFloat(world, p.x, p.y - 40, `+${amount}`, "#7dff9e");
     beep(660, 0.2, "sine", 0.06, 220);
     return true;

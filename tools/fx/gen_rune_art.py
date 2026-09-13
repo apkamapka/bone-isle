@@ -535,6 +535,10 @@ AURA = {
     # reds into violet. Fury is the only crystal that hurts you and the only
     # one of the five with neither a green nor a blue anywhere in it.
     "fury":  ["#1a0008", "#8f0030", "#e01e5a", "#c04aff", "#ffd0f0"],
+    # lilac, matching the colour Recall's own "recalled home" message has
+    # always been printed in. The oldest crystal in the game and the last one
+    # to get a picture.
+    "recall": ["#1b0f38", "#4b2a8a", "#9a6ee0", "#c9a6ff", "#f0e4ff"],
 }
 
 

@@ -18145,7 +18145,21 @@ async function main(): Promise<void> {
     showing.aegis = 0.5;
     ok(AF.activeAuras(showing).find((a) => a.name === "guard")!.alpha < 1,
       "…and an aura about to lapse fades rather than cutting out");
-    ok(AF.AURA_NAMES.length === 5, "five colourways of the one loop");
+    ok(AF.AURA_NAMES.length === 6, "six colourways of the one loop");
+
+    /* EVERY CASTABLE THING LEAVES A MARK. This is the audit that found the
+     * Life Crystal healing in total silence and fifteen elemental arrowheads
+     * crossing the screen as plain grey sticks - both had shipped, both
+     * worked, and neither could be seen. Anything usable that draws nothing is
+     * a bug the tests should catch before a player does. */
+    const EL2 = await import("../src/systems/elements.ts");
+    const elemental = (Object.keys(IT.ITEMS) as (keyof typeof IT.ITEMS)[])
+      .filter((k) => IT.ITEMS[k].ammo && IT.ITEMS[k].element);
+    ok(elemental.length === 15, "fifteen elemental arrowheads exist");
+    ok(elemental.every((k) => !!EL2.ELEMENT_COLOR[IT.ITEMS[k].element!]),
+      "…and every one of them has a colour to fly in");
+    ok(AF.AURA_NAMES.includes("recall"),
+      "Recall, the oldest crystal in the game, finally has a picture too");
 
     // AEGIS cuts what is left after shield and armour, elemental included
     const b3 = BF.newBuffs();
