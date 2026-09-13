@@ -63,14 +63,16 @@ UTILITY_BODY = {
 UTILITY_STONE = ["#101010", "#2e2e2c", "#55574f", "#7d8375", "#c2c7b8"]
 
 #            body      groove     mark       core
+#
+# The mark colours are the AURA colours, on purpose — see the note on AURA
+# below. What you see in the bag is what you see on your shoulders.
 UTILITY = {
-    "heal":  ("nugget", "#1f6b3a", "#3ee07a", "#b6ffcf"),
-    "haste": ("gem",    "#0f5c48", "#2fd8a0", "#a8ffdc"),
-    "mire":  ("gem",    "#0d4450", "#1f96ae", "#8fe0e8"),
-    "aegis": ("nugget", "#3a3f48", "#c6ccd8", "#ffffff"),
-    "fury":  ("tablet", "#4a5a08", "#b8e01e", "#f0ff8a"),
+    "heal":  ("nugget", "#0d3a1e", "#3ee07a", "#b6ffcf"),
+    "haste": ("gem",    "#4a3a00", "#ffd23a", "#fff4a8"),
+    "mire":  ("gem",    "#0a1c3a", "#3a8fe0", "#a8d4ff"),
+    "aegis": ("nugget", "#2a2f3a", "#dfe6f2", "#ffffff"),
+    "fury":  ("tablet", "#4a0018", "#e01e5a", "#ff9ad0"),
 }
-
 ELEMENTS = ["fire", "ice", "earth", "storm", "shadow"]
 
 # The id words, NOT the display words.  `TIER_CODE` in src/systems/elements.ts
@@ -505,17 +507,34 @@ def rune_icon(el, tier, stone):
 # character, and light with a one-bit edge reads as a sticker.
 
 AURA_FRAMES = 8
+
+# FIVE HUES, MAXIMALLY APART, and each one shared with its own icon.
+#
+# The first cut of this had Mending green, Protective green and Acceleration
+# jade — three flickers around the same character that were, in practice, one
+# colour. Worse, Protective's ICON was silver while its AURA was green, so the
+# thing in the bag and the thing on your shoulders did not match.
+#
+# The rule now is one hue per crystal, carried by the icon, the aura, the HUD
+# chip and the floating word alike. Element clash is a secondary worry here and
+# deliberately so: the utility family is already separated from the elemental
+# one by the grey stone body, no element crystal is ever a grey stone, and no
+# element ever puts an aura on the player at all. So these five only have to be
+# unmistakable against EACH OTHER, which buys the whole colour wheel.
 AURA = {
-    # green, because they are leaves and it is a shield of them
-    "guard": ["#0d3a1e", "#1f6b3a", "#3ee07a", "#b6ffcf", "#ffffff"],
-    # reds into violet. Fury is the only crystal that hurts you, and it is the
-    # only aura that does not have a green or a blue anywhere in it.
-    "fury":  ["#1a0008", "#8f0030", "#e01e5a", "#b83ee0", "#ffd0f0"],
-    # pale gold rather than another green: Mending and Protective would
-    # otherwise be two green flickers around the same character.
-    "mend":  ["#2a2410", "#8a6a1e", "#ffd070", "#fff6d0", "#ffffff"],
-    "speed": ["#0a3d30", "#0f5c48", "#2fd8a0", "#a8ffdc", "#ffffff"],
-    "slow":  ["#08303a", "#0d4450", "#1f96ae", "#8fe0e8", "#dffbff"],
+    # green — heal is green, and arguing with that costs more than it wins
+    "mend":  ["#0d3a1e", "#1f6b3a", "#3ee07a", "#b6ffcf", "#ffffff"],
+    # lemon — brighter and cooler than Spark's amber, and speed reads yellow
+    "speed": ["#3a2e00", "#8a6c00", "#ffd23a", "#fff4a8", "#ffffff"],
+    # deep sky blue, the heavy end of the wheel for the thing that makes
+    # everything heavy
+    "slow":  ["#0a1c3a", "#1a4a8a", "#3a8fe0", "#a8d4ff", "#dff0ff"],
+    # silver-white. A ward should look like glass, and this is the one aura
+    # that has to stay legible drawn over armour of any colour.
+    "guard": ["#2a2f3a", "#5a6478", "#a8b4c8", "#dfe6f2", "#ffffff"],
+    # reds into violet. Fury is the only crystal that hurts you and the only
+    # one of the five with neither a green nor a blue anywhere in it.
+    "fury":  ["#1a0008", "#8f0030", "#e01e5a", "#c04aff", "#ffd0f0"],
 }
 
 

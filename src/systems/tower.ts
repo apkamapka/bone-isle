@@ -250,7 +250,7 @@ export const RESEARCH: readonly Research[] = [
   {
     id: "mending",
     name: "Grand Life Crystals",
-    desc: "Heals far more than a Life Crystal. Shares its cooldown.",
+    desc: "Heals far more than a Life Crystal. Same cooldown.",
     researchCost: {},
     openFromStart: true,
     minLevel: 35,
@@ -286,7 +286,7 @@ export const RESEARCH: readonly Research[] = [
   {
     id: "aegis",
     name: "Protective Crystals",
-    desc: "Cuts all damage 40% for 15s, elemental too. Once per 5 min.",
+    desc: "Cuts damage 40% for 15s, elemental too. 1 per 5 min.",
     researchCost: {},
     openFromStart: true,
     minLevel: 30,
@@ -305,7 +305,7 @@ export const RESEARCH: readonly Research[] = [
     name: "Fury Crystals",
     // Short enough to fit the shelf row. The full arithmetic lives in
     // config.ts, which is where somebody retuning it will be looking anyway.
-    desc: "3x damage for 20s, then a 5 min burn. Once per 30 min.",
+    desc: "3x damage for 20s, then a 5 min burn. 1 per 30 min.",
     researchCost: {},
     openFromStart: true,
     minLevel: 40,

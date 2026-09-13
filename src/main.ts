@@ -4495,6 +4495,11 @@ function update(dt: number): void {
     updateFloats(dt);
     updateSpellFx(dt);  // the spell that killed you still gets to finish
     tickAuraFx(dt);
+    // The long locks keep counting while you are face down. Death already
+    // cleared the effects themselves, so this only advances `furyLock` and
+    // `aegisLock` — and it has to, or lying dead would pause the half-hour
+    // wait and dying would be a way to shorten it.
+    tickBuffs(P.buffs, dt);
     // …and so does the cast behind it: a creature rooted in its windup when
     // you died would still be rooted when you walked back in.
     updateMonsterSpells(game.current, dt, { tx: P.tx, ty: P.ty, dead: true }, () => {});

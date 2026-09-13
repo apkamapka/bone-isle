@@ -1389,11 +1389,11 @@ function drawSkills(p: PanelInput): void {
   const b = pl.buffs;
   const secs = (v: number) => `${Math.ceil(v)}s`;
   const marks: [string, string][] = [];
-  if (b.debt > 0) marks.push([`BURNING ${secs(b.debt)}`, "#ff6a5e"]);
-  if (b.fury > 0) marks.push([`Fury ${secs(b.fury)}`, "#b8e01e"]);
-  if (b.aegis > 0) marks.push([`Guard ${secs(b.aegis)}`, "#c6ccd8"]);
-  if (b.haste > 0) marks.push([`Speed ${secs(b.haste)}`, "#2fd8a0"]);
-  if (b.haste <= 0 && b.slow > 0) marks.push([`Slowed ${secs(b.slow)}`, "#1f96ae"]);
+  if (b.debt > 0) marks.push([`BURNING ${secs(b.debt)}`, "#ff8a2a"]);
+  if (b.fury > 0) marks.push([`Fury ${secs(b.fury)}`, "#e01e5a"]);
+  if (b.aegis > 0) marks.push([`Guard ${secs(b.aegis)}`, "#dfe6f2"]);
+  if (b.haste > 0) marks.push([`Speed ${secs(b.haste)}`, "#ffd23a"]);
+  if (b.haste <= 0 && b.slow > 0) marks.push([`Slowed ${secs(b.slow)}`, "#3a8fe0"]);
   if (b.fury <= 0 && b.debt <= 0 && b.furyLock > 0) {
     marks.push([`Fury in ${Math.ceil(b.furyLock / 60)}m`, "rgba(184,224,30,.55)"]);
   }
@@ -2029,7 +2029,7 @@ function drawTower(p: PanelInput): void {
     ry += rowH;
   }
 
-  // --- the four originals, still researched with materials ---
+  // --- the non-elemental shelf: the two originals, then the five crystals ---
   for (const r of rows) {
     const researched = isResearched(r.id);
     const cost = researched ? r.buyCost : r.researchCost;
@@ -2067,7 +2067,11 @@ function drawTower(p: PanelInput): void {
   }
 
   const foot = ui.towerTab === "other"
-    ? "The originals — no tiers, never hidden"
+    // Not "the originals" any more: the shelf held two crystals when that
+    // line was written and now holds seven. What is still true of all of them
+    // is that none has a tier and none is hidden behind a tower upgrade —
+    // the gate here is your level, so say that instead.
+    ? "No tiers, never hidden — gated by level"
     : showAttune
       ? "Sealed. An attunement stone opens this element."
       : `Showing tier ${tt} · upgrade the tower for the next five`;

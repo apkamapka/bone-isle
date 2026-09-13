@@ -18121,6 +18121,18 @@ async function main(): Promise<void> {
     BF.clearBuffsOnDeath(duel);
     ok(duel.slow === 0, "death clears a Slowdown like anything else");
 
+    /* THE SHELF ROW HAS A WIDTH AND THE DESCRIPTION HAS TO RESPECT IT.
+     *
+     * Fury shipped with an 89-character line and it ran out of the panel and
+     * over the world. `hudText` now takes a budget for every line in a tower
+     * row so it can never leak again — but a line AT the budget gets stepped
+     * down a font size and reads smaller than the rows around it, which is
+     * the shabby version of the same bug. 254 design px of 6.5 px pixel font
+     * measures out at roughly 58 characters, so 56 is the working ceiling. */
+    for (const r of TW.RESEARCH) {
+      ok(r.desc.length <= 56, `"${r.name}" description fits its row (${r.desc.length} chars)`);
+    }
+
     // AURAS: state loops, instants flare, and neither invents its own clock
     const AF = await import("../src/gfx/auraFx.ts");
     const showing = BF.newBuffs();

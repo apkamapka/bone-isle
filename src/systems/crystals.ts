@@ -344,7 +344,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   if (kind === "furyRune" && !furyReady(b)) {
     const left = b.debt > 0 ? b.debt : b.furyLock;
     const msg = b.debt > 0 ? "still burning" : `fury in ${Math.ceil(left / 60)} min`;
-    addFloat(world, p.x, p.y - 44, msg, "#b8e01e");
+    addFloat(world, p.x, p.y - 44, msg, "#e01e5a");
     return false;
   }
   // Same shape for Aegis, and for the same reason: its five-minute lock is the
@@ -352,7 +352,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   // would teach the player the wrong number.
   if (kind === "aegisRune" && !aegisReady(b)) {
     const msg = b.aegis > 0 ? "already guarded" : `guard in ${Math.ceil(b.aegisLock / 60)} min`;
-    addFloat(world, p.x, p.y - 44, msg, "#c6ccd8");
+    addFloat(world, p.x, p.y - 44, msg, "#dfe6f2");
     return false;
   }
 
@@ -367,13 +367,13 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   if (kind === "hasteRune") {
     startHaste(b, HASTE_RUNE_S);
     addFlare(world, p.x, p.y - 24, "speed");
-    addFloat(world, p.x, p.y - 40, "swift", "#2fd8a0");
+    addFloat(world, p.x, p.y - 40, "swift", "#ffd23a");
     beep(700, 0.18, "triangle", 0.06, 260);
     return true;
   }
   if (kind === "aegisRune") {
     startAegis(b, AEGIS_RUNE_S);
-    addFloat(world, p.x, p.y - 40, "guarded", "#c6ccd8");
+    addFloat(world, p.x, p.y - 40, "guarded", "#dfe6f2");
     beep(300, 0.26, "square", 0.05, 90);
     return true;
   }
@@ -387,17 +387,17 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
       if (Math.hypot(m.x - p.x, m.y - p.y) > reach) continue;
       m.slowS = MIRE_RUNE_S;
       caught++;
-      addFloat(world, m.x, m.y - 30, "slowed", "#1f96ae");
+      addFloat(world, m.x, m.y - 30, "slowed", "#3a8fe0");
     }
     addFlare(world, p.x, p.y - 24, "slow");
-    addFloat(world, p.x, p.y - 40, caught ? `slowed x${caught}` : "slowdown", "#1f96ae");
+    addFloat(world, p.x, p.y - 40, caught ? `slowed x${caught}` : "slowdown", "#3a8fe0");
     beep(150, 0.34, "sine", 0.06, -70);
     return true;
   }
   // furyRune
   startFury(b, FURY_RUNE_S, FURY_DEBT_S);
-  addFloat(world, p.x, p.y - 40, "FURY", "#b8e01e");
-  addFloat(world, p.x, p.y - 56, `${Math.round(FURY_DEBT_FRAC * 100)}% every ${FURY_DEBT_TICK_S}s after`, "#f0ff8a");
+  addFloat(world, p.x, p.y - 40, "FURY", "#e01e5a");
+  addFloat(world, p.x, p.y - 56, `${Math.round(FURY_DEBT_FRAC * 100)}% every ${FURY_DEBT_TICK_S}s after`, "#ff9ad0");
   beep(90, 0.55, "sawtooth", 0.1, 150);
   return true;
 }

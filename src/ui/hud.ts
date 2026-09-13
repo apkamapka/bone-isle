@@ -342,17 +342,17 @@ function clock(s: number): string {
 function drawEffectStrip(h: HudCtx, p: Player, x: number, y: number, w: number, S: number): void {
   const b = p.buffs;
   const live: Effect[] = [];
-  if (b.debt > 0) live.push({ label: `BURN ${clock(b.debt)}`, color: "#ff6a5e", frac: b.debt / FURY_DEBT_S, dim: false });
-  if (b.fury > 0) live.push({ label: `FURY ${clock(b.fury)}`, color: "#b8e01e", frac: b.fury / FURY_RUNE_S, dim: false });
-  if (b.aegis > 0) live.push({ label: `GUARD ${clock(b.aegis)}`, color: "#c6ccd8", frac: b.aegis / AEGIS_RUNE_S, dim: false });
-  if (b.haste > 0) live.push({ label: `SPEED ${clock(b.haste)}`, color: "#2fd8a0", frac: b.haste / HASTE_RUNE_S, dim: false });
-  if (b.haste <= 0 && b.slow > 0) live.push({ label: `SLOWED ${clock(b.slow)}`, color: "#1f96ae", frac: b.slow / MIRE_RUNE_S, dim: false });
+  if (b.debt > 0) live.push({ label: `BURN ${clock(b.debt)}`, color: "#ff8a2a", frac: b.debt / FURY_DEBT_S, dim: false });
+  if (b.fury > 0) live.push({ label: `FURY ${clock(b.fury)}`, color: "#e01e5a", frac: b.fury / FURY_RUNE_S, dim: false });
+  if (b.aegis > 0) live.push({ label: `GUARD ${clock(b.aegis)}`, color: "#dfe6f2", frac: b.aegis / AEGIS_RUNE_S, dim: false });
+  if (b.haste > 0) live.push({ label: `SPEED ${clock(b.haste)}`, color: "#ffd23a", frac: b.haste / HASTE_RUNE_S, dim: false });
+  if (b.haste <= 0 && b.slow > 0) live.push({ label: `SLOWED ${clock(b.slow)}`, color: "#3a8fe0", frac: b.slow / MIRE_RUNE_S, dim: false });
   // the two long locks, shown only once the thing itself has stopped
   if (b.aegis <= 0 && b.aegisLock > 0) {
-    live.push({ label: `guard ${clock(b.aegisLock)}`, color: "#c6ccd8", frac: 1 - b.aegisLock / AEGIS_LOCK_S, dim: true });
+    live.push({ label: `guard ${clock(b.aegisLock)}`, color: "#dfe6f2", frac: 1 - b.aegisLock / AEGIS_LOCK_S, dim: true });
   }
   if (b.fury <= 0 && b.debt <= 0 && b.furyLock > 0) {
-    live.push({ label: `fury ${clock(b.furyLock)}`, color: "#b8e01e", frac: 1 - b.furyLock / FURY_LOCK_S, dim: true });
+    live.push({ label: `fury ${clock(b.furyLock)}`, color: "#e01e5a", frac: 1 - b.furyLock / FURY_LOCK_S, dim: true });
   }
   if (!live.length) return;
 
