@@ -641,6 +641,8 @@ export interface UiState {
   /** The container on the ground whose window is open, if any. */
   floor: GroundItem | null;
   shopTab: "buy" | "sell";
+  /** Which tab of Grizelda's board is showing: the errands or her shelf. */
+  taskTab: "tasks" | "shop";
   /** Which tab of the Forge window is showing (Etap 24). */
   forgeTab: "craft" | "smelt" | "gems";
   /** Which page of the TEST window's grid is showing. */
@@ -2370,6 +2372,11 @@ function rewardText(r: TaskReward): string {
  * A lower-list row shows its tally only when there IS one — an errand counts
  * from the moment it is taken, so an untouched entry reads as its goal rather
  * than as a row of zeroes. An abandoned one keeps its number and says so.
+ *
+ * The second tab is Grizelda's shelf, and it is empty on purpose: what the
+ * Task Points buy is a separate piece of design. The tab ships now so the
+ * points have a visible destination rather than being a number that does
+ * nothing, and so the shelf lands in a place the player already knows.
  */
 function drawTasks(p: PanelInput): void {
   const { hud, player } = p;
@@ -2383,14 +2390,16 @@ function drawTasks(p: PanelInput): void {
 
   const w = 330 * S;
   const headerH = 24 * S;
+  const tabH = 18 * S;
   const handRowH = 44 * S;
   const taskRowH = 30 * S;
   const labelH = 12 * S;
   const handH = inHand.length ? inHand.length * handRowH : 24 * S;
-  const chrome = 18 * S + headerH + labelH + handH + labelH + 16 * S;
+  const onShop = p.ui.taskTab === "shop";
+  const chrome = 18 * S + headerH + tabH + labelH + handH + labelH + 16 * S;
   const { first, count } = listView(p, Math.max(1, avail.length), taskRowH, chrome);
   const shown = avail.slice(first, first + count);
-  const h = chrome + shown.length * taskRowH;
+  const h = onShop ? 18 * S + headerH + tabH + 56 * S : chrome + shown.length * taskRowH;
 
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "TASK BOARD \u2014 Grizelda")) return;
@@ -2399,6 +2408,30 @@ function drawTasks(p: PanelInput): void {
   hudText(hud, `Task Points: ${player.taskPoints}`, x + 12 * S, ry + 6 * S, 9 * S, "#9ad0ff", "left", true);
   hudText(hud, `lifetime ${pointsEarned()}`, x + w - 12 * S, ry + 6 * S, 7 * S, "rgba(220,214,190,.55)", "right");
   ry += headerH;
+
+  const tabW = 62 * S;
+  ([["tasks", "Tasks"], ["shop", "Shop"]] as const).forEach(([tab, label], i) => {
+    const tx = x + 12 * S + i * (tabW + 6 * S);
+    const on = p.ui.taskTab === tab;
+    buttonBox(ctx, tx, ry, tabW, 13 * S, S, {
+      on, face: on ? "rgba(202,162,58,.3)" : undefined,
+      hover: hovering(p, tx, ry, tabW, 13 * S), accent: on ? CHROME.gold : undefined,
+    });
+    hudText(hud, label, tx + tabW / 2, ry + 6.5 * S, 8 * S, on ? "#ffe9a8" : "#cfa86a", "center", true);
+    const ty = ry;
+    // The two tabs are different lists; an offset carried across opens the
+    // other one part-way down, or past its end.
+    p.hotspots.push({ x: tx, y: ty, w: tabW, h: 13 * S, fn: () => { p.ui.taskTab = tab; p.win.scroll = 0; } });
+  });
+  ry += tabH;
+
+  if (onShop) {
+    hudText(hud, "Grizelda has nothing on the shelf yet.", x + w / 2, ry + 14 * S, 8 * S,
+      "rgba(220,214,190,.6)", "center");
+    hudText(hud, "Keep the points \u2014 they are going to be worth something.", x + w / 2, ry + 30 * S,
+      6.5 * S, "rgba(202,162,58,.75)", "center");
+    return;
+  }
 
   /* ---- in hand ---- */
   hudText(hud, `IN HAND \u2014 ${inHand.length}/${MAX_ACTIVE}`, x + 12 * S, ry + 6 * S, 7 * S,

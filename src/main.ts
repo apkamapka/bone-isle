@@ -318,7 +318,7 @@ let lastPY = Number.NaN;
 let saveTimer = 0;
 let last = performance.now();
 
-const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null, shopTab: "buy",
+const ui: UiState = { windows: [], placing: null, selSlot: null, loot: null, npc: null, stash: null, floor: null, shopTab: "buy", taskTab: "tasks",
   forgeTab: "craft",
   testPage: 0,
   towerTab: "fire",

@@ -72,43 +72,48 @@ async function main(): Promise<void> {
     ok(tasks.progressOf(snakes) === 0, "kills made before the errand was taken do not count");
     ok(kills.killCount("snake") === 30, "…though the lifetime ledger recorded them all the same");
 
-    // ---- the level gate, both ends ----
-    ok(!tasks.acceptTask("t_demonskeletons", 5), "a level-5 character cannot take the Charnel errand");
+    // ---- the level gate, and only at the bottom ----
+    ok(!tasks.acceptTask("t_dragons", 5), "a level-5 character cannot take the dragon hunt");
+    ok(tasks.taskById("t_blackknights")!.reqLevel === tasks.taskById("t_dragons")!.reqLevel,
+      "the black knight opens at the same level as the dragon");
     ok(tasks.acceptTask("t_snakes", 5), "…but the snake cull is open to it");
     ok(!tasks.acceptTask("t_snakes", 5), "…and cannot be taken twice");
-    ok(!tasks.offeredTasks(60).some((t) => t.id === "t_poachers"),
-      "an errand fifteen levels behind falls off the board");
-    ok(tasks.offeredTasks(60).some((t) => t.id === "t_snakes"),
-      "…but one already in hand is never hidden, however far behind it falls");
-    const order = tasks.offeredTasks(30).map((t) => t.reqLevel);
-    ok(order.every((lv, i) => i === 0 || order[i - 1] <= lv), "the board reads easiest first, hardest last");
+    ok(tasks.offeredTasks(50).some((t) => t.id === "t_snakes"),
+      "nothing ever expires off the top — errands repeat, so a veteran may still cull snakes");
+    const order = tasks.offeredTasks(50).map((t) => t.reqLevel);
+    ok(order.every((lv, i) => i === 0 || order[i - 1] <= lv), "the board reads weakest first, strongest last");
 
     // ---- three is the ceiling ----
     tasks.acceptTask("t_vermin", 5);
-    tasks.acceptTask("t_bandits", 5);
+    tasks.acceptTask("t_highway", 15);
     ok(tasks.activeTasks().length === 3, "three errands fit");
-    ok(!tasks.acceptTask("t_poachers", 5), "…and a fourth does not");
+    ok(!tasks.acceptTask("t_skeletons", 15), "…and a fourth does not");
     ok(tasks.abandonTask("t_vermin") && tasks.activeTasks().length === 2, "dropping one frees a slot");
 
-    // ---- one corpse, every errand that wants it ----
+    // ---- one errand per ground, counting every rank on it ----
     tasks.resetTasks();
     tasks.acceptTask("t_goblins", 25);
-    tasks.acceptTask("t_warren", 25);
     slay("goblin", 10);
-    ok(tasks.progressOf(tasks.taskById("t_goblins")!) === 10
-      && tasks.progressOf(tasks.taskById("t_warren")!) === 10,
-      "a goblin counts for the bounty AND the warren — both were in hand");
     slay("goblinLegionary", 5);
-    ok(tasks.progressOf(tasks.taskById("t_goblins")!) === 10,
-      "…but a legionary is not a goblin, so the bounty does not move");
-    ok(tasks.progressOf(tasks.taskById("t_warren")!) === 15,
-      "…while the camp errand, which lists both ranks, counts it once");
+    ok(tasks.progressOf(tasks.taskById("t_goblins")!) === 15,
+      "both ranks of the goblin floor count for the one errand that covers it");
+    slay("orc", 4);
+    ok(tasks.progressOf(tasks.taskById("t_goblins")!) === 15, "…and nothing off that ground does");
+
+    const seen = new Map<string, string>();
+    for (const t of tasks.TASKS) {
+      for (const k of t.goal.kinds) {
+        ok(!seen.has(k), `${k} appears on exactly one errand (${seen.get(k) ?? t.id})`);
+        seen.set(k, t.id);
+      }
+    }
+    ok(seen.size === 39, "…and every creature in the game is on one");
 
     // ---- dropping keeps the tally ----
-    tasks.abandonTask("t_warren");
+    tasks.abandonTask("t_goblins");
     slay("goblin", 4);
-    ok(tasks.progressOf(tasks.taskById("t_warren")!) === 15, "a dropped errand stops counting");
-    ok(tasks.acceptTask("t_warren", 25) && tasks.progressOf(tasks.taskById("t_warren")!) === 15,
+    ok(tasks.progressOf(tasks.taskById("t_goblins")!) === 15, "a dropped errand stops counting");
+    ok(tasks.acceptTask("t_goblins", 25) && tasks.progressOf(tasks.taskById("t_goblins")!) === 15,
       "…and taking it back resumes where it stood rather than restarting");
 
     // ---- hand-in pays, and only once per threshold ----
@@ -151,10 +156,11 @@ async function main(): Promise<void> {
 
     // ---- the points ladder Radek set ----
     const pts = (id: string) => tasks.taskById(id)!.reward.points;
-    ok(pts("t_bandits") === 1, "road vermin pay one point");
+    ok(pts("t_vermin") === 1, "road vermin pay one point");
     ok(pts("t_goblins") === 2, "goblins and their like pay two");
     ok(pts("t_minotaurs") === 3, "minotaurs and their like pay three");
     ok(pts("t_demonskeletons") === 4, "everything between them and the dragon pays four");
+    ok(pts("t_blackknights") === 5, "the black knight pays five, like the dragon");
     ok(pts("t_dragons") === 5, "…and the dragon pays five");
     ok(tasks.TASKS.every((t) => t.reward.points >= 1 && t.reward.points <= 5),
       "nothing on the board falls off either end of that ladder");
