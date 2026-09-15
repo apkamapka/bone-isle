@@ -23,6 +23,7 @@ import {
 } from "./skills.ts";
 import type { ItemKind } from "../items.ts";
 import { recordKill } from "./kills.ts";
+import { onTaskKill } from "./tasks.ts";
 import { active as activeState } from "./playerState.ts";
 import type { Player } from "../entities/player.ts";
 import type { World, Monster, Structure } from "../world/types.ts";
@@ -314,10 +315,12 @@ export function killMonster(world: World, p: Player, m: Monster): void {
     t: relicOnBody ? RELIC_CORPSE_DECAY_S : CORPSE_DECAY_S,
   });
 
-  /* One line, and it is the only place a kill is ever counted. The board in
-   * tasks.ts reads out of this ledger rather than being told about kills, so
-   * hunting with no errand in hand still counts toward the next one. */
+  /* Two ledgers, one corpse. `recordKill` is the lifetime record per creature
+   * and runs whatever the player is doing; `onTaskKill` advances only the
+   * errands actually in hand, which is what makes taking one from Grizelda
+   * the moment that matters. */
   recordKill(m.kind);
+  onTaskKill(m.kind);
 
   const idx = world.monsters.indexOf(m);
   if (idx >= 0) world.monsters.splice(idx, 1);

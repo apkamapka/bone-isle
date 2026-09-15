@@ -56,13 +56,21 @@ async function main(): Promise<void> {
     ok(kills.killCount("orc") === 0, "an absent ledger loads empty — nobody is credited retroactively");
   }
 
-  console.log("task board (Etap 48 — three errands, read from the ledger):");
+  console.log("task board (Etap 48 — three errands, counted from acceptance):");
   {
     const p = createPlayer({ x: 0, y: 0 });
     p.pack = items.newContainer("backpack")!;
     kills.resetKills();
     tasks.resetTasks();
     const snakes = tasks.taskById("t_snakes")!;
+    const slay = (kind: string, n: number) => {
+      for (let i = 0; i < n; i++) { kills.recordKill(kind as never); tasks.onTaskKill(kind as never); }
+    };
+
+    // ---- nothing counts before the errand is taken ----
+    slay("snake", 30);
+    ok(tasks.progressOf(snakes) === 0, "kills made before the errand was taken do not count");
+    ok(kills.killCount("snake") === 30, "…though the lifetime ledger recorded them all the same");
 
     // ---- the level gate, both ends ----
     ok(!tasks.acceptTask("t_demonskeletons", 5), "a level-5 character cannot take the Charnel errand");
@@ -72,6 +80,8 @@ async function main(): Promise<void> {
       "an errand fifteen levels behind falls off the board");
     ok(tasks.offeredTasks(60).some((t) => t.id === "t_snakes"),
       "…but one already in hand is never hidden, however far behind it falls");
+    const order = tasks.offeredTasks(30).map((t) => t.reqLevel);
+    ok(order.every((lv, i) => i === 0 || order[i - 1] <= lv), "the board reads easiest first, hardest last");
 
     // ---- three is the ceiling ----
     tasks.acceptTask("t_vermin", 5);
@@ -80,20 +90,32 @@ async function main(): Promise<void> {
     ok(!tasks.acceptTask("t_poachers", 5), "…and a fourth does not");
     ok(tasks.abandonTask("t_vermin") && tasks.activeTasks().length === 2, "dropping one frees a slot");
 
-    // ---- progress is the ledger, not a per-errand tally ----
-    for (let i = 0; i < 50; i++) kills.recordKill("snake");
-    ok(tasks.progressOf(snakes) === 50 && tasks.isComplete(snakes), "fifty snakes finish the cull");
-    ok(tasks.abandonTask("t_snakes") && tasks.progressOf(snakes) === 50,
-      "dropping the errand loses NOTHING — the ledger is not the errand");
-    ok(tasks.acceptTask("t_snakes", 5) && tasks.isComplete(snakes), "…and taking it back finds it done");
+    // ---- one corpse, every errand that wants it ----
+    tasks.resetTasks();
+    tasks.acceptTask("t_goblins", 25);
+    tasks.acceptTask("t_warren", 25);
+    slay("goblin", 10);
+    ok(tasks.progressOf(tasks.taskById("t_goblins")!) === 10
+      && tasks.progressOf(tasks.taskById("t_warren")!) === 10,
+      "a goblin counts for the bounty AND the warren — both were in hand");
+    slay("goblinLegionary", 5);
+    ok(tasks.progressOf(tasks.taskById("t_goblins")!) === 10,
+      "…but a legionary is not a goblin, so the bounty does not move");
+    ok(tasks.progressOf(tasks.taskById("t_warren")!) === 15,
+      "…while the camp errand, which lists both ranks, counts it once");
 
-    // ---- kills made before the errand was ever taken still count ----
-    const vermin = tasks.taskById("t_vermin")!;
-    for (let i = 0; i < 50; i++) kills.recordKill("beggar");
-    ok(tasks.progressOf(vermin) === 50,
-      "an errand never taken already reads 50/50 — hunting with empty hands is never wasted");
+    // ---- dropping keeps the tally ----
+    tasks.abandonTask("t_warren");
+    slay("goblin", 4);
+    ok(tasks.progressOf(tasks.taskById("t_warren")!) === 15, "a dropped errand stops counting");
+    ok(tasks.acceptTask("t_warren", 25) && tasks.progressOf(tasks.taskById("t_warren")!) === 15,
+      "…and taking it back resumes where it stood rather than restarting");
 
     // ---- hand-in pays, and only once per threshold ----
+    tasks.resetTasks();
+    tasks.acceptTask("t_snakes", 5);
+    slay("snake", snakes.goal.need);
+    ok(tasks.isComplete(snakes), "fifty snakes finish the cull");
     let exp = 0;
     const before = p.gold;
     const r = tasks.handInTask(p, "t_snakes", (n) => { exp += n; })!;
@@ -105,19 +127,18 @@ async function main(): Promise<void> {
     ok(!tasks.isActive("t_snakes"), "the errand left the active list");
     ok(tasks.claimsOf("t_snakes") === 1, "…and is recorded as done once");
     ok(tasks.acceptTask("t_snakes", 5), "it can be taken again at once");
-    ok(tasks.progressOf(snakes) === 0 && !tasks.isComplete(snakes),
-      "…but the NEXT fifty are a fresh fifty: no double pay for the same corpses");
+    ok(tasks.progressOf(snakes) === 0 && !tasks.isComplete(snakes), "…starting from nothing");
     ok(tasks.handInTask(p, "t_snakes", () => {}) === null, "…so a second hand-in is refused");
 
-    // ---- surplus carries: two hundred snakes is four hand-ins ----
-    for (let i = 0; i < 150; i++) kills.recordKill("snake");
-    ok(tasks.isComplete(snakes), "a hundred and fifty more finishes the second");
+    // ---- overkill carries into the next round ----
+    slay("snake", snakes.goal.need + 8);
     tasks.handInTask(p, "t_snakes", () => {});
     tasks.acceptTask("t_snakes", 5);
-    ok(tasks.isComplete(snakes), "…and the third is already paid for by the surplus");
+    ok(tasks.progressOf(snakes) === 8, "finishing eight over starts the next round at eight");
     ok(tasks.claimsOf("t_snakes") === 2, "two hand-ins banked so far");
 
     // ---- a purse with nowhere to go is refused, not minted ----
+    slay("snake", snakes.goal.need);
     for (let i = 0; i < p.bag.length; i++) p.bag[i] = { kind: "ironSword", n: 1 };
     ok(!tasks.rewardFits(p, snakes), "a full pack has no cell for the coin");
     ok(tasks.handInTask(p, "t_snakes", () => {}) === null, "…so the hand-in is refused");
@@ -127,26 +148,16 @@ async function main(): Promise<void> {
      * gold, and two coin kinds need two stacks. */
     p.bag[0] = null; p.bag[1] = null;
     ok(!!tasks.handInTask(p, "t_snakes", () => {}), "two free cells later it pays out");
-  }
 
-  console.log("task save (Etap 48 — the one-errand shape still loads):");
-  {
-    tasks.resetTasks();
-    // the pre-Etap-48 shape: one errand, its own tally, lifetime points
-    tasks.loadTaskState({ activeId: "t_goblins", kills: 5, earned: 9 });
-    ok(tasks.activeTasks().map((t) => t.id).join() === "t_goblins",
-      "a legacy single errand comes back in hand");
-    ok(tasks.pointsEarned() === 9, "…with its lifetime points intact");
-    ok(tasks.claimsOf("t_goblins") === 0, "…and no hand-in invented from its old tally");
-
-    tasks.loadTaskState({ activeId: "t_wood", earned: 2 });
-    ok(tasks.activeTasks().length === 0, "an errand the catalogue no longer carries is dropped");
-
-    tasks.loadTaskState({ active: ["t_orcs", "t_orcs", "t_ghouls", "t_goblins", "t_snakes"], claims: { t_orcs: 3, t_nope: 9 }, earned: 4 });
-    ok(tasks.activeTasks().length === 3, "a save carrying more than three is trimmed to three");
-    ok(tasks.activeTasks().filter((t) => t.id === "t_orcs").length === 1, "…with duplicates collapsed");
-    ok(tasks.claimsOf("t_orcs") === 3, "hand-in counts survive");
-    ok(tasks.claimsOf("t_nope") === 0, "…and a count for an id that no longer exists is discarded");
+    // ---- the points ladder Radek set ----
+    const pts = (id: string) => tasks.taskById(id)!.reward.points;
+    ok(pts("t_bandits") === 1, "road vermin pay one point");
+    ok(pts("t_goblins") === 2, "goblins and their like pay two");
+    ok(pts("t_minotaurs") === 3, "minotaurs and their like pay three");
+    ok(pts("t_demonskeletons") === 4, "everything between them and the dragon pays four");
+    ok(pts("t_dragons") === 5, "…and the dragon pays five");
+    ok(tasks.TASKS.every((t) => t.reward.points >= 1 && t.reward.points <= 5),
+      "nothing on the board falls off either end of that ladder");
     tasks.resetTasks();
     kills.resetKills();
   }
@@ -2682,8 +2693,8 @@ async function main(): Promise<void> {
       t.resetTasks(); k.resetKills();
       const p = mkP({ x: 0, y: 0 });
       const def = t.taskById("t_snakes")!;
-      for (let i = 0; i < def.goal.need; i++) k.recordKill("snake");
       t.acceptTask(def.id, 5);
+      for (let i = 0; i < def.goal.need; i++) { k.recordKill("snake"); t.onTaskKill("snake"); }
       for (let i = 0; i < p.bag.length; i++) p.bag[i] = { kind: "ironSword", n: 1 };
       ok(t.handInTask(p, def.id, () => {}) === null,
         "a purse with nowhere to go is refused, not minted into thin air");

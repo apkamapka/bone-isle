@@ -9,7 +9,7 @@ import { RESEARCH, isResearched, towerTierOk, levelOk,
   ATTUNEMENT, isAttuned, offersFor } from "../systems/tower.ts";
 import { ELEMENT_LABEL, ELEMENTS, type Element } from "../systems/elements.ts";
 import { MAX_ACTIVE, offeredTasks, activeTasks, isActive as taskInHand, progressOf, isComplete, rewardFits, pointsEarned, claimsOf } from "../systems/tasks.ts";
-import type { TaskDef, TaskReward } from "../systems/tasks.ts";
+import type { TaskReward } from "../systems/tasks.ts";
 import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed, walletAcross, maxExchange } from "../items.ts";
 import { carryCap, carriedWeight, freeCap } from "../entities/player.ts";
 import { loreRead, stageOf, currentMission } from "../systems/missions.ts";
@@ -2358,31 +2358,28 @@ function rewardText(r: TaskReward): string {
  * Grizelda's board.
  *
  * Two lists: what is in hand (at most three) and what else she is offering at
- * this level. Both show progress, because progress is a property of the KILL
- * LEDGER and not of having taken the errand — an entry sitting in the lower
- * list can already read 100/100, and clicking it once is then two clicks from
- * the reward. That is the whole feel of the rewrite and the panel should show
- * it rather than hide it behind an accept step.
+ * this level, easiest at the top and hardest at the bottom.
  *
- * The lower list is capped at six rows, which keeps the tallest the panel can
- * get — three in hand plus six offered — inside what the old board already
- * occupied on a phone. The level window in tasks.ts does most of the work;
- * the cap is what stops a future catalogue from undoing it.
+ * The lower list scrolls rather than being cut off. It used to keep the first
+ * six rows, which — with the list running easiest-first — quietly hid exactly
+ * the entries worth taking: a level-42 character saw six errands from his
+ * twenties and none of the six above them. `listView` sizes the list to the
+ * screen and `scrollBar` reaches the rest, the same pair the backpack and the
+ * shop already use.
+ *
+ * A lower-list row shows its tally only when there IS one — an errand counts
+ * from the moment it is taken, so an untouched entry reads as its goal rather
+ * than as a row of zeroes. An abandoned one keeps its number and says so.
  */
 function drawTasks(p: PanelInput): void {
   const { hud, player } = p;
   const { ctx, scale: S } = hud;
 
   const inHand = activeTasks();
-  /* Ready-to-hand-in first, catalogue order under it. A repeat that is already
-   * paid for should not be three screens down behind errands worth nothing
-   * yet. */
-  const rank = (t: TaskDef) => (isComplete(t) ? 0 : 1);
-  const avail = offeredTasks(player.level)
-    .filter((t) => !taskInHand(t.id))
-    .sort((a, b) => rank(a) - rank(b));
-  const shown = avail.slice(0, 6);
-  const more = avail.length - shown.length;
+  /* `offeredTasks` already sorts easiest first; the filter only drops what is
+   * in hand, so the order the player reads down the board is the order the
+   * creatures get harder. */
+  const avail = offeredTasks(player.level).filter((t) => !taskInHand(t.id));
 
   const w = 330 * S;
   const headerH = 24 * S;
@@ -2390,8 +2387,10 @@ function drawTasks(p: PanelInput): void {
   const taskRowH = 30 * S;
   const labelH = 12 * S;
   const handH = inHand.length ? inHand.length * handRowH : 24 * S;
-  const listH = shown.length * taskRowH + (more > 0 ? 12 * S : 0);
-  const h = 18 * S + headerH + labelH + handH + labelH + listH + 16 * S;
+  const chrome = 18 * S + headerH + labelH + handH + labelH + 16 * S;
+  const { first, count } = listView(p, Math.max(1, avail.length), taskRowH, chrome);
+  const shown = avail.slice(first, first + count);
+  const h = chrome + shown.length * taskRowH;
 
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "TASK BOARD \u2014 Grizelda")) return;
@@ -2444,39 +2443,45 @@ function drawTasks(p: PanelInput): void {
 
   /* ---- on the board ---- */
   const full = inHand.length >= MAX_ACTIVE;
-  hudText(hud, full ? "ON THE BOARD \u2014 hands full" : "ON THE BOARD", x + 12 * S, ry + 6 * S, 7 * S,
-    "rgba(255,233,168,.85)", "left", true);
+  const head = full ? "ON THE BOARD \u2014 hands full"
+    : avail.length > count ? `ON THE BOARD \u2014 ${avail.length}, easiest first`
+    : "ON THE BOARD";
+  hudText(hud, head, x + 12 * S, ry + 6 * S, 7 * S, "rgba(255,233,168,.85)", "left", true);
   ry += labelH;
+  const listY = ry;
+  if (avail.length > count) {
+    scrollBar(p, x + w - (SCROLLBAR_W + 4) * S, listY, count * taskRowH, avail.length, count, first);
+  }
   for (const t of shown) {
     const prog = progressOf(t);
     const ready = isComplete(t);
     const done = claimsOf(t.id);
-    if (!full && hovering(p, x + 6 * S, ry, w - 12 * S, taskRowH - 2 * S)) {
+    const rowW = avail.length > count ? w - 12 * S - (SCROLLBAR_W + 4) * S : w - 12 * S;
+    if (!full && hovering(p, x + 6 * S, ry, rowW, taskRowH - 2 * S)) {
       ctx.fillStyle = "rgba(202,162,58,.15)";
-      ctx.fillRect(x + 6 * S, ry, w - 12 * S, taskRowH - 2 * S);
+      ctx.fillRect(x + 6 * S, ry, rowW, taskRowH - 2 * S);
     }
     const col = full ? "#8a8070" : ready ? "#9fe8a8" : "#f3eedd";
     /* The repeat count is worth a word: "x3 done" is the difference between
      * "I have never taken this" and "this is my fourth hundred orcs". */
     const tail = done ? `  \u00d7${done} done` : "";
-    hudText(hud, t.title + tail, x + 12 * S, ry + 9 * S, 8.5 * S, col, "left", true, w - 110 * S);
-    hudText(hud, t.desc, x + 12 * S, ry + 19 * S, 6 * S, "rgba(220,214,190,.55)", "left", false, w - 110 * S);
-    hudText(hud, `${prog}/${t.goal.need}`, x + w - 12 * S, ry + 9 * S, 7 * S,
-      ready ? "#9fe8a8" : "rgba(220,214,190,.6)", "right");
-    hudText(hud, rewardText(t.reward), x + w - 12 * S, ry + 20 * S, 6.5 * S, "rgba(202,162,58,.9)", "right");
+    const rx = x + 6 * S + rowW - 6 * S;
+    hudText(hud, t.title + tail, x + 12 * S, ry + 9 * S, 8.5 * S, col, "left", true, rowW - 104 * S);
+    hudText(hud, t.desc, x + 12 * S, ry + 19 * S, 6 * S, "rgba(220,214,190,.55)", "left", false, rowW - 104 * S);
+    /* No tally until there is one to show: an errand counts from the moment it
+     * is taken, so "0/100" on an untouched row would read as lost progress. */
+    hudText(hud, prog > 0 ? `${prog}/${t.goal.need}` : `${t.goal.need} kills`, rx, ry + 9 * S, 7 * S,
+      ready ? "#9fe8a8" : prog > 0 ? "rgba(255,233,168,.8)" : "rgba(220,214,190,.6)", "right");
+    hudText(hud, rewardText(t.reward), rx, ry + 20 * S, 6.5 * S, "rgba(202,162,58,.9)", "right");
     if (!full) {
       const id = t.id;
       const yy = ry;
-      p.hotspots.push({ x: x + 6 * S, y: yy, w: w - 12 * S, h: taskRowH - 2 * S, fn: () => p.act.acceptTask(id) });
+      p.hotspots.push({ x: x + 6 * S, y: yy, w: rowW, h: taskRowH - 2 * S, fn: () => p.act.acceptTask(id) });
     }
     ry += taskRowH;
   }
-  if (more > 0) {
-    hudText(hud, `+${more} more on the board`, x + w / 2, ry + 6 * S, 6.5 * S, "rgba(200,138,90,.8)", "center");
-    ry += 12 * S;
-  }
-  hudText(hud, "Kills always count \u00b7 errands repeat forever", x + w / 2, y + h - 8 * S, 6.5 * S,
-    "rgba(220,214,190,.55)", "center");
+  hudText(hud, "Counts once taken \u00b7 dropping keeps the tally \u00b7 errands repeat", x + w / 2,
+    y + h - 8 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
 }
 
 /* ---------------- Storage chest (stash) ---------------- */

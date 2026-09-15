@@ -3,21 +3,23 @@
  * time from Grizelda in Bonetown, hunt, and hand them in for gold, experience
  * and Task Points.
  *
- * WHAT CHANGED, AND WHY IT MATTERS
+ * HOW COUNTING WORKS
  *
- * Progress is no longer counted per errand. It is read out of the kill ledger
- * in `kills.ts`, which counts every creature this character has ever killed
- * whether or not a board entry was open at the time. Three consequences, all
- * of them deliberate:
+ * An errand counts from the moment it is TAKEN. Each active entry keeps its
+ * own tally in `progress`, advanced by `onTaskKill` for every creature in its
+ * goal — so walking into the Orc Deep with empty hands fills the kill ledger
+ * in `kills.ts` (which is a separate lifetime record, kept for its own sake)
+ * but moves no errand.
  *
- *   - Hunting is never wasted. Walk into the Orc Deep with no errand, come
- *     back with two hundred dead orcs, and the board owes you for them.
- *   - Abandoning costs nothing. The ledger does not care what you had in hand,
- *     so dropping an errand and taking it again later resumes exactly where it
- *     stood. `abandonTask` exists to free a slot, not to punish.
- *   - Errands repeat forever. An entry asks for the NEXT `need` kills, so the
- *     threshold for its n-th hand-in is `need x n`. Surplus carries: four
- *     hundred orcs is four hand-ins of a hundred, claimable back to back.
+ * Two things follow, and both are deliberate:
+ *
+ *   - Abandoning still costs nothing. The tally is keyed by entry, not by
+ *     "what is in hand", so dropping an errand and taking it back later
+ *     resumes exactly where it stood. `abandonTask` frees a slot; it does not
+ *     punish.
+ *   - Errands repeat forever. A hand-in subtracts `need` from the tally rather
+ *     than zeroing it, so overkill carries into the next round: finishing on
+ *     a hundred and eight orcs starts the next hundred at eight.
  *
  * The board is kills only. The old delivery errands (fifteen wood, twenty
  * stone) read the BAG rather than a ledger and had no sensible repeat rule —
@@ -30,7 +32,6 @@
  */
 import { giveGold, walletRoomFor } from "../items.ts";
 import { active as activeState } from "./playerState.ts";
-import { killCountOf } from "./kills.ts";
 import type { MonsterKind } from "../world/types.ts";
 import type { Player } from "../entities/player.ts";
 
@@ -83,17 +84,21 @@ export interface TaskDef {
  *  errand is a bonus on top of a hunt and never a substitute for one.
  *
  *  Spawn density was checked against the maps before these numbers were set.
- *  Two creatures are absent on purpose: the dragon and the black knight have
- *  exactly one post each in the whole world, so any kill count at all would
- *  be a respawn-timer errand rather than a hunt. The orc shaman (eleven posts)
- *  and the minotaur mage (seven) appear only inside camp errands, where the
- *  rest of the family carries the count.
+ *  The orc shaman (eleven posts) and the minotaur mage (seven) appear only
+ *  inside camp errands, where the rest of the family carries the count. The
+ *  black knight has no errand: one post in the world and no plans for more.
+ *  The dragon HAS one, written for the hunting grounds that are coming rather
+ *  than for the single lair that exists today.
  * ------------------------------------------------------------------ */
+/* Task Points run on the creature, not on the size of the errand: one for the
+ * vermin of the road, two for goblins and their like, three for minotaurs and
+ * their like, four for everything between them and the dragon, five for the
+ * dragon itself. Gold and experience still climb with the band underneath. */
 const A: TaskReward = { points: 1, gold: 150, exp: 600 };      // lvl 1-10,  need 50
 const B: TaskReward = { points: 2, gold: 400, exp: 2500 };     // lvl 11-20, need 75
 const C: TaskReward = { points: 3, gold: 800, exp: 5000 };     // lvl 21-30, need 100
 const D: TaskReward = { points: 4, gold: 1800, exp: 12000 };   // lvl 31-40, need 125
-const E: TaskReward = { points: 5, gold: 3000, exp: 20000 };   // lvl 41+,   need 150
+const E: TaskReward = { points: 4, gold: 3000, exp: 20000 };   // lvl 41-50, need 150
 
 export const TASKS: readonly TaskDef[] = [
   /* ---- band A: the vermin of the road, fifty a piece ---- */
@@ -261,7 +266,7 @@ export const TASKS: readonly TaskDef[] = [
     id: "t_labyrinth", title: "The Labyrinth",
     desc: "Minotaurs of any rank, horns and all. Clear 200.",
     goal: { kinds: ["minotaur", "minotaurArcher", "minotaurGuard", "minotaurMage"], need: 200 },
-    reward: { points: 5, gold: 2600, exp: 20000 }, reqLevel: 30,
+    reward: { points: 4, gold: 2600, exp: 20000 }, reqLevel: 30,
   },
 
   /* ---- band D: a hundred and twenty-five a piece ---- */
@@ -306,7 +311,13 @@ export const TASKS: readonly TaskDef[] = [
     id: "t_warband", title: "The Warband",
     desc: "Barbarians, raiders, warlords, chieftains — any of them. Clear 200.",
     goal: { kinds: ["barbarian", "raider", "warlord", "chieftain"], need: 200 },
-    reward: { points: 6, gold: 3400, exp: 24000 }, reqLevel: 38,
+    reward: { points: 5, gold: 3400, exp: 24000 }, reqLevel: 38,
+  },
+  {
+    id: "t_dragons", title: "Dragon Hunt",
+    desc: "The worst thing on the isle, and the best paid. Slay 150.",
+    goal: { kinds: ["dragon"], need: 150 },
+    reward: { points: 5, gold: 9000, exp: 80000 }, reqLevel: 45,
   },
 ];
 
@@ -316,14 +327,17 @@ export const TASKS: readonly TaskDef[] = [
  * This character's board. Lives on PlayerState, not in a module `let`, so a
  * process can run more than one character at a time.
  *
- * `claims` is the whole repeat mechanism: it counts hand-ins per entry, and
- * the threshold for the next one is `need x (claims + 1)`. There is no stored
- * progress anywhere — progress is the ledger minus what has been paid for,
- * which is why abandoning an errand cannot lose anything.
+ * `progress` is the tally per entry, advanced only while the entry is in hand.
+ * It is keyed by entry rather than living on the active list, which is what
+ * makes abandoning free: the number stays behind and is found again when the
+ * errand is taken back. `claims` counts hand-ins, purely so the board can say
+ * "x3 done".
  */
 const rt = {
   get active() { return activeState().tasks.active; },
   set active(v: string[]) { activeState().tasks.active = v; },
+  get progress() { return activeState().tasks.progress; },
+  set progress(v: Record<string, number>) { activeState().tasks.progress = v; },
   get claims() { return activeState().tasks.claims; },
   set claims(v: Record<string, number>) { activeState().tasks.claims = v; },
   get earned() { return activeState().tasks.earned; },
@@ -367,16 +381,34 @@ export function isTaskUnlocked(def: TaskDef, level: number): boolean {
   return level >= def.reqLevel && level - def.reqLevel <= TASK_WINDOW;
 }
 
-/** Everything the board shows this character, in catalogue order. */
+/** Everything the board shows this character, easiest first. */
 export function offeredTasks(level: number): TaskDef[] {
-  return TASKS.filter((t) => isTaskUnlocked(t, level));
+  return TASKS.filter((t) => isTaskUnlocked(t, level))
+    .sort((a, b) => a.reqLevel - b.reqLevel || a.goal.need - b.goal.need);
 }
 
-/** Kills toward the CURRENT hand-in: the ledger, less what is already paid. */
+/** Kills banked toward the next hand-in of this entry. */
 export function progressOf(def: TaskDef): number {
-  const paid = claimsOf(def.id) * def.goal.need;
-  const have = killCountOf(def.goal.kinds) - paid;
-  return Math.max(0, Math.min(have, def.goal.need));
+  return Math.max(0, Math.min(rt.progress[def.id] ?? 0, def.goal.need));
+}
+
+/**
+ * Count one kill against every errand in hand that wants it.
+ *
+ * Every errand, not the first match: a goblin killed while both the goblin
+ * bounty and the warren are in hand counts for both. Nothing here looks at
+ * the creature twice for the SAME entry, so a camp errand listing five ranks
+ * still advances by one per corpse.
+ */
+export function onTaskKill(kind: MonsterKind): void {
+  let next: Record<string, number> | null = null;
+  for (const id of rt.active) {
+    const def = taskById(id);
+    if (!def || !def.goal.kinds.includes(kind)) continue;
+    next ??= { ...rt.progress };
+    next[id] = (next[id] ?? 0) + 1;
+  }
+  if (next) rt.progress = next;
 }
 
 export function isComplete(def: TaskDef): boolean {
@@ -387,10 +419,10 @@ export function isComplete(def: TaskDef): boolean {
  * Take an errand. Fails if it is already in hand, the three slots are full, or
  * the board does not offer it at this level.
  *
- * Note what it does NOT do: it takes no snapshot and zeroes nothing. Kills
- * made before the errand was taken already count, which is the point — a
- * character who has been hunting orcs all week can take the orc errand and
- * hand it in on the spot.
+ * Note what it does NOT do: it does not zero the tally. Kills made BEFORE the
+ * errand was first taken never counted, but kills made while it was in hand
+ * on an earlier outing still do — taking an abandoned errand back resumes it
+ * rather than restarting it.
  */
 export function acceptTask(id: string, level: number): boolean {
   const def = taskById(id);
@@ -428,9 +460,9 @@ export interface HandInResult {
  * `giveExp` (so level-ups run through combat's normal path). Returns null if
  * the errand is not in hand, not finished, or the purse has nowhere to go.
  *
- * The entry leaves the active list on success and can be taken again at once:
- * with two hundred orcs in the ledger and a hundred asked for, the second
- * hand-in is already waiting.
+ * The entry leaves the active list on success and can be taken again at once.
+ * The tally is REDUCED by what was asked for rather than zeroed, so a hundred
+ * and eight orcs pays out once and starts the next round at eight.
  */
 export function handInTask(p: Player, id: string, giveExp: (n: number) => void): HandInResult | null {
   const def = taskById(id);
@@ -438,6 +470,7 @@ export function handInTask(p: Player, id: string, giveExp: (n: number) => void):
   if (!rewardFits(p, def)) return null;
   const time = claimsOf(def.id) + 1;
   rt.claims = { ...rt.claims, [def.id]: time };
+  rt.progress = { ...rt.progress, [def.id]: Math.max(0, (rt.progress[def.id] ?? 0) - def.goal.need) };
   rt.active = rt.active.filter((x) => x !== def.id);
   const r = def.reward;
   p.taskPoints += r.points;
@@ -452,6 +485,8 @@ export function handInTask(p: Player, id: string, giveExp: (n: number) => void):
 export interface TaskSave {
   /** Errand ids in hand, at most MAX_ACTIVE of them. */
   active: string[];
+  /** Kills banked per entry id. Survives abandoning, which is the point. */
+  progress: Record<string, number>;
   /** Hand-ins per entry id. Absent means never handed in. */
   claims: Record<string, number>;
   /** Lifetime Task Points earned, which no spending ever reduces. */
@@ -466,21 +501,38 @@ interface LegacyTaskSave {
 }
 
 export function taskState(): TaskSave {
-  return { active: [...rt.active], claims: { ...rt.claims }, earned: rt.earned };
+  return {
+    active: [...rt.active], progress: { ...rt.progress },
+    claims: { ...rt.claims }, earned: rt.earned,
+  };
+}
+
+/** Shared by `progress` and `claims`: ids the catalogue still carries, whole
+ *  positive numbers only. A save naming an errand that has been retired, or
+ *  carrying a fraction or a negative, loses that entry rather than the file. */
+function sanitizeCounts(src: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!src || typeof src !== "object") return out;
+  for (const [id, n] of Object.entries(src as Record<string, unknown>)) {
+    if (taskById(id) && typeof n === "number" && Number.isFinite(n) && n > 0) {
+      out[id] = Math.floor(n);
+    }
+  }
+  return out;
 }
 
 /**
  * Restore the board, accepting the old single-errand shape.
  *
  * A legacy `activeId` survives if the catalogue still carries that id — the
- * six kill errands kept their ids for exactly this reason. Its `kills` tally
- * is dropped rather than migrated: it counted toward a goal of eight, the
- * ledger it would have to move into counts every kill ever made, and seeding
- * one from the other would either invent kills or lose them. Nothing is lost
- * that the ledger will not earn back.
+ * six kill errands kept their ids for exactly this reason — and its `kills`
+ * tally moves across as that entry's progress. The goal grew from eight to
+ * fifty under it, so the bar is further away than it was, but the corpses
+ * were real and counting them again would be the ruder answer.
  */
 export function loadTaskState(s: (Partial<TaskSave> & LegacyTaskSave) | undefined): void {
   rt.active = [];
+  rt.progress = {};
   rt.claims = {};
   rt.earned = typeof s?.earned === "number" && s.earned > 0 ? Math.floor(s.earned) : 0;
   if (!s) return;
@@ -496,19 +548,20 @@ export function loadTaskState(s: (Partial<TaskSave> & LegacyTaskSave) | undefine
     rt.active = [...rt.active, id];
   }
 
-  if (s.claims && typeof s.claims === "object") {
-    const out: Record<string, number> = {};
-    for (const [id, n] of Object.entries(s.claims)) {
-      if (taskById(id) && typeof n === "number" && Number.isFinite(n) && n > 0) {
-        out[id] = Math.floor(n);
-      }
-    }
-    rt.claims = out;
+  rt.claims = sanitizeCounts(s.claims);
+  rt.progress = sanitizeCounts(s.progress);
+  /* The old single-errand tally, if this is a pre-rewrite save and its errand
+   * survived the catalogue. Never overwrites a real `progress` entry. */
+  const legacy = Math.floor(s.kills ?? 0);
+  const only = rt.active[0];
+  if (legacy > 0 && only && !(only in rt.progress)) {
+    rt.progress = { ...rt.progress, [only]: legacy };
   }
 }
 
 export function resetTasks(): void {
   rt.active = [];
+  rt.progress = {};
   rt.claims = {};
   rt.earned = 0;
 }

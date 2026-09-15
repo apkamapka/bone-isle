@@ -207,7 +207,7 @@ export function newPlayerState(): PlayerState {
   return {
     skills: defaultSkills(),
     modes: { stance: "balanced", chase: true, safeMode: true },
-    tasks: { active: [], claims: {}, earned: 0 },
+    tasks: { active: [], progress: {}, claims: {}, earned: 0 },
     kills: {},
     missions: {},
     lore: {},
