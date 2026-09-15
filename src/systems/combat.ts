@@ -22,8 +22,7 @@ import {
   rollArmorReduction, rollShieldBlock,
 } from "./skills.ts";
 import type { ItemKind } from "../items.ts";
-import { onMonsterKilled } from "./quests.ts";
-import { onTaskKill } from "./tasks.ts";
+import { recordKill } from "./kills.ts";
 import { active as activeState } from "./playerState.ts";
 import type { Player } from "../entities/player.ts";
 import type { World, Monster, Structure } from "../world/types.ts";
@@ -315,8 +314,10 @@ export function killMonster(world: World, p: Player, m: Monster): void {
     t: relicOnBody ? RELIC_CORPSE_DECAY_S : CORPSE_DECAY_S,
   });
 
-  onMonsterKilled(m.kind, (t) => addFloat(world, p.x, p.y - 64, t, "#ffe9a8"));
-  onTaskKill(m.kind);
+  /* One line, and it is the only place a kill is ever counted. The board in
+   * tasks.ts reads out of this ledger rather than being told about kills, so
+   * hunting with no errand in hand still counts toward the next one. */
+  recordKill(m.kind);
 
   const idx = world.monsters.indexOf(m);
   if (idx >= 0) world.monsters.splice(idx, 1);

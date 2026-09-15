@@ -8,11 +8,10 @@ import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost
 import { RESEARCH, isResearched, towerTierOk, levelOk,
   ATTUNEMENT, isAttuned, offersFor } from "../systems/tower.ts";
 import { ELEMENT_LABEL, ELEMENTS, type Element } from "../systems/elements.ts";
-import { TASKS, EXCHANGES, activeTask, isTaskUnlocked, progressOf, isComplete, rewardFits, pointsEarned } from "../systems/tasks.ts";
-import type { TaskReward } from "../systems/tasks.ts";
+import { MAX_ACTIVE, offeredTasks, activeTasks, isActive as taskInHand, progressOf, isComplete, rewardFits, pointsEarned, claimsOf } from "../systems/tasks.ts";
+import type { TaskDef, TaskReward } from "../systems/tasks.ts";
 import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed, walletAcross, maxExchange } from "../items.ts";
 import { carryCap, carriedWeight, freeCap } from "../entities/player.ts";
-import { questList } from "../systems/quests.ts";
 import { loreRead, stageOf, currentMission } from "../systems/missions.ts";
 import { t } from "../text/speech.ts";
 import { lang } from "../systems/panelPrefs.ts";
@@ -685,11 +684,9 @@ export interface PanelActions {
   takeAllLoot: (c: Corpse | null) => void;
   buy: (kind: ItemKind) => void;
   sell: (kind: ItemKind) => void;
-  claim: (id: string) => void;
   acceptTask: (id: string) => void;
-  abandonTask: () => void;
-  handInTask: () => void;
-  buyExchange: (id: string) => void;
+  abandonTask: (id: string) => void;
+  handInTask: (id: string) => void;
   moveStack: (ref: ContainerRef, index: number) => void;
   /** Walk this window down into the container sitting in slot `index`. */
   /** Open the container in slot `index` of `ref` — in its own window. */
@@ -2306,7 +2303,7 @@ function drawQuests(p: PanelInput): void {
   const errandLines = errand ? wrapText(hud, errandBody, 7 * S, w - 24 * S) : [];
   const ERR_LINE = 7 * S * 1.25;
   const errandH = errand ? 12 * S + 14 * S + errandLines.length * ERR_LINE + 13 * S : 0;
-  const h = 20 * S + errandH + chronH + questList().length * rowH + 16 * S;
+  const h = 20 * S + errandH + chronH + (errand || chron.length ? 0 : rowH) + 16 * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "QUEST LOG")) return;
   let ry = y + 18 * S;
@@ -2339,30 +2336,12 @@ function drawQuests(p: PanelInput): void {
     ctx.fillRect(x + 12 * S, ry, w - 24 * S, 1 * S);
     ry += 6 * S;
   }
-  for (const q of questList()) {
-    const need = q.goal.kind === "build" ? 1 : q.goal.need;
-    const prog = Math.min(q.progress, need);
-    const color = q.claimed ? "#7a8a7c" : q.done ? "#9fe8a8" : "#f3eedd";
-    hudText(hud, q.title, x + 12 * S, ry + 7 * S, 9 * S, color, "left", true);
-    const status = q.claimed ? "claimed" : q.done ? `${prog}/${need} — click to claim!` : `${prog}/${need}`;
-    hudText(hud, status, x + w - 12 * S, ry + 7 * S, 8 * S, q.done && !q.claimed ? "#ffe9a8" : "rgba(220,214,190,.7)", "right");
-    hudText(hud, q.desc, x + 12 * S, ry + 19 * S, 7 * S, "rgba(220,214,190,.6)");
-    const r = q.reward;
-    const parts: string[] = [];
-    if (r.exp) parts.push(`${r.exp} xp`);
-    if (r.gold) parts.push(`${r.gold} gold`);
-    if (r.item) parts.push(`${r.itemN ?? 1}x ${ITEMS[r.item].name}`);
-    hudText(hud, "Reward: " + parts.join(", "), x + 12 * S, ry + 29 * S, 7 * S, "rgba(202,162,58,.85)");
-    ctx.fillStyle = "#3a3222";
-    ctx.fillRect(x + 12 * S, ry + rowH - 6 * S, w - 24 * S, 2 * S);
-    ctx.fillStyle = q.claimed ? "#5a6a5c" : "#9fe8a8";
-    ctx.fillRect(x + 12 * S, ry + rowH - 6 * S, (w - 24 * S) * (prog / need), 2 * S);
-    if (q.done && !q.claimed) {
-      const id = q.id;
-      const ryy = ry;
-      p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.claim(id) });
-    }
-    ry += rowH;
+  /* Nothing yet: a character who has not met the Sage sees why the page is
+   * blank rather than an empty gold frame. The starter errand chain that used
+   * to fill this space moved to Grizelda's board — see systems/quests.ts. */
+  if (!errand && !chron.length) {
+    hudText(hud, "The Time Sage has no errand for you yet.", x + 12 * S, ry + 10 * S, 8 * S,
+      "rgba(220,214,190,.6)", "left");
   }
 }
 
@@ -2372,53 +2351,84 @@ function rewardText(r: TaskReward): string {
   const parts: string[] = [`${r.points} TP`];
   if (r.gold) parts.push(`${r.gold}g`);
   if (r.exp) parts.push(`${r.exp}xp`);
-  if (r.item) parts.push(`${r.itemN ?? 1}x ${ITEMS[r.item].name}`);
-  return parts.join(" · ");
+  return parts.join(" \u00b7 ");
 }
 
+/**
+ * Grizelda's board.
+ *
+ * Two lists: what is in hand (at most three) and what else she is offering at
+ * this level. Both show progress, because progress is a property of the KILL
+ * LEDGER and not of having taken the errand — an entry sitting in the lower
+ * list can already read 100/100, and clicking it once is then two clicks from
+ * the reward. That is the whole feel of the rewrite and the panel should show
+ * it rather than hide it behind an accept step.
+ *
+ * The lower list is capped at six rows, which keeps the tallest the panel can
+ * get — three in hand plus six offered — inside what the old board already
+ * occupied on a phone. The level window in tasks.ts does most of the work;
+ * the cap is what stops a future catalogue from undoing it.
+ */
 function drawTasks(p: PanelInput): void {
   const { hud, player } = p;
   const { ctx, scale: S } = hud;
-  const active = activeTask();
-  const unlocked = TASKS.filter(isTaskUnlocked);
-  const lockedCount = TASKS.length - unlocked.length;
-  const taskRowH = 28 * S;
-  const exRowH = 22 * S;
+
+  const inHand = activeTasks();
+  /* Ready-to-hand-in first, catalogue order under it. A repeat that is already
+   * paid for should not be three screens down behind errands worth nothing
+   * yet. */
+  const rank = (t: TaskDef) => (isComplete(t) ? 0 : 1);
+  const avail = offeredTasks(player.level)
+    .filter((t) => !taskInHand(t.id))
+    .sort((a, b) => rank(a) - rank(b));
+  const shown = avail.slice(0, 6);
+  const more = avail.length - shown.length;
 
   const w = 330 * S;
   const headerH = 24 * S;
-  const activeH = 48 * S;
-  const listLabelH = 12 * S;
-  const listH = unlocked.length * taskRowH + (lockedCount > 0 ? 12 * S : 0);
-  const exLabelH = 12 * S;
-  const exH = EXCHANGES.length * exRowH;
-  const h = 18 * S + headerH + activeH + listLabelH + listH + exLabelH + exH + 14 * S;
+  const handRowH = 44 * S;
+  const taskRowH = 30 * S;
+  const labelH = 12 * S;
+  const handH = inHand.length ? inHand.length * handRowH : 24 * S;
+  const listH = shown.length * taskRowH + (more > 0 ? 12 * S : 0);
+  const h = 18 * S + headerH + labelH + handH + labelH + listH + 16 * S;
 
   const { x, y } = anchor(p, w, h);
-  if (!goldPanel(p, x, y, w, h, "TASK BOARD — Grizelda")) return;
+  if (!goldPanel(p, x, y, w, h, "TASK BOARD \u2014 Grizelda")) return;
 
   let ry = y + 18 * S;
-  // points header
   hudText(hud, `Task Points: ${player.taskPoints}`, x + 12 * S, ry + 6 * S, 9 * S, "#9ad0ff", "left", true);
   hudText(hud, `lifetime ${pointsEarned()}`, x + w - 12 * S, ry + 6 * S, 7 * S, "rgba(220,214,190,.55)", "right");
   ry += headerH;
 
-  // active-task block
-  ctx.fillStyle = "rgba(20,30,40,.5)";
-  ctx.fillRect(x + 8 * S, ry, w - 16 * S, activeH - 6 * S);
-  if (active) {
-    const need = active.goal.need;
-    const prog = progressOf(active, player.bag);
-    const complete = isComplete(active, player.bag);
-    const fits = rewardFits(player, active);
-    hudText(hud, active.title, x + 14 * S, ry + 9 * S, 9 * S, "#ffe9a8", "left", true);
-    hudText(hud, active.desc, x + 14 * S, ry + 20 * S, 6.5 * S, "rgba(220,214,190,.6)");
+  /* ---- in hand ---- */
+  hudText(hud, `IN HAND \u2014 ${inHand.length}/${MAX_ACTIVE}`, x + 12 * S, ry + 6 * S, 7 * S,
+    "rgba(255,233,168,.85)", "left", true);
+  ry += labelH;
+  if (!inHand.length) {
+    hudText(hud, "Nothing in hand. Take up to three below.", x + 14 * S, ry + 8 * S, 8 * S,
+      "rgba(220,214,190,.6)", "left");
+    ry += 24 * S;
+  }
+  for (const t of inHand) {
+    const need = t.goal.need;
+    const prog = progressOf(t);
+    const complete = isComplete(t);
+    const fits = rewardFits(player, t);
+    ctx.fillStyle = "rgba(20,30,40,.5)";
+    ctx.fillRect(x + 8 * S, ry, w - 16 * S, handRowH - 6 * S);
+    hudText(hud, t.title, x + 14 * S, ry + 9 * S, 8.5 * S, complete ? "#9fe8a8" : "#ffe9a8", "left", true,
+      w - 120 * S);
+    hudText(hud, t.desc, x + 14 * S, ry + 19 * S, 6 * S, "rgba(220,214,190,.6)", "left", false, w - 120 * S);
     ctx.fillStyle = "#2a3a30";
-    ctx.fillRect(x + 14 * S, ry + 27 * S, w - 118 * S, 3 * S);
+    ctx.fillRect(x + 14 * S, ry + 25 * S, w - 118 * S, 3 * S);
     ctx.fillStyle = complete ? "#9fe8a8" : "#caa15a";
-    ctx.fillRect(x + 14 * S, ry + 27 * S, (w - 118 * S) * (prog / need), 3 * S);
-    hudText(hud, `${prog}/${need}`, x + 14 * S, ry + 38 * S, 7 * S, complete ? "#9fe8a8" : "#e8dcc0");
-    // hand-in button
+    ctx.fillRect(x + 14 * S, ry + 25 * S, (w - 118 * S) * (prog / need), 3 * S);
+    hudText(hud, `${prog}/${need}`, x + 14 * S, ry + 34 * S, 7 * S, complete ? "#9fe8a8" : "#e8dcc0");
+    hudText(hud, "[drop]", x + 62 * S, ry + 34 * S, 6.5 * S, "rgba(230,130,110,.85)", "left");
+    const did = t.id;
+    p.hotspots.push({ x: x + 60 * S, y: ry + 28 * S, w: 40 * S, h: 12 * S, fn: () => p.act.abandonTask(did) });
+
     const bw = 78 * S, bh = 24 * S, bx = x + w - bw - 10 * S, by = ry + 7 * S;
     const canHand = complete && fits;
     buttonBox(ctx, bx, by, bw, bh, S, {
@@ -2428,67 +2438,45 @@ function drawTasks(p: PanelInput): void {
     });
     const label = canHand ? "HAND IN" : complete ? "bag full" : "in progress";
     hudText(hud, label, bx + bw / 2, by + bh / 2, 8 * S, canHand ? "#eaffea" : "#9a9a9a", "center", true);
-    if (canHand) p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.handInTask() });
-    // abandon
-    hudText(hud, "[abandon]", x + 14 * S, ry + activeH - 10 * S, 6.5 * S, "rgba(230,130,110,.85)", "left");
-    p.hotspots.push({ x: x + 12 * S, y: ry + activeH - 16 * S, w: 58 * S, h: 12 * S, fn: () => p.act.abandonTask() });
-  } else {
-    hudText(hud, "No active task.", x + 14 * S, ry + 13 * S, 9 * S, "#e8dcc0", "left", true);
-    hudText(hud, "Pick one below to start hunting.", x + 14 * S, ry + 26 * S, 7 * S, "rgba(220,214,190,.6)");
+    if (canHand) p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.handInTask(did) });
+    ry += handRowH;
   }
-  ry += activeH;
 
-  // available list
-  hudText(hud, active ? "AVAILABLE — finish current first" : "AVAILABLE TASKS", x + 12 * S, ry + 6 * S, 7 * S, "rgba(255,233,168,.85)", "left", true);
-  ry += listLabelH;
-  for (const t of unlocked) {
-    const isActive = active?.id === t.id;
-    const canAccept = !active;
-    if (hovering(p, x + 6 * S, ry, w - 12 * S, taskRowH - 2 * S) && canAccept) {
+  /* ---- on the board ---- */
+  const full = inHand.length >= MAX_ACTIVE;
+  hudText(hud, full ? "ON THE BOARD \u2014 hands full" : "ON THE BOARD", x + 12 * S, ry + 6 * S, 7 * S,
+    "rgba(255,233,168,.85)", "left", true);
+  ry += labelH;
+  for (const t of shown) {
+    const prog = progressOf(t);
+    const ready = isComplete(t);
+    const done = claimsOf(t.id);
+    if (!full && hovering(p, x + 6 * S, ry, w - 12 * S, taskRowH - 2 * S)) {
       ctx.fillStyle = "rgba(202,162,58,.15)";
       ctx.fillRect(x + 6 * S, ry, w - 12 * S, taskRowH - 2 * S);
     }
-    const goalTxt = t.goal.kind === "kill"
-      ? `Kill ${t.goal.need} ${t.goal.monster}`
-      : `Deliver ${t.goal.need} ${ITEMS[t.goal.item].name}`;
-    const col = isActive ? "#9fe8a8" : canAccept ? "#f3eedd" : "#8a8070";
-    hudText(hud, t.title + (isActive ? "  (active)" : ""), x + 12 * S, ry + 9 * S, 8.5 * S, col, "left", true);
-    hudText(hud, goalTxt, x + 12 * S, ry + 19 * S, 6.5 * S, "rgba(220,214,190,.6)");
-    hudText(hud, rewardText(t.reward), x + w - 12 * S, ry + 13 * S, 6.5 * S, "rgba(202,162,58,.9)", "right");
-    if (canAccept && !isActive) {
+    const col = full ? "#8a8070" : ready ? "#9fe8a8" : "#f3eedd";
+    /* The repeat count is worth a word: "x3 done" is the difference between
+     * "I have never taken this" and "this is my fourth hundred orcs". */
+    const tail = done ? `  \u00d7${done} done` : "";
+    hudText(hud, t.title + tail, x + 12 * S, ry + 9 * S, 8.5 * S, col, "left", true, w - 110 * S);
+    hudText(hud, t.desc, x + 12 * S, ry + 19 * S, 6 * S, "rgba(220,214,190,.55)", "left", false, w - 110 * S);
+    hudText(hud, `${prog}/${t.goal.need}`, x + w - 12 * S, ry + 9 * S, 7 * S,
+      ready ? "#9fe8a8" : "rgba(220,214,190,.6)", "right");
+    hudText(hud, rewardText(t.reward), x + w - 12 * S, ry + 20 * S, 6.5 * S, "rgba(202,162,58,.9)", "right");
+    if (!full) {
       const id = t.id;
       const yy = ry;
       p.hotspots.push({ x: x + 6 * S, y: yy, w: w - 12 * S, h: taskRowH - 2 * S, fn: () => p.act.acceptTask(id) });
     }
     ry += taskRowH;
   }
-  if (lockedCount > 0) {
-    hudText(hud, `+${lockedCount} more unlock at higher Task Points`, x + w / 2, ry + 6 * S, 6.5 * S, "rgba(200,138,90,.8)", "center");
+  if (more > 0) {
+    hudText(hud, `+${more} more on the board`, x + w / 2, ry + 6 * S, 6.5 * S, "rgba(200,138,90,.8)", "center");
     ry += 12 * S;
   }
-
-  // point exchange
-  hudText(hud, "SPEND POINTS", x + 12 * S, ry + 6 * S, 7 * S, "rgba(154,208,255,.85)", "left", true);
-  ry += exLabelH;
-  for (const e of EXCHANGES) {
-    const can = player.taskPoints >= e.cost;
-    if (hovering(p, x + 6 * S, ry, w - 12 * S, exRowH - 2 * S) && can) {
-      ctx.fillStyle = "rgba(154,208,255,.12)";
-      ctx.fillRect(x + 6 * S, ry, w - 12 * S, exRowH - 2 * S);
-    }
-    const spr = itemSprite(e.item);
-    icon(p, spr, x + 10 * S, ry + (exRowH - iconH(spr, 2 * S)) / 2, 2 * S);
-    hudText(hud, `${e.itemN}x ${ITEMS[e.item].name}`, x + 34 * S, ry + 8 * S, 8 * S, can ? "#f3eedd" : "#8a8070", "left", true);
-    hudText(hud, e.desc, x + 34 * S, ry + 17 * S, 6 * S, "rgba(220,214,190,.5)");
-    hudText(hud, `${e.cost} TP`, x + w - 12 * S, ry + exRowH / 2, 8 * S, can ? "#9ad0ff" : "#d96a5a", "right");
-    if (can) {
-      const id = e.id;
-      const yy = ry;
-      p.hotspots.push({ x: x + 6 * S, y: yy, w: w - 12 * S, h: exRowH - 2 * S, fn: () => p.act.buyExchange(id) });
-    }
-    ry += exRowH;
-  }
-  hudText(hud, "One task at a time · kills count only while active", x + w / 2, y + h - 8 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
+  hudText(hud, "Kills always count \u00b7 errands repeat forever", x + w / 2, y + h - 8 * S, 6.5 * S,
+    "rgba(220,214,190,.55)", "center");
 }
 
 /* ---------------- Storage chest (stash) ---------------- */

@@ -6,8 +6,8 @@ import {
 } from "../config.ts";
 import { SPR, iconW, iconH } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
-import { ITEMS, walletAcross } from "../items.ts";
-import { activeTask, progressOf } from "../systems/tasks.ts";
+import { walletAcross } from "../items.ts";
+import { activeTasks, progressOf } from "../systems/tasks.ts";
 import { placeHud, hudUserScale } from "../systems/hudLayout.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
 import { stance, stanceAtk, stanceDef, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
@@ -515,15 +515,19 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   hudText(h, game.current.name + (isSafeTile(game.current, game.player.tx, game.player.ty) ? " · safe" : " · danger"), pad + 2, pad + 18 * S, 8 * S, "rgba(207,232,210,.7)");
   }
 
-  // active board-task tracker
-  const task = activeTask();
-  if (task && !h.fixedChrome) {
-    const prog = progressOf(task, p.bag);
-    const label = task.goal.kind === "kill"
-      ? `${task.goal.monster}`
-      : `${ITEMS[task.goal.item].name}`;
-    const done = prog >= task.goal.need;
-    hudText(h, `Task: ${prog}/${task.goal.need} ${label}`, pad + 2, pad + 29 * S, 8 * S, done ? "#9fe8a8" : "rgba(154,208,255,.85)");
+  /* Board tracker: one line per errand in hand, up to three.
+   *
+   * The title rather than the creature, because a camp errand counts five
+   * kinds and "orc" would be a lie on four of them. */
+  if (!h.fixedChrome) {
+    let ty = pad + 29 * S;
+    for (const task of activeTasks()) {
+      const prog = progressOf(task);
+      const done = prog >= task.goal.need;
+      hudText(h, `${prog}/${task.goal.need} \u00b7 ${task.title}`, pad + 2, ty, 8 * S,
+        done ? "#9fe8a8" : "rgba(154,208,255,.85)");
+      ty += 11 * S;
+    }
   }
 
   // Floating minimap top-right — the column hosts its own on desktop, as the

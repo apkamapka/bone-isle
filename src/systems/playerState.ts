@@ -38,8 +38,8 @@
  */
 import type { Skill, SkillKey } from "./skills.ts";
 import type { Stance } from "./stance.ts";
-import type { Quest } from "./quests.ts";
 import type { TaskSave } from "./tasks.ts";
+import type { KillSave } from "./kills.ts";
 import type { OutfitSave } from "./outfit.ts";
 import type { Element } from "./elements.ts";
 import type { PvpState } from "./pvp.ts";
@@ -93,8 +93,13 @@ export interface CombatModes {
 export interface PlayerState {
   skills: Record<SkillKey, Skill>;
   modes: CombatModes;
-  quests: Quest[];
   tasks: TaskSave;
+  /**
+   * Every creature this character has ever killed, keyed by kind. The board in
+   * tasks.ts reads its progress out of this rather than keeping a tally of its
+   * own — see kills.ts for why that is the whole point.
+   */
+  kills: KillSave;
   /**
    * The Time Sage's chain: mission id → stage. Absent means `locked`, so a
    * brand-new character is an empty object rather than fourteen rows of
@@ -156,52 +161,6 @@ function defaultSkills(): Record<SkillKey, Skill> {
   };
 }
 
-/**
- * The quest chain, fresh. Defined here rather than imported from quests.ts so
- * that this module has no VALUE import from any feature module — every import
- * above is `import type`, which erases at compile time. That keeps the module
- * graph acyclic even though quests.ts imports `active()` from here.
- */
-function defaultQuests(): Quest[] {
-  return [
-    {
-      id: "q1", title: "Pest Control",
-      desc: "The Gallows Coast crawls with snakes. Cull 5 of them.",
-      goal: { kind: "kill", monster: "snake", need: 5 },
-      reward: { gold: 20, exp: 30 },
-      progress: 0, done: false, claimed: false,
-    },
-    {
-      id: "q2", title: "Rattle the Bones",
-      desc: "Skeletons haunt the ruins. Bring peace to 6 of them.",
-      goal: { kind: "kill", monster: "skeleton", need: 6 },
-      reward: { item: "shortSword", itemN: 1, exp: 50 },
-      progress: 0, done: false, claimed: false,
-    },
-    {
-      id: "q3", title: "Stock the Forge",
-      desc: "The smith needs raw stone. Gather 20 stone.",
-      goal: { kind: "collect", item: "stone", need: 20 },
-      reward: { gold: 30, exp: 40 },
-      progress: 0, done: false, claimed: false,
-    },
-    {
-      id: "q4", title: "A Roof of Your Own",
-      desc: "Build a Forge on your Home Isle to craft real gear.",
-      goal: { kind: "build", struct: "forge" },
-      reward: { item: "hpPotion", itemN: 3, exp: 60 },
-      progress: 0, done: false, claimed: false,
-    },
-    {
-      id: "q5", title: "Horns of the Deep",
-      desc: "Minotaurs hold the deep under the Reach. Slay 3 to prove your strength.",
-      goal: { kind: "kill", monster: "minotaur", need: 3 },
-      reward: { item: "amulet", itemN: 1, gold: 100, exp: 200 },
-      progress: 0, done: false, claimed: false,
-    },
-  ];
-}
-
 /** The wardrobe a brand-new character starts in. */
 function defaultOutfit(): OutfitSave {
   return {
@@ -214,9 +173,9 @@ function defaultOutfit(): OutfitSave {
 /**
  * A clean sheet: no skull, no frags.
  *
- * Defined here rather than in pvp.ts for the same reason `defaultQuests` is —
- * pvp.ts reads `active()` out of this module, so the default has to live on
- * this side of the arrow or the two files import each other.
+ * Defined here rather than in pvp.ts because pvp.ts reads `active()` out of
+ * this module, so the default has to live on this side of the arrow or the two
+ * files import each other.
  */
 function defaultPvp(): PvpState {
   return { skull: "none", t: 0, frags: 0 };
@@ -227,7 +186,7 @@ function defaultPvp(): PvpState {
  * slots 1–2, the rest empty and waiting for whichever element they attune to.
  *
  * The two numbers live here rather than in actions.ts for the same reason
- * `defaultQuests` and `defaultOutfit` do — this module takes no VALUE import
+ * `defaultOutfit` does — this module takes no VALUE import
  * from a feature module, and actions.ts now reads `active()` out of here.
  * There is no second copy to drift: `ACTION_SLOTS_MIN`/`_MAX` are re-exported
  * FROM these, so actions.ts and this file cannot disagree by construction.
@@ -248,8 +207,8 @@ export function newPlayerState(): PlayerState {
   return {
     skills: defaultSkills(),
     modes: { stance: "balanced", chase: true, safeMode: true },
-    quests: defaultQuests(),
-    tasks: { activeId: null, kills: 0, earned: 0 },
+    tasks: { active: [], claims: {}, earned: 0 },
+    kills: {},
     missions: {},
     lore: {},
     outfit: defaultOutfit(),
@@ -266,10 +225,11 @@ export function newPlayerState(): PlayerState {
 }
 
 /**
- * Lazily created, so that module evaluation order cannot matter. quests.ts
- * imports `active()` from here and this module imports nothing but types from
- * quests.ts — but even if a value import crept in one day, nothing runs until
- * the first `active()` call, which is long after every module has loaded.
+ * Lazily created, so that module evaluation order cannot matter. tasks.ts and
+ * kills.ts import `active()` from here and this module imports nothing but
+ * types from them — but even if a value import crept in one day, nothing runs
+ * until the first `active()` call, which is long after every module has
+ * loaded.
  */
 let current: PlayerState | null = null;
 

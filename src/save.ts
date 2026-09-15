@@ -13,6 +13,7 @@ import { liftOverDeep } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 import { researchState, loadResearchState, attunedState, loadAttunedState } from "./systems/tower.ts";
 import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
+import { killState, loadKillState, type KillSave } from "./systems/kills.ts";
 import { missionState, loadMissionState, loreState, loadLoreState } from "./systems/missions.ts";
 import { serializeSlots, loadSlots, actionSlotCount, setActionSlotCount, type SlotAction } from "./systems/actions.ts";
 import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./systems/outfit.ts";
@@ -21,7 +22,6 @@ import { skills, type SkillKey } from "./systems/skills.ts";
 import { stance, setStance, STANCES, type Stance } from "./systems/stance.ts";
 import { chasing, setChase, safeMode, setSafeMode, active } from "./systems/playerState.ts";
 import type { Skull } from "./systems/pvp.ts";
-import { questList } from "./systems/quests.ts";
 import { emptyStash, emptyCorpseBag, emptyEquipment, addItem, addStack, newContainer, giveGold, COIN_KINDS, ITEMS, AMMO_KINDS } from "./items.ts";
 import type { Bag, Equipment, ItemKind, ItemStack } from "./items.ts";
 import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
@@ -140,7 +140,9 @@ interface SaveData {
    * not allow.
    */
   pvp?: { skull?: Skull; t?: number; frags?: number };
-  quests: { id: string; progress: number; done: boolean; claimed: boolean }[];
+  /** LEGACY: the starter quest chain, removed with the board rewrite. Written
+   *  by older clients, read by none — listed so an old save still parses. */
+  quests?: unknown;
   /** The Time Sage's chain: mission id → stage. Absent before v12. */
   missions?: Record<string, string>;
   /** Mission ids whose chronicle has been shown. Absent before v13. */
@@ -159,6 +161,9 @@ interface SaveData {
    *  which is correct: nobody had spent a stone yet. */
   attuned?: string[];
   tasks?: TaskSave;
+  /** Lifetime kills per creature. Absent before the board rewrite, and an
+   *  absent ledger loads as an empty one: nobody is credited retroactively. */
+  kills?: KillSave;
   slots?: (SlotAction | null)[];
   /** How many of `slots` are in play. Absent before v11, when it was six. */
   slotCount?: number;
@@ -250,7 +255,6 @@ export function saveGame(g: Game): void {
     skills: skillDump,
     modes: { stance: stance(), chase: chasing(), safeMode: safeMode() },
     pvp: { ...active().pvp },
-    quests: questList().map((q) => ({ id: q.id, progress: q.progress, done: q.done, claimed: q.claimed })),
     missions: missionState(),
     lore: loreState(),
     structures: structDump,
@@ -260,6 +264,7 @@ export function saveGame(g: Game): void {
     research: researchState(),
     attuned: attunedState(),
     tasks: taskState(),
+    kills: killState(),
     slots: serializeSlots(),
     /* Saved beside the bindings rather than with the HUD layout, because it
      * is a property of the CHARACTER: how many things this one has to reach
@@ -483,15 +488,11 @@ export function loadGame(): Game | null {
   pv.t = pv.skull === "none" ? 0 : Math.max(0, data.pvp?.t ?? 0);
   pv.frags = Math.max(0, Math.floor(data.pvp?.frags ?? 0));
 
-  for (const qs of data.quests ?? []) {
-    const q = questList().find((x) => x.id === qs.id);
-    if (q) { q.progress = qs.progress; q.done = qs.done; q.claimed = qs.claimed; }
-  }
-
   loadMissionState(data.missions);
   loadLoreState(data.lore);
   loadResearchState(data.research);
   loadAttunedState(data.attuned);
+  loadKillState(data.kills);
   loadTaskState(data.tasks);
   loadSlots(data.slots);
   // Absent in pre-v11 saves, where six was the only length there was.

@@ -7,7 +7,6 @@ import { nextEntityId } from "../world/entities.ts";
 import { SPR, bakeForge, bakeLibrary, bakeDummy, bakeRange, bakeChest, bakeTreasureChest } from "../gfx/sprites.ts";
 import { buildingArt } from "../gfx/buildingArt.ts";
 import { countAcross, removeAcross, emptyStash } from "../items.ts";
-import { onStructureBuilt } from "./quests.ts";
 import { unstick } from "../world/collision.ts";
 import { Tile } from "../world/types.ts";
 import type { ItemKind, Bag } from "../items.ts";
@@ -324,7 +323,6 @@ export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy:
   home.structures.push({ id: nextEntityId(), key, tx, ty, tier: 1, anim: Math.random() * 6, hurtT: 0, ...(key === "chest" ? { inv: emptyStash(CHEST_SLOTS[0]) } : {}) });
   markSolid(home, key, tx, ty);
   unstick(home, p); // if you built on the tile you were standing on, step out of it
-  onStructureBuilt(key, (t) => addFloat(home, tx * TILE + TILE, ty * TILE - 16, t, "#ffe9a8"));
   addFloat(home, tx * TILE + TILE, ty * TILE, `${def.name} built!`, "#ffe27a");
   beep(330, 0.1, "triangle", 0.06);
   return true;

@@ -9,11 +9,10 @@ function ok(cond: boolean, name: string): void {
 }
 
 async function main(): Promise<void> {
-  const { questList, claimQuest, resetQuests } = await import("../src/systems/quests.ts");
-  const quests = questList();
   const { createPlayer } = await import("../src/entities/player.ts");
   const items = await import("../src/items.ts");
   const tasks = await import("../src/systems/tasks.ts");
+  const kills = await import("../src/systems/kills.ts");
   const { skills, resetSkills, addSkillXp } = await import("../src/systems/skills.ts");
   const { buildWorlds, applyMissionPads } = await import("../src/game.ts");
   const { WORLD_SEED, TILE, BAG_SIZE: cfgBagSize, CORPSE_SLOTS: cfgCorpseSlots } = await import("../src/config.ts");
@@ -34,43 +33,122 @@ async function main(): Promise<void> {
     ok(!items.bagRoomFor(bag, "wood", 10), "…but not 10");
   }
 
-  console.log("claimQuest (exp + full-bag protection):");
+  console.log("kill ledger (Etap 48 — lifetime counts, per creature):");
   {
-    resetQuests();
-    const p = createPlayer({ x: 0, y: 0 });
-    p.pack = items.newContainer("backpack")!;
-    const q2 = quests.find((q) => q.id === "q2")!; // reward: sword + 50 exp
-    q2.progress = 6; q2.done = true;
-    let expGiven = 0;
-    // full bag → "full", nothing consumed / claimed
-    p.bag.fill({ kind: "chainHelm", n: 1 });
-    ok(claimQuest(p, q2, (n) => { expGiven += n; }) === "full", "full bag blocks the claim");
-    ok(!q2.claimed && expGiven === 0, "claim was fully rolled back (not claimed, no exp)");
-    // free a slot → "ok", exp + item both granted
-    p.bag[0] = null;
-    ok(claimQuest(p, q2, (n) => { expGiven += n; }) === "ok", "claim succeeds with room");
-    ok(expGiven === 50, "quest exp is granted via giveExp (was silently lost before)");
-    ok(items.bagCount(p.bag, "shortSword") === 1, "item reward landed in the bag");
-    ok(claimQuest(p, q2, (n) => { expGiven += n; }) === "no", "double-claim rejected");
-    resetQuests();
-    ok(quests.every((q) => !q.done && !q.claimed && q.progress === 0), "resetQuests wipes the chain");
+    kills.resetKills();
+    ok(kills.killCount("goblin") === 0, "a fresh ledger knows nothing");
+    for (let i = 0; i < 7; i++) kills.recordKill("goblin");
+    kills.recordKill("goblinLegionary");
+    ok(kills.killCount("goblin") === 7, "seven goblins are seven goblins");
+    ok(kills.killCountOf(["goblin", "goblinLegionary"]) === 8,
+      "a family question sums its ranks — the whole point of a camp errand");
+    ok(kills.killCountOf(["orc"]) === 0, "…and counts nothing it was not asked about");
+
+    const dump = kills.killState();
+    kills.resetKills();
+    kills.loadKillState(dump);
+    ok(kills.killCount("goblin") === 7, "the ledger survives a save round-trip");
+
+    kills.loadKillState({ goblin: -4, orc: 3.7 } as never);
+    ok(kills.killCount("goblin") === 0, "a negative tally loads as zero, not as a debt");
+    ok(kills.killCount("orc") === 3, "…and a fractional one is floored");
+    kills.loadKillState(undefined);
+    ok(kills.killCount("orc") === 0, "an absent ledger loads empty — nobody is credited retroactively");
   }
 
-  console.log("tasks (weight-aware rewards):");
+  console.log("task board (Etap 48 — three errands, read from the ledger):");
   {
     const p = createPlayer({ x: 0, y: 0 });
     p.pack = items.newContainer("backpack")!;
-    const ghouls = tasks.TASKS.find((t) => t.id === "t_ghouls")!; // reward 20 boneArrow (20 oz)
-    ok(tasks.rewardFits(p, ghouls), "light bag fits the arrow reward");
-    // stuff the bag to the cap with stone (weight 14): cap 500 → 35 stones = 490 oz
-    items.addItem(p.bag, "stone", 35);
-    ok(!tasks.rewardFits(p, ghouls), "reward heavier than free cap is rejected");
-    ok(tasks.buyExchange(p, "x_arrows") === "poor", "no TP → poor");
-    p.taskPoints = 20;
-    ok(tasks.buyExchange(p, "x_arrows") === "heavy", "50 arrows over cap → heavy");
-    p.pack = items.newContainer("backpack")!;
-    ok(tasks.buyExchange(p, "x_arrows") === "ok", "with room it buys");
-    ok(items.bagCount(p.bag, "boneArrow") === 50 && p.taskPoints === 17, "arrows + TP deducted");
+    kills.resetKills();
+    tasks.resetTasks();
+    const snakes = tasks.taskById("t_snakes")!;
+
+    // ---- the level gate, both ends ----
+    ok(!tasks.acceptTask("t_demonskeletons", 5), "a level-5 character cannot take the Charnel errand");
+    ok(tasks.acceptTask("t_snakes", 5), "…but the snake cull is open to it");
+    ok(!tasks.acceptTask("t_snakes", 5), "…and cannot be taken twice");
+    ok(!tasks.offeredTasks(60).some((t) => t.id === "t_poachers"),
+      "an errand fifteen levels behind falls off the board");
+    ok(tasks.offeredTasks(60).some((t) => t.id === "t_snakes"),
+      "…but one already in hand is never hidden, however far behind it falls");
+
+    // ---- three is the ceiling ----
+    tasks.acceptTask("t_vermin", 5);
+    tasks.acceptTask("t_bandits", 5);
+    ok(tasks.activeTasks().length === 3, "three errands fit");
+    ok(!tasks.acceptTask("t_poachers", 5), "…and a fourth does not");
+    ok(tasks.abandonTask("t_vermin") && tasks.activeTasks().length === 2, "dropping one frees a slot");
+
+    // ---- progress is the ledger, not a per-errand tally ----
+    for (let i = 0; i < 50; i++) kills.recordKill("snake");
+    ok(tasks.progressOf(snakes) === 50 && tasks.isComplete(snakes), "fifty snakes finish the cull");
+    ok(tasks.abandonTask("t_snakes") && tasks.progressOf(snakes) === 50,
+      "dropping the errand loses NOTHING — the ledger is not the errand");
+    ok(tasks.acceptTask("t_snakes", 5) && tasks.isComplete(snakes), "…and taking it back finds it done");
+
+    // ---- kills made before the errand was ever taken still count ----
+    const vermin = tasks.taskById("t_vermin")!;
+    for (let i = 0; i < 50; i++) kills.recordKill("beggar");
+    ok(tasks.progressOf(vermin) === 50,
+      "an errand never taken already reads 50/50 — hunting with empty hands is never wasted");
+
+    // ---- hand-in pays, and only once per threshold ----
+    let exp = 0;
+    const before = p.gold;
+    const r = tasks.handInTask(p, "t_snakes", (n) => { exp += n; })!;
+    ok(!!r && r.time === 1, "the first hand-in reports itself as the first");
+    ok(p.taskPoints === snakes.reward.points, "Task Points landed on the character");
+    ok(tasks.pointsEarned() === snakes.reward.points, "…and on the lifetime tally, which nothing reduces");
+    ok(p.gold === before + snakes.reward.gold, "the purse was minted");
+    ok(exp === snakes.reward.exp, "experience went through giveExp, not into the void");
+    ok(!tasks.isActive("t_snakes"), "the errand left the active list");
+    ok(tasks.claimsOf("t_snakes") === 1, "…and is recorded as done once");
+    ok(tasks.acceptTask("t_snakes", 5), "it can be taken again at once");
+    ok(tasks.progressOf(snakes) === 0 && !tasks.isComplete(snakes),
+      "…but the NEXT fifty are a fresh fifty: no double pay for the same corpses");
+    ok(tasks.handInTask(p, "t_snakes", () => {}) === null, "…so a second hand-in is refused");
+
+    // ---- surplus carries: two hundred snakes is four hand-ins ----
+    for (let i = 0; i < 150; i++) kills.recordKill("snake");
+    ok(tasks.isComplete(snakes), "a hundred and fifty more finishes the second");
+    tasks.handInTask(p, "t_snakes", () => {});
+    tasks.acceptTask("t_snakes", 5);
+    ok(tasks.isComplete(snakes), "…and the third is already paid for by the surplus");
+    ok(tasks.claimsOf("t_snakes") === 2, "two hand-ins banked so far");
+
+    // ---- a purse with nowhere to go is refused, not minted ----
+    for (let i = 0; i < p.bag.length; i++) p.bag[i] = { kind: "ironSword", n: 1 };
+    ok(!tasks.rewardFits(p, snakes), "a full pack has no cell for the coin");
+    ok(tasks.handInTask(p, "t_snakes", () => {}) === null, "…so the hand-in is refused");
+    ok(tasks.isActive("t_snakes") && tasks.claimsOf("t_snakes") === 2,
+      "…and nothing was consumed: the errand is still in hand, still claimable");
+    /* TWO cells, not one: 150 gold is minted as a platinum coin and fifty
+     * gold, and two coin kinds need two stacks. */
+    p.bag[0] = null; p.bag[1] = null;
+    ok(!!tasks.handInTask(p, "t_snakes", () => {}), "two free cells later it pays out");
+  }
+
+  console.log("task save (Etap 48 — the one-errand shape still loads):");
+  {
+    tasks.resetTasks();
+    // the pre-Etap-48 shape: one errand, its own tally, lifetime points
+    tasks.loadTaskState({ activeId: "t_goblins", kills: 5, earned: 9 });
+    ok(tasks.activeTasks().map((t) => t.id).join() === "t_goblins",
+      "a legacy single errand comes back in hand");
+    ok(tasks.pointsEarned() === 9, "…with its lifetime points intact");
+    ok(tasks.claimsOf("t_goblins") === 0, "…and no hand-in invented from its old tally");
+
+    tasks.loadTaskState({ activeId: "t_wood", earned: 2 });
+    ok(tasks.activeTasks().length === 0, "an errand the catalogue no longer carries is dropped");
+
+    tasks.loadTaskState({ active: ["t_orcs", "t_orcs", "t_ghouls", "t_goblins", "t_snakes"], claims: { t_orcs: 3, t_nope: 9 }, earned: 4 });
+    ok(tasks.activeTasks().length === 3, "a save carrying more than three is trimmed to three");
+    ok(tasks.activeTasks().filter((t) => t.id === "t_orcs").length === 1, "…with duplicates collapsed");
+    ok(tasks.claimsOf("t_orcs") === 3, "hand-in counts survive");
+    ok(tasks.claimsOf("t_nope") === 0, "…and a count for an id that no longer exists is discarded");
+    tasks.resetTasks();
+    kills.resetKills();
   }
 
   console.log("skills reset:");
@@ -2059,9 +2137,10 @@ async function main(): Promise<void> {
     ok(!Object.values(M.MONSTER_DEFS).some((d) => d.loot.some((l) => (l.kind as string) === "fireRuby")),
       "…nothing in the bestiary drops one");
     ok(!T.RESEARCH.some((r) => "fireRuby" in r.researchCost), "…no project asks for one");
-    ok(!tasks.EXCHANGES.some((x) => (x.item as string) === "fireRuby")
-      && !tasks.TASKS.some((t) => (t.reward.item as string) === "fireRuby"),
-      "…and the task board stopped paying in rubies");
+    /* The board cannot pay in rubies because it cannot pay in ITEMS: since the
+     * Etap 48 rewrite a hand-in is points, coin and experience, full stop. */
+    ok(tasks.TASKS.every((t) => !("item" in t.reward)),
+      "…and the task board pays no items at all, rubies included");
 
     // the id handover, finished: the charge crystal it was renamed FOR is gone
     // too, so "fireCrystal" is now unambiguously the attunement stone.
@@ -2597,27 +2676,24 @@ async function main(): Promise<void> {
 
     // ---- rewards need a slot for the coin, and say so ----
     {
-      const { questList: qList, claimQuest: claim, resetQuests: reset } = await import("../src/systems/quests.ts");
-      const qs = qList();
       const { createPlayer: mkP } = await import("../src/entities/player.ts");
-      reset();
-      const q = qs.find((x) => x.reward.gold && !x.reward.item);
-      if (q) {
-        const p = mkP({ x: 0, y: 0 });
-        q.done = true; q.claimed = false;
-        for (let i = 0; i < p.bag.length; i++) p.bag[i] = { kind: "ironSword", n: 1 };
-        ok(claim(p, q) === "full",
-          "a purse with nowhere to go is refused, not minted into thin air");
-        ok(!q.claimed, "…and the quest stays claimable");
-        p.bag[0] = null;
-        ok(claim(p, q) === "ok" && p.gold === (q.reward.gold ?? 0),
-          "…one free cell later it pays out in full");
-      } else {
-        ok(true, "no gold-only quest to test (skipped)");
-        ok(true, "…");
-        ok(true, "…");
-      }
-      reset();
+      const t = await import("../src/systems/tasks.ts");
+      const k = await import("../src/systems/kills.ts");
+      t.resetTasks(); k.resetKills();
+      const p = mkP({ x: 0, y: 0 });
+      const def = t.taskById("t_snakes")!;
+      for (let i = 0; i < def.goal.need; i++) k.recordKill("snake");
+      t.acceptTask(def.id, 5);
+      for (let i = 0; i < p.bag.length; i++) p.bag[i] = { kind: "ironSword", n: 1 };
+      ok(t.handInTask(p, def.id, () => {}) === null,
+        "a purse with nowhere to go is refused, not minted into thin air");
+      ok(t.isActive(def.id), "…and the errand stays claimable");
+      /* Two cells: a 150-gold purse is a platinum coin plus fifty gold, and
+       * two coin kinds are two stacks. */
+      p.bag[0] = null; p.bag[1] = null;
+      ok(!!t.handInTask(p, def.id, () => {}) && p.gold === def.reward.gold,
+        "…two free cells later it pays out in full");
+      t.resetTasks(); k.resetKills();
     }
   }
 
@@ -7562,6 +7638,7 @@ async function main(): Promise<void> {
   {
     const M = await import("../src/entities/monsters.ts");
     const tasks = await import("../src/systems/tasks.ts");
+  const kills = await import("../src/systems/kills.ts");
     const T = await import("../src/systems/tower.ts");
     const A = await import("../src/systems/actions.ts");
     const { createGame } = await import("../src/game.ts");
@@ -7572,8 +7649,8 @@ async function main(): Promise<void> {
       "…nothing in the bestiary drops one");
     ok(!T.RESEARCH.some((r) => GONE.some((k) => k in r.researchCost || k in r.buyCost)),
       "…no tower project asks for one");
-    ok(!tasks.EXCHANGES.some((x) => GONE.includes(x.item as string)),
-      "…and the task board stopped paying in them");
+    ok(tasks.TASKS.every((t) => !("item" in t.reward)),
+      "…and the task board, which pays no items at all, cannot pay in them");
     ok(!A.actionSlots.some((sl) => sl?.type === "crystal" && GONE.includes(sl.item as string)),
       "…no default hotkey points at one");
 
@@ -11273,7 +11350,7 @@ async function main(): Promise<void> {
     const ps = await import("../src/systems/playerState.ts");
     const sk = await import("../src/systems/skills.ts");
     const st = await import("../src/systems/stance.ts");
-    const qu = await import("../src/systems/quests.ts");
+    const kl = await import("../src/systems/kills.ts");
     const tk = await import("../src/systems/tasks.ts");
     const tw = await import("../src/systems/tower.ts");
 
@@ -11281,20 +11358,20 @@ async function main(): Promise<void> {
     const alice = ps.resetPlayerState();
     sk.skills.sword.lv = 42;
     st.setStance("offensive");
-    qu.questList()[0].progress = 3;
+    kl.recordKill("orc"); kl.recordKill("orc"); kl.recordKill("orc");
     ps.setChase(false);
 
     const bob = ps.newPlayerState();
     ps.setActive(bob);
     ok(sk.skills.sword.lv === 10, "a second character reads his OWN sword skill, not the first one's");
     ok(st.stance() === "balanced", "…his own stance");
-    ok(qu.questList()[0].progress === 0, "…his own quest progress");
+    ok(kl.killCount("orc") === 0, "…his own kill ledger, which is the board's only source of progress");
     ok(ps.chasing() === true, "…and his own combat toggles");
 
     ps.setActive(alice);
     ok(sk.skills.sword.lv === 42, "switching back restores the first character's skill");
     ok(st.stance() === "offensive", "…his stance");
-    ok(qu.questList()[0].progress === 3, "…his quest progress");
+    ok(kl.killCount("orc") === 3, "…his kill ledger");
     ok(ps.chasing() === false, "…and his toggles");
 
     /* The skills façade is the risky one: it keeps its old NAME so ~100 call
@@ -11316,19 +11393,21 @@ async function main(): Promise<void> {
 
     /* …and the board, whose runtime is a getter/setter pair. */
     ps.setActive(bob);
-    tk.loadTaskState({ activeId: null, kills: 5, earned: 11 });
-    ok(tk.taskState().kills === 5 && tk.taskState().earned === 11, "board progress lands on the active character");
+    tk.loadTaskState({ active: ["t_goblins"], claims: { t_goblins: 2 }, earned: 11 });
+    ok(tk.taskState().earned === 11 && tk.claimsOf("t_goblins") === 2,
+      "board state lands on the active character");
     ps.setActive(alice);
-    ok(tk.taskState().kills === 0, "…and the other character's board is his own");
+    ok(tk.taskState().earned === 0 && tk.activeTasks().length === 0,
+      "…and the other character's board is his own");
 
     /* A fresh state must be genuinely fresh — a shared default object would
      * make every new character an alias of the last one. */
     const c1 = ps.newPlayerState();
     const c2 = ps.newPlayerState();
     c1.skills.dist.lv = 55;
-    c1.quests[0].done = true;
+    c1.kills.orc = 7;
     ok(c2.skills.dist.lv === 10, "newPlayerState deep-copies the skill table rather than sharing it");
-    ok(c2.quests[0].done === false, "…and the quest chain too");
+    ok(!c2.kills.orc, "…and the kill ledger too");
     ok(c1.research !== c2.research && c1.shieldBlockTimes !== c2.shieldBlockTimes,
       "…and every collection on it");
 

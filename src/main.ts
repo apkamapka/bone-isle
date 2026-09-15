@@ -46,7 +46,6 @@ import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor, expNeeded } from "./config.ts";
-import { questList, claimQuest, syncCollectQuests } from "./systems/quests.ts";
 import {
   MISSIONS, stageOf, setStage, offeredMission, currentMission,
   missionHandedIn, relicLost, missionByGround, groundOpen, carriesBound,
@@ -57,7 +56,7 @@ import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
 import { nextEntityId, byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { TARGET_SEEK_PX, MIN_ELEMENTAL_DAMAGE } from "./config.ts";
-import { acceptTask, abandonTask, handInTask, buyExchange, activeTask } from "./systems/tasks.ts";
+import { acceptTask, abandonTask, handInTask, taskById, hasRoomForTask, isActive, isComplete, rewardFits } from "./systems/tasks.ts";
 import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, exchangeCoins } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
@@ -827,36 +826,27 @@ const act: PanelActions = {
   },
   buy: (kind: ItemKind) => { doBuy(kind); },
   sell: (kind: ItemKind) => { doSell(kind); },
-  claim: (id: string) => {
-    const q = questList().find((x) => x.id === id);
-    if (!q) return;
-    const r = q.reward;
-    if (r.item && !canCarry(P, r.item, r.itemN ?? 1)) { flash("too heavy"); return; }
-    const res = claimQuest(P, q, (xp) => grantExp(cw(), P, xp), (t) => flash(t, "#ffe9a8"));
-    if (res === "ok") beep(560, 0.16, "square", 0.06);
-    else if (res === "full") flash("bag full");
-  },
   acceptTask: (id: string) => {
-    if (acceptTask(id)) { flash("task accepted", "#9ad0ff"); beep(440, 0.12, "sine", 0.05, 120); }
-    else flash("finish your current task first", "#e0a06a");
+    if (acceptTask(id, P.level)) { flash("task accepted", "#9ad0ff"); beep(440, 0.12, "sine", 0.05, 120); }
+    /* The only reason a legal entry is ever refused: three is the ceiling.
+     * Say which one it is rather than "no", because the fix is a click away. */
+    else if (!hasRoomForTask() && !isActive(id)) flash("three tasks is the limit", "#e0a06a");
   },
-  abandonTask: () => {
-    const a = activeTask();
-    if (a) { abandonTask(); flash("task abandoned", "#e0a06a"); beep(240, 0.1, "triangle", 0.05, -80); }
+  abandonTask: (id: string) => {
+    if (abandonTask(id)) { flash("task dropped · kills still count", "#e0a06a"); beep(240, 0.1, "triangle", 0.05, -80); }
   },
-  handInTask: () => {
-    const res = handInTask(P, (xp) => grantExp(cw(), P, xp));
+  handInTask: (id: string) => {
+    const res = handInTask(P, id, (xp) => grantExp(cw(), P, xp));
     if (res) {
-      flash(`+${res.reward.points} TP · task done!`, "#9fe8a8");
+      flash(`+${res.reward.points} TP · ${res.title}`, "#9fe8a8");
       beep(560, 0.18, "square", 0.06, 140);
-    } else flash("not ready to hand in", "#e0a06a");
-  },
-  buyExchange: (id: string) => {
-    const r = buyExchange(P, id);
-    if (r === "ok") { flash("bought with Task Points", "#9ad0ff"); beep(440, 0.12, "sine", 0.05); }
-    else if (r === "poor") flash("not enough Task Points", "#d96a5a");
-    else if (r === "full") flash("no room in bag", "#e0a06a");
-    else if (r === "heavy") flash("too heavy", "#e0a06a");
+    } else {
+      /* Two ways to get here and they need different advice: an unfinished
+       * errand, or a finished one whose purse has nowhere to go. */
+      const def = taskById(id);
+      const full = !!def && isComplete(def) && !rewardFits(P, def);
+      flash(full ? "no room for the purse" : "not ready to hand in", "#e0a06a");
+    }
   },
   moveStack: (ref: ContainerRef, index: number) => { openMoveChooser(ref, index); },
   openNested: (ref: ContainerRef, index: number, win: PanelWindow) => { navInto(ref, index, win); },
@@ -1097,9 +1087,6 @@ function moveItems(
     if (st.n <= 0) src[fi] = null;
   }
 
-  if (rootOf(to) === "player" || rootOf(from) === "player") {
-    syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
-  }
   beep(rootOf(to) === "player" ? 440 : 360, 0.06, "sine", 0.04);
   return true;
 }
@@ -1298,7 +1285,6 @@ function pickupGround(gi: GroundItem): void {
   const took = gi.n - left;
   if (took <= 0) { flash("bag full"); return; }
   compactBag(P.bag);
-  syncCollectQuests(P, (t) => flash(t, "#ffe9a8"));
   if (left > 0) gi.n = left;
   else { const idx = world.ground.indexOf(gi); if (idx >= 0) world.ground.splice(idx, 1); }
   beep(520, 0.06, "sine", 0.05, 80);
@@ -4620,7 +4606,7 @@ function update(dt: number): void {
       const d = dist(P.x, P.y, gp.x, gp.y);
       if (d > MELEE_REACH_PX) walkGrid(world, toTile(gp.x), toTile(gp.y), budget);
       else if (P.atkCd <= 0 && P.gather) {
-        gatherTick(world, P, P.gather, (t) => flash(t, "#ffe9a8"));
+        gatherTick(world, P, P.gather);
       }
     }
   }
