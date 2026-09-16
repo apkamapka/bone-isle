@@ -97,7 +97,8 @@ export type ItemKind =
    * ice is researched with water, storm with lightning, wind with wind.
    * -------------------------------------------------------------------- */
   | "fireCrystal" | "waterCrystal" | "earthCrystal" | "windCrystal" | "lightningCrystal"
-  /** Spent buying the strongest crystal of every element. Drops from the dragon. */
+  /** Spent buying the strongest crystal of every element. Drops from the dragon
+   *  and the Black Knight, and rarely from the orc shaman and minotaur mage. */
   | "magicEssence"
   // ranged: bows (two-handed weapons) + arrows (consumable ammo)
   | "bow" | "longbow" | "arrow" | "boneArrow"
@@ -269,9 +270,12 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * THE DRAGON SCALE IS THE DEAREST OF THEM (Etap 58): 150 at Mira, up from
    * 45, because a scale off the last creature in the game read cheaper than a
    * cursed rib and a minotaur's horn. It got dearer by getting RARER — the
-   * dragon used to shed one to three on most kills and now drops a single
-   * scale on three in ten — so what a dragon pays per kill barely moved while
-   * what a scale is worth in the hand tripled. */
+   * dragon used to shed one to three on most kills, and since Etap 59 drops a
+   * single scale on 15% of them.
+   *
+   * ETAP 59 HALVED EVERY TROPHY'S DROP RATE (15% -> 8%; the gland, claw and
+   * scale in proportion) and left these prices where they are. A trophy is
+   * rarer loot now, and a gem costs about twice the hunting it did. */
   minotaurHorn: { name: "Minotaur Horn", stack: 9999, value: 180, weight: 5 },
   orcEar:       { name: "Orc Ear",       stack: 9999, value: 100, weight: 2 },
   goblinFang:   { name: "Goblin Fang",   stack: 9999, value: 80, weight: 1 },

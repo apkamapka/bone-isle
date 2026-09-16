@@ -1658,8 +1658,11 @@ async function main(): Promise<void> {
     ok(bladeFrom.length === 1 && bladeFrom[0] === "demonSkeleton",
       `the demon skeleton, and only it, drops the Marrow Blade (${bladeFrom.join(",") || "nobody"})`);
     const bladeOdds = MONSTER_DEFS.demonSkeleton.loot.find((e: { kind: string }) => e.kind === "marrowBlade")?.chance ?? 0;
-    ok(bladeOdds > 0 && bladeOdds < 0.05,
-      `…rarer than the knight's and the dragon's swords (${bladeOdds * 100}%)`);
+    const topSword = (m: "blackKnight" | "dragon", k: string): number =>
+      MONSTER_DEFS[m].loot.find((e: { kind: string }) => e.kind === k)?.chance ?? 0;
+    ok(bladeOdds > 0 && bladeOdds <= topSword("blackKnight", "knightSword")
+      && bladeOdds <= topSword("dragon", "fireSword"),
+      `…no commoner than the knight's and the dragon's swords (${bladeOdds * 100}%)`);
     let inShop = false;
     for (const shop of Object.values(SHOPS)) {
       if (shop && shop.entries.some((e) => e.kind === "marrowBlade" && e.buy > 0)) inShop = true;
@@ -2201,7 +2204,10 @@ async function main(): Promise<void> {
     const droppers = Object.entries(M.MONSTER_DEFS)
       .filter(([, d]) => d.loot.some((l) => l.kind === "magicEssence"))
       .map(([k]) => k);
-    ok(droppers.length === 1 && droppers[0] === "dragon", "the dragon is the only source of the Essence");
+    // Etap 59 widened the sources: the dragon, the Black Knight at the top of
+    // the ladder, and the two casters rarely. Nothing else, and never a chest.
+    ok([...droppers].sort().join(",") === ["blackKnight", "dragon", "minotaurMage", "orcShaman"].join(","),
+      `the Essence comes off the dragon, the Black Knight and the two casters (${droppers.join(",")})`);
   }
 
   console.log("Etap 26 — the retired crystals leave old saves (migration):");
@@ -4035,8 +4041,8 @@ async function main(): Promise<void> {
     ok(!drops("chieftain", "knightSword") && !drops("warlord", "knightSword"),
       "the longsword the top ranks carry stays out of their loot");
     const sword = MONSTER_DEFS.deserter.loot.find((l) => l.kind === "ironSword");
-    ok(sword !== undefined && sword.chance === 0.08,
-      "the deserter's sword sits at the gear ceiling — the best odds any rank offers");
+    ok(sword !== undefined && sword.chance === 0.03,
+      "the deserter's sword sits at the gear ceiling (3% since Etap 59) — the best odds any rank offers");
 
     // Gear on the ground beside a body is loot the game will not hand over, so
     // the death frame's dropped weapon is cut. Every body that had one ends up
@@ -7518,8 +7524,8 @@ async function main(): Promise<void> {
       "both minotaur ranks shed their own set");
     ok(rate("minotaurGuard", "minotaurBody") > rate("minotaur", "minotaurBody"),
       "…and the guard sheds it more often than the rank and file");
-    ok(rate("minotaurGuard", "minotaurBody") === 0.08,
-      "…at the 8% ceiling every gear drop in the game now shares");
+    ok(rate("minotaurGuard", "minotaurBody") === 0.02,
+      "…at 2%, the most any tier-4 or tier-5 piece drops at since Etap 59");
     ok(rate("goblinLegionary", "goblinHelm") > rate("goblin", "goblinHelm")
       && rate("orcBerserker", "orcishHelm") > rate("orc", "orcishHelm")
       && rate("demonSkeleton", "marrowHelm") > rate("skeletonWarrior", "marrowHelm"),
@@ -7557,7 +7563,7 @@ async function main(): Promise<void> {
     const knightRates = (MONSTER_DEFS.blackKnight.loot as { kind: string; chance: number }[])
       .filter((e) => knightSet.includes(e.kind as never));
     ok(knightRates.length === 5, `all five pieces roll separately (${knightRates.length})`);
-    ok(knightRates.every((e) => e.chance === 0.05), "…each at a flat 5%");
+    ok(knightRates.every((e) => e.chance === 0.005), "…each at a flat half a percent (Etap 59)");
   }
 
   console.log("Etap 23 — purses, weapon drops and the boot outlier:");
@@ -8297,8 +8303,8 @@ async function main(): Promise<void> {
     const knightPieces = D.loot!.filter((l) => String(l.kind).startsWith("knight"));
     ok(knightPieces.length === 6,
       `he sheds the whole suit — five pieces and the sword (${knightPieces.length})`);
-    ok(knightPieces.every((l) => l.chance === 0.05),
-      "…every one of them at a flat 5%, the hardest fight paying the rarest gear");
+    ok(knightPieces.every((l) => l.chance === 0.005),
+      "…every one of them at a flat 0.5%, the hardest fight paying the rarest gear");
     ok(!D.loot!.some((l) => l.kind === "bones"),
       "a man in full plate leaves steel and coal, not a pile of bones");
 
@@ -9001,25 +9007,26 @@ async function main(): Promise<void> {
     const isGear = (k: string): boolean =>
       WORN.includes((I[k as never] as { slot?: string }).slot ?? "");
 
-    // The rule the whole pass exists for: a corpse hands over at most one
-    // piece in twelve. Before this, an orc berserker shed its set at 20% a
-    // piece and a whole suit off one body was a 1-in-3125 roll — common
-    // enough that players were seeing it. At 8% the same suit is 1-in-30,517.
+    // The rule the whole pass exists for. Before it, an orc berserker shed its
+    // set at 20% a piece and a whole suit off one body was a 1-in-3125 roll;
+    // Etap 29 capped every piece at 8%. Etap 59 cut it again, harder — Radek
+    // was still pulling armour off most dragons — so the ceiling is 3% now, and
+    // that is only ever reached below tier 4.
     const over: string[] = [];
     for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
       for (const l of MONSTER_DEFS[k].loot as { kind: string; chance: number }[]) {
-        if (isGear(l.kind) && l.chance > 0.08) over.push(`${k}:${l.kind}@${l.chance}`);
+        if (isGear(l.kind) && l.chance > 0.03) over.push(`${k}:${l.kind}@${l.chance}`);
       }
     }
-    ok(over.length === 0, `no rank sheds gear above 8% (${over.join(" ") || "clean"})`);
+    ok(over.length === 0, `no rank sheds gear above 3% (${over.join(" ") || "clean"})`);
 
     // The two level-50 fights are stricter still: their gear is the end of the
-    // ladder, so it comes off at 5% rather than the general ceiling.
+    // ladder, so it comes off at half a percent rather than the general ceiling.
     for (const boss of ["dragon", "blackKnight"] as const) {
       const gear = (MONSTER_DEFS[boss].loot as { kind: string; chance: number }[])
         .filter((l) => isGear(l.kind));
-      ok(gear.length > 0 && gear.every((l) => l.chance === 0.05),
-        `${boss}: every piece of gear at a flat 5% (${gear.length} entries)`);
+      ok(gear.length > 0 && gear.every((l) => l.chance === 0.005),
+        `${boss}: every piece of gear at a flat 0.5% (${gear.length} entries)`);
     }
 
     // Materials, food, trophies and ammo are deliberately NOT capped — the
@@ -18539,6 +18546,60 @@ async function main(): Promise<void> {
     const knightPays = perKill("blackKnight");
     ok(Math.abs(dragonPays - knightPays) / Math.max(dragonPays, knightPays) <= 0.2,
       `the dragon and the Black Knight pay within 20% of each other (${dragonPays.toFixed(0)} vs ${knightPays.toFixed(0)})`);
+  }
+
+  console.log("Etap 59 — rare gear, rarer trophies, the Essence on four creatures:");
+  {
+    const { MONSTER_DEFS: M59, MONSTER_KINDS: MK59 } = await import("../src/entities/monsters.ts");
+    const SM59 = await import("../src/systems/smelt.ts");
+    const IT59 = items.ITEMS;
+    type Row59 = { kind: string; chance: number; n: readonly [number, number] };
+    const loot59 = (m: string): Row59[] => (M59 as never as Record<string, { loot: Row59[] }>)[m].loot;
+    const odds = (m: string, k: string): number => loot59(m).find((l) => l.kind === k)?.chance ?? 0;
+    const WORN59 = ["weapon", "head", "body", "legs", "boots", "shield"];
+    const isGear59 = (k: string): boolean => WORN59.includes((IT59[k as never] as { slot?: string }).slot ?? "");
+    const PIECES = ["Helm", "Body", "Legs", "Boots", "Shield"];
+    const setOf = (prefixes: string[]): Set<string> => new Set(prefixes.flatMap((p) => PIECES.map((x) => p + x)));
+    const TOP = new Set([...setOf(["knight", "dragon"]), "knightSword", "fireSword", "marrowBlade"]);
+    const MID = new Set([...setOf(["plate", "minotaur", "steel", "marrow"]),
+      "gladius", "minotaurAxe", "boneSword", "warlordBlade", "steelMaul", "demonCleaver"]);
+
+    /* --- 1. GEAR, BY THE TIER OF THE ITEM ------------------------------------
+     * Top sets and top blades at half a percent, tiers 4-5 at 2% at most,
+     * everything below at 3% at most. A rule over the whole bestiary, so a new
+     * rank cannot quietly bring back the old rates. */
+    const wrong: string[] = [];
+    for (const m of MK59) {
+      for (const l of loot59(m)) {
+        if (!isGear59(l.kind)) continue;
+        const cap = TOP.has(l.kind) ? 0.005 : MID.has(l.kind) ? 0.02 : 0.03;
+        if (TOP.has(l.kind) ? l.chance !== cap : l.chance > cap) wrong.push(`${m}:${l.kind}@${l.chance}`);
+      }
+    }
+    ok(wrong.length === 0, `every gear drop sits at or under its tier's rate (${wrong.join(" ") || "clean"})`);
+    ok([...setOf(["snakeskin"])].every((k) => odds("snake", k) === 0.01), "the snake's set drops at 1% a piece");
+    // what Radek saw: a level-50 corpse coughing up armour on most visits
+    for (const m of ["dragon", "blackKnight"]) {
+      const none = loot59(m).filter((l) => isGear59(l.kind)).reduce((p, l) => p * (1 - l.chance), 1);
+      ok(1 - none < 0.035, `${m}: any piece of gear on ${((1 - none) * 100).toFixed(1)}% of kills — about one in thirty`);
+    }
+
+    /* --- 2. TROPHIES, HALVED ---------------------------------------------- */
+    for (const k of ["goblinFang", "orcEar", "minotaurHorn", "cursedRib"]) {
+      const at = MK59.filter((m) => odds(m, k) > 0).map((m) => odds(m, k));
+      ok(at.length > 0 && at.every((c) => c === 0.08), `${k}: 8% on every creature that carries it`);
+    }
+    ok(odds("snake", "venomGland") === 0.12 && odds("ghoul", "ghoulClaw") === 0.1 && odds("dragon", "dragonScale") === 0.15,
+      "the gland, the claw and the scale halved with them (12 / 10 / 15%)");
+    ok(SM59.GEM_TROPHIES.every((t) => MK59.every((m) => odds(m, t) <= 0.15)), "no trophy drops on more than 15% of kills");
+    ok(odds("orc", "coal") === 0.4 && odds("dragon", "dragonHam") === 0.9,
+      "…and coal and food were left alone");
+
+    /* --- 3. THE ESSENCE --------------------------------------------------- */
+    ok(odds("dragon", "magicEssence") === 0.2 && odds("blackKnight", "magicEssence") === 0.3,
+      "the Essence: 20% off the dragon, 30% off the Black Knight");
+    ok(odds("orcShaman", "magicEssence") === 0.05 && odds("minotaurMage", "magicEssence") === 0.05,
+      "…and 5% off each of the two casters");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
