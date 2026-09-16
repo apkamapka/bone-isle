@@ -1167,13 +1167,15 @@ async function main(): Promise<void> {
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
     console.log("Etap 24 — smelting:");
 
-    // every new material and trophy exists and is priced
-    for (const k of ["iron", "steel", "essentialGem", "coal",
-                     "minotaurHorn", "orcEar", "goblinFang", "cursedRib"] as const) {
+    // every new material and trophy exists. Coal and the trophies are loot and
+    // carry a price; what the forge MAKES carries none since Etap 57, when the
+    // steel-at-50 and gem-at-500 sales turned out to be a mint (see Etap 57)
+    for (const k of ["coal", "minotaurHorn", "orcEar", "goblinFang", "cursedRib"] as const) {
       ok(ITEMS[k] !== undefined && ITEMS[k].value > 0, `${k} is in the catalog with a price`);
     }
-    ok(ITEMS.steel.value === 100 && ITEMS.iron.value === 12, "iron 12g / steel 100g");
-    ok(ITEMS.essentialGem.value === 1000, "essential gem is worth 1000g");
+    for (const k of ["iron", "steel", "essentialGem"] as const) {
+      ok(ITEMS[k] !== undefined && ITEMS[k].value === 0, `${k} is in the catalog, and worth nothing to a shop`);
+    }
     // light on purpose — 600 iron + 550 steel has to be haulable
     ok(ITEMS.iron.weight <= 6 && ITEMS.steel.weight <= 6, "metal is light enough to carry in bulk");
 
@@ -1216,18 +1218,17 @@ async function main(): Promise<void> {
       ok(worst === 3, `no piece yields more than 3 units (worst ${worst})`);
     }
 
-    // the no-regret property: melting top gear must not feel like a robbery
-    {
-      const y = sm.smeltYield("knightBody", 2, "body");
-      const melt = y.iron * ITEMS.iron.value + y.steel * ITEMS.steel.value;
-      const sell = ITEMS.knightBody.value;
-      ok(Math.abs(melt - sell) / sell < 0.2, "Knight Armor: melting is within 20% of selling");
-    }
-    // ...while mid gear is clearly worth melting, so vendor trash is the feedstock
-    for (const k of ["chainBody", "plateBody", "steelBody"] as const) {
+    /* TWO GOLD COMPARISONS STOOD HERE until Etap 57: "melting Knight Armor is
+     * within 20% of selling it" and "mid gear melts for more than it sells".
+     * Both put a price on the metal, and a priced metal was a mint — Chain
+     * Boots sold for 12 and melted into 50. The furnace pays in building stock
+     * now, so the gold side of a melt is pinned at nothing: the only money
+     * question left is what Borin gives for the piece, which the smelt tab
+     * quotes. */
+    for (const k of ["chainBody", "plateBody", "steelBody", "knightBody"] as const) {
       const y = sm.smeltYield(k, 2, "body");
-      const melt = y.iron * ITEMS.iron.value + y.steel * ITEMS.steel.value;
-      ok(melt > ITEMS[k].value, `${k}: melting beats selling`);
+      ok(y.iron + y.steel > 0 && y.iron * ITEMS.iron.value + y.steel * ITEMS.steel.value === 0,
+        `${k}: melts into building stock that no shop will price`);
     }
 
     // coal comes from everything that makes camp, and from nothing else
@@ -14095,13 +14096,14 @@ async function main(): Promise<void> {
       `…and the level-25 ranks that stood here first are well clear of it (${heaviest})`);
     /* AND NOTHING BUT THE FORGE MAKES BAR STOCK. Iron and steel are smelted
      * from looted gear; a creature that hands out ingots directly makes the
-     * forge optional. One grandfathered exception, the Black Knight's steel,
-     * which is gated behind the hardest fight in the game — everything else in
-     * the bestiary, including everything on this island, has to stay clean. */
+     * forge optional. The Black Knight's steel was grandfathered in here until
+     * Etap 57 took it out, so there is no exception left to carry: the whole
+     * bestiary, including everything on this island, stays clean — gems too. */
     const ingots = M43.MONSTER_KINDS
-      .filter((k) => M43.MONSTER_DEFS[k].loot.some((e) => e.kind === "iron" || e.kind === "steel"));
-    ok(ingots.length === 1 && ingots[0] === "blackKnight",
-      `only the Black Knight drops bar stock (${ingots.join(",") || "none"})`);
+      .filter((k) => M43.MONSTER_DEFS[k].loot.some((e) =>
+        e.kind === "iron" || e.kind === "steel" || e.kind === "essentialGem"));
+    ok(ingots.length === 0,
+      `nothing in the bestiary drops bar stock or gems (${ingots.join(",") || "none"})`);
     ok(!M43.MONSTER_DEFS.viking.loot.some((e) => e.kind === "iron" || e.kind === "steel"),
       "…and the viking drops what he wears, not what a forge should have made");
 
@@ -18319,6 +18321,145 @@ async function main(): Promise<void> {
     ok(utility.every((r) => !TW.levelOk(r, 1)), "a level-1 character can buy none of them");
     ok(TW.levelOk(TW.RESEARCH.find((r) => r.id === "recall")!, 1),
       "…while Recall, which has no gate, is still open at level 1");
+  }
+
+  console.log("Etap 57 — NPC prices: no mint at the forge, a real ladder for gear:");
+  {
+    const I57 = await import("../src/items.ts");
+    const { SHOPS: S57, sellsFor } = await import("../src/entities/npcs.ts");
+    const { MONSTER_DEFS: M57, MONSTER_KINDS: MK57 } = await import("../src/entities/monsters.ts");
+    const SM57 = await import("../src/systems/smelt.ts");
+    const TW57 = await import("../src/systems/tower.ts");
+    const { CHEST_PRIZES: CP57 } = await import("../src/game.ts");
+    const fs57 = await import("node:fs");
+    const IT = I57.ITEMS;
+    type K57 = keyof typeof IT;
+    const shops57 = Object.entries(S57).map(([n, sh]) => [n, sh!.entries] as const);
+    const buyersOf = (k: string): string[] =>
+      shops57.filter(([, es]) => es.some((e) => e.kind === k && e.sell > 0)).map(([n]) => n);
+
+    /* --- 1. THE FORGE IS NOT A MINT ----------------------------------------
+     * The report that started this: three trophies selling for 8, 8 and 10
+     * cut into an Essential Gem the elder bought for 500. Steel was the same
+     * trick smaller — Chain Boots sold for 12 and melted into 50. What the
+     * forge makes is worth nothing to a shop, no shop lists it, and nothing
+     * hands it out for free either. */
+    const FORGED = ["iron", "steel", "essentialGem"] as const;
+    for (const k of FORGED) {
+      ok(IT[k].value === 0 && buyersOf(k).length === 0,
+        `${k}: worth nothing to a shop, and no shop buys it (${buyersOf(k).join(",") || "none"})`);
+    }
+    const forgedDrops = MK57.filter((m) => M57[m].loot.some((l) => (FORGED as readonly string[]).includes(l.kind)));
+    ok(forgedDrops.length === 0, `no creature drops forge output (${forgedDrops.join(",") || "none"})`);
+    const forgedHoards = Object.values(CP57).flat()
+      .map((p) => (typeof p === "string" ? p : p![0]))
+      .filter((k) => (FORGED as readonly string[]).includes(k as string));
+    ok(forgedHoards.length === 0, "…and no hoard holds any");
+
+    // …so a gem now costs what its trophies would have fetched, and that is money
+    const trophyPrices = SM57.GEM_TROPHIES.map((t) => sellsFor("herbalist", t));
+    ok(trophyPrices.every((p) => p > 0), "Mira buys every gem trophy");
+    const cheapestGem = [...trophyPrices].sort((a, b) => a - b)
+      .slice(0, SM57.GEM_TROPHY_KINDS).reduce((a, b) => a + b, 0);
+    ok(cheapestGem >= 90, `the cheapest gem's three trophies sell for ${cheapestGem}g — not three pennies`);
+    ok(sellsFor("herbalist", "dragonScale") > sellsFor("herbalist", "goblinFang"),
+      "a scale off the dragon reads dearer than a goblin's fang");
+    // one camp is never a gem: no creature carries two trophy kinds
+    const twoKinds = MK57.filter((m) => new Set(M57[m].loot.map((l) => l.kind).filter((k) => SM57.isGemTrophy(k))).size > 1);
+    ok(twoKinds.length === 0, `no creature drops two trophy kinds (${twoKinds.join(",") || "none"})`);
+    ok(M57.skeleton.loot.some((l) => l.kind === "cursedRib"), "the skeleton drops the undead's rib…");
+    ok(!M57.goblin.loot.some((l) => l.kind === "cursedRib"), "…and the goblin no longer does");
+
+    /* --- 2. NO DEAD ROW, NO ZERO THAT PAYS, NO ROUND TRIP ------------------- */
+    for (const [n, es] of shops57) {
+      ok(es.every((e) => e.buy > 0 || e.sell > 0), `${n}: every row either sells or buys`);
+      ok(es.every((e) => e.sell === 0 || IT[e.kind].value > 0), `${n}: pays nothing for a zero-value item`);
+    }
+    const cheapest = new Map<string, number>();
+    for (const [, es] of shops57) for (const e of es) {
+      if (e.buy > 0) cheapest.set(e.kind, Math.min(cheapest.get(e.kind) ?? Infinity, e.buy));
+    }
+    const roundTrip = shops57.flatMap(([, es]) => es)
+      .filter((e) => e.sell > 0 && (cheapest.get(e.kind) ?? Infinity) <= e.sell).map((e) => e.kind);
+    ok(roundTrip.length === 0, `nothing buys back for what any shop sells it at (${roundTrip.join(",") || "none"})`);
+
+    /* --- 3. WHO BUYS WHAT --------------------------------------------------- */
+    const elderBuys = S57.elder!.entries.filter((e) => e.sell > 0).map((e) => e.kind);
+    ok(elderBuys.every((k) => IT[k].slot === "ring" || IT[k].slot === "amulet"),
+      `Oswin buys jewellery and nothing else (${elderBuys.join(",")})`);
+    ok(!S57.herbalist!.entries.some((e) => e.buy > 0 && IT[e.kind].slot !== undefined), "Mira stocks no gear");
+    const droppedGear = new Set<K57>();
+    for (const m of MK57) for (const l of M57[m].loot) if (IT[l.kind].slot) droppedGear.add(l.kind);
+    const unsellable = [...droppedGear].filter((k) => buyersOf(k).length === 0);
+    ok(unsellable.length === 0, `every piece of gear a creature drops sells in town (${unsellable.join(",") || "all do"})`);
+    ok(sellsFor("smith", "bow") > 0 && sellsFor("smith", "longbow") > 0, "…the bows included, at Borin");
+
+    /* --- 4. BETTER GEAR SELLS FOR MORE ----------------------------------------
+     * Every tier is worth at least twice the one below it, in every worn slot
+     * and the shield, on both lines — and Borin's price climbs with it. Before
+     * this the top of the ladder grew 1.7x a tier, and a Knight Armor fetched
+     * 170. Written as a rule, so a retune can move numbers but not flatten the
+     * ladder again. */
+    const LINES57 = [["leather", "studded", "chain", "plate", "steel", "knight"],
+      ["snakeskin", "goblin", "orcish", "minotaur", "marrow", "dragon"]] as const;
+    for (const line of LINES57) {
+      for (const part of ["Helm", "Body", "Legs", "Boots", "Shield"] as const) {
+        const keys = line.map((set) => `${set}${part}` as K57);
+        ok(keys.every((k) => IT[k] !== undefined), `${line[0]} line ${part}: all six tiers exist`);
+        let steep = true;
+        let climbs = true;
+        for (let t = 0; t < 5; t++) {
+          if (IT[keys[t + 1]].value < 2 * IT[keys[t]].value) steep = false;
+          if (sellsFor("smith", keys[t + 1]) <= sellsFor("smith", keys[t])) climbs = false;
+        }
+        ok(steep, `${line[0]} line ${part}: every tier is worth at least twice the one below`);
+        ok(climbs, `${line[0]} line ${part}: …and Borin pays more at every step`);
+      }
+    }
+    // weapons: anything a tier up is worth more than everything a tier down
+    const byTier = new Map<number, number[]>();
+    for (const [k, row] of Object.entries(SM57.SMELT_TIER) as [K57, readonly [number, string]][]) {
+      if (IT[k].slot !== "weapon") continue;
+      byTier.set(row[0], [...(byTier.get(row[0]) ?? []), IT[k].value]);
+    }
+    const tiers = [...byTier.keys()].sort((a, b) => a - b);
+    let inverted = "";
+    for (let i = 1; i < tiers.length; i++) {
+      if (Math.min(...byTier.get(tiers[i])!) <= Math.max(...byTier.get(tiers[i - 1])!)) inverted = `tier ${tiers[i]}`;
+    }
+    ok(inverted === "", `every weapon out-prices every weapon of the tier below${inverted && " — " + inverted}`);
+    // …and the starter kit Borin stocks did not get dearer on the way
+    const kit: [K57, number][] = [["shortSword", 30], ["ironSword", 90], ["leatherHelm", 12], ["leatherBody", 24],
+      ["leatherLegs", 16], ["leatherBoots", 10], ["leatherShield", 20], ["bow", 70], ["backpack", 40], ["trainingArrow", 1]];
+    const moved = kit.filter(([k, p]) => S57.smith!.entries.find((e) => e.kind === k)?.buy !== p).map(([k]) => k);
+    ok(moved.length === 0, `Borin's starter shelf costs what it did (${moved.join(",") || "unchanged"})`);
+
+    /* --- 5. DEATH PROTECTION COSTS SOMETHING -------------------------------- */
+    const aol = S57.elder!.entries.find((e) => e.kind === "aolAmulet")!.buy;
+    const dearest = Math.max(...shops57.flatMap(([, es]) => es).filter((e) => e.kind !== "aolAmulet").map((e) => e.buy));
+    ok(aol > dearest, `the Amulet of Loss is the dearest thing on any shelf (${aol}g)`);
+    const recall = TW57.RESEARCH.find((r) => r.id === "recall")!;
+    ok(aol >= 5 * (recall.buyGold ?? 0), "…and costs more than five trips home");
+    const coinIn = (w: string): number => (CP57[w as keyof typeof CP57] ?? [])
+      .reduce((n, p) => n + (typeof p !== "string" && p[0] === "platinumCoin" ? p[1] * 100 : 0), 0);
+    ok(coinIn("hermitage") + coinIn("haugr") >= aol,
+      "…but the first two hoards together still pay for one");
+
+    /* --- 6. THE LIFE CRYSTAL, two prices for one charge ----------------------
+     * One crystal is one use. The tower sells ten for 80 once Life is
+     * researched; Mira sells one for 16 with no tower and no research. The
+     * shelf in town is the convenience, so it has to stay the dearer one. */
+    const life = TW57.RESEARCH.find((r) => r.id === "life")!;
+    const miraLife = S57.herbalist!.entries.find((e) => e.kind === "healCrystal")!.buy;
+    ok((life.buyGold ?? 0) / life.buyN < miraLife,
+      `a charge from the tower (${(life.buyGold ?? 0) / life.buyN}g) is cheaper than one from Mira (${miraLife}g)`);
+
+    /* --- 7. THE SMELT TAB QUOTES BORIN'S REAL PRICE ------------------------- */
+    ok(sellsFor("smith", "plateBody") === Math.round(IT.plateBody.value / 2), "sellsFor quotes what Borin pays");
+    ok(sellsFor("smith", "steel") === 0 && sellsFor("elder", "essentialGem") === 0, "…and 0 for what he will not take");
+    const panels57 = fs57.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
+    ok(panels57.includes('sellsFor("smith", row.kind)') && !panels57.includes("${ITEMS[row.kind].value}g at Borin"),
+      "the smelt tab prints Borin's price, not the raw value");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

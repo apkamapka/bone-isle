@@ -817,15 +817,23 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 15. Slowest thing in the game — it is meant to be outwalked, which is
   // what makes fighting one a choice rather than an ambush.
+  /* THE RIB IS HIS (Etap 57). Cursed Rib is the undead family's trophy — the
+   * skeleton warrior and the demon skeleton both carry it — and it had landed
+   * on the GOBLIN instead, next to the goblin's own fang, while the first
+   * skeleton in the game dropped nothing but bones. Two trophy kinds off one
+   * camp is also exactly what the gem recipe's "three DIFFERENT kinds" rule
+   * exists to prevent: goblins plus a few snakes was a whole gem. */
   skeleton: {
     spr: SPR.skeleton, hp: 160, dmg: [14, 36], speed: 41, atkRate: 2.0, exp: 135, gold: [7, 20], danger: 0.3, armor: 7, resist: { shadow: 0.6, fire: 1.3 },
-    loot: [{ kind: "bones", chance: 0.9, n: [1, 3] }],
+    loot: [
+      { kind: "bones", chance: 0.9, n: [1, 3] },
+      { kind: "cursedRib", chance: 0.15, n: [1, 1] },
+    ],
   },
   // lvl 16
   goblin: {
     spr: SPR.goblin, hp: 175, dmg: [14, 38], speed: 60, atkRate: 2.0, exp: 150, gold: [7, 21], danger: 0.4, armor: 7,
     loot: [
-      { kind: "cursedRib", chance: 0.15, n: [1, 1] },
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "goblinFang", chance: 0.15, n: [1, 1] },
       { kind: "meat", chance: 0.4, n: [1, 1] }, { kind: "hpPotion", chance: 0.12, n: [1, 1] },
@@ -1317,8 +1325,14 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { name: "Chain Lightning", element: "storm", tier: 0, shape: "line", dmg: [40, 100], range: 7 * TILE, cooldownS: 4, windupS: 0.22, depth: 6 },
     ],
     respawnS: 600,
+    /* NO STEEL (Etap 57). He was the one creature allowed to drop bar stock —
+     * half his kills paid out one to three ingots — and he was grandfathered
+     * in rather than argued for. Nothing drops what the forge makes now: steel
+     * is pulled out of looted gear or it does not exist, and his own suit is
+     * the richest feed for it in the game (a Knight Armor melts into three).
+     * The purse lost about fifty gold a kill with it, and the Etap 57 price
+     * ladder gave most of it back through that same suit. */
     loot: [
-      { kind: "steel", chance: 0.5, n: [1, 3] },
       { kind: "coal", chance: 0.4, n: [1, 3] },
       // The knight SET, entire, at one flat 5% a piece — sword and shield with
       // it. The chests on cave3/bastion2/orcdeep1/minodeep1 still hold one of

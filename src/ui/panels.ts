@@ -15,7 +15,7 @@ import { carryCap, carriedWeight, freeCap } from "../entities/player.ts";
 import { loreRead, stageOf, currentMission } from "../systems/missions.ts";
 import { t } from "../text/speech.ts";
 import { lang } from "../systems/panelPrefs.ts";
-import { SHOPS } from "../entities/npcs.ts";
+import { SHOPS, sellsFor } from "../entities/npcs.ts";
 import { OUTFIT_COLORS, HUE_STEPS, SAT_ROWS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
 import { heroPreviewFrame } from "../gfx/heroSheet.ts";
 import { hudText, wrapText, hudLines, hudFont, type HudCtx } from "./hud.ts";
@@ -1812,7 +1812,11 @@ function forgeSmelt(
     hudText(hud, label, x + 34 * S, ry + 8 * S, 9 * S, ok ? "#f3eedd" : "#8a8070", "left", true);
     const parts = [y.iron > 0 ? `${y.iron} iron` : "", y.steel > 0 ? `${y.steel} steel` : ""].filter(Boolean);
     hudText(hud, `-> ${parts.join(" + ")}`, x + 34 * S, ry + 18 * S, 7 * S, ok ? "#b9e07f" : "#8a8070");
-    hudText(hud, `${ITEMS[row.kind].value}g at Borin`, x + w - 12 * S, ry + 13 * S, 7 * S, "rgba(220,214,190,.45)", "right");
+    // What Borin actually PAYS, from his own list (Etap 57). This used to print
+    // the raw value, which is twice his price — a Plate Armor read "110g at
+    // Borin" and sold for 55 — and it is the one number the tab exists to
+    // weigh the melt against.
+    hudText(hud, `${sellsFor("smith", row.kind)}g at Borin`, x + w - 12 * S, ry + 13 * S, 7 * S, "rgba(220,214,190,.45)", "right");
     if (ok) {
       const rr = row; const ryy = ry;
       p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.smelt(rr.kind) });
