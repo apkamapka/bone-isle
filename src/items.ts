@@ -250,7 +250,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   bones:     { name: "Bones",        stack: 9999, value: 2, weight: 8 },
   venomGland:{ name: "Venom Gland",  stack: 9999, value: 15, weight: 2 },
   ghoulClaw: { name: "Ghoul Claw",   stack: 9999, value: 100, weight: 3 },
-  dragonScale:{ name: "Dragon Scale", stack: 999, value: 90, weight: 4 },
+  dragonScale:{ name: "Dragon Scale", stack: 999, value: 300, weight: 4 },
   // ---- trophies. Priced to be worth selling once you have your gems, which
   // ---- is exactly the regret the design wants: sell early, pay later.
   /* ETAP 57 RAISED THEM, and the reason is the gem. The elder used to buy an
@@ -264,10 +264,14 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * sell for over ninety) and makes the regret above a decision.
    *
    * The Venom Gland stays where it was: the snake is a level-3 animal and its
-   * gland was already a third of its purse. The Dragon Scale moved least of
-   * the rest (30 to 45 at Mira) because the dragon drops more than one a
-   * kill — and a scale off the last creature in the game still has to read
-   * dearer than a goblin's fang. */
+   * gland was already a third of its purse.
+   *
+   * THE DRAGON SCALE IS THE DEAREST OF THEM (Etap 58): 150 at Mira, up from
+   * 45, because a scale off the last creature in the game read cheaper than a
+   * cursed rib and a minotaur's horn. It got dearer by getting RARER — the
+   * dragon used to shed one to three on most kills and now drops a single
+   * scale on three in ten — so what a dragon pays per kill barely moved while
+   * what a scale is worth in the hand tripled. */
   minotaurHorn: { name: "Minotaur Horn", stack: 9999, value: 180, weight: 5 },
   orcEar:       { name: "Orc Ear",       stack: 9999, value: 100, weight: 2 },
   goblinFang:   { name: "Goblin Fang",   stack: 9999, value: 80, weight: 1 },
@@ -349,7 +353,17 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   mushroom:  { name: "Mushroom",     stack: 999, value: 2, weight: 4, food: 60 },
   meat:      { name: "Raw Meat",     stack: 999, value: 3, weight: 8, food: 180 },
   dragonHam: { name: "Dragon Ham",   stack: 999, value: 8, weight: 10, food: 360 },
-  hpPotion:  { name: "Health Potion", stack: 999, value: 12, weight: 5, heal: 45 },
+  /* ON THE HEAL CLOCK SINCE ETAP 58, and half the price. It used to have no
+   * cooldown at all: forty-five points a click, as fast as the click could
+   * land, bought with nothing but coin — the exact "free extra heal on a
+   * separate timer" the heal clock in `cooldowns.ts` exists to stop. Every
+   * item that heals now shares the Life Crystal's two seconds, so a potion is
+   * a heal INSTEAD of a crystal, never on top of one. That makes the crystal
+   * the better heal from about level 5 (30 + 3 x level), so the potion is
+   * priced as what it is from there on: the cheap heal for the first levels,
+   * and the one you can drink out of a corpse without picking it up. 12 gold
+   * at Mira, against 16 for a Life Crystal. */
+  hpPotion:  { name: "Health Potion", stack: 999, value: 6, weight: 5, heal: 45 },
   healCrystal:   { name: "Life Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
   recallCrystal: { name: "Recall Crystal", stack: 999, value: 6, weight: 2, crystal: true },
   // ---- the elemental line. Naming runs Ember/Flame/Pyre by tier, and

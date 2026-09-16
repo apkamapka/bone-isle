@@ -26,7 +26,7 @@ import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } 
 import { setActiveBonus } from "./systems/derived.ts";
 import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
 import { useCrystal, tickCrystalCooldown, crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
-import { cooldownFrac } from "./systems/cooldowns.ts";
+import { cooldownFrac, isReady, startCooldown } from "./systems/cooldowns.ts";
 import {
   actionSlots, setSlot, BINDABLE_CRYSTALS,
   actionSlotCount, addActionSlots, removeActionSlots,
@@ -750,8 +750,18 @@ const act: PanelActions = {
     }
     // don't waste a potion charge when already at full health
     if (def.heal && P.hp >= P.maxhp) { flash("full hp", "#7dff9e"); return; }
+    /* THE HEAL CLOCK (Etap 58). A potion used to skip it entirely — no
+     * cooldown, forty-five points a click for as long as the gold lasted. It
+     * now shares the Life Crystal's two seconds both ways: drinking starts the
+     * clock the crystal reads, and a crystal just used refuses the potion.
+     * Checked BEFORE `spend`, so a refused drink keeps the potion. */
+    if (def.heal && !isReady(kind)) { flash("still cooling", "#8ab6ff"); return; }
     if (!spend()) return;
-    if (def.heal) { P.hp = Math.min(P.maxhp, P.hp + def.heal); flash(`+${def.heal} hp`, "#7dff9e"); }
+    if (def.heal) {
+      startCooldown(kind);
+      P.hp = Math.min(P.maxhp, P.hp + def.heal);
+      flash(`+${def.heal} hp`, "#7dff9e");
+    }
     beep(500, 0.12, "sine", 0.05, 180);
   },
   equipItem: (kind: ItemKind) => {

@@ -104,9 +104,9 @@ export interface Game {
  *
  * Etap 40 took two entries with it. `cave3` held the Marrow Blade and
  * `bastion2` the Knight shield, and both maps are gone — the shield still
- * drops from the Black Knight at 5%, but THE MARROW BLADE NOW HAS NO SOURCE
- * AT ALL. It is left in the item table on purpose: the sword exists, it is
- * simply not findable until a mission map buries it again.
+ * drops from the Black Knight at 5%, and the Marrow Blade, which had no
+ * source at all for eighteen etaps, drops from the demon skeleton at 2% since
+ * Etap 58. No chest holds either.
  *
  * The 80x80 redraw took the other two. Neither `minodeep1` nor `orcdeep1`
  * buries anything now; each branch has ONE hoard and it sits at the bottom of

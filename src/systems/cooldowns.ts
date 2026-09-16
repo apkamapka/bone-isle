@@ -24,6 +24,7 @@
  * needed no save migration and neither does this.
  */
 import { CRYSTAL_CD_TIER, CRYSTAL_GCD_S, HEAL_CRYSTAL_CD_S, UTILITY_RUNE_CD_S } from "../config.ts";
+import { ITEMS } from "../items.ts";
 import type { ItemKind } from "../items.ts";
 import { CRYSTAL_SPECS } from "./crystals.ts";
 import { active as activeState } from "./playerState.ts";
@@ -42,8 +43,22 @@ export type CdGroup = "shard" | "burst" | "nova" | "wave" | "heal" | "utility";
 /** The wider bracket the wheel runs in. Healing does not share the attack's. */
 export type CdFamily = "attack" | "heal" | "utility";
 
+/**
+ * Everything that restores health runs on ONE clock: the two crystals, and
+ * any item with a `heal` of its own (Etap 58).
+ *
+ * The Health Potion was the hole. It never went through this file at all, so
+ * it had no cooldown — forty-five points per click, as fast as clicks land,
+ * paid for in coin. Reading `heal` off the catalog rather than naming the
+ * potion is the fix that stays fixed: a second potion added next year joins
+ * the clock by being a potion.
+ */
+export function isHeal(kind: ItemKind): boolean {
+  return kind === "healCrystal" || kind === "healRune" || (ITEMS[kind]?.heal ?? 0) > 0;
+}
+
 export function familyOf(kind: ItemKind): CdFamily {
-  if (kind === "healCrystal" || kind === "healRune") return "heal";
+  if (isHeal(kind)) return "heal";
   return UTILITY_RUNES.has(kind) ? "utility" : "attack";
 }
 
@@ -117,7 +132,7 @@ function st(): CdState {
  * is a decision about who you know.
  */
 export function groupOf(kind: ItemKind): CdGroup {
-  if (kind === "healCrystal" || kind === "healRune") return "heal";
+  if (isHeal(kind)) return "heal";
   if (UTILITY_RUNES.has(kind)) return "utility";
   const spec = CRYSTAL_SPECS[kind];
   if (!spec) return "shard";

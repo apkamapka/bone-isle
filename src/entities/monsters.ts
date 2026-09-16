@@ -1071,6 +1071,13 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "marrowLegs", chance: 0.05, n: [1, 1] },
       { kind: "marrowBoots", chance: 0.05, n: [1, 1] },
       { kind: "marrowShield", chance: 0.05, n: [1, 1] },
+      /* THE BONE SWORD (Etap 58), which had no source anywhere. The undead line
+       * below the demon skeleton carried no weapon at all — the skeleton and
+       * the ghoul fight bare-handed, and this one wore a whole suit with nothing
+       * in its hand — and a bone blade is the undead's sword by name. It is a
+       * tier-4 weapon and this is the level-28 rung the gladius and the
+       * minotaur axe drop on; four in a hundred, just under the axe's five. */
+      { kind: "boneSword", chance: 0.04, n: [1, 1] },
     ],
   },
   // lvl 28. Shield and plate: the human wall, and the armour rating is the
@@ -1242,6 +1249,14 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "marrowBoots", chance: 0.08, n: [1, 1] },
       { kind: "marrowShield", chance: 0.08, n: [1, 1] },
       { kind: "demonCleaver", chance: 0.08, n: [1, 1] },
+      /* THE MARROW BLADE HAS A HOME AGAIN (Etap 58). It lost its only source
+       * with the procedural caves in Etap 40 and sat in the item table, priced
+       * and drawn, with no way to find it. It belongs here: the demon skeleton
+       * is the one creature already carrying the rest of the marrow line, and
+       * the blade is its best piece — the strongest guard of any weapon in the
+       * game. Two in a hundred, under the knight's and the dragon's swords at
+       * five, because this is a level-40 creature handing out a top-rung blade. */
+      { kind: "marrowBlade", chance: 0.02, n: [1, 1] },
     ],
   },
   // lvl 50. A brute that charges in, mauls with its paw for heavy hits, AND
@@ -1283,7 +1298,11 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     respawnS: 600,
     loot: [
       { kind: "dragonHam", chance: 0.9, n: [2, 5] },
-      { kind: "dragonScale", chance: 0.6, n: [1, 3] },
+      // One scale on three kills in ten (Etap 58), down from one to three on
+      // most of them — and 150 at Mira instead of 45. Rarer and dearer, so the
+      // scale reads like the top trophy it is while the kill pays about what
+      // it did.
+      { kind: "dragonScale", chance: 0.3, n: [1, 1] },
       // the ONLY source of the Essence: the strongest crystal of every
       // element is bought from the tower with something the dragon owns
       { kind: "magicEssence", chance: 0.2, n: [1, 1] },
@@ -1314,7 +1333,13 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // stops being decided by feel, and his identity does not need to rest on
   // the one stat the curve caps hardest.
   blackKnight: {
-    spr: SPR.humanFoe, hp: 950, dmg: [44, 112], speed: 58, atkRate: 2.0, exp: 880, gold: [80, 190], danger: 0.98, armor: 28, element: "storm",
+    /* The purse is 120-250 (Etap 58), up from 80-190. Etap 57 took his steel,
+     * about fifty gold a kill, and the dragon he is meant to stand level with
+     * kept its ham and its scales: he had fallen to about seventy per cent of
+     * what a dragon pays for the same fight. The difference went back into coin
+     * rather than a new drop — he is a knight, and what a knight carries that
+     * a dragon does not is money. */
+    spr: SPR.humanFoe, hp: 950, dmg: [44, 112], speed: 58, atkRate: 2.0, exp: 880, gold: [120, 250], danger: 0.98, armor: 28, element: "storm",
     ranged: { range: 300, dmg: [42, 106], color: "#7dd8ff", fx: { el: "storm", tier: 0 }, brute: true }, // arcing bolt
     spells: [
       // The ring, for when he is being hugged — same role as the dragon's

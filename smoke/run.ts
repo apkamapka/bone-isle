@@ -1641,7 +1641,7 @@ async function main(): Promise<void> {
     ok(p.fedS === 0, "a fresh character starts hungry");
   }
 
-  console.log("Marrow Blade (a prize with nowhere left to be found):");
+  console.log("Marrow Blade (lost in Etap 40, the demon skeleton's since Etap 58):");
   {
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
     const { SHOPS } = await import("../src/entities/npcs.ts");
@@ -1653,23 +1653,24 @@ async function main(): Promise<void> {
     // bigger.
     ok((blade.gear?.def ?? 0) > (items.ITEMS.fireSword.gear?.def ?? 0) && blade.slot === "weapon",
       `Marrow Blade tops the weapon ladder on guard (def ${blade.gear?.def})`);
-    let inLoot = false;
-    for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
-      if (MONSTER_DEFS[k].loot.some((e: { kind: string }) => e.kind === "marrowBlade")) inLoot = true;
-    }
-    ok(!inLoot, "no monster drops the Marrow Blade");
+    const bladeFrom = (Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[])
+      .filter((k) => MONSTER_DEFS[k].loot.some((e: { kind: string }) => e.kind === "marrowBlade"));
+    ok(bladeFrom.length === 1 && bladeFrom[0] === "demonSkeleton",
+      `the demon skeleton, and only it, drops the Marrow Blade (${bladeFrom.join(",") || "nobody"})`);
+    const bladeOdds = MONSTER_DEFS.demonSkeleton.loot.find((e: { kind: string }) => e.kind === "marrowBlade")?.chance ?? 0;
+    ok(bladeOdds > 0 && bladeOdds < 0.05,
+      `…rarer than the knight's and the dragon's swords (${bladeOdds * 100}%)`);
     let inShop = false;
     for (const shop of Object.values(SHOPS)) {
       if (shop && shop.entries.some((e) => e.kind === "marrowBlade" && e.buy > 0)) inShop = true;
     }
     ok(!inShop, "no shop sells the Marrow Blade");
-    /* …and as of Etap 40 no chest holds it either. Its cave went with the
-     * procedural maps, so the sword is defined, priced, drawn and completely
-     * unobtainable — deliberately, and recorded here so it is a decision on
-     * the books rather than a hole somebody finds later. It comes back as a
-     * mission reward. Delete this assertion on the day it does. */
+    /* No chest holds it. Its cave went with the procedural maps in Etap 40,
+     * and for eighteen etaps the sword was defined, priced, drawn and
+     * unobtainable; Etap 58 gave it to the creature already wearing the rest
+     * of the marrow line. The repeatable source is the only one. */
     const buried = Object.values(CHEST_PRIZES).flat();
-    ok(!buried.includes("marrowBlade"), "…and no chest buries it: currently unobtainable BY DESIGN");
+    ok(!buried.includes("marrowBlade"), "…and no chest buries it");
 
     /* The chests that DO still exist: two floors under the Bone Reach, two
      * pieces apiece, and every listed world really has the chest to hold
@@ -18460,6 +18461,84 @@ async function main(): Promise<void> {
     const panels57 = fs57.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
     ok(panels57.includes('sellsFor("smith", row.kind)') && !panels57.includes("${ITEMS[row.kind].value}g at Borin"),
       "the smelt tab prints Borin's price, not the raw value");
+  }
+
+  console.log("Etap 58 — the dragon's scale, two lost swords, one heal clock:");
+  {
+    const I58 = await import("../src/items.ts");
+    const { SHOPS: S58, sellsFor: sf58 } = await import("../src/entities/npcs.ts");
+    const { MONSTER_DEFS: M58, MONSTER_KINDS: MK58 } = await import("../src/entities/monsters.ts");
+    const SM58 = await import("../src/systems/smelt.ts");
+    const CD58 = await import("../src/systems/cooldowns.ts");
+    const { HEAL_CRYSTAL_CD_S: HEAL58 } = await import("../src/config.ts");
+    const { CHEST_PRIZES: CP58 } = await import("../src/game.ts");
+    const fs58 = await import("node:fs");
+    const IT58 = I58.ITEMS;
+    type K58 = keyof typeof IT58;
+    const bestSale = (k: K58): number => Math.max(0, ...Object.keys(S58).map((n) => sf58(n as never, k)));
+
+    /* --- 1. THE SCALE: dearest trophy, and rare enough to stay that way ---- */
+    const scale = sf58("herbalist", "dragonScale");
+    const others = SM58.GEM_TROPHIES.filter((t) => t !== "dragonScale").map((t) => sf58("herbalist", t));
+    ok(scale > Math.max(...others), `the Dragon Scale is the dearest trophy Mira buys (${scale}g)`);
+    const scaleRow = M58.dragon.loot.find((l) => l.kind === "dragonScale")!;
+    ok(scaleRow.n[1] === 1, "…and a dragon sheds at most one a kill");
+    const scalePerKill = scaleRow.chance * scale;
+    ok(scalePerKill <= 60, `…so a scale is worth ${scalePerKill.toFixed(0)}g a kill on average, not a second purse`);
+
+    /* --- 2. EVERY WEAPON CAN BE FOUND ----------------------------------------
+     * The Bone Sword and the Marrow Blade were both priced, drawn and bought by
+     * Borin, and neither dropped, sat in a chest or stood on a shelf. Written
+     * as a rule over the whole table, so the next orphan fails here. */
+    const found = new Set<string>();
+    for (const m of MK58) for (const l of M58[m].loot) found.add(l.kind);
+    for (const p of Object.values(CP58).flat()) found.add(typeof p === "string" ? p : p![0]);
+    for (const sh of Object.values(S58)) for (const e of sh!.entries) if (e.buy > 0) found.add(e.kind);
+    const orphans = (Object.keys(IT58) as K58[]).filter((k) => IT58[k].slot === "weapon" && !found.has(k));
+    ok(orphans.length === 0, `every weapon in the table has a source (${orphans.join(",") || "all do"})`);
+    ok(M58.skeletonWarrior.loot.some((l) => l.kind === "boneSword"), "the Bone Sword is the skeleton warrior's");
+    const boneFrom = MK58.filter((m) => M58[m].loot.some((l) => l.kind === "boneSword"));
+    ok(boneFrom.length === 1, `…and nobody else's (${boneFrom.join(",")})`);
+
+    /* --- 3. ONE HEAL CLOCK ---------------------------------------------------
+     * The potion had no cooldown: forty-five a click for as long as the gold
+     * lasted. Every item that heals now shares the crystal's clock, both ways. */
+    const healers = (Object.keys(IT58) as K58[]).filter((k) => (IT58[k].heal ?? 0) > 0);
+    ok(healers.length > 0 && healers.every((k) => CD58.isHeal(k) && CD58.groupOf(k) === "heal"
+      && CD58.familyOf(k) === "heal" && CD58.ownCooldown(k) === HEAL58),
+      `every item with a heal runs on the heal clock (${healers.join(",")})`);
+    CD58.resetCooldowns();
+    CD58.startCooldown("hpPotion");
+    ok(!CD58.isReady("healCrystal") && !CD58.isReady("healRune"), "drinking a potion cools both Life Crystals");
+    ok(CD58.isReady("fireEmberShard"), "…and never an attack");
+    CD58.resetCooldowns();
+    CD58.startCooldown("healCrystal");
+    ok(!CD58.isReady("hpPotion"), "…and a Life Crystal just used refuses the potion");
+    CD58.tickCooldowns(HEAL58 + 0.01);
+    ok(CD58.isReady("hpPotion"), "…until the two seconds are up");
+    CD58.resetCooldowns();
+    const main58 = fs58.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const guard = main58.indexOf("if (def.heal && !isReady(kind))");
+    const spendAt = main58.indexOf("if (!spend()) return;", guard);
+    ok(guard > 0 && spendAt > guard && main58.indexOf("startCooldown(kind);", spendAt) > spendAt,
+      "the drink checks the clock before spending the potion, and starts it after");
+    ok(S58.herbalist!.entries.find((e) => e.kind === "hpPotion")!.buy
+      < S58.herbalist!.entries.find((e) => e.kind === "healCrystal")!.buy,
+      "…and a potion costs less than the Life Crystal that out-heals it past level 5");
+
+    /* --- 4. THE KNIGHT AND THE DRAGON PAY FOR THE SAME FIGHT ----------------
+     * Same level, same armour, same respawn. Expected coin plus everything a
+     * shop buys, per kill, within a fifth of each other. */
+    const perKill = (m: "dragon" | "blackKnight"): number => {
+      const d = M58[m];
+      let v = (d.gold[0] + d.gold[1]) / 2;
+      for (const l of d.loot) v += l.chance * ((l.n[0] + l.n[1]) / 2) * bestSale(l.kind);
+      return v;
+    };
+    const dragonPays = perKill("dragon");
+    const knightPays = perKill("blackKnight");
+    ok(Math.abs(dragonPays - knightPays) / Math.max(dragonPays, knightPays) <= 0.2,
+      `the dragon and the Black Knight pay within 20% of each other (${dragonPays.toFixed(0)} vs ${knightPays.toFixed(0)})`);
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
