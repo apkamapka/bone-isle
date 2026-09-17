@@ -1067,12 +1067,13 @@ async function main(): Promise<void> {
       "…only Life and Recall are left of the originals proper");
     ok(T.RESEARCH.every((r) => Object.keys(r.researchCost).length === 0),
       "…and nothing on this shelf is researched with materials any more");
-    // Gold-only is still the rule for everything except Fury, whose Essential
-    // Gem is the brake. Pinned as "exactly one exception, and it is that one"
-    // rather than loosened to "some have costs", which would assert nothing.
+    // Gold-only is still the rule for everything except the two crystals that
+    // end a fight on their own: Fury, and — since Etap 62 — the Protective
+    // Crystal. Pinned as "exactly these two" rather than loosened to "some
+    // have costs", which would assert nothing.
     const withMats = T.RESEARCH.filter((r) => Object.keys(r.buyCost).length > 0);
-    ok(withMats.length === 1 && withMats[0].id === "fury",
-      "…and Fury is the only project on it that costs a material");
+    ok(withMats.map((r) => r.id).sort().join(",") === "aegis,fury",
+      `…and Fury and the Protective Crystal are the only projects on it that cost materials (${withMats.map((r) => r.id).join(",")})`);
     ok(T.RESEARCH.every((r) => r.openFromStart || (r.researchGold ?? 0) > 0),
       "…every project either costs gold to unlock or needs no unlocking");
 
@@ -2198,9 +2199,14 @@ async function main(): Promise<void> {
 
     // the Essence: one sink per element, and (since Etap 59) four creatures carry it
     const needEssence = T.OFFERS.filter((o) => "magicEssence" in o.cost);
-    ok(needEssence.length === 5, "exactly five crystals want an Essence — one per element");
-    ok(needEssence.every((o) => o.tier === 2 && o.id.endsWith("Wave")),
-      "…and it is the widest shape at the top tier");
+    // Etap 62 put the Knells on it too: none at tier I, one at tier II, two at
+    // tier III, so fifteen offers want an Essence — the five top Waves and the
+    // ten Knells above tier I.
+    ok(needEssence.length === 15, `fifteen crystals want an Essence (${needEssence.length})`);
+    ok(needEssence.filter((o) => o.id.endsWith("Wave")).every((o) => o.tier === 2 && o.cost.magicEssence === 1),
+      "…the widest shape at the top tier, one Essence a batch");
+    ok(needEssence.filter((o) => o.id.endsWith("Rune")).every((o) => o.cost.magicEssence === o.tier),
+      "…and a Knell wants one Essence at tier II and two at tier III");
     ok(new Set(needEssence.map((o) => o.element)).size === 5, "…with no element left out");
     const droppers = Object.entries(M.MONSTER_DEFS)
       .filter(([, d]) => d.loot.some((l) => l.kind === "magicEssence"))
@@ -18056,8 +18062,10 @@ async function main(): Promise<void> {
     // Shard is ever rebalanced, this fails instead of silently drifting
     const shardBase = CS.CRYSTAL_SPECS.fireEmberShard.base;
     const runeBase = CS.CRYSTAL_SPECS.fireEmberRune.base;
-    ok(runeBase[0] === shardBase[0] * 2 && runeBase[1] === shardBase[1] * 2,
-      "a Knell is exactly twice a Shard at both ends of the roll");
+    // Etap 62 lifted it a fifth above the flat double it was, when the gems
+    // came off it and the Essence went on.
+    ok(runeBase[0] === Math.round(shardBase[0] * 2.4) && runeBase[1] === Math.round(shardBase[1] * 2.4),
+      "a Knell is two Shards and a half at both ends of the roll");
 
     // one tile shorter, at every tier
     for (const el of EL.ELEMENTS) {
@@ -18090,13 +18098,13 @@ async function main(): Promise<void> {
     ok(ART.fxFile("shadow", 2, "rune") === "fx-shadow-3-rune.png",
       "…on the same lowercase-kebab filename rule as every other sheet");
 
-    // the shelf: gems at every tier, and the batch stays small
+    // the shelf: the Essence rises with the tier, and the batch stays small
     const offers = TW.OFFERS.filter((o) => o.id.endsWith("Rune"));
     ok(offers.length === 15, "all fifteen Knells are on the shelf");
-    ok(offers.every((o) => o.cost.essentialGem === 2),
-      "every Knell costs two Essential Gems — the brake is the material, not the gold");
-    ok(offers.every((o) => !("magicEssence" in o.cost)),
-      "…and none of them touches the dragon's Essence, which gates Waves");
+    ok(offers.every((o) => (o.cost.magicEssence ?? 0) === o.tier),
+      "a Knell costs no Essence at tier I, one at tier II and two at tier III (Etap 62)");
+    ok(offers.every((o) => !("essentialGem" in o.cost)),
+      "…and none of them costs a Gem any more — the brake is the material, not the gold");
     ok(offers.filter((o) => o.tier === 0).every((o) => o.buyN === 5)
       && offers.filter((o) => o.tier === 1).every((o) => o.buyN === 4)
       && offers.filter((o) => o.tier === 2).every((o) => o.buyN === 3),
@@ -18110,9 +18118,9 @@ async function main(): Promise<void> {
     }
 
     // the Wave's Essence rule survived the shelf growing a sixth form
-    const essence = TW.OFFERS.filter((o) => "magicEssence" in o.cost);
-    ok(essence.length === 5 && essence.every((o) => o.tier === 2 && o.id.endsWith("Wave")),
-      "the Essence still gates exactly the five top-tier Waves and nothing else");
+    const essence = TW.OFFERS.filter((o) => o.id.endsWith("Wave") && "magicEssence" in o.cost);
+    ok(essence.length === 5 && essence.every((o) => o.tier === 2),
+      "the Essence still gates exactly the five top-tier Waves among the shaped crystals");
   }
 
   console.log("Etap 56 — the utility runes, and Fury's bill:");
@@ -18323,8 +18331,8 @@ async function main(): Promise<void> {
     ok((mending.minLevel as number) < (furyR.minLevel as number),
       "Mending unlocks before Fury — the antidote first, then the poison");
     const fury = TW.RESEARCH.find((r) => r.id === "fury")!;
-    ok(fury.minLevel === 40 && fury.buyCost.essentialGem === 1 && (fury.buyGold ?? 0) >= 2000,
-      "Fury is the level-40 one, and it wants a gem as well as the gold");
+    ok(fury.minLevel === 40 && fury.buyCost.magicEssence === 3 && (fury.buyGold ?? 0) >= 2000,
+      "Fury is the level-40 one, and it wants three Essences as well as the gold (Etap 62)");
     ok(TW.levelOk(fury, 40) && !TW.levelOk(fury, 39),
       "…and the level gate is exact, not approximate");
     ok(utility.every((r) => !TW.levelOk(r, 1)), "a level-1 character can buy none of them");
@@ -18760,6 +18768,70 @@ async function main(): Promise<void> {
       }
     }
     ok(Math.max(...shardRatios) / Math.min(...shardRatios) <= 1.25, "…and no tier is dearer than another for what it does");
+  }
+
+  console.log("Etap 62 — the Essence rations the big hits, the Gem guards the shield, the circle opens the lane:");
+  {
+    const TW62 = await import("../src/systems/tower.ts");
+    const CR62 = await import("../src/systems/crystals.ts");
+    const { STRUCTS: ST62 } = await import("../src/systems/building.ts");
+    const { MONSTER_DEFS: M62, MONSTER_KINDS: MK62 } = await import("../src/entities/monsters.ts");
+    const { SHOPS: S62 } = await import("../src/entities/npcs.ts");
+    const { CHEST_PRIZES: CP62 } = await import("../src/game.ts");
+    const fs62 = await import("node:fs");
+    const IT62 = items.ITEMS;
+
+    /* --- 1. THE TWO CRYSTALS THAT END A FIGHT ------------------------------- */
+    const aegis62 = TW62.RESEARCH.find((r) => r.id === "aegis")!;
+    const fury62 = TW62.RESEARCH.find((r) => r.id === "fury")!;
+    ok(aegis62.buyCost.essentialGem === 2 && (aegis62.buyGold ?? 0) === 900 && aegis62.buyN === 3,
+      "a Protective batch is two Gems and 900 gold for three charges");
+    ok(fury62.buyCost.magicEssence === 3 && !("essentialGem" in fury62.buyCost)
+      && (fury62.buyGold ?? 0) === 2500 && fury62.buyN === 1,
+      "a Fury charge is three Essences and 2 500 gold");
+
+    /* --- 2. THE KNELL ------------------------------------------------------- */
+    const knells = TW62.OFFERS.filter((o) => o.id.endsWith("Rune"));
+    ok(knells.every((o) => (o.cost.magicEssence ?? 0) === o.tier && !("essentialGem" in o.cost)),
+      "a Knell costs Essences equal to its tier index: none, one, two");
+    ok(knells.filter((o) => o.tier === 0).every((o) => Object.keys(o.cost).length === 0),
+      "…so a first Knell is gold alone, and a level-10 character can carry five");
+    for (const t of [0, 1, 2] as const) {
+      const shard = CR62.CRYSTAL_SPECS[`fire${["Ember", "Flame", "Pyre"][t]}Shard`];
+      const rune = CR62.CRYSTAL_SPECS[`fire${["Ember", "Flame", "Pyre"][t]}Rune`];
+      const ratio = ((rune.base[0] + rune.base[1]) / 2) / ((shard.base[0] + shard.base[1]) / 2);
+      ok(ratio > 2.3 && ratio < 2.5, `tier ${t + 1}: a Knell hits ${ratio.toFixed(2)} Shards, a fifth up from the old flat double`);
+    }
+
+    /* --- 3. WHERE EACH MATERIAL GOES NOW ------------------------------------- */
+    const gemSinks = [...TW62.OFFERS.filter((o) => "essentialGem" in o.cost).map((o) => o.id),
+      ...TW62.RESEARCH.filter((r) => "essentialGem" in r.buyCost).map((r) => r.id)];
+    ok(gemSinks.join(",") === "aegis", `the Gem is spent on the Protective Crystal and the tower build alone (${gemSinks.join(",") || "none"})`);
+    ok((ST62.tower.tiers[2].cost.essentialGem ?? 0) > 0, "…the Alchemy Tower III still wanting fifty of them");
+    const essenceSinks = TW62.OFFERS.filter((o) => "magicEssence" in o.cost).length
+      + TW62.RESEARCH.filter((r) => "magicEssence" in r.buyCost).length;
+    ok(essenceSinks === 16, `the Essence is spent on 16 things: five top Waves, ten Knells, and Fury (${essenceSinks})`);
+
+    /* --- 4. THE MARKS, AND WHAT ACTUALLY OPENS A LANE ------------------------
+     * Nothing has handed a mark out since the Circles of Calanais started
+     * attuning on contact, so the tower must not quote a price no character
+     * can pay. The items stay in the catalog — saves are keyed to their ids —
+     * renamed so they read as what they are and never as another crystal. */
+    const marks = Object.values(TW62.ATTUNEMENT);
+    ok(marks.every((k) => IT62[k].name.startsWith("Mark of")),
+      `every attunement item is a Mark (${marks.map((k) => IT62[k].name).join(", ")})`);
+    ok(marks.every((k) => !IT62[k].name.includes("Crystal")), "…and none of them is called a Crystal");
+    const markSources = [
+      ...MK62.filter((m) => M62[m].loot.some((l) => (marks as string[]).includes(l.kind))),
+      ...Object.values(CP62).flat().map((p) => (typeof p === "string" ? p : p![0])).filter((k) => (marks as string[]).includes(k)),
+      ...Object.values(S62).flatMap((sh) => sh!.entries.filter((e) => e.buy > 0 && (marks as string[]).includes(e.kind)).map((e) => e.kind)),
+    ];
+    ok(markSources.length === 0, `nothing drops, buries or stocks a mark (${markSources.join(",") || "none"})`);
+    const panels62 = fs62.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
+    ok(panels62.includes('"Stand in its circle: the Circles of Calanais"')
+      && !panels62.includes("stones are rare")
+      && panels62.includes('"Sealed. Its circle in the Circles of Calanais opens it."'),
+      "a sealed lane points at its circle instead of quoting a price nobody can pay");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

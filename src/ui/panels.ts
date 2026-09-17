@@ -1997,9 +1997,18 @@ function drawTower(p: PanelInput): void {
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
     hudText(hud, `Attune ${ELEMENT_LABEL[el]}`, x + 34 * S, ry + 8 * S, 9 * S, "#f3eedd", "left", true);
     hudText(hud, "SEALED", x + w - 12 * S, ry + 8 * S, 7 * S, "#c98a5a", "right");
-    hudText(hud, `Spend:  1 ${ITEMS[key].name}`, x + 34 * S, ry + 19 * S, 7 * S, held ? "#c9a6ff" : "#d96a5a");
-    hudText(hud, "Opens this element for good. Choose carefully — stones are rare.",
-      x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)");
+    /* WHAT ACTUALLY OPENS A LANE (Etap 62). This row used to read "Spend: 1
+     * Fire Crystal" at every character who had never seen one — and nothing in
+     * the game has handed a mark out since the Circles of Calanais started
+     * attuning on contact, so it was quoting a price that could not be paid.
+     * It now names the circle. A character still carrying a mark keeps the old
+     * line, and the row stays clickable for them. */
+    hudText(hud, held ? `Spend:  1 ${ITEMS[key].name}` : "Stand in its circle: the Circles of Calanais",
+      x + 34 * S, ry + 19 * S, 7 * S, held ? "#c9a6ff" : "#c98a5a", "left", false, lineW);
+    hudText(hud, held
+      ? "Opens this element for good. Choose carefully."
+      : "Opens this element for good. The tower cannot open one.",
+      x + 34 * S, ry + 28 * S, 6.5 * S, "rgba(220,214,190,.5)", "left", false, lineW);
     if (held) {
       const ryy = ry;
       const e = el;
@@ -2076,7 +2085,7 @@ function drawTower(p: PanelInput): void {
     // the gate here is your level, so say that instead.
     ? "No tiers, never hidden — gated by level"
     : showAttune
-      ? "Sealed. An attunement stone opens this element."
+      ? "Sealed. Its circle in the Circles of Calanais opens it."
       : `Showing tier ${tt} · upgrade the tower for the next five`;
   hudText(hud, foot, x + w / 2, y + h - 9 * S, 7 * S, "rgba(220,214,190,.6)", "center");
 }

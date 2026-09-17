@@ -161,7 +161,11 @@ const FORM_BASE: Readonly<Record<CrystalSpec["role"], readonly [number, number]>
   burst: [9, 15],   // thrown, lands on a pack at range
   nova: [11, 17],   // everything touching you, no aiming, worst position
   wave: [8, 14],    // eleven tiles, but only where you are looking
-  rune: [28, 44],   // exactly twice a Shard, and rationed by the gem price
+  /* TWO SHARDS AND A HALF since Etap 62, up a fifth from the flat double it
+   * was. The Knell stopped costing gems that tier and started costing the
+   * Essence — none at tier I, one at tier II, two at tier III — so the hit
+   * that a dragon's drop pays for should land like one. */
+  rune: [34, 53],
 };
 
 /**

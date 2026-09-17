@@ -83,8 +83,10 @@ export interface Research {
  *  ATTUNEMENT — the key that opens a lane
  *
  *  Every elemental project is locked until its element is attuned, which
- *  costs exactly one stone and happens once. The stone is spent, not held,
- *  so a lane is a door you walk through rather than a key you carry.
+ *  happens once and is not bought: the player stands in that element's circle
+ *  in the sanctum of the Circles of Calanais and the lane opens. A mark spent
+ *  at the tower does the same thing, and nothing hands marks out any more —
+ *  the row is kept working for a character who still carries one (Etap 62).
  *
  *  This is deliberately NOT the retired `requires` chain. That failed
  *  because the panel only ever shows the tier your tower is at, so a
@@ -94,8 +96,10 @@ export interface Research {
  *  so it can never fall off the screen.
  * ------------------------------------------------------------------ */
 
-/** Which stone opens which lane. Ice is bought with water, storm with wind,
- *  shadow with lightning — the stone names the source, not the spell. */
+/** Which mark opens which lane. The internal element ids are frozen (`ice`,
+ *  `storm`, `shadow`), so the pairing looks crossed here and reads straight in
+ *  play: every mark names the lane the player sees — Water opens Water, Wind
+ *  opens Wind, Lightning opens Lightning. */
 export const ATTUNEMENT: Readonly<Record<Element, ItemKind>> = {
   fire: "fireCrystal",
   ice: "waterCrystal",
@@ -291,16 +295,21 @@ export const RESEARCH: readonly Research[] = [
     openFromStart: true,
     minLevel: 30,
     crystal: "aegisRune",
-    buyCost: {},
+    /* Two gems a batch (Etap 62). Gold alone could not ration the one crystal
+     * that turns a losing fight into a survivable one, and the gems had lost
+     * their other job when the Knells moved onto the Essence — so the brake
+     * moved here. Three charges, six trophies' worth of cutting. */
+    buyCost: { essentialGem: 2 },
     buyGold: 900,
     buyN: 3,
   },
   {
-    // The Essential Gem is doing the same job here it does on the Knells:
-    // gold is a thing a player eventually has piles of, and a rune this
-    // strong has to be rationed by something that is not gold. One gem a
-    // charge also puts Fury in the same currency as the Knells, which is
-    // correct — they are the two things you spend on a fight you chose.
+    // The material is doing the same job here it does on the Knells: gold is
+    // a thing a player eventually has piles of, and a rune this strong has to
+    // be rationed by something that is not gold. Since Etap 62 that currency
+    // is the Essence of Magic on both — they are the two things you spend on
+    // a fight you chose, and both are paid for off the last two fights in the
+    // bestiary.
     id: "fury",
     name: "Fury Crystals",
     // Short enough to fit the shelf row. The full arithmetic lives in
@@ -310,7 +319,12 @@ export const RESEARCH: readonly Research[] = [
     openFromStart: true,
     minLevel: 40,
     crystal: "furyRune",
-    buyCost: { essentialGem: 1 },
+    /* THREE ESSENCES A CHARGE (Etap 62), where it used to be one gem. Fury is
+     * the biggest button in the game — triple damage for twenty seconds — and
+     * it is bought one charge at a time; the material that rations it should be
+     * the one that only the last two fights in the bestiary hand out. About ten
+     * Black Knights per cast. */
+    buyCost: { magicEssence: 3 },
     buyGold: 2500,
     buyN: 1,
   },
@@ -358,7 +372,7 @@ const FORM_DESC: Readonly<Record<(typeof FORMS)[number], string>> = {
   Nova: "Every tile touching you at once. No aiming, and no safe distance.",
   Wave: "Sixteen tiles the way you are facing, four deep, widening as it goes.",
   Arrow: "Arrowheads that carry the element. They meet resistance, never armour.",
-  Rune: "One creature, twice a Shard, one tile shorter. Cools on the Shard's clock.",
+  Rune: "One creature, two Shards and a half, one tile shorter. Cools on the Shard's clock.",
 };
 
 
@@ -398,17 +412,18 @@ const BATCH: Readonly<Record<(typeof FORMS)[number], readonly [number, number, n
 /**
  * The materials a batch wants on top of its gold.
  *
- * TWO DIFFERENT JOBS, which is why they are written as two rules rather than
- * one table. The Essence gates the single most destructive SHAPE of each
- * element and nothing else — one dragon-only material on one crystal is a
- * landmark, and spread across five it would be a tax. The Gems gate the Knell
- * at EVERY tier, because there the material is not a landmark at all: it is
- * the brake. Gold alone cannot ration a Knell — gold is the thing a player
- * eventually has piles of — and an unrationed Knell is simply a Shard that
- * won.
+ * ONE MATERIAL, RISING WITH THE TIER (Etap 62). The Essence gates the two
+ * shapes that end a fight on their own: the top Wave of every element, and the
+ * Knell — which now costs none at tier I, one at tier II and two at tier III,
+ * rather than two Gems at every tier. Gold alone cannot ration a Knell, gold
+ * is the thing a player eventually has piles of; but a first Knell should be
+ * something a level-10 character can carry five of, and only the Knell that
+ * lands for four hundred belongs behind the dragon's and the knight's drop.
+ * The Gems kept their own jobs: the Alchemy Tower III, and the Protective
+ * Crystal above.
  */
 function materialsFor(form: (typeof FORMS)[number], tier: Tier): Cost {
-  if (form === "Rune") return { essentialGem: 2 };
+  if (form === "Rune") return tier === 0 ? {} : { magicEssence: tier === 1 ? 1 : 2 };
   if (tier === 2 && form === "Wave") return { magicEssence: 1 };
   return {};
 }

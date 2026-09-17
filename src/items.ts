@@ -470,14 +470,28 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   shadowGloomRune: { name: "Zephyr Knell", stack: 999, value: 40, weight: 3, crystal: true },
   shadowUmbraRune: { name: "Squall Knell", stack: 999, value: 150, weight: 3, crystal: true },
   shadowEclipseRune: { name: "Cyclone Knell", stack: 999, value: 450, weight: 3, crystal: true },
-  /* Attunement stones and the Essence carry value 0 on purpose. A shop that
-   * buys them turns a quest reward into a lump of gold, and a lane you can
-   * sell is a lane you can lose. They are keys, not loot. */
-  fireCrystal:      { name: "Fire Crystal",      stack: 99, value: 0, weight: 3 },
-  waterCrystal:     { name: "Water Crystal",     stack: 99, value: 0, weight: 3 },
-  earthCrystal:     { name: "Earth Crystal",     stack: 99, value: 0, weight: 3 },
-  windCrystal:      { name: "Wind Crystal",      stack: 99, value: 0, weight: 3 },
-  lightningCrystal: { name: "Lightning Crystal", stack: 99, value: 0, weight: 3 },
+  /* THE MARKS, renamed in Etap 62, and no longer how a lane is opened.
+   *
+   * They were "Fire Crystal", "Water Crystal" and so on, which read as four
+   * more crystals on a shelf already holding ninety of them — and as the
+   * price of an element, which they have not been since the Circles of
+   * Calanais went in: standing in an element's circle in the sanctum attunes
+   * it outright, and nothing in the game hands these out any more. The tower
+   * says so now (`panels.ts`); the items keep their ids, which saves and the
+   * v3→v4 migration in `save.ts` are keyed to, and the spend-a-mark path is
+   * left working for any character who still carries one.
+   *
+   * Each one now names its own LANE — Water opens Water, Wind opens Wind —
+   * where the old names named the source the tower drew it from.
+   *
+   * Value 0 on purpose, marks and the Essence alike: a shop that buys them
+   * turns progress into a lump of gold, and a lane you can sell is a lane you
+   * can lose. They are keys, not loot. */
+  fireCrystal:      { name: "Mark of Fire",      stack: 99, value: 0, weight: 3 },
+  waterCrystal:     { name: "Mark of Water",     stack: 99, value: 0, weight: 3 },
+  earthCrystal:     { name: "Mark of Earth",     stack: 99, value: 0, weight: 3 },
+  windCrystal:      { name: "Mark of Wind",      stack: 99, value: 0, weight: 3 },
+  lightningCrystal: { name: "Mark of Lightning", stack: 99, value: 0, weight: 3 },
   magicEssence:     { name: "Essence of Magic",  stack: 99, value: 0, weight: 2 },
   bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 5 * TILE, power: 4 } },
   longbow:   { name: "Hunter's Bow", stack: 1, value: 275, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 5 * TILE, power: 9 } },
