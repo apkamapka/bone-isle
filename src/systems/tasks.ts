@@ -94,7 +94,8 @@ export interface TaskDef {
  *  thin ranks like the orc shaman (eleven posts) and the minotaur mage (seven)
  *  never carry an errand alone, only alongside the rest of their floor. The
  *  black knight and dragon errands are the exception, written for the hunting
- *  grounds that are coming rather than for the single post each has today.
+ *  grounds that are coming rather than for the single post each has today —
+ *  and since Etap 61 they pay the same, as the same fight should.
  * ------------------------------------------------------------------ */
 /* Task Points run on the creature, not on the size of the errand: one for the
  * vermin of the road, two for goblins and their like, three for minotaurs and
@@ -185,13 +186,20 @@ export const TASKS: readonly TaskDef[] = [
     id: "t_blackknights", title: "Black Knight Hunt",
     desc: "Black Knight",
     goal: { kinds: ["blackKnight"], need: 150 },
-    reward: { points: 5, gold: 4000, exp: 32000 }, reqLevel: 45,
+    // Etap 61: the knight's errand pays the dragon's gold. The two are the same
+    // fight at the same level, and the band rule above — about a quarter of
+    // what the kills pay — puts both near ten thousand, where the dragon's
+    // nine already sat; at four thousand he paid a tenth.
+    reward: { points: 5, gold: 9000, exp: 32000 }, reqLevel: 45,
   },
   {
     id: "t_dragons", title: "Dragon Hunt",
     desc: "Dragon",
     goal: { kinds: ["dragon"], need: 150 },
-    reward: { points: 5, gold: 9000, exp: 80000 }, reqLevel: 45,
+    // Etap 61: and the dragon's errand pays the knight's experience. Eighty
+    // thousand was nearly sixty per cent of what the hundred and fifty kills
+    // give on their own — a second hunt's worth, not a bonus on one.
+    reward: { points: 5, gold: 9000, exp: 32000 }, reqLevel: 45,
   },
 ];
 

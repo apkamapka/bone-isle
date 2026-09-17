@@ -71,22 +71,32 @@ export type StructKey = "forge" | "tower" | "dummy" | "range" | "chest";
  * Forge I can smelt; a Forge III costs steel, which only a Forge II can
  * pull; and an Alchemy Tower III costs gems, which only a Forge III can cut.
  * No tier can be skipped and no tier exists without a job.
+ *
+ * THE METAL AND GEM COSTS WERE CUT IN ETAP 61, by exactly what Etap 59 took off
+ * the drops that feed them. Iron and steel exist only as melted gear, and gear
+ * dropped 2.5x rarer at tiers 1-3 and 4x rarer at tiers 4-5; trophies dropped
+ * half as often. Left alone, the Tower III bill of 500 steel was about 1 800
+ * warlord kills instead of 450 — and, since Etap 60 made gear dear, over a
+ * hundred thousand gold of armour thrown in a furnace. Iron is divided by 2.5,
+ * steel by 4 and gems by 2, which puts every upgrade back at the hunting it
+ * cost before the cut. Wood, stone and bones never came off a corpse and did
+ * not move.
  */
 export const STRUCTS: Record<StructKey, StructDef> = {
   forge: {
     name: "Forge", spr: bakeForge(), solid: true,
     tiers: [
       { cost: { wood: 50, stone: 20 }, desc: "Smelt looted gear into iron · craft arrows" },
-      { cost: { stone: 100, wood: 50, iron: 20 }, desc: "The same gear now yields steel" },
-      { cost: { wood: 100, iron: 160, stone: 100, steel: 20 }, desc: "Cut Essential Gems from trophies" },
+      { cost: { stone: 100, wood: 50, iron: 8 }, desc: "The same gear now yields steel" },
+      { cost: { wood: 100, iron: 64, stone: 100, steel: 5 }, desc: "Cut Essential Gems from trophies" },
     ],
   },
   tower: {
     name: "Alchemy Tower", spr: bakeLibrary(), solid: true,
     tiers: [
       { cost: { wood: 50, stone: 30 }, desc: "Research tier I crystals" },
-      { cost: { wood: 100, stone: 100, iron: 100, steel: 50 }, desc: "Unlocks tier II crystals" },
-      { cost: { wood: 1000, stone: 1000, iron: 500, essentialGem: 100, steel: 500 }, desc: "Unlocks tier III crystals" },
+      { cost: { wood: 100, stone: 100, iron: 40, steel: 12 }, desc: "Unlocks tier II crystals" },
+      { cost: { wood: 1000, stone: 1000, iron: 200, essentialGem: 50, steel: 125 }, desc: "Unlocks tier III crystals" },
     ],
   },
   dummy: {
@@ -94,7 +104,7 @@ export const STRUCTS: Record<StructKey, StructDef> = {
     tiers: [
       { cost: { wood: 20, stone: 15 }, desc: "Trains Sword Fighting at half rate" },
       { cost: { wood: 50, stone: 30, bones: 20 }, desc: "Also trains Shielding" },
-      { cost: { wood: 100, stone: 80, bones: 50, steel: 20 }, desc: "Faster on both" },
+      { cost: { wood: 100, stone: 80, bones: 50, steel: 5 }, desc: "Faster on both" },
     ],
   },
   range: {

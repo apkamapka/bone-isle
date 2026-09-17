@@ -10,7 +10,7 @@ export type ItemKind =
   | "wood" | "stone" | "bones"
   // creature materials (Etap 8): loot-only, sold to shops / future research & tasks
   | "venomGland" | "ghoulClaw" | "dragonScale"
-  // creature trophies (Etap 24): 15% from their family, the feedstock of Essential Gems
+  // creature trophies (Etap 24): 8% from their family since Etap 59, the feedstock of Essential Gems
   | "minotaurHorn" | "orcEar" | "goblinFang" | "cursedRib"
   // The redcap's cap. One creature, one drop, and it is a relic rather than a
   // trophy: it goes on the Time Sage's table and does not come back.
@@ -332,7 +332,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * icon was ramped rather than repainted. */
   gorakTusk:    { name: "Gorak's Tusk",  stack: 1, value: 1600, weight: 14 },
   // ---- forge materials. Iron and steel are LIGHT on purpose: the Alchemy
-  // ---- Tower wants 600 iron and 550 steel, and at a realistic weight the
+  // ---- Tower wants 240 iron and 137 steel (Etap 61), and at a realistic weight the
   // ---- logistics of carrying them would be a bigger obstacle than earning
   // ---- them. Storage Chests count towards build costs, so the haul is
   // ---- spread over many trips either way.
@@ -494,8 +494,9 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * to 6 were multiplied by 1.2, 1.4, 1.6 and 2.0 on top of the old numbers,
    * which makes every tier worth about TWICE the one below it, in every slot
    * and on both lines (the smoke suite holds that as a rule, not a number).
-   * Tiers 1 and 2 did not move: Borin stocks them, and a starter kit should
-   * not get dearer because the top of the ladder got steeper.
+   * Tiers 1 and 2 did not move in Etap 57, because Borin stocks the leather
+   * set and both starter swords and a starter kit should not get dearer when
+   * the top of the ladder gets steeper (the rest of tier 2 moved in Etap 60).
    *
    * Weapons take their tier from `SMELT_TIER`; the Bone Sword has no row
    * there and is priced as the tier-4 blade its stats make it. The order
@@ -594,15 +595,23 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   dragonBoots: { name: "Dragon Scale Boots", stack: 1, value: 3120, weight: 26, slot: "boots", gear: { def: 2, speed: 8 }, set: "dragon" },
   knightShield: { name: "Knight Shield", stack: 1, value: 5440, weight: 60, slot: "shield", gear: { def: 17 } },
   dragonShield: { name: "Dragon Shield", stack: 1, value: 6260, weight: 70, slot: "shield", gear: { def: 17 } },
-  ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
+  /* THE RINGS ARE PRICED LIKE WHAT THEY ARE (Etap 61): three pieces of jewellery,
+   * one of each in the whole game per character, out of the three deepest
+   * boss hoards. Oswin used to pay 45 to 75 for them — less than a Plate
+   * Helmet, which drops off any gladiator. He now pays 800 for the Health Ring
+   * out of Kárr's howe (level 15), 900 for the Guard Ring out of the labyrinth
+   * (25) and 1 000 for the Power Ring out of Gorak's hoard (30): the deeper
+   * the hoard, the more its ring fetches. Nobody stocks them, so the price is
+   * only ever what the elder gives. */
+  ring:      { name: "Power Ring",   stack: 1, value: 2000, weight: 2, slot: "ring",    gear: { atk: 2 } },
   /* The Power Ring's opposite number, out of the hoard at the middle of the
    * labyrinth. Same slot, same weight, the mirrored stat: two points of guard
    * where that one gives two of attack, so the ring slot becomes a CHOICE
    * rather than a thing you either have or have not found yet.
    *
-   * Priced above the Power Ring but not by much. It is worth more because
-   * there is exactly one source — a one-time chest, no shop, no drop — and
-   * the Power Ring at least still has Kárr's howe as well as its old shelf.
+   * Priced under the Power Ring since Etap 61, which comes out of a deeper
+   * hoard; see the note above the Power Ring.
+   *
    * Icon: a banded ring, three-quarter on like the Power Ring's, in cold teal
    * and bone against that one's gold and green.
    *
@@ -615,7 +624,7 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * of two more points of the stat every armour piece in the game already
    * gives. Two points puts it between the short sword's one and the marrow
    * blade's four. */
-  guardRing: { name: "Guard Ring",   stack: 1, value: 120, weight: 2, slot: "ring",    gear: { defBonus: 2 } },
+  guardRing: { name: "Guard Ring",   stack: 1, value: 1800, weight: 2, slot: "ring",    gear: { defBonus: 2 } },
   /* THE THIRD RING, and the one that turns a pair into a real choice.
    *
    * Attack, guard, and now BODY: thirty-five points of maximum health, which
@@ -634,15 +643,15 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * player can use them: body at fifteen, guard at twenty-five, attack at
    * thirty.
    *
-   * Priced above the Guard Ring, for the same reason that one is priced above
-   * the Power Ring: one source, one chest, no shop and no drop. The elder buys
-   * all three and stocks none of them.
+   * Priced under the other two since Etap 61: all three have exactly one
+   * source, and this one's hoard is the shallowest. The elder buys all three
+   * and stocks none of them.
    *
    * Icon: a smooth red-orange band, three-quarter on like the other two, and
    * unmistakable beside them at twelve pixels — the Power Ring is studded gold
    * and teal, the Guard Ring banded teal and bone, and this one is the only
    * one of the three with no second colour on it at all. */
-  healthRing: { name: "Health Ring",  stack: 1, value: 150, weight: 2, slot: "ring",    gear: { maxhp: 35 } },
+  healthRing: { name: "Health Ring",  stack: 1, value: 1600, weight: 2, slot: "ring",    gear: { maxhp: 35 } },
   amulet:    { name: "Bone Amulet",  stack: 1, value: 160, weight: 5, slot: "amulet", gear: { maxhp: 35 } },
   /* 5 000 AT OSWIN (Etap 57), up from 500. From level 10 a death drops the
    * whole backpack, and this is the only thing in the game that stops it —

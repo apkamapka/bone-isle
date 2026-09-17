@@ -393,7 +393,7 @@ export function totalGold(game: Game, p: Player): number {
  * Break `str` into lines that each fit `maxW`, at spaces where possible.
  *
  * Truncating with an ellipsis was the first answer and it was the wrong one:
- * "Upgrade to III: 1000 wood + 1000 stone + 500 iron + 100 essentia…" hides
+ * "Upgrade to III: 1000 wood + 1000 stone + 200 iron + 50 essentialG…" hides
  * the very numbers the line exists to tell you. Wrapping keeps all of it.
  *
  * A word longer than the whole budget is cut mid-word rather than allowed to

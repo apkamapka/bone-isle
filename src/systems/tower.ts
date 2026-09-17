@@ -362,14 +362,29 @@ const FORM_DESC: Readonly<Record<(typeof FORMS)[number], string>> = {
 };
 
 
-/** Gold per batch, by tier and form. Arrows are cheap and bought by the score. */
+/**
+ * Gold per batch, by tier and form. Arrows are cheap and bought by the score.
+ *
+ * RE-PRICED IN ETAP 61 against what a kill pays. The old shelf was set before
+ * the loot economy was, and it got steeper up the tiers than the loot did: a
+ * single-target Shard cost 2.7 times the gold its damage took off a creature
+ * at tier I, 4 at tier II and 4.4 at tier III, so hunting on crystals lost
+ * money everywhere and lost it faster the higher you went. Tier I was halved,
+ * tier II divided by three and tier III by three and a half, which lands the
+ * Shard at about 1.2-1.4 times the loot its damage clears at each tier's home
+ * level (15, 30, 45) and a shaped crystal on three creatures at roughly break
+ * even or better — the crystals pay their way on a pack and cost a little on
+ * a single target, at every tier alike. Knells moved by the same factors, so
+ * they keep their place at several Shards a charge on top of the two gems that
+ * ration them. Arrows were already under the loot line and did not move.
+ */
 const PRICE: Readonly<Record<(typeof FORMS)[number], readonly [number, number, number]>> = {
-  Shard: [120, 400, 1200],
-  Burst: [150, 500, 1500],
-  Nova: [140, 460, 1400],
-  Wave: [170, 560, 1700],
+  Shard: [60, 135, 340],
+  Burst: [75, 165, 430],
+  Nova: [70, 155, 400],
+  Wave: [85, 185, 485],
   Arrow: [60, 150, 400],
-  Rune: [350, 1100, 3200],
+  Rune: [175, 365, 915],
 };
 
 const BATCH: Readonly<Record<(typeof FORMS)[number], readonly [number, number, number]>> = {

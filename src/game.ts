@@ -104,9 +104,9 @@ export interface Game {
  *
  * Etap 40 took two entries with it. `cave3` held the Marrow Blade and
  * `bastion2` the Knight shield, and both maps are gone — the shield still
- * drops from the Black Knight at 5%, and the Marrow Blade, which had no
- * source at all for eighteen etaps, drops from the demon skeleton at 2% since
- * Etap 58. No chest holds either.
+ * drops from the Black Knight, and the Marrow Blade, which had no source at
+ * all for eighteen etaps, drops from the demon skeleton since Etap 58; both
+ * at half a percent since Etap 59. No chest holds either.
  *
  * The 80x80 redraw took the other two. Neither `minodeep1` nor `orcdeep1`
  * buries anything now; each branch has ONE hoard and it sits at the bottom of
@@ -114,7 +114,8 @@ export interface Game {
  * the orcish shield under the orcs, ten platinum with each.
  *
  * SO NO CHEST IN THE GAME HOLDS KNIGHT GEAR ANY MORE. All four pieces stay in
- * the item table and all four still drop from the Black Knight at 5% apiece,
+ * the item table and all four still drop from the Black Knight (half a percent
+ * apiece since Etap 59),
  * which was always meant to be the repeatable source; what is gone is the
  * one-off that handed a level-25 character half the set for a walk. If that
  * turns out to be too steep a cut, this table is where it is put back.
@@ -135,8 +136,9 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize
    * what you come back wearing rather than how much you come back with. */
   goblindeep2: ["goblinShield", ["platinumCoin", 10]],
   // The redcap's hoard: everything he ever took off the road, in one pile.
-  // Thirty platinum is three thousand gold and it is the biggest single prize
-  // in the game, which is exactly why it lives HERE and not in his loot table
+  // Thirty platinum is three thousand gold — the biggest prize in the game when
+  // it was placed, since passed by the labyrinth's and Gorak's hoards — and
+  // that size is exactly why it lives HERE and not in his loot table
   // — `game.opened` gives it out once per character, and a respawning boss
   // would have given it out forever.
   hermitage: [["platinumCoin", 30]],
@@ -163,8 +165,8 @@ export const CHEST_PRIZES: Readonly<Partial<Record<WorldKey, readonly ChestPrize
   // offerings they started leaving under the oak once barring the doors had
   // stopped working, which is a beat Chronos' own briefing already has. So it
   // is coin and no gear: twenty-five platinum, under the redcap's thirty,
-  // because his purse is meant to stay the biggest single prize in the game
-  // and nothing about this errand argues for moving it.
+  // because his purse was meant to stay the biggest of the early hoards and
+  // nothing about this errand argues for moving it.
   bower: [["platinumCoin", 25]],
   /* THE MINOTAUR'S HOARD, and the first time the ladder's purses stop being
    * flat. Minos took tribute from Athens for a generation and it did not

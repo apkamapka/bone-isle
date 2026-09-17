@@ -433,9 +433,9 @@ export function useCrystal(
     // Healing shares ONE timer with the elemental line (Etap 30). Tibia pays
     // for a heal in mana; with no mana here the only currency left is the
     // turn, so a crystal spent on your own bar is a crystal not thrown at
-    // what is hitting you. The refusal is silent about which crystal blocked
-    // it — "not ready" is the same message either way, because to the player
-    // there is now only one cooldown to learn.
+    // what is hitting you. The refusal says which clock blocked it — "still
+    // cooling" for the heal's own, "too soon" for the group's — and a Health
+    // Potion on the same clock says the same words (Etap 61).
 /* Two clocks now, and they ask for opposite things: your OWN says press a
      * different crystal, the group's says wait a beat. "Not ready" could not
      * tell them apart, so it taught the player nothing about what to do. */

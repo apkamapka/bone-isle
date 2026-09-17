@@ -281,7 +281,8 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  and drops an iron sword. A drop the player never saw the corpse holding
    *  reads as a slot-machine payout; a drop he watched swing at him reads as
    *  spoils. Two ranks are exceptions the item list forces — the brigand and
-   *  the mercenary fight with spears, and there is no spear to drop.
+   *  the mercenary fight with spears, and there is no spear to drop, so each
+   *  drops the blade of his rank instead (an iron sword, a mercenary blade).
    * ================================================================== */
   // lvl 1. The floor of the game: it must not be able to kill a fresh
   // character even if the player walks away from the keyboard mid-fight.
@@ -398,9 +399,9 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "studdedLegs", chance: 0.03, n: [1, 1] },
       { kind: "studdedBoots", chance: 0.03, n: [1, 1] },
       { kind: "studdedShield", chance: 0.03, n: [1, 1] },
-      // He is the sword drop of the human ladder. At 6% it was a rounding
-      // error nobody would notice; at 12% killing deserters is a way to arm a
-      // second character, which is what an army's runaway should be worth.
+      // He is the sword drop of the human ladder: the best odds on a weapon any
+      // rank offers, at the 3% ceiling since Etap 59 (it was 12% once, when
+      // killing deserters was meant to arm a second character).
       { kind: "ironSword", chance: 0.03, n: [1, 1] },
     ],
   },
@@ -1251,9 +1252,10 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "steelShield", chance: 0.02, n: [1, 1] },
       // He is drawn with a longsword, and the item that matches it is the
       // Knight's Longsword — which he still must not drop, even though the
-      // black knight now does at 5%. Knight gear belongs to the two level-50
-      // fights and the four chests; handing it out at 40 would collapse the
-      // last ten levels of the ladder into one. The maul stays.
+      // black knight does (half a percent since Etap 59). Knight gear belongs
+      // to the level-50 fight alone, no chest holds any of it, and handing it
+      // out at 40 would collapse the last ten levels of the ladder into one.
+      // The maul stays.
       { kind: "steelMaul", chance: 0.02, n: [1, 1] },
     ],
   },
@@ -1376,8 +1378,9 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     /* NO STEEL (Etap 57). He was the one creature allowed to drop bar stock —
      * half his kills paid out one to three ingots — and he was grandfathered
      * in rather than argued for. Nothing drops what the forge makes now: steel
-     * is pulled out of looted gear or it does not exist, and his own suit is
-     * the richest feed for it in the game (a Knight Armor melts into three).
+     * is pulled out of looted gear or it does not exist. (His own suit was
+     * the richest feed for it until Etap 59 made it rare; the warlord and the
+     * chieftain are now.)
      * The purse lost about fifty gold a kill with it; Etap 57's price ladder
      * gave most of it back through that same suit, until Etap 59 made the suit
      * rare and the coin raised in Etap 58 became what he pays in. */

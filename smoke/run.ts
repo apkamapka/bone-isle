@@ -1176,7 +1176,7 @@ async function main(): Promise<void> {
     for (const k of ["iron", "steel", "essentialGem"] as const) {
       ok(ITEMS[k] !== undefined && ITEMS[k].value === 0, `${k} is in the catalog, and worth nothing to a shop`);
     }
-    // light on purpose — 600 iron + 550 steel has to be haulable
+    // light on purpose — the tower's 240 iron + 137 steel (Etap 61) has to be haulable
     ok(ITEMS.iron.weight <= 6 && ITEMS.steel.weight <= 6, "metal is light enough to carry in bulk");
 
     // organic gear never smelts, whatever tier it sits at
@@ -1320,7 +1320,8 @@ async function main(): Promise<void> {
       // no iron in the bag, so the upgrade must be refused
       ok(!tryUpgrade(home, g.player, forge, []), "no iron, no Forge II");
       ok(tierOf(forge) === 1, "…and the refusal costs nothing");
-      items.addItem(g.player.bag, "iron", 20);
+      // exactly the bill, read off the catalog (Etap 61 cut it from 20 to 8)
+      items.addItem(g.player.bag, "iron", STRUCTS.forge.tiers[1].cost.iron ?? 0);
       items.addItem(g.player.bag, "stone", 100);
       items.addItem(g.player.bag, "wood", 50);
       ok(tryUpgrade(home, g.player, forge, []), "with iron, the Forge upgrades");
@@ -1571,7 +1572,7 @@ async function main(): Promise<void> {
       ok(y.iron === 3 && y.steel === 0, "a Forge I turns Plate Armor into 3 iron");
       ok(items.bagCount(bag, "plateBody") === 0, "…consuming the armour");
     }
-    // gems: three different kinds, spent from the deepest stacks, coal included
+    // gems: three different kinds, the cheapest first (Etap 61), coal included
     {
       const bag = mkBag(); const chest = mkBag();
       items.addItem(bag, "minotaurHorn", 9);
@@ -2195,7 +2196,7 @@ async function main(): Promise<void> {
     ok(price("fireEmberShard") < price("fireFlameShard") && price("fireFlameShard") < price("firePyreShard"),
       "each tier costs more gold than the one below it");
 
-    // the Essence: one sink per element, one source in the world
+    // the Essence: one sink per element, and (since Etap 59) four creatures carry it
     const needEssence = T.OFFERS.filter((o) => "magicEssence" in o.cost);
     ok(needEssence.length === 5, "exactly five crystals want an Essence — one per element");
     ok(needEssence.every((o) => o.tier === 2 && o.id.endsWith("Wave")),
@@ -7551,8 +7552,8 @@ async function main(): Promise<void> {
     ok(knightSet.length === 5,
       `the knight's gear is five pieces, sword aside (${knightSet.length})`);
     ok(knightSet.includes("knightShield" as never), "…the shield among them");
-    // The set became farmable off the black knight (5% a piece); the four
-    // chests are still the only OTHER source, and no lesser rank may touch it.
+    // The set is farmable off the black knight alone (half a percent a piece
+    // since Etap 59); no chest holds any of it, and no lesser rank may touch it.
     const knightDroppers: string[] = [];
     for (const k of Object.keys(MONSTER_DEFS) as (keyof typeof MONSTER_DEFS)[]) {
       if ((MONSTER_DEFS[k].loot as { kind: string }[])
@@ -9814,7 +9815,7 @@ async function main(): Promise<void> {
     const h = { ctx, scale: 2, screenW: 800, screenH: 600 } as never;
     const widthOf = (t: string, px: number): number => t.length * px * 0.6;
 
-    const long = "Upgrade to III: 1000 wood + 1000 stone + 500 iron + 100 essentialGem + 500 steel";
+    const long = "Upgrade to III: 1000 wood + 1000 stone + 200 iron + 50 essentialGem + 125 steel";
 
     drawn = [];
     hudText(h, long, 0, 0, 14, "#fff");
@@ -9900,7 +9901,7 @@ async function main(): Promise<void> {
     const h = { ctx, scale: 2, screenW: 800, screenH: 600 } as never;
     const wide = (t: string, px: number): number => t.length * px * 0.6;
 
-    const cost = "Upgrade to III: 1000 wood + 1000 stone + 500 iron + 100 essentialGem + 500 steel";
+    const cost = "Upgrade to III: 1000 wood + 1000 stone + 200 iron + 50 essentialGem + 125 steel";
 
     ok(wrapText(h, "short", 10, 400).length === 1, "a line that fits is one line and is left alone");
 
@@ -18644,6 +18645,121 @@ async function main(): Promise<void> {
     ok(cheapestGem60 >= 180, `a gem's three cheapest trophies now sell for ${cheapestGem60}g`);
     ok(sf60("smith", "coal") === 2 && sf60("smith", "bones") === 1 && sf60("herbalist", "meat") === 2,
       "coal, bones and food drop as often as they did, and sell for what they did");
+  }
+
+  console.log("Etap 61 — building bills, errands, the gem recipe, rings and the crystal shelf:");
+  {
+    const { MONSTER_DEFS: M61, MONSTER_KINDS: MK61, monsterTierOf: tierOf61 } = await import("../src/entities/monsters.ts");
+    const { SHOPS: S61, sellsFor: sf61 } = await import("../src/entities/npcs.ts");
+    const { STRUCTS: ST61 } = await import("../src/systems/building.ts");
+    const SM61 = await import("../src/systems/smelt.ts");
+    const TK61 = await import("../src/systems/tasks.ts");
+    const TW61 = await import("../src/systems/tower.ts");
+    const CR61 = await import("../src/systems/crystals.ts");
+    const EL61 = await import("../src/systems/elements.ts");
+    const fs61 = await import("node:fs");
+    const IT61 = items.ITEMS;
+    type Row61 = { kind: string; chance: number; n: readonly [number, number] };
+    const def61 = (m: string) => (M61 as never as Record<string, { hp: number; exp: number; gold: readonly [number, number]; loot: Row61[] }>)[m];
+    const BOSS61 = new Set(["redcap", "draugr", "blackAnnis", "asterion", "gorak"]);
+    const bestSale61 = (k: string): number => Math.max(0, ...Object.keys(S61).map((n) => sf61(n as never, k as never)));
+    const perKill61 = (m: string): number => def61(m).loot.reduce(
+      (v, l) => v + l.chance * ((l.n[0] + l.n[1]) / 2) * bestSale61(l.kind), (def61(m).gold[0] + def61(m).gold[1]) / 2);
+    const metalPerKill = (m: string, which: "iron" | "steel"): number => def61(m).loot.reduce((v, l) => {
+      if (!SM61.canSmelt(l.kind as never)) return v;
+      const y = SM61.smeltYield(l.kind as never, 3, (IT61[l.kind as never] as { slot?: string }).slot);
+      return v + l.chance * ((l.n[0] + l.n[1]) / 2) * y[which];
+    }, 0);
+
+    /* --- 1. THE BILLS FOLLOW THE DROPS ---------------------------------------
+     * Written against the drop tables rather than as bare numbers: if a rate
+     * moves again, the bill it feeds fails here. The best feed for each: the
+     * warlord for steel, the orc berserker for iron, any trophy creature for a
+     * gem's three trophies. */
+    const t3 = ST61.tower.tiers[2].cost;
+    const steelKills = (t3.steel ?? 0) / metalPerKill("warlord", "steel");
+    const ironKills = (t3.iron ?? 0) / metalPerKill("orcBerserker", "iron");
+    const gemKills = (t3.essentialGem ?? 0) * SM61.GEM_TROPHY_KINDS / 0.08;
+    ok(steelKills <= 500, `Tower III's steel is ${steelKills.toFixed(0)} warlord kills of melted gear, not 1 800`);
+    ok(ironKills <= 800, `…its iron ${ironKills.toFixed(0)} orc berserker kills`);
+    ok(gemKills <= 2000, `…and its gems ${gemKills.toFixed(0)} trophy kills, where they were 2 000 before the halving`);
+    ok(ST61.forge.tiers[1].cost.iron === 8 && ST61.forge.tiers[2].cost.iron === 64 && ST61.forge.tiers[2].cost.steel === 5
+      && ST61.tower.tiers[1].cost.iron === 40 && ST61.tower.tiers[1].cost.steel === 12
+      && t3.iron === 200 && t3.steel === 125 && t3.essentialGem === 50 && ST61.dummy.tiers[2].cost.steel === 5,
+      "iron / 2.5, steel / 4, gems / 2 across every bill that asks for them");
+    ok(t3.wood === 1000 && t3.stone === 1000, "…and wood and stone, which never came off a corpse, did not move");
+
+    /* --- 2. THE SAME FIGHT PAYS THE SAME ERRAND ------------------------------ */
+    const bkT = TK61.taskById("t_blackknights")!;
+    const drT = TK61.taskById("t_dragons")!;
+    ok(bkT.reward.gold === drT.reward.gold && bkT.reward.exp === drT.reward.exp,
+      `the knight's and the dragon's errands pay alike (${bkT.reward.gold}g, ${bkT.reward.exp} exp)`);
+    for (const [task, m] of [[bkT, "blackKnight"], [drT, "dragon"]] as const) {
+      const need = task.goal.need;
+      const g = task.reward.gold / (need * perKill61(m));
+      const x = task.reward.exp / (need * def61(m).exp);
+      ok(g >= 0.15 && g <= 0.35 && x >= 0.15 && x <= 0.35,
+        `${m}: the errand is about a quarter of the hunt (${(g * 100).toFixed(0)}% of its gold, ${(x * 100).toFixed(0)}% of its exp)`);
+    }
+
+    /* --- 3. A GEM IS CUT FROM WHAT IS WORTH LEAST ---------------------------- */
+    {
+      const bag = Array(20).fill(null) as items.Bag;
+      items.addItem(bag, "dragonScale", 9);
+      items.addItem(bag, "minotaurHorn", 9);
+      items.addItem(bag, "venomGland", 1);
+      items.addItem(bag, "goblinFang", 1);
+      items.addItem(bag, "orcEar", 1);
+      items.addItem(bag, "coal", 3);
+      const pick = SM61.gemPick([bag]) ?? [];
+      ok([...pick].sort().join(",") === ["goblinFang", "orcEar", "venomGland"].join(","),
+        `the cheapest three go into the gem, not the deepest stacks (${pick.join(",")})`);
+      SM61.applyGem([bag]);
+      ok(items.bagCount(bag, "dragonScale") === 9 && items.bagCount(bag, "minotaurHorn") === 9,
+        "…and the scales and horns are all still there");
+    }
+
+    /* --- 4. THE RINGS --------------------------------------------------------- */
+    const ringPay = (k: string): number => sf61("elder", k as never);
+    ok(ringPay("healthRing") === 800 && ringPay("guardRing") === 900 && ringPay("ring") === 1000,
+      "Oswin pays 800 / 900 / 1 000 for the Health, Guard and Power Rings");
+    const bestTier4 = Math.max(...["plate", "minotaur"].flatMap((p) => ["Helm", "Body", "Legs", "Boots", "Shield"]
+      .map((x) => sf61("smith", `${p}${x}` as never))));
+    ok(ringPay("healthRing") > bestTier4, `…the cheapest of them above any tier-4 piece (${bestTier4}g)`);
+
+    /* --- 5. THE POTION SPEAKS LIKE THE CRYSTAL -------------------------------- */
+    const main61 = fs61.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(main61.includes('addFloat(cw(), P.x, P.y - 44, "still cooling", "#8ab6ff")')
+      && !main61.includes('flash("still cooling"'),
+      "a potion refused by the heal clock floats the Life Crystal's words, where the crystal floats them");
+
+    /* --- 6. THE SHELF COSTS ABOUT WHAT A KILL PAYS -----------------------------
+     * At each tier's home level, gold per point of damage against the loot a
+     * point of creature HP pays in that level band. A single-target Shard costs
+     * a little more than it clears, a shaped crystal on three creatures costs
+     * no more than it clears, and — the old shelf's real fault — the ratio does
+     * not climb with the tier (it went 2.7x, 4x, 4.4x). */
+    const HOME61: [number, number, number][] = [[15, 11, 20], [30, 25, 37], [45, 40, 60]];
+    const shardRatios: number[] = [];
+    for (let t = 0; t < 3; t++) {
+      const [home, lo, hi] = HOME61[t];
+      const band = MK61.filter((m) => !BOSS61.has(m) && tierOf61(def61(m).hp) >= lo && tierOf61(def61(m).hp) <= hi);
+      const lootHp = band.reduce((a, m) => a + perKill61(m) / def61(m).hp, 0) / band.length;
+      for (const [form, targets] of [["Shard", 1], ["Burst", 3], ["Nova", 3], ["Wave", 3]] as const) {
+        const id = `fire${EL61.TIER_CODE.fire[t]}${form}`;
+        const spec = CR61.CRYSTAL_SPECS[id];
+        const offer = TW61.offerById(id)!;
+        const dmg = ((spec.base[0] + spec.base[1]) / 2) * EL61.TIER_MULT[t] * (1 + home / EL61.CRYSTAL_LEVEL_SCALE) * targets;
+        const ratio = offer.gold / offer.buyN / dmg / lootHp;
+        if (form === "Shard") {
+          shardRatios.push(ratio);
+          ok(ratio >= 1 && ratio <= 1.6, `tier ${t + 1} Shard: ${ratio.toFixed(2)}x the loot its damage clears`);
+        } else {
+          ok(ratio <= 1.2, `tier ${t + 1} ${form} on three: ${ratio.toFixed(2)}x`);
+        }
+      }
+    }
+    ok(Math.max(...shardRatios) / Math.min(...shardRatios) <= 1.25, "…and no tier is dearer than another for what it does");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

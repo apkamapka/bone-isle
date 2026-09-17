@@ -145,7 +145,7 @@ export const GEM_COAL = 3;
  * The recipe takes three trophies of three DIFFERENT kinds, and that
  * restriction is the whole point: one trophy type at a time would mean
  * finding the single richest spawn and never leaving it. Three different
- * kinds means the hundred gems the Alchemy Tower wants are a tour of the
+ * kinds means the fifty gems the Alchemy Tower wants are a tour of the
  * island, not a chair in front of one camp.
  */
 export function gemReady(counts: ReadonlyMap<ItemKind, number>, coal: number): boolean {
@@ -194,13 +194,23 @@ export function applySmelt(
   return y;
 }
 
-/** Trophy kinds that would be spent on the next gem, or null if none can be. */
+/**
+ * Trophy kinds that would be spent on the next gem, or null if none can be.
+ *
+ * THE CHEAPEST THREE, since Etap 61. It used to take the three kinds you held
+ * the most of, which was harmless while every trophy sold for pennies; with
+ * Mira paying anything from 15 for a gland to 300 for a dragon scale, a
+ * deep stack of scales would have been cut into a gem while the glands sat
+ * in the chest. A gem is the same gem whatever went into it, so the recipe
+ * spends what is worth least. Among equal prices the deeper stack goes first,
+ * and the catalog order breaks what is left.
+ */
 export function gemPick(bags: readonly Bag[]): ItemKind[] | null {
   if (countAcross(bags, "coal") < GEM_COAL) return null;
   const held = GEM_TROPHIES
     .map((t) => ({ t, n: countAcross(bags, t) }))
     .filter((h) => h.n > 0)
-    .sort((a, b) => b.n - a.n);
+    .sort((a, b) => ITEMS[a.t].value - ITEMS[b.t].value || b.n - a.n);
   if (held.length < GEM_TROPHY_KINDS) return null;
   return held.slice(0, GEM_TROPHY_KINDS).map((h) => h.t);
 }
