@@ -18602,6 +18602,50 @@ async function main(): Promise<void> {
       "…and 5% off each of the two casters");
   }
 
+  console.log("Etap 60 — rarer drops sell for more, so a kill pays what it did:");
+  {
+    const { MONSTER_DEFS: M60 } = await import("../src/entities/monsters.ts");
+    const { SHOPS: S60, sellsFor: sf60 } = await import("../src/entities/npcs.ts");
+    const SM60 = await import("../src/systems/smelt.ts");
+    const IT60 = items.ITEMS;
+    type Row60 = { kind: string; chance: number; n: readonly [number, number] };
+    const bestSale60 = (k: string): number =>
+      Math.max(0, ...Object.keys(S60).map((n) => sf60(n as never, k as never)));
+    const perKill60 = (m: string): number => {
+      const d = (M60 as never as Record<string, { gold: readonly [number, number]; loot: Row60[] }>)[m];
+      return d.loot.reduce((v, l) => v + l.chance * ((l.n[0] + l.n[1]) / 2) * bestSale60(l.kind),
+        (d.gold[0] + d.gold[1]) / 2);
+    };
+
+    /* --- 1. THE PURSE IS BACK WHERE ETAP 58 LEFT IT --------------------------
+     * Etap 59 cut gear to 2.5-10x rarer and trophies to half, and a kill lost
+     * 20-47% of its gold. Etap 60 multiplied each price by the same factor it
+     * lost in odds. The anchors are what these ranks paid at Etap 58:
+     * dragon 297, Black Knight 265, chieftain 123, gladiator 74, orc 39. */
+    const anchors: [string, number][] = [["dragon", 297], ["blackKnight", 265], ["chieftain", 123], ["gladiator", 74], ["orc", 39]];
+    for (const [m, was] of anchors) {
+      const now = perKill60(m);
+      ok(now >= was * 0.9, `${m}: ${now.toFixed(0)}g a kill again (was ${was} before the rarity cut)`);
+    }
+
+    /* --- 2. …AND IT ARRIVES IN A LUMP ---------------------------------------- */
+    const bk = M60.blackKnight;
+    const purse = (bk.gold[0] + bk.gold[1]) / 2;
+    ok(sf60("smith", "knightBody") >= 10 * purse,
+      `a Knight Armor (${sf60("smith", "knightBody")}g) is worth more than ten of his purses`);
+    ok(sf60("smith", "dragonBody") > sf60("smith", "marrowBody") * 4,
+      "…and a top-set piece sells for over four times its tier-5 counterpart, as it is four times rarer");
+
+    /* --- 3. WHAT DID NOT MOVE ------------------------------------------------ */
+    ok(IT60.fangDagger.value < IT60.ironSword.value,
+      "the Fang Dagger stays under the Iron Sword it is worse than — value is the quick swap's order");
+    const cheapestGem60 = SM60.GEM_TROPHIES.map((t) => sf60("herbalist", t)).sort((a, b) => a - b)
+      .slice(0, SM60.GEM_TROPHY_KINDS).reduce((a, b) => a + b, 0);
+    ok(cheapestGem60 >= 180, `a gem's three cheapest trophies now sell for ${cheapestGem60}g`);
+    ok(sf60("smith", "coal") === 2 && sf60("smith", "bones") === 1 && sf60("herbalist", "meat") === 2,
+      "coal, bones and food drop as often as they did, and sell for what they did");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

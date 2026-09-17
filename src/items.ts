@@ -249,9 +249,9 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
   wood:      { name: "Wood",         stack: 9999, value: 1, weight: 10 },
   stone:     { name: "Stone",        stack: 9999, value: 1, weight: 14 },
   bones:     { name: "Bones",        stack: 9999, value: 2, weight: 8 },
-  venomGland:{ name: "Venom Gland",  stack: 9999, value: 15, weight: 2 },
-  ghoulClaw: { name: "Ghoul Claw",   stack: 9999, value: 100, weight: 3 },
-  dragonScale:{ name: "Dragon Scale", stack: 999, value: 300, weight: 4 },
+  venomGland:{ name: "Venom Gland",  stack: 9999, value: 30, weight: 2 },
+  ghoulClaw: { name: "Ghoul Claw",   stack: 9999, value: 200, weight: 3 },
+  dragonScale:{ name: "Dragon Scale", stack: 999, value: 600, weight: 4 },
   // ---- trophies. Priced to be worth selling once you have your gems, which
   // ---- is exactly the regret the design wants: sell early, pay later.
   /* ETAP 57 RAISED THEM, and the reason is the gem. The elder used to buy an
@@ -274,12 +274,14 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * single scale on 15% of them.
    *
    * ETAP 59 HALVED EVERY TROPHY'S DROP RATE (15% -> 8%; the gland, claw and
-   * scale in proportion) and left these prices where they are. A trophy is
-   * rarer loot now, and a gem costs about twice the hunting it did. */
-  minotaurHorn: { name: "Minotaur Horn", stack: 9999, value: 180, weight: 5 },
-  orcEar:       { name: "Orc Ear",       stack: 9999, value: 100, weight: 2 },
-  goblinFang:   { name: "Goblin Fang",   stack: 9999, value: 80, weight: 1 },
-  cursedRib:    { name: "Cursed Rib",    stack: 9999, value: 200, weight: 3 },
+   * scale in proportion), and Etap 60 doubled every price here to match: a
+   * trophy is rarer loot and worth twice as much, so a kill pays what it did,
+   * a gem costs about twice the hunting it did, and the gold its three
+   * trophies would have fetched doubled with it. */
+  minotaurHorn: { name: "Minotaur Horn", stack: 9999, value: 360, weight: 5 },
+  orcEar:       { name: "Orc Ear",       stack: 9999, value: 200, weight: 2 },
+  goblinFang:   { name: "Goblin Fang",   stack: 9999, value: 160, weight: 1 },
+  cursedRib:    { name: "Cursed Rib",    stack: 9999, value: 400, weight: 3 },
   /* The redcap's cap. A relic, not a trophy: it goes on the Time Sage's table
    * and never comes back. It does NOT stack — there is one redcap and there is
    * one cap, and a slot showing "Blood-Dyed Cap ×3" would say the opposite.
@@ -478,7 +480,7 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   lightningCrystal: { name: "Lightning Crystal", stack: 99, value: 0, weight: 3 },
   magicEssence:     { name: "Essence of Magic",  stack: 99, value: 0, weight: 2 },
   bow:       { name: "Short Bow",    stack: 1, value: 35, weight: 30, slot: "weapon", gear: { atk: 1 }, bow: { range: 5 * TILE, power: 4 } },
-  longbow:   { name: "Hunter's Bow", stack: 1, value: 110, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 5 * TILE, power: 9 } },
+  longbow:   { name: "Hunter's Bow", stack: 1, value: 275, weight: 38, slot: "weapon", gear: { atk: 2 }, bow: { range: 5 * TILE, power: 9 } },
   arrow:     { name: "Arrow",        stack: 999, value: 1, weight: 1, ammo: { dmg: 8 } },
   // Blunt practice shafts: dirt-cheap (1g at the smith, or bulk-crafted from
   // wood), zero attack — pure Distance training fodder for the Archery Range.
@@ -498,90 +500,100 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * Weapons take their tier from `SMELT_TIER`; the Bone Sword has no row
    * there and is priced as the tier-4 blade its stats make it. The order
    * inside every tier is unchanged, which matters: value is what the quick
-   * swap reads as "better". */
+   * swap reads as "better".
+   *
+   * ETAP 60 MULTIPLIED THEM AGAIN, by exactly what Etap 59 took off the drop
+   * rates: x2.5 for tiers 2-3 and the snakeskin (they drop 2.5 times less
+   * often), x4 for tiers 4-5, x10 for the knight and dragon sets, their swords
+   * and the Marrow Blade. A piece is rarer and worth that much more, so a kill
+   * pays about what it did before the cut — in a lump when something drops,
+   * not in a trickle. A Knight Armor sells for 3 400. What Borin STOCKS was
+   * left alone (the leather set, both swords, the Short Bow), because value
+   * is also what he charges, and the Fang Dagger stayed under the Iron Sword
+   * it is worse than. */
   /* ---- weapons ---- */
   shortSword: { name: "Short Sword", stack: 1, value: 15, weight: 35, slot: "weapon", gear: { atk: 6, def: 6, defBonus: 1 } },
   fangDagger: { name: "Fang Dagger", stack: 1, value: 20, weight: 28, slot: "weapon", gear: { atk: 8, def: 2 } },
   ironSword: { name: "Iron Sword", stack: 1, value: 45, weight: 42, slot: "weapon", gear: { atk: 10, def: 10, defBonus: 2 } },
-  goblinHatchet: { name: "Goblin Hatchet", stack: 1, value: 72, weight: 48, slot: "weapon", gear: { atk: 13, def: 5 } },
-  mercBlade: { name: "Mercenary Blade", stack: 1, value: 108, weight: 46, slot: "weapon", gear: { atk: 13, def: 13, defBonus: 2 } },
-  warHammer: { name: "War Hammer", stack: 1, value: 102, weight: 70, slot: "weapon", gear: { atk: 15, def: 6 } },
-  orcishAxe: { name: "Orcish Axe", stack: 1, value: 132, weight: 55, slot: "weapon", gear: { atk: 17, def: 7 } },
-  gladius: { name: "Gladius", stack: 1, value: 210, weight: 44, slot: "weapon", gear: { atk: 16, def: 16, defBonus: 3 } },
-  boneSword: { name: "Bone Sword", stack: 1, value: 238, weight: 48, slot: "weapon", gear: { atk: 18, def: 14, defBonus: 2 } },
-  minotaurAxe: { name: "Minotaur Axe", stack: 1, value: 280, weight: 62, slot: "weapon", gear: { atk: 21, def: 9, defBonus: 1 } },
-  warlordBlade: { name: "Warlord's Blade", stack: 1, value: 416, weight: 46, slot: "weapon", gear: { atk: 20, def: 20, defBonus: 3 } },
-  steelMaul: { name: "Steel Maul", stack: 1, value: 400, weight: 86, slot: "weapon", gear: { atk: 24, def: 9 } },
-  demonCleaver: { name: "Demon Cleaver", stack: 1, value: 480, weight: 68, slot: "weapon", gear: { atk: 25, def: 11, defBonus: 1 } },
-  knightSword: { name: "Knight's Longsword", stack: 1, value: 840, weight: 52, slot: "weapon", gear: { atk: 24, def: 22, defBonus: 3 } },
-  fireSword: { name: "Fire Sword", stack: 1, value: 920, weight: 46, slot: "weapon", gear: { atk: 26, def: 16, defBonus: 2 } },
-  marrowBlade: { name: "Marrow Blade", stack: 1, value: 960, weight: 52, slot: "weapon", gear: { atk: 23, def: 21, defBonus: 4 } },
+  goblinHatchet: { name: "Goblin Hatchet", stack: 1, value: 180, weight: 48, slot: "weapon", gear: { atk: 13, def: 5 } },
+  mercBlade: { name: "Mercenary Blade", stack: 1, value: 270, weight: 46, slot: "weapon", gear: { atk: 13, def: 13, defBonus: 2 } },
+  warHammer: { name: "War Hammer", stack: 1, value: 255, weight: 70, slot: "weapon", gear: { atk: 15, def: 6 } },
+  orcishAxe: { name: "Orcish Axe", stack: 1, value: 330, weight: 55, slot: "weapon", gear: { atk: 17, def: 7 } },
+  gladius: { name: "Gladius", stack: 1, value: 840, weight: 44, slot: "weapon", gear: { atk: 16, def: 16, defBonus: 3 } },
+  boneSword: { name: "Bone Sword", stack: 1, value: 952, weight: 48, slot: "weapon", gear: { atk: 18, def: 14, defBonus: 2 } },
+  minotaurAxe: { name: "Minotaur Axe", stack: 1, value: 1120, weight: 62, slot: "weapon", gear: { atk: 21, def: 9, defBonus: 1 } },
+  warlordBlade: { name: "Warlord's Blade", stack: 1, value: 1664, weight: 46, slot: "weapon", gear: { atk: 20, def: 20, defBonus: 3 } },
+  steelMaul: { name: "Steel Maul", stack: 1, value: 1600, weight: 86, slot: "weapon", gear: { atk: 24, def: 9 } },
+  demonCleaver: { name: "Demon Cleaver", stack: 1, value: 1920, weight: 68, slot: "weapon", gear: { atk: 25, def: 11, defBonus: 1 } },
+  knightSword: { name: "Knight's Longsword", stack: 1, value: 8400, weight: 52, slot: "weapon", gear: { atk: 24, def: 22, defBonus: 3 } },
+  fireSword: { name: "Fire Sword", stack: 1, value: 9200, weight: 46, slot: "weapon", gear: { atk: 26, def: 16, defBonus: 2 } },
+  marrowBlade: { name: "Marrow Blade", stack: 1, value: 9600, weight: 52, slot: "weapon", gear: { atk: 23, def: 21, defBonus: 4 } },
   /* ---- tier 1: Leather / Snakeskin (set bonus +1 worn complete) ---- */
   leatherHelm: { name: "Leather Helmet", stack: 1, value: 6, weight: 17, slot: "head", gear: { def: 1 }, set: "leather" },
-  snakeskinHelm: { name: "Snakeskin Hood", stack: 1, value: 7, weight: 20, slot: "head", gear: { def: 1 }, set: "snakeskin" },
+  snakeskinHelm: { name: "Snakeskin Hood", stack: 1, value: 18, weight: 20, slot: "head", gear: { def: 1 }, set: "snakeskin" },
   leatherBody: { name: "Leather Armor", stack: 1, value: 12, weight: 60, slot: "body", gear: { def: 1 }, set: "leather" },
-  snakeskinBody: { name: "Snakeskin Mail", stack: 1, value: 14, weight: 70, slot: "body", gear: { def: 2 }, set: "snakeskin" },
+  snakeskinBody: { name: "Snakeskin Mail", stack: 1, value: 35, weight: 70, slot: "body", gear: { def: 2 }, set: "snakeskin" },
   leatherLegs: { name: "Leather Legs", stack: 1, value: 8, weight: 34, slot: "legs", gear: { def: 1 }, set: "leather" },
-  snakeskinLegs: { name: "Snakeskin Legs", stack: 1, value: 9, weight: 40, slot: "legs", gear: { def: 1 }, set: "snakeskin" },
+  snakeskinLegs: { name: "Snakeskin Legs", stack: 1, value: 23, weight: 40, slot: "legs", gear: { def: 1 }, set: "snakeskin" },
   leatherBoots: { name: "Leather Boots", stack: 1, value: 5, weight: 15, slot: "boots", gear: { def: 0, speed: 2 }, set: "leather" },
-  snakeskinBoots: { name: "Snakeskin Boots", stack: 1, value: 6, weight: 18, slot: "boots", gear: { def: 0 }, set: "snakeskin" },
+  snakeskinBoots: { name: "Snakeskin Boots", stack: 1, value: 15, weight: 18, slot: "boots", gear: { def: 0 }, set: "snakeskin" },
   leatherShield: { name: "Leather Shield", stack: 1, value: 10, weight: 51, slot: "shield", gear: { def: 4 } },
-  snakeskinShield: { name: "Snakeskin Buckler", stack: 1, value: 12, weight: 60, slot: "shield", gear: { def: 4 } },
+  snakeskinShield: { name: "Snakeskin Buckler", stack: 1, value: 30, weight: 60, slot: "shield", gear: { def: 4 } },
   /* ---- tier 2: Studded / Goblin (set bonus +1 worn complete) ---- */
-  studdedHelm: { name: "Studded Helmet", stack: 1, value: 15, weight: 26, slot: "head", gear: { def: 1 }, set: "studded" },
-  goblinHelm: { name: "Goblin Skull", stack: 1, value: 17, weight: 30, slot: "head", gear: { def: 1 }, set: "goblin" },
-  studdedBody: { name: "Studded Armor", stack: 1, value: 30, weight: 72, slot: "body", gear: { def: 3 }, set: "studded" },
-  goblinBody: { name: "Goblin Mail", stack: 1, value: 34, weight: 85, slot: "body", gear: { def: 4 }, set: "goblin" },
-  studdedLegs: { name: "Studded Legs", stack: 1, value: 21, weight: 51, slot: "legs", gear: { def: 2 }, set: "studded" },
-  goblinLegs: { name: "Goblin Legs", stack: 1, value: 24, weight: 60, slot: "legs", gear: { def: 2 }, set: "goblin" },
-  studdedBoots: { name: "Studded Boots", stack: 1, value: 12, weight: 17, slot: "boots", gear: { def: 1, speed: 4 }, set: "studded" },
-  goblinBoots: { name: "Goblin Boots", stack: 1, value: 14, weight: 20, slot: "boots", gear: { def: 1 }, set: "goblin" },
-  studdedShield: { name: "Studded Shield", stack: 1, value: 24, weight: 53, slot: "shield", gear: { def: 6 } },
-  goblinShield: { name: "Goblin Shield", stack: 1, value: 28, weight: 62, slot: "shield", gear: { def: 6 } },
+  studdedHelm: { name: "Studded Helmet", stack: 1, value: 38, weight: 26, slot: "head", gear: { def: 1 }, set: "studded" },
+  goblinHelm: { name: "Goblin Skull", stack: 1, value: 43, weight: 30, slot: "head", gear: { def: 1 }, set: "goblin" },
+  studdedBody: { name: "Studded Armor", stack: 1, value: 75, weight: 72, slot: "body", gear: { def: 3 }, set: "studded" },
+  goblinBody: { name: "Goblin Mail", stack: 1, value: 85, weight: 85, slot: "body", gear: { def: 4 }, set: "goblin" },
+  studdedLegs: { name: "Studded Legs", stack: 1, value: 53, weight: 51, slot: "legs", gear: { def: 2 }, set: "studded" },
+  goblinLegs: { name: "Goblin Legs", stack: 1, value: 60, weight: 60, slot: "legs", gear: { def: 2 }, set: "goblin" },
+  studdedBoots: { name: "Studded Boots", stack: 1, value: 30, weight: 17, slot: "boots", gear: { def: 1, speed: 4 }, set: "studded" },
+  goblinBoots: { name: "Goblin Boots", stack: 1, value: 35, weight: 20, slot: "boots", gear: { def: 1 }, set: "goblin" },
+  studdedShield: { name: "Studded Shield", stack: 1, value: 60, weight: 53, slot: "shield", gear: { def: 6 } },
+  goblinShield: { name: "Goblin Shield", stack: 1, value: 70, weight: 62, slot: "shield", gear: { def: 6 } },
   /* ---- tier 3: Chain / Orcish (set bonus +2 worn complete) ---- */
-  chainHelm: { name: "Chain Helmet", stack: 1, value: 36, weight: 38, slot: "head", gear: { def: 2 }, set: "chain" },
-  orcishHelm: { name: "Orcish Helm", stack: 1, value: 41, weight: 45, slot: "head", gear: { def: 2 }, set: "orcish" },
-  chainBody: { name: "Chain Armor", stack: 1, value: 72, weight: 81, slot: "body", gear: { def: 4 }, set: "chain" },
-  orcishBody: { name: "Orcish Mail", stack: 1, value: 83, weight: 95, slot: "body", gear: { def: 5 }, set: "orcish" },
-  chainLegs: { name: "Chain Legs", stack: 1, value: 50, weight: 64, slot: "legs", gear: { def: 2 }, set: "chain" },
-  orcishLegs: { name: "Orcish Legs", stack: 1, value: 58, weight: 75, slot: "legs", gear: { def: 2 }, set: "orcish" },
-  chainBoots: { name: "Chain Boots", stack: 1, value: 29, weight: 20, slot: "boots", gear: { def: 1, speed: 6 }, set: "chain" },
-  orcishBoots: { name: "Orcish Boots", stack: 1, value: 34, weight: 24, slot: "boots", gear: { def: 1, speed: 2 }, set: "orcish" },
-  chainShield: { name: "Chain Shield", stack: 1, value: 58, weight: 55, slot: "shield", gear: { def: 8 } },
-  orcishShield: { name: "Orcish Shield", stack: 1, value: 66, weight: 65, slot: "shield", gear: { def: 8 } },
+  chainHelm: { name: "Chain Helmet", stack: 1, value: 90, weight: 38, slot: "head", gear: { def: 2 }, set: "chain" },
+  orcishHelm: { name: "Orcish Helm", stack: 1, value: 103, weight: 45, slot: "head", gear: { def: 2 }, set: "orcish" },
+  chainBody: { name: "Chain Armor", stack: 1, value: 180, weight: 81, slot: "body", gear: { def: 4 }, set: "chain" },
+  orcishBody: { name: "Orcish Mail", stack: 1, value: 208, weight: 95, slot: "body", gear: { def: 5 }, set: "orcish" },
+  chainLegs: { name: "Chain Legs", stack: 1, value: 125, weight: 64, slot: "legs", gear: { def: 2 }, set: "chain" },
+  orcishLegs: { name: "Orcish Legs", stack: 1, value: 145, weight: 75, slot: "legs", gear: { def: 2 }, set: "orcish" },
+  chainBoots: { name: "Chain Boots", stack: 1, value: 73, weight: 20, slot: "boots", gear: { def: 1, speed: 6 }, set: "chain" },
+  orcishBoots: { name: "Orcish Boots", stack: 1, value: 85, weight: 24, slot: "boots", gear: { def: 1, speed: 2 }, set: "orcish" },
+  chainShield: { name: "Chain Shield", stack: 1, value: 145, weight: 55, slot: "shield", gear: { def: 8 } },
+  orcishShield: { name: "Orcish Shield", stack: 1, value: 165, weight: 65, slot: "shield", gear: { def: 8 } },
   /* ---- tier 4: Plate / Minotaur (set bonus +2 worn complete) ---- */
-  plateHelm: { name: "Plate Helmet", stack: 1, value: 77, weight: 42, slot: "head", gear: { def: 3 }, set: "plate" },
-  minotaurHelm: { name: "Minotaur Helm", stack: 1, value: 88, weight: 50, slot: "head", gear: { def: 3 }, set: "minotaur" },
-  plateBody: { name: "Plate Armor", stack: 1, value: 154, weight: 102, slot: "body", gear: { def: 6 }, set: "plate" },
-  minotaurBody: { name: "Minotaur Mail", stack: 1, value: 176, weight: 120, slot: "body", gear: { def: 7 }, set: "minotaur" },
-  plateLegs: { name: "Plate Legs", stack: 1, value: 108, weight: 76, slot: "legs", gear: { def: 3 }, set: "plate" },
-  minotaurLegs: { name: "Minotaur Legs", stack: 1, value: 125, weight: 90, slot: "legs", gear: { def: 3 }, set: "minotaur" },
-  plateBoots: { name: "Plate Boots", stack: 1, value: 62, weight: 22, slot: "boots", gear: { def: 1, speed: 8 }, set: "plate" },
-  minotaurBoots: { name: "Minotaur Hooves", stack: 1, value: 71, weight: 26, slot: "boots", gear: { def: 1, speed: 4 }, set: "minotaur" },
-  plateShield: { name: "Plate Shield", stack: 1, value: 123, weight: 58, slot: "shield", gear: { def: 11 } },
-  minotaurShield: { name: "Minotaur Shield", stack: 1, value: 141, weight: 68, slot: "shield", gear: { def: 11 } },
+  plateHelm: { name: "Plate Helmet", stack: 1, value: 308, weight: 42, slot: "head", gear: { def: 3 }, set: "plate" },
+  minotaurHelm: { name: "Minotaur Helm", stack: 1, value: 352, weight: 50, slot: "head", gear: { def: 3 }, set: "minotaur" },
+  plateBody: { name: "Plate Armor", stack: 1, value: 616, weight: 102, slot: "body", gear: { def: 6 }, set: "plate" },
+  minotaurBody: { name: "Minotaur Mail", stack: 1, value: 704, weight: 120, slot: "body", gear: { def: 7 }, set: "minotaur" },
+  plateLegs: { name: "Plate Legs", stack: 1, value: 432, weight: 76, slot: "legs", gear: { def: 3 }, set: "plate" },
+  minotaurLegs: { name: "Minotaur Legs", stack: 1, value: 500, weight: 90, slot: "legs", gear: { def: 3 }, set: "minotaur" },
+  plateBoots: { name: "Plate Boots", stack: 1, value: 248, weight: 22, slot: "boots", gear: { def: 1, speed: 8 }, set: "plate" },
+  minotaurBoots: { name: "Minotaur Hooves", stack: 1, value: 284, weight: 26, slot: "boots", gear: { def: 1, speed: 4 }, set: "minotaur" },
+  plateShield: { name: "Plate Shield", stack: 1, value: 492, weight: 58, slot: "shield", gear: { def: 11 } },
+  minotaurShield: { name: "Minotaur Shield", stack: 1, value: 564, weight: 68, slot: "shield", gear: { def: 11 } },
   /* ---- tier 5: Steel / Marrow (set bonus +3 worn complete) ---- */
-  steelHelm: { name: "Steel Helmet", stack: 1, value: 160, weight: 44, slot: "head", gear: { def: 3 }, set: "steel" },
-  marrowHelm: { name: "Marrow Helm", stack: 1, value: 184, weight: 52, slot: "head", gear: { def: 3 }, set: "marrow" },
-  steelBody: { name: "Steel Armor", stack: 1, value: 320, weight: 94, slot: "body", gear: { def: 8 }, set: "steel" },
-  marrowBody: { name: "Marrow Plate", stack: 1, value: 368, weight: 110, slot: "body", gear: { def: 9 }, set: "marrow" },
-  steelLegs: { name: "Steel Legs", stack: 1, value: 224, weight: 70, slot: "legs", gear: { def: 4 }, set: "steel" },
-  marrowLegs: { name: "Marrow Greaves", stack: 1, value: 258, weight: 82, slot: "legs", gear: { def: 4 }, set: "marrow" },
-  steelBoots: { name: "Steel Boots", stack: 1, value: 128, weight: 21, slot: "boots", gear: { def: 2, speed: 10 }, set: "steel" },
-  marrowBoots: { name: "Marrow Treads", stack: 1, value: 147, weight: 25, slot: "boots", gear: { def: 2, speed: 6 }, set: "marrow" },
-  steelShield: { name: "Steel Shield", stack: 1, value: 256, weight: 56, slot: "shield", gear: { def: 14 } },
-  marrowShield: { name: "Marrow Shield", stack: 1, value: 294, weight: 66, slot: "shield", gear: { def: 14 } },
+  steelHelm: { name: "Steel Helmet", stack: 1, value: 640, weight: 44, slot: "head", gear: { def: 3 }, set: "steel" },
+  marrowHelm: { name: "Marrow Helm", stack: 1, value: 736, weight: 52, slot: "head", gear: { def: 3 }, set: "marrow" },
+  steelBody: { name: "Steel Armor", stack: 1, value: 1280, weight: 94, slot: "body", gear: { def: 8 }, set: "steel" },
+  marrowBody: { name: "Marrow Plate", stack: 1, value: 1472, weight: 110, slot: "body", gear: { def: 9 }, set: "marrow" },
+  steelLegs: { name: "Steel Legs", stack: 1, value: 896, weight: 70, slot: "legs", gear: { def: 4 }, set: "steel" },
+  marrowLegs: { name: "Marrow Greaves", stack: 1, value: 1032, weight: 82, slot: "legs", gear: { def: 4 }, set: "marrow" },
+  steelBoots: { name: "Steel Boots", stack: 1, value: 512, weight: 21, slot: "boots", gear: { def: 2, speed: 10 }, set: "steel" },
+  marrowBoots: { name: "Marrow Treads", stack: 1, value: 588, weight: 25, slot: "boots", gear: { def: 2, speed: 6 }, set: "marrow" },
+  steelShield: { name: "Steel Shield", stack: 1, value: 1024, weight: 56, slot: "shield", gear: { def: 14 } },
+  marrowShield: { name: "Marrow Shield", stack: 1, value: 1176, weight: 66, slot: "shield", gear: { def: 14 } },
   /* ---- tier 6: Knight / Dragon (set bonus +3 worn complete) ---- */
-  knightHelm: { name: "Knight Helmet", stack: 1, value: 340, weight: 44, slot: "head", gear: { def: 5 }, set: "knight" },
-  dragonHelm: { name: "Dragon Helm", stack: 1, value: 390, weight: 52, slot: "head", gear: { def: 5 }, set: "dragon" },
-  knightBody: { name: "Knight Armor", stack: 1, value: 680, weight: 94, slot: "body", gear: { def: 9 }, set: "knight" },
-  dragonBody: { name: "Dragon Scale Mail", stack: 1, value: 782, weight: 110, slot: "body", gear: { def: 10 }, set: "dragon" },
-  knightLegs: { name: "Knight Legs", stack: 1, value: 476, weight: 71, slot: "legs", gear: { def: 5 }, set: "knight" },
-  dragonLegs: { name: "Dragon Scale Legs", stack: 1, value: 548, weight: 84, slot: "legs", gear: { def: 5 }, set: "dragon" },
-  knightBoots: { name: "Knight Boots", stack: 1, value: 272, weight: 22, slot: "boots", gear: { def: 2, speed: 12 }, set: "knight" },
-  dragonBoots: { name: "Dragon Scale Boots", stack: 1, value: 312, weight: 26, slot: "boots", gear: { def: 2, speed: 8 }, set: "dragon" },
-  knightShield: { name: "Knight Shield", stack: 1, value: 544, weight: 60, slot: "shield", gear: { def: 17 } },
-  dragonShield: { name: "Dragon Shield", stack: 1, value: 626, weight: 70, slot: "shield", gear: { def: 17 } },
+  knightHelm: { name: "Knight Helmet", stack: 1, value: 3400, weight: 44, slot: "head", gear: { def: 5 }, set: "knight" },
+  dragonHelm: { name: "Dragon Helm", stack: 1, value: 3900, weight: 52, slot: "head", gear: { def: 5 }, set: "dragon" },
+  knightBody: { name: "Knight Armor", stack: 1, value: 6800, weight: 94, slot: "body", gear: { def: 9 }, set: "knight" },
+  dragonBody: { name: "Dragon Scale Mail", stack: 1, value: 7820, weight: 110, slot: "body", gear: { def: 10 }, set: "dragon" },
+  knightLegs: { name: "Knight Legs", stack: 1, value: 4760, weight: 71, slot: "legs", gear: { def: 5 }, set: "knight" },
+  dragonLegs: { name: "Dragon Scale Legs", stack: 1, value: 5480, weight: 84, slot: "legs", gear: { def: 5 }, set: "dragon" },
+  knightBoots: { name: "Knight Boots", stack: 1, value: 2720, weight: 22, slot: "boots", gear: { def: 2, speed: 12 }, set: "knight" },
+  dragonBoots: { name: "Dragon Scale Boots", stack: 1, value: 3120, weight: 26, slot: "boots", gear: { def: 2, speed: 8 }, set: "dragon" },
+  knightShield: { name: "Knight Shield", stack: 1, value: 5440, weight: 60, slot: "shield", gear: { def: 17 } },
+  dragonShield: { name: "Dragon Shield", stack: 1, value: 6260, weight: 70, slot: "shield", gear: { def: 17 } },
   ring:      { name: "Power Ring",   stack: 1, value: 90, weight: 2, slot: "ring",    gear: { atk: 2 } },
   /* The Power Ring's opposite number, out of the hoard at the middle of the
    * labyrinth. Same slot, same weight, the mirrored stat: two points of guard
