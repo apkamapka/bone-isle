@@ -36,7 +36,7 @@ export interface SmeltYield {
 }
 
 /**
- * Gear tier (1..6) and line, for everything that smelts.
+ * Gear tier (1..7) and line, for everything that smelts.
  *
  * Armour pieces carry a `set` tag in ITEMS and could be read from there, but
  * shields and weapons deliberately do not (a player picks a guard on its own
@@ -45,7 +45,7 @@ export interface SmeltYield {
  * look when a number is wrong.
  */
 export const SMELT_TIER: Readonly<Partial<Record<ItemKind, readonly [number, SmeltLine]>>> = {
-  // ---- armour, tier 2..6. Tier 1 (leather / snakeskin) is hide, not metal.
+  // ---- armour, tier 2..7. Tier 1 (leather / snakeskin) is hide, not metal.
   studdedHelm: [2, "human"], studdedBody: [2, "human"], studdedLegs: [2, "human"], studdedBoots: [2, "human"], studdedShield: [2, "human"],
   goblinHelm: [2, "beast"], goblinBody: [2, "beast"], goblinLegs: [2, "beast"], goblinBoots: [2, "beast"], goblinShield: [2, "beast"],
   chainHelm: [3, "human"], chainBody: [3, "human"], chainLegs: [3, "human"], chainBoots: [3, "human"], chainShield: [3, "human"],
@@ -55,11 +55,13 @@ export const SMELT_TIER: Readonly<Partial<Record<ItemKind, readonly [number, Sme
   steelHelm: [5, "human"], steelBody: [5, "human"], steelLegs: [5, "human"], steelBoots: [5, "human"], steelShield: [5, "human"],
   knightHelm: [6, "human"], knightBody: [6, "human"], knightLegs: [6, "human"], knightBoots: [6, "human"], knightShield: [6, "human"],
   // Marrow (bone) and Dragon (scale) are the beast tier-5/6 sets and are
-  // organic on purpose — the best beast gear is simply not smeltable.
-  // Tier 7 is absent on purpose too (Etap 64): a Golden suit is gold, which
-  // is neither iron nor steel, and the Vampire sits at the top of the beast
-  // line, where nothing has ever gone in the fire. TIER_UNITS has no row for
-  // tier 7 either — give it one before listing any tier-7 piece here.
+  // organic on purpose — neither is smeltable.
+  // Tier 7 (Etap 64) goes in the fire, both lines. The Golden suit is gilded
+  // steel and gives it up exactly like the Knight set; the Vampire is beast
+  // plate, not bone or scale, so it is the one top-of-the-beast-line suit that
+  // melts at all — and, being beast work, mostly into iron.
+  goldenHelm: [7, "human"], goldenBody: [7, "human"], goldenLegs: [7, "human"], goldenBoots: [7, "human"],
+  vampireHelm: [7, "beast"], vampireBody: [7, "beast"], vampireLegs: [7, "beast"], vampireBoots: [7, "beast"],
 
   // ---- weapons. Bone and wood are absent for the same reason.
   shortSword: [2, "human"], ironSword: [2, "human"], fangDagger: [2, "beast"],
@@ -69,8 +71,9 @@ export const SMELT_TIER: Readonly<Partial<Record<ItemKind, readonly [number, Sme
   knightSword: [6, "human"], fireSword: [6, "human"],
 };
 
-/** Units of metal a tier yields on a body piece, shield or weapon. */
-const TIER_UNITS: readonly number[] = [0, 0, 1, 2, 3, 3, 3];
+/** Units of metal a tier yields on a body piece, shield or weapon. Tier 7
+ *  stays at 3, because three units is the ceiling on any one piece. */
+const TIER_UNITS: readonly number[] = [0, 0, 1, 2, 3, 3, 3, 3];
 
 /** Slots that give less than the full tier value. A helmet is not a
  *  breastplate and boots are barely a handful of rivets. */

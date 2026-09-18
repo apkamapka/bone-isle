@@ -632,9 +632,9 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    *
    * NOTHING HANDS THEM OUT YET, by decision: no creature drops them, no chest
    * holds them and no shelf stocks them. Borin buys them like any other set
-   * piece, so the day a source is written they already sell. Neither smelts:
-   * the furnace pulls iron and steel and a gold suit holds neither, and the
-   * top of the beast line has never gone in the fire (see smelt.ts). */
+   * piece, so the day a source is written they already sell. Both smelt: the
+   * Golden suit is gilded steel and melts like the Knight set, the Vampire is
+   * beast plate and gives up mostly iron (see smelt.ts). */
   goldenHelm: { name: "Golden Helmet", stack: 1, value: 6800, weight: 46, slot: "head", gear: { def: 6 }, set: "golden" },
   vampireHelm: { name: "Vampire Helm", stack: 1, value: 7800, weight: 54, slot: "head", gear: { def: 6 }, set: "vampire" },
   goldenBody: { name: "Golden Armor", stack: 1, value: 13600, weight: 96, slot: "body", gear: { def: 10 }, set: "golden" },

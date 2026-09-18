@@ -18968,8 +18968,28 @@ async function main(): Promise<void> {
     const sources = [...dropped, ...chested, ...stocked];
     ok(sources.length === 0, `no creature, chest or shelf hands tier 7 out yet (${sources.join(",") || "none"})`);
 
-    /* --- 7. NEITHER GOES IN THE FURNACE ------------------------------------- */
-    ok([...golden, ...vampire].every((k) => !SM64.canSmelt(k)), "neither tier-7 suit smelts");
+    /* --- 7. BOTH GO IN THE FURNACE ------------------------------------------
+     * The Golden melts exactly like the Knight set, piece for piece and at
+     * every forge; the Vampire like the beast work it is — mostly iron. */
+    ok([...golden, ...vampire].every((k) => SM64.canSmelt(k)), "both tier-7 suits smelt");
+    const melt64 = (k: K64, t: 1 | 2 | 3): string => {
+      const y = SM64.smeltYield(k, t, I64[k].slot);
+      return `${y.iron}/${y.steel}`;
+    };
+    ok(golden.every((k, i) => ([1, 2, 3] as const).every((t) => melt64(k, t) === melt64(knight[i], t))),
+      "every Golden piece melts exactly like its Knight counterpart, at every forge");
+    const total64 = (set: K64[], which: "iron" | "steel"): number =>
+      set.reduce((n, k) => n + SM64.smeltYield(k, 2, I64[k].slot)[which], 0);
+    ok(total64(golden, "steel") === 8 && total64(golden, "iron") === 0,
+      `a tier-II forge pulls ${total64(golden, "steel")} steel out of a Golden suit and no iron`);
+    ok(total64(vampire, "steel") === 3 && total64(vampire, "iron") === 5,
+      `…and ${total64(vampire, "steel")} steel with ${total64(vampire, "iron")} iron out of a Vampire one`);
+    ok([...golden, ...vampire].every((k) => melt64(k, 1).endsWith("/0")),
+      "…while a tier-I forge gets nothing but iron from either");
+    ok([...golden, ...vampire].every((k) => {
+      const y = SM64.smeltYield(k, 3, I64[k].slot);
+      return y.iron + y.steel <= 3;
+    }), "…and no tier-7 piece breaks the three-unit ceiling");
 
     /* --- 8. THE ICONS --------------------------------------------------------- */
     const badIcons = [...golden, ...vampire].map((k) => A64.iconFile(k)).filter((f) => {

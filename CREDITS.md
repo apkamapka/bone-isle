@@ -2034,6 +2034,42 @@ generator may destroy bought artwork the first time somebody runs the tools
 directory; this one writes to exactly such a path, so it is made incapable of
 running without the file it is meant to be transforming.
 
+## The Golden and Vampire sets — `item-golden-{helm,body,legs,boots}.png`, `item-vampire-{helm,body,legs,boots}.png`
+
+Source: **CraftPix.net**, standard (non-Enterprise) licence —
+https://craftpix.net/file-licenses/
+
+Eight 32x32 item icons, the tier-7 armour added in Etap 64, bought from
+CraftPix like the rest of the set icons. The pack they came from is not
+recorded yet; its name belongs on this line once it is read off the purchase.
+
+Same terms as the dragon, the buildings and the icons above: commercial use
+granted outright, no royalty, no attribution owed on a paid product, and the
+same clause 1.1.3 / 1.2.1 restriction on public source files. **The
+public-repository warning in the buildings section applies to all eight files
+in full.**
+
+All eight are **modified**, under the adaptation right of clause 1.1.1:
+
+- **Recoloured, one ramp per set.** The purchased Golden set mixed orange,
+  red, gold and grey from piece to piece; every colour now maps onto a single
+  gold ramp, with one ruby accent on the helmet's crest and the gem on the
+  breastplate. The Vampire set was teal, with cream legs; it is now a black
+  ramp with blood red on the visor slit, the chest gem, the knee guards and
+  the rim of each boot. Silhouette and shading steps are untouched: every
+  colour was swapped one for one, and only the Vampire's red accents were
+  placed by position — the visor slit (outline-dark in the purchase), the lit
+  edge of the chest gem and the band at the top of each boot.
+- **The boots are a pair.** The purchase draws one boot per set, where every
+  other set in the game shows two. The boot was shrunk to about two thirds of its
+  width by dropping whole rows and columns of the drawing (never resampled),
+  given a fresh one-pixel outline and mirrored for the left foot, with the
+  right one set two pixels lower — the arrangement every other pair in
+  `public/` uses.
+
+No script in `tools/` produces or rewrites these files, so there is nothing
+that could overwrite the purchase by being run.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in
