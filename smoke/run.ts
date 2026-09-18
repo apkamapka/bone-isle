@@ -18834,6 +18834,60 @@ async function main(): Promise<void> {
       "a sealed lane points at its circle instead of quoting a price nobody can pay");
   }
 
+  console.log("Etap 63 — nobody stands on a bridge pillar:");
+  {
+    /* The stone crossings that run east-west stand on a pillar in mid-stream,
+     * drawn just under the south rail. The Gallows Coast was traced with that
+     * pillar as grass, so a player could step off the deck and stand on it in
+     * the river. Every pillar in the game is listed here, Bonetown's included,
+     * because a re-trace of either map would put the square straight back. */
+    const { walkable: walk63 } = await import("../src/world/grid.ts");
+    const W63 = buildWorlds(WORLD_SEED);
+    const open63 = (k: "town" | "bandit", x: number, y: number): boolean =>
+      W63[k].tile[y][x] !== Tile.Water && walk63(W63[k], x, y);
+    const PILLARS63: ["town" | "bandit", number, number][] = [
+      ["town", 53, 22], ["town", 31, 48], ["town", 39, 82],
+      ["bandit", 46, 22], ["bandit", 54, 51],
+    ];
+    const standable63 = PILLARS63.filter(([k, x, y]) => open63(k, x, y));
+    ok(standable63.length === 0,
+      `every bridge pillar is water (${standable63.map(([k, x, y]) => `${k} ${x},${y}`).join("; ") || "all five"})`);
+    ok(!open63("bandit", 45, 22),
+      "…and so is the rail's shadow beside the north pillar on the Gallows Coast");
+
+    /* The general form, so the next crossing traced cannot repeat it: lift the
+     * planks and every square still standable on the Gallows Coast belongs to
+     * a real landmass. A square reachable only from a deck is in the river. */
+    const b63 = W63.bandit;
+    const off63 = (x: number, y: number): boolean =>
+      open63("bandit", x, y) && b63.tile[y][x] !== Tile.Dirt;
+    const seen63 = b63.tile.map((r) => r.map(() => false));
+    const sizes63: number[] = [];
+    for (let y = 0; y < b63.h; y++) {
+      for (let x = 0; x < b63.w; x++) {
+        if (seen63[y][x] || !off63(x, y)) continue;
+        seen63[y][x] = true;
+        const q: [number, number][] = [[x, y]];
+        let n = 0;
+        while (q.length) {
+          const [cx, cy] = q.pop()!;
+          n++;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx < 0 || ny < 0 || nx >= b63.w || ny >= b63.h) continue;
+            if (seen63[ny][nx] || !off63(nx, ny)) continue;
+            seen63[ny][nx] = true;
+            q.push([nx, ny]);
+          }
+        }
+        sizes63.push(n);
+      }
+    }
+    const smallest63 = Math.min(...sizes63);
+    ok(smallest63 >= 100,
+      `with the planks lifted, every square off them is part of a landmass (smallest: ${smallest63})`);
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
