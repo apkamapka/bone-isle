@@ -130,6 +130,10 @@ export type ItemKind =
   // tier 6 — Knight (human line) / Dragon (beast line)
   | "knightHelm" | "knightBody" | "knightLegs" | "knightBoots" | "knightShield"
   | "dragonHelm" | "dragonBody" | "dragonLegs" | "dragonBoots" | "dragonShield"
+  // tier 7 — Golden (human line) / Vampire (beast line), Etap 64: the four
+  // worn pieces only. No shield came with them, so there is none.
+  | "goldenHelm" | "goldenBody" | "goldenLegs" | "goldenBoots"
+  | "vampireHelm" | "vampireBody" | "vampireLegs" | "vampireBoots"
   // weapons: the two lines diverge here rather than mirroring each other —
   // human smiths make swords and hammers that guard as well as they cut,
   // beasts carry axes and fangs that hit harder and defend far worse
@@ -144,8 +148,9 @@ export type ItemKind =
 
 export type EqSlot = "head" | "body" | "legs" | "boots" | "weapon" | "shield" | "ring" | "amulet";
 
-/** The twelve matched sets: six tiers, a human and a beast line at each. */
-export type SetKey = "leather" | "studded" | "chain" | "plate" | "steel" | "knight" | "snakeskin" | "goblin" | "orcish" | "minotaur" | "marrow" | "dragon";
+/** The fourteen matched sets: seven tiers, a human and a beast line at each. */
+export type SetKey = "leather" | "studded" | "chain" | "plate" | "steel" | "knight" | "golden"
+  | "snakeskin" | "goblin" | "orcish" | "minotaur" | "marrow" | "dragon" | "vampire";
 
 /**
  * Armor paid for wearing head + body + legs + boots all from one set.
@@ -164,6 +169,14 @@ export const SET_BONUS: Readonly<Record<SetKey, number>> = {
   plate: 2, minotaur: 2,
   steel: 3, marrow: 3,
   knight: 3, dragon: 3,
+  /* +4 at tier 7, and the step is for a reason the table cannot show: an odd
+   * armor total protects exactly like the even one below it (see
+   * rollArmorReduction). At +3 the Vampire's extra body point would land on
+   * 29 and buy nothing, which is where the Dragon's sits today (25 guards
+   * like the Knight's 24). At +4 the Vampire totals 30 and keeps its point;
+   * the Golden totals 29, the human line paying for its speed as it does on
+   * tiers 1 to 4. */
+  golden: 4, vampire: 4,
 };
 
 /** The four worn slots a set is counted across. Shields and weapons are out. */
@@ -609,6 +622,27 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   dragonBoots: { name: "Dragon Scale Boots", stack: 1, value: 3120, weight: 26, slot: "boots", gear: { def: 2, speed: 8 }, set: "dragon" },
   knightShield: { name: "Knight Shield", stack: 1, value: 5440, weight: 60, slot: "shield", gear: { def: 17 } },
   dragonShield: { name: "Dragon Shield", stack: 1, value: 6260, weight: 70, slot: "shield", gear: { def: 17 } },
+  /* ---- tier 7: Golden / Vampire (set bonus +4 worn complete) ----
+   * ETAP 64. The first sets above the Knight and the Dragon, and the first
+   * above the old level-50 ceiling of `bestArmorSet` — the curve places them
+   * at about level 57 and 60. Built by the same rules as every tier below:
+   * a point more armor on each piece than tier 6, the beast line one point
+   * more on the body, the human line some 15% lighter with the quicker boots,
+   * and every piece worth exactly twice its tier-6 counterpart.
+   *
+   * NOTHING HANDS THEM OUT YET, by decision: no creature drops them, no chest
+   * holds them and no shelf stocks them. Borin buys them like any other set
+   * piece, so the day a source is written they already sell. Neither smelts:
+   * the furnace pulls iron and steel and a gold suit holds neither, and the
+   * top of the beast line has never gone in the fire (see smelt.ts). */
+  goldenHelm: { name: "Golden Helmet", stack: 1, value: 6800, weight: 46, slot: "head", gear: { def: 6 }, set: "golden" },
+  vampireHelm: { name: "Vampire Helm", stack: 1, value: 7800, weight: 54, slot: "head", gear: { def: 6 }, set: "vampire" },
+  goldenBody: { name: "Golden Armor", stack: 1, value: 13600, weight: 96, slot: "body", gear: { def: 10 }, set: "golden" },
+  vampireBody: { name: "Vampire Mail", stack: 1, value: 15640, weight: 112, slot: "body", gear: { def: 11 }, set: "vampire" },
+  goldenLegs: { name: "Golden Legs", stack: 1, value: 9520, weight: 72, slot: "legs", gear: { def: 6 }, set: "golden" },
+  vampireLegs: { name: "Vampire Legs", stack: 1, value: 10960, weight: 86, slot: "legs", gear: { def: 6 }, set: "vampire" },
+  goldenBoots: { name: "Golden Boots", stack: 1, value: 5440, weight: 22, slot: "boots", gear: { def: 3, speed: 14 }, set: "golden" },
+  vampireBoots: { name: "Vampire Boots", stack: 1, value: 6240, weight: 26, slot: "boots", gear: { def: 3, speed: 10 }, set: "vampire" },
   /* THE RINGS ARE PRICED LIKE WHAT THEY ARE (Etap 61): three pieces of jewellery,
    * one of each in the whole game per character, out of the three deepest
    * boss hoards. Oswin used to pay 45 to 75 for them — less than a Plate

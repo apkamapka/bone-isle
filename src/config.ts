@@ -607,9 +607,16 @@ export function bestShieldDef(level: number): number {
 
 /** Best TOTAL armor rating of a full worn set (head + body + legs + boots).
  *  Same two-part shape as the shield, five points lower at the start — a
- *  beginner finds a shield before a matched set of plate. */
+ *  beginner finds a shield before a matched set of plate.
+ *
+ *  The plateau moved from 22 to 26 in Etap 64, when the Golden and Vampire
+ *  sets (25 and 26) became the first armor above the Knight and the Dragon.
+ *  Nothing below level 51 moves — the slope meets 22 at about level 50 — so
+ *  every older rung is checked against exactly the target it always was;
+ *  the line simply runs on to about level 60 before it flattens. The shield
+ *  curve keeps its 17: tier 7 came without shields. */
 export function bestArmorSet(level: number): number {
-  return Math.min(22, 0.4 + 0.43 * level);
+  return Math.min(26, 0.4 + 0.43 * level);
 }
 
 /** Dropped items linger on the ground this long (seconds) before vanishing. */

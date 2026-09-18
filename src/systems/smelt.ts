@@ -56,6 +56,10 @@ export const SMELT_TIER: Readonly<Partial<Record<ItemKind, readonly [number, Sme
   knightHelm: [6, "human"], knightBody: [6, "human"], knightLegs: [6, "human"], knightBoots: [6, "human"], knightShield: [6, "human"],
   // Marrow (bone) and Dragon (scale) are the beast tier-5/6 sets and are
   // organic on purpose — the best beast gear is simply not smeltable.
+  // Tier 7 is absent on purpose too (Etap 64): a Golden suit is gold, which
+  // is neither iron nor steel, and the Vampire sits at the top of the beast
+  // line, where nothing has ever gone in the fire. TIER_UNITS has no row for
+  // tier 7 either — give it one before listing any tier-7 piece here.
 
   // ---- weapons. Bone and wood are absent for the same reason.
   shortSword: [2, "human"], ironSword: [2, "human"], fangDagger: [2, "beast"],

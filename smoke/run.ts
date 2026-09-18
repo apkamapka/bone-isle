@@ -853,6 +853,7 @@ async function main(): Promise<void> {
       [["plateHelm", "plateBody", "plateLegs", "plateBoots"], 29],
       [["steelHelm", "steelBody", "steelLegs", "steelBoots"], 39],
       [["knightHelm", "knightBody", "knightLegs", "knightBoots"], 48],
+      [["goldenHelm", "goldenBody", "goldenLegs", "goldenBoots"], 57],
     ] as const;
     const beastSets = [
       [["snakeskinHelm", "snakeskinBody", "snakeskinLegs", "snakeskinBoots"], 8],
@@ -861,6 +862,7 @@ async function main(): Promise<void> {
       [["minotaurHelm", "minotaurBody", "minotaurLegs", "minotaurBoots"], 32],
       [["marrowHelm", "marrowBody", "marrowLegs", "marrowBoots"], 41],
       [["dragonHelm", "dragonBody", "dragonLegs", "dragonBoots"], 50],
+      [["vampireHelm", "vampireBody", "vampireLegs", "vampireBoots"], 60],
     ] as const;
 
     let weaponsOk = true, shieldsOk = true, setsOk = true;
@@ -911,7 +913,7 @@ async function main(): Promise<void> {
 
     // the plateau is as important as the slope: gear stops, training does not
     ok(cfg.bestWeaponAtk(200) === cfg.bestWeaponAtk(100), "weapon curve plateaus and stays there");
-    ok(cfg.bestShieldDef(200) === 17 && cfg.bestArmorSet(200) === 22, "defense curves plateau at 17 / 22");
+    ok(cfg.bestShieldDef(200) === 17 && cfg.bestArmorSet(200) === 26, "defense curves plateau at 17 / 26");
     // …and across the covered range gear must grow slower than training does
     const gearGrowth = cfg.bestWeaponAtk(60) / cfg.bestWeaponAtk(1);
     ok(gearGrowth < 4, `best weapon grows only ${gearGrowth.toFixed(1)}× from level 1 to 60 (skillTerm grows ~4.5×)`);
@@ -939,7 +941,7 @@ async function main(): Promise<void> {
     // on, so the Leather set must remain purchasable.
     const craftable = new Set(items.RECIPES.map((r) => r.out));
     const gearKeys = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].set);
-    ok(gearKeys.length === 48, `the catalog holds 48 worn set pieces (${gearKeys.length})`);
+    ok(gearKeys.length === 56, `the catalog holds 56 worn set pieces (${gearKeys.length})`);
     ok(gearKeys.filter((k) => craftable.has(k)).length === 0, "no worn gear is craftable any more");
     {
       const { SHOPS } = await import("../src/entities/npcs.ts");
@@ -7485,16 +7487,16 @@ async function main(): Promise<void> {
     const { setBonus, defenseArmor } = await import("../src/systems/skills.ts");
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
     const defOf = (k: keyof typeof I): number => I[k].gear?.def ?? 0;
-    const LINES = [["leather", "studded", "chain", "plate", "steel", "knight"],
-                   ["snakeskin", "goblin", "orcish", "minotaur", "marrow", "dragon"]] as const;
+    const LINES = [["leather", "studded", "chain", "plate", "steel", "knight", "golden"],
+                   ["snakeskin", "goblin", "orcish", "minotaur", "marrow", "dragon", "vampire"]] as const;
 
     /* --- the catalog is complete and every piece is tagged --- */
     const worn = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].set);
-    ok(worn.length === 48, `48 worn pieces across twelve sets (${worn.length})`);
+    ok(worn.length === 56, `56 worn pieces across fourteen sets (${worn.length})`);
     ok(worn.every((k) => SET_SLOTS.includes(I[k].slot as never)),
       "every tagged piece sits in one of the four worn slots");
     ok((Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "shield").length === 12,
-      "twelve shields, one per set — and none of them carries a set tag");
+      "twelve shields, one per set of tiers 1-6 (tier 7 has none) — and none of them carries a set tag");
     ok((Object.keys(I) as (keyof typeof I)[]).every((k) => I[k].slot !== "shield" || !I[k].set),
       "…because a shield should be chosen on its own merits");
 
@@ -7517,7 +7519,7 @@ async function main(): Promise<void> {
     }
 
     /* --- the bonus is set ABOVE the one-point gap, or it would not work --- */
-    for (let t = 0; t < 6; t++) {
+    for (let t = 0; t < LINES[0].length; t++) {
       const h = LINES[0][t], b = LINES[1][t];
       ok(SET_BONUS[h] === SET_BONUS[b], `tier ${t + 1}: both lines pay the same set bonus`);
       ok(SET_BONUS[b] > 1, `tier ${t + 1}: the bonus outweighs the one-point armour gap`);
@@ -7620,10 +7622,10 @@ async function main(): Promise<void> {
       // entirely inside the sets, where the human line already IS the fast
       // one. This assertion is the tripwire against quietly adding another.
       const boots = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "boots");
-      ok(boots.length === 12, `twelve boots, one per set (${boots.length})`);
+      ok(boots.length === 14, `fourteen boots, one per set (${boots.length})`);
       ok(boots.every((k) => I[k].set !== undefined), "every boot belongs to a set");
       const fastest = boots.reduce((a, b) => ((I[a].gear?.speed ?? 0) >= (I[b].gear?.speed ?? 0) ? a : b));
-      ok(fastest === "knightBoots", `the quickest boot in the game is the human line's best (${fastest})`);
+      ok(fastest === "goldenBoots", `the quickest boot in the game is the human line's best (${fastest})`);
     }
   }
 
@@ -18886,6 +18888,97 @@ async function main(): Promise<void> {
     const smallest63 = Math.min(...sizes63);
     ok(smallest63 >= 100,
       `with the planks lifted, every square off them is part of a landmass (smallest: ${smallest63})`);
+  }
+
+  console.log("Etap 64 — the Golden and Vampire sets, tier 7:");
+  {
+    const I64 = items.ITEMS;
+    const { defenseArmor: da64, rollArmorReduction: rar64 } = await import("../src/systems/skills.ts");
+    const { MONSTER_DEFS: M64 } = await import("../src/entities/monsters.ts");
+    const { SHOPS: S64, sellsFor: sf64 } = await import("../src/entities/npcs.ts");
+    const { CHEST_PRIZES: CP64 } = await import("../src/game.ts");
+    const SM64 = await import("../src/systems/smelt.ts");
+    const A64 = await import("../src/gfx/itemArt.ts");
+    const fs64 = await import("node:fs");
+    type K64 = keyof typeof I64;
+    const suit64 = (set: string): K64[] => ["Helm", "Body", "Legs", "Boots"].map((p) => `${set}${p}` as K64);
+    const golden = suit64("golden"), vampire = suit64("vampire");
+    const knight = suit64("knight"), dragon = suit64("dragon");
+    const def64 = (k: K64): number => I64[k].gear?.def ?? 0;
+
+    /* --- 1. THE CATALOG ------------------------------------------------------ */
+    ok([...golden, ...vampire].every((k) => I64[k] !== undefined), "all eight tier-7 pieces are in the catalog");
+    ok(golden.every((k) => I64[k].set === "golden") && vampire.every((k) => I64[k].set === "vampire"),
+      "…each tagged with its own set");
+    ok([...golden, ...vampire].every((k, i) => I64[k].slot === ["head", "body", "legs", "boots"][i % 4]),
+      "…one per worn slot, helmet to boots");
+
+    /* --- 2. ONE POINT ABOVE TIER 6, PIECE BY PIECE -------------------------- */
+    ok(golden.every((k, i) => def64(k) === def64(knight[i]) + 1),
+      "every Golden piece guards one point more than its Knight counterpart");
+    ok(vampire.every((k, i) => def64(k) === def64(dragon[i]) + 1),
+      "…and every Vampire piece one more than its Dragon one");
+    ok(items.SET_BONUS.golden === 4 && items.SET_BONUS.vampire === 4 && items.SET_BONUS.knight === 3,
+      "the set bonus steps from +3 to +4");
+
+    /* --- 3. WORN COMPLETE, AND THE ODD-TOTAL RULE ----------------------------
+     * An odd armor total protects exactly like the even one below it. The +4
+     * is what keeps the Vampire's extra body point a real one — the Dragon's,
+     * at 25, guards exactly like the Knight's 24. */
+    const worn64 = (set: K64[]): number => {
+      const p = createPlayer({ x: 0, y: 0 });
+      p.eq.head = set[0]; p.eq.body = set[1]; p.eq.legs = set[2]; p.eq.boots = set[3];
+      return da64(p.eq);
+    };
+    ok(worn64(golden) === 29 && worn64(vampire) === 30,
+      `worn complete: Golden ${worn64(golden)}, Vampire ${worn64(vampire)} — against Knight ${worn64(knight)} and Dragon ${worn64(dragon)}`);
+    const span64 = (armor: number): string => {
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < 4000; i++) { const r = rar64(armor); lo = Math.min(lo, r); hi = Math.max(hi, r); }
+      return `${lo}-${hi}`;
+    };
+    const sg = span64(worn64(golden)), sv = span64(worn64(vampire));
+    ok(sg === "14-27" && sv === "15-29", `a Vampire suit stops more than a Golden one (${sv} against ${sg} a hit)`);
+    ok(span64(worn64(dragon)) === span64(worn64(knight)), "…where the Dragon's extra point still buys nothing");
+
+    /* --- 4. THE TWO LINES ARE STILL A CHOICE -------------------------------- */
+    const wt64 = (set: K64[]): number => set.reduce((n, k) => n + I64[k].weight, 0);
+    ok(wt64(golden) < wt64(vampire), `the human suit is the lighter (${wt64(golden)} against ${wt64(vampire)} oz)`);
+    ok(I64.goldenBoots.gear?.speed === 14 && I64.vampireBoots.gear?.speed === 10,
+      "…with the quicker boots: 14 against 10, each two up on tier 6");
+
+    /* --- 5. TWICE THE PRICE OF TIER 6, AND BORIN BUYS THEM ------------------ */
+    ok(golden.every((k, i) => I64[k].value === 2 * I64[knight[i]].value)
+      && vampire.every((k, i) => I64[k].value === 2 * I64[dragon[i]].value),
+      "every piece is worth exactly twice its tier-6 counterpart");
+    ok(golden.every((k, i) => sf64("smith", k) > sf64("smith", knight[i]))
+      && vampire.every((k, i) => sf64("smith", k) > sf64("smith", dragon[i])),
+      "Borin buys all eight, each for more than the piece a tier below");
+
+    /* --- 6. NOTHING HANDS THEM OUT YET, BY DECISION --------------------------
+     * The day a creature, a chest or a shelf starts giving these away, this is
+     * the assertion to rewrite — not the one to delete. */
+    const t7 = new Set<string>([...golden, ...vampire]);
+    const dropped = (Object.keys(M64) as (keyof typeof M64)[])
+      .filter((m) => (M64[m].loot as { kind: string }[]).some((l) => t7.has(l.kind)));
+    const chested = Object.values(CP64).flat()
+      .map((p) => (typeof p === "string" ? p : p![0])).filter((k) => t7.has(k as string));
+    const stocked = Object.values(S64)
+      .flatMap((sh) => sh!.entries.filter((e) => e.buy > 0 && t7.has(e.kind)).map((e) => e.kind));
+    const sources = [...dropped, ...chested, ...stocked];
+    ok(sources.length === 0, `no creature, chest or shelf hands tier 7 out yet (${sources.join(",") || "none"})`);
+
+    /* --- 7. NEITHER GOES IN THE FURNACE ------------------------------------- */
+    ok([...golden, ...vampire].every((k) => !SM64.canSmelt(k)), "neither tier-7 suit smelts");
+
+    /* --- 8. THE ICONS --------------------------------------------------------- */
+    const badIcons = [...golden, ...vampire].map((k) => A64.iconFile(k)).filter((f) => {
+      const u = new URL(`../public/${f}`, import.meta.url);
+      if (!fs64.existsSync(u)) return true;
+      const png = fs64.readFileSync(u);
+      return png.readUInt32BE(16) !== 32 || png.readUInt32BE(20) !== 32;
+    });
+    ok(badIcons.length === 0, `all eight drawn icons ship, at 32x32 (${badIcons.join(",") || "all do"})`);
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

@@ -1334,6 +1334,8 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   steelShield: SPR.gearStubShield, marrowShield: SPR.gearStubShield, knightHelm: SPR.gearStubHead, dragonHelm: SPR.gearStubHead,
   knightBody: SPR.gearStubBody, dragonBody: SPR.gearStubBody, knightLegs: SPR.gearStubLegs, dragonLegs: SPR.gearStubLegs,
   knightBoots: SPR.gearStubBoots, dragonBoots: SPR.gearStubBoots, knightShield: SPR.gearStubShield, dragonShield: SPR.gearStubShield,
+  goldenHelm: SPR.gearStubHead, vampireHelm: SPR.gearStubHead, goldenBody: SPR.gearStubBody, vampireBody: SPR.gearStubBody,
+  goldenLegs: SPR.gearStubLegs, vampireLegs: SPR.gearStubLegs, goldenBoots: SPR.gearStubBoots, vampireBoots: SPR.gearStubBoots,
   shortSword: SPR.gearStubWeapon, fangDagger: SPR.gearStubWeapon, ironSword: SPR.gearStubWeapon, goblinHatchet: SPR.gearStubWeapon,
   mercBlade: SPR.gearStubWeapon, warHammer: SPR.gearStubWeapon, orcishAxe: SPR.gearStubWeapon, gladius: SPR.gearStubWeapon,
   boneSword: SPR.gearStubWeapon, minotaurAxe: SPR.gearStubWeapon, warlordBlade: SPR.gearStubWeapon, steelMaul: SPR.gearStubWeapon,
