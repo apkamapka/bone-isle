@@ -143,7 +143,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   beep(430, 0.06, "triangle", 0.045, -120);
   // accuracy first, Tibia-style: the arrow is spent either way, a miss trains
   // Distance once, a hit trains it DOUBLE (as in the real skill system)
-  if (Math.random() > distanceHitChance()) {
+  if (Math.random() > distanceHitChance(p.eq)) {
     m.aggroT = MONSTER_AGGRO_HIT_S; // even a whizzing miss provokes the target
     addFloat(world, m.x, m.y - 32, "miss", "#9aa0a8");
     addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
@@ -185,7 +185,7 @@ export function shootDummy(world: World, p: Player, s: Structure, arrowKind: Ite
   s.anim = 0;
   const flight = Math.hypot(tx - p.x, ty - p.y) / SHOT_SPEED;
   world.shots.push({ fromX: p.x, fromY: p.y - 16, toX: tx, toY: ty - 12, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow", color: arrowTint(arrowKind) });
-  if (Math.random() > distanceHitChance()) {
+  if (Math.random() > distanceHitChance(p.eq)) {
     addFloat(world, c.x, s.ty * TILE - 8, "miss", "#9aa0a8");
     addSkillXp("dist", 1 * DUMMY_TIER_RATE[0], (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
     return true;

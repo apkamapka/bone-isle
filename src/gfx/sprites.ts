@@ -1321,7 +1321,7 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   ring: SPR.eqRing, guardRing: SPR.eqRing, healthRing: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
   leatherHelm: SPR.gearStubHead, snakeskinHelm: SPR.gearStubHead, leatherBody: SPR.gearStubBody, snakeskinBody: SPR.gearStubBody,
   leatherLegs: SPR.gearStubLegs, snakeskinLegs: SPR.gearStubLegs, leatherBoots: SPR.gearStubBoots, snakeskinBoots: SPR.gearStubBoots,
-  leatherShield: SPR.gearStubShield, snakeskinShield: SPR.gearStubShield, studdedHelm: SPR.gearStubHead, goblinHelm: SPR.gearStubHead,
+  leatherShield: SPR.gearStubShield, studdedHelm: SPR.gearStubHead, goblinHelm: SPR.gearStubHead,
   studdedBody: SPR.gearStubBody, goblinBody: SPR.gearStubBody, studdedLegs: SPR.gearStubLegs, goblinLegs: SPR.gearStubLegs,
   studdedBoots: SPR.gearStubBoots, goblinBoots: SPR.gearStubBoots, studdedShield: SPR.gearStubShield, goblinShield: SPR.gearStubShield,
   chainHelm: SPR.gearStubHead, orcishHelm: SPR.gearStubHead, chainBody: SPR.gearStubBody, orcishBody: SPR.gearStubBody,

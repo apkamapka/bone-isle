@@ -258,8 +258,9 @@ export function monsterTierOf(hp: number): number {
  *    tiers 4-5 (plate/minotaur, steel/marrow)          x 0.25  8% -> 2%
  *    tier 6 (knight, dragon, their swords, the blade)  to 0.5%
  *
- *  rounded to half a point, never under 1% below tier 4. The snakeskin set is
- *  the one hand-set number, at 1%. A level-50 corpse now hands over a piece
+ *  rounded to half a point, never under 1% below tier 4. (The snakeskin set
+ *  was the one hand-set number, at 1%, until it left the snake in Etap 67 to
+ *  become the Hunter set.) A level-50 corpse now hands over a piece
  *  of its suit about once in thirty-three kills, and any GIVEN piece once in
  *  two hundred. Trophies were halved (15% -> 8%) in the same pass; coal, food,
  *  bones and ammunition were not touched. The smoke suite holds the shape:
@@ -826,12 +827,9 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   snake: {
     spr: SPR.snake, hp: 30, dmg: [4, 11], speed: 58, atkRate: 2.0, exp: 20, gold: [1, 4], danger: 0.1, resist: { earth: 0.6, ice: 1.5 },
     loot: [
+      // No set any more (Etap 67): the snakeskin suit it carried at 1% a
+      // piece became the Hunter set, which nothing drops yet.
       { kind: "venomGland", chance: 0.12, n: [1, 1] },
-      { kind: "snakeskinHelm", chance: 0.01, n: [1, 1] },
-      { kind: "snakeskinBody", chance: 0.01, n: [1, 1] },
-      { kind: "snakeskinLegs", chance: 0.01, n: [1, 1] },
-      { kind: "snakeskinBoots", chance: 0.01, n: [1, 1] },
-      { kind: "snakeskinShield", chance: 0.01, n: [1, 1] },
       { kind: "fangDagger", chance: 0.015, n: [1, 1] },
     ],
   },

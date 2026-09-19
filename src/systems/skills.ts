@@ -230,7 +230,7 @@ export function attackPower(level: number, eq: Equipment): number {
 export function distancePower(level: number, eq: Equipment, arrowAtk: number): number {
   const attackValue = (equippedBow(eq)?.power ?? 0) + arrowAtk;
   const raw = attackValue
-    * skillTerm(skills.dist.lv, SKILL_TERM_PER_DIST)
+    * skillTerm(distanceSkill(eq), SKILL_TERM_PER_DIST)
     * levelFactor(level)
     * mastery("dist")
     * stanceAtk();
@@ -255,9 +255,20 @@ export function rollDistanceDamage(max: number, _level?: number): number {
   return rollHit(max);
 }
 
-/** Accuracy of one bow shot at the current Distance Fighting skill. */
-export function distanceHitChance(): number {
-  return Math.min(DIST_HITCHANCE_MAX, DIST_HITCHANCE_BASE + (skills.dist.lv - 10) * DIST_HITCHANCE_PER);
+/**
+ * Distance Fighting as the bow reads it: the trained level plus whatever worn
+ * gear adds (`dist`, the Hunter set, Etap 67). Gear never trains and is never
+ * lost on death, and mastery() keeps comparing TRAINED levels only — a suit
+ * is not a specialisation.
+ */
+export function distanceSkill(eq?: Equipment): number {
+  return skills.dist.lv + (eq ? gearStat(eq, "dist") : 0);
+}
+
+/** Accuracy of one bow shot at the current Distance Fighting skill, worn
+ *  bonuses included when the equipment is passed. */
+export function distanceHitChance(eq?: Equipment): number {
+  return Math.min(DIST_HITCHANCE_MAX, DIST_HITCHANCE_BASE + (distanceSkill(eq) - 10) * DIST_HITCHANCE_PER);
 }
 
 /* ================================================================== *

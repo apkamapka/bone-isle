@@ -112,9 +112,12 @@ export type ItemKind =
    * obvious exploit of pairing the heavier beast plate with the quicker
    * human boots — mixing costs more armor than the mismatch ever gains.
    * -------------------------------------------------------------------- */
-  // tier 1 — Leather (human line) / Snakeskin (beast line)
+  // tier 1 — Leather (human line). The beast line starts at tier 2 since
+  // Etap 67: its old tier-1 suit is the Hunter set, just below.
   | "leatherHelm" | "leatherBody" | "leatherLegs" | "leatherBoots" | "leatherShield"
-  | "snakeskinHelm" | "snakeskinBody" | "snakeskinLegs" | "snakeskinBoots" | "snakeskinShield"
+  // the Hunter set (Etap 67), the archer's suit. The ids are the Snakeskin
+  // set's it replaced, kept so saves and icons still line up.
+  | "snakeskinHelm" | "snakeskinBody" | "snakeskinLegs" | "snakeskinBoots"
   // tier 2 — Studded (human line) / Goblin (beast line)
   | "studdedHelm" | "studdedBody" | "studdedLegs" | "studdedBoots" | "studdedShield"
   | "goblinHelm" | "goblinBody" | "goblinLegs" | "goblinBoots" | "goblinShield"
@@ -152,11 +155,13 @@ export type ItemKind =
 
 export type EqSlot = "head" | "body" | "legs" | "boots" | "weapon" | "shield" | "ring" | "amulet";
 
-/** The fifteen matched sets: seven tiers, a human and a beast line at each,
- *  and the Zephyr, which belongs to neither ladder. */
+/** The fifteen matched sets: the human line's seven tiers, the beast line's
+ *  six (it starts at tier 2), and two that belong to neither ladder — the
+ *  Zephyr, and the Hunter set, which keeps the key of the Snakeskin set it
+ *  replaced (Etap 67). */
 export type SetKey = "leather" | "studded" | "chain" | "plate" | "steel" | "knight" | "golden"
-  | "snakeskin" | "goblin" | "orcish" | "minotaur" | "marrow" | "dragon" | "vampire"
-  | "zephyr";
+  | "goblin" | "orcish" | "minotaur" | "marrow" | "dragon" | "vampire"
+  | "zephyr" | "snakeskin";
 
 /**
  * Armor paid for wearing head + body + legs + boots all from one set.
@@ -169,7 +174,7 @@ export type SetKey = "leather" | "studded" | "chain" | "plate" | "steel" | "knig
  * set to cherry-pick costs strictly more than the mismatch is worth.
  */
 export const SET_BONUS: Readonly<Record<SetKey, number>> = {
-  leather: 2, snakeskin: 2,
+  leather: 2,
   studded: 2, goblin: 2,
   chain: 2, orcish: 2,
   plate: 2, minotaur: 2,
@@ -185,6 +190,10 @@ export const SET_BONUS: Readonly<Record<SetKey, number>> = {
   golden: 4, vampire: 4,
   /* The Zephyr pays nothing in armor. Its bonus is speed — SET_SPEED_BONUS. */
   zephyr: 0,
+  /* The Hunter set (the key is the Snakeskin's, Etap 67) is an archer's suit:
+   * what it pays is Distance on every piece, not armor, and the one point it
+   * keeps for being worn whole is what "next to no defense" leaves it. */
+  snakeskin: 1,
 };
 
 /**
@@ -237,6 +246,11 @@ export interface GearStats {
   defBonus?: number;
   speed?: number;
   maxhp?: number;
+  /** Distance Fighting added while worn (Etap 67, the Hunter set). It counts as
+   *  skill levels wherever the bow reads the skill — damage and accuracy — and
+   *  is never trained or lost; specialisation (mastery) still compares the
+   *  trained levels only. See distanceSkill() in skills.ts. */
+  dist?: number;
 }
 
 export interface ItemDef {
@@ -604,17 +618,27 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * is over the Knight), both melt, and nothing hands either out yet. */
   sunspear: { name: "Sunspear", stack: 1, value: 16800, weight: 58, slot: "weapon", gear: { atk: 27, def: 24, defBonus: 3 } },
   bloodletter: { name: "Bloodletter", stack: 1, value: 19320, weight: 54, slot: "weapon", gear: { atk: 30, def: 14, defBonus: 1 } },
-  /* ---- tier 1: Leather / Snakeskin (set bonus +1 worn complete) ---- */
+  /* ---- tier 1: Leather (set bonus +2 worn complete) ---- */
   leatherHelm: { name: "Leather Helmet", stack: 1, value: 6, weight: 17, slot: "head", gear: { def: 1 }, set: "leather" },
-  snakeskinHelm: { name: "Snakeskin Hood", stack: 1, value: 18, weight: 20, slot: "head", gear: { def: 1 }, set: "snakeskin" },
   leatherBody: { name: "Leather Armor", stack: 1, value: 12, weight: 60, slot: "body", gear: { def: 1 }, set: "leather" },
-  snakeskinBody: { name: "Snakeskin Mail", stack: 1, value: 35, weight: 70, slot: "body", gear: { def: 2 }, set: "snakeskin" },
   leatherLegs: { name: "Leather Legs", stack: 1, value: 8, weight: 34, slot: "legs", gear: { def: 1 }, set: "leather" },
-  snakeskinLegs: { name: "Snakeskin Legs", stack: 1, value: 23, weight: 40, slot: "legs", gear: { def: 1 }, set: "snakeskin" },
   leatherBoots: { name: "Leather Boots", stack: 1, value: 5, weight: 15, slot: "boots", gear: { def: 0, speed: 2 }, set: "leather" },
-  snakeskinBoots: { name: "Snakeskin Boots", stack: 1, value: 15, weight: 18, slot: "boots", gear: { def: 0 }, set: "snakeskin" },
   leatherShield: { name: "Leather Shield", stack: 1, value: 10, weight: 51, slot: "shield", gear: { def: 4 } },
-  snakeskinShield: { name: "Snakeskin Buckler", stack: 1, value: 30, weight: 60, slot: "shield", gear: { def: 4 } },
+  /* ---- the Hunter set (Etap 67) ----
+   * The archer's suit: next to no armor — 2 across the pieces, 3 worn whole —
+   * and +2 Distance Fighting on every piece, +8 worn complete. It was the
+   * Snakeskin set, the beast line's tier 1, and keeps that set's ids so old
+   * saves and the icon files still line up; the names, the stats and the art
+   * are new. The snake no longer carries it, and for now nothing does.
+   *
+   * THE SNAKESKIN BUCKLER WENT WITH IT, out of the game rather than into the
+   * set: a bow takes both hands, so a shield that helped the bow could never
+   * be worn with one. A save that still holds a buckler simply drops it on
+   * load (save.ts keeps only kinds the catalog knows). */
+  snakeskinHelm: { name: "Hunter's Hood", stack: 1, value: 18, weight: 20, slot: "head", gear: { def: 0, dist: 2 }, set: "snakeskin" },
+  snakeskinBody: { name: "Hunter's Jerkin", stack: 1, value: 35, weight: 70, slot: "body", gear: { def: 1, dist: 2 }, set: "snakeskin" },
+  snakeskinLegs: { name: "Hunter's Leggings", stack: 1, value: 23, weight: 40, slot: "legs", gear: { def: 1, dist: 2 }, set: "snakeskin" },
+  snakeskinBoots: { name: "Hunter's Boots", stack: 1, value: 15, weight: 18, slot: "boots", gear: { def: 0, dist: 2 }, set: "snakeskin" },
   /* ---- tier 2: Studded / Goblin (set bonus +1 worn complete) ---- */
   studdedHelm: { name: "Studded Helmet", stack: 1, value: 38, weight: 26, slot: "head", gear: { def: 1 }, set: "studded" },
   goblinHelm: { name: "Goblin Skull", stack: 1, value: 43, weight: 30, slot: "head", gear: { def: 1 }, set: "goblin" },
@@ -1475,6 +1499,7 @@ export function itemInfoLines(kind: ItemKind, st?: ItemStack | null): string[] {
     lines.push(`Defense +${d.gear.defBonus}`);
   }
   if (d.gear?.speed) lines.push(`Speed +${d.gear.speed}`);
+  if (d.gear?.dist) lines.push(`Distance +${d.gear.dist}`);
   if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
   if (d.crystal) lines.push(`Charge item (1 use per unit)`);
   if (d.deathProtect) lines.push(`Protects your items on death`, `(one use — the amulet shatters)`);

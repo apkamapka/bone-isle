@@ -10,8 +10,9 @@
  *      only pull iron; a tier-II furnace pulls steel out of the same piece.
  *      This is the entire argument for upgrading: the better forge does not
  *      get more out of a breastplate, it gets BETTER metal out of it.
- *   3. Organic gear does not go in the fire. Leather, snakeskin, bone
- *      (marrow) and dragon scale are not metal and never smelt.
+ *   3. Organic gear does not go in the fire. Leather (the Hunter set's
+ *      too), cloth, bone (marrow) and dragon scale are not metal and never
+ *      smelt.
  *
  * The economy this is balanced against: the feedstock is DUPLICATES, not the
  * gear on your back. A chieftain drops a piece of the Steel set on one kill
@@ -45,7 +46,7 @@ export interface SmeltYield {
  * look when a number is wrong.
  */
 export const SMELT_TIER: Readonly<Partial<Record<ItemKind, readonly [number, SmeltLine]>>> = {
-  // ---- armour, tier 2..7. Tier 1 (leather / snakeskin) is hide, not metal.
+  // ---- armour, tier 2..7. Tier 1 (leather) and the Hunter set are hide, not metal.
   studdedHelm: [2, "human"], studdedBody: [2, "human"], studdedLegs: [2, "human"], studdedBoots: [2, "human"], studdedShield: [2, "human"],
   goblinHelm: [2, "beast"], goblinBody: [2, "beast"], goblinLegs: [2, "beast"], goblinBoots: [2, "beast"], goblinShield: [2, "beast"],
   chainHelm: [3, "human"], chainBody: [3, "human"], chainLegs: [3, "human"], chainBoots: [3, "human"], chainShield: [3, "human"],

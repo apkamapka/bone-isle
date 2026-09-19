@@ -1,7 +1,7 @@
 /** All toggleable UI panels. Each draws itself and pushes clickable hotspots. */
 import { SPR, iconW, iconH } from "../gfx/sprites.ts";
 import { itemSprite } from "../gfx/itemArt.ts";
-import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax } from "../systems/skills.ts";
+import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax, distanceSkill } from "../systems/skills.ts";
 import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import { MIN_HIT_RATIO } from "../config.ts";
 import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost, structSprite, countOwned } from "../systems/building.ts";
@@ -1336,7 +1336,10 @@ function drawSkills(p: PanelInput): void {
     const need = skillNeed(s);
     const pct = s.active ? Math.floor((s.pts / need) * 100) : 0;
     hudText(hud, s.name, x + 10 * S, ry + 5 * S, 8 * S, "#f3eedd", "left", true);
-    hudText(hud, `Lv ${s.lv}`, x + w - 46 * S, ry + 5 * S, 8 * S, "#ffe9a8", "right");
+    // Worn Distance (the Hunter set) shows beside the trained level, never
+    // folded into it: the bar and the percentage are training, the bonus is not.
+    const worn = key === "dist" ? distanceSkill(p.player.eq) - s.lv : 0;
+    hudText(hud, worn > 0 ? `Lv ${s.lv} +${worn}` : `Lv ${s.lv}`, x + w - 46 * S, ry + 5 * S, 8 * S, "#ffe9a8", "right");
     hudText(hud, `${pct}%`, x + w - 12 * S, ry + 5 * S, 8 * S, s.active ? "#cfe8d2" : "#8a8070", "right");
     skillBar(p, x + 10 * S, ry + 11 * S, w - 22 * S, 6 * S, s.active ? s.pts / need : 0, s.color);
     if (!s.active) hudText(hud, "(coming soon)", x + 12 * S, ry + 14 * S, 6 * S, "rgba(220,214,190,.45)");
@@ -1796,7 +1799,7 @@ function forgeSmelt(
   }
   if (!rows.length) {
     hudText(hud, "Nothing you own will melt.", x + w / 2, ry + 6 * S, 8 * S, "rgba(220,214,190,.55)", "center");
-    hudText(hud, "Leather, snakeskin, bone and dragon scale never do.", x + w / 2, ry + 16 * S, 7 * S, "rgba(220,214,190,.4)", "center");
+    hudText(hud, "Leather, cloth, bone and dragon scale never do.", x + w / 2, ry + 16 * S, 7 * S, "rgba(220,214,190,.4)", "center");
     return ry + rowH;
   }
   for (const row of rows.slice(0, 12)) {

@@ -843,7 +843,9 @@ async function main(): Promise<void> {
       ["gladius", 30], ["warlordBlade", 40], ["knightSword", 50], ["sunspear", 57]] as const;
     const shields = [["leatherShield", 9], ["studdedShield", 15], ["chainShield", 22],
       ["plateShield", 31], ["steelShield", 40], ["knightShield", 50], ["goldenShield", 57]] as const;
-    const beastShields = [["snakeskinShield", 9], ["goblinShield", 15], ["orcishShield", 22],
+    // The beast line starts at tier 2 since Etap 67: its tier-1 suit left the
+    // ladder to become the Hunter set, and its buckler left the game.
+    const beastShields = [["goblinShield", 15], ["orcishShield", 22],
       ["minotaurShield", 31], ["marrowShield", 40], ["dragonShield", 50], ["vampireShield", 60]] as const;
     // full worn sets: head + body + legs + boots, both lines
     const sets = [
@@ -856,7 +858,6 @@ async function main(): Promise<void> {
       [["goldenHelm", "goldenBody", "goldenLegs", "goldenBoots"], 57],
     ] as const;
     const beastSets = [
-      [["snakeskinHelm", "snakeskinBody", "snakeskinLegs", "snakeskinBoots"], 8],
       [["goblinHelm", "goblinBody", "goblinLegs", "goblinBoots"], 18],
       [["orcishHelm", "orcishBody", "orcishLegs", "orcishBoots"], 22],
       [["minotaurHelm", "minotaurBody", "minotaurLegs", "minotaurBoots"], 32],
@@ -899,11 +900,14 @@ async function main(): Promise<void> {
       const wt = (pieces: readonly string[]): number =>
         pieces.reduce((n, k) => n + I[k as keyof typeof I].weight, 0);
       let armorEdge = true, weightEdge = true, speedEdge = true;
-      for (let i = 0; i < sets.length; i++) {
-        if (setTotal(beastSets[i][0]) !== setTotal(sets[i][0]) + 1) armorEdge = false;
-        if (wt(sets[i][0]) >= wt(beastSets[i][0])) weightEdge = false;
-        const hb = I[sets[i][0][3] as keyof typeof I].gear?.speed ?? 0;
-        const bb = I[beastSets[i][0][3] as keyof typeof I].gear?.speed ?? 0;
+      // pair by tier: the human line has a tier 1 the beast line no longer does
+      const skip = sets.length - beastSets.length;
+      for (let i = 0; i < beastSets.length; i++) {
+        const h = sets[i + skip][0], b = beastSets[i][0];
+        if (setTotal(b) !== setTotal(h) + 1) armorEdge = false;
+        if (wt(h) >= wt(b)) weightEdge = false;
+        const hb = I[h[3] as keyof typeof I].gear?.speed ?? 0;
+        const bb = I[b[3] as keyof typeof I].gear?.speed ?? 0;
         if (hb <= bb) speedEdge = false;
       }
       ok(armorEdge, "at every tier the beast set carries exactly one more point of armor");
@@ -2265,8 +2269,13 @@ async function main(): Promise<void> {
     // silently, because a missing icon looks exactly like an item without art.
     const files = readdirSync("public").filter((f) => f.startsWith("item-") && f.endsWith(".png"));
     const expected = new Set(Object.keys(items.ITEMS).map((k) => A.iconFile(k as never)));
-    const orphans = files.filter((f) => !expected.has(f));
+    // RETIRED art may stay on disk: the upload path adds and overwrites but
+    // cannot delete. Listed by name, so every other stray still fails — and
+    // none of it may answer to a live item, or it was never retired.
+    const RETIRED = new Set(["item-snakeskin-shield.png"]); // the Snakeskin Buckler, Etap 67
+    const orphans = files.filter((f) => !expected.has(f) && !RETIRED.has(f));
     ok(orphans.length === 0, `every item-*.png maps to a real item${orphans.length ? " — stray: " + orphans.join(", ") : ""}`);
+    ok([...RETIRED].every((f) => !expected.has(f)), "…retired icons excepted, and no live item uses one");
     ok(files.length > 0, `public/ carries drawn icons (${files.length} of ${expected.size} items)`);
 
     // headless, so nothing can have loaded — the baked icon must still answer
@@ -7487,16 +7496,17 @@ async function main(): Promise<void> {
     const { setBonus, defenseArmor } = await import("../src/systems/skills.ts");
     const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
     const defOf = (k: keyof typeof I): number => I[k].gear?.def ?? 0;
-    const LINES = [["leather", "studded", "chain", "plate", "steel", "knight", "golden"],
-                   ["snakeskin", "goblin", "orcish", "minotaur", "marrow", "dragon", "vampire"]] as const;
+    // tier by tier from 2 up: tier 1 has only the leather since Etap 67
+    const LINES = [["studded", "chain", "plate", "steel", "knight", "golden"],
+                   ["goblin", "orcish", "minotaur", "marrow", "dragon", "vampire"]] as const;
 
     /* --- the catalog is complete and every piece is tagged --- */
     const worn = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].set);
     ok(worn.length === 60, `60 worn pieces across fifteen sets (${worn.length})`);
     ok(worn.every((k) => SET_SLOTS.includes(I[k].slot as never)),
       "every tagged piece sits in one of the four worn slots");
-    ok((Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "shield").length === 14,
-      "fourteen shields, one per tier and line (the Zephyr has none) — and none of them carries a set tag");
+    ok((Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "shield").length === 13,
+      "thirteen shields, one per tier and line (the Hunter and the Zephyr have none) — and none of them carries a set tag");
     ok((Object.keys(I) as (keyof typeof I)[]).every((k) => I[k].slot !== "shield" || !I[k].set),
       "…because a shield should be chosen on its own merits");
 
@@ -7521,8 +7531,8 @@ async function main(): Promise<void> {
     /* --- the bonus is set ABOVE the one-point gap, or it would not work --- */
     for (let t = 0; t < LINES[0].length; t++) {
       const h = LINES[0][t], b = LINES[1][t];
-      ok(SET_BONUS[h] === SET_BONUS[b], `tier ${t + 1}: both lines pay the same set bonus`);
-      ok(SET_BONUS[b] > 1, `tier ${t + 1}: the bonus outweighs the one-point armour gap`);
+      ok(SET_BONUS[h] === SET_BONUS[b], `tier ${t + 2}: both lines pay the same set bonus`);
+      ok(SET_BONUS[b] > 1, `tier ${t + 2}: the bonus outweighs the one-point armour gap`);
     }
 
     /* --- drops: rank and file shed at a trickle, elites at a real rate --- */
@@ -18429,11 +18439,11 @@ async function main(): Promise<void> {
      * 170. Written as a rule, so a retune can move numbers but not flatten the
      * ladder again. */
     const LINES57 = [["leather", "studded", "chain", "plate", "steel", "knight", "golden"],
-      ["snakeskin", "goblin", "orcish", "minotaur", "marrow", "dragon", "vampire"]] as const;
+      ["goblin", "orcish", "minotaur", "marrow", "dragon", "vampire"]] as const;
     for (const line of LINES57) {
       for (const part of ["Helm", "Body", "Legs", "Boots", "Shield"] as const) {
         const keys = line.map((set) => `${set}${part}` as K57);
-        ok(keys.every((k) => IT[k] !== undefined), `${line[0]} line ${part}: all seven tiers exist`);
+        ok(keys.every((k) => IT[k] !== undefined), `${line[0]} line ${part}: all ${keys.length} tiers exist`);
         let steep = true;
         let climbs = true;
         for (let t = 0; t < keys.length - 1; t++) {
@@ -18606,7 +18616,8 @@ async function main(): Promise<void> {
       }
     }
     ok(wrong.length === 0, `every gear drop sits at or under its tier's rate (${wrong.join(" ") || "clean"})`);
-    ok([...setOf(["snakeskin"])].every((k) => odds("snake", k) === 0.01), "the snake's set drops at 1% a piece");
+    ok([...setOf(["snakeskin"])].every((k) => odds("snake", k) === 0),
+      "the snake carries no set any more — its old suit is the Hunter set (Etap 67)");
     // what Radek saw: a level-50 corpse coughing up armour on most visits
     for (const m of ["dragon", "blackKnight"]) {
       const none = loot59(m).filter((l) => isGear59(l.kind)).reduce((p, l) => p * (1 - l.chance), 1);
@@ -19175,6 +19186,90 @@ async function main(): Promise<void> {
       return png.readUInt32BE(16) !== 32 || png.readUInt32BE(20) !== 32;
     });
     ok(badIcons.length === 0, `all four drawn icons ship, at 32x32 (${badIcons.join(",") || "all do"})`);
+  }
+
+  console.log("Etap 67 — the snakeskin becomes the Hunter set:");
+  {
+    const I67 = items.ITEMS;
+    const SK67 = await import("../src/systems/skills.ts");
+    const cfg67 = await import("../src/config.ts");
+    const { MONSTER_DEFS: M67 } = await import("../src/entities/monsters.ts");
+    const { SHOPS: S67, sellsFor: sf67 } = await import("../src/entities/npcs.ts");
+    const { CHEST_PRIZES: CP67, createGame: cg67 } = await import("../src/game.ts");
+    const SM67 = await import("../src/systems/smelt.ts");
+    const A67 = await import("../src/gfx/itemArt.ts");
+    const { saveGame: save67, loadGame: load67, deleteSave: del67 } = await import("../src/save.ts");
+    const fs67 = await import("node:fs");
+    type K67 = keyof typeof I67;
+    const hunter: K67[] = ["snakeskinHelm", "snakeskinBody", "snakeskinLegs", "snakeskinBoots"];
+    const dress67 = (worn: (K67 | null)[], bow = true) => {
+      const p = createPlayer({ x: 0, y: 0 });
+      p.eq.head = worn[0]; p.eq.body = worn[1]; p.eq.legs = worn[2]; p.eq.boots = worn[3];
+      p.eq.weapon = bow ? "bow" : null;
+      return p;
+    };
+
+    /* --- 1. THE SUIT --------------------------------------------------------- */
+    ok(hunter.map((k) => I67[k].name).join(", ") === "Hunter's Hood, Hunter's Jerkin, Hunter's Leggings, Hunter's Boots",
+      "the snakeskin pieces are the Hunter's Hood, Jerkin, Leggings and Boots");
+    ok(hunter.every((k) => I67[k].set === "snakeskin"), "…one set, still keyed as the snakeskin so old saves line up");
+    ok(hunter.map((k) => I67[k].gear?.def ?? 0).join("/") === "0/1/1/0" && items.SET_BONUS.snakeskin === 1
+      && SK67.defenseArmor(dress67(hunter).eq) === 3,
+      "next to no armor: 0, 1, 1 and 0, and 3 worn whole with its one-point bonus");
+    ok(hunter.every((k) => I67[k].gear?.dist === 2), "every piece carries +2 Distance Fighting");
+
+    /* --- 2. WHAT +2 A PIECE DOES TO A BOW ------------------------------------- */
+    const trained = SK67.skills.dist.lv;
+    const naked = dress67([null, null, null, null]), suited = dress67(hunter);
+    ok(SK67.distanceSkill(naked.eq) === trained && SK67.distanceSkill(suited.eq) === trained + 8,
+      `worn complete the bow reads Distance ${trained} as ${SK67.distanceSkill(suited.eq)}`);
+    ok(SK67.distanceSkill(dress67([null, "snakeskinBody", "snakeskinLegs", "snakeskinBoots"]).eq) === trained + 6,
+      "…and each piece counts on its own — no set needed for the Distance");
+    ok(SK67.distancePower(20, suited.eq, 8) > SK67.distancePower(20, naked.eq, 8),
+      `arrows hit harder in the suit (${SK67.distancePower(20, naked.eq, 8)} → ${SK67.distancePower(20, suited.eq, 8)} max)`);
+    const acc = (eq: typeof naked.eq) => SK67.distanceHitChance(eq);
+    ok(Math.abs(acc(suited.eq) - Math.min(cfg67.DIST_HITCHANCE_MAX, acc(naked.eq) + 8 * cfg67.DIST_HITCHANCE_PER)) < 1e-9,
+      `…and land more often (${(acc(naked.eq) * 100).toFixed(0)}% → ${(acc(suited.eq) * 100).toFixed(0)}%)`);
+    ok(SK67.distanceHitChance() === acc(naked.eq), "…while a call without equipment still reads the trained level alone");
+
+    /* --- 3. THE BUCKLER IS GONE, AND A SAVE THAT HELD ONE STILL LOADS -------- */
+    ok(!("snakeskinShield" in I67), "the Snakeskin Buckler is out of the catalog");
+    {
+      const g = cg67();
+      g.player.eq.head = "snakeskinHelm";
+      save67(g);
+      const raw = JSON.parse(localStorage.getItem("bone-isle-save-v2")!);
+      raw.player.eq.shield = "snakeskinShield";
+      raw.player.pack.items[5] = { kind: "snakeskinShield", n: 1 };
+      localStorage.setItem("bone-isle-save-v2", JSON.stringify(raw));
+      const g2 = load67();
+      ok(!!g2 && g2.player.eq.shield === null && g2.player.eq.head === "snakeskinHelm"
+        && !g2.player.pack!.items.some((q) => q?.kind === ("snakeskinShield" as never)),
+        "an old save holding a buckler loads without it, and keeps the hood");
+      del67();
+    }
+
+    /* --- 4. THE SNAKE CARRIES NONE OF IT, AND NOTHING ELSE DOES YET --------- */
+    const hs = new Set<string>([...hunter, "snakeskinShield"]);
+    ok(!(M67.snake.loot as { kind: string }[]).some((l) => hs.has(l.kind)), "the snake drops no piece of the suit");
+    const sources67 = [
+      ...(Object.keys(M67) as (keyof typeof M67)[])
+        .filter((m) => (M67[m].loot as { kind: string }[]).some((l) => hs.has(l.kind))),
+      ...Object.values(CP67).flat().map((p) => (typeof p === "string" ? p : p![0])).filter((k) => hs.has(k as string)),
+      ...Object.values(S67).flatMap((sh) => sh!.entries.filter((e) => e.buy > 0 && hs.has(e.kind)).map((e) => e.kind)),
+    ];
+    ok(sources67.length === 0, `no creature, chest or shelf hands the Hunter set out yet (${sources67.join(",") || "none"})`);
+    ok(hunter.every((k) => sf67("smith", k) > 0), "Borin still buys every piece");
+    ok(hunter.every((k) => !SM67.canSmelt(k)), "…and none goes in the furnace — it is hide and cloth");
+
+    /* --- 5. THE ICONS ------------------------------------------------------------- */
+    const badIcons = hunter.map((k) => A67.iconFile(k)).filter((f) => {
+      const u = new URL(`../public/${f}`, import.meta.url);
+      if (!fs67.existsSync(u)) return true;
+      const png = fs67.readFileSync(u);
+      return png.readUInt32BE(16) !== 32 || png.readUInt32BE(20) !== 32;
+    });
+    ok(badIcons.length === 0, `all four redrawn icons ship, at 32x32 (${badIcons.join(",") || "all do"})`);
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
