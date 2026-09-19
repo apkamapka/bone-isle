@@ -2034,22 +2034,23 @@ generator may destroy bought artwork the first time somebody runs the tools
 directory; this one writes to exactly such a path, so it is made incapable of
 running without the file it is meant to be transforming.
 
-## The Golden and Vampire sets — `item-golden-{helm,body,legs,boots}.png`, `item-vampire-{helm,body,legs,boots}.png`
+## The Golden and Vampire sets — `item-golden-{helm,body,legs,boots,shield}.png`, `item-vampire-{helm,body,legs,boots,shield}.png`, `item-sunspear.png`, `item-bloodletter.png`
 
 Source: **CraftPix.net**, standard (non-Enterprise) licence —
 https://craftpix.net/file-licenses/
 
-Eight 32x32 item icons, the tier-7 armour added in Etap 64, bought from
-CraftPix like the rest of the set icons. The pack they came from is not
+Twelve 32x32 item icons: the tier-7 armour added in Etap 64, and its shields
+and weapons added in Etap 66, bought from CraftPix like the rest of the set
+icons. The pack they came from is not
 recorded yet; its name belongs on this line once it is read off the purchase.
 
 Same terms as the dragon, the buildings and the icons above: commercial use
 granted outright, no royalty, no attribution owed on a paid product, and the
 same clause 1.1.3 / 1.2.1 restriction on public source files. **The
-public-repository warning in the buildings section applies to all eight files
-in full.**
+public-repository warning in the buildings section applies to all twelve
+files in full.**
 
-All eight are **modified**, under the adaptation right of clause 1.1.1:
+All twelve are **modified**, under the adaptation right of clause 1.1.1:
 
 - **Recoloured, one ramp per set.** The purchased Golden set mixed orange,
   red, gold and grey from piece to piece; every colour now maps onto a single
@@ -2066,6 +2067,13 @@ All eight are **modified**, under the adaptation right of clause 1.1.1:
   given a fresh one-pixel outline and mirrored for the left foot, with the
   right one set two pixels lower — the arrangement every other pair in
   `public/` uses.
+- **The shields and weapons (Etap 66) went onto the same ramps.** The Golden
+  Shield was quartered red and teal: the teal quarters are gold now and the
+  red ones ruby, with the emblems on the gold quarters lifted a step so they
+  still read against them. The Sunspear's shaft is gold and its red streamer
+  ruby. The Vampire Shield is black with a blood-red rim where the purchase
+  had brown and gold, and the Bloodletter — a fiery orange blade on a teal
+  grip in the purchase — is crimson on black.
 
 No script in `tools/` produces or rewrites these files, so there is nothing
 that could overwrite the purchase by being run.

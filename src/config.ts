@@ -593,16 +593,20 @@ export const BLOOD_HIT_WINDOW_S = 60;
  * ------------------------------------------------------------------ */
 
 /** Best attack VALUE available at a level — fists included, so compare it
- *  against MELEE_FIST_ATK + the weapon's gear Attack, not the weapon alone. */
+ *  against MELEE_FIST_ATK + the weapon's gear Attack, not the weapon alone.
+ *  Its plateau moved from 31 to 35 in Etap 66 with the tier-7 weapons, the
+ *  same way the armor curve's did for the tier-7 sets: nothing at or below
+ *  level 50 moves, the line just runs on to about level 60. */
 export function bestWeaponAtk(level: number): number {
-  return Math.min(31, 10.5 + 0.41 * level);
+  return Math.min(35, 10.5 + 0.41 * level);
 }
 
 /** Best shield Defense available at a level. Unlike the weapon curve this one
  *  bends: defense climbs briskly to level 25, then flattens out, so the early
- *  game is where a shield upgrade is genuinely felt. */
+ *  game is where a shield upgrade is genuinely felt. The plateau moved from
+ *  17 to 20 in Etap 66 with the tier-7 shields; below level 50 nothing moves. */
 export function bestShieldDef(level: number): number {
-  return Math.min(17, 1.1 + 0.32 * level);
+  return Math.min(20, 1.1 + 0.32 * level);
 }
 
 /** Best TOTAL armor rating of a full worn set (head + body + legs + boots).
@@ -613,8 +617,7 @@ export function bestShieldDef(level: number): number {
  *  sets (25 and 26) became the first armor above the Knight and the Dragon.
  *  Nothing below level 51 moves — the slope meets 22 at about level 50 — so
  *  every older rung is checked against exactly the target it always was;
- *  the line simply runs on to about level 60 before it flattens. The shield
- *  curve keeps its 17: tier 7 came without shields. */
+ *  the line simply runs on to about level 60 before it flattens. */
 export function bestArmorSet(level: number): number {
   return Math.min(26, 0.4 + 0.43 * level);
 }

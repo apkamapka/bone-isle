@@ -130,16 +130,18 @@ export type ItemKind =
   // tier 6 — Knight (human line) / Dragon (beast line)
   | "knightHelm" | "knightBody" | "knightLegs" | "knightBoots" | "knightShield"
   | "dragonHelm" | "dragonBody" | "dragonLegs" | "dragonBoots" | "dragonShield"
-  // tier 7 — Golden (human line) / Vampire (beast line), Etap 64: the four
-  // worn pieces only. No shield came with them, so there is none.
-  | "goldenHelm" | "goldenBody" | "goldenLegs" | "goldenBoots"
-  | "vampireHelm" | "vampireBody" | "vampireLegs" | "vampireBoots"
+  // tier 7 — Golden (human line) / Vampire (beast line): the worn pieces in
+  // Etap 64, their shields in Etap 66
+  | "goldenHelm" | "goldenBody" | "goldenLegs" | "goldenBoots" | "goldenShield"
+  | "vampireHelm" | "vampireBody" | "vampireLegs" | "vampireBoots" | "vampireShield"
   // Zephyr (Etap 65): the speed set, outside both lines — see ITEMS
   | "zephyrHelm" | "zephyrBody" | "zephyrLegs" | "zephyrBoots"
   // weapons: the two lines diverge here rather than mirroring each other —
   // human smiths make swords and hammers that guard as well as they cut,
   // beasts carry axes and fangs that hit harder and defend far worse
   | "shortSword" | "fangDagger" | "ironSword" | "goblinHatchet" | "mercBlade" | "warHammer" | "orcishAxe" | "gladius" | "boneSword" | "minotaurAxe" | "warlordBlade" | "steelMaul" | "demonCleaver" | "knightSword" | "fireSword" | "marrowBlade"
+  // tier 7 (Etap 66): the Golden's spear and the Vampire's blade
+  | "sunspear" | "bloodletter"
   | "ring" | "guardRing" | "healthRing" | "amulet"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet"
@@ -592,6 +594,16 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   knightSword: { name: "Knight's Longsword", stack: 1, value: 8400, weight: 52, slot: "weapon", gear: { atk: 24, def: 22, defBonus: 3 } },
   fireSword: { name: "Fire Sword", stack: 1, value: 9200, weight: 46, slot: "weapon", gear: { atk: 26, def: 16, defBonus: 2 } },
   marrowBlade: { name: "Marrow Blade", stack: 1, value: 9600, weight: 52, slot: "weapon", gear: { atk: 23, def: 21, defBonus: 4 } },
+  /* ---- tier 7 (Etap 66): the weapons of the Golden and the Vampire ----
+   * Named for what the sets are rather than after them. The SUNSPEAR is the
+   * human line's: a smith's weapon that guards nearly as well as it strikes,
+   * three attack and two defense over the Knight's Longsword. The BLOODLETTER
+   * is the beast line's: a curved blade that hits hardest of anything in the
+   * game and defends like the axes do. Both sit at twice the price of the
+   * tier below (the Bloodletter a line's 1.15 over the spear, as the Dragon
+   * is over the Knight), both melt, and nothing hands either out yet. */
+  sunspear: { name: "Sunspear", stack: 1, value: 16800, weight: 58, slot: "weapon", gear: { atk: 27, def: 24, defBonus: 3 } },
+  bloodletter: { name: "Bloodletter", stack: 1, value: 19320, weight: 54, slot: "weapon", gear: { atk: 30, def: 14, defBonus: 1 } },
   /* ---- tier 1: Leather / Snakeskin (set bonus +1 worn complete) ---- */
   leatherHelm: { name: "Leather Helmet", stack: 1, value: 6, weight: 17, slot: "head", gear: { def: 1 }, set: "leather" },
   snakeskinHelm: { name: "Snakeskin Hood", stack: 1, value: 18, weight: 20, slot: "head", gear: { def: 1 }, set: "snakeskin" },
@@ -679,6 +691,12 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   vampireLegs: { name: "Vampire Legs", stack: 1, value: 10960, weight: 86, slot: "legs", gear: { def: 6 }, set: "vampire" },
   goldenBoots: { name: "Golden Boots", stack: 1, value: 5440, weight: 22, slot: "boots", gear: { def: 3, speed: 14 }, set: "golden" },
   vampireBoots: { name: "Vampire Boots", stack: 1, value: 6240, weight: 26, slot: "boots", gear: { def: 3, speed: 10 }, set: "vampire" },
+  /* The tier-7 shields (Etap 66) keep the ladder's own rhythm: three defense
+   * over tier 6, the same on both lines, the beast one ten ounces heavier and
+   * 1.15 the price, each twice its tier-6 counterpart. Like every shield they
+   * carry no set tag — the bonus counts the four worn slots only. */
+  goldenShield: { name: "Golden Shield", stack: 1, value: 10880, weight: 64, slot: "shield", gear: { def: 20 } },
+  vampireShield: { name: "Vampire Shield", stack: 1, value: 12520, weight: 74, slot: "shield", gear: { def: 20 } },
   /* ---- the Zephyr: speed instead of armor (Etap 65) ----
    * Outside both lines and every tier: one point of armor for the whole set,
    * and +80 speed worn complete — +40 across the pieces and +40 more from

@@ -62,6 +62,7 @@ export const SMELT_TIER: Readonly<Partial<Record<ItemKind, readonly [number, Sme
   // melts at all — and, being beast work, mostly into iron.
   goldenHelm: [7, "human"], goldenBody: [7, "human"], goldenLegs: [7, "human"], goldenBoots: [7, "human"],
   vampireHelm: [7, "beast"], vampireBody: [7, "beast"], vampireLegs: [7, "beast"], vampireBoots: [7, "beast"],
+  goldenShield: [7, "human"], vampireShield: [7, "beast"],
 
   // ---- weapons. Bone and wood are absent for the same reason.
   shortSword: [2, "human"], ironSword: [2, "human"], fangDagger: [2, "beast"],
@@ -69,6 +70,7 @@ export const SMELT_TIER: Readonly<Partial<Record<ItemKind, readonly [number, Sme
   gladius: [4, "human"], minotaurAxe: [4, "beast"],
   warlordBlade: [5, "human"], steelMaul: [5, "human"], demonCleaver: [5, "beast"],
   knightSword: [6, "human"], fireSword: [6, "human"],
+  sunspear: [7, "human"], bloodletter: [7, "beast"],
 };
 
 /** Units of metal a tier yields on a body piece, shield or weapon. Tier 7

@@ -840,11 +840,11 @@ async function main(): Promise<void> {
     // levels differ slightly at the same tier: the beast body piece carries
     // one more point of armor, so it lands a rung further along the curve.
     const weapons = [["shortSword", 6], ["ironSword", 16], ["mercBlade", 23],
-      ["gladius", 30], ["warlordBlade", 40], ["knightSword", 50]] as const;
+      ["gladius", 30], ["warlordBlade", 40], ["knightSword", 50], ["sunspear", 57]] as const;
     const shields = [["leatherShield", 9], ["studdedShield", 15], ["chainShield", 22],
-      ["plateShield", 31], ["steelShield", 40], ["knightShield", 50]] as const;
+      ["plateShield", 31], ["steelShield", 40], ["knightShield", 50], ["goldenShield", 57]] as const;
     const beastShields = [["snakeskinShield", 9], ["goblinShield", 15], ["orcishShield", 22],
-      ["minotaurShield", 31], ["marrowShield", 40], ["dragonShield", 50]] as const;
+      ["minotaurShield", 31], ["marrowShield", 40], ["dragonShield", 50], ["vampireShield", 60]] as const;
     // full worn sets: head + body + legs + boots, both lines
     const sets = [
       [["leatherHelm", "leatherBody", "leatherLegs", "leatherBoots"], 6],
@@ -913,7 +913,7 @@ async function main(): Promise<void> {
 
     // the plateau is as important as the slope: gear stops, training does not
     ok(cfg.bestWeaponAtk(200) === cfg.bestWeaponAtk(100), "weapon curve plateaus and stays there");
-    ok(cfg.bestShieldDef(200) === 17 && cfg.bestArmorSet(200) === 26, "defense curves plateau at 17 / 26");
+    ok(cfg.bestShieldDef(200) === 20 && cfg.bestArmorSet(200) === 26, "defense curves plateau at 20 / 26");
     // …and across the covered range gear must grow slower than training does
     const gearGrowth = cfg.bestWeaponAtk(60) / cfg.bestWeaponAtk(1);
     ok(gearGrowth < 4, `best weapon grows only ${gearGrowth.toFixed(1)}× from level 1 to 60 (skillTerm grows ~4.5×)`);
@@ -7495,8 +7495,8 @@ async function main(): Promise<void> {
     ok(worn.length === 60, `60 worn pieces across fifteen sets (${worn.length})`);
     ok(worn.every((k) => SET_SLOTS.includes(I[k].slot as never)),
       "every tagged piece sits in one of the four worn slots");
-    ok((Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "shield").length === 12,
-      "twelve shields, one per set of tiers 1-6 (tier 7 has none) — and none of them carries a set tag");
+    ok((Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "shield").length === 14,
+      "fourteen shields, one per tier and line (the Zephyr has none) — and none of them carries a set tag");
     ok((Object.keys(I) as (keyof typeof I)[]).every((k) => I[k].slot !== "shield" || !I[k].set),
       "…because a shield should be chosen on its own merits");
 
@@ -18428,15 +18428,15 @@ async function main(): Promise<void> {
      * this the top of the ladder grew 1.7x a tier, and a Knight Armor fetched
      * 170. Written as a rule, so a retune can move numbers but not flatten the
      * ladder again. */
-    const LINES57 = [["leather", "studded", "chain", "plate", "steel", "knight"],
-      ["snakeskin", "goblin", "orcish", "minotaur", "marrow", "dragon"]] as const;
+    const LINES57 = [["leather", "studded", "chain", "plate", "steel", "knight", "golden"],
+      ["snakeskin", "goblin", "orcish", "minotaur", "marrow", "dragon", "vampire"]] as const;
     for (const line of LINES57) {
       for (const part of ["Helm", "Body", "Legs", "Boots", "Shield"] as const) {
         const keys = line.map((set) => `${set}${part}` as K57);
-        ok(keys.every((k) => IT[k] !== undefined), `${line[0]} line ${part}: all six tiers exist`);
+        ok(keys.every((k) => IT[k] !== undefined), `${line[0]} line ${part}: all seven tiers exist`);
         let steep = true;
         let climbs = true;
-        for (let t = 0; t < 5; t++) {
+        for (let t = 0; t < keys.length - 1; t++) {
           if (IT[keys[t + 1]].value < 2 * IT[keys[t]].value) steep = false;
           if (sellsFor("smith", keys[t + 1]) <= sellsFor("smith", keys[t])) climbs = false;
         }
@@ -18521,8 +18521,17 @@ async function main(): Promise<void> {
     for (const m of MK58) for (const l of M58[m].loot) found.add(l.kind);
     for (const p of Object.values(CP58).flat()) found.add(typeof p === "string" ? p : p![0]);
     for (const sh of Object.values(S58)) for (const e of sh!.entries) if (e.buy > 0) found.add(e.kind);
-    const orphans = (Object.keys(IT58) as K58[]).filter((k) => IT58[k].slot === "weapon" && !found.has(k));
+    // Etap 66: the Sunspear and the Bloodletter are the one exception, by
+    // decision — tier 7 has no source yet, weapons and armor alike. Named
+    // here rather than filtered by a rule, so any other orphan still fails;
+    // and the second assertion fails the day they get a source, so the
+    // exception cannot outlive the reason for it.
+    const UNSOURCED58 = new Set<string>(["sunspear", "bloodletter"]);
+    const orphans = (Object.keys(IT58) as K58[])
+      .filter((k) => IT58[k].slot === "weapon" && !found.has(k) && !UNSOURCED58.has(k));
     ok(orphans.length === 0, `every weapon in the table has a source (${orphans.join(",") || "all do"})`);
+    ok([...UNSOURCED58].every((k) => !found.has(k)),
+      "…save the tier-7 pair, which have none yet — drop them from the exception when they do");
     ok(M58.skeletonWarrior.loot.some((l) => l.kind === "boneSword"), "the Bone Sword is the skeleton warrior's");
     const boneFrom = MK58.filter((m) => M58[m].loot.some((l) => l.kind === "boneSword"));
     ok(boneFrom.length === 1, `…and nobody else's (${boneFrom.join(",")})`);
@@ -19082,6 +19091,87 @@ async function main(): Promise<void> {
       const u = new URL(`../public/${f}`, import.meta.url);
       if (!fs65.existsSync(u)) return true;
       const png = fs65.readFileSync(u);
+      return png.readUInt32BE(16) !== 32 || png.readUInt32BE(20) !== 32;
+    });
+    ok(badIcons.length === 0, `all four drawn icons ship, at 32x32 (${badIcons.join(",") || "all do"})`);
+  }
+
+  console.log("Etap 66 — tier 7 gets its shields and weapons:");
+  {
+    const I66 = items.ITEMS;
+    const cfg66 = await import("../src/config.ts");
+    const { MONSTER_DEFS: M66 } = await import("../src/entities/monsters.ts");
+    const { SHOPS: S66, sellsFor: sf66 } = await import("../src/entities/npcs.ts");
+    const { CHEST_PRIZES: CP66 } = await import("../src/game.ts");
+    const SM66 = await import("../src/systems/smelt.ts");
+    const A66 = await import("../src/gfx/itemArt.ts");
+    const fs66 = await import("node:fs");
+    type K66 = keyof typeof I66;
+    const g = (k: K66) => I66[k].gear ?? {};
+    const NEW66: K66[] = ["goldenShield", "vampireShield", "sunspear", "bloodletter"];
+
+    /* --- 1. THE SHIELDS: THE LADDER'S OWN RHYTHM ------------------------------ */
+    ok(I66.goldenShield.slot === "shield" && I66.vampireShield.slot === "shield"
+      && !I66.goldenShield.set && !I66.vampireShield.set,
+      "a Golden Shield and a Vampire Shield, neither tagged to its set");
+    ok(g("goldenShield").def === 20 && g("vampireShield").def === 20
+      && g("knightShield").def === 17 && g("dragonShield").def === 17,
+      "both guard for 20, three over tier 6 — the same on both lines, as at every tier");
+    ok(I66.vampireShield.weight === I66.goldenShield.weight + 10, "…the beast one ten ounces heavier");
+    ok(I66.goldenShield.value === 2 * I66.knightShield.value && I66.vampireShield.value === 2 * I66.dragonShield.value,
+      "…and each worth twice its tier-6 counterpart");
+
+    /* --- 2. THE WEAPONS: THE TWO LINES STILL DIVERGE -------------------------- */
+    ok(g("sunspear").atk === g("knightSword").atk! + 3 && g("sunspear").def === g("knightSword").def! + 2
+      && g("sunspear").defBonus === g("knightSword").defBonus,
+      "the Sunspear is the Knight's Longsword three attack and two defense on");
+    const topAtk = Math.max(...(Object.keys(I66) as K66[]).filter((k) => I66[k].slot === "weapon").map((k) => g(k).atk ?? 0));
+    ok(g("bloodletter").atk === topAtk && topAtk === 30, `the Bloodletter hits hardest of anything in the game (${topAtk})`);
+    ok(g("bloodletter").atk! > g("sunspear").atk! && g("bloodletter").def! < g("sunspear").def!
+      && g("bloodletter").defBonus! < g("sunspear").defBonus!,
+      "…and guards worse than the spear on both counts — the beast line's bargain");
+    ok(I66.sunspear.value === 2 * I66.knightSword.value && I66.bloodletter.value === Math.round(I66.sunspear.value * 1.15),
+      "the Sunspear costs twice the Longsword, the Bloodletter 1.15 the Sunspear");
+
+    /* --- 3. THE CURVES MOVED ONLY ABOVE LEVEL 50 ------------------------------ */
+    let low66 = true;
+    for (let lv = 1; lv < 50; lv++) {
+      if (cfg66.bestShieldDef(lv) !== Math.min(17, 1.1 + 0.32 * lv)) low66 = false;
+      if (cfg66.bestWeaponAtk(lv) !== Math.min(31, 10.5 + 0.41 * lv)) low66 = false;
+    }
+    ok(low66 && cfg66.bestShieldDef(60) === 20 && cfg66.bestWeaponAtk(60) === 35,
+      "shield and weapon curves now top out at 20 and 35, with every level below 50 untouched");
+
+    /* --- 4. BORIN BUYS THEM, THE FURNACE TAKES THEM --------------------------- */
+    const below66: Record<string, K66> = { goldenShield: "knightShield", vampireShield: "dragonShield",
+      sunspear: "knightSword", bloodletter: "fireSword" };
+    ok(NEW66.every((k) => sf66("smith", k) > sf66("smith", below66[k])),
+      "Borin buys all four, each for more than the piece a tier below");
+    const melt66 = (k: K66, t: 1 | 2 | 3): string => {
+      const y = SM66.smeltYield(k, t, I66[k].slot);
+      return `${y.iron}/${y.steel}`;
+    };
+    ok(melt66("goldenShield", 2) === "0/3" && melt66("sunspear", 2) === "0/3",
+      "a tier-II forge gets three steel out of the Golden Shield and the Sunspear");
+    ok(melt66("vampireShield", 2) === "2/1" && melt66("bloodletter", 2) === "2/1",
+      "…and two iron with one steel out of the Vampire's, as beast work gives");
+    ok(NEW66.every((k) => melt66(k, 1).endsWith("/0")), "…while a tier-I forge gets nothing but iron");
+
+    /* --- 5. NOTHING HANDS THEM OUT YET, BY DECISION --------------------------- */
+    const n66 = new Set<string>(NEW66);
+    const sources66 = [
+      ...(Object.keys(M66) as (keyof typeof M66)[])
+        .filter((m) => (M66[m].loot as { kind: string }[]).some((l) => n66.has(l.kind))),
+      ...Object.values(CP66).flat().map((p) => (typeof p === "string" ? p : p![0])).filter((k) => n66.has(k as string)),
+      ...Object.values(S66).flatMap((sh) => sh!.entries.filter((e) => e.buy > 0 && n66.has(e.kind)).map((e) => e.kind)),
+    ];
+    ok(sources66.length === 0, `no creature, chest or shelf hands them out yet (${sources66.join(",") || "none"})`);
+
+    /* --- 6. THE ICONS ----------------------------------------------------------- */
+    const badIcons = NEW66.map((k) => A66.iconFile(k)).filter((f) => {
+      const u = new URL(`../public/${f}`, import.meta.url);
+      if (!fs66.existsSync(u)) return true;
+      const png = fs66.readFileSync(u);
       return png.readUInt32BE(16) !== 32 || png.readUInt32BE(20) !== 32;
     });
     ok(badIcons.length === 0, `all four drawn icons ship, at 32x32 (${badIcons.join(",") || "all do"})`);
