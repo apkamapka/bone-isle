@@ -2109,10 +2109,13 @@ the set icons — same terms, same clause 1.1.3 / 1.2.1 restriction and **the
 same public-repository warning** as every CraftPix entry above.
 
 The four pieces of what was the Snakeskin set, **recoloured** in Etap 67 when
-it became the Hunter set: the olive-and-green snakeskin is now a forest-green
-hood, a brown leather jerkin with tan lacing, green leggings over brown wraps,
-brown shoes. Colour for colour, under the adaptation right of clause 1.1.1;
-shapes untouched. The files keep their snakeskin names, as the item ids do.
+it became the Hunter set, and settled on a green-and-brown forest look: a
+forest-green hood, a green jerkin with brown panels and tan lacing, green
+leggings over brown wraps, green shoes on brown soles. Colour for colour,
+under the adaptation right of clause 1.1.1, with two things **drawn in by
+hand** in the same outline: a red feather tucked into the hood, and a quiver
+strap with a gold buckle across the jerkin. The files keep their snakeskin
+names, as the item ids do.
 
 `item-snakeskin-shield.png`, the Snakeskin Buckler, is retired: no item uses
 it any more, and it stays on disk only because the upload path cannot delete.
