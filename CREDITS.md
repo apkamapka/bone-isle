@@ -2070,6 +2070,30 @@ All eight are **modified**, under the adaptation right of clause 1.1.1:
 No script in `tools/` produces or rewrites these files, so there is nothing
 that could overwrite the purchase by being run.
 
+## The Zephyr set — `item-zephyr-{helm,body,legs,boots}.png`
+
+Source: **CraftPix.net**, standard (non-Enterprise) licence —
+https://craftpix.net/file-licenses/
+
+Four 32x32 item icons, the speed set added in Etap 65, cut from the purchase's
+`icons_14_01` (mask), `icons_14_11` (tunic), `icons_14_33` (legs) and
+`icons_14_41` (boot). Same terms, same clause 1.1.3 / 1.2.1 restriction and
+**the same public-repository warning** as every CraftPix entry above.
+
+All four are **modified**, under the adaptation right of clause 1.1.1:
+
+- **Recoloured** onto one sky-blue ramp and one white one, where the purchase
+  was peach and cream with red stripes, teal and brown. Colour for colour,
+  except on the legs: there the browns become a white belt at the waist and
+  white wraps below the knee, and blue in between.
+- **Wings added**, drawn by hand in the same outline and palette: one pair on
+  the mask, one small wing on the ankle of each boot.
+- **The boots are a pair**, made the way the Golden and Vampire pairs were:
+  whole rows and columns dropped, a fresh outline, mirrored for the left foot
+  and the right set two pixels lower.
+
+No script in `tools/` produces or rewrites these files either.
+
 ## Everything else
 
 All remaining artwork is procedural — baked at runtime from character maps in

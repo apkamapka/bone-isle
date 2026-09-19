@@ -1,6 +1,6 @@
 /** Tibia-style skills: levels that climb as you use them, plus gear bonuses. */
 import { beep } from "../audio.ts";
-import { gearStat, gearStatOf, equippedBow, ITEMS, SET_BONUS, SET_SLOTS } from "../items.ts";
+import { gearStat, gearStatOf, equippedBow, SET_BONUS, completeSet } from "../items.ts";
 import {
   MELEE_FIST_ATK, MIN_HIT_RATIO,
   SKILL_TERM_PER, SKILL_TERM_PER_DIST, SKILL_TERM_FLAT,
@@ -311,13 +311,8 @@ export function defenseArmor(eq: Equipment): number {
  * mismatched piece drops the whole bonus, which is the point.
  */
 export function setBonus(eq: Equipment): number {
-  const first = eq.head ? ITEMS[eq.head].set : undefined;
-  if (!first) return 0;
-  for (const slot of SET_SLOTS) {
-    const k = eq[slot];
-    if (!k || ITEMS[k].set !== first) return 0;
-  }
-  return SET_BONUS[first];
+  const set = completeSet(eq);
+  return set ? SET_BONUS[set] : 0;
 }
 
 /** Both ratings together — used by the UI, never by the damage pipeline. */

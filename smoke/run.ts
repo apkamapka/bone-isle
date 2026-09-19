@@ -941,7 +941,7 @@ async function main(): Promise<void> {
     // on, so the Leather set must remain purchasable.
     const craftable = new Set(items.RECIPES.map((r) => r.out));
     const gearKeys = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].set);
-    ok(gearKeys.length === 56, `the catalog holds 56 worn set pieces (${gearKeys.length})`);
+    ok(gearKeys.length === 60, `the catalog holds 60 worn set pieces (${gearKeys.length})`);
     ok(gearKeys.filter((k) => craftable.has(k)).length === 0, "no worn gear is craftable any more");
     {
       const { SHOPS } = await import("../src/entities/npcs.ts");
@@ -7492,7 +7492,7 @@ async function main(): Promise<void> {
 
     /* --- the catalog is complete and every piece is tagged --- */
     const worn = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].set);
-    ok(worn.length === 56, `56 worn pieces across fourteen sets (${worn.length})`);
+    ok(worn.length === 60, `60 worn pieces across fifteen sets (${worn.length})`);
     ok(worn.every((k) => SET_SLOTS.includes(I[k].slot as never)),
       "every tagged piece sits in one of the four worn slots");
     ok((Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "shield").length === 12,
@@ -7622,10 +7622,19 @@ async function main(): Promise<void> {
       // entirely inside the sets, where the human line already IS the fast
       // one. This assertion is the tripwire against quietly adding another.
       const boots = (Object.keys(I) as (keyof typeof I)[]).filter((k) => I[k].slot === "boots");
-      ok(boots.length === 14, `fourteen boots, one per set (${boots.length})`);
+      ok(boots.length === 15, `fifteen boots, one per set (${boots.length})`);
       ok(boots.every((k) => I[k].set !== undefined), "every boot belongs to a set");
-      const fastest = boots.reduce((a, b) => ((I[a].gear?.speed ?? 0) >= (I[b].gear?.speed ?? 0) ? a : b));
-      ok(fastest === "goldenBoots", `the quickest boot in the game is the human line's best (${fastest})`);
+      // Etap 65 moved the top of this list without changing what it guards:
+      // the quickest boot is now the Zephyr's, and it pays for that with no
+      // armor at all — best speed still costs something, and still only
+      // inside a set. Among the armored lines the human one stays the fast.
+      const quickest = (ks: (keyof typeof I)[]) =>
+        ks.reduce((a, b) => ((I[a].gear?.speed ?? 0) >= (I[b].gear?.speed ?? 0) ? a : b));
+      const fastest = quickest(boots);
+      ok(fastest === "zephyrBoots" && !(I[fastest].gear?.def),
+        `the quickest boot in the game is the Zephyr's, and it carries no armor (${fastest})`);
+      const armored = quickest(boots.filter((k) => (I[k].gear?.def ?? 0) > 0));
+      ok(armored === "goldenBoots", `…the quickest ARMORED boot is the human line's best (${armored})`);
     }
   }
 
@@ -18999,6 +19008,83 @@ async function main(): Promise<void> {
       return png.readUInt32BE(16) !== 32 || png.readUInt32BE(20) !== 32;
     });
     ok(badIcons.length === 0, `all eight drawn icons ship, at 32x32 (${badIcons.join(",") || "all do"})`);
+  }
+
+  console.log("Etap 65 — the Zephyr, a set that trades armor for speed:");
+  {
+    const I65 = items.ITEMS;
+    const { defenseArmor: da65 } = await import("../src/systems/skills.ts");
+    const { playerSpeed: ps65 } = await import("../src/entities/player.ts");
+    const { startHaste: sh65 } = await import("../src/systems/buffs.ts");
+    const cfg65 = await import("../src/config.ts");
+    const { MONSTER_DEFS: M65 } = await import("../src/entities/monsters.ts");
+    const { SHOPS: S65, sellsFor: sf65 } = await import("../src/entities/npcs.ts");
+    const { CHEST_PRIZES: CP65 } = await import("../src/game.ts");
+    const SM65 = await import("../src/systems/smelt.ts");
+    const A65 = await import("../src/gfx/itemArt.ts");
+    const fs65 = await import("node:fs");
+    type K65 = keyof typeof I65;
+    const zephyr: K65[] = ["zephyrHelm", "zephyrBody", "zephyrLegs", "zephyrBoots"];
+    const dress65 = (level: number, worn: (K65 | null)[]) => {
+      const p = createPlayer({ x: 0, y: 0 });
+      p.level = level;
+      p.eq.head = worn[0]; p.eq.body = worn[1]; p.eq.legs = worn[2]; p.eq.boots = worn[3];
+      return p;
+    };
+
+    /* --- 1. THE SET ------------------------------------------------------------ */
+    ok(zephyr.every((k, i) => I65[k]?.set === "zephyr" && I65[k].slot === ["head", "body", "legs", "boots"][i]),
+      "four Zephyr pieces, one per worn slot, all of one set");
+    ok(zephyr.map((k) => I65[k].gear?.speed ?? 0).join("/") === "8/8/8/16",
+      "the pieces carry +8, +8, +8 and +16 speed");
+    ok(items.SET_SPEED_BONUS.zephyr === 40
+      && Object.keys(items.SET_SPEED_BONUS).length === 1,
+      "worn complete they pay +40 more, and no other set pays speed");
+
+    /* --- 2. ALMOST NO ARMOR --------------------------------------------------- */
+    ok(da65(dress65(1, zephyr).eq) === 1 && items.SET_BONUS.zephyr === 0,
+      "the whole set guards for 1 point — the tunic's — and has no armor bonus");
+
+    /* --- 3. +80 COMPLETE, AND ONLY COMPLETE ----------------------------------- */
+    const naked = (lv: number) => ps65(dress65(lv, [null, null, null, null]));
+    const gain = (lv: number, worn: (K65 | null)[]) => ps65(dress65(lv, worn)) - naked(lv);
+    ok(Math.abs(gain(1, zephyr) - 80) < 1e-9 && Math.abs(gain(50, zephyr) - 80) < 1e-9,
+      `worn complete the set adds exactly 80 at any level (${gain(1, zephyr)})`);
+    ok(Math.abs(ps65(dress65(1, zephyr)) - 173) < 1e-9 && Math.abs(ps65(dress65(50, zephyr)) - 212.2) < 1e-9,
+      `level 1 walks at ${ps65(dress65(1, zephyr))}, level 50 at ${ps65(dress65(50, zephyr)).toFixed(1)}`);
+    ok(Math.abs(gain(1, [null, "zephyrBody", "zephyrLegs", "zephyrBoots"]) - 32) < 1e-9,
+      "three pieces out of four pay only their own +32 — the bonus needs the full set");
+    ok(Math.abs(gain(1, ["knightHelm", "zephyrBody", "zephyrLegs", "zephyrBoots"]) - 32) < 1e-9,
+      "…and a borrowed helmet breaks it just the same");
+    const hasted = dress65(50, zephyr);
+    sh65(hasted.buffs, 20);
+    ok(Math.abs(ps65(hasted) - 212.2 * cfg65.HASTE_RUNE_MULT) < 1e-9,
+      "Swiftness multiplies the whole figure, the set's pace included");
+
+    /* --- 4. VERY RARE: 10 000 A PIECE AT BORIN, AND NOTHING HANDS IT OUT ------ */
+    ok(zephyr.every((k) => I65[k].value === 20000 && sf65("smith", k) === 10000),
+      "Borin pays 10 000 for every piece");
+    const z65 = new Set<string>(zephyr);
+    const dropped = (Object.keys(M65) as (keyof typeof M65)[])
+      .filter((m) => (M65[m].loot as { kind: string }[]).some((l) => z65.has(l.kind)));
+    const chested = Object.values(CP65).flat()
+      .map((p) => (typeof p === "string" ? p : p![0])).filter((k) => z65.has(k as string));
+    const stocked = Object.values(S65)
+      .flatMap((sh) => sh!.entries.filter((e) => e.buy > 0 && z65.has(e.kind)).map((e) => e.kind));
+    const sources = [...dropped, ...chested, ...stocked];
+    ok(sources.length === 0, `no creature, chest or shelf hands the Zephyr out yet (${sources.join(",") || "none"})`);
+
+    /* --- 5. CLOTH AND FEATHERS: THE FURNACE WILL NOT TAKE IT ------------------ */
+    ok(zephyr.every((k) => !SM65.canSmelt(k)), "no Zephyr piece smelts");
+
+    /* --- 6. THE ICONS ----------------------------------------------------------- */
+    const badIcons = zephyr.map((k) => A65.iconFile(k)).filter((f) => {
+      const u = new URL(`../public/${f}`, import.meta.url);
+      if (!fs65.existsSync(u)) return true;
+      const png = fs65.readFileSync(u);
+      return png.readUInt32BE(16) !== 32 || png.readUInt32BE(20) !== 32;
+    });
+    ok(badIcons.length === 0, `all four drawn icons ship, at 32x32 (${badIcons.join(",") || "all do"})`);
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

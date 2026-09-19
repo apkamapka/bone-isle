@@ -134,6 +134,8 @@ export type ItemKind =
   // worn pieces only. No shield came with them, so there is none.
   | "goldenHelm" | "goldenBody" | "goldenLegs" | "goldenBoots"
   | "vampireHelm" | "vampireBody" | "vampireLegs" | "vampireBoots"
+  // Zephyr (Etap 65): the speed set, outside both lines — see ITEMS
+  | "zephyrHelm" | "zephyrBody" | "zephyrLegs" | "zephyrBoots"
   // weapons: the two lines diverge here rather than mirroring each other —
   // human smiths make swords and hammers that guard as well as they cut,
   // beasts carry axes and fangs that hit harder and defend far worse
@@ -148,9 +150,11 @@ export type ItemKind =
 
 export type EqSlot = "head" | "body" | "legs" | "boots" | "weapon" | "shield" | "ring" | "amulet";
 
-/** The fourteen matched sets: seven tiers, a human and a beast line at each. */
+/** The fifteen matched sets: seven tiers, a human and a beast line at each,
+ *  and the Zephyr, which belongs to neither ladder. */
 export type SetKey = "leather" | "studded" | "chain" | "plate" | "steel" | "knight" | "golden"
-  | "snakeskin" | "goblin" | "orcish" | "minotaur" | "marrow" | "dragon" | "vampire";
+  | "snakeskin" | "goblin" | "orcish" | "minotaur" | "marrow" | "dragon" | "vampire"
+  | "zephyr";
 
 /**
  * Armor paid for wearing head + body + legs + boots all from one set.
@@ -177,10 +181,42 @@ export const SET_BONUS: Readonly<Record<SetKey, number>> = {
    * the Golden totals 29, the human line paying for its speed as it does on
    * tiers 1 to 4. */
   golden: 4, vampire: 4,
+  /* The Zephyr pays nothing in armor. Its bonus is speed — SET_SPEED_BONUS. */
+  zephyr: 0,
+};
+
+/**
+ * Speed paid for wearing a set complete, on top of whatever the pieces carry.
+ * Only the Zephyr has one (Etap 65), and it is where most of that set's pace
+ * lives: +40 of its +80. That split is deliberate — the pieces alone stay
+ * light enough that a single Zephyr boot is no reason to wear it under plate,
+ * and the full pace is only ever had with the armor the set does not give.
+ */
+export const SET_SPEED_BONUS: Readonly<Partial<Record<SetKey, number>>> = {
+  zephyr: 40,
 };
 
 /** The four worn slots a set is counted across. Shields and weapons are out. */
 export const SET_SLOTS = ["head", "body", "legs", "boots"] as const;
+
+/** The set worn COMPLETE — head, body, legs and boots all from one — or
+ *  undefined for any mixed outfit. A single odd piece drops the whole set,
+ *  for the armor bonus and the speed bonus alike. */
+export function completeSet(eq: Equipment): SetKey | undefined {
+  const first = eq.head ? ITEMS[eq.head].set : undefined;
+  if (!first) return undefined;
+  for (const slot of SET_SLOTS) {
+    const k = eq[slot];
+    if (!k || ITEMS[k].set !== first) return undefined;
+  }
+  return first;
+}
+
+/** Speed from a complete set, read by playerSpeed next to the pieces' own. */
+export function setSpeedBonus(eq: Equipment): number {
+  const s = completeSet(eq);
+  return s ? SET_SPEED_BONUS[s] ?? 0 : 0;
+}
 
 export interface GearStats {
   atk?: number;
@@ -643,6 +679,24 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   vampireLegs: { name: "Vampire Legs", stack: 1, value: 10960, weight: 86, slot: "legs", gear: { def: 6 }, set: "vampire" },
   goldenBoots: { name: "Golden Boots", stack: 1, value: 5440, weight: 22, slot: "boots", gear: { def: 3, speed: 14 }, set: "golden" },
   vampireBoots: { name: "Vampire Boots", stack: 1, value: 6240, weight: 26, slot: "boots", gear: { def: 3, speed: 10 }, set: "vampire" },
+  /* ---- the Zephyr: speed instead of armor (Etap 65) ----
+   * Outside both lines and every tier: one point of armor for the whole set,
+   * and +80 speed worn complete — +40 across the pieces and +40 more from
+   * SET_SPEED_BONUS. At level 1 that nearly doubles a walk (93 to 173), at
+   * level 50 it is +60% (132 to 212), and Swiftness multiplies all of it.
+   * The pieces alone are still quick: the boots carry +16, above the Golden's
+   * 14 — but no armor, so breaking an armored set for them costs that set's
+   * bonus plus the armor of the boot they replace, for a few points of pace
+   * (two, against the Golden's).
+   *
+   * VERY RARE, AND FOR NOW NOT FOUND AT ALL: no creature drops it, no chest
+   * holds it and no shelf stocks it. Borin pays 10 000 a piece — the value
+   * below is twice that, since a shop that buys pays half. It is cloth and
+   * feathers, so the furnace will not take it (it has no row in smelt.ts). */
+  zephyrHelm: { name: "Zephyr Mask", stack: 1, value: 20000, weight: 4, slot: "head", gear: { speed: 8 }, set: "zephyr" },
+  zephyrBody: { name: "Zephyr Tunic", stack: 1, value: 20000, weight: 18, slot: "body", gear: { def: 1, speed: 8 }, set: "zephyr" },
+  zephyrLegs: { name: "Zephyr Legs", stack: 1, value: 20000, weight: 14, slot: "legs", gear: { speed: 8 }, set: "zephyr" },
+  zephyrBoots: { name: "Zephyr Boots", stack: 1, value: 20000, weight: 8, slot: "boots", gear: { speed: 16 }, set: "zephyr" },
   /* THE RINGS ARE PRICED LIKE WHAT THEY ARE (Etap 61): three pieces of jewellery,
    * one of each in the whole game per character, out of the three deepest
    * boss hoards. Oswin used to pay 45 to 75 for them — less than a Plate

@@ -6,7 +6,7 @@ import { bakeOutfitSprites } from "../systems/outfit.ts";
 import type { Facing, DirSprites } from "../systems/outfit.ts";
 import { toTile, tileCenter } from "../world/grid.ts";
 import { activeBonus } from "../systems/derived.ts";
-import { ITEMS, walletValue, emptyEquipment, gearStat, itemWeight, bagWeight, addItem, newContainer, NO_BAG } from "../items.ts";
+import { ITEMS, walletValue, emptyEquipment, gearStat, setSpeedBonus, itemWeight, bagWeight, addItem, newContainer, NO_BAG } from "../items.ts";
 import type { Bag, Equipment, ItemKind, ItemStack } from "../items.ts";
 import type { Vec, Tree, RockNode } from "../world/types.ts";
 
@@ -177,9 +177,11 @@ export function refreshDerived(p: Player, bonus: DerivedBonus = activeBonus): vo
   if (p.hp > p.maxhp) p.hp = p.maxhp;
 }
 
-/** Movement speed in px/s: base + character level (Tibia 8.6 style) + boots. */
+/** Movement speed in px/s: base + character level (Tibia 8.6 style) + worn
+ *  gear + a complete set's speed bonus (only the Zephyr has one). */
 export function playerSpeed(p: Player): number {
-  const base = PLAYER_BASE_SPEED + (p.level - 1) * SPEED_PER_LEVEL + gearStat(p.eq, "speed");
+  const base = PLAYER_BASE_SPEED + (p.level - 1) * SPEED_PER_LEVEL
+    + gearStat(p.eq, "speed") + setSpeedBonus(p.eq);
   // Swiftness multiplies the WHOLE figure, boots included. Adding a flat bonus
   // instead would have made the rune worth least to the character who has
   // invested in speed, which is the wrong way round for something you buy.
