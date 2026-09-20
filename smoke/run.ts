@@ -19272,6 +19272,144 @@ async function main(): Promise<void> {
     ok(badIcons.length === 0, `all four redrawn icons ship, at 32x32 (${badIcons.join(",") || "all do"})`);
   }
 
+
+  console.log("Etap 68 — a square's pile has an ORDER, and the newest is on top of it:");
+  {
+    const G68 = await import("../src/world/ground.ts");
+    const fs68 = await import("node:fs");
+    const T68 = 32;
+    const mid68 = (t: number): number => t * T68 + T68 / 2;
+    type W68 = Parameters<typeof G68.placeOnGround>[0];
+    const mkW68 = (): W68 => ({ ground: [] } as unknown as W68);
+
+    /* THE BUG AS RADEK MET IT: stacking on the ground obeyed no rule at all.
+     * "Sometimes the new one is on top, sometimes not — maybe weight, maybe
+     * quantity." Neither. THREE things decided depth and none of them was
+     * drop order: the pixel `y` the renderer sorts by (a feet-drop was
+     * jittered ±8px, so half of them landed UNDER what was thrown there), the
+     * array slot (moving a stack left it where it was), and the merge (loose
+     * material joined the FIRST stack of its kind, which under a sword is the
+     * bottom of the heap). Two earlier passes fixed "which one do I take" and
+     * could not have helped: they all assume the pile has an order. */
+    const w68 = mkW68();
+    G68.placeOnGround(w68, "wood", 3, mid68(10) - 7, mid68(10) + 6);
+    G68.placeOnGround(w68, "shortSword", 1, mid68(10) + 5, mid68(10) - 8);
+    const newest68 = G68.placeOnGround(w68, "stone", 2, mid68(10) + 2, mid68(10) + 2);
+    ok(w68.ground.map((g) => g.kind).join(",") === "wood,shortSword,stone",
+      "three things dropped on one square keep the order they were dropped in");
+    ok(w68.ground.every((g) => g.x === mid68(10) && g.y === mid68(10)),
+      "…all on the square's own centre, so the renderer's y-sort cannot reshuffle them");
+    ok(G68.topOfPile(w68, mid68(10), mid68(10)) === newest68,
+      "…and the last one down is the top of the pile");
+    ok(G68.pileAt(w68, mid68(10), mid68(10)).length === 3
+      && G68.pileAt(w68, mid68(11), mid68(10)).length === 0,
+      "…which is one pile on one square, and nothing on the next one over");
+
+    /* Loose material joins the stack ON TOP, never one buried under a sword —
+     * that is where dropped gold used to disappear to. */
+    const w68b = mkW68();
+    const buried68 = G68.placeOnGround(w68b, "wood", 10, mid68(4), mid68(4));
+    G68.placeOnGround(w68b, "shortSword", 1, mid68(4), mid68(4));
+    const fresh68 = G68.placeOnGround(w68b, "wood", 5, mid68(4), mid68(4));
+    ok(buried68.n === 10 && fresh68 !== buried68,
+      "wood dropped onto a sword does not sink into the wood underneath it");
+    ok(G68.topOfPile(w68b, mid68(4), mid68(4)) === fresh68 && w68b.ground.length === 3,
+      "…it lies on top, where it was just dropped");
+    ok(G68.placeOnGround(w68b, "wood", 4, mid68(4), mid68(4)) === fresh68 && fresh68.n === 9,
+      "…and the NEXT armful joins it, because now IT is the top");
+
+    /* Gear is not material: two swords are two objects, or "the newest is on
+     * top" is a promise the floor quietly breaks for everything you wear. */
+    const w68c = mkW68();
+    G68.placeOnGround(w68c, "shortSword", 1, mid68(2), mid68(2));
+    const second68 = G68.placeOnGround(w68c, "shortSword", 1, mid68(2), mid68(2));
+    ok(w68c.ground.length === 2 && G68.topOfPile(w68c, mid68(2), mid68(2)) === second68,
+      "two swords are two objects, the second lying on the first");
+
+    /* …and a container is never folded into a stack of two, which would fuse
+     * two loot bags and delete the loser's contents. */
+    const w68d = mkW68();
+    const sack68 = items.newContainer("backpack")!;
+    items.addItem(sack68.items!, "dragonScale", 7);
+    const packA68 = G68.placeOnGround(w68d, "backpack", 1, mid68(6), mid68(6), { items: sack68.items });
+    const packB68 = G68.placeOnGround(w68d, "backpack", 1, mid68(6), mid68(6),
+      { items: items.newContainer("backpack")!.items });
+    ok(w68d.ground.length === 2 && packA68 !== packB68 && packA68.n === 1,
+      "two backpacks on one square stay two backpacks");
+    ok(items.bagCount(packA68.items!, "dragonScale") === 7,
+      "…so the one underneath keeps every scale in it");
+    ok(G68.topOfPile(w68d, mid68(6), mid68(6)) === packB68,
+      "…and the one you put down last is still the one you pick up first");
+
+    /* Moving a stack is a drop like any other: it lands on top of where it
+     * lands. This is the half that no amount of fixing the pick could reach —
+     * the stack kept the array slot, and therefore the depth, of the square
+     * it came from. */
+    const w68e = mkW68();
+    const old68 = G68.placeOnGround(w68e, "shortSword", 1, mid68(1), mid68(1));
+    G68.placeOnGround(w68e, "stone", 2, mid68(9), mid68(9));
+    G68.moveToPile(w68e, old68, mid68(9) + 6, mid68(9) - 5);
+    ok(G68.topOfPile(w68e, mid68(9), mid68(9)) === old68,
+      "a stack dragged onto another square lands on TOP of what is already there");
+    ok(old68.x === mid68(9) && old68.y === mid68(9), "…on that square's centre, like everything else");
+    ok(G68.pileAt(w68e, mid68(1), mid68(1)).length === 0, "…and the square it left is bare");
+
+    /* Dragging something onto its OWN square digs it back out of the pile,
+     * which is the only way to raise a buried stack without picking it up. */
+    const w68f = mkW68();
+    const under68 = G68.placeOnGround(w68f, "stone", 1, mid68(3), mid68(3));
+    const over68 = G68.placeOnGround(w68f, "shortSword", 1, mid68(3), mid68(3));
+    ok(G68.topOfPile(w68f, mid68(3), mid68(3)) === over68, "the sword lies on the stone");
+    G68.moveToPile(w68f, under68, mid68(3), mid68(3));
+    ok(G68.topOfPile(w68f, mid68(3), mid68(3)) === under68 && w68f.ground.length === 2,
+      "…and dragging the stone onto its own square brings it back up, losing nothing");
+
+    /* Material dragged onto the same material still merges — the merged stack
+     * IS the top one, so the rule costs nothing here. */
+    const w68g = mkW68();
+    const heap68 = G68.placeOnGround(w68g, "wood", 6, mid68(7), mid68(7));
+    const loose68 = G68.placeOnGround(w68g, "wood", 4, mid68(8), mid68(7));
+    ok(G68.moveToPile(w68g, loose68, mid68(7), mid68(7)) === heap68
+      && heap68.n === 10 && w68g.ground.length === 1,
+      "wood dragged onto wood joins it instead of doubling the pile");
+
+    /* An old save holds stacks jittered inside their squares. A stray pixel of
+     * `y` is a stray depth, so they come back onto the centre — in the order
+     * they were saved in, which is the order they were dropped in. */
+    {
+      const { loadGame: lg68 } = await import("../src/save.ts");
+      const SK68 = "bone-isle-save-v2";
+      localStorage.setItem(SK68, JSON.stringify({
+        v: 14,
+        player: { x: 100, y: 100, gold: 0, level: 1, exp: 0, taskPoints: 0, bag: [], eq: {} },
+        world: "home", worlds: {}, structures: {}, corpses: {},
+        ground: { home: [
+          { kind: "wood", n: 1, x: mid68(12) - 7, y: mid68(12) + 6, t: 900 },
+          { kind: "stone", n: 1, x: mid68(12) + 5, y: mid68(12) - 8, t: 900 },
+        ] },
+      }));
+      const back68 = lg68();
+      const pile68 = back68 ? G68.pileAt(back68.worlds.home, mid68(12), mid68(12)) : [];
+      ok(pile68.length === 2 && pile68[0].kind === "wood" && pile68[1].kind === "stone",
+        "a saved pile reloads in the order it was dropped in");
+      ok(pile68.every((g) => g.x === mid68(12) && g.y === mid68(12)),
+        "…squared onto its tile, so the reload cannot repaint it in a new order");
+      localStorage.removeItem(SK68);
+    }
+
+    /* ONE DOOR ONTO THE FLOOR. Every path that used to push a stack straight
+     * into `world.ground` with its own merge scan is gone; pinned, because a
+     * second copy of the rule is exactly how this got three answers. */
+    const m68 = fs68.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(!/ground\.push\(/.test(m68), "nothing in main.ts puts a stack on the floor behind the rule's back");
+    ok(!/ground\.find\(\(g[a-z]*\) => g[a-z]*\.kind ===/.test(m68), "…and no private merge scan is left in it");
+    const s68 = fs68.readFileSync(new URL("../src/save.ts", import.meta.url), "utf8");
+    ok(!/ground\.push\(/.test(s68), "…nor in the loader, which spills an overflowing bag onto the same floor");
+    const g68 = fs68.readFileSync(new URL("../src/world/ground.ts", import.meta.url), "utf8");
+    ok(/for \(let i = w\.ground\.length - 1; i >= 0; i--\)/.test(g68),
+      "and the pile itself is read from the top down, the way it is painted");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

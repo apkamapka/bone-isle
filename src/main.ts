@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, GROUND_DESPAWN_S, MONSTERS_ENABLED, USE_RANGE_PX, PANEL_REACH_TILES, RESPAWN_RETRY_S, THROW_RANGE_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, WATER_GLINT_CUT, WATER_GLINT_LEN_VAR, WATER_GLINT_SPEED_VAR, WATER_SWELL_COLOR, WATER_SWELL_ALPHA, WATER_SWELL_LEN, WATER_SWELL_SPEED, COAST_FOAM_COLOR, COAST_FOAM_SPEED, COAST_FOAM_CUT, COAST_FOAM_DASHES, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, MONSTERS_ENABLED, USE_RANGE_PX, PANEL_REACH_TILES, RESPAWN_RETRY_S, THROW_RANGE_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, WATER_GLINT_CUT, WATER_GLINT_LEN_VAR, WATER_GLINT_SPEED_VAR, WATER_SWELL_COLOR, WATER_SWELL_ALPHA, WATER_SWELL_LEN, WATER_SWELL_SPEED, COAST_FOAM_COLOR, COAST_FOAM_SPEED, COAST_FOAM_CUT, COAST_FOAM_DASHES, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
 import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers, isSafeTile } from "./world/collision.ts";
 import { carryCap, carriedWeight } from "./entities/player.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, chebToPoint, type Occupied } from "./world/grid.ts";
@@ -54,7 +54,8 @@ import {
 } from "./systems/missions.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
-import { nextEntityId, byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
+import { byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
+import { placeOnGround, moveToPile } from "./world/ground.ts";
 import { TARGET_SEEK_PX, MIN_ELEMENTAL_DAMAGE } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, taskById, hasRoomForTask, isActive, isComplete, rewardFits } from "./systems/tasks.ts";
 import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, exchangeCoins } from "./items.ts";
@@ -1186,15 +1187,12 @@ function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }, co
   const from = cw();
   const dest = game.worlds[pt.dest];
   const back = dest.portals.find((p2) => p2.dest === from.key) ?? dest.portals[0];
-  const gx = (back?.x ?? dest.w * TILE / 2) + (Math.random() - 0.5) * 16;
+  const gx = back?.x ?? dest.w * TILE / 2;
   const gy = (back?.y ?? dest.h * TILE / 2) + 28;
-  /* A pack shoved through arrives WITH what is in it, and never merges: it is
-   * one object, and folding two backpacks into a stack of two would fuse two
-   * sets of contents and silently delete the loser's. */
-  const near = contents ? undefined
-    : dest.ground.find((g) => g.kind === kind && !g.items && Math.hypot(g.x - gx, g.y - gy) < 14);
-  if (near) near.n += n;
-  else dest.ground.push({ id: nextEntityId(), kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S, ...(contents ? { items: contents } : {}) });
+  /* One rule for landing on a square, and `placeOnGround` is it: the haul
+   * arrives on top of whatever is already lying by the far portal, and a pack
+   * shoved through arrives WITH what is in it and never merges. */
+  placeOnGround(dest, kind, n, gx, gy, { items: contents });
   flash(`whoosh — ${n} ${ITEMS[kind].name} through the portal!`, "#8ab6ff");
   beep(600, 0.12, "sine", 0.05, -220);
 }
@@ -1226,16 +1224,16 @@ function dropToGround(kind: ItemKind, n: number, tx?: number, ty?: number): void
     if (t.sank) { sink(kind, n, t.x, t.y); return; }
     gx = t.x; gy = t.y;
   } else {
-    const jitter = () => (Math.random() - 0.5) * 16;
-    gx = P.x + jitter();
-    gy = P.y + 4 + jitter();
+    /* At your feet means at your feet — the square you are standing on, not a
+     * jittered point inside it. The jitter was there to keep a heap from
+     * overlapping exactly, and it cost the pile its order: a random `y` is a
+     * random depth, so half the drops slid under what was already there. */
+    gx = P.x;
+    gy = P.y;
   }
-  // merge into a very close stack of the same kind to avoid clutter
-  // merge into a very close stack of the same kind to avoid clutter — never
-  // into a container, whose `n` is an object count and not a quantity
-  const near = world.ground.find((g) => g.kind === kind && !g.items && Math.hypot(g.x - gx, g.y - gy) < 14);
-  if (near) near.n += n;
-  else world.ground.push({ id: nextEntityId(), kind, n, x: gx, y: gy, t: GROUND_DESPAWN_S });
+  // one square, one pile, newest on top — and loose material joins the stack
+  // already on top of it rather than one buried under a helmet
+  placeOnGround(world, kind, n, gx, gy);
   flash(`dropped ${n} ${ITEMS[kind].name}`, "#cfa86a");
   beep(200, 0.06, "sine", 0.04, -60);
 }
@@ -1261,18 +1259,11 @@ function throwGroundItem(gi: GroundItem, tx: number, ty: number): void {
     sink(gi.kind, gi.n, t.x, t.y);
     return;
   }
-  // two backpacks are two objects: merging them would fuse two sets of
-  // contents into one and quietly delete the loser's
-  const near = gi.items ? undefined
-    : world.ground.find((g) => g !== gi && g.kind === gi.kind && !g.items && Math.hypot(g.x - t.x, g.y - t.y) < 14);
-  if (near) {
-    near.n += gi.n;
-    const idx = world.ground.indexOf(gi);
-    if (idx >= 0) world.ground.splice(idx, 1);
-  } else {
-    gi.x = t.x;
-    gi.y = t.y;
-  }
+  /* It lands like anything else: on TOP of the square it was aimed at. Moving
+   * the coordinates alone used to leave it wherever it sat in `world.ground`,
+   * so a stack shoved onto a pile kept the depth of the square it came from —
+   * and two backpacks still never merge, which `moveToPile` enforces. */
+  moveToPile(world, gi, t.x, t.y);
   beep(200, 0.06, "sine", 0.04, -60);
 }
 
@@ -1549,11 +1540,11 @@ function dropContainerToGround(st: ItemStack, tx?: number, ty?: number): void {
     if (t.sank) { sink(st.kind, 1, t.x, t.y); return; }
     gx = t.x; gy = t.y;
   } else {
-    gx = P.x + (Math.random() - 0.5) * 16;
-    gy = P.y + 4 + (Math.random() - 0.5) * 16;
+    gx = P.x;
+    gy = P.y;
   }
   // never merged into a nearby stack: two backpacks are two objects
-  world.ground.push({ id: nextEntityId(), kind: st.kind, n: 1, x: gx, y: gy, t: GROUND_DESPAWN_S, items: st.items });
+  placeOnGround(world, st.kind, 1, gx, gy, { items: st.items });
   flash(`dropped ${ITEMS[st.kind].name}`, "#cfa86a");
   beep(200, 0.06, "sine", 0.04, -60);
 }
@@ -1809,10 +1800,7 @@ function giveMaterial(kind: ItemKind, n: number): void {
   let left = addItem(P.bag, kind, n);
   for (const ch of homeChests(game)) { if (left <= 0) break; left = addItem(ch, kind, left); }
   if (left <= 0) return;
-  const w0 = cw();
-  const near = w0.ground.find((gi) => gi.kind === kind && Math.hypot(gi.x - P.x, gi.y - P.y) < 14);
-  if (near) near.n += left;
-  else w0.ground.push({ id: nextEntityId(), kind, n: left, x: P.x, y: P.y, t: GROUND_DESPAWN_S });
+  placeOnGround(cw(), kind, left, P.x, P.y);
   flash(`${left} ${ITEMS[kind].name} dropped at your feet`, "#e0a06a");
 }
 
@@ -5590,14 +5578,25 @@ function render(): void {
       vctx.globalAlpha = 1;
     } });
   }
-  // dropped items on the ground
+  /* Dropped items, painted bottom of the pile first — `world.ground` order IS
+   * pile order (see world/ground.ts), every stack on a square shares one `y`,
+   * and `drawList.sort` is stable, so the last one dropped is the last one
+   * painted and therefore the one you can see.
+   *
+   * ONE SHADOW PER SQUARE, though. Ten stacks at one point used to mean ten
+   * shadows on one patch of grass, which reads as a hole in the ground. The
+   * first entry on a tile is the bottom of its pile, so it carries it. */
+  const shadowed = new Set<number>();
   for (const gi of world.ground) {
     if (!inView(gi.x, gi.y)) continue;
+    const pileKey = toTile(gi.y) * world.w + toTile(gi.x);
+    const floorOfPile = !shadowed.has(pileKey);
+    shadowed.add(pileKey);
     const blink = gi.t < 30 ? (Math.sin(waveT * 8) > 0 ? 1 : 0.45) : 1;
     const spr = itemSprite(gi.kind);
     drawList.push({ y: gi.y, fn: () => {
       vctx.globalAlpha = blink;
-      drawShadow(gi.x, gi.y, 12);
+      if (floorOfPile) drawShadow(gi.x, gi.y, 12);
       const px = Math.round(gi.x - cam.x - spr.width / 2);
       const py = Math.round(gi.y - cam.y - spr.height);
       vctx.imageSmoothingEnabled = false;

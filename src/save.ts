@@ -8,6 +8,7 @@ import { createPlayer, refreshDerived } from "./entities/player.ts";
 import { portalSpawn, feetBlocked, worldSpawn } from "./world/collision.ts";
 import { placeWalker } from "./world/grid.ts";
 import { stampWorlds, nextEntityId } from "./world/entities.ts";
+import { placeOnGround, pileSpot } from "./world/ground.ts";
 import { applyStructureSolidity, canPlaceAt, STRUCTS, CHEST_SLOTS } from "./systems/building.ts";
 import { liftOverDeep } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
@@ -333,7 +334,13 @@ export function loadGame(): Game | null {
         .filter((gi) => validItem(gi) && typeof gi.x === "number" && typeof gi.y === "number")
         .map((gi) => {
           const st = validItem(gi)!;
-          return { id: nextEntityId(), kind: st.kind, n: st.n, x: gi.x * pos, y: gi.y * pos,
+          /* Onto the square's centre, keeping the saved ARRAY order — which
+           * is pile order now (see world/ground.ts). Old saves hold stacks
+           * jittered a few pixels inside their tile, and a stray pixel of `y`
+           * is a stray depth: the renderer sorts by `y`, so a pile saved in
+           * one order would come back painted in another. */
+          const at = pileSpot(gi.x * pos, gi.y * pos);
+          return { id: nextEntityId(), kind: st.kind, n: st.n, x: at.x, y: at.y,
             t: typeof gi.t === "number" ? gi.t : GROUND_DESPAWN_S,
             ...(st.items ? { items: st.items } : {}) };
         });
@@ -523,7 +530,7 @@ export function loadGame(): Game | null {
     if (firstChest) left = addItem((firstChest.inv ??= emptyStash(CHEST_SLOTS[1])), st.kind, st.n);
     if (left > 0) {
       const at = portalSpawn(worlds.home);
-      worlds.home.ground.push({ id: nextEntityId(), kind: st.kind, n: left, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16, t: GROUND_DESPAWN_S });
+      placeOnGround(worlds.home, st.kind, left, at.x, at.y);
     }
   }
 
@@ -537,8 +544,7 @@ export function loadGame(): Game | null {
     if (firstChest) placed = addStack((firstChest.inv ??= emptyStash(CHEST_SLOTS[1])), st);
     if (!placed) {
       const at = portalSpawn(worlds.home);
-      worlds.home.ground.push({ id: nextEntityId(), kind: st.kind, n: st.n, x: at.x + (Math.random() - 0.5) * 24, y: at.y + 16,
-        t: GROUND_DESPAWN_S, ...(st.items ? { items: st.items } : {}) });
+      placeOnGround(worlds.home, st.kind, st.n, at.x, at.y, { items: st.items });
     }
   }
 
