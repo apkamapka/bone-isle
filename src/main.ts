@@ -68,7 +68,7 @@ import { chatInput, initChatInput } from "./ui/chatInput.ts";
 import { groundEntries, playerEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
 import { tickAuraFx, drawAuras, drawFlares, addFlare } from "./gfx/auraFx.ts";
-import { lifePercent, lifeTrail, sweepLifeTrails, drawLifeBar } from "./gfx/lifeBar.ts";
+import { lifePercent, lifeTrail, sweepLifeTrails, drawLifeBar, drawNameTag, NAME_GAP } from "./gfx/lifeBar.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
@@ -2738,6 +2738,21 @@ function sendChat(text: string): void {
  */
 const CHAT_SPEAKER_ID = -1;
 
+/**
+ * TEMP-ETAP70-NAME — the name over the player's head, until there is a real one.
+ *
+ * ONLINE: REPLACE THIS. Nobody has a name yet because nobody logs in: there
+ * is one character per browser and it has never been asked what it is called.
+ * The day accounts exist, the server hands every character its name, this
+ * constant goes, and `nameplate` is given that name instead — for the local
+ * player AND for every other player on screen, since they draw through the
+ * same call. The chat's `SELF` ("You", systems/chat.ts) is the same seam on
+ * the other side of the screen and wants the same fix at the same time.
+ *
+ * Grep TEMP-ETAP70-NAME to find everything that has to change with it.
+ */
+const PLAYER_NAME = "Player";
+
 initChatInput({ send: sendChat, cancel: closeChat });
 initWakeLock();
 
@@ -5054,18 +5069,21 @@ function hpBar(x: number, y: number, frac: number, w = 28): void {
 }
 
 /**
- * The life bar over somebody's head — a creature's, the player's, and one day
+ * The nameplate over somebody's head — name above, life bar below, both in the
+ * colour of how alive they are. A creature's, the player's, and one day
  * another player's, all through this one call so they can never drift apart.
  *
  * `key` names whose damage trail this is (an entity id, or the player's
- * reserved speaker id); `x` is the centre and `top` the top edge of the frame,
- * in WORLD pixels. The colour bands, the trail and the percent rounding live
- * in gfx/lifeBar.ts. `hpBar` above is a different thing and stays: a tree or a
+ * reserved speaker id); `x` is the centre and `top` the top edge of the bar's
+ * frame, in WORLD pixels — the name sits NAME_GAP above that. The colour
+ * bands, the trail, the percent rounding and the lettering live in
+ * gfx/lifeBar.ts. `hpBar` above is a different thing and stays: a tree or a
  * rock being worked shows how much work is left, not how alive it is.
  */
-function lifeBar(key: number, x: number, top: number, hp: number, maxhp: number): void {
+function nameplate(key: number, name: string, x: number, top: number, hp: number, maxhp: number): void {
   const pct = lifePercent(hp, maxhp);
   drawLifeBar(vctx, x - cam.x, top - cam.y, pct, lifeTrail(key, pct, performance.now() / 1000));
+  drawNameTag(vctx, x - cam.x, top - cam.y - NAME_GAP, name, pct);
 }
 
 function render(): void {
@@ -5660,9 +5678,10 @@ function render(): void {
       vctx.globalAlpha = m.hurtT > 0 && Math.sin(m.hurtT * 60) > 0 ? 0.5 : 1;
       drawSprite(spr, m.x, m.y, 1, bob);
       vctx.globalAlpha = 1;
-      lifeBar(m.id, m.x, m.y - spr.height - 9, m.hp, m.maxhp);
+      nameplate(m.id, mobName(m.kind), m.x, m.y - spr.height - 9, m.hp, m.maxhp);
       if (P.target?.kind === "mob" && P.target.id === m.id) targetBox(m.x, m.y);
-      sayBubble(m.id, m.x, m.y - spr.height - 20);
+      // above the name now, which sits where this used to be
+      sayBubble(m.id, m.x, m.y - spr.height - 26);
     } });
   }
   // player — hand-drawn LPC art when the sheet is up, the baked outfit until then
@@ -5686,15 +5705,15 @@ function render(): void {
     // and centred on his CHEST rather than his feet, because a ward drawn on
     // the ground reads as something he is standing in.
     if (!P.dead) drawAuras(vctx, P.buffs, P.x - cam.x, P.y - cam.y - 22, performance.now() / 1000);
-    /* Life, over the head, where everyone else on screen can read it — Tibia's
-     * layout exactly: the bar sits two pixels above the hair (the head starts
-     * at y-49, see above), the skull tucks in under its right end, and speech
-     * goes above the lot. The speech used to sit at y-46, across the top of
-     * the head; with the bar there it has to clear the bar instead. After the
-     * aura, so a ward never paints over the one thing a fight is read from. */
-    if (!P.dead) lifeBar(CHAT_SPEAKER_ID, P.x, P.y - 57, P.hp, P.maxhp);
+    /* Name and life, over the head, where everyone else on screen can read
+     * them — Tibia's layout exactly: the bar sits two pixels above the hair
+     * (the head starts at y-49, see above), the name sits on the bar, the
+     * skull tucks in under the bar's right end, and speech goes above the lot.
+     * After the aura, so a ward never paints over the one thing a fight is
+     * read from. */
+    if (!P.dead) nameplate(CHAT_SPEAKER_ID, PLAYER_NAME, P.x, P.y - 57, P.hp, P.maxhp);
     if (!P.dead) skullMark(skull(), P.x + 10, P.y - 49);
-    sayBubble(CHAT_SPEAKER_ID, P.x, P.y - 62);
+    sayBubble(CHAT_SPEAKER_ID, P.x, P.y - 74);
   } });
 
   drawList.sort((a, b) => a.y - b.y);

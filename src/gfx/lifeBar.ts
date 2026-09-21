@@ -26,6 +26,13 @@
  * reserved speaker id — so every creature on screen keeps its own, and one
  * that walks out of view is forgotten after a couple of seconds instead of
  * being remembered forever.
+ *
+ * THE NAME
+ * --------
+ * Over the bar, in the bar's own colour: Tibia never gives a name a colour of
+ * its own, so a name going yellow IS the news, readable before the bar is.
+ * Black-outlined rather than shadowed, because a name has to read on sand,
+ * grass, a cave floor and a burning field alike.
  */
 
 /** Width of the coloured fill, in world pixels. The frame adds one each side. */
@@ -146,4 +153,50 @@ export function drawLifeBar(ctx: BarCtx, cx: number, top: number, pct: number, t
     ctx.fillStyle = lifeColor(pct);
     ctx.fillRect(left, y + 1, fill, LIFE_BAR_H);
   }
+}
+
+/**
+ * The name's typeface: a bold Verdana-like sans at ten world pixels, which is
+ * Tibia's proportion to a 32px tile. The fallbacks matter — a phone has no
+ * Verdana, and a monospace name would be half as wide again.
+ */
+export const NAME_FONT = "bold 10px Verdana, Tahoma, 'DejaVu Sans', sans-serif";
+/** From the name's baseline down to the top of the bar's frame. Descenders
+ *  (the g of Goblin, the y of Player) hang into it and stop a pixel short. */
+export const NAME_GAP = 3;
+
+/** The drawing surface a name needs — a canvas context, or a test's recorder. */
+export interface NameCtx {
+  font: string;
+  textAlign: CanvasTextAlign;
+  textBaseline: CanvasTextBaseline;
+  lineJoin: CanvasLineJoin;
+  lineWidth: number;
+  strokeStyle: string | CanvasGradient | CanvasPattern;
+  fillStyle: string | CanvasGradient | CanvasPattern;
+  strokeText(text: string, x: number, y: number): void;
+  fillText(text: string, x: number, y: number): void;
+}
+
+/**
+ * Paint a name centred on `cx` with its baseline at `baseline` (SCREEN
+ * pixels), in the colour of `pct`. An empty name paints nothing.
+ *
+ * The outline is a two-pixel stroke under the fill — one pixel of it lands
+ * outside the letters, which is Tibia's one-pixel border. Round joins, or the
+ * corners of a bold V grow spikes.
+ */
+export function drawNameTag(ctx: NameCtx, cx: number, baseline: number, name: string, pct: number): void {
+  if (!name) return;
+  const x = Math.round(cx);
+  const y = Math.round(baseline);
+  ctx.font = NAME_FONT;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#000";
+  ctx.strokeText(name, x, y);
+  ctx.fillStyle = lifeColor(pct);
+  ctx.fillText(name, x, y);
 }

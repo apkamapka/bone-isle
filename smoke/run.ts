@@ -19501,15 +19501,15 @@ async function main(): Promise<void> {
 
     /* WIRED IN — creatures and the player through the one call. */
     const m69 = fs69.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    ok(m69.includes("lifeBar(m.id, m.x, m.y - spr.height - 9, m.hp, m.maxhp);"),
+    ok(m69.includes("nameplate(m.id, mobName(m.kind), m.x, m.y - spr.height - 9, m.hp, m.maxhp);"),
       "every creature carries the new bar, keyed by its own id");
     ok(!/hpBar\(m\.x/.test(m69), "…and none is left on the old all-red one");
     ok(m69.includes("hpBar(bx, tr.ty * TILE - 8") && m69.includes("hpBar(bx, rk.ty * TILE - 4"),
       "a tree or a rock being worked keeps its own bar — that is work left, not life");
-    ok(m69.includes("if (!P.dead) lifeBar(CHAT_SPEAKER_ID, P.x, P.y - 57, P.hp, P.maxhp);"),
+    ok(m69.includes("if (!P.dead) nameplate(CHAT_SPEAKER_ID, PLAYER_NAME, P.x, P.y - 57, P.hp, P.maxhp);"),
       "the player carries one over his head, and his corpse does not");
-    const own69 = m69.slice(m69.indexOf("if (!P.dead) lifeBar(CHAT_SPEAKER_ID"));
-    ok(own69.indexOf("lifeBar(") < own69.indexOf("skullMark(skull()"),
+    const own69 = m69.slice(m69.indexOf("if (!P.dead) nameplate(CHAT_SPEAKER_ID"));
+    ok(own69.indexOf("nameplate(") < own69.indexOf("skullMark(skull()"),
       "…painted before the skull, so the skull is never under the bar");
 
     /* The layout, in pixels above the feet: head top 49, the bar's frame 51..57,
@@ -19525,6 +19525,80 @@ async function main(): Promise<void> {
     const loop69 = m69.slice(m69.indexOf("for (const d of drawList) d.fn();"));
     ok(loop69.slice(0, 200).includes("sweepLifeTrails("),
       "the trails of whatever left the screen are swept right after the scene is drawn");
+  }
+
+
+  console.log("Etap 70 — a name over every head, in the colour of its life:");
+  {
+    const LB70 = await import("../src/gfx/lifeBar.ts");
+    const MON70 = await import("../src/entities/monsters.ts");
+    const fs70 = await import("node:fs");
+
+    /* THE NAMES THEMSELVES. `mobName` only ever raised the first letter, so a
+     * compound kind came out glued: the look said "You see OrcWarrior". Over
+     * a head, read a hundred times a fight, that is simply wrong. */
+    ok(MON70.mobName("orcWarrior") === "Orc Warrior", "orcWarrior reads as Orc Warrior");
+    ok(MON70.mobName("goblinLegionary") === "Goblin Legionary" && MON70.mobName("blackKnight") === "Black Knight",
+      "…and every other two-word kind the same way");
+    ok(MON70.mobName("bandit") === "Bandit", "a one-word kind is untouched");
+    ok(MON70.mobName("draugr") === "Kárr the Old" && MON70.mobName("redcap") === "Robin Redcap",
+      "a boss with a NAME keeps its name, not its species");
+    const glued70 = Object.keys(MON70.MONSTER_DEFS).filter((k) => /[a-z][A-Z]/.test(MON70.mobName(k)));
+    ok(glued70.length === 0, `no creature in the bestiary wears a glued name (${glued70.join(",") || "none"})`);
+
+    /* THE LETTERING, recorded rather than looked at. */
+    const rec70: { op: string; text: string; x: number; y: number; style: string; font: string; width: number; align: string }[] = [];
+    const ctx70 = {
+      font: "", textAlign: "left" as CanvasTextAlign, textBaseline: "top" as CanvasTextBaseline,
+      lineJoin: "miter" as CanvasLineJoin, lineWidth: 1,
+      strokeStyle: "" as string, fillStyle: "" as string,
+      strokeText(text: string, x: number, y: number): void {
+        rec70.push({ op: "stroke", text, x, y, style: String(ctx70.strokeStyle), font: ctx70.font,
+          width: ctx70.lineWidth, align: ctx70.textAlign });
+      },
+      fillText(text: string, x: number, y: number): void {
+        rec70.push({ op: "fill", text, x, y, style: String(ctx70.fillStyle), font: ctx70.font,
+          width: ctx70.lineWidth, align: ctx70.textAlign });
+      },
+    };
+    LB70.drawNameTag(ctx70, 100.4, 50.6, "Orc Warrior", 45);
+    ok(rec70.length === 2 && rec70[0].op === "stroke" && rec70[1].op === "fill",
+      "a name is an outline first and the letters over it");
+    ok(rec70[0].style === "#000" && rec70[0].width === 2, "…a black two-pixel stroke, one pixel of it outside the letters");
+    ok(rec70[1].style === LB70.lifeColor(45), "…and the letters in the colour of the bar under them");
+    ok(rec70.every((r) => r.text === "Orc Warrior" && r.x === 100 && r.y === 51 && r.align === "center"),
+      "…centred over the bar, on whole pixels");
+    ok(rec70[1].font === LB70.NAME_FONT && /bold 10px/.test(LB70.NAME_FONT) && /sans-serif/.test(LB70.NAME_FONT),
+      "…in a bold ten-pixel sans, with a fallback for the phone that has no Verdana");
+    ok(ctx70.textBaseline === "alphabetic",
+      "…measured from its baseline, whatever the last thing to touch the context left it on");
+    rec70.length = 0;
+    LB70.drawNameTag(ctx70, 100, 50, "Player", 100);
+    ok(rec70[1]?.style === "#00bc00", "a name at full life is green, like its bar");
+    rec70.length = 0;
+    LB70.drawNameTag(ctx70, 100, 50, "", 100);
+    ok(rec70.length === 0, "…and an empty name paints nothing at all");
+
+    /* WIRED IN. The creature's name comes from `mobName`; the player's is the
+     * tagged stand-in until the server has a real one. */
+    const m70 = fs70.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const plate70 = m70.slice(m70.indexOf("function nameplate("), m70.indexOf("function render("));
+    ok(/drawLifeBar\(/.test(plate70) && /drawNameTag\(vctx, x - cam\.x, top - cam\.y - NAME_GAP, name, pct\)/.test(plate70),
+      "one call draws both, the name NAME_GAP above the bar and in the same percent");
+    ok(!/[^.\w]lifeBar\(/.test(m70), "…and nothing draws a bar without its name any more");
+    ok(m70.includes('const PLAYER_NAME = "Player";'), "the player is called Player for now");
+    const tag70 = m70.slice(m70.indexOf("TEMP-ETAP70-NAME"), m70.indexOf('const PLAYER_NAME = "Player";'));
+    ok(tag70.length > 0 && /ONLINE: REPLACE THIS/.test(tag70),
+      "…and it says, in the tag, that the online build has to replace it (grep TEMP-ETAP70-NAME)");
+
+    /* THE STACK OVER A HEAD, in pixels above the feet. Bar frame 51..57, the
+     * name's baseline NAME_GAP above it with capitals about eight pixels tall,
+     * then speech with its descenders clear of those capitals. */
+    const nameTop70 = 57 + LB70.NAME_GAP + 8;
+    const say70 = Number(/sayBubble\(CHAT_SPEAKER_ID, P\.x, P\.y - (\d+)\)/.exec(m70)?.[1]);
+    ok(say70 - 3 > nameTop70, `the player's speech rides above his name (baseline ${say70}, name to ${nameTop70})`);
+    const mobSay70 = Number(/sayBubble\(m\.id, m\.x, m\.y - spr\.height - (\d+)\)/.exec(m70)?.[1]);
+    ok(mobSay70 - 3 > 9 + LB70.NAME_GAP + 8, `…and a creature's above its name (${mobSay70})`);
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

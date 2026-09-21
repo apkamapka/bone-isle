@@ -60,7 +60,14 @@ export interface RangedDef {
  */
 export function mobName(kind: string): string {
   const named = (MONSTER_DEFS as Record<string, { name?: string } | undefined>)[kind]?.name;
-  return named ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+  if (named) return named;
+  /* Title-cased WORD BY WORD. The note on `MonsterDef.name` always said
+   * "orcWarrior" title-cased was the answer, and the code only ever raised
+   * the first letter — so the look said "You see OrcWarrior" and nobody
+   * minded much. A name floating over the creature's head is read a hundred
+   * times a fight, and there "GoblinLegionary" is simply wrong. */
+  const words = kind.replace(/([a-z])([A-Z])/g, "$1 $2");
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export interface MonsterDef {
