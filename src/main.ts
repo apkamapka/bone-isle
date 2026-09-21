@@ -68,6 +68,7 @@ import { chatInput, initChatInput } from "./ui/chatInput.ts";
 import { groundEntries, playerEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
 import { tickAuraFx, drawAuras, drawFlares, addFlare } from "./gfx/auraFx.ts";
+import { lifePercent, lifeTrail, sweepLifeTrails, drawLifeBar } from "./gfx/lifeBar.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
@@ -5052,6 +5053,21 @@ function hpBar(x: number, y: number, frac: number, w = 28): void {
   vctx.fillRect(Math.round(x - cam.x - w / 2), Math.round(y - cam.y), Math.round(w * clamp(frac, 0, 1)), 4);
 }
 
+/**
+ * The life bar over somebody's head — a creature's, the player's, and one day
+ * another player's, all through this one call so they can never drift apart.
+ *
+ * `key` names whose damage trail this is (an entity id, or the player's
+ * reserved speaker id); `x` is the centre and `top` the top edge of the frame,
+ * in WORLD pixels. The colour bands, the trail and the percent rounding live
+ * in gfx/lifeBar.ts. `hpBar` above is a different thing and stays: a tree or a
+ * rock being worked shows how much work is left, not how alive it is.
+ */
+function lifeBar(key: number, x: number, top: number, hp: number, maxhp: number): void {
+  const pct = lifePercent(hp, maxhp);
+  drawLifeBar(vctx, x - cam.x, top - cam.y, pct, lifeTrail(key, pct, performance.now() / 1000));
+}
+
 function render(): void {
   const world = cw();
   /* THE CAMERA IS NO LONGER CLAMPED TO THE MAP.
@@ -5644,7 +5660,7 @@ function render(): void {
       vctx.globalAlpha = m.hurtT > 0 && Math.sin(m.hurtT * 60) > 0 ? 0.5 : 1;
       drawSprite(spr, m.x, m.y, 1, bob);
       vctx.globalAlpha = 1;
-      hpBar(m.x, m.y - spr.height - 8, m.hp / m.maxhp);
+      lifeBar(m.id, m.x, m.y - spr.height - 9, m.hp, m.maxhp);
       if (P.target?.kind === "mob" && P.target.id === m.id) targetBox(m.x, m.y);
       sayBubble(m.id, m.x, m.y - spr.height - 20);
     } });
@@ -5670,12 +5686,21 @@ function render(): void {
     // and centred on his CHEST rather than his feet, because a ward drawn on
     // the ground reads as something he is standing in.
     if (!P.dead) drawAuras(vctx, P.buffs, P.x - cam.x, P.y - cam.y - 22, performance.now() / 1000);
+    /* Life, over the head, where everyone else on screen can read it — Tibia's
+     * layout exactly: the bar sits two pixels above the hair (the head starts
+     * at y-49, see above), the skull tucks in under its right end, and speech
+     * goes above the lot. The speech used to sit at y-46, across the top of
+     * the head; with the bar there it has to clear the bar instead. After the
+     * aura, so a ward never paints over the one thing a fight is read from. */
+    if (!P.dead) lifeBar(CHAT_SPEAKER_ID, P.x, P.y - 57, P.hp, P.maxhp);
     if (!P.dead) skullMark(skull(), P.x + 10, P.y - 49);
-    sayBubble(CHAT_SPEAKER_ID, P.x, P.y - 46);
+    sayBubble(CHAT_SPEAKER_ID, P.x, P.y - 62);
   } });
 
   drawList.sort((a, b) => a.y - b.y);
   for (const d of drawList) d.fn();
+  // every bar that was drawn has just been seen; the rest are forgotten
+  sweepLifeTrails(performance.now() / 1000);
 
   // arrows in flight — drawn above the sorted scene since they arc overhead
   for (const sh of world.shots) {

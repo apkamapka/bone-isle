@@ -19410,6 +19410,123 @@ async function main(): Promise<void> {
       "and the pile itself is read from the top down, the way it is painted");
   }
 
+
+  console.log("Etap 69 — life over every head, in Tibia's colours, with a trail for what was just lost:");
+  {
+    const LB = await import("../src/gfx/lifeBar.ts");
+    const fs69 = await import("node:fs");
+
+    /* THE NUMBER. A percent, rounded up — Tibia's, and the only number an
+     * online client will ever get for somebody else. */
+    ok(LB.lifePercent(1000, 1000) === 100, "full life is 100%");
+    ok(LB.lifePercent(1, 1000) === 1, "a single hit point left is 1%, never an empty bar");
+    ok(LB.lifePercent(921, 1000) === 93, "…because the percent is rounded UP");
+    ok(LB.lifePercent(0, 1000) === 0 && LB.lifePercent(-5, 100) === 0, "the dead read 0");
+    ok(LB.lifePercent(50, 0) === 0, "…and so does a broken maximum, instead of Infinity");
+    ok(LB.lifePercent(150, 100) === 100, "an overheal cannot push the fill out of its frame");
+
+    /* THE COLOUR. Six bands, each threshold on Tibia's side of the line. */
+    const bands69: [number, string][] = [
+      [100, "#00bc00"], [93, "#00bc00"], [92, "#50a150"], [61, "#50a150"],
+      [60, "#a1a100"], [31, "#a1a100"], [30, "#bf0a0a"], [9, "#bf0a0a"],
+      [8, "#910f0f"], [4, "#910f0f"], [3, "#850c0c"], [1, "#850c0c"],
+    ];
+    const wrong69 = bands69.filter(([p, c]) => LB.lifeColor(p) !== c).map(([p]) => p);
+    ok(wrong69.length === 0, `green, pale green, yellow, red, dark red, darker red (${wrong69.join(",") || "all right"})`);
+    ok(new Set(bands69.map(([p]) => LB.lifeColor(p))).size === 6, "…six distinct colours, not five and a duplicate");
+
+    /* THE TRAIL. A hit leaves the lost chunk pale on the bar, holds it, then
+     * drains it into the fill. */
+    LB.resetLifeTrails();
+    ok(LB.lifeTrail(7, 100, 0) === 100, "a bar seen for the first time has no trail");
+    ok(LB.lifeTrail(7, 60, 1) === 100, "a hit leaves the lost chunk on the bar");
+    ok(LB.lifeTrail(7, 60, 1 + LB.TRAIL_HOLD_S - 0.01) === 100, "…at full length through the hold");
+    const drain69 = LB.lifeTrail(7, 60, 1 + LB.TRAIL_HOLD_S + 0.25);
+    ok(Math.abs(drain69 - (100 - 0.25 * LB.TRAIL_DRAIN_PER_S)) < 1e-9, `…then drains at a steady rate (${drain69})`);
+    ok(LB.lifeTrail(7, 60, 5) === 60, "…and comes to rest on the fill, never below it");
+
+    /* A combo is ONE trail: the second blow inside the hold keeps the first
+     * blow's top and restarts the clock. That is the PvP reading — "he lost
+     * half of it just now" — rather than a stutter of short trails. */
+    LB.resetLifeTrails();
+    LB.lifeTrail(8, 100, 0);
+    LB.lifeTrail(8, 80, 0);
+    LB.lifeTrail(8, 60, 0.3);
+    ok(LB.lifeTrail(8, 60, 0.7) === 100, "two quick blows read as one trail from the top, still held");
+
+    LB.resetLifeTrails();
+    LB.lifeTrail(9, 40, 0);
+    ok(LB.lifeTrail(9, 90, 0.1) === 90, "healing grows the fill and leaves no trail behind");
+
+    LB.resetLifeTrails();
+    LB.lifeTrail(1, 100, 0);
+    LB.lifeTrail(2, 100, 0);
+    LB.lifeTrail(1, 30, 0.1);
+    ok(LB.lifeTrail(2, 100, 0.2) === 100 && LB.lifeTrail(1, 30, 0.2) === 100,
+      "every head keeps its own trail — one creature's wound is not another's");
+    LB.lifeTrail(3, 50, 10);
+    LB.sweepLifeTrails(10);
+    ok(LB.lifeTrailCount() === 1, "a bar not drawn for a couple of seconds is forgotten, so the dead do not pile up");
+    ok(LB.lifeTrail(1, 30, 10) === 30, "…and one that comes back into view starts clean");
+    LB.sweepLifeTrails(11);
+    ok(LB.lifeTrailCount() === 2, "…while bars still on screen are kept");
+    LB.resetLifeTrails();
+
+    /* THE PAINT, recorded rather than looked at. */
+    const rec69: { style: string; x: number; y: number; w: number; h: number }[] = [];
+    const ctx69 = {
+      fillStyle: "" as string,
+      fillRect(x: number, y: number, w: number, h: number): void {
+        rec69.push({ style: String(ctx69.fillStyle), x, y, w, h });
+      },
+    };
+    LB.drawLifeBar(ctx69, 100, 50, 100, 100);
+    ok(rec69.length === 2 && rec69[0].style === "#000"
+      && rec69[0].w === LB.LIFE_BAR_W + 2 && rec69[0].h === LB.LIFE_BAR_H + 2,
+      "a full bar is a one-pixel black frame…");
+    ok(rec69[1].style === "#00bc00" && rec69[1].w === LB.LIFE_BAR_W && rec69[1].x === rec69[0].x + 1,
+      "…filled end to end, in green");
+    rec69.length = 0;
+    LB.drawLifeBar(ctx69, 100, 50, 50, 100);
+    const ghost69 = rec69.find((r) => r.style === LB.TRAIL_COLOR);
+    const fill69 = rec69.find((r) => r.style === LB.lifeColor(50));
+    ok(!!ghost69 && !!fill69 && ghost69.x === fill69.x + fill69.w && fill69.w + ghost69.w === LB.LIFE_BAR_W,
+      "the trail starts exactly where the fill stops and runs out to where life was");
+    rec69.length = 0;
+    LB.drawLifeBar(ctx69, 100, 50, 1, 1);
+    ok(rec69.some((r) => r.style === LB.lifeColor(1) && r.w === 1), "1% is still one pixel you can see");
+    rec69.length = 0;
+    LB.drawLifeBar(ctx69, 100, 50, 0, 0);
+    ok(rec69.length === 1, "an empty bar is just its frame");
+
+    /* WIRED IN — creatures and the player through the one call. */
+    const m69 = fs69.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(m69.includes("lifeBar(m.id, m.x, m.y - spr.height - 9, m.hp, m.maxhp);"),
+      "every creature carries the new bar, keyed by its own id");
+    ok(!/hpBar\(m\.x/.test(m69), "…and none is left on the old all-red one");
+    ok(m69.includes("hpBar(bx, tr.ty * TILE - 8") && m69.includes("hpBar(bx, rk.ty * TILE - 4"),
+      "a tree or a rock being worked keeps its own bar — that is work left, not life");
+    ok(m69.includes("if (!P.dead) lifeBar(CHAT_SPEAKER_ID, P.x, P.y - 57, P.hp, P.maxhp);"),
+      "the player carries one over his head, and his corpse does not");
+    const own69 = m69.slice(m69.indexOf("if (!P.dead) lifeBar(CHAT_SPEAKER_ID"));
+    ok(own69.indexOf("lifeBar(") < own69.indexOf("skullMark(skull()"),
+      "…painted before the skull, so the skull is never under the bar");
+
+    /* The layout, in pixels above the feet: head top 49, the bar's frame 51..57,
+     * the skull from 49 down, speech with its baseline above the bar. */
+    const barTop69 = 57;
+    const barBottom69 = barTop69 - (LB.LIFE_BAR_H + 2);
+    const say69 = Number(/sayBubble\(CHAT_SPEAKER_ID, P\.x, P\.y - (\d+)\)/.exec(m69)?.[1]);
+    ok(barBottom69 > 49, "the bar clears the top of the head");
+    ok(m69.includes("skullMark(skull(), P.x + 10, P.y - 49);") && barBottom69 > 49,
+      "…and the skull, which hangs from the head, tucks in under it rather than over it");
+    ok(say69 - 3 > barTop69, `speech moved up over the bar, descenders and all (baseline ${say69})`);
+
+    const loop69 = m69.slice(m69.indexOf("for (const d of drawList) d.fn();"));
+    ok(loop69.slice(0, 200).includes("sweepLifeTrails("),
+      "the trails of whatever left the screen are swept right after the scene is drawn");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
