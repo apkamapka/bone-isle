@@ -1330,7 +1330,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
     loot: [
       { kind: "dragonHam", chance: 0.9, n: [2, 5] },
       // One scale, on 15% of kills (Etap 59; 30% in Etap 58, one to three on
-      // most kills before that) — and 150 at Mira. The top trophy, and rare.
+      // most kills before that) — and 150 at Hildegard. The top trophy, and rare.
       { kind: "dragonScale", chance: 0.15, n: [1, 1] },
       // The Essence buys the strongest Wave of every element. The dragon was
       // its only source until Etap 59; the Black Knight carries it more often

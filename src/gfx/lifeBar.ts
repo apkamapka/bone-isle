@@ -213,10 +213,12 @@ function outlined(ctx: NameCtx, cx: number, baseline: number, text: string, colo
  * carries its bar — says what he IS instead: NPC. It used to be a lone "!",
  * which told a new player that something was there and nothing about what.
  *
- * Two lines rather than "Borin the Smith (NPC)" on one: the shop row puts
- * four NPCs five tiles apart, each pacing a tile either way, and four names
- * lengthened by six characters apiece run into each other as soon as two of
- * them wander together — the letters interleave and neither can be read.
+ * Two lines rather than "Chester (NPC)" on one. It mirrors every other head
+ * — the name on top, the line under it saying what the rest is — and it was
+ * forced first by the names Bonetown wore before Etap 72: the shop row puts
+ * four NPCs five tiles apart, each pacing a tile either way, and "Borin the
+ * Smith (NPC)" and its neighbours ran into each other the moment two of them
+ * wandered together, letters interleaved and neither readable.
  *
  * Pale gold, the colour the "!" was, and on purpose none of the six life
  * colours: an NPC must never read as a creature at some fraction of its life.

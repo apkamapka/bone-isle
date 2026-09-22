@@ -209,7 +209,7 @@ export function applySmelt(
  *
  * THE CHEAPEST THREE, since Etap 61. It used to take the three kinds you held
  * the most of, which was harmless while every trophy sold for pennies; with
- * Mira paying anything from 15 for a gland to 300 for a dragon scale, a
+ * Hildegard paying anything from 15 for a gland to 300 for a dragon scale, a
  * deep stack of scales would have been cut into a gem while the glands sat
  * in the chest. A gem is the same gem whatever went into it, so the recipe
  * spends what is worth least. Among equal prices the deeper stack goes first,

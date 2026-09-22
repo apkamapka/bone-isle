@@ -346,9 +346,9 @@ export const TOWN_SPEC: HandmadeSpec = {
   },
   npcs: {
     s: "smith", t: "tailor", h: "herbalist", g: "taskmaster", e: "elder",
-    // Morgan the Changer, fourth along the same market row as the smith, the
+    // Morgan, fourth along the same market row as the smith, the
     // tailor and the herbalist — five tiles on, the spacing that row already
-    // keeps, and far enough from Mira that their beats cannot touch.
+    // keeps, and far enough from Hildegard that their beats cannot touch.
     b: "morgan",
     // Chronos keeps his own island. Four tiles by four, off the corner the pin
     // put him on, so he drifts around the trapdoor without ever leaving it.

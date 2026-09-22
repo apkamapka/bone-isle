@@ -47,7 +47,7 @@ export interface NpcShop {
 
 /** Shops keyed by NPC. The taskmaster has no shop — clicking them opens the task board. */
 export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
-  /* BORIN (Etap 57). Two changes to what he takes, none to what he stocks.
+  /* CHESTER (Etap 57). Two changes to what he takes, none to what he stocks.
    *
    * He no longer buys IRON or STEEL. Both were a mint: Chain Boots sold to
    * him for 12 and melted into a steel he paid 50 for. What the forge makes
@@ -65,7 +65,7 @@ export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
       ["wood", "stone", "bones", "coal", "bow", "longbow", "leatherHelm", "snakeskinHelm", "leatherBody", "snakeskinBody", "leatherLegs", "snakeskinLegs", "leatherBoots", "snakeskinBoots", "leatherShield", "studdedHelm", "goblinHelm", "studdedBody", "goblinBody", "studdedLegs", "goblinLegs", "studdedBoots", "goblinBoots", "studdedShield", "goblinShield", "chainHelm", "orcishHelm", "chainBody", "orcishBody", "chainLegs", "orcishLegs", "chainBoots", "orcishBoots", "chainShield", "orcishShield", "plateHelm", "minotaurHelm", "plateBody", "minotaurBody", "plateLegs", "minotaurLegs", "plateBoots", "minotaurBoots", "plateShield", "minotaurShield", "steelHelm", "marrowHelm", "steelBody", "marrowBody", "steelLegs", "marrowLegs", "steelBoots", "marrowBoots", "steelShield", "marrowShield", "knightHelm", "dragonHelm", "knightBody", "dragonBody", "knightLegs", "dragonLegs", "knightBoots", "dragonBoots", "knightShield", "dragonShield", "goldenHelm", "vampireHelm", "goldenBody", "vampireBody", "goldenLegs", "vampireLegs", "goldenBoots", "vampireBoots", "goldenShield", "vampireShield", "zephyrHelm", "zephyrBody", "zephyrLegs", "zephyrBoots", "shortSword", "fangDagger", "ironSword", "goblinHatchet", "mercBlade", "warHammer", "orcishAxe", "gladius", "boneSword", "minotaurAxe", "warlordBlade", "steelMaul", "demonCleaver", "knightSword", "fireSword", "marrowBlade", "sunspear", "bloodletter"],
     ),
   },
-  /* MIRA. Her shelf lost the Leather Boots (Etap 57): Borin stocks the same
+  /* HILDEGARD. Her shelf lost the Leather Boots (Etap 57): Chester stocks the same
    * pair at the same price, and a herbalist selling boots was a leftover, not
    * a second source. What she buys is what comes off a creature — food and
    * trophies — and the trophies are where the Etap 57 price rise landed. */
@@ -89,7 +89,7 @@ export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
      * take it.
      *
      * JEWELLERY ONLY SINCE ETAP 57. He also used to buy three swords, at
-     * exactly Borin's price, and the Essential Gem at 500 — the second was a
+     * exactly Chester's price, and the Essential Gem at 500 — the second was a
      * mint (three trophies worth 32 gold cut into one) and the first was a
      * copy of a list the smith already has. */
     entries: shop(
@@ -103,7 +103,7 @@ export const SHOPS: Readonly<Partial<Record<NpcKey, NpcShop>>> = {
  * What `npc` pays for one `kind`, or 0 if he will not take it.
  *
  * For anything that has to QUOTE a shop without opening one — the forge's
- * smelt tab tells you what Borin would give for a piece before you melt it,
+ * smelt tab tells you what Chester would give for a piece before you melt it,
  * and it used to print the item's raw value there, which is twice what he
  * actually pays.
  */

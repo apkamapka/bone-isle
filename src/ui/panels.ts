@@ -971,7 +971,7 @@ function drawSplit(base: Omit<PanelInput, "win">): void {
   }
   /* NO COIN VERB HERE any more. Changing denomination used to be offered in
    * this dialog and in the long-press menu; both are gone. It is a service
-   * Morgan the Changer performs in Bonetown, at his counter, which is where
+   * Morgan performs in Bonetown, at his counter, which is where
    * Tibia always put it — a stack of gold in the wildlands is a stack of gold
    * until you carry it back to town. */
   acts.push(["Cancel", "drop"]);
@@ -1815,11 +1815,11 @@ function forgeSmelt(
     hudText(hud, label, x + 34 * S, ry + 8 * S, 9 * S, ok ? "#f3eedd" : "#8a8070", "left", true);
     const parts = [y.iron > 0 ? `${y.iron} iron` : "", y.steel > 0 ? `${y.steel} steel` : ""].filter(Boolean);
     hudText(hud, `-> ${parts.join(" + ")}`, x + 34 * S, ry + 18 * S, 7 * S, ok ? "#b9e07f" : "#8a8070");
-    // What Borin actually PAYS, from his own list (Etap 57). This used to print
+    // What Chester actually PAYS, from his own list (Etap 57). This used to print
     // the raw value, which is twice his price — a Plate Armor read "110g at
-    // Borin" and sold for 55 — and it is the one number the tab exists to
+    // Chester" and sold for 55 — and it is the one number the tab exists to
     // weigh the melt against.
-    hudText(hud, `${sellsFor("smith", row.kind)}g at Borin`, x + w - 12 * S, ry + 13 * S, 7 * S, "rgba(220,214,190,.45)", "right");
+    hudText(hud, `${sellsFor("smith", row.kind)}g at Chester`, x + w - 12 * S, ry + 13 * S, 7 * S, "rgba(220,214,190,.45)", "right");
     if (ok) {
       const rr = row; const ryy = ry;
       p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.smelt(rr.kind) });
@@ -2748,7 +2748,7 @@ function drawStash(p: PanelInput): void {
 /* ---------------- Wardrobe (outfit dyes) ---------------- */
 
 /**
- * Vesper's dressing room: a live preview of the player plus one dye row per
+ * Vito's dressing room: a live preview of the player plus one dye row per
  * zone (hair / tunic / legs). Clicking a swatch re-tints instantly — the
  * preview IS the player sprite, so it always matches what walks out the door.
  * Outfit SHAPES (loot-box unlocks) plug in here later; for now colors only.
@@ -2779,7 +2779,7 @@ function drawWardrobe(p: PanelInput): void {
   const bodyH = Math.max(previewH + 4 * S + zones.length * (btnH + 3 * S), gridH);
   const h = 20 * S + bodyH + 30 * S;
   const { x, y } = anchor(p, w, h);
-  if (!goldPanel(p, x, y, w, h, "WARDROBE — Vesper")) return;
+  if (!goldPanel(p, x, y, w, h, "WARDROBE — Vito")) return;
 
   const top = y + 18 * S;
   const lx = x + pad;

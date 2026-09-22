@@ -13,16 +13,31 @@ import { rnd, rndi } from "../util.ts";
 import type { NpcKey, World } from "./types.ts";
 import { Tile } from "./types.ts";
 
+/**
+ * Bonetown's people, by the names over their heads.
+ *
+ * Named for somebody real since Etap 72, each for the trade he or she keeps:
+ * Chester the smith (Winchester — was Borin), Hildegard the herbalist
+ * (Hildegard of Bingen — was Mira), Kruk the jeweller (W.KRUK, Poznan, 1840 —
+ * was Elder Oswin), Vito the tailor (Louis Vuitton — was Vesper) and Morgan
+ * the changer (J.P. Morgan). Grizelda already was one: Grizzly Adams, whose
+ * name Tibia's hunting-task master wears. Just the name — "NPC" under it says
+ * the rest (gfx/lifeBar.ts). Chronos alone keeps his title: "the Time Sage"
+ * is what the mission chain is called, not a job description.
+ *
+ * The KEYS do not move: sprites, shops, windows and spawn glyphs hang off
+ * them, and none of them is ever shown.
+ */
 export const NPC_DATA: ReadonlyArray<readonly [NpcKey, string, HTMLCanvasElement, number]> = [
-  ["smith", "Borin the Smith", SPR.npcSmith, 1],
-  ["herbalist", "Mira the Herbalist", SPR.npcHerbalist, 1],
-  ["elder", "Elder Oswin", SPR.npcElder, 1],
-  ["taskmaster", "Grizelda the Huntress", SPR.npcTaskmaster, 1],
-  ["tailor", "Vesper the Tailor", SPR.npcTailor, 1],
+  ["smith", "Chester", SPR.npcSmith, 1],
+  ["herbalist", "Hildegard", SPR.npcHerbalist, 1],
+  ["elder", "Kruk", SPR.npcElder, 1],
+  ["taskmaster", "Grizelda", SPR.npcTaskmaster, 1],
+  ["tailor", "Vito", SPR.npcTailor, 1],
   // The money changer. He paces the same 3x3 box as the other stallholders —
   // and, like them, stands perfectly still for as long as his window is open,
   // because an open panel holds `talk` and a talking townsperson never steps.
-  ["morgan", "Morgan the Changer", SPR.npcMorgan, 1],
+  ["morgan", "Morgan", SPR.npcMorgan, 1],
   // Rooted by default — the cellar copy never moves. The town copy overrides
   // the beat in its own spec (four tiles east and west, one row).
   ["timesage", "Chronos the Time Sage", SPR.npcTimesage, 0],

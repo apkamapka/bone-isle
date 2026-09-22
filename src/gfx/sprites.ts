@@ -619,8 +619,9 @@ export const SPR = {
     "..WW..WW..",
     "..kk..kk..",
   ]),
-  // Vesper the Tailor — Bonetown's outfitter. Violet robe (the u/U dyes she
-  // sells), a measuring band across the chest, pins in her dark hair.
+  // Vito — Bonetown's tailor. Violet robe (the u/U dyes he sells), a
+  // measuring band across the chest, pins in his dark hair. A stand-in only:
+  // the LPC walk sheet (public/npc-tailor.png) replaces him once it loads.
   npcTailor: bake([
     "..kkkkkk..",
     ".kkkkkkkk.",
@@ -636,7 +637,7 @@ export const SPR = {
     "..uU..Uu..",
     "..kk..kk..",
   ]),
-  // Morgan the Changer — Bonetown's money changer. Black tophat, pale frock
+  // Morgan — Bonetown's money changer. Black tophat, pale frock
   // coat, gold moustache. A stand-in only: the LPC walk sheet
   // (public/npc-morgan.png) replaces him the moment it loads.
   npcMorgan: bake([

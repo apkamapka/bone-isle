@@ -332,7 +332,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * The Venom Gland stays where it was: the snake is a level-3 animal and its
    * gland was already a third of its purse.
    *
-   * THE DRAGON SCALE IS THE DEAREST OF THEM (Etap 58): 150 at Mira, up from
+   * THE DRAGON SCALE IS THE DEAREST OF THEM (Etap 58): 150 at Hildegard, up from
    * 45, because a scale off the last creature in the game read cheaper than a
    * cursed rib and a minotaur's horn. It got dearer by getting RARER — the
    * dragon used to shed one to three on most kills, and since Etap 59 drops a
@@ -433,7 +433,7 @@ export const ITEMS: Readonly<Record<ItemKind, ItemDef>> = {
    * the better heal from about level 5 (30 + 3 x level), so the potion is
    * priced as what it is from there on: the cheap heal for the first levels,
    * and the one you can drink out of a corpse without picking it up. 12 gold
-   * at Mira, against 16 for a Life Crystal. */
+   * at Hildegard, against 16 for a Life Crystal. */
   hpPotion:  { name: "Health Potion", stack: 999, value: 6, weight: 5, heal: 45 },
   healCrystal:   { name: "Life Crystal",   stack: 999, value: 8, weight: 2, crystal: true },
   recallCrystal: { name: "Recall Crystal", stack: 999, value: 6, weight: 2, crystal: true },
@@ -573,7 +573,7 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * to 6 were multiplied by 1.2, 1.4, 1.6 and 2.0 on top of the old numbers,
    * which makes every tier worth about TWICE the one below it, in every slot
    * and on both lines (the smoke suite holds that as a rule, not a number).
-   * Tiers 1 and 2 did not move in Etap 57, because Borin stocks the leather
+   * Tiers 1 and 2 did not move in Etap 57, because Chester stocks the leather
    * set and both starter swords and a starter kit should not get dearer when
    * the top of the ladder gets steeper (the rest of tier 2 moved in Etap 60).
    *
@@ -587,7 +587,7 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * often), x4 for tiers 4-5, x10 for the knight and dragon sets, their swords
    * and the Marrow Blade. A piece is rarer and worth that much more, so a kill
    * pays about what it did before the cut — in a lump when something drops,
-   * not in a trickle. A Knight Armor sells for 3 400. What Borin STOCKS was
+   * not in a trickle. A Knight Armor sells for 3 400. What Chester STOCKS was
    * left alone (the leather set, both swords, the Short Bow), because value
    * is also what he charges, and the Fang Dagger stayed under the Iron Sword
    * it is worse than. */
@@ -703,7 +703,7 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * and every piece worth exactly twice its tier-6 counterpart.
    *
    * NOTHING HANDS THEM OUT YET, by decision: no creature drops them, no chest
-   * holds them and no shelf stocks them. Borin buys them like any other set
+   * holds them and no shelf stocks them. Chester buys them like any other set
    * piece, so the day a source is written they already sell. Both smelt: the
    * Golden suit is gilded steel and melts like the Knight set, the Vampire is
    * beast plate and gives up mostly iron (see smelt.ts). */
@@ -732,7 +732,7 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * (two, against the Golden's).
    *
    * VERY RARE, AND FOR NOW NOT FOUND AT ALL: no creature drops it, no chest
-   * holds it and no shelf stocks it. Borin pays 10 000 a piece — the value
+   * holds it and no shelf stocks it. Chester pays 10 000 a piece — the value
    * below is twice that, since a shop that buys pays half. It is cloth and
    * feathers, so the furnace will not take it (it has no row in smelt.ts). */
   zephyrHelm: { name: "Zephyr Mask", stack: 1, value: 20000, weight: 4, slot: "head", gear: { speed: 8 }, set: "zephyr" },
@@ -741,7 +741,7 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
   zephyrBoots: { name: "Zephyr Boots", stack: 1, value: 20000, weight: 8, slot: "boots", gear: { speed: 16 }, set: "zephyr" },
   /* THE RINGS ARE PRICED LIKE WHAT THEY ARE (Etap 61): three pieces of jewellery,
    * one of each in the whole game per character, out of the three deepest
-   * boss hoards. Oswin used to pay 45 to 75 for them — less than a Plate
+   * boss hoards. Kruk used to pay 45 to 75 for them — less than a Plate
    * Helmet, which drops off any gladiator. He now pays 800 for the Health Ring
    * out of Kárr's howe (level 15), 900 for the Guard Ring out of the labyrinth
    * (25) and 1 000 for the Power Ring out of Gorak's hoard (30): the deeper
@@ -1395,13 +1395,13 @@ export interface Recipe {
  * Forge recipes — what is left of them.
  *
  * The forge stopped being a workshop and became a foundry (Etap 24). Gear is
- * looted, bought from Borin, or pulled out of a treasure chest; the only
+ * looted, bought from Chester, or pulled out of a treasure chest; the only
  * things still MADE here are arrows, because an archer who has to walk back
  * to town for ammunition simply stops using the bow.
  *
  * Everything that used to live in this list — the sword ladder, the Leather
  * and Chain sets, jewellery, potions, bows — now has a shop that sells it.
- * See npcs.ts: moving the Amulet of Loss to Oswin was not optional, it is
+ * See npcs.ts: moving the Amulet of Loss to Kruk was not optional, it is
  * the only death protection in the game.
  */
 export const RECIPES: readonly Recipe[] = [

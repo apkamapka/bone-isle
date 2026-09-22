@@ -485,7 +485,7 @@ async function main(): Promise<void> {
     resetBloodHit();
   }
 
-  console.log("Amulet of Loss (moved to Oswin in Etap 24):");
+  console.log("Amulet of Loss (moved to Kruk in Etap 24):");
   {
     const { SHOPS } = await import("../src/entities/npcs.ts");
     ok(items.ITEMS.aolAmulet.deathProtect === true && items.ITEMS.aolAmulet.slot === "amulet", "AOL is a death-protecting amulet");
@@ -494,7 +494,7 @@ async function main(): Promise<void> {
     // and the ONLY protection against dropping your things on death must not
     // quietly leave the game with it.
     const sells = SHOPS.elder!.entries.filter((e) => e.buy > 0).map((e) => e.kind);
-    ok(sells.includes("aolAmulet"), "…but Oswin sells it, so death protection still exists");
+    ok(sells.includes("aolAmulet"), "…but Kruk sells it, so death protection still exists");
   }
 
   console.log("spawn placement (authored posts, never on the player):");
@@ -940,7 +940,7 @@ async function main(): Promise<void> {
     }
 
     // Etap 24: the forge stopped being a workshop. NO gear is craftable any
-    // more — the starter kit is bought from Borin and everything above it is
+    // more — the starter kit is bought from Chester and everything above it is
     // looted. What matters is that the early game still has a floor to stand
     // on, so the Leather set must remain purchasable.
     const craftable = new Set(items.RECIPES.map((r) => r.out));
@@ -952,7 +952,7 @@ async function main(): Promise<void> {
       const smithSells = new Set(SHOPS.smith!.entries.filter((e) => e.buy > 0).map((e) => e.kind));
       for (const k of ["leatherHelm", "leatherBody", "leatherLegs", "leatherBoots", "leatherShield",
         "shortSword", "bow"] as const) {
-        ok(smithSells.has(k), `Borin still sells ${k} — the starter kit survives`);
+        ok(smithSells.has(k), `Chester still sells ${k} — the starter kit survives`);
       }
     }
     // arrows stay craftable: an archer who has to walk to town for ammunition
@@ -1230,7 +1230,7 @@ async function main(): Promise<void> {
      * Both put a price on the metal, and a priced metal was a mint — Chain
      * Boots sold for 12 and melted into 50. The furnace pays in building stock
      * now, so the gold side of a melt is pinned at nothing: the only money
-     * question left is what Borin gives for the piece, which the smelt tab
+     * question left is what Chester gives for the piece, which the smelt tab
      * quotes. */
     for (const k of ["chainBody", "plateBody", "steelBody", "knightBody"] as const) {
       const y = sm.smeltYield(k, 2, "body");
@@ -1988,7 +1988,7 @@ async function main(): Promise<void> {
     const { makeHandmadeWorld, TOWN_SPEC } = await import("../src/world/handmade.ts");
     const town = makeHandmadeWorld(TOWN_SPEC);
     const tailor = town.npcs.find((n) => n.key === "tailor");
-    ok(!!tailor, "Vesper is placed on the town map");
+    ok(!!tailor, "Vito is placed on the town map");
     ok(town.npcs.length === 7, "all seven town NPCs parse from the grid");
     const { SHOPS } = await import("../src/entities/npcs.ts");
     ok(!SHOPS.tailor, "the tailor runs the wardrobe, not a shop");
@@ -2880,8 +2880,8 @@ async function main(): Promise<void> {
     const { makeHandmadeWorld: mkw27, TOWN_SPEC: TS27 } = await import("../src/world/handmade.ts");
     const town27 = mkw27(TS27);
     const morgan27 = town27.npcs.find((n) => n.key === "morgan");
-    ok(!!morgan27, "Morgan the Changer stands on the town map");
-    ok(morgan27!.name === "Morgan the Changer", "…under his own name");
+    ok(!!morgan27, "Morgan stands on the town map");
+    ok(morgan27!.name === "Morgan", "…under his own name");
     const { SHOPS: SHOPS27 } = await import("../src/entities/npcs.ts");
     ok(!SHOPS27.morgan, "…and he keeps a counter, not a shop");
 
@@ -11073,7 +11073,7 @@ async function main(): Promise<void> {
       .document.createElement("canvas").getContext("2d");
     const d = mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
     const sheets = sheetSlots(d, 1);
-    const smith = (g.worlds.town.npcs as { name?: string }[]).find((n) => (n.name ?? "").includes("Borin"));
+    const smith = (g.worlds.town.npcs as { key?: string }[]).find((n) => n.key === "smith");
 
     type W = {
       kind: string; seq: number; offset: { x: number; y: number };
@@ -11229,9 +11229,9 @@ async function main(): Promise<void> {
 
     const d = mobileLayout(412 * 2, 915 * 2, 2, 0, 48);
     const sheets = sheetSlots(d, 1);
-    /* Borin the Smith, on the sell tab: eighty-odd wares, and the exact window
+    /* Chester the Smith, on the sell tab: eighty-odd wares, and the exact window
      * that came out as an unreadable ribbon on a phone. */
-    const smith = (g.worlds.town.npcs as { name?: string }[]).find((n) => (n.name ?? "").includes("Borin"));
+    const smith = (g.worlds.town.npcs as { key?: string }[]).find((n) => n.key === "smith");
     ok(!!smith, "the smith is in town, with a catalogue long enough to overflow any phone");
     const win = { kind: "shop", offset: { x: 0, y: 0 }, rect: null, titleBar: null } as never as
       { rect: { x: number; y: number; w: number; h: number } | null; fit?: number; sheetScroll?: number };
@@ -18396,7 +18396,7 @@ async function main(): Promise<void> {
 
     // …so a gem now costs what its trophies would have fetched, and that is money
     const trophyPrices = SM57.GEM_TROPHIES.map((t) => sellsFor("herbalist", t));
-    ok(trophyPrices.every((p) => p > 0), "Mira buys every gem trophy");
+    ok(trophyPrices.every((p) => p > 0), "Hildegard buys every gem trophy");
     const cheapestGem = [...trophyPrices].sort((a, b) => a - b)
       .slice(0, SM57.GEM_TROPHY_KINDS).reduce((a, b) => a + b, 0);
     ok(cheapestGem >= 90, `the cheapest gem's three trophies sell for ${cheapestGem}g — not three pennies`);
@@ -18424,17 +18424,17 @@ async function main(): Promise<void> {
     /* --- 3. WHO BUYS WHAT --------------------------------------------------- */
     const elderBuys = S57.elder!.entries.filter((e) => e.sell > 0).map((e) => e.kind);
     ok(elderBuys.every((k) => IT[k].slot === "ring" || IT[k].slot === "amulet"),
-      `Oswin buys jewellery and nothing else (${elderBuys.join(",")})`);
-    ok(!S57.herbalist!.entries.some((e) => e.buy > 0 && IT[e.kind].slot !== undefined), "Mira stocks no gear");
+      `Kruk buys jewellery and nothing else (${elderBuys.join(",")})`);
+    ok(!S57.herbalist!.entries.some((e) => e.buy > 0 && IT[e.kind].slot !== undefined), "Hildegard stocks no gear");
     const droppedGear = new Set<K57>();
     for (const m of MK57) for (const l of M57[m].loot) if (IT[l.kind].slot) droppedGear.add(l.kind);
     const unsellable = [...droppedGear].filter((k) => buyersOf(k).length === 0);
     ok(unsellable.length === 0, `every piece of gear a creature drops sells in town (${unsellable.join(",") || "all do"})`);
-    ok(sellsFor("smith", "bow") > 0 && sellsFor("smith", "longbow") > 0, "…the bows included, at Borin");
+    ok(sellsFor("smith", "bow") > 0 && sellsFor("smith", "longbow") > 0, "…the bows included, at Chester");
 
     /* --- 4. BETTER GEAR SELLS FOR MORE ----------------------------------------
      * Every tier is worth at least twice the one below it, in every worn slot
-     * and the shield, on both lines — and Borin's price climbs with it. Before
+     * and the shield, on both lines — and Chester's price climbs with it. Before
      * this the top of the ladder grew 1.7x a tier, and a Knight Armor fetched
      * 170. Written as a rule, so a retune can move numbers but not flatten the
      * ladder again. */
@@ -18451,7 +18451,7 @@ async function main(): Promise<void> {
           if (sellsFor("smith", keys[t + 1]) <= sellsFor("smith", keys[t])) climbs = false;
         }
         ok(steep, `${line[0]} line ${part}: every tier is worth at least twice the one below`);
-        ok(climbs, `${line[0]} line ${part}: …and Borin pays more at every step`);
+        ok(climbs, `${line[0]} line ${part}: …and Chester pays more at every step`);
       }
     }
     // weapons: anything a tier up is worth more than everything a tier down
@@ -18466,11 +18466,11 @@ async function main(): Promise<void> {
       if (Math.min(...byTier.get(tiers[i])!) <= Math.max(...byTier.get(tiers[i - 1])!)) inverted = `tier ${tiers[i]}`;
     }
     ok(inverted === "", `every weapon out-prices every weapon of the tier below${inverted && " — " + inverted}`);
-    // …and the starter kit Borin stocks did not get dearer on the way
+    // …and the starter kit Chester stocks did not get dearer on the way
     const kit: [K57, number][] = [["shortSword", 30], ["ironSword", 90], ["leatherHelm", 12], ["leatherBody", 24],
       ["leatherLegs", 16], ["leatherBoots", 10], ["leatherShield", 20], ["bow", 70], ["backpack", 40], ["trainingArrow", 1]];
     const moved = kit.filter(([k, p]) => S57.smith!.entries.find((e) => e.kind === k)?.buy !== p).map(([k]) => k);
-    ok(moved.length === 0, `Borin's starter shelf costs what it did (${moved.join(",") || "unchanged"})`);
+    ok(moved.length === 0, `Chester's starter shelf costs what it did (${moved.join(",") || "unchanged"})`);
 
     /* --- 5. DEATH PROTECTION COSTS SOMETHING -------------------------------- */
     const aol = S57.elder!.entries.find((e) => e.kind === "aolAmulet")!.buy;
@@ -18485,19 +18485,19 @@ async function main(): Promise<void> {
 
     /* --- 6. THE LIFE CRYSTAL, two prices for one charge ----------------------
      * One crystal is one use. The tower sells ten for 80 once Life is
-     * researched; Mira sells one for 16 with no tower and no research. The
+     * researched; Hildegard sells one for 16 with no tower and no research. The
      * shelf in town is the convenience, so it has to stay the dearer one. */
     const life = TW57.RESEARCH.find((r) => r.id === "life")!;
     const miraLife = S57.herbalist!.entries.find((e) => e.kind === "healCrystal")!.buy;
     ok((life.buyGold ?? 0) / life.buyN < miraLife,
-      `a charge from the tower (${(life.buyGold ?? 0) / life.buyN}g) is cheaper than one from Mira (${miraLife}g)`);
+      `a charge from the tower (${(life.buyGold ?? 0) / life.buyN}g) is cheaper than one from Hildegard (${miraLife}g)`);
 
     /* --- 7. THE SMELT TAB QUOTES BORIN'S REAL PRICE ------------------------- */
-    ok(sellsFor("smith", "plateBody") === Math.round(IT.plateBody.value / 2), "sellsFor quotes what Borin pays");
+    ok(sellsFor("smith", "plateBody") === Math.round(IT.plateBody.value / 2), "sellsFor quotes what Chester pays");
     ok(sellsFor("smith", "steel") === 0 && sellsFor("elder", "essentialGem") === 0, "…and 0 for what he will not take");
     const panels57 = fs57.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
-    ok(panels57.includes('sellsFor("smith", row.kind)') && !panels57.includes("${ITEMS[row.kind].value}g at Borin"),
-      "the smelt tab prints Borin's price, not the raw value");
+    ok(panels57.includes('sellsFor("smith", row.kind)') && !panels57.includes("${ITEMS[row.kind].value}g at Chester"),
+      "the smelt tab prints Chester's price, not the raw value");
   }
 
   console.log("Etap 58 — the dragon's scale, two lost swords, one heal clock:");
@@ -18517,7 +18517,7 @@ async function main(): Promise<void> {
     /* --- 1. THE SCALE: dearest trophy, and rare enough to stay that way ---- */
     const scale = sf58("herbalist", "dragonScale");
     const others = SM58.GEM_TROPHIES.filter((t) => t !== "dragonScale").map((t) => sf58("herbalist", t));
-    ok(scale > Math.max(...others), `the Dragon Scale is the dearest trophy Mira buys (${scale}g)`);
+    ok(scale > Math.max(...others), `the Dragon Scale is the dearest trophy Hildegard buys (${scale}g)`);
     const scaleRow = M58.dragon.loot.find((l) => l.kind === "dragonScale")!;
     ok(scaleRow.n[1] === 1, "…and a dragon sheds at most one a kill");
     const scalePerKill = scaleRow.chance * scale;
@@ -18525,7 +18525,7 @@ async function main(): Promise<void> {
 
     /* --- 2. EVERY WEAPON CAN BE FOUND ----------------------------------------
      * The Bone Sword and the Marrow Blade were both priced, drawn and bought by
-     * Borin, and neither dropped, sat in a chest or stood on a shelf. Written
+     * Chester, and neither dropped, sat in a chest or stood on a shelf. Written
      * as a rule over the whole table, so the next orphan fails here. */
     const found = new Set<string>();
     for (const m of MK58) for (const l of M58[m].loot) found.add(l.kind);
@@ -18761,7 +18761,7 @@ async function main(): Promise<void> {
     /* --- 4. THE RINGS --------------------------------------------------------- */
     const ringPay = (k: string): number => sf61("elder", k as never);
     ok(ringPay("healthRing") === 800 && ringPay("guardRing") === 900 && ringPay("ring") === 1000,
-      "Oswin pays 800 / 900 / 1 000 for the Health, Guard and Power Rings");
+      "Kruk pays 800 / 900 / 1 000 for the Health, Guard and Power Rings");
     const bestTier4 = Math.max(...["plate", "minotaur"].flatMap((p) => ["Helm", "Body", "Legs", "Boots", "Shield"]
       .map((x) => sf61("smith", `${p}${x}` as never))));
     ok(ringPay("healthRing") > bestTier4, `…the cheapest of them above any tier-4 piece (${bestTier4}g)`);
@@ -18982,7 +18982,7 @@ async function main(): Promise<void> {
       "every piece is worth exactly twice its tier-6 counterpart");
     ok(golden.every((k, i) => sf64("smith", k) > sf64("smith", knight[i]))
       && vampire.every((k, i) => sf64("smith", k) > sf64("smith", dragon[i])),
-      "Borin buys all eight, each for more than the piece a tier below");
+      "Chester buys all eight, each for more than the piece a tier below");
 
     /* --- 6. NOTHING HANDS THEM OUT YET, BY DECISION --------------------------
      * The day a creature, a chest or a shelf starts giving these away, this is
@@ -19083,7 +19083,7 @@ async function main(): Promise<void> {
 
     /* --- 4. VERY RARE: 10 000 A PIECE AT BORIN, AND NOTHING HANDS IT OUT ------ */
     ok(zephyr.every((k) => I65[k].value === 20000 && sf65("smith", k) === 10000),
-      "Borin pays 10 000 for every piece");
+      "Chester pays 10 000 for every piece");
     const z65 = new Set<string>(zephyr);
     const dropped = (Object.keys(M65) as (keyof typeof M65)[])
       .filter((m) => (M65[m].loot as { kind: string }[]).some((l) => z65.has(l.kind)));
@@ -19157,7 +19157,7 @@ async function main(): Promise<void> {
     const below66: Record<string, K66> = { goldenShield: "knightShield", vampireShield: "dragonShield",
       sunspear: "knightSword", bloodletter: "fireSword" };
     ok(NEW66.every((k) => sf66("smith", k) > sf66("smith", below66[k])),
-      "Borin buys all four, each for more than the piece a tier below");
+      "Chester buys all four, each for more than the piece a tier below");
     const melt66 = (k: K66, t: 1 | 2 | 3): string => {
       const y = SM66.smeltYield(k, t, I66[k].slot);
       return `${y.iron}/${y.steel}`;
@@ -19259,7 +19259,7 @@ async function main(): Promise<void> {
       ...Object.values(S67).flatMap((sh) => sh!.entries.filter((e) => e.buy > 0 && hs.has(e.kind)).map((e) => e.kind)),
     ];
     ok(sources67.length === 0, `no creature, chest or shelf hands the Hunter set out yet (${sources67.join(",") || "none"})`);
-    ok(hunter.every((k) => sf67("smith", k) > 0), "Borin still buys every piece");
+    ok(hunter.every((k) => sf67("smith", k) > 0), "Chester still buys every piece");
     ok(hunter.every((k) => !SM67.canSmelt(k)), "…and none goes in the furnace — it is hide and cloth");
 
     /* --- 5. THE ICONS ------------------------------------------------------------- */
@@ -19619,8 +19619,8 @@ async function main(): Promise<void> {
         rec71.push({ op: "fill", text, x, y, style: String(ctx71.fillStyle) });
       },
     };
-    LB71.drawNpcTag(ctx71, 200, 100, "Borin the Smith");
-    const name71 = rec71.filter((r) => r.text === "Borin the Smith");
+    LB71.drawNpcTag(ctx71, 200, 100, "Chester");
+    const name71 = rec71.filter((r) => r.text === "Chester");
     const tag71 = rec71.filter((r) => r.text === LB71.NPC_LABEL);
     ok(LB71.NPC_LABEL === "NPC" && name71.length === 2 && tag71.length === 2,
       "an NPC is drawn as his name and the word NPC, each outlined and filled");
@@ -19651,6 +19651,52 @@ async function main(): Promise<void> {
     const w71 = buildWorlds(WORLD_SEED);
     const unnamed71 = Object.values(w71).flatMap((w) => w.npcs).filter((n) => !n.name.trim());
     ok(unnamed71.length === 0, "every NPC in every world has a name to wear");
+  }
+
+
+  console.log("Etap 72 — Bonetown's people are named for somebody real, and wear just the name:");
+  {
+    const w72 = buildWorlds(WORLD_SEED) as unknown as Record<string, { npcs: { key: string; name: string }[] }>;
+    const nameOf72 = (world: string, key: string): string | undefined =>
+      w72[world]?.npcs.find((n) => n.key === key)?.name;
+    const want72: [string, string][] = [
+      ["smith", "Chester"], ["herbalist", "Hildegard"], ["elder", "Kruk"],
+      ["taskmaster", "Grizelda"], ["tailor", "Vito"], ["morgan", "Morgan"],
+    ];
+    const wrong72 = want72.filter(([k, n]) => nameOf72("town", k) !== n).map(([k]) => `${k}=${nameOf72("town", k)}`);
+    ok(wrong72.length === 0,
+      `Chester, Hildegard, Kruk, Grizelda, Vito and Morgan stand in Bonetown (${wrong72.join(",") || "all six"})`);
+    ok(want72.every(([, n]) => !/ the |^Elder /.test(n)), "…each under just a name — the NPC line beneath says the rest");
+    ok(nameOf72("town", "timesage") === "Chronos the Time Sage" && nameOf72("cellar", "timesage") === "Chronos the Time Sage",
+      "Chronos alone keeps his title, upstairs and down");
+
+    const fs72 = await import("node:fs");
+    const panels72 = fs72.readFileSync(new URL("../src/ui/panels.ts", import.meta.url), "utf8");
+    ok(panels72.includes("g at Chester`") && panels72.includes('"WARDROBE — Vito"'),
+      "the smelt tab quotes Chester's price, and the wardrobe is Vito's");
+
+    /* Nothing still calls them by the old names — the screen or the source.
+     * Two files say where the names came from, on purpose; the Spanish speech
+     * says "mira" because it means "look". */
+    const files72: URL[] = [];
+    const walk72 = (dir: URL): void => {
+      for (const e of fs72.readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) walk72(new URL(e.name + "/", dir));
+        else if (e.name.endsWith(".ts")) files72.push(new URL(e.name, dir));
+      }
+    };
+    walk72(new URL("../src/", import.meta.url));
+    const notes72 = ["/src/world/generate.ts", "/src/gfx/lifeBar.ts"];
+    const stale72 = files72
+      .filter((u) => !notes72.some((n) => u.pathname.endsWith(n)))
+      .filter((u) => {
+        const src = fs72.readFileSync(u, "utf8");
+        return /\b(Borin|Oswin|Vesper)\b|Morgan the Changer|Grizelda the Huntress/.test(src)
+          || (!u.pathname.includes("/src/text/") && /\bMira\b/.test(src));
+      })
+      .map((u) => u.pathname.split("/src/")[1]);
+    ok(files72.length > 20 && stale72.length === 0,
+      `no file still calls them by the old names (${stale72.join(",") || `${files72.length} files clean`})`);
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

@@ -2351,7 +2351,7 @@ function openContextMenu(sx: number, sy: number): void {
    *
    * Gold and platinum used to be the one deliberate exception, with an entry
    * of their own for changing denomination. That verb moved out of the
-   * inventory entirely: it is Morgan the Changer's counter in Bonetown now,
+   * inventory entirely: it is Morgan's counter in Bonetown now,
    * so this menu is back to describing things and nothing else. */
   for (let i = itemSlots.length - 1; i >= 0; i--) {
     const it = itemSlots[i];
