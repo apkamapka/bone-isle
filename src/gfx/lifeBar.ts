@@ -187,7 +187,12 @@ export interface NameCtx {
  * corners of a bold V grow spikes.
  */
 export function drawNameTag(ctx: NameCtx, cx: number, baseline: number, name: string, pct: number): void {
-  if (!name) return;
+  outlined(ctx, cx, baseline, name, lifeColor(pct));
+}
+
+/** One line of overhead lettering: black outline, then the letters in `color`. */
+function outlined(ctx: NameCtx, cx: number, baseline: number, text: string, color: string): void {
+  if (!text) return;
   const x = Math.round(cx);
   const y = Math.round(baseline);
   ctx.font = NAME_FONT;
@@ -196,7 +201,44 @@ export function drawNameTag(ctx: NameCtx, cx: number, baseline: number, name: st
   ctx.lineJoin = "round";
   ctx.lineWidth = 2;
   ctx.strokeStyle = "#000";
-  ctx.strokeText(name, x, y);
-  ctx.fillStyle = lifeColor(pct);
-  ctx.fillText(name, x, y);
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+/*
+ * NPCs
+ * ----
+ * An NPC has no life to show, so the line under his name — where a creature
+ * carries its bar — says what he IS instead: NPC. It used to be a lone "!",
+ * which told a new player that something was there and nothing about what.
+ *
+ * Two lines rather than "Borin the Smith (NPC)" on one: the shop row puts
+ * four NPCs five tiles apart, each pacing a tile either way, and four names
+ * lengthened by six characters apiece run into each other as soon as two of
+ * them wander together — the letters interleave and neither can be read.
+ *
+ * Pale gold, the colour the "!" was, and on purpose none of the six life
+ * colours: an NPC must never read as a creature at some fraction of its life.
+ */
+
+/** The line under an NPC's name. */
+export const NPC_LABEL = "NPC";
+/** His name — the old marker's gold. */
+export const NPC_NAME_COLOR = "#ffe9a8";
+/** The label under it: the same gold, dimmed, so the name leads. */
+export const NPC_LABEL_COLOR = "#c9b98a";
+/** From the top of his sprite up to the label's baseline… */
+export const NPC_LABEL_LIFT = 3;
+/** …and up to the name's, far enough that the name's descenders clear the
+ *  label's capitals. */
+export const NPC_NAME_LIFT = 14;
+
+/**
+ * Paint an NPC's name with NPC under it. `cx` is his centre and `spriteTop`
+ * the top edge of his sprite, in SCREEN pixels.
+ */
+export function drawNpcTag(ctx: NameCtx, cx: number, spriteTop: number, name: string): void {
+  outlined(ctx, cx, spriteTop - NPC_LABEL_LIFT, NPC_LABEL, NPC_LABEL_COLOR);
+  outlined(ctx, cx, spriteTop - NPC_NAME_LIFT, name, NPC_NAME_COLOR);
 }

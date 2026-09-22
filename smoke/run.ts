@@ -19601,6 +19601,58 @@ async function main(): Promise<void> {
     ok(mobSay70 - 3 > 9 + LB70.NAME_GAP + 8, `…and a creature's above its name (${mobSay70})`);
   }
 
+
+  console.log("Etap 71 — an NPC wears his name, and NPC under it where a creature wears its life:");
+  {
+    const LB71 = await import("../src/gfx/lifeBar.ts");
+    const fs71 = await import("node:fs");
+
+    const rec71: { op: string; text: string; x: number; y: number; style: string }[] = [];
+    const ctx71 = {
+      font: "", textAlign: "left" as CanvasTextAlign, textBaseline: "top" as CanvasTextBaseline,
+      lineJoin: "miter" as CanvasLineJoin, lineWidth: 1,
+      strokeStyle: "" as string, fillStyle: "" as string,
+      strokeText(text: string, x: number, y: number): void {
+        rec71.push({ op: "stroke", text, x, y, style: String(ctx71.strokeStyle) });
+      },
+      fillText(text: string, x: number, y: number): void {
+        rec71.push({ op: "fill", text, x, y, style: String(ctx71.fillStyle) });
+      },
+    };
+    LB71.drawNpcTag(ctx71, 200, 100, "Borin the Smith");
+    const name71 = rec71.filter((r) => r.text === "Borin the Smith");
+    const tag71 = rec71.filter((r) => r.text === LB71.NPC_LABEL);
+    ok(LB71.NPC_LABEL === "NPC" && name71.length === 2 && tag71.length === 2,
+      "an NPC is drawn as his name and the word NPC, each outlined and filled");
+    ok(rec71.every((r, i) => (i % 2 === 0) === (r.op === "stroke")) && rec71.filter((r) => r.op === "stroke").every((r) => r.style === "#000"),
+      "…each a black outline first, the letters over it — the same lettering as every other name");
+    ok(name71[0].y < tag71[0].y && name71.every((r) => r.x === 200) && tag71.every((r) => r.x === 200),
+      "…the name on top, NPC under it, both centred over him");
+    ok(tag71[0].y === 100 - LB71.NPC_LABEL_LIFT && name71[0].y === 100 - LB71.NPC_NAME_LIFT,
+      "…measured off the top of his sprite");
+    ok(LB71.NPC_NAME_LIFT - 2 > LB71.NPC_LABEL_LIFT + 8,
+      "…with the name's descenders clear of the label's capitals");
+    ok(name71[1].style === LB71.NPC_NAME_COLOR && tag71[1].style === LB71.NPC_LABEL_COLOR
+      && LB71.NPC_NAME_COLOR !== LB71.NPC_LABEL_COLOR,
+      "the name leads in gold and the label follows in a dimmer one");
+    const bands71 = new Set(Array.from({ length: 101 }, (_, p) => LB71.lifeColor(p)));
+    ok(!bands71.has(LB71.NPC_NAME_COLOR) && !bands71.has(LB71.NPC_LABEL_COLOR),
+      "…neither of them one of the six life colours, so an NPC never reads as a wounded creature");
+
+    const m71 = fs71.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    // the RENDER's NPC pass — the update loop has an "// NPCs" section of its own
+    const render71 = m71.slice(m71.indexOf("function render(): void {"));
+    const npcDraw71 = render71.slice(render71.indexOf("// NPCs\n"), render71.indexOf("// monsters\n"));
+    ok(npcDraw71.length > 0 && npcDraw71.includes("drawNpcTag(vctx, n.x - cam.x, n.y - cam.y - spr.height, n.name);"),
+      "every NPC in the world is drawn with his tag");
+    ok(!npcDraw71.includes('"!"') && !m71.includes('fillText("!"'), "…and the lone \"!\" over his head is gone");
+    ok(!/nameplate\(|drawLifeBar\(/.test(npcDraw71), "…and he carries no life bar, having no life to show");
+
+    const w71 = buildWorlds(WORLD_SEED);
+    const unnamed71 = Object.values(w71).flatMap((w) => w.npcs).filter((n) => !n.name.trim());
+    ok(unnamed71.length === 0, "every NPC in every world has a name to wear");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

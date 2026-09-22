@@ -68,7 +68,7 @@ import { chatInput, initChatInput } from "./ui/chatInput.ts";
 import { groundEntries, playerEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
 import { tickAuraFx, drawAuras, drawFlares, addFlare } from "./gfx/auraFx.ts";
-import { lifePercent, lifeTrail, sweepLifeTrails, drawLifeBar, drawNameTag, NAME_GAP } from "./gfx/lifeBar.ts";
+import { lifePercent, lifeTrail, sweepLifeTrails, drawLifeBar, drawNameTag, drawNpcTag, NAME_GAP } from "./gfx/lifeBar.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { unlockAudio, beep } from "./audio.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
@@ -5656,13 +5656,9 @@ function render(): void {
     drawList.push({ y: n.y, fn: () => {
       drawShadow(n.x, n.y);
       drawSprite(spr, n.x, n.y, 1, bob);
-      // name tag
-      vctx.font = "bold 12px monospace";
-      vctx.textAlign = "center";
-      vctx.fillStyle = "#000";
-      vctx.fillText("!", Math.round(n.x - cam.x) + 2, Math.round(n.y - cam.y - spr.height - 6) + 2);
-      vctx.fillStyle = "#ffe9a8";
-      vctx.fillText("!", Math.round(n.x - cam.x), Math.round(n.y - cam.y - spr.height - 6));
+      // his name, and under it — where a creature carries its life — that he
+      // is an NPC. No bar: he has no life to show. See gfx/lifeBar.ts.
+      drawNpcTag(vctx, n.x - cam.x, n.y - cam.y - spr.height, n.name);
     } });
   }
   // monsters
