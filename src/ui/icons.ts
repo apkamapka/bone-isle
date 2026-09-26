@@ -23,7 +23,7 @@
 export const ICON_SRC = 16;
 
 export type ControlIcon =
-  | "build" | "skills" | "equip" | "bag" | "quest" | "atk"
+  | "build" | "skills" | "equip" | "bag" | "quest" | "atk" | "options"
   /* The two faces of one button: whether you follow what you are fighting.
    * A word fits in half the room a word needs — CHASE and STAND were the two
    * widest labels on the row — and freeing that half is what let the skull
@@ -41,6 +41,7 @@ const ICON_SRC_FILE: Record<ControlIcon, string> = {
   equip: "/icon-eq.png",
   bag: "/icon-backpack.png",
   quest: "/icon-quest.png",
+  options: "/icon-options.png",
   atk: "/icon-atk.png",
   chase: "/icon-chase.png",
   stand: "/icon-stand.png",
@@ -157,6 +158,13 @@ const GLYPHS: Record<ControlIcon, readonly Cell[]> = {
     [2, 3, 8, 8, 1], [2, 3, 8, 1, 2],
     [4, 1, 4, 2, 1], [2, 5, 8, 1, 0],
     [5, 6, 2, 2, 0],
+  ],
+  /* A gear (Etap 73): four square teeth, four corner ones, a hub with a hole. */
+  options: [
+    [5, 0, 2, 2, 1], [5, 10, 2, 2, 1], [0, 5, 2, 2, 1], [10, 5, 2, 2, 1],
+    [1, 1, 2, 2, 1], [9, 1, 2, 2, 1], [1, 9, 2, 2, 1], [9, 9, 2, 2, 1],
+    [2, 2, 8, 8, 1], [3, 2, 6, 1, 2],
+    [4, 4, 4, 4, 0],
   ],
   /* A scroll. The curls have to overhang the sheet by a clear pixel each side
    * or the whole thing reads as a spool of thread. */

@@ -5,7 +5,7 @@
  * the elemental line. Recall is a travel action handled in the main loop
  * (it needs the game object).
  */
-import { beep } from "../audio.ts";
+import { sfx } from "../audio.ts";
 import { markBloodHit } from "./skills.ts";
 import { monsterById } from "../world/entities.ts";
 import { ELEMENTS, ELEMENT_COLOR, TIER_CODE, crystalDamage, type Element, type Tier } from "./elements.ts";
@@ -337,7 +337,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
     p.hp = Math.min(p.maxhp, p.hp + amount);
     addFlare(world, p.x, p.y - 24, "mend");
     addFloat(world, p.x, p.y - 40, `+${amount}`, "#3ee07a");
-    beep(520, 0.3, "sine", 0.07, 320);
+    sfx("heal");
     return true;
   }
 
@@ -372,7 +372,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
     startHaste(b, HASTE_RUNE_S);
     addFlare(world, p.x, p.y - 24, "speed");
     addFloat(world, p.x, p.y - 40, "swift", "#ffd23a");
-    beep(700, 0.18, "triangle", 0.06, 260);
+    sfx("buff");
     return true;
   }
   if (kind === "aegisRune") {
@@ -383,7 +383,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
     // you cannot see.
     addFlare(world, p.x, p.y - 24, "guard", 1.15);
     addFloat(world, p.x, p.y - 40, "guarded", "#dfe6f2");
-    beep(300, 0.26, "square", 0.05, 90);
+    sfx("buff");
     return true;
   }
   if (kind === "mireRune") {
@@ -400,7 +400,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
     }
     addFlare(world, p.x, p.y - 24, "slow");
     addFloat(world, p.x, p.y - 40, caught ? `slowed x${caught}` : "slowdown", "#3a8fe0");
-    beep(150, 0.34, "sine", 0.06, -70);
+    sfx("mire");
     return true;
   }
   // furyRune
@@ -408,7 +408,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   addFlare(world, p.x, p.y - 24, "fury", 1.4);
   addFloat(world, p.x, p.y - 40, "FURY", "#e01e5a");
   addFloat(world, p.x, p.y - 56, `${Math.round(FURY_DEBT_FRAC * 100)}% every ${FURY_DEBT_TICK_S}s after`, "#ff9ad0");
-  beep(90, 0.55, "sawtooth", 0.1, 150);
+  sfx("fury");
   return true;
 }
 
@@ -459,7 +459,7 @@ export function useCrystal(
     // that matters.
     addFlare(world, p.x, p.y - 24, "mend", 0.65);
     addFloat(world, p.x, p.y - 40, `+${amount}`, "#7dff9e");
-    beep(660, 0.2, "sine", 0.06, 220);
+    sfx("heal");
     return true;
   }
 
@@ -505,7 +505,7 @@ export function useCrystal(
       paint(world, shape, spec.element, spec.tier, FX_SLOT[spec.role]);
       if (hit.length) markBloodHit();
       for (const m of hit) damageWithElement(world, p, m, spec, col);
-      beep(spec.role === "nova" ? 150 : 240, 0.22, "sawtooth", 0.07, spec.role === "nova" ? -200 : 180);
+      sfx("cast");
       return true;
     }
 
@@ -573,8 +573,8 @@ export function useCrystal(
     for (const m of caught) damageWithElement(world, p, m, spec, col);
     // The Knell tolls: low, long, and falling. It is the only crystal whose
     // sound is meant to land AFTER you have already seen the thing die.
-    if (spec.role === "rune") beep(110, 0.38, "sawtooth", 0.09, -70);
-    else beep(spec.role === "burst" ? 180 : 320, 0.2, "sawtooth", 0.06, spec.role === "burst" ? -160 : 120);
+    if (spec.role === "rune") sfx("rune");
+    else sfx("cast");
     return true;
   }
 

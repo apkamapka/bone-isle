@@ -1,6 +1,6 @@
 /** Building system: structure catalog, tiers, affordability, free-form placement. */
 import { TILE } from "../config.ts";
-import { beep } from "../audio.ts";
+import { sfx } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
 import { nextEntityId } from "../world/entities.ts";
@@ -334,7 +334,7 @@ export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy:
   markSolid(home, key, tx, ty);
   unstick(home, p); // if you built on the tile you were standing on, step out of it
   addFloat(home, tx * TILE + TILE, ty * TILE, `${def.name} built!`, "#ffe27a");
-  beep(330, 0.1, "triangle", 0.06);
+  sfx("build");
   return true;
 }
 
@@ -358,7 +358,7 @@ export function tryUpgrade(home: World, p: Player, s: Structure, stash?: readonl
   }
   const def = STRUCTS[s.key as StructKey];
   addFloat(home, s.tx * TILE + TILE, s.ty * TILE, `${def.name} ${"I".repeat(s.tier)}!`, "#ffe27a");
-  beep(392, 0.12, "triangle", 0.06);
+  sfx("build");
   return true;
 }
 

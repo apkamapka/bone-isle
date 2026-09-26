@@ -1,7 +1,7 @@
 /** Resource gathering: chop trees, mine rocks. */
 import { TREE_REGROW_S, ROCK_REGROW_S, TILE } from "../config.ts";
 import { dist } from "../util.ts";
-import { beep } from "../audio.ts";
+import { sfx } from "../audio.ts";
 import { addFloat } from "../fx.ts";
 import { addItem } from "../items.ts";
 import { canCarry } from "../entities/player.ts";
@@ -25,7 +25,7 @@ export function gatherTick(world: World, p: Player, g: GatherTask): void {
     tr.hurtT = 0.15;
     addItem(p.bag, "wood", 1);
     addFloat(world, tr.tx * TILE + TILE / 2, tr.ty * TILE - 16, "+1 wood", "#b9e07f");
-    beep(300, 0.06, "triangle", 0.06);
+    sfx("chop");
     if (tr.hp <= 0) {
       addItem(p.bag, "wood", 2);
       addFloat(world, tr.tx * TILE + TILE / 2, tr.ty * TILE - 4, "+2 wood", "#b9e07f");
@@ -40,7 +40,7 @@ export function gatherTick(world: World, p: Player, g: GatherTask): void {
     rk.hurtT = 0.15;
     addItem(p.bag, "stone", 1);
     addFloat(world, rk.tx * TILE + TILE / 2, rk.ty * TILE - 4, "+1 stone", "#c8d3d8");
-    beep(180, 0.06, "square", 0.05);
+    sfx("mine");
     if (rk.hp <= 0) {
       addItem(p.bag, "stone", 2);
       addFloat(world, rk.tx * TILE + TILE / 2, rk.ty * TILE + 8, "+2 stone", "#c8d3d8");

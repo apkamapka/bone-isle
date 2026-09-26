@@ -134,6 +134,8 @@ export interface MobileLayout {
    * alone, so the answer arrives in the log with nothing on top of it.
    */
   look: Rect;
+  /** OPTIONS, beside LOOK on the drop-down's second row (Etap 73). */
+  opts: Rect;
   /**
    * Where the hotbar-length strip goes while EDIT is on.
    *
@@ -204,7 +206,7 @@ export function noDeck(screenH = 0): MobileLayout {
   return {
     on: false, landscape: false, u: 0, gap: 0, margin: 0,
     topH: 0, info: z, vitals: z, purse: z,
-    menu: z, edit: z, swap: z, chase: z, atk: z, skull: z, chat: z, look: z,
+    menu: z, edit: z, swap: z, chase: z, atk: z, skull: z, chat: z, look: z, opts: z,
     keysBar: z, minimap: z, tabs: [],
     deckY: screenH, deckH: 0, slots: [],
     mapTop: 0, mapBottom: screenH, mapLeft: 0, mapRight: 0, sheet: z,
@@ -302,6 +304,7 @@ export function mobileLayout(
   const chat: Rect = cell(DECK_TABS.length);
   const edit: Rect = cell(DECK_TABS.length + 1);
   const look: Rect = cell(DECK_TABS.length + 2);
+  const opts: Rect = cell(DECK_TABS.length + 3);
 
   /* --- thumb deck: the action slots, and nothing else ---------------------
    *
@@ -358,7 +361,7 @@ export function mobileLayout(
   return {
     on: true, landscape: false, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, skull, chat, look, keysBar, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, look, opts, keysBar, minimap, tabs,
     deckY, deckH, slots,
     mapTop, mapBottom, mapLeft: 0, mapRight: screenW, sheet,
   };
@@ -489,6 +492,7 @@ function landscapeLayout(
   const chat: Rect = cell(DECK_TABS.length);
   const edit: Rect = cell(DECK_TABS.length + 1);
   const look: Rect = cell(DECK_TABS.length + 2);
+  const opts: Rect = cell(DECK_TABS.length + 3);
 
   /* Sideways there is no room under the slots — the column is centred in a
    * band it very nearly fills, and putting the strip above or below it landed
@@ -512,7 +516,7 @@ function landscapeLayout(
   return {
     on: true, landscape: true, u, gap, margin: m,
     topH, info, vitals, purse,
-    menu, edit, swap, chase, atk, skull, chat, look, keysBar, minimap, tabs,
+    menu, edit, swap, chase, atk, skull, chat, look, opts, keysBar, minimap, tabs,
     deckY: screenH, deckH: 0, slots,
     mapTop, mapBottom, mapLeft, mapRight, sheet,
   };

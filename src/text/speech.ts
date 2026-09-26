@@ -34,10 +34,10 @@
  * fallback should never actually run.
  */
 
-export type Lang = "en" | "pl" | "es";
+export type Lang = "en" | "pl" | "es" | "pt";
 
 /** Display order in the dialogue box's language strip. */
-export const LANGS: readonly Lang[] = ["en", "pl", "es"];
+export const LANGS: readonly Lang[] = ["en", "pl", "es", "pt"];
 
 /** What a player who has never touched the strip reads. */
 export const DEFAULT_LANG: Lang = "en";
@@ -68,6 +68,7 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     en: "Come back at level {lv}. Not every story cares for an unripe listener.",
     pl: "Wróć na poziomie {lv}. Nie wszystkie historie lubią niedojrzałych słuchaczy.",
     es: "Vuelve al nivel {lv}. No todas las historias quieren oyentes verdes.",
+    pt: "Volte no nível {lv}. Nem toda história gosta de ouvintes verdes.",
   },
   /* Nothing left in the catalogue — for now, which is the part that matters.
    * The first draft of this read as a dead end ("every door I know is behind
@@ -77,6 +78,8 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     en: "That is all I have for you. For now. Come back when I open something else.",
     pl: "To wszystko, co mam dla ciebie. Na razie. Wróć, kiedy znowu coś otworzę.",
     es: "Eso es todo lo que tengo para ti. Por ahora. Vuelve cuando abra otra cosa.",
+    pt: "Isso é tudo o que tenho para você. Por enquanto. Volte quando eu abrir "
+      + "outra coisa.",
   },
 
   /* --- the answers the player picks ------------------------------------- */
@@ -84,6 +87,7 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     en: "What is behind them?",
     pl: "Co jest za nimi?",
     es: "¿Qué hay detrás?",
+    pt: "O que há atrás delas?",
   },
   /* Two jobs: declining the errand, and the labelled way out of any other
    * conversation. Both are "I am done here", and one word covers both. */
@@ -91,6 +95,7 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     en: "Not yet.",
     pl: "Jeszcze nie.",
     es: "Todavía no.",
+    pt: "Ainda não.",
   },
 
   /* --- mission 1: the redcap --------------------------------------------
@@ -114,6 +119,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "cuyo señor era demasiado orgulloso para morir como un hombre "
       + "corriente.\n\n"
       + "No le sirvió de nada.",
+    pt: "A primeira porta se abre para Hermitage.\n\n"
+      + "Liddesdale, ano de 1320. Chuva, lama e um castelo cujo senhor era "
+      + "orgulhoso demais para morrer como um homem comum.\n\n"
+      + "Não adiantou nada.",
   },
   "sage.accept.redcap": {
     en: "William de Soulis had his men, his castle, and the certainty that no "
@@ -148,6 +157,17 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Desde entonces el Redcap guarda ese lugar.\n\n"
       + "Tráeme su gorro. Sólo que no dejes que se seque. Importa más de lo "
       + "que parece.",
+    pt: "William de Soulis tinha seus homens, seu castelo e a certeza de que "
+      + "nenhuma morte o alcançaria.\n\n"
+      + "Então seus servos o mergulharam em chumbo quente.\n\n"
+      + "Dizem que, no fim, restou só uma armadura vazia e o cheiro de carne "
+      + "queimada.\n\n"
+      + "Mas, quando a noite caiu sobre o castelo, algo pequeno saiu das "
+      + "pedras.\n\n"
+      + "Vermelho.\n\n"
+      + "Desde então, o Redcap guarda aquele lugar.\n\n"
+      + "Traga-me o gorro dele. Só não deixe que seque. Isso importa mais do "
+      + "que parece.",
   },
   "sage.decline.redcap": {
     en: "Good.\n\n"
@@ -159,6 +179,9 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     es: "Bien.\n\n"
       + "El Redcap lleva setecientos años esperando ahí.\n\n"
       + "Dudo que note que tú no estabas.",
+    pt: "Tudo bem.\n\n"
+      + "O Redcap espera lá há setecentos anos.\n\n"
+      + "Duvido que ele note a sua ausência.",
   },
   "sage.remind.redcap": {
     en: "Go back to Hermitage.\n\n"
@@ -173,6 +196,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Busca al hombrecillo del gorro rojo y quítale aquello que le "
       + "permite seguir llevándolo.\n\n"
       + "Y recuerda: la sangre se seca antes de lo que crees.",
+    pt: "Volte a Hermitage.\n\n"
+      + "Encontre o homenzinho de gorro vermelho e tire dele aquilo que o deixa "
+      + "continuar usando o gorro.\n\n"
+      + "E lembre-se — o sangue seca mais rápido do que parece.",
   },
   "sage.handIn.redcap": {
     en: "Still wet.\n\n"
@@ -193,6 +220,12 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "muy malo.\n\n"
       + "Nueve hombres se han llamado señores de Hermitage.\n\n"
       + "El Redcap es el único al que la muerte no logró echar de allí.",
+    pt: "Ainda molhado.\n\n"
+      + "Bom.\n\n"
+      + "Se tivesse secado, você estaria segurando um punhado de pó vermelho e "
+      + "uma lembrança muito ruim.\n\n"
+      + "Nove homens se chamaram senhores de Hermitage.\n\n"
+      + "O Redcap é o único que a morte não conseguiu expulsar de lá.",
   },
   "sage.empty.redcap": {
     en: "You lost it.\n\n"
@@ -210,6 +243,11 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Abriré la puerta otra vez. Lo encontrarás exactamente donde lo "
       + "dejaste.\n\n"
       + "Esta vez, cuida el gorro.",
+    pt: "Você o perdeu.\n\n"
+      + "Uma pena. O Redcap não gosta quando tiram coisas dele.\n\n"
+      + "Vou abrir a porta mais uma vez. Você vai encontrá-lo exatamente onde o "
+      + "deixou.\n\n"
+      + "Desta vez, cuide do gorro.",
   },
 
   /* --- mission 2: Kárr the Old ------------------------------------------
@@ -232,6 +270,11 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "unos mil años, había una sola granja.\n\n"
       + "Ahora no hay nada.\n\n"
       + "Salvo una tumba.",
+    pt: "A segunda porta é mais fria.\n\n"
+      + "Haramsey. Uma pequena ilha na costa da Noruega onde, há uns mil anos, "
+      + "havia uma única fazenda.\n\n"
+      + "Agora não há nada lá.\n\n"
+      + "A não ser um túmulo.",
   },
   "sage.accept.draugr": {
     en: "Kárr owned the island.\n\n"
@@ -259,6 +302,14 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Desde entonces nadie vive en Haramsey.\n\n"
       + "Coge su yelmo.\n\n"
       + "El nombre grabado en ese hierro puede ser lo único que quede de él.",
+    pt: "Kárr era o dono da ilha.\n\n"
+      + "Quando morreu, puseram ouro e um elmo de ferro no túmulo com ele. Um "
+      + "homem da sua posição devia levar alguma coisa consigo.\n\n"
+      + "Só não previram que Kárr ia querer voltar para buscar.\n\n"
+      + "O primeiro que estendeu a mão para o ouro o acordou.\n\n"
+      + "Desde então, ninguém mora em Haramsey.\n\n"
+      + "Pegue o elmo dele.\n\n"
+      + "O nome gravado naquele ferro pode ser a única coisa que restou dele.",
   },
   "sage.decline.draugr": {
     en: "I understand.\n\n"
@@ -273,6 +324,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Entonces Kárr seguirá sentado en su tumba, guardando un oro que "
       + "nunca gastará.\n\n"
       + "Tiempo le sobra.",
+    pt: "Entendo.\n\n"
+      + "Então Kárr pode continuar sentado no túmulo, guardando um ouro que "
+      + "nunca vai gastar.\n\n"
+      + "Tempo ele tem de sobra.",
   },
   "sage.remind.draugr": {
     en: "Kárr is still under the ground.\n\n"
@@ -287,6 +342,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Sigue llevando el mismo yelmo.\n\n"
       + "Si lo quieres para mí, primero tendrás que convencerlo a él de que "
       + "lo suelte.",
+    pt: "Kárr continua debaixo da terra.\n\n"
+      + "Ainda com o mesmo elmo na cabeça.\n\n"
+      + "Se você o quer para mim, primeiro vai ter que convencê-lo a "
+      + "entregá-lo.",
   },
   "sage.handIn.draugr": {
     en: "Kárr inn gamli.\n\n"
@@ -308,6 +367,13 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "llegó más que un puñado de palabras.\n\n"
       + "Ahora tengo su nombre.\n\n"
       + "Debería bastar para que deje de ser un cadáver más sin nombre.",
+    pt: "Kárr inn gamli.\n\n"
+      + "Kárr, o Velho.\n\n"
+      + "Estranho. Ele segurou aquela ilha por oitenta anos, e de toda a sua "
+      + "vida só me chegou um punhado de palavras.\n\n"
+      + "Agora eu tenho o nome dele.\n\n"
+      + "Isso deve bastar para que ele deixe de ser só mais um cadáver sem "
+      + "nome.",
   },
   "sage.empty.draugr": {
     en: "You lost the helm.\n\n"
@@ -323,6 +389,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "No te preocupes. Abriré el túmulo de nuevo.\n\n"
       + "Sólo que esta vez, no dejes que se quede con aquello a lo que "
       + "fuiste.",
+    pt: "Você perdeu o elmo.\n\n"
+      + "A essa altura, Kárr já deve tê-lo posto de volta.\n\n"
+      + "Não se preocupe. Vou abrir o túmulo de novo.\n\n"
+      + "Só que, desta vez, não o deixe ficar com aquilo que você foi buscar.",
   },
   /* Etap 52 — the third door. THE POLISH IS RADEK'S OWN and is copied in
    * unchanged, beat for beat; English and Spanish are rebuilt to the same beat
@@ -356,6 +426,12 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Dicen que en ella vive Black Annis.\n\n"
       + "Dicen también que alguna vez fue mujer.\n\n"
       + "Una de esas dos afirmaciones es probablemente cierta.",
+    pt: "A terceira porta.\n\n"
+      + "Leicestershire. Há ali uma caverna sob um velho carvalho que os "
+      + "moradores há muito deixaram de chamar pelo nome.\n\n"
+      + "Dizem que Black Annis mora nela.\n\n"
+      + "Também dizem que ela já foi uma mulher.\n\n"
+      + "Uma dessas duas coisas provavelmente é verdade.",
   },
   "sage.accept.blackannis": {
     en: "Once, when children went missing from the villages around, people barred their doors before sundown.\n\n"
@@ -379,6 +455,14 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Eso funcionó.\n\n"
       + "Durante un tiempo.\n\n"
       + "Baja a su cueva y termina esta historia.",
+    pt: "Antigamente, quando crianças sumiam das aldeias vizinhas, as pessoas "
+      + "trancavam as portas antes do pôr do sol.\n\n"
+      + "Não adiantava.\n\n"
+      + "Black Annis saía à noite e levava quem encontrasse do lado de fora.\n\n"
+      + "Então começaram a deixar comida debaixo do carvalho.\n\n"
+      + "Funcionou.\n\n"
+      + "Por um tempo.\n\n"
+      + "Desça até a caverna dela e termine essa história.",
   },
   "sage.decline.blackannis": {
     en: "Sensible.\n\n"
@@ -390,6 +474,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     es: "Razonable.\n\n"
       + "Los vecinos hicieron lo mismo durante años.\n\n"
       + "Atrancaban la puerta y confiaban en que esta vez eligiera a otro.",
+    pt: "Sensato.\n\n"
+      + "Os moradores fizeram o mesmo por anos.\n\n"
+      + "Trancavam a porta e torciam para que, desta vez, ela escolhesse outra "
+      + "pessoa.",
   },
   "sage.remind.blackannis": {
     en: "The old oak. The cave beneath it.\n\n"
@@ -404,6 +492,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Si encuentras huellas que entran, síguelas.\n\n"
       + "Si encuentras huellas que salen...\n\n"
       + "asegúrate de que sean unas solas.",
+    pt: "O velho carvalho. A caverna embaixo dele.\n\n"
+      + "Se encontrar pegadas que levam para dentro, siga-as.\n\n"
+      + "Se encontrar pegadas que levam para fora...\n\n"
+      + "confira se há um só rastro.",
   },
   "sage.handIn.blackannis": {
     en: "So she could be quieted after all.\n\n"
@@ -421,6 +513,12 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Ahora el miedo se quedó al otro lado de la puerta.\n\n"
       + "Bien.\n\n"
       + "Una historia menos que contar.",
+    pt: "Então ela podia mesmo ser calada.\n\n"
+      + "Por centenas de anos bastou que as pessoas tivessem mais medo dela do "
+      + "que ela delas.\n\n"
+      + "Agora o medo ficou do outro lado da porta.\n\n"
+      + "Bom.\n\n"
+      + "É uma história a menos para contar.",
   },
   "sage.empty.blackannis": {
     en: "You came back.\n\n"
@@ -435,6 +533,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Black Annis no.\n\n"
       + "No es así como debía terminar.\n\n"
       + "La puerta sigue abierta. Vuelve y acaba lo que empezaste.",
+    pt: "Você voltou.\n\n"
+      + "Black Annis, não.\n\n"
+      + "Não era para ser assim.\n\n"
+      + "A porta continua aberta. Volte lá e termine o que começou.",
   },
 
   /* ---------------------------------------------------------------------
@@ -478,6 +580,15 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Medio hombre. Medio toro.\n\n"
       + "El Minotauro.\n\n"
       + "Si quieres saber la verdad, tendrás que entrar donde nadie debió entrar dos veces.",
+    pt: "A quarta porta.\n\n"
+      + "Creta.\n\n"
+      + "Há muito tempo, um rei mandou construir um lugar de onde ninguém "
+      + "conseguia achar a saída.\n\n"
+      + "Diziam que um monstro foi trancado lá dentro.\n\n"
+      + "Metade homem. Metade touro.\n\n"
+      + "O Minotauro.\n\n"
+      + "Se quer saber a verdade, vai ter que entrar onde ninguém deveria ter "
+      + "entrado duas vezes.",
   },
   "sage.accept.minotaur": {
     en: "King Minos did not want anyone to see what he had hidden under his palace.\n\n"
@@ -510,6 +621,18 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Tú no tendrás el hilo.\n\n"
       + "Así que si oyes pasos pesados detrás de ti...\n\n"
       + "más te vale recordar por dónde entraste.",
+    pt: "O rei Minos não queria que ninguém visse o que ele escondeu sob o seu "
+      + "palácio.\n\n"
+      + "Por isso construiu o labirinto.\n\n"
+      + "Centenas de corredores. Becos sem saída. Escadas que não levam a lugar "
+      + "nenhum.\n\n"
+      + "E, bem no meio — o Minotauro.\n\n"
+      + "A cada poucos anos, mandavam jovens para ele como tributo.\n\n"
+      + "Até que veio Teseu.\n\n"
+      + "Ele tinha uma espada, tinha coragem e tinha o fio de Ariadne.\n\n"
+      + "Você não vai ter o fio.\n\n"
+      + "Então, se ouvir passos pesados atrás de você...\n\n"
+      + "é melhor lembrar por onde entrou.",
   },
   "sage.decline.minotaur": {
     en: "I understand.\n\n"
@@ -521,6 +644,9 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     es: "Entiendo.\n\n"
       + "Teseo también pudo dar la vuelta.\n\n"
       + "Solo que entonces Creta habría tenido que buscar a otro.",
+    pt: "Entendo.\n\n"
+      + "Teseu também podia ter voltado atrás.\n\n"
+      + "Só que aí Creta teria que encontrar outra pessoa.",
   },
   "sage.remind.minotaur": {
     en: "The labyrinth was not built to keep the Minotaur in.\n\n"
@@ -535,6 +661,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Se construyó para que nadie lo encontrara.\n\n"
       + "Entra más hondo de lo que entró Teseo.\n\n"
       + "Quiero saber qué quedó allí cuando él se marchó.",
+    pt: "O labirinto não foi construído para prender o Minotauro.\n\n"
+      + "Foi construído para que ninguém o encontrasse.\n\n"
+      + "Vá mais fundo do que Teseu foi.\n\n"
+      + "Quero saber o que ficou lá dentro depois que ele saiu.",
   },
   "sage.handIn.minotaur": {
     en: "So it really was him.\n\n"
@@ -555,6 +685,13 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Ahora ya lo sabemos.\n\n"
       + "El Minotauro no fue el final de esa historia.\n\n"
       + "Solo fue una parte de ella.",
+    pt: "Então era mesmo ele.\n\n"
+      + "Por milhares de anos contaram que Teseu matou o Minotauro e saiu do "
+      + "labirinto.\n\n"
+      + "Mas nenhuma história diz o que aconteceu depois.\n\n"
+      + "Agora nós sabemos.\n\n"
+      + "O Minotauro não era o fim da história.\n\n"
+      + "Era só uma parte dela.",
   },
   "sage.empty.minotaur": {
     en: "The labyrinth let you out.\n\n"
@@ -569,6 +706,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "El Minotauro por lo visto no.\n\n"
       + "Vuelve allí.\n\n"
       + "Y esta vez no dejes que sea él quien encuentre la salida.",
+    pt: "O labirinto deixou você sair.\n\n"
+      + "O Minotauro, pelo visto, não.\n\n"
+      + "Volte lá.\n\n"
+      + "E desta vez não deixe que seja ele a encontrar a saída.",
   },
 
   /* ======================================================================
@@ -605,6 +746,13 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Ahora alguien los está uniendo.\n\n"
       + "Lo llaman Gorak.\n\n"
       + "Quiero ver hasta dónde logra llevarlos.",
+    pt: "A quinta porta, e desta vez achei algo interessante.\n\n"
+      + "Os orcs começaram a se reunir.\n\n"
+      + "Até pouco tempo atrás, brigavam entre si por cada caverna, cada forja "
+      + "e cada pedaço de terra.\n\n"
+      + "Agora alguém os está unindo.\n\n"
+      + "Eles o chamam de Gorak.\n\n"
+      + "Quero ver até onde ele consegue levá-los.",
   },
 
   "sage.accept.orc": {
@@ -638,6 +786,16 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "pelearían bajo un mismo estandarte.\n\n"
       + "Encuentra a Gorak.\n\n"
       + "Antes de que su ejército esté listo.",
+    pt: "Gorak é o maior orc que eu já vi.\n\n"
+      + "E o primeiro a entender uma coisa importante.\n\n"
+      + "Um orc sozinho pode tomar uma aldeia.\n\n"
+      + "Dez podem tomar uma fortaleza.\n\n"
+      + "Mil podem mudar o mapa.\n\n"
+      + "Por isso ele está reunindo todos.\n\n"
+      + "Guerreiros, caçadores, xamãs e aqueles que juraram que nunca lutariam "
+      + "sob uma mesma bandeira.\n\n"
+      + "Encontre Gorak.\n\n"
+      + "Antes que o exército dele esteja pronto.",
   },
 
   "sage.decline.orc": {
@@ -652,6 +810,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "En ese caso, no te cruces en su camino.\n\n"
       + "Puede que dentro de un tiempo tengas muchísimas más razones para "
       + "asomarte por allí.",
+    pt: "Entendo.\n\n"
+      + "Nesse caso, não fique no caminho deles.\n\n"
+      + "Daqui a algum tempo, talvez você tenha muito mais motivos para dar uma "
+      + "olhada lá.",
   },
 
   "sage.remind.orc": {
@@ -670,6 +832,11 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Eso ya no es un campamento cualquiera.\n\n"
       + "Es un ejército.\n\n"
       + "Y al final de él espera Gorak.",
+    pt: "Os orcs continuam se reunindo.\n\n"
+      + "Quanto mais você entrar nas terras deles, mais deles vai ver.\n\n"
+      + "Aquilo já não é um acampamento qualquer.\n\n"
+      + "É um exército.\n\n"
+      + "E, no fim dele, Gorak espera.",
   },
 
   "sage.handIn.orc": {
@@ -691,6 +858,13 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Él hizo que empezaran a pelear juntos.\n\n"
       + "Esa fue su mayor fuerza.\n\n"
       + "Y puede que sea justo por eso que su muerte no cierra esta historia.",
+    pt: "Então Gorak caiu.\n\n"
+      + "Interessante.\n\n"
+      + "A vida inteira os orcs lutaram uns contra os outros.\n\n"
+      + "Ele os fez começar a lutar juntos.\n\n"
+      + "Essa era a sua maior força.\n\n"
+      + "E talvez seja exatamente por isso que a morte dele não encerra esta "
+      + "história.",
   },
 
   "sage.empty.orc": {
@@ -706,6 +880,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Gorak sigue vivo, con toda probabilidad.\n\n"
       + "Y su ejército sigue creciendo.\n\n"
       + "Si quieres detener lo que empezó, tendrás que volver.",
+    pt: "Você voltou.\n\n"
+      + "Gorak, pelo jeito, continua vivo.\n\n"
+      + "E o exército dele continua crescendo.\n\n"
+      + "Se quer interromper o que ele começou, vai ter que voltar.",
   },
 
   /* --- TEMP-ETAP45-TESTMENU ---------------------------------------------
@@ -721,11 +899,13 @@ const SAGE: Readonly<Record<string, Bundle>> = {
     en: "Start over.",
     pl: "Zacznij od nowa.",
     es: "Empezar de nuevo.",
+    pt: "Começar de novo.",
   },
   "sage.test.pick": {
     en: "Which of them would you live through again?",
     pl: "Którą z nich chcesz przeżyć jeszcze raz?",
     es: "¿Cuál de ellas quieres vivir otra vez?",
+    pt: "Qual delas você quer viver de novo?",
   },
 };
 
@@ -745,6 +925,7 @@ const LORE: Readonly<Record<string, Bundle>> = {
     en: "Hermitage, Liddesdale — 1320",
     pl: "Hermitage, Liddesdale — 1320",
     es: "Hermitage, Liddesdale — 1320",
+    pt: "Hermitage, Liddesdale — 1320",
   },
   /* Rewritten in Etap 45, and the three facts are still all in it — wet cap,
    * iron, speed — but they are no longer a list of a boss's mechanics with
@@ -857,12 +1038,45 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "a los del valle.\n\n"
       + "Nunca volvió a por ello.\n\n"
       + "Eso sí me gustaría verlo.",
+    pt: "William de Soulis não queria morrer.\n\n"
+      + "Dizem que pagou por isso com mais do que ouro. Quando a morte veio "
+      + "buscá-lo, não achou nele nenhum lugar onde pudesse se agarrar.\n\n"
+      + "Então seus servos encontraram outro jeito.\n\n"
+      + "Fecharam-no dentro de um círculo de pedras e derramaram chumbo quente "
+      + "por cima.\n\n"
+      + "Não tiveram pressa.\n\n"
+      + "Quando terminaram, o castelo ficou em silêncio.\n\n"
+      + "William continuou morto.\n\n"
+      + "Mas algo pequeno saiu do lugar onde o cozinharam.\n\n"
+      + "Desde então, o Redcap anda por Hermitage.\n\n"
+      + "Três coisas você precisa saber.\n\n"
+      + "O gorro.\n\n"
+      + "Não é enfeite. O Redcap guarda a vida dele ali.\n\n"
+      + "Enquanto o sangue nele estiver molhado, ele vive.\n\n"
+      + "Quando secar, o gorro vira pó, e o Redcap cai junto.\n\n"
+      + "Então, se você o pegar — não espere.\n\n"
+      + "O ferro.\n\n"
+      + "O Redcap não o teme como os outros da sua espécie.\n\n"
+      + "Ele anda de botas de ferro e carrega uma arma de ferro. Você vai ouvir "
+      + "os passos dele antes de vê-lo.\n\n"
+      + "Não tente detê-lo com isso.\n\n"
+      + "A velocidade.\n\n"
+      + "É a pior coisa que ele tem.\n\n"
+      + "Ele é pequeno. É rápido. E não se cansa.\n\n"
+      + "Você pode tentar fugir, mas não conte com despistá-lo.\n\n"
+      + "Se ouvir ferro batendo em pedra, você tem um instante.\n\n"
+      + "Mais uma coisa.\n\n"
+      + "Em algum lugar sob o castelo, o Redcap escondeu o que tomou do povo do "
+      + "vale.\n\n"
+      + "Nunca voltou para buscar.\n\n"
+      + "Isso eu gostaria de ver.",
   },
 
   "lore.title.draugr": {
     en: "Haramsey — c. 1000",
     pl: "Haramsey — ok. 1000",
     es: "Haramsey — h. 1000",
+    pt: "Haramsey — c. 1000",
   },
   /* Same rebuild. The one line that changed meaning rather than shape is the
    * weight beat: the draft read "nie popełnia błędu, którego żywy człowiek
@@ -980,11 +1194,48 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Lo que un draugr mata no siempre sigue muerto.\n\n"
       + "Si entras en su cámara, no des por hecho que vencer a Kárr te deje "
       + "solo en ella.",
+    pt: "Kárr era um homem rico.\n\n"
+      + "Rico o bastante para que, ao enterrá-lo, pusessem com ele ouro, armas "
+      + "e o elmo que usou em vida.\n\n"
+      + "Ele devia ficar lá para sempre.\n\n"
+      + "Até que alguém tentou levar o ouro.\n\n"
+      + "Então Kárr abriu os olhos.\n\n"
+      + "O homem que entrou no túmulo não saiu.\n\n"
+      + "O resto de Haramsey saiu por ele.\n\n"
+      + "Oitenta anos depois, a ilha continua vazia.\n\n"
+      + "E Kárr continua debaixo da terra.\n\n"
+      + "Três coisas.\n\n"
+      + "O peso.\n\n"
+      + "Os mortos de Haramsey não voltam como eram.\n\n"
+      + "Incham debaixo da terra. Crescem. Ficam mais pesados do que um corpo "
+      + "humano deveria ser.\n\n"
+      + "Kárr é um dos mais pesados.\n\n"
+      + "É lento, mas não comete os erros que um homem vivo comete de vez em "
+      + "quando.\n\n"
+      + "Ele não precisa alcançar você.\n\n"
+      + "Basta continuar andando.\n\n"
+      + "O ferro.\n\n"
+      + "Kárr usa mais ferro do que você gostaria de ver.\n\n"
+      + "Elmo. Cota de malha. Lâmina.\n\n"
+      + "Golpes fracos vão escorrer dele como chuva num telhado.\n\n"
+      + "Se quer feri-lo, bata como se realmente quisesse matá-lo.\n\n"
+      + "O fogo.\n\n"
+      + "O ferro deixa você feri-lo.\n\n"
+      + "O fogo deixa fazer isso mais rápido.\n\n"
+      + "Não basta para queimá-lo.\n\n"
+      + "Basta para que ele deixe de ser tão difícil de matar.\n\n"
+      + "Leve um pouco com você, se puder.\n\n"
+      + "Mais uma coisa.\n\n"
+      + "Kárr não é o único lá embaixo que pode se levantar.\n\n"
+      + "O que um draugr mata nem sempre continua morto.\n\n"
+      + "Se entrar na câmara dele, não pense que, vencendo Kárr, você vai ficar "
+      + "sozinho.",
   },
   "lore.title.blackannis": {
     en: "Dane Hills — 1794",
     pl: "Dane Hills — 1794",
     es: "Dane Hills — 1794",
+    pt: "Dane Hills — 1794",
   },
   /* The chronicle. Same build as Kárr's: a page told in beats, ending in the
    * three things it promises about the fight — and all three are stats in
@@ -1066,11 +1317,44 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Es rápida. Tan rápida como el de la gorra roja, y a él nadie lo ha dejado atrás.\n\n"
       + "No lleva hierro, así que cada golpe pesado cuenta entero.\n\n"
       + "Y cede ante la piedra. Excavó esa arenisca con las uñas, y fue la piedra la que la tapó.",
+    pt: "As Dane Hills ficam a duas milhas a oeste de Leicester.\n\n"
+      + "Antes era um descampado: colinas baixas de arenito, tojo e uma "
+      + "caverna.\n\n"
+      + "Chamavam-na de Bower.\n\n"
+      + "Um carvalho podado crescia de uma fenda na rocha, bem acima da "
+      + "entrada.\n\n"
+      + "Diziam que ela ficava sentada nos galhos, esperando.\n\n"
+      + "Que tinha cavado a caverna com as próprias unhas.\n\n"
+      + "Que seus uivos se ouviam a milhas de distância.\n\n"
+      + "E que isso era uma boa notícia, porque dava tempo de trancar a porta.\n\n"
+      + "As casas da região eram construídas com janelas muito pequenas.\n\n"
+      + "Isso é verdade e dá para conferir até hoje.\n\n"
+      + "O motivo, não.\n\n"
+      + "Toda Segunda-feira de Páscoa, o prefeito de Leicester saía a cavalo "
+      + "pelos campos.\n\n"
+      + "Arrastavam um gato morto embebido em anis da gruta dela até a porta "
+      + "dele.\n\n"
+      + "Fizeram isso por cento e setenta anos, e ninguém anotou por quê.\n\n"
+      + "Há duas histórias sobre quem ela era.\n\n"
+      + "Na primeira, ela é o que sobrou de uma deusa celta, e a gruta foi "
+      + "lugar de culto antes de virar lugar de medo.\n\n"
+      + "Na segunda, chamava-se Agnes Scott, era uma eremita e morou de verdade "
+      + "numa caverna nestas colinas.\n\n"
+      + "Cem anos depois, só se lembravam de que ela ficava sentada.\n\n"
+      + "No fim, encheram a gruta de terra. Não para matá-la — para que "
+      + "parassem de falar dela.\n\n"
+      + "Três coisas.\n\n"
+      + "Ela é rápida. Tão rápida quanto aquele do gorro vermelho, e dele "
+      + "ninguém fugiu.\n\n"
+      + "Não usa ferro, então cada golpe pesado conta inteiro.\n\n"
+      + "E cede à pedra. Ela cavou aquele arenito com as unhas, e foi a pedra "
+      + "que a cobriu.",
   },
   "lore.title.orc": {
     en: "The orc lands — date unknown",
     pl: "Ziemie orków — data nieznana",
     es: "Las tierras de los orcos — fecha desconocida",
+    pt: "As terras dos orcs — data desconhecida",
   },
   /* THE ONE CHRONICLE IN THE GAME THAT IS ABOUT NOT HAVING ONE.
    *
@@ -1152,11 +1436,36 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Es el más grande que he visto, más que el Minotauro, y es más lento que los más rápidos de los suyos. Puedes zafarte de él. Ellos no te dejarán.\n\n"
       + "Lleva el hierro más pesado que nadie ha llevado en este mundo. Más que Kárr. Un golpe ligero rebotará en él.\n\n"
       + "Y cede ante la oscuridad. No porque tema la noche — sino porque toda su fuerza consiste en que mil orcos tengan algo que mirar. Quítales aquello que miran y se queda allí solo.",
+    pt: "Não tenho uma página sobre Gorak para você.\n\n"
+      + "Vou dizer isso com todas as letras, porque nunca precisei dizer antes: "
+      + "procurei, e ele não está em lugar nenhum.\n\n"
+      + "Estive em centenas de eras. Em todas elas os orcs são iguais — muitas "
+      + "tribos, uma contra a outra, e cada uma perdendo sozinha.\n\n"
+      + "Nunca houve uma era em que fossem um só povo.\n\n"
+      + "Então, quando vi uma bandeira se erguendo, fiz o que sempre faço. Fui "
+      + "mais adiante. Cem anos, depois duzentos, depois mil.\n\n"
+      + "A bandeira também não está lá.\n\n"
+      + "Nenhuma canção sobre ele, nenhum nome em lista alguma, nenhum túmulo "
+      + "onde alguém pare.\n\n"
+      + "Isso quer dizer uma de duas coisas.\n\n"
+      + "Ou Gorak fracassa sozinho.\n\n"
+      + "Ou alguém o faz fracassar.\n\n"
+      + "Não estou mandando você descobrir qual.\n\n"
+      + "Estou mandando você ser o motivo.\n\n"
+      + "Três coisas.\n\n"
+      + "Ele é o maior que já vi, maior que o Minotauro, e mais lento que os "
+      + "mais rápidos dos seus. Você pode se afastar dele. Eles não vão deixar.\n\n"
+      + "Usa o ferro mais pesado que alguém já usou neste mundo. Mais pesado "
+      + "que o de Kárr. Um golpe leve volta direto dele.\n\n"
+      + "E cede à escuridão. Não porque tema a noite — mas porque toda a sua "
+      + "força está em mil orcs terem algo para olhar. Tire deles aquilo que "
+      + "olham, e ele fica lá sozinho.",
   },
   "lore.title.minotaur": {
     en: "Knossos, Crete — c. 1400 BC",
     pl: "Knossos, Kreta — ok. 1400 p.n.e.",
     es: "Cnosos, Creta — h. 1400 a.C.",
+    pt: "Cnossos, Creta — c. 1400 a.C.",
   },
   /* Radek's page, verbatim in Polish, and the first chronicle in the chain
    * that ends on a QUESTION rather than on a fact. The redcap's ends with a
@@ -1225,17 +1534,45 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Es el mayor de todos ellos, y no el más rápido — puedes soltarte de él. En un laberinto eso no siempre ayuda tanto como suena.\n\n"
       + "Lleva hierro. No tanto como Kárr, pero bastante para que un golpe ligero le resbale.\n\n"
       + "Y cede ante el frío. Lo criaron bajo el sol de Creta y no pasó frío ni una sola vez en su vida.",
+    pt: "O Minotauro não era um monstro qualquer.\n\n"
+      + "Segundo o mito, era filho de Pasífae, esposa do rei Minos, e de um "
+      + "touro branco enviado por Poseidon. Minos o escondeu do mundo e mandou "
+      + "Dédalo construir um labirinto do qual era impossível sair.\n\n"
+      + "Por anos, Atenas teve de mandar rapazes e moças a Creta como tributo "
+      + "para a fera.\n\n"
+      + "Então chegou Teseu.\n\n"
+      + "Ariadne o ajudou, dando-lhe um novelo de linha. Teseu foi desenrolando "
+      + "o fio pelo labirinto e, depois de matar o Minotauro, conseguiu achar o "
+      + "caminho de volta.\n\n"
+      + "Mas há algo estranho aqui.\n\n"
+      + "Os gregos antigos nunca nos deixaram uma descrição do labirinto que "
+      + "combinasse com a lenda posterior de centenas de corredores.\n\n"
+      + "Alguns estudiosos ligam o mito ao enorme palácio de Cnossos — um lugar "
+      + "cheio de salas, escadas e passagens que, para um homem de uma era "
+      + "distante, podia parecer um labirinto de verdade.\n\n"
+      + "E o Minotauro?\n\n"
+      + "Talvez nunca tenha sido sobre um homem com cabeça de touro morando lá "
+      + "dentro de verdade.\n\n"
+      + "Talvez tenha bastado alguém contar a história desse jeito.\n\n"
+      + "E, por milhares de anos, todos acreditaram nele.\n\n"
+      + "Três coisas.\n\n"
+      + "Ele é o maior de todos e não é o mais rápido — você pode se afastar "
+      + "dele. Num labirinto, isso nem sempre ajuda tanto quanto parece.\n\n"
+      + "Usa ferro. Não tanto quanto Kárr, mas o bastante para um golpe leve "
+      + "escorregar.\n\n"
+      + "E cede ao frio. Foi criado sob o sol de Creta e nunca na vida sentiu "
+      + "frio.",
   },
 };
 
 const UI: Readonly<Record<string, Bundle>> = {
-  "ui.continue": { en: "continue", pl: "dalej", es: "continuar" },
-  "ui.close": { en: "close", pl: "zamknij", es: "cerrar" },
-  "ui.chronicles": { en: "CHRONICLES", pl: "KRONIKI", es: "CRÓNICAS" },
-  "ui.readAgain": { en: "read again", pl: "przeczytaj", es: "leer de nuevo" },
+  "ui.continue": { en: "continue", pl: "dalej", es: "continuar", pt: "continuar" },
+  "ui.close": { en: "close", pl: "zamknij", es: "cerrar", pt: "fechar" },
+  "ui.chronicles": { en: "CHRONICLES", pl: "KRONIKI", es: "CRÓNICAS", pt: "CRÔNICAS" },
+  "ui.readAgain": { en: "read again", pl: "przeczytaj", es: "leer de nuevo", pt: "ler de novo" },
   /* The heading over the errand in hand, in the quest log. Keyed for the same
    * reason CHRONICLES is: it sits directly above a Polish sentence. */
-  "ui.errand": { en: "ERRAND", pl: "ZLECENIE", es: "ENCARGO" },
+  "ui.errand": { en: "ERRAND", pl: "ZLECENIE", es: "ENCARGO", pt: "ENCARGO" },
 };
 
 /* ==========================================================================
@@ -1262,6 +1599,7 @@ const PAD: Readonly<Record<string, Bundle>> = {
     en: "Chronos opens this door at level {lv}.",
     pl: "Chronos otworzy te wrota na poziomie {lv}.",
     es: "Chronos abre esta puerta en el nivel {lv}.",
+    pt: "Chronos abre esta porta no nível {lv}.",
   },
   /* The errand is on his table and has not been taken. This is the only one of
    * the six the player can act on immediately, and it names where he stands. */
@@ -1269,6 +1607,7 @@ const PAD: Readonly<Record<string, Bundle>> = {
     en: "Not opened yet. Ask Chronos, down in his cellar.",
     pl: "Jeszcze nieotwarte. Spytaj Chronosa w jego piwnicy.",
     es: "Aún sin abrir. Pregunta a Chronos en su sótano.",
+    pt: "Ainda fechada. Pergunte a Chronos, no porão.",
   },
   /* The boss is down and the relic is in the pack: the echo below is an empty
    * room with a spent chest in it, and the errand finishes at the sage. */
@@ -1276,24 +1615,28 @@ const PAD: Readonly<Record<string, Bundle>> = {
     en: "He is down. What he had goes to Chronos.",
     pl: "On padł. To, co miał, idzie do Chronosa.",
     es: "Ha caído. Lo que tenía va para Chronos.",
+    pt: "Ele caiu. O que ele tinha vai para Chronos.",
   },
   /* Handed in. This is the one the old line lied about hardest. */
   "pad.errandOver": {
     en: "That errand is finished. This door stays shut.",
     pl: "To zlecenie skończone. Te wrota zostają zamknięte.",
     es: "Ese encargo terminó. Esta puerta queda cerrada.",
+    pt: "Esse encargo acabou. Esta porta continua fechada.",
   },
   /* Standing in an echo, on the pad home, with the boss still alive. */
   "pad.wayHome": {
     en: "The way home opens when he falls.",
     pl: "Droga powrotna otworzy się, gdy on padnie.",
     es: "El camino de vuelta se abre cuando él caiga.",
+    pt: "O caminho de volta se abre quando ele cair.",
   },
   /* One of the ten rifts no mission has been written for. Honest about it. */
   "pad.sealed": {
     en: "Sealed. Chronos has not read this far yet.",
     pl: "Zapieczętowane. Chronos jeszcze tu nie doczytał.",
     es: "Sellada. Chronos aún no ha leído hasta aquí.",
+    pt: "Selada. Chronos ainda não leu até aqui.",
   },
 };
 
@@ -1319,6 +1662,7 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     en: "The Circles of Calanais",
     pl: "Kręgi Calanais",
     es: "Los Círculos de Calanais",
+    pt: "Os Círculos de Calanais",
   },
   "mission.goal.calanais": {
     en: "Cross Calanais, go down into the sanctum and choose one of the five "
@@ -1327,6 +1671,8 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "kręgów żywiołów. Następnie wróć do Chronosa.",
     es: "Cruza Calanais, baja al santuario y elige uno de los cinco círculos "
       + "elementales. Luego vuelve con Chronos.",
+    pt: "Atravesse Calanais, desça ao santuário e escolha um dos cinco círculos "
+      + "de elementos. Depois volte a Chronos.",
   },
   "sage.offer.calanais": {
     en: "Before we begin in earnest, I have something for you that money does "
@@ -1358,6 +1704,16 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Cuando elijas, los demás se apagarán.\n\n"
       + "Así que no elijas el que mejor se vea.\n\n"
       + "Elige aquel con el que quieras quedarte.",
+    pt: "Antes de começarmos de verdade, tenho para você algo que dinheiro não "
+      + "compra.\n\n"
+      + "Em Calanais há pedras mais velhas que os reinos que tentaram dar nome "
+      + "a elas. Debaixo delas construíram um lugar onde cinco fogueiras ainda "
+      + "ardem.\n\n"
+      + "Fogo. Água. Relâmpago. Terra. Vento.\n\n"
+      + "Você só pode entrar em uma.\n\n"
+      + "Quando escolher, as outras se apagam.\n\n"
+      + "Então não escolha a que parece mais bonita.\n\n"
+      + "Escolha aquela com que quer viver.",
   },
   "sage.accept.calanais": {
     en: "The gate is open.\n\n"
@@ -1381,6 +1737,13 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Cruza el puente. Luego baja bajo el templo.\n\n"
       + "Verás cinco círculos.\n\n"
       + "El resto lo entenderás tú solo.",
+    pt: "O portão está aberto.\n\n"
+      + "Calanais hoje não está tão vazia quanto já foi.\n\n"
+      + "Alguém entrou antes de você.\n\n"
+      + "E, pelo visto, nunca achou o caminho de volta.\n\n"
+      + "Atravesse a ponte. Depois desça por baixo do templo.\n\n"
+      + "Você vai ver cinco círculos.\n\n"
+      + "O resto você descobre sozinho.",
   },
   "sage.decline.calanais": {
     en: "Very well.\n\n"
@@ -1395,6 +1758,10 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "No todo regalo hay que aceptarlo.\n\n"
       + "Los círculos ardían mucho antes que nosotros.\n\n"
       + "Si cambias de idea, allí estarán.",
+    pt: "Muito bem.\n\n"
+      + "Nem todo presente precisa ser aceito.\n\n"
+      + "Os círculos ardiam muito antes de nós.\n\n"
+      + "Se mudar de ideia, eles estarão lá.",
   },
   "sage.remind.calanais": {
     en: "Calanais.\n\n"
@@ -1412,6 +1779,11 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Uno será tuyo.\n\n"
       + "No me preguntes cuál. Si quisiera elegir por ti, no te habría dado a "
       + "elegir.",
+    pt: "Calanais.\n\n"
+      + "Desça sob as pedras e encontre cinco círculos.\n\n"
+      + "Um será seu.\n\n"
+      + "Não me pergunte qual escolher. Se eu quisesse escolher por você, não "
+      + "teria lhe dado escolha.",
   },
   /* Said on the stair, on the cellar side of the jump, every descent. He names
    * the five and refuses to recommend one — the five are a MENU, and the line
@@ -1449,6 +1821,17 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Un sitio para ti.\n\n"
       + "Cuando entres, los otros cuatro se apagarán.\n\n"
       + "Y ya nunca volverán a encenderse para ti.",
+    pt: "Agora você os vê.\n\n"
+      + "Não chegue perto ainda.\n\n"
+      + "Dê a volta neles.\n\n"
+      + "Olhe para o que está queimando.\n\n"
+      + "O vermelho lembra o fogo. O azul — a água. O amarelo não tem paciência "
+      + "para o silêncio. O marrom se agarra à terra. E o pálido... está sempre "
+      + "tentando ir embora.\n\n"
+      + "Cinco elementos.\n\n"
+      + "Um lugar para você.\n\n"
+      + "Quando você entrar, os outros quatro se apagam.\n\n"
+      + "E nunca mais vão acender para você.",
   },
   /* Said standing in the circle, the instant it takes. Not a reward speech —
    * the reward speech is at his table. This is the door closing.
@@ -1476,6 +1859,12 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Ahora sabes por qué te hice elegir solo.\n\n"
       + "Vuelve a mí.\n\n"
       + "Quiero ver qué has hecho con lo que te di.",
+    pt: "...\n\n"
+      + "Sente isso?\n\n"
+      + "Bom.\n\n"
+      + "Agora você sabe por que eu o fiz escolher sozinho.\n\n"
+      + "Volte até mim.\n\n"
+      + "Quero ver o que você fez com o que eu lhe dei.",
   },
   "sage.handIn.calanais": {
     en: "I see it.\n\n"
@@ -1506,6 +1895,15 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Busca lo que hay debajo.\n\n"
       + "Y ahora, basta de regalos.\n\n"
       + "Tengo otra puerta para ti.",
+    pt: "Estou vendo.\n\n"
+      + "Nada mal.\n\n"
+      + "Erga a Torre Alquímica na sua ilha. Lá você vai aprender a levar esse "
+      + "elemento adiante — para pontas de flecha, para fragmentos, para o que "
+      + "mais nascer dele.\n\n"
+      + "Só lembre: um elemento não tenta furar a armadura.\n\n"
+      + "Ele procura o que está por baixo dela.\n\n"
+      + "E agora, chega de presentes.\n\n"
+      + "Tenho outro portão para você.",
   },
   /* Reached by walking down to the sanctum and coming back up without standing
    * in anything — the errand has no relic to lose, so this is the only way to
@@ -1521,11 +1919,15 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     es: "Bajaste hasta debajo del templo y volviste sin nada.\n\n"
       + "Los círculos siguen ardiendo.\n\n"
       + "La próxima vez, entra en uno.",
+    pt: "Você desceu até debaixo do templo e voltou sem nada.\n\n"
+      + "Os círculos continuam ardendo.\n\n"
+      + "Da próxima vez, entre em um.",
   },
   "lore.title.calanais": {
     en: "The Circles of Calanais",
     pl: "Kręgi Calanais",
     es: "Los Círculos de Calanais",
+    pt: "Os Círculos de Calanais",
   },
   "lore.calanais": {
     en: "They raised the stones on Lewis before Egypt cut its first block.\n\n"
@@ -1553,6 +1955,15 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Bajo el círculo hay una cámara, y en la cámara cinco fuegos que nadie "
       + "encendió.\n\n"
       + "No se han apagado.",
+    pt: "Ergueram as pedras em Lewis antes que o Egito cortasse o seu primeiro "
+      + "bloco.\n\n"
+      + "Ninguém anotou por quê.\n\n"
+      + "Os que vieram depois diziam que as pedras eram gigantes que não "
+      + "quiseram se ajoelhar e, por isso, ficaram de pé.\n\n"
+      + "Diziam que, no solstício de verão, algo caminha pela alameda.\n\n"
+      + "Sob o círculo há uma câmara, e na câmara cinco fogos que ninguém "
+      + "acendeu.\n\n"
+      + "Não se apagaram.",
   },
   /* The refusal when a character already holds the element they walked into.
    * Unreachable today — one errand, one element — and cheap insurance for the
@@ -1561,11 +1972,13 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     en: "you already carry this one",
     pl: "ten już w tobie jest",
     es: "ya llevas éste",
+    pt: "este já está em você",
   },
   "mission.title.redcap": {
     en: "The Cap of Hermitage",
     pl: "Czapka z Hermitage",
     es: "El gorro de Hermitage",
+    pt: "O Gorro de Hermitage",
   },
   "mission.goal.redcap": {
     en: "Beat the Redcap in the Hermitage echo and bring his bloodied cap to "
@@ -1574,11 +1987,14 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Chronosowi.",
     es: "Vence al Redcap en el eco de Hermitage y lleva su gorro ensangrentado "
       + "a Chronos.",
+    pt: "Vença o Redcap no eco de Hermitage e leve o gorro ensanguentado dele "
+      + "para Chronos.",
   },
   "mission.title.draugr": {
     en: "The Helm in the Howe",
     pl: "Hełm w kurhanie",
     es: "El yelmo en el túmulo",
+    pt: "O Elmo no Túmulo",
   },
   "mission.goal.draugr": {
     en: "Beat Kárr the Old in the howe under Haramsey and bring his helm to "
@@ -1587,26 +2003,34 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "Chronosowi.",
     es: "Vence a Kárr el Viejo en el túmulo bajo Haramsey y lleva su yelmo a "
       + "Chronos.",
+    pt: "Vença Kárr, o Velho, no túmulo sob Haramsey e leve o elmo dele para "
+      + "Chronos.",
   },
   "mission.title.blackannis": {
     en: "The Effigy in the Oak",
     pl: "Kukła w dębie",
     es: "El muñeco en el roble",
+    pt: "A Efígie no Carvalho",
   },
   "mission.goal.blackannis": {
     en: "Find Black Annis' cave under the Dane Hills, beat the hag, and bring the effigy to Chronos.",
     pl: "Odnajdź jaskinię Black Annis pod Dane Hills, pokonaj wiedźmę i przynieś kukłę Chronosowi.",
     es: "Encuentra la cueva de Black Annis bajo las Dane Hills, vence a la bruja y lleva el muñeco a Chronos.",
+    pt: "Encontre a caverna de Black Annis sob as Dane Hills, vença a bruxa e "
+      + "leve a efígie para Chronos.",
   },
   "mission.title.minotaur": {
     en: "The Ring in His Ear",
     pl: "Kolczyk w jego uchu",
     es: "El aro en su oreja",
+    pt: "O Brinco na Orelha Dele",
   },
   "mission.goal.minotaur": {
     en: "Find the Minotaur in the labyrinth on Crete and beat the beast that for centuries let nobody find the way back.",
     pl: "Odnajdź Minotaura w labiryncie na Krecie i pokonaj bestię, która przez wieki nie pozwalała nikomu odnaleźć drogi powrotnej.",
     es: "Encuentra al Minotauro en el laberinto de Creta y vence a la bestia que durante siglos no dejó a nadie encontrar el camino de vuelta.",
+    pt: "Encontre o Minotauro no labirinto de Creta e vença a fera que, por "
+      + "séculos, não deixou ninguém achar o caminho de volta.",
   },
   /* The only mission title in the set that names no object and no place. The
    * five before it are a cap, a helm, an effigy, an earring and a circle of
@@ -1617,11 +2041,14 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     en: "The Banner Nobody Wrote Down",
     pl: "Sztandar, którego nikt nie zapisał",
     es: "El estandarte que nadie anotó",
+    pt: "A Bandeira Que Ninguém Registrou",
   },
   "mission.goal.orc": {
     en: "Find Gorak, chieftain of the orcs, and beat him before he can gather an army able to threaten the lands around him.",
     pl: "Odnajdź Goraka, wodza orków, i pokonaj go, zanim zdoła zebrać armię zdolną zagrozić okolicznym krainom.",
     es: "Encuentra a Gorak, caudillo de los orcos, y véncelo antes de que logre reunir un ejército capaz de amenazar las tierras vecinas.",
+    pt: "Encontre Gorak, o chefe dos orcs, e vença-o antes que ele reúna um "
+      + "exército capaz de ameaçar as terras ao redor.",
   },
   /* The second half of every errand, and the half nothing on screen used to
    * say. The goal line is written for a player who has not been down yet
@@ -1633,6 +2060,7 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     en: "It is in your pack. Take it to Chronos, in the cellar.",
     pl: "Masz to w plecaku. Zanieś to Chronosowi, do piwnicy.",
     es: "Lo llevas en la mochila. Llévaselo a Chronos, al sótano.",
+    pt: "Está na sua mochila. Leve para Chronos, no porão.",
   },
   /* And the same sentence for the half-minute between the kill and the loot.
    * Etap 46 put the relic on the body, so `complete` no longer means "it is
@@ -1644,6 +2072,7 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     en: "It is on his body. Loot him, then take it to Chronos.",
     pl: "Leży na jego ciele. Obszukaj go i zanieś to Chronosowi.",
     es: "Está en su cuerpo. Regístralo y llévaselo a Chronos.",
+    pt: "Está no corpo dele. Saqueie-o e leve para Chronos.",
   },
 };
 

@@ -35,6 +35,7 @@ import { CHROME, panelFrame, popupFrame, raisedBox, sunkenBox, slotCell, buttonB
 import { NO_DOCK, dockScroll, dockOverflow, reportDockStack, type DockLayout } from "./dock.ts";
 import type { Rect } from "./mobile.ts";
 import { drawResizeArrows } from "./icons.ts";
+import { audioSettings, setSfxVolume, setAmbientVolume, setVibration, canVibrate, buzz, sfx } from "../audio.ts";
 
 /**
  * Window kinds that may take the phone's side strip.
@@ -80,7 +81,7 @@ export function stripCandidate(windows: readonly PanelWindow[]): PanelWindow | u
 }
 
 export type PanelKind =
-  | "build" | "skills" | "equip" | "bag" | "quest"
+  | "build" | "skills" | "equip" | "bag" | "quest" | "options"
   | "forge" | "tower" | "loot" | "shop" | "stash" | "tasks" | "wardrobe"
   /** Morgan's counter in Bonetown: the one place coins change denomination. */
   | "exchange"
@@ -1122,6 +1123,7 @@ export function drawPanels(
       case "wardrobe": drawWardrobe(p); break;
       case "exchange": drawExchange(p); break;
       case "test": drawTest(p); break;
+      case "options": drawOptions(p); break;
       default: break;
     }
     if (clipDock && !(overflowing && sheet)) {
@@ -2844,6 +2846,80 @@ function drawWardrobe(p: PanelInput): void {
 }
 
 /* ---------------- Morgan's counter (gold ⇄ platinum) ---------------- */
+
+/**
+ * OPTIONS (Etap 73): the effects volume, the ambience volume, and whether the
+ * phone buzzes. Device settings, not character ones — they live beside the
+ * browser, not in the save, and follow nobody to another machine.
+ *
+ * Each volume is a row of ten cells between a minus and a plus; tapping a
+ * cell jumps straight to it, which is what a thumb wants. Vibration shows
+ * "n/a" where the browser has no motor to offer (desktops, iPhones).
+ */
+function drawOptions(p: PanelInput): void {
+  const { hud } = p;
+  const { ctx, scale: S } = hud;
+  const st = audioSettings();
+  const w = 230 * S;
+  const rowH = 28 * S;
+  const h = 18 * S + rowH * 3 + 8 * S;
+  const { x, y } = anchor(p, w, h);
+  if (!goldPanel(p, x, y, w, h, "OPTIONS")) return;
+  const bw = 16 * S;
+  const bh = 15 * S;
+  const segs = 10;
+  const segW = 5 * S;
+  const segGap = 1 * S;
+  const barW = segs * segW + (segs - 1) * segGap;
+  const bx0 = x + w - 10 * S - (bw * 2 + barW + 8 * S);
+  let py = y + 18 * S;
+  const volume = (label: string, v: number, set: (n: number) => void): void => {
+    const by = py + (rowH - bh) / 2;
+    hudText(hud, label, x + 10 * S, py + rowH / 2, 7.5 * S, "#f3eedd", "left", true);
+    const step = (bx: number, text: string, next: number): void => {
+      const can = next !== v;
+      const hov = can && hovering(p, bx, by, bw, bh);
+      buttonBox(ctx, bx, by, bw, bh, S, {
+        face: can ? "rgba(30,44,30,.95)" : "rgba(48,48,48,.7)", accent: can ? "#caa15a" : undefined, hover: hov,
+      });
+      hudText(hud, text, bx + bw / 2, by + bh / 2, 8 * S, can ? "#ffe9a8" : "#8a8070", "center", true);
+      if (can) p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => set(next) });
+    };
+    step(bx0, "-", Math.max(0, Math.round(v * 10 - 1) / 10));
+    const sx0 = bx0 + bw + 4 * S;
+    const lit = Math.round(v * segs);
+    for (let i = 0; i < segs; i++) {
+      const sx = sx0 + i * (segW + segGap);
+      ctx.fillStyle = i < lit ? "#caa15a" : "rgba(255,255,255,.12)";
+      ctx.fillRect(Math.round(sx), Math.round(by + 3 * S), Math.max(1, Math.round(segW)), Math.round(bh - 6 * S));
+      const level = (i + 1) / segs;
+      p.hotspots.push({ x: sx, y: by, w: segW + segGap, h: bh, fn: () => set(level) });
+    }
+    step(sx0 + barW + 4 * S, "+", Math.min(1, Math.round(v * 10 + 1) / 10));
+    py += rowH;
+  };
+  volume("Sound effects", st.sfx, (n) => { setSfxVolume(n); sfx("coins"); });
+  volume("Ambience", st.ambient, (n) => setAmbientVolume(n));
+  const can = canVibrate();
+  const tw = 46 * S;
+  const tx = x + w - 10 * S - tw;
+  const ty = py + (rowH - bh) / 2;
+  hudText(hud, "Vibration", x + 10 * S, py + rowH / 2, 7.5 * S, can ? "#f3eedd" : "#8a8070", "left", true);
+  const on = can && st.vibration;
+  buttonBox(ctx, tx, ty, tw, bh, S, {
+    face: on ? "rgba(202,162,58,.92)" : can ? "rgba(30,44,30,.95)" : "rgba(48,48,48,.7)",
+    accent: can ? "#caa15a" : undefined, hover: can && hovering(p, tx, ty, tw, bh),
+  });
+  hudText(hud, can ? (st.vibration ? "ON" : "OFF") : "n/a", tx + tw / 2, ty + bh / 2, 7 * S,
+    on ? "#201a10" : can ? "#ffe9a8" : "#8a8070", "center", true);
+  if (can) {
+    p.hotspots.push({ x: tx, y: ty, w: tw, h: bh, fn: () => {
+      const next = !st.vibration;
+      setVibration(next);
+      if (next) buzz(40);
+    } });
+  }
+}
 
 /**
  * The money changer's window.

@@ -446,6 +446,14 @@ export interface Monster {
    *  body-blocked — half the pack circles left, half right, so they surround
    *  the player instead of queueing in a single line behind each other. */
   orbit: 1 | -1;
+  /** Rolled once at spawn: the rare, stronger variant (Etap 73). */
+  elite?: boolean;
+  /** Seconds until this creature next says something (Etap 73). */
+  voiceT?: number;
+  /** A coward cries out once as it breaks, not every frame after. */
+  fleeSaid?: boolean;
+  /** A healer's own clock (Etap 73). */
+  healCd?: number;
   /** The tile this creature is posted to: the square the map's author put it
    *  on, or a treasure chest it guards. A slain creature respawns back here. */
   guard?: { tx: number; ty: number };
@@ -526,6 +534,8 @@ export interface Npc {
   moving: boolean;
   /** Seconds left of "someone is talking to me": stand still, face them. */
   talk: number;
+  /** Seconds until this townsperson next calls out (Etap 73). */
+  voiceT?: number;
 }
 
 /**

@@ -14,6 +14,8 @@ import type { World, Monster, MonsterKind } from "../world/types.ts";
 import type { ItemKind } from "../items.ts";
 import { elementDefenseProfile } from "../systems/elements.ts";
 import type { Resistances, Element, Tier } from "../systems/elements.ts";
+import { ELITE_PREFIX, makeElite, rollElite } from "../systems/elite.ts";
+import { isFleeing, tickHealer } from "../systems/mobTactics.ts";
 
 /** A weighted loot entry: item, drop chance, and min/max quantity. */
 export interface LootEntry {
@@ -68,6 +70,12 @@ export function mobName(kind: string): string {
    * times a fight, and there "GoblinLegionary" is simply wrong. */
   const words = kind.replace(/([a-z])([A-Z])/g, "$1 $2");
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** The name over a live creature's head: its kind's, with an elite's title
+ * in front (Etap 73). Corpses and the kill ledger keep the plain name. */
+export function mobLabel(m: Monster): string {
+  return m.elite ? `${ELITE_PREFIX} ${mobName(m.kind)}` : mobName(m.kind);
 }
 
 export interface MonsterDef {
@@ -1457,6 +1465,9 @@ function pushMonster(
     aggroT: 0,
     orbit: wrnd(0, 1) < 0.5 ? 1 : -1,
   });
+  // one spawn in four hundred comes back as an elite (Etap 73)
+  const fresh = w.monsters[w.monsters.length - 1];
+  if (rollElite(fresh.kind)) makeElite(fresh);
   return true;
 }
 
@@ -1705,6 +1716,23 @@ export function updateMonsters(
     const provoked = d < sight || m.aggroT > 0;
     m.engaged = provoked;
     const rd = MONSTER_DEFS[m.kind].ranged;
+
+    // ---- a healer tends the worst-hurt of its own (Etap 73) ----
+    // On its own clock, costing it no swing and no step.
+    tickHealer(w, m, dt, provoked);
+
+    // ---- a coward below its nerve runs (Etap 73) ----
+    // Ahead of the spells and the melee on purpose: a creature that is
+    // running does neither, and one with its back to a wall just stands.
+    if (provoked && isFleeing(m)) {
+      let budget = monsterSpeed(m) * dt;
+      for (let step = 0; step < 4 && budget > 0; step++) {
+        budget = glideWalker(m, budget);
+        if (budget <= 0) break;
+        if (!retreatStep(m, occ)) break;
+      }
+      continue;
+    }
 
     // ---- the big attacks, ahead of everything else ----
     // This block MUST stay above the melee branch below it, which ends in an

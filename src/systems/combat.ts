@@ -5,13 +5,16 @@ import {
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
   SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S, MIN_ELEMENTAL_DAMAGE, MIN_DAMAGE_TO_MONSTER,
 } from "../config.ts";
-import { beep } from "../audio.ts";
+import { sfx, buzz } from "../audio.ts";
 import { aegisCut, clearBuffsOnDeath, furyMult } from "./buffs.ts";
 import { addFloat } from "../fx.ts";
 import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import type { Element } from "./elements.ts";
 import { nextEntityId } from "../world/entities.ts";
-import { MONSTER_DEFS, rollLoot, monsterResist } from "../entities/monsters.ts";
+import { MONSTER_DEFS, rollLoot, monsterResist, mobLabel } from "../entities/monsters.ts";
+import { splash, pool, bloodOf } from "../gfx/blood.ts";
+import { mobExpMult, mergeLoot } from "./elite.ts";
+import { logServer } from "./chat.ts";
 import { missionByEcho, wantsRelic, relicTaken, extractBound } from "./missions.ts";
 import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, bagCount, newContainer, contentsOf } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
@@ -94,7 +97,7 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
   if (dmg <= 0) {
     // the classic Tibia whiff — the swing lands for nothing
     addFloat(world, m.x, m.y - 32, "poof", "#9aa0a8");
-    beep(140, 0.05, "sine", 0.03);
+    sfx("whiff");
     return false;
   }
   m.hp -= dmg;
@@ -102,7 +105,8 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
   addFloat(world, m.x, m.y - 32, String(dmg), "#ffe27a");
-  beep(160, 0.07, "square", 0.05);
+  sfx("hit");
+  splash(world, m.x, m.y, bloodOf(m.kind));
   if (m.hp <= 0) {
     killMonster(world, p, m);
     return true;
@@ -140,7 +144,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
     color: arrowTint(arrowKind),
   });
   if (m.x < p.x) p.face = -1; else p.face = 1;
-  beep(430, 0.06, "triangle", 0.045, -120);
+  sfx("bow");
   // accuracy first, Tibia-style: the arrow is spent either way, a miss trains
   // Distance once, a hit trains it DOUBLE (as in the real skill system)
   if (Math.random() > distanceHitChance(p.eq)) {
@@ -159,6 +163,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
     : applyMonsterArmor(m, raw);
   m.hp -= dmg;
   markBloodHit(); // you drew blood — Shielding may train for the next minute
+  splash(world, m.x, m.y, bloodOf(m.kind));
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
   addFloat(world, m.x, m.y - 32, String(dmg), el ? ELEMENT_COLOR[el] : "#bfe08a");
@@ -194,7 +199,7 @@ export function shootDummy(world: World, p: Player, s: Structure, arrowKind: Ite
   addFloat(world, c.x, s.ty * TILE - 8, String(dmg), "#bfe08a");
   markBloodHit(); // a dummy still counts as swinging at something
   addSkillXp("dist", 2 * DUMMY_TIER_RATE[0], (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
-  beep(430, 0.06, "triangle", 0.045, -120);
+  sfx("bow");
   return true;
 }
 
@@ -213,7 +218,7 @@ export function hitDummy(world: World, p: Player, s: Structure): void {
   // blocking two creatures at once, and a post in the ground is exactly one.
   const shield = DUMMY_TIER_SHIELD[dt];
   if (shield > 0) addShieldXp(shield, (t) => addFloat(world, p.x, p.y - 76, t, "#7dff9e"));
-  beep(220, 0.05, "triangle", 0.05);
+  sfx("knock");
 }
 
 /** Grant xp and process any level-ups. */
@@ -227,17 +232,20 @@ export function grantExp(world: World, p: Player, exp: number): void {
     refreshDerived(p);
     p.hp = p.maxhp;
     addFloat(world, p.x, p.y - 48, "LEVEL UP!", "#7dff9e");
-    beep(440, 0.1, "square", 0.06);
+    sfx("levelup");
+    buzz([30, 40, 30]);
   }
 }
 
 /** Resolve a monster death: xp, level-ups, a lootable corpse, schedule respawn. */
 export function killMonster(world: World, p: Player, m: Monster): void {
   const d = MONSTER_DEFS[m.kind];
-  beep(220, 0.18, "sawtooth", 0.05, -160);
-  grantExp(world, p, d.exp);
+  sfx("kill");
+  grantExp(world, p, d.exp * mobExpMult(m));
 
-  const { items, gold } = rollLoot(m.kind);
+  const firstRoll = rollLoot(m.kind);
+  // an elite's body is searched twice (Etap 73)
+  const { items, gold } = m.elite ? mergeLoot(firstRoll, rollLoot(m.kind)) : firstRoll;
   /* THE RELIC GATE. A mission's relic is not ordinary loot: it exists ONCE per
    * character, and everything here is in service of keeping that true.
    *
@@ -319,6 +327,11 @@ export function killMonster(world: World, p: Player, m: Monster): void {
    * and runs whatever the player is doing; `onTaskKill` advances only the
    * errands actually in hand, which is what makes taking one from Grizelda
    * the moment that matters. */
+  pool(world, m.x, m.y, bloodOf(m.kind));
+  if (m.elite) {
+    logServer(`You slew an ${mobLabel(m)}.`, "#ffd23a");
+    addFloat(world, m.x, m.y - 44, "ELITE", "#ffd23a");
+  }
   recordKill(m.kind);
   onTaskKill(m.kind);
 
@@ -494,7 +507,9 @@ export function hurtPlayer(
     const shieldWon = fromShield > fromArmor;
     addFloat(world, p.x + 16, p.y - 20, shieldWon ? "puff" : "spark", shieldWon ? "#9ec8ff" : "#d8d2c0");
   }
-  beep(90, 0.1, "sawtooth", 0.05);
+  sfx(dmg > 0 ? "hurt" : "block");
+  if (dmg > 0 && !elemental) splash(world, p.x, p.y, "red");
+  if (dmg > 0 && dmg >= p.maxhp * 0.15) buzz(35);
   if (p.hp <= 0) {
     p.hp = 0;
     p.dead = true;
@@ -508,7 +523,8 @@ export function hurtPlayer(
     // Fury gone wrong.
     clearBuffsOnDeath(p.buffs);
     applyDeathPenalty(world, p);
-    beep(120, 0.5, "sawtooth", 0.07, -90);
+    sfx("death");
+    buzz([90, 60, 180]);
     return true;
   }
   return false;

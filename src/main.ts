@@ -16,7 +16,7 @@ import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
-import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName, tickMonsterSlows } from "./entities/monsters.ts";
+import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName, mobLabel, tickMonsterSlows } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster, grantExp, setRelicNotice } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
@@ -70,7 +70,10 @@ import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellF
 import { tickAuraFx, drawAuras, drawFlares, addFlare } from "./gfx/auraFx.ts";
 import { lifePercent, lifeTrail, sweepLifeTrails, drawLifeBar, drawNameTag, drawNpcTag, NAME_GAP } from "./gfx/lifeBar.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
-import { unlockAudio, beep } from "./audio.ts";
+import { unlockAudio, beep, sfx, setAmbient, ambientFor } from "./audio.ts";
+import { drawBlood, tickBlood } from "./gfx/blood.ts";
+import { tickVoices } from "./systems/voices.ts";
+import { drawEliteAura, mobDamageMult } from "./systems/elite.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { planSwap, refused, freeSlots } from "./systems/loadout.ts";
@@ -717,7 +720,7 @@ const act: PanelActions = {
       if (!spend()) return;
       P.fedS += def.food;
       flash(["Munch.", "Gulp.", "Mmmh."][rndi(0, 2)], "#e8dcc0");
-      beep(360, 0.08, "sine", 0.05, 60);
+      sfx("eat");
       return;
     }
     if (def.testLevel) {
@@ -855,7 +858,7 @@ const act: PanelActions = {
     const res = handInTask(P, id, (xp) => grantExp(cw(), P, xp));
     if (res) {
       flash(`+${res.reward.points} TP · ${res.title}`, "#9fe8a8");
-      beep(560, 0.18, "square", 0.06, 140);
+      sfx("reward");
     } else {
       /* Two ways to get here and they need different advice: an unfinished
        * errand, or a finished one whose purse has nowhere to go. */
@@ -1176,7 +1179,7 @@ function resolveThrowTarget(tx: number, ty: number): { x: number; y: number; san
 function sink(kind: ItemKind, n: number, x: number, y: number): void {
   addFloat(cw(), x, y - 12, "splash", "#8ecfff");
   flash(`${n} ${ITEMS[kind].name} sank`, "#8ecfff");
-  beep(150, 0.18, "sine", 0.05, -90);
+  sfx("splash");
 }
 
 /**
@@ -1195,7 +1198,7 @@ function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }, co
    * shoved through arrives WITH what is in it and never merges. */
   placeOnGround(dest, kind, n, gx, gy, { items: contents });
   flash(`whoosh — ${n} ${ITEMS[kind].name} through the portal!`, "#8ab6ff");
-  beep(600, 0.12, "sine", 0.05, -220);
+  sfx("portal");
 }
 
 /** The portal (if any) whose swirl covers world point (x,y). A dormant pad is
@@ -1792,7 +1795,7 @@ function doSmelt(kind: ItemKind): void {
   giveMaterial("steel", y.steel);
   const parts = [y.iron > 0 ? `${y.iron} iron` : "", y.steel > 0 ? `${y.steel} steel` : ""].filter(Boolean);
   flash(`smelted → ${parts.join(" + ")}`, "#b9e07f");
-  beep(180, 0.16, "sawtooth", 0.05, 60);
+  sfx("forge");
 }
 
 /** Backpack first, then the chests, then the floor — never nowhere. */
@@ -2130,7 +2133,7 @@ function doBuy(kind: ItemKind): void {
   // and a purse of loose change is exactly when that happens
   if (!takeGold(P.bag, entry.buy)) { flash("not enough gold", "#d96a5a"); return; }
   if (addItem(P.bag, kind, 1) > 0) { giveGold(P.bag, entry.buy); flash("bag full"); return; }
-  beep(440, 0.1, "sine", 0.05);
+  sfx("coins");
 }
 function doSell(kind: ItemKind): void {
   if (!ui.npc) return;
@@ -2149,7 +2152,7 @@ function doSell(kind: ItemKind): void {
     return;
   }
   giveGold(P.bag, entry.sell);
-  beep(360, 0.1, "sine", 0.05);
+  sfx("coins");
 }
 
 /* ---------------- input wiring ---------------- */
@@ -2220,7 +2223,7 @@ function lookAtTile(at: Vec): void {
    * meant", and it matters: a coin lying at the foot of a chest should be
    * the coin, and a rat standing in front of the chest should be the rat. */
   const m = nearestHit(world.monsters, at, (x) => x.hp > 0);
-  if (m) { logServer(`You see ${mobName(m.kind)} — ${Math.ceil(m.hp)}/${m.maxhp} hp.`); return; }
+  if (m) { logServer(`You see ${mobLabel(m)} — ${Math.ceil(m.hp)}/${m.maxhp} hp.`); return; }
   const n = nearestHit(world.npcs, at);
   if (n) { logServer(`You see ${n.name}.`); return; }
   const gi = nearestHit(world.ground, at);
@@ -2325,7 +2328,7 @@ function runCoinExchange(to: "goldCoin" | "platinumCoin", n: number): void {
   }
   if (!exchangeCoins(P.bag, to, n)) { flash("no room in bag", "#d96a5a"); return; }
   flash(to === "platinumCoin" ? `+${n} platinum` : `+${n * 100} gold`, "#ffe9a8");
-  beep(440, 0.06, "sine", 0.04);
+  sfx("coins");
 }
 
 function openContextMenu(sx: number, sy: number): void {
@@ -2394,7 +2397,7 @@ function openContextMenu(sx: number, sy: number): void {
    * and the menu acts. */
   const m = nearestHit(world.monsters, at, (x) => x.hp > 0);
   if (m) {
-    entries.push({ verb: "attack", label: `Attack ${mobName(m.kind)}`, enabled: true,
+    entries.push({ verb: "attack", label: `Attack ${mobLabel(m)}`, enabled: true,
       run: () => { P.target = { kind: "mob", id: m.id }; P.dest = null; P.gather = null; } });
   }
   const c = nearestHit(world.corpses, at);
@@ -3241,7 +3244,7 @@ function openTreasure(s: Structure): void {
     parts.push(n > 1 ? `${n} ${ITEMS[kind].name}` : ITEMS[kind].name);
   }
   flash(`You have found ${parts.join(" and ")}.`, "#ffe9a8");
-  beep(660, 0.18, "sine", 0.06, 220);
+  sfx("reward");
   saveGame(game);
 }
 
@@ -3524,7 +3527,7 @@ function talkToSage(): void {
         if (cur.relic) removeAcross([P.bag], cur.relic, 1);
         missionHandedIn(cur.id, P.level);
         grantExp(cw(), P, cur.rewardExp);
-        beep(660, 0.2, "sine", 0.06, 220);
+        sfx("reward");
         saveGame(game);
         logServer(`${t(`mission.title.${cur.id}`, lang())}: ${cur.rewardExp} xp`, "#b9a6d8");
         /* He thanks you and then, without being asked again, moves on to
@@ -4388,7 +4391,7 @@ function checkAttuneCircles(world: World): void {
     relicTaken(md.id, P.level);
     applyMissionPads(game.worlds, P.level);
     addFloat(world, P.x, P.y - 64, ELEMENT_LABEL[nd.el], ELEMENT_COLOR[nd.el]);
-    beep(660, 0.28, "sine", 0.06, 220);
+    sfx("chime");
     saveGame(game);
     sageSays("sage.attuned.calanais", { then: () => {} });
     return;
@@ -4649,7 +4652,7 @@ function update(dt: number): void {
       if (isSafeTile(world, P.tx, P.ty)) return;
       const d = MONSTER_DEFS[m.kind];
       const roll = ranged && d.ranged ? d.ranged.dmg : d.dmg;
-      hurtPlayer(world, P, rndi(roll[0], roll[1]));
+      hurtPlayer(world, P, Math.round(rndi(roll[0], roll[1]) * mobDamageMult(m)));
     });
     // respawns — never on top of the player (Tibia: nothing spawns on screen);
     // if the whole area is camped, the respawn retries a few seconds later.
@@ -4766,6 +4769,9 @@ function update(dt: number): void {
 
   tickRegrowth(world, dt, P.x, P.y, true);
   tickNpcTalk(world);
+  tickVoices(world, dt, P.x, P.y);
+  tickBlood(dt);
+  setAmbient(ambientFor(world.key));
   updateNpcs(world, dt, P.x, P.y);
   tickProximityPanels(dt);
   checkPortals();
@@ -5428,6 +5434,8 @@ function render(): void {
     vctx.fillText(`${gt.lv}`, Math.round(gx) - 6, Math.round(gy) - 10);
   }
 
+  // blood lies flat on the ground, under everything that stands on it (Etap 73)
+  drawBlood(vctx, world, cam.x, cam.y);
   // gather nodes: trees and rocks (sorted by y with actors below)
   type Drawable = { y: number; fn: () => void };
   const drawList: Drawable[] = [];
@@ -5659,6 +5667,7 @@ function render(): void {
       // his name, and under it — where a creature carries its life — that he
       // is an NPC. No bar: he has no life to show. See gfx/lifeBar.ts.
       drawNpcTag(vctx, n.x - cam.x, n.y - cam.y - spr.height, n.name);
+      sayBubble(n.id, n.x, n.y - spr.height - 30);
     } });
   }
   // monsters
@@ -5671,10 +5680,11 @@ function render(): void {
     const spr = walk ?? m.spr;
     drawList.push({ y: m.y, fn: () => {
       drawShadow(m.x, m.y, MOB_SHADOW[m.kind]);
+      if (m.elite) drawEliteAura(vctx, m.x - cam.x, m.y - cam.y, waveT);
       vctx.globalAlpha = m.hurtT > 0 && Math.sin(m.hurtT * 60) > 0 ? 0.5 : 1;
       drawSprite(spr, m.x, m.y, 1, bob);
       vctx.globalAlpha = 1;
-      nameplate(m.id, mobName(m.kind), m.x, m.y - spr.height - 9, m.hp, m.maxhp);
+      nameplate(m.id, mobLabel(m), m.x, m.y - spr.height - 9, m.hp, m.maxhp);
       if (P.target?.kind === "mob" && P.target.id === m.id) targetBox(m.x, m.y);
       // above the name now, which sits where this used to be
       sayBubble(m.id, m.x, m.y - spr.height - 26);
@@ -6081,6 +6091,21 @@ function drawSidebar(h: HudCtx, d: DockLayout): void {
   };
 
   header("minimap", "MAP");
+  /* The gear (Etap 73): OPTIONS rides on the map's own bar, left of its fold
+   * arrow — the column has no spare row, and this is where Tibia keeps its
+   * options too. Pushed after the bar's hotspot, so it wins inside its box. */
+  {
+    const r = d.blocks.minimap;
+    const gw = bar + Math.round(6 * S);
+    const gx = d.innerX + d.innerW - Math.round(16 * S) - gw;
+    const on = hasWindow("options");
+    buttonBox(ctx, gx, r.y, gw, bar, S, {
+      on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
+    });
+    drawSquareIcon(ctx, "options", gx, r.y, gw, bar, on, undefined, 0.9);
+    hotspots.push({ x: gx, y: r.y, w: gw, h: bar, fn: () => togglePanel("options") });
+    touchButtons.push({ x: gx, y: r.y, w: gw, h: bar });
+  }
   {
     const r = d.blocks.minimap;
     if (!r.collapsed) {
@@ -6621,6 +6646,20 @@ function drawDeck(): void {
     } });
     touchButtons.push({ ...lr });
 
+    /* …and OPTIONS (Etap 73), the fourth on this row: sound and vibration.
+     * A gear rather than a word — the row has spent its words already. */
+    const orr = d.opts;
+    const optOpen = hasWindow("options");
+    buttonBox(ctx, orr.x, orr.y, orr.w, orr.h, scale, {
+      on: optOpen, face: optOpen ? "rgba(202,162,58,.92)" : undefined,
+      accent: optOpen ? CHROME.goldText : undefined,
+    });
+    drawSquareIcon(ctx, "options", orr.x, orr.y, orr.w, orr.h, optOpen, undefined, 0.6);
+    hotspots.push({ x: orr.x, y: orr.y, w: orr.w, h: orr.h, fn: () => {
+      deckMenu = false;
+      togglePanel("options");
+    } });
+    touchButtons.push({ ...orr });
   }
   /* Empty slots are drawn on the deck even out of edit mode, unlike the old
    * floating HUD which hid them. A row with holes in it is a row you have to
@@ -6965,6 +7004,7 @@ function drawTouchControls(): void {
   // --- panel-button column (group "panels"), collapsible behind a ≡ button ---
   const pbtns: [string, string, PanelKind][] = [
     ["Build", "B", "build"], ["Skills", "K", "skills"], ["Equip", "E", "equip"], ["Bag", "I", "bag"], ["Quest", "Q", "quest"],
+    ["Options", "O", "options"],
   ];
   const menuOpen = !docked && (hudMenuOpen() || editing);
   const togH = bs * 0.5;

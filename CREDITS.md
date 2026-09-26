@@ -1633,6 +1633,11 @@ Backpack and Quest — are 16x16 pixel icons: `icon-build.png`, `icon-skill.png`
 `icon-atk.png` joins them on the same 16x16 grid: the crossed-swords glyph on
 the attack-nearest button, which replaced a procedurally drawn pair of blades.
 
+`icon-options.png` (Etap 73) is the gear on the OPTIONS button — on the map's
+bar in the docked sidebar, in the phone menu and in the ≡ column. Drawn for
+Bone Isle in code on the same 16x16 grid, in the black, grey and white of its
+row; no third-party source.
+
 Four more, on the same grid, for the combat controls:
 
 - `icon-chase.png`, `icon-stand.png` — a running figure and a standing one, the

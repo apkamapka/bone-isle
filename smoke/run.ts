@@ -14855,13 +14855,13 @@ async function main(): Promise<void> {
       const tale = SP45.t("lore.redcap", lg);
       for (const [what, re] of [
         ["the cap dries", /dries|wyschn|seca/i],
-        ["the iron on his feet", /iron|żelaz|hierro/i],
+        ["the iron on his feet", /iron|żelaz|hierro|ferro/i],
         ["nothing outruns him", /fast|szybk|rápid/i],
       ] as const) ok(re.test(tale), `${lg}: the page still says ${what}`);
       const howe = SP45.t("lore.draugr", lg);
       for (const [what, re] of [
-        ["fire shortens him", /fire|ogień|ogie|fuego/i],
-        ["weak blows do nothing", /weak|słabe|flojos/i],
+        ["fire shortens him", /fire|ogień|ogie|fuego|fogo/i],
+        ["weak blows do nothing", /weak|słabe|flojos|fracos/i],
         ["his dead get up too", /get up|wstać|wstan|levantar/i],
       ] as const) ok(re.test(howe), `${lg}: the howe's page still says ${what}`);
     }
@@ -19501,7 +19501,7 @@ async function main(): Promise<void> {
 
     /* WIRED IN — creatures and the player through the one call. */
     const m69 = fs69.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    ok(m69.includes("nameplate(m.id, mobName(m.kind), m.x, m.y - spr.height - 9, m.hp, m.maxhp);"),
+    ok(m69.includes("nameplate(m.id, mobLabel(m), m.x, m.y - spr.height - 9, m.hp, m.maxhp);"),
       "every creature carries the new bar, keyed by its own id");
     ok(!/hpBar\(m\.x/.test(m69), "…and none is left on the old all-red one");
     ok(m69.includes("hpBar(bx, tr.ty * TILE - 8") && m69.includes("hpBar(bx, rk.ty * TILE - 4"),
@@ -19697,6 +19697,157 @@ async function main(): Promise<void> {
       .map((u) => u.pathname.split("/src/")[1]);
     ok(files72.length > 20 && stale72.length === 0,
       `no file still calls them by the old names (${stale72.join(",") || `${files72.length} files clean`})`);
+  }
+
+
+  console.log("\nEtap 73 — blood, voices, cowards and healers, elites, sound, options, Portuguese:");
+  {
+    type Mon73 = import("../src/world/types.ts").Monster;
+    const BL = await import("../src/gfx/blood.ts");
+    const VO = await import("../src/text/voices.ts");
+    const MT = await import("../src/systems/mobTactics.ts");
+    const EL = await import("../src/systems/elite.ts");
+    const SY = await import("../src/sound/synth.ts");
+    const AU = await import("../src/audio.ts");
+    const SP = await import("../src/text/speech.ts");
+    const PP = await import("../src/systems/panelPrefs.ts");
+    const MO = await import("../src/entities/monsters.ts");
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const mk = (o: Record<string, unknown>): Mon73 =>
+      ({ id: 1, x: 336, y: 336, tx: 10, ty: 10, hp: 100, maxhp: 100, kind: "orc", ...o }) as unknown as Mon73;
+    const BOSSES = ["redcap", "draugr", "blackAnnis", "asterion", "gorak"] as const;
+
+    // ---- blood
+    ok(BL.bloodOf("orc") === "red" && BL.bloodOf("dragon") === "red", "orcs and dragons bleed red");
+    ok(BL.bloodOf("snake") === "green", "…snakes bleed green");
+    ok((["skeleton", "skeletonWarrior", "demonSkeleton", "ghoul", "draugr"] as const).every((k) => BL.bloodOf(k) === "bone"),
+      "…and the dead leave bone dust, not blood");
+    const fw = { key: "etap73" } as never;
+    BL.clearBlood();
+    BL.splash(fw, 100, 100, "red");
+    BL.pool(fw, 100, 100, "red");
+    ok(BL.bloodOn(fw).length === 2 && BL.bloodOn(fw).some((d) => d.pool), "a hit splashes and a body pools");
+    BL.tickBlood(BL.BLOOD_LIFE_S - 1);
+    ok(BL.bloodOn(fw).length === 2, "…both still there just short of a minute");
+    BL.tickBlood(2);
+    ok(BL.bloodOn(fw).length === 0, "…and gone after it");
+    for (let i = 0; i < BL.BLOOD_MAX_PER_WORLD + 30; i++) BL.splash(fw, i, i, "red");
+    ok(BL.bloodOn(fw).length === BL.BLOOD_MAX_PER_WORLD, `a long fight never piles past ${BL.BLOOD_MAX_PER_WORLD} on one map`);
+    BL.clearBlood();
+    const combat = read("../src/systems/combat.ts");
+    ok(/sfx\("hit"\);\s*splash\(world, m\.x, m\.y, bloodOf\(m\.kind\)\)/.test(combat), "a sword hit splashes");
+    ok(/if \(dmg > 0 && !elemental\) splash\(world, p\.x, p\.y, "red"\)/.test(combat), "…the player bleeds from a blow, never from an element");
+    ok(/pool\(world, m\.x, m\.y, bloodOf\(m\.kind\)\)/.test(combat), "…and every kill leaves a pool");
+
+    // ---- voices
+    const lines = VO.allVoiceLines();
+    ok(lines.length > 80, `plenty to say (${lines.length} lines)`);
+    ok(lines.every((l) => /^[\x20-\x7E]+$/.test(l)), "every line is plain ASCII English");
+    const long = lines.filter((l) => l.length > VO.MAX_LINE);
+    ok(long.length === 0, `…short enough for one bubble (≤ ${VO.MAX_LINE})${long.length ? " — " + long[0] : ""}`);
+    const lifted = ["Kaplar", "Grak brrretz", "Grow truk", "GROOAAARRR", "FCHHHH", "Zzzzzzt", "Your money or your life",
+      "Me green", "Bugga", "Zig Zag", "Hurr", "Valhalla", "NO PRISONERS", "Bolg", "Plundeeeeer", "nice trophy",
+      "Yeeee ha", "Charrrrrge", "Huumans", "Gobo"];
+    ok(!lines.some((l) => lifted.some((t) => l.includes(t))), "…and none of them is lifted from Tibia");
+    ok(BOSSES.every((k) => VO.voiceLine(k, true) === null && VO.voiceLine(k, false) === null), "the five bosses keep their mouths shut");
+    const mute = MO.MONSTER_KINDS.filter((k) => !EL.ELITE_EXCLUDED.has(k) && (VO.voiceLine(k, false) === null || VO.voiceLine(k, true) === null));
+    ok(mute.length === 0, `every other creature has something to say, calm and angry${mute.length ? " — " + mute[0] : ""}`);
+    ok([...MT.COWARDS].every((k) => VO.fleeLine(k) !== null) && VO.fleeLine("orc") === null, "every coward has a line to break with; an orc does not");
+    ok((["smith", "herbalist", "elder", "taskmaster", "tailor", "morgan"] as const).every((k) => VO.npcLine(k) !== null)
+      && VO.npcLine("timesage") === null, "Bonetown's six call out; Chronos does not");
+    ok(VO.VOICE_COLOR === "#f0a33a", "…in orange, over the head");
+
+    // ---- cowards and healers
+    ok(MT.isFleeing(mk({ kind: "thief", hp: 14 })) && !MT.isFleeing(mk({ kind: "thief", hp: 16 })), "a thief breaks below 15% and not above");
+    ok(!MT.isFleeing(mk({ kind: "bandit", hp: 1 })) && !MT.isFleeing(mk({ kind: "orc", hp: 1 })), "…a bandit or an orc fights to the end");
+    const mons = read("../src/entities/monsters.ts");
+    const fleeAt = mons.indexOf("if (provoked && isFleeing(m))");
+    const bigAt = mons.indexOf("// ---- the big attacks, ahead of everything else ----");
+    ok(fleeAt > 0 && bigAt > fleeAt, "…and the run is decided before any spell or swing");
+    const shaman = mk({ kind: "orcShaman" });
+    const hurt = mk({ kind: "orc", hp: 40, tx: 12 });
+    const far = mk({ kind: "orc", hp: 10, tx: 30 });
+    const w73 = { key: "etap73", monsters: [shaman, hurt, far] } as never;
+    ok(MT.pickPatient(w73, shaman) === hurt, "a shaman picks the worst-hurt ally in reach, not the one across the floor");
+    ok(MT.tickHealer(w73, shaman, MT.HEAL_FIRST_S - 0.5, true) === 0, "…not in the first moment of the fight");
+    ok(MT.tickHealer(w73, shaman, 1, true) === 20 && hurt.hp === 60, "…then mends a fifth of a life");
+    ok(MT.tickHealer(w73, shaman, 1, true) === 0, "…and waits out its ten seconds");
+    ok(MT.tickHealer(w73, shaman, MT.HEAL_CD_S, false) === 0, "…and never outside a fight");
+    ok(MT.pickPatient({ monsters: [shaman, mk({ hp: 95 })] } as never, shaman) === null, "a scratch is not worth a heal");
+    ok(MT.tickHealer(w73, mk({ kind: "orc" }), 99, true) === 0, "an ordinary orc heals nobody");
+    ok(MT.HEALERS.has("minotaurMage") && MT.HEALERS.size === 2, "the minotaur mage heals too, and nobody else");
+
+    // ---- elites
+    ok(EL.rollElite("orc", () => 0) && !EL.rollElite("orc", () => 0.5), "an elite is a roll of the dice");
+    ok(Math.abs(EL.ELITE_CHANCE - 1 / 400) < 1e-12, "…one in four hundred");
+    ok(BOSSES.every((k) => !EL.rollElite(k, () => 0)), "…and never a mission boss");
+    const e = mk({ hp: 50, maxhp: 50 });
+    EL.makeElite(e);
+    ok(e.elite === true && e.maxhp === 100 && e.hp === 100, "an elite has twice the life");
+    EL.makeElite(e);
+    ok(e.maxhp === 100, "…once, not again on a second call");
+    ok(EL.mobDamageMult(e) === 1.3 && EL.mobExpMult(e) === 3 && EL.mobDamageMult(mk({})) === 1, "…hits 30% harder and pays triple");
+    ok(MO.mobLabel(e) === "Elite Orc" && MO.mobLabel(mk({ kind: "orcWarrior" })) === "Orc Warrior", "…and wears its title over its head");
+    const both = EL.mergeLoot({ items: [{ kind: "a", n: 1 }], gold: 5 }, { items: [{ kind: "b", n: 2 }], gold: 7 });
+    ok(both.items.length === 2 && both.gold === 12, "its body is searched twice");
+    ok(/grantExp\(world, p, d\.exp \* mobExpMult\(m\)\)/.test(combat) && /mergeLoot\(firstRoll, rollLoot\(m\.kind\)\)/.test(combat),
+      "…and the kill pays both out");
+    ok(/mobDamageMult\(caster\)/.test(read("../src/systems/monsterSpells.ts")) && /mobDamageMult\(m\)/.test(read("../src/main.ts")),
+      "…its swings, shots and spells all carry the extra weight");
+    ok(/if \(rollElite\(fresh\.kind\)\) makeElite\(fresh\)/.test(mons), "…rolled where every creature is made");
+
+    // ---- sound
+    const bad: string[] = [];
+    for (const id of SY.SFX_IDS) {
+      const d = SY.renderSfx(id, 22050);
+      let peak = 0;
+      let finite = true;
+      for (const v of d) { if (!Number.isFinite(v)) finite = false; peak = Math.max(peak, Math.abs(v)); }
+      if (!finite || d.length < 200 || peak > 1 || peak < 0.1 || Math.abs(d[d.length - 1]) > 0.02) bad.push(id);
+    }
+    ok(bad.length === 0 && SY.SFX_IDS.length === 27, `all ${SY.SFX_IDS.length} sounds render clean, audible and click-free${bad.length ? " — " + bad.join(", ") : ""}`);
+    for (const id of SY.AMBIENT_IDS) {
+      const d = SY.renderAmbient(id, 8000);
+      let peak = 0;
+      let step = 0;
+      let finite = true;
+      for (let i = 0; i < d.length; i++) {
+        if (!Number.isFinite(d[i])) finite = false;
+        peak = Math.max(peak, Math.abs(d[i]));
+        if (i) step = Math.max(step, Math.abs(d[i] - d[i - 1]));
+      }
+      ok(finite && peak <= 1 && peak > 0.1 && d.length === SY.AMBIENT_LOOP_S[id] * 8000
+        && Math.abs(d[0] - d[d.length - 1]) <= step + 1e-6, `the ${id} loop is clean and loops without a seam`);
+    }
+    AU.setSfxVolume(1.7);
+    const hi = AU.audioSettings().sfx;
+    AU.setSfxVolume(-3);
+    const lo = AU.audioSettings().sfx;
+    AU.setSfxVolume(0.8);
+    ok(hi === 1 && lo === 0 && AU.audioSettings().sfx === 0.8, "volumes stay between silent and full, in tenths");
+    ok(AU.ambientFor("town") === "town" && AU.ambientFor("home" as never) === "sea", "Bonetown sounds like a town, the islands like the sea");
+    const combatBeeps = (combat.match(/\bbeep\(/g) ?? []).length;
+    ok(combatBeeps === 0 && /sfx\("levelup"\);\s*buzz\(/.test(combat) && /sfx\("death"\);\s*buzz\(/.test(combat),
+      "combat speaks in named sounds, and a level-up or a death buzzes the phone");
+
+    // ---- options
+    const panels = read("../src/ui/panels.ts");
+    ok(/case "options": drawOptions\(p\)/.test(panels) && /k === "o"\) h\.onPanel\("options"\)/.test(read("../src/input.ts"))
+      && (read("../src/main.ts").match(/togglePanel\("options"\)/g) ?? []).length === 2,
+      "the options window opens from the map's gear, the phone menu, the ≡ column and the O key");
+    ok(/"Sound effects"/.test(panels) && /"Ambience"/.test(panels) && /"Vibration"/.test(panels), "…and holds the three knobs");
+
+    // ---- Portuguese
+    ok(SP.LANGS.includes("pt"), "Portuguese is a fourth language");
+    const same = SP.textKeys().filter((k) => !k.startsWith("lore.title.") && SP.TEXT[k].pt === SP.TEXT[k].en);
+    ok(same.length === 0, `…no Portuguese string is still its English original${same.length ? " — " + same[0] : ""}`);
+    const offBeat = SP.textKeys().filter((k) => SP.TEXT[k].pt.split("\n\n").length !== SP.TEXT[k].pl.split("\n\n").length);
+    ok(offBeat.length === 0, `…and it keeps Polish's beats one for one${offBeat.length ? " — " + offBeat[0] : ""}`);
+    ok(!/plataforma/i.test(SP.textKeys().map((k) => SP.TEXT[k].pt).join(" ")), "…Chronos opens doors in Portuguese too, never platforms");
+    ok(PP.detectLang(["pt-BR", "en-US"]) === "pt" && PP.detectLang(["sv-SE", "en-US"]) === "en" && PP.detectLang(["pl-PL"]) === "pl"
+      && PP.detectLang(["es-MX"]) === "es" && PP.detectLang(["de-DE"]) === "en" && PP.detectLang([]) === "en",
+      "a first visit reads in the browser's own language, English when it asks for none of ours");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

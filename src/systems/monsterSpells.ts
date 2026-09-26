@@ -54,6 +54,7 @@ import { addBlast, addBolt, addField, burningTiles } from "../gfx/spellFx.ts";
 import { ELEMENT_COLOR, type Element, type Tier } from "../systems/elements.ts";
 import { groundBlocked } from "../world/collision.ts";
 import { rndi } from "../util.ts";
+import { mobDamageMult } from "./elite.ts";
 import type { Monster, World } from "../world/types.ts";
 
 /** The four footprints a monster can throw. */
@@ -346,7 +347,7 @@ function land(
   // at all, rather than nothing-plus-one-free-hit.
   if (spell.shape === "field") return;
   if (p.tiles.some((t) => t.tx === target.tx && t.ty === target.ty)) {
-    hurt(rndi(spell.dmg[0], spell.dmg[1]), spell.element, spell.name);
+    hurt(Math.round(rndi(spell.dmg[0], spell.dmg[1]) * mobDamageMult(caster)), spell.element, spell.name);
   }
 }
 

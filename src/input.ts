@@ -23,7 +23,7 @@ export function moveAxis(): { dx: number; dy: number } {
   return { dx, dy };
 }
 
-export type PanelName = "build" | "skills" | "equip" | "bag" | "quest";
+export type PanelName = "build" | "skills" | "equip" | "bag" | "quest" | "options";
 
 /**
  * How many slots one row of function keys reaches, and therefore what Shift
@@ -77,6 +77,7 @@ export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
     else if (k === "e") h.onPanel("equip");
     else if (k === "i") h.onPanel("bag");
     else if (k === "q") h.onPanel("quest");
+    else if (k === "o") h.onPanel("options");
     else if (k === "l") h.onLook();
     else if (k === "x") h.onStance();
     // C for chase and SPACE for "attack nearest" — both sit under the hand
