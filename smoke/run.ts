@@ -11580,7 +11580,7 @@ async function main(): Promise<void> {
     ok(!main.includes("function crossedSwords"),
       "…with the procedural pair deleted, so there is one source of truth for the shape");
     const icons = (await import("node:fs")).readFileSync("src/ui/icons.ts", "utf8");
-    ok(icons.includes('atk: "/icon-atk.png"'), "the art is registered with the other five");
+    ok(icons.includes('atk: "./icon-atk.png"'), "the art is registered with the other five");
     ok(icons.includes("atk: ["), "…and has a fallback glyph, so a failed load leaves a shape not a hole");
     ok(main.includes('if (P.target?.kind === "mob" && P.target.id === m.id) targetBox(m.x, m.y);'),
       "and the marked creature wears corner brackets in the world");
@@ -11997,7 +11997,9 @@ async function main(): Promise<void> {
       "…falling back to standalone where fullscreen is refused");
     const purposes = man.icons.map((i: { purpose: string }) => i.purpose);
     ok(purposes.includes("maskable"), "a maskable icon exists, so launchers do not crop the art off");
-    for (const i of man.icons) ok(nfs.existsSync(`public${i.src}`), `${i.src} is actually there`);
+    /* Beside the manifest since Etap 74 (relative, so the game can live under
+     * /play/), so the file is looked for next to it rather than at the root. */
+    for (const i of man.icons) ok(nfs.existsSync(`public/${i.src.replace(/^\.?\//, "")}`), `${i.src} is actually there`);
     const html = nfs.readFileSync("index.html", "utf8");
     ok(html.includes('rel="manifest"'), "…and index.html links it, or none of it happens");
 
@@ -19848,6 +19850,73 @@ async function main(): Promise<void> {
     ok(PP.detectLang(["pt-BR", "en-US"]) === "pt" && PP.detectLang(["sv-SE", "en-US"]) === "en" && PP.detectLang(["pl-PL"]) === "pl"
       && PP.detectLang(["es-MX"]) === "es" && PP.detectLang(["de-DE"]) === "en" && PP.detectLang([]) === "en",
       "a first visit reads in the browser's own language, English when it asks for none of ours");
+  }
+
+  console.log("\nEtap 74 — Xebeka: the game answers to its name, runs from /play/, and hands the website its tables:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const walk = (dir: string): string[] =>
+      fs.readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })
+        .flatMap((e) => (e.isDirectory() ? walk(`${dir}${e.name}/`) : [`${dir}${e.name}`]));
+    const gameTs = walk("../src/").filter((f) => f.endsWith(".ts"));
+
+    // ---- the name
+    const manifest = JSON.parse(read("../public/manifest.webmanifest"));
+    ok(read("../index.html").includes("<title>Xebeka</title>"), "the browser tab says Xebeka");
+    ok(manifest.name === "Xebeka" && manifest.short_name === "Xebeka", "…and so does the home-screen launcher");
+    ok(read("../src/ui/hud.ts").includes('hudText(h, "XEBEKA"'), "…and the wordmark over the map");
+    const oldName = gameTs.filter((f) => /Bone Isle/i.test(read(f)));
+    ok(oldName.length === 0, `no line of the game still calls it Bone Isle${oldName.length ? " — " + oldName[0] : ""}`);
+    ok(read("../src/save.ts").includes('"bone-isle-save-v2"') && read("../src/systems/panelPrefs.ts").includes('"bone-isle-panels-v1"'),
+      "…while the storage keys keep the old name: renaming a key orphans every save written under it");
+    ok(!read("../index.html").includes("favicon.svg") && read("../index.html").includes('rel="icon" type="image/png" href="/icon-192.png"'),
+      "the tab wears the game's own icon, not the Vite logo the template left behind");
+
+    // ---- served from /play/
+    const rootAbs = /["'`]\/[\w${}.-]+\.(png|webp|jpe?g|gif|svg|mp3|ogg|wav|json|webmanifest)["'`]/;
+    const absolute = gameTs.filter((f) => rootAbs.test(read(f)));
+    ok(absolute.length === 0,
+      `no asset URL in the game starts with a slash, so it loads under /play/ as well as at /${absolute.length ? " — " + absolute[0] : ""}`);
+    ok(manifest.start_url === "./" && manifest.scope === "./", "the launcher opens the folder it was installed from");
+    ok((manifest.icons as { src: string }[]).every((i) => !i.src.startsWith("/")), "…and finds its icons beside the manifest");
+    const pkg = JSON.parse(read("../package.json"));
+    const site: string = pkg.scripts["build:site"] ?? "";
+    ok(site.includes("vite build --base=/play/ --outDir web/dist/play"), "the site build puts the game at /play/");
+    ok(site.indexOf("tools/export-data.ts") >= 0 && site.indexOf("tools/export-data.ts") < site.indexOf("--prefix web"),
+      "…after writing the game's tables and before the site that reads them is built");
+    ok(pkg.devDependencies?.tsx !== undefined && Object.keys(pkg.dependencies ?? {}).length === 0,
+      "…with the exporter's runner pinned, and the game still shipping zero dependencies");
+    const vercel = JSON.parse(read("../vercel.json"));
+    ok(vercel.buildCommand === "npm run build:site" && vercel.outputDirectory === "web/dist",
+      "Vercel deploys the site with the game inside it");
+    ok((vercel.redirects as { source: string; destination: string }[]).some((r) => r.source === "/play" && r.destination === "/play/"),
+      "…and sends /play to /play/: relative URLs resolve against the folder, and without the slash there is no folder");
+
+    // ---- the tables the website is built from
+    const outFile = new URL("../web/src/data/generated/game-data.json", import.meta.url);
+    const stampBefore = fs.existsSync(outFile) ? fs.statSync(outFile).mtimeMs : -1;
+    const EX = await import("../tools/export-data.ts");
+    const stampAfter = fs.existsSync(outFile) ? fs.statSync(outFile).mtimeMs : -1;
+    ok(stampBefore === stampAfter, "importing the exporter writes nothing; only running it does");
+    const data = EX.collectGameData();
+    const itemKeys = new Set(data.items.map((i) => i.key));
+    ok(data.items.length > 100 && data.monsters.length > 20 && data.npcs.length > 3 && data.worlds.length > 10,
+      "the exporter reads every table: items, creatures, NPCs and places");
+    ok(data.items.every((i) => i.name.length > 0 && i.category.length > 0), "every item has a name and a category");
+    ok(!data.items.some((i) => "testLevel" in i || "testSkill" in i), "…and the developer's test items stay out of the library");
+    const badLoot = data.monsters.flatMap((m) => m.loot.filter((l) => !itemKeys.has(l.item)).map((l) => `${m.kind}:${l.item}`));
+    ok(badLoot.length === 0, `every drop is an item the library lists${badLoot.length ? " — " + badLoot[0] : ""}`);
+    const badShop = data.npcs.flatMap((n) => (n.shop?.entries ?? []).filter((e) => !itemKeys.has(e.item)).map((e) => `${n.key}:${e.item}`));
+    ok(badShop.length === 0, `…and so is every line of every shop${badShop.length ? " — " + badShop[0] : ""}`);
+    const kinds = new Set(data.monsters.map((m) => m.kind));
+    const strays = data.worlds.flatMap((w) => Object.keys(w.monsters).filter((k) => !kinds.has(k)).map((k) => `${w.key}:${k}`));
+    ok(strays.length === 0, `every creature standing on a map has a library entry${strays.length ? " — " + strays[0] : ""}`);
+    ok(!/"spr"/.test(JSON.stringify(data.monsters)), "…and no sprite canvas is dragged into the JSON");
+    const drake = data.monsters.find((m) => m.kind === "dragon");
+    ok(drake?.element === "fire" && drake.resist.fire !== undefined,
+      "a creature's element and resist row come out the way the game computes them");
+    ok(data.elements.find((e) => e.id === "ice")?.label === "Water", "…under the names the player reads, not the frozen ids");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

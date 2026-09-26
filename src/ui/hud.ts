@@ -511,7 +511,7 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   // top-left: title + zone. The phone puts the zone in its own strip and has
   // no room for a wordmark laid over the world, so both are skipped there.
   if (!h.fixedChrome) {
-  hudText(h, "BONE ISLE", pad + 2, pad + 7 * S, 11 * S, "#cfe8d2", "left", true);
+  hudText(h, "XEBEKA", pad + 2, pad + 7 * S, 11 * S, "#cfe8d2", "left", true);
   hudText(h, game.current.name + (isSafeTile(game.current, game.player.tx, game.player.ty) ? " · safe" : " · danger"), pad + 2, pad + 18 * S, 8 * S, "rgba(207,232,210,.7)");
   }
 

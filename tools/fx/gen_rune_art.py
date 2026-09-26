@@ -1,5 +1,5 @@
 """
-Knell artwork for Bone Isle: the 32x32 impact strips and the fifteen stones.
+Knell artwork for Xebeka: the 32x32 impact strips and the fifteen stones.
 
 Run from the repo root:  python tools/fx/gen_rune_art.py
 

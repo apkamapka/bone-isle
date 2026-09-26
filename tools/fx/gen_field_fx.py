@@ -1,5 +1,5 @@
 """
-One-tile `field` effects for Bone Isle — earth and ice.
+One-tile `field` effects for Xebeka — earth and ice.
 
 The `field` slot is the only one that loops: the tile keeps hurting after the
 cast, so the artwork has to run forever without a seam.  Twelve frames, same as

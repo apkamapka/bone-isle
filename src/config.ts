@@ -107,7 +107,7 @@ export const PLAYER_BASE_SPEED = 93;
  * creature in MONSTER_DEFS. The measurement behind it: converted to tiles per
  * second, Tibia's own creatures move at roughly speed/100 on normal ground —
  * an orc 0.75, a minotaur 0.84, a dragon 0.86 — against a level-1 player's
- * 2.20. Bone Isle was running the whole clock about twice as fast as that,
+ * 2.20. Xebeka was running the whole clock about twice as fast as that,
  * which is why a fight covered seven tiles per swing where Tibia covers four.
  * The cuts are deliberately UNEQUAL and in this direction on purpose: the
  * player's edge over the average creature was 1.9x here against Tibia's 2.7x,
@@ -168,7 +168,7 @@ export const CORPSE_SLOTS = 16;
  *
  * Twelve was a carousel. Tibia keys respawn off a per-home "regen" value and
  * the number of players online: a typical home at regen 600 refills in five
- * to ten minutes on an empty server and two to four on a full one. Bone Isle
+ * to ten minutes on an empty server and two to four on a full one. Xebeka
  * is single-player, so the empty-server branch is the honest comparison — and
  * twelve seconds was twenty-five to fifty times faster than it.
  *
@@ -300,7 +300,7 @@ export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level*3
  * alike. Etap 30 merged what used to be an offence-only timer.
  *
  * Tibia brakes healing with mana: a spell you cannot pay for is a spell you
- * do not cast, and the exhaust on top of it is about a second. Bone Isle has
+ * do not cast, and the exhaust on top of it is about a second. Xebeka has
  * no mana, so before this the brake was nothing at all — a Life Crystal heals
  * 30 + 3·level for eight gold with no timer, which at level 50 is 180 HP a
  * click and a full bar for thirty-seven gold. A character could out-heal

@@ -1,0 +1,227 @@
+/*
+ * The palette is the game's, not a new one: the sea is the colour the game's
+ * canvas sits on (src/style.css), the wood and the bevels are CHROME in
+ * src/ui/chrome.ts, and the gold is its title gold. A player who opens the
+ * site after the game should feel they never left it.
+ */
+:root {
+  --sea: #142a2c;
+  --sea-deep: #0e1f21;
+  --sea-line: #6fa39a;
+  --wood: #2c2215;
+  --wood-bar: #40311a;
+  --bar-light: #6b5526;
+  --bevel-light: #7a6330;
+  --bevel-dark: #0d0906;
+  --edge: #050403;
+  --gold: #caa23a;
+  --cream: #ffe9a8;
+  --bone: #eadfc4;
+  --bone-dim: #a99878;
+
+  --font-display: "IM Fell English", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-body: "Alegreya", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+
+  --step--1: 0.9rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.3rem;
+  --step-2: 1.6rem;
+
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--sea);
+  color: var(--bone);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: 1.6;
+}
+
+a { color: var(--gold); text-underline-offset: 0.15em; }
+a:hover { color: var(--cream); }
+
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- header */
+
+.masthead {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: clamp(12rem, 28vw, 18rem);
+  overflow: hidden;
+  background: var(--sea-deep);
+  border-bottom: 2px solid var(--edge);
+  text-align: center;
+}
+
+.masthead__rose {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.masthead__text { position: relative; padding: 0 1rem; }
+
+.wordmark {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(3.2rem, 11vw, 6.75rem);
+  line-height: 1;
+  letter-spacing: 0.14em;
+  /* the trailing letter-space would push the word off centre */
+  margin-right: -0.14em;
+  color: var(--gold);
+  /* A hard 2 px outline, the way the game letters a name over a head. */
+  text-shadow:
+    2px 0 0 var(--edge), -2px 0 0 var(--edge),
+    0 2px 0 var(--edge), 0 -2px 0 var(--edge),
+    2px 2px 0 var(--edge), -2px 2px 0 var(--edge),
+    2px -2px 0 var(--edge), -2px -2px 0 var(--edge);
+}
+
+.tagline {
+  margin: 0.75rem auto 0;
+  max-width: 34ch;
+  font-style: italic;
+  font-size: var(--step-1);
+  line-height: 1.35;
+  color: var(--bone);
+  text-shadow: 0 1px 0 var(--edge);
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.page {
+  display: grid;
+  grid-template-columns: 13.5rem minmax(0, 1fr) 15rem;
+  grid-template-areas: "nav main side";
+  align-items: start;
+  gap: 1.25rem;
+  max-width: 76rem;
+  margin: 1.75rem auto 0;
+  padding: 0 1rem;
+}
+
+.page__nav { grid-area: nav; }
+.page__main { grid-area: main; display: grid; gap: 1.25rem; }
+.page__side { grid-area: side; display: grid; gap: 1.25rem; }
+
+@media (max-width: 60rem) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "main" "side" "nav";
+  }
+}
+
+/* ------------------------------------------------ panels: the game's chrome */
+
+/* RAISED: light top-left, dark bottom-right, one hard ring outside — the
+ * four-rectangle bevel every window in the game is built from. */
+.panel {
+  background: var(--wood);
+  border: 2px solid;
+  border-color: var(--bevel-light) var(--bevel-dark) var(--bevel-dark) var(--bevel-light);
+  outline: 1px solid var(--edge);
+}
+
+.panel__bar {
+  padding: 0.4rem 0.9rem 0.35rem;
+  background: var(--wood-bar);
+  border-bottom: 2px solid var(--bevel-dark);
+  box-shadow: inset 0 2px 0 var(--bar-light);
+}
+
+.panel__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--step-1);
+  line-height: 1.3;
+  color: var(--gold);
+}
+
+.panel__body { padding: 1rem 1.15rem 1.2rem; }
+.panel__body > :first-child { margin-top: 0; }
+.panel__body > :last-child { margin-bottom: 0; }
+.panel__body p { max-width: 70ch; }
+
+/* --------------------------------------------------------------- the menu */
+
+.menu__note {
+  margin: 0 0 1rem;
+  font-size: var(--step--1);
+  font-style: italic;
+  color: var(--bone-dim);
+}
+
+.menu__group + .menu__group { margin-top: 1rem; }
+
+.menu__heading {
+  margin: 0 0 0.3rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.1rem;
+  color: var(--gold);
+}
+
+.menu__list { margin: 0; padding: 0; list-style: none; }
+
+.menu__item {
+  display: block;
+  padding: 0.1rem 0 0.1rem 0.75rem;
+  border-left: 2px solid var(--bevel-dark);
+  color: var(--bone);
+  text-decoration: none;
+}
+
+/* A page that does not exist yet: shown so the shape of the site is visible,
+ * dimmed so nobody expects it to open. */
+.menu__item[aria-disabled="true"] { color: var(--bone-dim); opacity: 0.7; }
+
+/* ------------------------------------------------------------ the buttons */
+
+.button {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 1rem 0.5rem;
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+  line-height: 1.2;
+  color: var(--cream);
+  background: var(--wood-bar);
+  border: 2px solid;
+  border-color: var(--bar-light) var(--bevel-dark) var(--bevel-dark) var(--bar-light);
+  outline: 1px solid var(--edge);
+  cursor: pointer;
+}
+
+.button:disabled {
+  color: var(--bone-dim);
+  cursor: not-allowed;
+}
+
+.side-note {
+  margin: 0.75rem 0 0;
+  font-size: var(--step--1);
+  color: var(--bone-dim);
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.footer {
+  max-width: 76rem;
+  margin: 2.5rem auto 0;
+  padding: 1rem 1rem 2rem;
+  font-size: var(--step--1);
+  color: var(--bone-dim);
+}

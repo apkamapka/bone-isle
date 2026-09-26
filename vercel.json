@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci && npm ci --prefix web",
+  "buildCommand": "npm run build:site",
+  "outputDirectory": "web/dist",
+  "redirects": [
+    { "source": "/play", "destination": "/play/", "permanent": true }
+  ]
+}

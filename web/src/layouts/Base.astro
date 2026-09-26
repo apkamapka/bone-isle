@@ -1,0 +1,94 @@
+---
+import "@fontsource/alegreya/400.css";
+import "@fontsource/alegreya/400-italic.css";
+import "@fontsource/alegreya/700.css";
+import "@fontsource/im-fell-english/400.css";
+import "../styles/global.css";
+import Panel from "../components/Panel.astro";
+import WindRose from "../components/WindRose.astro";
+
+interface Props {
+  title: string;
+  description: string;
+}
+const { title, description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+
+/*
+ * The site's shape, shown from day one. Every entry is a page that opens with
+ * the game (etap 1: account; etap 2: library; etap 4: community). Until its
+ * page exists an entry has no href and is dimmed — see `.menu__item`.
+ */
+type MenuItem = { label: string; href?: string };
+const MENU: { heading: string; items: MenuItem[] }[] = [
+  { heading: "News", items: [{ label: "Latest news" }] },
+  { heading: "Account", items: [{ label: "Create account" }, { label: "Log in" }, { label: "Manage account" }] },
+  { heading: "Library", items: [{ label: "Creatures" }, { label: "Items" }, { label: "Magic" }, { label: "NPCs" }, { label: "World map" }] },
+  { heading: "Community", items: [{ label: "Characters" }, { label: "Highscores" }, { label: "Who is online" }, { label: "Kill statistics" }] },
+  { heading: "Support", items: [{ label: "FAQ" }, { label: "Rules" }, { label: "Credits" }] },
+];
+const menuOpen = MENU.some((g) => g.items.some((i) => i.href));
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/png" href="/play/icon-192.png" />
+    <meta name="theme-color" content="#142a2c" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Xebeka" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+  </head>
+  <body>
+    <header class="masthead">
+      <WindRose />
+      <div class="masthead__text">
+        <p class="wordmark" role="heading" aria-level="1">XEBEKA</p>
+        <p class="tagline">An online role-playing game of islands, bones and old stories, played in the browser.</p>
+      </div>
+    </header>
+
+    <div class="page">
+      <div class="page__nav">
+        <Panel as="nav" label="Site">
+          {!menuOpen && <p class="menu__note">These pages open with the game.</p>}
+          {MENU.map((group) => (
+            <div class="menu__group">
+              <h2 class="menu__heading">{group.heading}</h2>
+              <ul class="menu__list">
+                {group.items.map((item) => (
+                  <li>
+                    {item.href
+                      ? <a class="menu__item" href={item.href}>{item.label}</a>
+                      : <span class="menu__item" aria-disabled="true">{item.label}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </Panel>
+      </div>
+
+      <main class="page__main">
+        <slot />
+      </main>
+
+      <div class="page__side">
+        <Panel as="aside" title="Play" label="Play">
+          <button class="button" type="button" disabled>Not open yet</button>
+          <p class="side-note">When the world opens, you log in with email or Google and play right here.</p>
+        </Panel>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p>© 2026 Xebeka</p>
+    </footer>
+  </body>
+</html>

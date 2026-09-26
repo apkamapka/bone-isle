@@ -1,5 +1,5 @@
 """
-Element-choice circle effects for Bone Isle.
+Element-choice circle effects for Xebeka.
 
 Draws a rotating rune ring on the ground plus a rising particle column, in the
 same visual language as the supplied Mana_Recovery reference frames (soft

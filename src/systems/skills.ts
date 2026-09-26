@@ -40,7 +40,7 @@ export interface Skill {
  * investment, which is exactly why a high skill reads as an achievement rather
  * than a milestone you pass through.
  *
- * `base` is where the vocations differ in the real game, and where Bone Isle
+ * `base` is where the vocations differ in the real game, and where Xebeka
  * has to reason for itself, because it has one character rather than four:
  *
  *   sword      A=50   — matched exactly.

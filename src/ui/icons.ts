@@ -34,19 +34,23 @@ export type ControlIcon =
    * who already has. Same art, drawn twice at different sizes. */
   | "skullWhite" | "skullRed";
 
-/** The hand-drawn 16x16 art, one file per button. */
+/** The hand-drawn 16x16 art, one file per button.
+ *
+ * RELATIVE, like every other asset URL in the game (Etap 74): on xebeka.com
+ * the game lives under /play/, and a path that starts with a slash asks the
+ * website for the file instead of the game. */
 const ICON_SRC_FILE: Record<ControlIcon, string> = {
-  build: "/icon-build.png",
-  skills: "/icon-skill.png",
-  equip: "/icon-eq.png",
-  bag: "/icon-backpack.png",
-  quest: "/icon-quest.png",
-  options: "/icon-options.png",
-  atk: "/icon-atk.png",
-  chase: "/icon-chase.png",
-  stand: "/icon-stand.png",
-  skullWhite: "/icon-skull-white.png",
-  skullRed: "/icon-skull-red.png",
+  build: "./icon-build.png",
+  skills: "./icon-skill.png",
+  equip: "./icon-eq.png",
+  bag: "./icon-backpack.png",
+  quest: "./icon-quest.png",
+  options: "./icon-options.png",
+  atk: "./icon-atk.png",
+  chase: "./icon-chase.png",
+  stand: "./icon-stand.png",
+  skullWhite: "./icon-skull-white.png",
+  skullRed: "./icon-skull-red.png",
 };
 
 const loaded: Partial<Record<ControlIcon, CanvasImageSource>> = {};
