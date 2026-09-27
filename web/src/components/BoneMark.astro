@@ -1,0 +1,15 @@
+---
+/** The site's mark: the app icon's bone in its ring, drawn for small sizes. */
+interface Props { size?: number }
+const { size = 30 } = Astro.props;
+---
+<svg width={size} height={size} viewBox="0 0 30 30" aria-hidden="true" class="bonemark">
+  <circle cx="15" cy="15" r="13" fill="none" stroke="var(--lantern)" stroke-width="2" />
+  <g transform="rotate(-30 15 15)" fill="var(--bone)">
+    <circle cx="8.5" cy="12.8" r="2.6" />
+    <circle cx="8.5" cy="17.2" r="2.6" />
+    <circle cx="21.5" cy="12.8" r="2.6" />
+    <circle cx="21.5" cy="17.2" r="2.6" />
+    <rect x="8.5" y="13" width="13" height="4" />
+  </g>
+</svg>

@@ -1,6 +1,5 @@
 ---
-import Base from "../layouts/Base.astro";
-import Panel from "../components/Panel.astro";
+import Doc from "../layouts/Doc.astro";
 
 /*
  * Etap 1.12, before registration opens: the operator is named here only as
@@ -8,150 +7,160 @@ import Panel from "../components/Panel.astro";
  * a natural person, so add the full name and address to section 1, and the
  * same in privacy.astro.
  */
+const TOC = [
+  { id: "who", label: "1. Who runs Xebeka" },
+  { id: "beta", label: "2. A game still being built" },
+  { id: "needs", label: "3. What you need" },
+  { id: "account", label: "4. Your account" },
+  { id: "characters", label: "5. Characters" },
+  { id: "rules", label: "6. Rules of play" },
+  { id: "breaches", label: "7. When the rules are broken" },
+  { id: "price", label: "8. Price" },
+  { id: "content", label: "9. The game and its content" },
+  { id: "responsibility", label: "10. Our responsibility" },
+  { id: "complaints", label: "11. Complaints" },
+  { id: "changes", label: "12. Changes to these terms" },
+  { id: "law", label: "13. Law" },
+];
 ---
-<Base
+<Doc
   title="Terms of Service · Xebeka"
   description="The terms of Xebeka, the online RPG played in the browser, including the rules of play."
+  heading="Terms of Service"
+  updated="27 September 2026"
+  toc={TOC}
 >
-  <Panel title="Terms of Service">
-    <article class="prose">
-      <p class="doc__date">Last updated 27 September 2026</p>
-      <p>
-        These terms apply to Xebeka, the online role-playing game at xebeka.com, and to your
-        account in it. By creating an account you agree to them, so please read them first. They
-        include the rules of play, which keep the game fair for everyone. How we handle your data
-        is described in the <a href="/privacy/">Privacy Policy</a>.
-      </p>
+  <p>
+    These terms apply to Xebeka, the online role-playing game at xebeka.com, and to your account
+    in it. By creating an account you agree to them, so please read them first. They include the
+    rules of play, which keep the game fair for everyone. How we handle your data is described in
+    the <a href="/privacy/">Privacy Policy</a>.
+  </p>
 
-      <h3>1. Who runs Xebeka</h3>
-      <p>
-        Xebeka is run by <a href="https://akappstudio.pl">akApp Studio</a>. You can reach us at
-        <a href="mailto:kontakt@xebeka.com">kontakt@xebeka.com</a>, the address for everything
-        these terms mention: questions, reports and complaints.
-      </p>
+  <h2 id="who">1. Who runs Xebeka</h2>
+  <p>
+    Xebeka is run by <a href="https://akappstudio.pl">akApp Studio</a>. You can reach us at
+    <a href="mailto:kontakt@xebeka.com">kontakt@xebeka.com</a>, the address for everything these
+    terms mention: questions, reports and complaints.
+  </p>
 
-      <h3>2. A game still being built</h3>
-      <p>
-        Xebeka is in beta. Creatures, items, maps and balance change as the game grows, and the
-        game may be unavailable for a while when it is updated. During the beta, characters and
-        their progress may be reset, in particular when the game moves to a new server. Whenever we
-        can, we announce a reset on this site before it happens.
-      </p>
+  <h2 id="beta">2. A game still being built</h2>
+  <p>
+    Xebeka is in beta. Creatures, items, maps and balance change as the game grows, and the game
+    may be unavailable for a while when it is updated. During the beta, characters and their
+    progress may be reset, in particular when the game moves to a new server. Whenever we can, we
+    announce a reset on this site before it happens.
+  </p>
 
-      <h3>3. What you need</h3>
-      <p>
-        A current web browser with JavaScript turned on, on a computer or a phone, and an internet
-        connection. There is nothing to install.
-      </p>
+  <h2 id="needs">3. What you need</h2>
+  <p>
+    A current web browser with JavaScript turned on, on a computer or a phone, and an internet
+    connection. There is nothing to install.
+  </p>
 
-      <h3>4. Your account</h3>
-      <ul>
-        <li>
-          You must be at least 13 years old to create an account. If you are under 18, read these
-          terms together with a parent or guardian.
-        </li>
-        <li>
-          You create an account with an email address and a password, or with a Google account.
-          The agreement between us starts when you create it and lasts until it is deleted.
-        </li>
-        <li>Keep your password to yourself. You are responsible for what happens on your account.</li>
-        <li>An account is personal. Do not sell it, share it or give it to someone else.</li>
-        <li>
-          You can delete your account at any time in Manage account. This removes the account and
-          all its characters for good.
-        </li>
-      </ul>
+  <h2 id="account">4. Your account</h2>
+  <ul>
+    <li>
+      You must be at least 13 years old to create an account. If you are under 18, read these terms
+      together with a parent or guardian.
+    </li>
+    <li>
+      You create an account with an email address and a password, or with a Google account. The
+      agreement between us starts when you create it and lasts until it is deleted.
+    </li>
+    <li>Keep your password to yourself. You are responsible for what happens on your account.</li>
+    <li>An account is personal. Do not sell it, share it or give it to someone else.</li>
+    <li>
+      You can delete your account at any time in Manage account. This removes the account and all
+      its characters for good.
+    </li>
+  </ul>
 
-      <h3>5. Characters</h3>
-      <ul>
-        <li>An account holds up to five characters.</li>
-        <li>
-          A name is 3 to 20 letters (A to Z), in up to three words. It must not be offensive,
-          pretend to be staff, or copy the name of a creature or of a character in the game. We may
-          change or remove a name that breaks this rule.
-        </li>
-        <li>
-          A character you delete is removed 7 days later. Until then you can change your mind and
-          cancel the deletion.
-        </li>
-      </ul>
+  <h2 id="characters">5. Characters</h2>
+  <ul>
+    <li>An account holds up to five characters.</li>
+    <li>
+      A name is 3 to 20 letters (A to Z), in up to three words. It must not be offensive, pretend to
+      be staff, or copy the name of a creature or of a character in the game. We may change or
+      remove a name that breaks this rule.
+    </li>
+    <li>
+      A character you delete is removed 7 days later. Until then you can change your mind and cancel
+      the deletion.
+    </li>
+  </ul>
 
-      <h3 id="rules">6. Rules of play</h3>
-      <p>Xebeka is a shared world. These rules keep it fair:</p>
-      <ul>
-        <li>
-          <strong>Play yourself.</strong> No bots, macros or programs that play for you, no
-          modified game files, and no tampering with the game's data or its connection.
-        </li>
-        <li>
-          <strong>Report bugs instead of using them.</strong> If you find a way to gain an
-          advantage the game did not intend, tell us.
-        </li>
-        <li>
-          <strong>Respect other players.</strong> No harassment, threats or hate speech, and no
-          sharing anyone's personal information.
-        </li>
-        <li><strong>No scams.</strong> Do not trick other players out of their items or accounts.</li>
-        <li>
-          <strong>No real-money trading.</strong> Do not buy or sell characters, items or gold for
-          real money.
-        </li>
-        <li><strong>Do not pretend to be staff.</strong></li>
-        <li><strong>Nothing unlawful.</strong> Do not post or send unlawful content through the game.</li>
-      </ul>
-      <p>
-        Fighting other players is part of the game from level 10 and does not by itself break
-        these rules.
-      </p>
+  <h2 id="rules">6. Rules of play</h2>
+  <p>Xebeka is a shared world. These rules keep it fair:</p>
+  <ul>
+    <li>
+      <strong>Play yourself.</strong> No bots, macros or programs that play for you, no modified game
+      files, and no tampering with the game's data or its connection.
+    </li>
+    <li>
+      <strong>Report bugs instead of using them.</strong> If you find a way to gain an advantage the
+      game did not intend, tell us.
+    </li>
+    <li>
+      <strong>Respect other players.</strong> No harassment, threats or hate speech, and no sharing
+      anyone's personal information.
+    </li>
+    <li><strong>No scams.</strong> Do not trick other players out of their items or accounts.</li>
+    <li>
+      <strong>No real-money trading.</strong> Do not buy or sell characters, items or gold for real
+      money.
+    </li>
+    <li><strong>Do not pretend to be staff.</strong></li>
+    <li><strong>Nothing unlawful.</strong> Do not post or send unlawful content through the game.</li>
+  </ul>
+  <p>Fighting other players is part of the game from level 10 and does not by itself break these rules.</p>
 
-      <h3>7. When the rules are broken</h3>
-      <p>
-        We may warn you, suspend your account for a time, or delete it, depending on how serious
-        the breach is and whether it is repeated. If you think we got it wrong, write to us and we
-        will look at it again.
-      </p>
+  <h2 id="breaches">7. When the rules are broken</h2>
+  <p>
+    We may warn you, suspend your account for a time, or delete it, depending on how serious the
+    breach is and whether it is repeated. If you think we got it wrong, write to us and we will look
+    at it again.
+  </p>
 
-      <h3>8. Price</h3>
-      <p>
-        Xebeka is free to play. If optional paid features are added later, their price and terms
-        will be shown before you can buy them.
-      </p>
+  <h2 id="price">8. Price</h2>
+  <p>
+    Xebeka is free to play. If optional paid features are added later, their price and terms will
+    be shown before you can buy them.
+  </p>
 
-      <h3>9. The game and its content</h3>
-      <p>
-        The game, its code and its art belong to us or to the artists who licensed their work
-        (see <a href="/credits/">Credits</a>). You get a personal right to play. Characters and
-        items exist only inside the game and are not your property.
-      </p>
+  <h2 id="content">9. The game and its content</h2>
+  <p>
+    The game, its code and its art belong to us or to the artists who licensed their work (see
+    <a href="/credits/">Credits</a>). You get a personal right to play. Characters and items exist
+    only inside the game and are not your property.
+  </p>
 
-      <h3>10. Our responsibility</h3>
-      <p>
-        We work to keep Xebeka running and your progress safe, but during the beta we cannot
-        promise that the game will always be available, that it is free of errors, or that
-        progress will never be lost or reset. Nothing in these terms limits liability that the law
-        does not allow to be limited, or takes away your rights as a consumer.
-      </p>
+  <h2 id="responsibility">10. Our responsibility</h2>
+  <p>
+    We work to keep Xebeka running and your progress safe, but during the beta we cannot promise that
+    the game will always be available, that it is free of errors, or that progress will never be lost
+    or reset. Nothing in these terms limits liability that the law does not allow to be limited, or
+    takes away your rights as a consumer.
+  </p>
 
-      <h3>11. Complaints</h3>
-      <p>
-        If something does not work as it should, write to
-        <a href="mailto:kontakt@xebeka.com">kontakt@xebeka.com</a> with the email address of your
-        account and a description of the problem. We answer within 14 days.
-      </p>
+  <h2 id="complaints">11. Complaints</h2>
+  <p>
+    If something does not work as it should, write to
+    <a href="mailto:kontakt@xebeka.com">kontakt@xebeka.com</a> with the email address of your account
+    and a description of the problem. We answer within 14 days.
+  </p>
 
-      <h3>12. Changes to these terms</h3>
-      <p>
-        We may change these terms as the game develops, for example when new features arrive, and
-        we announce significant changes on this site before they take effect. If you do not agree
-        with a change, you can delete your account. If you keep playing after it takes effect, the
-        new terms apply to you.
-      </p>
+  <h2 id="changes">12. Changes to these terms</h2>
+  <p>
+    We may change these terms as the game develops, for example when new features arrive, and we
+    announce significant changes on this site before they take effect. If you do not agree with a
+    change, you can delete your account. If you keep playing after it takes effect, the new terms
+    apply to you.
+  </p>
 
-      <h3>13. Law</h3>
-      <p>
-        These terms are governed by Polish law. If you play as a consumer, you also keep the
-        protection that the law of the country where you live gives you.
-      </p>
-    </article>
-  </Panel>
-</Base>
+  <h2 id="law">13. Law</h2>
+  <p>
+    These terms are governed by Polish law. If you play as a consumer, you also keep the protection
+    that the law of the country where you live gives you.
+  </p>
+</Doc>

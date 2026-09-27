@@ -1,307 +1,427 @@
 /*
- * The palette is the game's, not a new one: the sea is the colour the game's
- * canvas sits on (src/style.css), the wood and the bevels are CHROME in
- * src/ui/chrome.ts, and the gold is its title gold. A player who opens the
- * site after the game should feel they never left it.
+ * Xebeka website, "night harbour".
+ *
+ * A calm, flat frame in the colours of the game's own sea, with the game's
+ * pixel art as the only thing drawn in pixels. The one flourish is the
+ * stepped corner on buttons and pictures (.notch): the site is modern, but
+ * its corners are cut the way a sprite's are.
+ *
+ * Pixel art is always shown at a whole multiple of its size (2x) and cropped
+ * by its container, never scaled to fit, so every pixel stays square.
  */
+
 :root {
-  --sea: #142a2c;
-  --sea-deep: #0e1f21;
-  --sea-line: #6fa39a;
-  --wood: #2c2215;
-  --wood-bar: #40311a;
-  --bar-light: #6b5526;
-  --bevel-light: #7a6330;
-  --bevel-dark: #0d0906;
-  --edge: #050403;
-  --gold: #caa23a;
-  --cream: #ffe9a8;
-  --bone: #eadfc4;
-  --bone-dim: #a99878;
+  --deep: #0d2226;      /* page ground: the sea at night */
+  --abyss: #0a1b1e;     /* footer */
+  --shallows: #163a3f;  /* raised surfaces */
+  --line: #1d4147;      /* dividers */
+  --bone: #efe6d3;      /* text */
+  --mist: #9db4b0;      /* secondary text */
+  --lantern: #f2b33d;   /* the one accent: Play, links */
+  --lantern-hi: #ffd27a;
 
-  --font-display: "IM Fell English", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --font-body: "Alegreya", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-
-  --step--1: 0.9rem;
-  --step-0: 1.0625rem;
-  --step-1: 1.3rem;
-  --step-2: 1.6rem;
+  --font-display: "Young Serif", Georgia, serif;
+  --font-body: "Figtree", system-ui, sans-serif;
+  --page-pad: clamp(20px, 5.5vw, 80px);
 
   color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html { background: var(--deep); }
 
 body {
   margin: 0;
-  min-height: 100vh;
-  background: var(--sea);
+  background: var(--deep);
   color: var(--bone);
   font-family: var(--font-body);
-  font-size: var(--step-0);
+  font-size: 17px;
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
-a { color: var(--gold); text-underline-offset: 0.15em; }
-a:hover { color: var(--cream); }
+a { color: var(--lantern); }
+a:hover { color: var(--lantern-hi); }
 
-:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--lantern); outline-offset: 3px; }
 
-/* ---------------------------------------------------------------- header */
+.px { image-rendering: pixelated; }
 
-.masthead {
-  position: relative;
-  display: grid;
-  place-items: center;
-  height: clamp(12rem, 28vw, 18rem);
-  overflow: hidden;
-  background: var(--sea-deep);
-  border-bottom: 2px solid var(--edge);
-  text-align: center;
+/* ----------------------------------------------------------- stepped corners */
+
+.notch {
+  clip-path: polygon(0 8px, 4px 8px, 4px 4px, 8px 4px, 8px 0, calc(100% - 8px) 0, calc(100% - 8px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 8px, 100% 8px, 100% calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) calc(100% - 4px), calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) 100%, 8px 100%, 8px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 8px), 0 calc(100% - 8px));
 }
 
-.masthead__rose {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+.notch-lg {
+  clip-path: polygon(0 16px, 8px 16px, 8px 8px, 16px 8px, 16px 0, calc(100% - 16px) 0, calc(100% - 16px) 8px, calc(100% - 8px) 8px, calc(100% - 8px) 16px, 100% 16px, 100% calc(100% - 16px), calc(100% - 8px) calc(100% - 16px), calc(100% - 8px) calc(100% - 8px), calc(100% - 16px) calc(100% - 8px), calc(100% - 16px) 100%, 16px 100%, 16px calc(100% - 8px), 8px calc(100% - 8px), 8px calc(100% - 16px), 0 calc(100% - 16px));
 }
 
-.masthead__text { position: relative; padding: 0 1rem; }
-
-.wordmark {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(3.2rem, 11vw, 6.75rem);
-  line-height: 1;
-  letter-spacing: 0.14em;
-  /* the trailing letter-space would push the word off centre */
-  margin-right: -0.14em;
-  color: var(--gold);
-  /* A hard 2 px outline, the way the game letters a name over a head. */
-  text-shadow:
-    2px 0 0 var(--edge), -2px 0 0 var(--edge),
-    0 2px 0 var(--edge), 0 -2px 0 var(--edge),
-    2px 2px 0 var(--edge), -2px 2px 0 var(--edge),
-    2px -2px 0 var(--edge), -2px -2px 0 var(--edge);
+/* Only the left corners: for a picture that runs off the right edge. */
+.notch-l {
+  clip-path: polygon(0 16px, 8px 16px, 8px 8px, 16px 8px, 16px 0, 100% 0, 100% 100%, 16px 100%, 16px calc(100% - 8px), 8px calc(100% - 8px), 8px calc(100% - 16px), 0 calc(100% - 16px));
 }
 
-.tagline {
-  margin: 0.75rem auto 0;
-  max-width: 34ch;
-  font-style: italic;
-  font-size: var(--step-1);
-  line-height: 1.35;
-  color: var(--bone);
-  text-shadow: 0 1px 0 var(--edge);
+/* ------------------------------------------------------------------- buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 22px;
+  border: 0;
+  background: var(--lantern);
+  color: var(--deep);
+  font: 700 16px/1 var(--font-body);
+  text-decoration: none;
+  cursor: pointer;
 }
 
-/* ---------------------------------------------------------------- layout */
+.btn:hover { background: var(--lantern-hi); color: var(--deep); }
 
-.page {
-  display: grid;
-  grid-template-columns: 13.5rem minmax(0, 1fr) 15rem;
-  grid-template-areas: "nav main side";
-  align-items: start;
-  gap: 1.25rem;
-  max-width: 76rem;
-  margin: 1.75rem auto 0;
-  padding: 0 1rem;
+/* The corners clip an outside outline, so the focus ring sits inside. */
+.btn:focus-visible { outline: 2px solid var(--deep); outline-offset: -6px; }
+
+.btn--lg { min-height: 52px; padding: 0 28px; font-size: 17px; }
+
+.btn--quiet { background: var(--shallows); color: var(--bone); font-weight: 600; }
+.btn--quiet:hover { background: var(--line); color: var(--bone); }
+.btn--quiet:focus-visible { outline-color: var(--bone); }
+
+.btn--off,
+.btn:disabled,
+.btn--off:hover,
+.btn:disabled:hover {
+  background: var(--shallows);
+  color: var(--mist);
+  font-weight: 600;
+  cursor: default;
 }
 
-.page__nav { grid-area: nav; }
-.page__main { grid-area: main; display: grid; gap: 1.25rem; }
-.page__side { grid-area: side; display: grid; gap: 1.25rem; }
+/* ------------------------------------------------------------------- top bar */
 
-@media (max-width: 60rem) {
-  .page {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "main" "side" "nav";
-  }
+.topbar { border-bottom: 1px solid var(--line); }
+
+.topbar__inner {
+  display: flex;
+  align-items: center;
+  gap: 56px;
+  max-width: 1440px;
+  height: 76px;
+  margin: 0 auto;
+  padding: 0 var(--page-pad);
 }
 
-/* ------------------------------------------------ panels: the game's chrome */
-
-/* RAISED: light top-left, dark bottom-right, one hard ring outside — the
- * four-rectangle bevel every window in the game is built from. */
-.panel {
-  background: var(--wood);
-  border: 2px solid;
-  border-color: var(--bevel-light) var(--bevel-dark) var(--bevel-dark) var(--bevel-light);
-  outline: 1px solid var(--edge);
-}
-
-.panel__bar {
-  padding: 0.4rem 0.9rem 0.35rem;
-  background: var(--wood-bar);
-  border-bottom: 2px solid var(--bevel-dark);
-  box-shadow: inset 0 2px 0 var(--bar-light);
-}
-
-.panel__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: var(--step-1);
-  line-height: 1.3;
-  color: var(--gold);
-}
-
-.panel__body { padding: 1rem 1.15rem 1.2rem; }
-.panel__body > :first-child { margin-top: 0; }
-.panel__body > :last-child { margin-bottom: 0; }
-.panel__body p { max-width: 70ch; }
-
-/* --------------------------------------------------------------- the menu */
-
-.menu__note {
-  margin: 0 0 1rem;
-  font-size: var(--step--1);
-  font-style: italic;
-  color: var(--bone-dim);
-}
-
-.menu__group + .menu__group { margin-top: 1rem; }
-
-.menu__heading {
-  margin: 0 0 0.3rem;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 1.1rem;
-  color: var(--gold);
-}
-
-.menu__list { margin: 0; padding: 0; list-style: none; }
-
-.menu__item {
-  display: block;
-  padding: 0.1rem 0 0.1rem 0.75rem;
-  border-left: 2px solid var(--bevel-dark);
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: var(--bone);
   text-decoration: none;
 }
 
-/* A page that does not exist yet: shown so the shape of the site is visible,
- * dimmed so nobody expects it to open. */
-.menu__item[aria-disabled="true"] { color: var(--bone-dim); opacity: 0.7; }
+.brand:hover { color: var(--bone); }
 
-/* ------------------------------------------------------------ the buttons */
+.brand__name { font-family: var(--font-display); font-size: 28px; line-height: 1; }
 
-.button {
-  display: block;
-  width: 100%;
-  padding: 0.55rem 1rem 0.5rem;
-  font-family: var(--font-display);
-  font-size: var(--step-1);
-  line-height: 1.2;
-  color: var(--cream);
-  background: var(--wood-bar);
-  border: 2px solid;
-  border-color: var(--bar-light) var(--bevel-dark) var(--bevel-dark) var(--bar-light);
-  outline: 1px solid var(--edge);
-  cursor: pointer;
+.topnav { display: flex; gap: 32px; font-size: 16px; font-weight: 500; }
+.topnav a { color: var(--bone); text-decoration: none; }
+.topnav a:hover { color: var(--lantern); }
+.topnav [aria-disabled] { color: var(--mist); opacity: 0.55; cursor: default; }
+
+.topbar__actions { display: flex; align-items: center; gap: 24px; margin-left: auto; }
+
+@media (max-width: 860px) {
+  .topbar__inner { height: 64px; gap: 16px; }
+  .topnav { display: none; }
+  .brand__name { font-size: 24px; }
 }
 
-.button:disabled {
-  color: var(--bone-dim);
-  cursor: not-allowed;
-}
+/* ---------------------------------------------------------------------- hero */
 
-.side-note {
-  margin: 0.75rem 0 0;
-  font-size: var(--step--1);
-  color: var(--bone-dim);
-}
+.hero { display: flex; max-width: 1440px; min-height: 640px; margin: 0 auto; }
 
-/* ---------------------------------------------------------------- footer */
-
-.footer {
+.hero__text {
+  flex: 0 0 560px;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.5rem 1.5rem;
-  max-width: 76rem;
-  margin: 2.5rem auto 0;
-  padding: 1rem 1rem 2rem;
-  font-size: var(--step--1);
-  color: var(--bone-dim);
+  flex-direction: column;
+  justify-content: center;
+  gap: 24px;
+  padding: 48px 56px 48px var(--page-pad);
 }
 
-.footer p { margin: 0; }
-
-.footer__links { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
-
-.footer__links a { color: var(--bone-dim); }
-.footer__links a:hover { color: var(--cream); }
-
-/* ------------------------------------------------------------- documents */
-
-/* Long text inside a panel: the terms, the privacy policy, the credits.
- * Headings take the game's display face so a legal page still reads as a
- * page of this world, and the measure stays under 70 characters. */
-.doc__date {
-  font-size: var(--step--1);
-  font-style: italic;
-  color: var(--bone-dim);
-}
-
-.prose { max-width: 70ch; }
-
-.prose h2,
-.prose h3,
-.prose h4 {
-  margin: 1.75rem 0 0.35rem;
+.hero__title {
+  margin: 0;
   font-family: var(--font-display);
   font-weight: 400;
-  line-height: 1.3;
-  color: var(--gold);
-  scroll-margin-top: 1rem;
+  font-size: clamp(36px, 4vw, 56px);
+  line-height: 1.08;
 }
 
-.prose h2 { font-size: var(--step-1); }
-.prose h3 { font-size: 1.2rem; }
-.prose h4 { font-size: var(--step-0); }
+.hero__lead { margin: 0; font-size: 19px; }
 
-.prose ul,
-.prose ol { padding-left: 1.3rem; }
+.hero__actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; }
 
-.prose li + li { margin-top: 0.35rem; }
+.hero__note { margin: 0; font-size: 15px; line-height: 1.5; color: var(--mist); }
 
-.prose strong { color: var(--cream); }
+/* The scene is 880x640 (the art at 2x) and anchored right, so a narrower
+ * window loses the Time Sage's bank first and keeps the bridge and the town. */
+.hero__scene { position: relative; flex: 1 1 auto; min-width: 0; height: 640px; overflow: hidden; }
 
-/* Credits are full of file paths and generator URLs a hundred characters
- * long; they wrap anywhere rather than push the page sideways on a phone. */
-.prose a,
-.prose code { overflow-wrap: anywhere; }
+.scene { position: absolute; top: 0; right: 0; width: 880px; height: 640px; }
 
-.prose code { font-size: 0.92em; color: var(--cream); }
+.scene img { display: block; width: 880px; height: 640px; }
 
-.prose table {
+/* The one thing that moves: a player crossing to Bonetown, eight frames from
+ * the game's own walk cycle, on a loop. */
+.walker {
+  position: absolute;
+  left: 16px;
+  top: 446px;
+  width: 128px;
+  height: 128px;
+  background: url(/art/hero-walk.png) 0 0 / 1024px 128px no-repeat;
+  image-rendering: pixelated;
+  animation: xb-stride 1s steps(8) infinite, xb-cross 7s linear infinite;
+}
+
+@keyframes xb-stride { to { background-position: -1024px 0; } }
+
+@keyframes xb-cross {
+  0% { transform: translateX(0); opacity: 0; }
+  6% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { transform: translateX(520px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .walker { animation: none; transform: translateX(250px); }
+}
+
+@media (max-width: 1023px) {
+  .hero { flex-direction: column; min-height: 0; }
+  .hero__scene { order: -1; flex: none; height: 360px; }
+  .hero__scene.notch-l { clip-path: none; }
+  .scene { right: auto; left: calc(50% - 420px); top: -250px; }
+  .hero__text { flex: none; padding: 32px var(--page-pad) 0; }
+}
+
+@media (max-width: 560px) {
+  .hero__actions .btn { flex: 1 1 100%; }
+}
+
+/* ------------------------------------------------------------------ sections */
+
+.section { max-width: 1440px; margin: 0 auto; padding: 120px var(--page-pad) 0; }
+
+.section__head { display: flex; flex-direction: column; gap: 16px; max-width: 720px; margin-bottom: 40px; }
+
+.section__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(30px, 3vw, 40px);
+  line-height: 1.15;
+}
+
+.section__intro { margin: 0; font-size: 19px; color: var(--mist); }
+
+@media (max-width: 1023px) {
+  .section { padding-top: 72px; }
+  .section__head { margin-bottom: 28px; }
+  .section__intro { font-size: 17px; }
+}
+
+/* the road: your island, the town, the wilds */
+.journey { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; margin: 0; padding: 0; list-style: none; }
+
+.stop { display: flex; flex-direction: column; gap: 20px; }
+.stop p { margin: 0; }
+
+.stop__art { position: relative; height: 256px; overflow: hidden; }
+.stop__art img { position: absolute; top: 0; left: 50%; width: 400px; height: 256px; transform: translateX(-50%); }
+
+.stop__head { display: flex; align-items: baseline; gap: 14px; }
+.stop__num { font-family: var(--font-display); font-size: 28px; line-height: 1; color: var(--lantern); }
+.stop__title { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 26px; line-height: 1.2; }
+
+@media (max-width: 1023px) {
+  .journey { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+}
+
+/* the creatures on their strip of grass; the row scrolls sideways on phones */
+.lineup { overflow-x: auto; padding-bottom: 8px; }
+.lineup__inner { width: 1024px; }
+.lineup img { display: block; width: 1024px; height: 168px; }
+
+.lineup__names {
+  display: flex;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-display);
+  font-size: 18px;
+  text-align: center;
+}
+
+.lineup__names li { width: 144px; }
+.lineup__names li.is-wide { width: 160px; }
+
+@media (max-width: 1100px) {
+  .lineup { margin: 0 calc(-1 * var(--page-pad)); padding: 0 var(--page-pad) 8px; }
+}
+
+/* news */
+.news { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+
+.news__item { display: flex; flex-direction: column; gap: 12px; padding: 32px; background: var(--shallows); }
+.news__item p { margin: 0; }
+
+.news__date { font-size: 15px; color: var(--mist); }
+
+.news__title { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 26px; line-height: 1.25; }
+
+@media (max-width: 860px) {
+  .news { grid-template-columns: minmax(0, 1fr); }
+  .news__item { padding: 24px; }
+  .news__title { font-size: 22px; }
+}
+
+/* -------------------------------------------------------------------- footer */
+
+.footer { margin-top: 120px; background: var(--abyss); }
+
+.footer__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px 40px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 40px var(--page-pad);
+}
+
+.footer__brand { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.footer__name { font-family: var(--font-display); font-size: 20px; }
+.footer__copy { margin: 0 0 0 12px; font-size: 15px; color: var(--mist); }
+
+.footer__links { display: flex; flex-wrap: wrap; gap: 12px 28px; font-size: 15px; }
+.footer__links a { color: var(--bone); text-decoration: none; }
+.footer__links a:hover,
+.footer__links a[aria-current] { color: var(--lantern); }
+
+@media (max-width: 1023px) {
+  .footer { margin-top: 72px; }
+  .footer__copy { flex-basis: 100%; margin: 0; }
+}
+
+/* ------------------------------------------------------------ long documents */
+
+/* A strip of the river from Bonetown, 2x, centred; wider screens see sea. */
+.band {
+  height: 120px;
+  background: var(--deep) url(/art/band.png) center / 1920px 120px no-repeat;
+  image-rendering: pixelated;
+}
+
+.doc {
+  display: flex;
+  align-items: flex-start;
+  gap: 96px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 72px var(--page-pad) 0;
+}
+
+.doc__body { flex: 0 1 720px; min-width: 0; font-size: 18px; line-height: 1.7; }
+
+.doc__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(38px, 4vw, 52px);
+  line-height: 1.1;
+}
+
+.doc__date { margin: 18px 0 0; font-size: 15px; color: var(--mist); }
+
+.doc__toc {
+  position: sticky;
+  top: 24px;
+  flex: 0 0 280px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding-top: 12px;
+}
+
+.doc__toc-title { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
+
+.doc__toc ul { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; font-size: 16px; line-height: 1.4; }
+.doc__toc a { color: var(--mist); text-decoration: none; }
+.doc__toc a:hover { color: var(--bone); }
+
+@media (max-width: 1100px) {
+  .doc { padding-top: 48px; }
+  .doc__toc { display: none; }
+  .doc__body { font-size: 17px; }
+}
+
+.doc__body p,
+.doc__body ul,
+.doc__body ol,
+.doc__body table { margin: 18px 0 0; }
+
+.doc__body h2 {
+  margin: 44px 0 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 26px;
+  line-height: 1.3;
+  scroll-margin-top: 24px;
+}
+
+.doc__body h3 {
+  margin: 32px 0 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 21px;
+  line-height: 1.35;
+  scroll-margin-top: 24px;
+}
+
+.doc__body h4 { margin: 24px 0 0; font-size: 18px; font-weight: 700; }
+
+.doc__body ul,
+.doc__body ol { padding-left: 22px; }
+
+.doc__body li + li { margin-top: 10px; }
+
+.doc__body strong { font-weight: 700; }
+
+/* Credits are full of file paths and generator URLs a hundred characters long;
+ * they wrap anywhere rather than push the page sideways on a phone. */
+.doc__body a,
+.doc__body code { overflow-wrap: anywhere; }
+
+.doc__body code { padding: 1px 5px; background: var(--shallows); font-size: 0.9em; }
+
+.doc__body table {
   display: block;
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
-  font-size: var(--step--1);
+  font-size: 15px;
 }
 
-.prose th,
-.prose td {
-  padding: 0.3rem 0.6rem;
-  border: 1px solid var(--bevel-dark);
-  text-align: left;
-  vertical-align: top;
-}
+.doc__body th,
+.doc__body td { padding: 6px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
 
-.prose th { color: var(--gold); background: var(--wood-bar); }
+.doc__body th { background: var(--shallows); }
 
-.prose hr {
-  margin: 1.75rem 0;
-  border: 0;
-  border-top: 2px solid var(--bevel-dark);
-}
+.doc__body hr { margin: 44px 0 0; border: 0; border-top: 1px solid var(--line); }
 
-/* CREDITS.md opens with its own "# Credits"; the panel title already says it. */
-.prose--credits > h1:first-child { display: none; }
+/* CREDITS.md opens with its own "# Credits"; the page title already says it. */
+.credits > h1:first-child { display: none; }

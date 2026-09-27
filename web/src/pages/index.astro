@@ -1,21 +1,124 @@
 ---
 import Base from "../layouts/Base.astro";
-import Panel from "../components/Panel.astro";
+import { WORLD_OPEN } from "../site.ts";
+
+// Until etap 1.11 gives news a home of its own, the posts live here.
+const NEWS = [
+  {
+    date: "27 September 2026",
+    title: "A new look for xebeka.com",
+    text: "The site now opens onto Bonetown itself. Your account, the library and the highscores will all live here.",
+  },
+  {
+    date: "27 September 2026",
+    title: "Accounts are on the way",
+    text: "Soon you will log in with email or Google, keep up to five characters, and find your progress waiting on any device.",
+  },
+];
+
+// Left to right, as they stand on the strip in /art/creatures.png.
+const CREATURES = ["Goblin", "Skeleton", "Orc", "Minotaur", "Viking", "Black Knight", "Corsair"];
 ---
 <Base
   title="Xebeka, an online RPG you play in the browser"
-  description="Xebeka is an online role-playing game played in the browser, with nothing to install. It is not open yet."
+  description="Xebeka is an online role-playing game played in the browser, with nothing to install. Begin on an island of your own and cross to Bonetown."
 >
-  <Panel title="Xebeka is not open yet">
-    <p>
-      Xebeka is an online role-playing game you play in the browser, with nothing to install.
-      You begin on an island of your own, and from there you cross to Bonetown, where every
-      player shares the streets, the traders and the hunting grounds beyond.
-    </p>
-    <p>The creatures out there are shared and fought over, and from level 10 so are you.</p>
-    <p>
-      The first world opens after testing. Accounts, the library of creatures and items,
-      and the highscores open with it.
-    </p>
-  </Panel>
+  <section class="hero">
+    <div class="hero__text">
+      <h1 class="hero__title">Begin on an island of your own.</h1>
+      <p class="hero__lead">
+        Xebeka is an online role-playing game you play in the browser, with nothing to install.
+        Cross the bridge to Bonetown, where every player shares the streets, the traders and the
+        hunting grounds beyond.
+      </p>
+      <div class="hero__actions">
+        {WORLD_OPEN
+          ? <a class="btn btn--lg notch" href="/play/">Play in your browser</a>
+          : <button class="btn btn--lg notch" type="button" disabled>Not open yet</button>}
+      </div>
+      <p class="hero__note">
+        {WORLD_OPEN
+          ? "Free to play. From level 10, other players can fight you too."
+          : "The first world opens after testing, free to play. From level 10, other players can fight you too."}
+      </p>
+    </div>
+    <div class="hero__scene notch-l">
+      <div class="scene">
+        <img
+          class="px"
+          src="/art/bonetown-bridge.png"
+          width="880"
+          height="640"
+          alt="Bonetown's west bridge: a player crosses the river towards the inn and a market stall, while the Time Sage waits on his island"
+        />
+        <div class="walker" aria-hidden="true"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section__head">
+      <h2 class="section__title">From your island to the wild isles</h2>
+      <p class="section__intro">
+        Every character starts on a small island of their own. A bridge leads to the town, and
+        the town's bridges lead out to the creatures.
+      </p>
+    </div>
+    <ol class="journey">
+      <li class="stop">
+        <div class="stop__art notch-lg">
+          <img class="px" src="/art/journey-island.png" width="400" height="256" alt="A home island with a forge, a chest and a mage tower" />
+        </div>
+        <div class="stop__head"><span class="stop__num" aria-hidden="true">1</span><h3 class="stop__title">Your island</h3></div>
+        <p>You start on an island of your own. Build it up with a forge, a tower and chests for everything you bring back.</p>
+      </li>
+      <li class="stop">
+        <div class="stop__art notch-lg">
+          <img class="px" src="/art/journey-town.png" width="400" height="256" alt="Bonetown's market square with two stalls, their traders and two players" />
+        </div>
+        <div class="stop__head"><span class="stop__num" aria-hidden="true">2</span><h3 class="stop__title">Bonetown</h3></div>
+        <p>Cross the bridge to the town every player shares, with its traders, its market square and the people you will hunt with.</p>
+      </li>
+      <li class="stop">
+        <div class="stop__art notch-lg">
+          <img class="px" src="/art/journey-wilds.png" width="400" height="256" alt="An orc camp with a tent, a campfire and a skull pole, and a skeleton by the water" />
+        </div>
+        <div class="stop__head"><span class="stop__num" aria-hidden="true">3</span><h3 class="stop__title">The wild isles</h3></div>
+        <p>Past the town's bridges, creatures hold camps on every island. From level 10, other players can fight you there too.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="section">
+    <div class="section__head">
+      <h2 class="section__title">Who waits past the bridges</h2>
+      <p class="section__intro">
+        When the world opens, every creature gets its own page in the library: where it lives,
+        how it fights and what it leaves behind.
+      </p>
+    </div>
+    <div class="lineup">
+      <div class="lineup__inner">
+        <img class="px" src="/art/creatures.png" width="1024" height="168" alt={`${CREATURES.join(", ")}, standing in a row on a strip of grass`} />
+        <ul class="lineup__names" aria-hidden="true">
+          {CREATURES.map((name) => <li class={name === "Black Knight" ? "is-wide" : undefined}>{name}</li>)}
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section__head">
+      <h2 class="section__title">News</h2>
+    </div>
+    <div class="news">
+      {NEWS.map((post) => (
+        <article class="news__item notch-lg">
+          <p class="news__date">{post.date}</p>
+          <h3 class="news__title">{post.title}</h3>
+          <p>{post.text}</p>
+        </article>
+      ))}
+    </div>
+  </section>
 </Base>

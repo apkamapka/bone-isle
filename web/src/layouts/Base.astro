@@ -1,11 +1,12 @@
 ---
-import "@fontsource/alegreya/400.css";
-import "@fontsource/alegreya/400-italic.css";
-import "@fontsource/alegreya/700.css";
-import "@fontsource/im-fell-english/400.css";
+import "@fontsource/young-serif/400.css";
+import "@fontsource/figtree/400.css";
+import "@fontsource/figtree/500.css";
+import "@fontsource/figtree/600.css";
+import "@fontsource/figtree/700.css";
 import "../styles/global.css";
-import Panel from "../components/Panel.astro";
-import WindRose from "../components/WindRose.astro";
+import BoneMark from "../components/BoneMark.astro";
+import { WORLD_OPEN } from "../site.ts";
 
 interface Props {
   title: string;
@@ -13,21 +14,25 @@ interface Props {
 }
 const { title, description } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
+const here = Astro.url.pathname;
 
 /*
- * The site's shape, shown from day one. Every entry is a page that opens with
- * the game (etap 1: account; etap 2: library; etap 4: community). Until its
- * page exists an entry has no href and is dimmed — see `.menu__item`.
+ * The top bar shows the site's whole shape from day one. An entry without an
+ * href is a page that opens later (etap 1.11 news, etap 2 library, etap 4
+ * community) and is drawn dimmed. On phones the entries hide until at least
+ * one is live, since a menu of dimmed words is no use there.
  */
-type MenuItem = { label: string; href?: string };
-const MENU: { heading: string; items: MenuItem[] }[] = [
-  { heading: "News", items: [{ label: "Latest news" }] },
-  { heading: "Account", items: [{ label: "Create account" }, { label: "Log in" }, { label: "Manage account" }] },
-  { heading: "Library", items: [{ label: "Creatures" }, { label: "Items" }, { label: "Magic" }, { label: "NPCs" }, { label: "World map" }] },
-  { heading: "Community", items: [{ label: "Characters" }, { label: "Highscores" }, { label: "Who is online" }, { label: "Kill statistics" }] },
-  { heading: "Support", items: [{ label: "FAQ" }, { label: "Rules", href: "/terms/#rules" }, { label: "Credits", href: "/credits/" }] },
+const NAV: { label: string; href?: string }[] = [
+  { label: "News" },
+  { label: "Library" },
+  { label: "Community" },
+  { label: "Support" },
 ];
-const menuDimmed = MENU.some((g) => g.items.some((i) => !i.href));
+const LEGAL = [
+  { label: "Terms of Service", href: "/terms/" },
+  { label: "Privacy Policy", href: "/privacy/" },
+  { label: "Credits", href: "/credits/" },
+];
 ---
 <!doctype html>
 <html lang="en">
@@ -38,7 +43,7 @@ const menuDimmed = MENU.some((g) => g.items.some((i) => !i.href));
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" type="image/png" href="/play/icon-192.png" />
-    <meta name="theme-color" content="#142a2c" />
+    <meta name="theme-color" content="#0d2226" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Xebeka" />
     <meta property="og:title" content={title} />
@@ -46,54 +51,44 @@ const menuDimmed = MENU.some((g) => g.items.some((i) => !i.href));
     <meta property="og:url" content={canonical} />
   </head>
   <body>
-    <header class="masthead">
-      <WindRose />
-      <div class="masthead__text">
-        <p class="wordmark" role="heading" aria-level="1">XEBEKA</p>
-        <p class="tagline">An online role-playing game of islands, bones and old stories, played in the browser.</p>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <a class="brand" href="/">
+          <BoneMark />
+          <span class="brand__name">Xebeka</span>
+        </a>
+        <nav class="topnav" aria-label="Site">
+          {NAV.map((item) =>
+            item.href
+              ? <a href={item.href}>{item.label}</a>
+              : <span aria-disabled="true" title="Opens with the game">{item.label}</span>
+          )}
+        </nav>
+        <div class="topbar__actions">
+          {WORLD_OPEN
+            ? <a class="btn notch" href="/play/">Play</a>
+            : <span class="btn btn--off notch" aria-disabled="true">Not open yet</span>}
+        </div>
       </div>
     </header>
 
-    <div class="page">
-      <div class="page__nav">
-        <Panel as="nav" label="Site">
-          {menuDimmed && <p class="menu__note">Dimmed pages open with the game.</p>}
-          {MENU.map((group) => (
-            <div class="menu__group">
-              <h2 class="menu__heading">{group.heading}</h2>
-              <ul class="menu__list">
-                {group.items.map((item) => (
-                  <li>
-                    {item.href
-                      ? <a class="menu__item" href={item.href}>{item.label}</a>
-                      : <span class="menu__item" aria-disabled="true">{item.label}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </Panel>
-      </div>
-
-      <main class="page__main">
-        <slot />
-      </main>
-
-      <div class="page__side">
-        <Panel as="aside" title="Play" label="Play">
-          <button class="button" type="button" disabled>Not open yet</button>
-          <p class="side-note">When the world opens, you log in with email or Google and play right here.</p>
-        </Panel>
-      </div>
-    </div>
+    <main>
+      <slot />
+    </main>
 
     <footer class="footer">
-      <p>© 2026 Xebeka</p>
-      <nav class="footer__links" aria-label="Legal">
-        <a href="/terms/">Terms of Service</a>
-        <a href="/privacy/">Privacy Policy</a>
-        <a href="/credits/">Credits</a>
-      </nav>
+      <div class="footer__inner">
+        <div class="footer__brand">
+          <BoneMark size={24} />
+          <span class="footer__name">Xebeka</span>
+          <p class="footer__copy">© 2026 Xebeka. Run by akApp Studio.</p>
+        </div>
+        <nav class="footer__links" aria-label="Legal">
+          {LEGAL.map((l) => (
+            <a href={l.href} aria-current={here === l.href ? "page" : undefined}>{l.label}</a>
+          ))}
+        </nav>
+      </div>
     </footer>
   </body>
 </html>
