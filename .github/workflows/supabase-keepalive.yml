@@ -1,0 +1,36 @@
+# Etap 1.3: keeps the Supabase Free project from being paused for inactivity,
+# and removes characters whose 7-day deletion has run out.
+#
+# Runs 3 times a day, and on demand from the Actions tab ("Run workflow").
+# If a run fails, GitHub emails you: that is the early warning that the
+# project is paused or unreachable.
+#
+# The key below is the PUBLISHABLE key. It is public by design and reaches
+# only what the database grants to "anon": here, one function.
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: "17 */8 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Purge expired characters (also counts as database activity)
+        env:
+          SUPABASE_URL: https://yjtojtvakkcokomrzcyh.supabase.co
+          SUPABASE_KEY: sb_publishable_MJn1iEgInCW3zhRHxCip7w_4AhEygnn
+        run: |
+          echo "Characters purged:"
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 20 \
+            -X POST "$SUPABASE_URL/rest/v1/rpc/purge_deleted_characters" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+          echo
