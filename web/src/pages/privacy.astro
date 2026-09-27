@@ -1,0 +1,143 @@
+---
+import Base from "../layouts/Base.astro";
+import Panel from "../components/Panel.astro";
+
+/*
+ * Etap 1.12, before registration opens: the controller is named here only as
+ * akApp Studio. Under an unregistered business (NDG) the controller is a
+ * natural person, so add the full name and address to "Who is responsible",
+ * and the same in terms.astro.
+ */
+---
+<Base
+  title="Privacy Policy · Xebeka"
+  description="What personal data Xebeka collects, why, who helps process it, and what rights you have."
+>
+  <Panel title="Privacy Policy">
+    <article class="prose">
+      <p class="doc__date">Last updated 27 September 2026</p>
+      <p>
+        This policy explains what personal data Xebeka collects, why, who helps us process it, and
+        what rights you have. We collect only what the game needs. There are no ads, no tracking
+        and no analytics, and we never sell data.
+      </p>
+
+      <h3>Who is responsible</h3>
+      <p>
+        The controller of your data is <a href="https://akappstudio.pl">akApp Studio</a>. For
+        anything about your data, write to <a href="mailto:kontakt@xebeka.com">kontakt@xebeka.com</a>.
+      </p>
+
+      <h3>What we collect</h3>
+      <ul>
+        <li>
+          <strong>Your account:</strong> your email address and your password. The password is
+          stored only in hashed form, so nobody can read it, us included. If you sign in with
+          Google, we receive your email address and the basic profile Google shares (your name and
+          a link to your profile picture) instead of a password.
+        </li>
+        <li>
+          <strong>Your characters:</strong> their names, sex, world and progress in the game, with
+          the dates they were created and last saved.
+        </li>
+        <li>
+          <strong>Technical data:</strong> when you use the site or the game, our providers record
+          your IP address, your browser and the requests it makes, to keep the service secure and
+          to fix problems.
+        </li>
+        <li><strong>Messages:</strong> whatever you write to us by email.</li>
+      </ul>
+      <p>
+        You do not have to give us your email address, but without it we cannot create an
+        account for you.
+      </p>
+
+      <h3>Why, and on what legal basis</h3>
+      <ul>
+        <li>
+          To create and run your account and characters, and to send the emails that come with
+          them: confirming your address, resetting your password, and important notices about your
+          account or the game. This is needed to provide the game you signed up for
+          (Article 6(1)(b) GDPR).
+        </li>
+        <li>
+          To keep the game secure, prevent abuse and enforce the rules of play. This is our
+          legitimate interest in a safe and fair game (Article 6(1)(f) GDPR).
+        </li>
+        <li>To answer your messages. This is our legitimate interest in replying (Article 6(1)(f) GDPR).</li>
+        <li>To keep or hand over data when the law requires it (Article 6(1)(c) GDPR).</li>
+      </ul>
+      <p>We do not send newsletters or marketing email.</p>
+
+      <h3>What is stored on your device</h3>
+      <p>
+        The site and the game keep a few things in your browser's local storage: your sign-in
+        session, your game settings and window layout, and the game data the game needs while you
+        play. The game cannot work without them, so we do not ask for consent. There are no
+        advertising or tracking cookies.
+      </p>
+
+      <h3>Who processes your data for us</h3>
+      <ul>
+        <li>
+          <strong>Supabase</strong> stores accounts and characters and handles signing in. Our
+          database is in Frankfurt, Germany.
+        </li>
+        <li><strong>Vercel</strong> hosts the website and the game.</li>
+        <li><strong>SEOHOST</strong>, in Poland, handles our email.</li>
+        <li>
+          <strong>Google</strong>, only if you choose to sign in with Google. Your Google account
+          itself is covered by Google's own privacy policy.
+        </li>
+      </ul>
+      <p>
+        They process data only on our instructions. Supabase and Vercel are US companies, so some
+        data may be processed outside the European Economic Area. Those transfers are protected by
+        the EU-US Data Privacy Framework or by the European Commission's Standard Contractual
+        Clauses.
+      </p>
+
+      <h3>How long we keep it</h3>
+      <ul>
+        <li>Account and character data: until you delete your account.</li>
+        <li>A character you delete: 7 days, the time you have to change your mind.</li>
+        <li>Technical logs: for the short time our providers keep them, usually days to weeks.</li>
+        <li>Emails: as long as it takes to deal with your matter.</li>
+      </ul>
+
+      <h3>Your rights</h3>
+      <p>
+        You can ask us for a copy of your data, to correct it, to delete it, to limit how we use
+        it, or to send it to you in a portable format. You can also object to what we do on the
+        basis of our legitimate interests. Write to
+        <a href="mailto:kontakt@xebeka.com">kontakt@xebeka.com</a> and we will answer within one
+        month. You can delete your account yourself at any time.
+      </p>
+      <p>
+        You can complain to a data protection authority: in Poland, the President of the Personal
+        Data Protection Office (<a href="https://uodo.gov.pl">uodo.gov.pl</a>), or the authority
+        in the country where you live. If you live outside the European Union, for example in
+        Brazil, you have the rights your own law gives you, and we honour them the same way.
+      </p>
+
+      <h3>Children</h3>
+      <p>
+        Xebeka is for players aged 13 and over. If we learn that an account belongs to a child
+        under 13, we delete it. A parent who thinks their child has made an account can write to
+        us.
+      </p>
+
+      <h3>Security</h3>
+      <p>
+        Connections to the site and the game are encrypted, passwords are stored only in hashed
+        form, and each player can reach only their own account and characters.
+      </p>
+
+      <h3>Changes to this policy</h3>
+      <p>
+        When this policy changes, the new version appears here with a new date, and significant
+        changes are announced on the site.
+      </p>
+    </article>
+  </Panel>
+</Base>

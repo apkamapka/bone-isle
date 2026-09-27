@@ -1,0 +1,26 @@
+---
+import Base from "../layouts/Base.astro";
+import Panel from "../components/Panel.astro";
+// The attribution record kept next to the game's art. Rendered at build time,
+// so whatever CREDITS.md says on deploy is what this page says: one file to
+// update, and the page the licences require stays reachable from the game's
+// own origin even when the repository is private.
+import { Content as Credits } from "../../../CREDITS.md";
+---
+<Base
+  title="Credits · Xebeka"
+  description="The artists whose work appears in Xebeka, with the licence and source of every piece."
+>
+  <Panel title="Credits">
+    <div class="prose">
+      <p>
+        Xebeka is drawn with art shared by many artists under open and free licences. Every piece
+        used in the game is credited below with its authors, its licence and where it comes from,
+        together with what was changed to fit it into the game.
+      </p>
+    </div>
+    <div class="prose prose--credits">
+      <Credits />
+    </div>
+  </Panel>
+</Base>

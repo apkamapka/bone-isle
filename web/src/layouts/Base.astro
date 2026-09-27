@@ -25,9 +25,9 @@ const MENU: { heading: string; items: MenuItem[] }[] = [
   { heading: "Account", items: [{ label: "Create account" }, { label: "Log in" }, { label: "Manage account" }] },
   { heading: "Library", items: [{ label: "Creatures" }, { label: "Items" }, { label: "Magic" }, { label: "NPCs" }, { label: "World map" }] },
   { heading: "Community", items: [{ label: "Characters" }, { label: "Highscores" }, { label: "Who is online" }, { label: "Kill statistics" }] },
-  { heading: "Support", items: [{ label: "FAQ" }, { label: "Rules" }, { label: "Credits" }] },
+  { heading: "Support", items: [{ label: "FAQ" }, { label: "Rules", href: "/terms/#rules" }, { label: "Credits", href: "/credits/" }] },
 ];
-const menuOpen = MENU.some((g) => g.items.some((i) => i.href));
+const menuDimmed = MENU.some((g) => g.items.some((i) => !i.href));
 ---
 <!doctype html>
 <html lang="en">
@@ -57,7 +57,7 @@ const menuOpen = MENU.some((g) => g.items.some((i) => i.href));
     <div class="page">
       <div class="page__nav">
         <Panel as="nav" label="Site">
-          {!menuOpen && <p class="menu__note">These pages open with the game.</p>}
+          {menuDimmed && <p class="menu__note">Dimmed pages open with the game.</p>}
           {MENU.map((group) => (
             <div class="menu__group">
               <h2 class="menu__heading">{group.heading}</h2>
@@ -89,6 +89,11 @@ const menuOpen = MENU.some((g) => g.items.some((i) => i.href));
 
     <footer class="footer">
       <p>© 2026 Xebeka</p>
+      <nav class="footer__links" aria-label="Legal">
+        <a href="/terms/">Terms of Service</a>
+        <a href="/privacy/">Privacy Policy</a>
+        <a href="/credits/">Credits</a>
+      </nav>
     </footer>
   </body>
 </html>
