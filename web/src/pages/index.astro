@@ -2,20 +2,6 @@
 import Base from "../layouts/Base.astro";
 import { WORLD_OPEN } from "../site.ts";
 
-// Until etap 1.11 gives news a home of its own, the posts live here.
-const NEWS = [
-  {
-    date: "27 September 2026",
-    title: "A new look for xebeka.com",
-    text: "The site now opens onto Bonetown itself. Your account, the library and the highscores will all live here.",
-  },
-  {
-    date: "27 September 2026",
-    title: "Accounts are on the way",
-    text: "Soon you will log in with email or Google, keep up to five characters, and find your progress waiting on any device.",
-  },
-];
-
 // Left to right, as they stand on the strip in /art/creatures.png.
 const CREATURES = ["Goblin", "Skeleton", "Orc", "Minotaur", "Viking", "Black Knight", "Corsair"];
 ---
@@ -25,11 +11,13 @@ const CREATURES = ["Goblin", "Skeleton", "Orc", "Minotaur", "Viking", "Black Kni
 >
   <section class="hero">
     <div class="hero__text">
-      <h1 class="hero__title">Begin on an island of your own.</h1>
+      <h1 class="hero__logo">
+        <img class="px" src="/art/logo.png" width="342" height="300" alt="Xebeka" />
+      </h1>
       <p class="hero__lead">
-        Xebeka is an online role-playing game you play in the browser, with nothing to install.
-        Cross the bridge to Bonetown, where every player shares the streets, the traders and the
-        hunting grounds beyond.
+        An online role-playing game you play in the browser, with nothing to install. Begin on an
+        island of your own, then cross the bridge to Bonetown, where every player shares the
+        streets, the traders and the hunting grounds beyond.
       </p>
       <div class="hero__actions">
         {WORLD_OPEN
@@ -107,18 +95,4 @@ const CREATURES = ["Goblin", "Skeleton", "Orc", "Minotaur", "Viking", "Black Kni
     </div>
   </section>
 
-  <section class="section">
-    <div class="section__head">
-      <h2 class="section__title">News</h2>
-    </div>
-    <div class="news">
-      {NEWS.map((post) => (
-        <article class="news__item notch-lg">
-          <p class="news__date">{post.date}</p>
-          <h3 class="news__title">{post.title}</h3>
-          <p>{post.text}</p>
-        </article>
-      ))}
-    </div>
-  </section>
 </Base>

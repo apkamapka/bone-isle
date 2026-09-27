@@ -126,6 +126,8 @@ a:hover { color: var(--lantern-hi); }
 
 .brand__name { font-family: var(--font-display); font-size: 28px; line-height: 1; }
 
+.brand__mark { display: block; width: 48px; height: 50px; }
+
 .topnav { display: flex; gap: 32px; font-size: 16px; font-weight: 500; }
 .topnav a { color: var(--bone); text-decoration: none; }
 .topnav a:hover { color: var(--lantern); }
@@ -141,26 +143,22 @@ a:hover { color: var(--lantern-hi); }
 
 /* ---------------------------------------------------------------------- hero */
 
-.hero { display: flex; max-width: 1440px; min-height: 640px; margin: 0 auto; }
+.hero { display: flex; align-items: center; max-width: 1440px; min-height: 640px; margin: 0 auto; }
 
 .hero__text {
   flex: 0 0 560px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 24px;
-  padding: 48px 56px 48px var(--page-pad);
+  gap: 20px;
+  padding: 32px 56px 32px var(--page-pad);
 }
 
-.hero__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(36px, 4vw, 56px);
-  line-height: 1.08;
-}
+/* The logo is pixel art 114x100, shown at 3x (2x on the narrowest phones). */
+.hero__logo { margin: 0; line-height: 0; }
+.hero__logo img { display: block; width: 342px; height: 300px; }
 
-.hero__lead { margin: 0; font-size: 19px; }
+.hero__lead { margin: 0; font-size: 18px; }
 
 .hero__actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; }
 
@@ -202,10 +200,15 @@ a:hover { color: var(--lantern-hi); }
 
 @media (max-width: 1023px) {
   .hero { flex-direction: column; min-height: 0; }
-  .hero__scene { order: -1; flex: none; height: 360px; }
+  .hero__scene { flex: none; height: 360px; margin-top: 40px; }
   .hero__scene.notch-l { clip-path: none; }
   .scene { right: auto; left: calc(50% - 420px); top: -250px; }
   .hero__text { flex: none; padding: 32px var(--page-pad) 0; }
+  .hero__logo img { margin: 0 auto; }
+}
+
+@media (max-width: 400px) {
+  .hero__logo img { width: 228px; height: 200px; }
 }
 
 @media (max-width: 560px) {
@@ -307,6 +310,8 @@ a:hover { color: var(--lantern-hi); }
 .footer__brand { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .footer__name { font-family: var(--font-display); font-size: 20px; }
 .footer__copy { margin: 0 0 0 12px; font-size: 15px; color: var(--mist); }
+.footer__copy a { color: var(--bone); }
+.footer__copy a:hover { color: var(--lantern); }
 
 .footer__links { display: flex; flex-wrap: wrap; gap: 12px 28px; font-size: 15px; }
 .footer__links a { color: var(--bone); text-decoration: none; }

@@ -5,7 +5,6 @@ import "@fontsource/figtree/500.css";
 import "@fontsource/figtree/600.css";
 import "@fontsource/figtree/700.css";
 import "../styles/global.css";
-import BoneMark from "../components/BoneMark.astro";
 import { WORLD_OPEN } from "../site.ts";
 
 interface Props {
@@ -42,7 +41,8 @@ const LEGAL = [
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <link rel="icon" type="image/png" href="/play/icon-192.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0d2226" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Xebeka" />
@@ -54,7 +54,7 @@ const LEGAL = [
     <header class="topbar">
       <div class="topbar__inner">
         <a class="brand" href="/">
-          <BoneMark />
+          <img class="brand__mark px" src="/art/emblem.png" width="48" height="50" alt="" />
           <span class="brand__name">Xebeka</span>
         </a>
         <nav class="topnav" aria-label="Site">
@@ -79,9 +79,9 @@ const LEGAL = [
     <footer class="footer">
       <div class="footer__inner">
         <div class="footer__brand">
-          <BoneMark size={24} />
+          <img class="px" src="/art/emblem.png" width="24" height="25" alt="" />
           <span class="footer__name">Xebeka</span>
-          <p class="footer__copy">© 2026 Xebeka. Run by akApp Studio.</p>
+          <p class="footer__copy">© 2026 Xebeka. Run by <a href="https://akappstudio.pl/">akApp Studio</a>.</p>
         </div>
         <nav class="footer__links" aria-label="Legal">
           {LEGAL.map((l) => (

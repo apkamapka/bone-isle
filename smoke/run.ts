@@ -19870,8 +19870,8 @@ async function main(): Promise<void> {
     ok(oldName.length === 0, `no line of the game still calls it Bone Isle${oldName.length ? " — " + oldName[0] : ""}`);
     ok(read("../src/save.ts").includes('"bone-isle-save-v2"') && read("../src/systems/panelPrefs.ts").includes('"bone-isle-panels-v1"'),
       "…while the storage keys keep the old name: renaming a key orphans every save written under it");
-    ok(!read("../index.html").includes("favicon.svg") && read("../index.html").includes('rel="icon" type="image/png" href="/icon-192.png"'),
-      "the tab wears the game's own icon, not the Vite logo the template left behind");
+    ok(!read("../index.html").includes("favicon.svg") && read("../index.html").includes('rel="icon" href="/favicon.ico"') && fs.existsSync(new URL("../public/favicon.ico", import.meta.url)),
+      "the tab wears the game's own icon (the X emblem the website uses), not the Vite logo the template left behind");
 
     // ---- served from /play/
     const rootAbs = /["'`]\/[\w${}.-]+\.(png|webp|jpe?g|gif|svg|mp3|ogg|wav|json|webmanifest)["'`]/;
