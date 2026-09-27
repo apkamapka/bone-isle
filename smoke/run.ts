@@ -19919,6 +19919,77 @@ async function main(): Promise<void> {
     ok(data.elements.find((e) => e.id === "ice")?.label === "Water", "…under the names the player reads, not the frozen ids");
   }
 
+  console.log("\nEtap 75 — accounts on the website: create one, log in, reset the password, confirm by email:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const walk = (dir: string): string[] =>
+      fs.readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })
+        .flatMap((e) => (e.isDirectory() ? walk(`${dir}${e.name}/`) : [`${dir}${e.name}`]));
+
+    // ---- keys: the public ones in one place, the secret ones nowhere
+    const site = read("../web/src/site.ts");
+    ok(site.includes('SUPABASE_URL = "https://yjtojtvakkcokomrzcyh.supabase.co"') && /SUPABASE_KEY = "sb_publishable_\w+"/.test(site),
+      "the site talks to the Frankfurt project with its publishable key");
+    const shipped = [...walk("../web/src/"), ...walk("../supabase/")].filter((f) => /\.(ts|astro|html|sql|css)$/.test(f));
+    const leaks = shipped.filter((f) => /sb_secret_|service_role|eyJhbGciOi/.test(read(f)));
+    ok(leaks.length === 0, `no secret key in the website or the database scripts${leaks.length ? " — " + leaks[0] : ""}`);
+    ok(site.includes('AUTH_STORAGE_KEY = "sb-yjtojtvakkcokomrzcyh-auth-token"'), "the session sits under one fixed key, which the game can read in 1.9");
+    ok(/export const TURNSTILE_SITE_KEY = "[\w-]*";/.test(site), "the Turnstile site key has its own one line in site.ts");
+
+    // ---- the pages
+    ok(["signup", "login", "reset-password", "confirm"].every((p) => read(`../web/src/pages/${p}.astro`).includes('import Auth from "../layouts/Auth.astro"')),
+      "the four account pages share one layout");
+    ok(read("../web/src/layouts/Auth.astro").includes("noindex") && read("../web/src/layouts/Base.astro").includes('<meta name="robots" content="noindex" />'),
+      "...which keeps them out of search results");
+    ok(/\{WORLD_OPEN && <a[^>]*href="\/login\/"/.test(read("../web/src/layouts/Base.astro")),
+      "the top bar offers Log in only once the world is open");
+    const bar = read("../web/src/lib/account-bar.ts");
+    ok(bar.includes("localStorage.getItem(AUTH_STORAGE_KEY)") && bar.includes('await import("./supabase.ts")'),
+      "a visitor with no session in the browser downloads no Supabase client");
+    ok(bar.includes('signOut({ scope: "local" })'), "Log out ends the session on this browser only");
+    ok(["signup", "confirm"].every((p) => /autocomplete="new-password"[^>]*minlength="8" maxlength="72"/.test(read(`../web/src/pages/${p}.astro`))),
+      "a new password needs 8 characters and may have up to the 72 Supabase accepts");
+
+    // ---- the email links
+    const confirmTs = read("../web/src/scripts/confirm.ts");
+    const onLoad = confirmTs.slice(0, confirmTs.indexOf("addEventListener")) + confirmTs.slice(confirmTs.lastIndexOf("wireReveal();"));
+    ok(!onLoad.includes("verifyOtp") && (confirmTs.match(/verifyOtp/g) ?? []).length === 2,
+      "/confirm/ spends a link only on a click, never on load (mail scanners open links too)");
+    for (const [file, type] of [["confirm-signup", "email"], ["reset-password", "recovery"]]) {
+      const html = read(`../supabase/emails/${file}.html`);
+      ok(html.includes(`{{ .SiteURL }}/confirm/?token_hash={{ .TokenHash }}&amp;type=${type}`) && !html.includes("ConfirmationURL"),
+        `the ${file} email opens /confirm/ with its token (type=${type}), not Supabase's own one-click link`);
+    }
+    const changed = read("../supabase/emails/password-changed.html");
+    ok(changed.includes("{{ .SiteURL }}/reset-password/") && changed.includes("kontakt@xebeka.com") && !changed.includes("TokenHash"),
+      "the password-changed email points to a reset and to us, and carries no token");
+
+    // ---- what the player reads
+    const AE = await import("../web/src/lib/auth-errors.ts");
+    ok(AE.authErrorMessage({ code: "invalid_credentials", status: 400 }) === "Wrong email or password.", "a wrong password reads as one");
+    ok(AE.authErrorMessage({ code: "over_email_send_rate_limit", status: 429, message: "For security purposes, you can only request this after 37 seconds." })
+      === "Wait 37 seconds before asking for another email.", "the one-minute email cooldown says how long to wait");
+    ok(AE.authErrorMessage({ name: "AuthRetryableFetchError", status: 0 }).startsWith("Could not reach the server"), "no connection reads as no connection");
+    ok(AE.authErrorMessage({ code: "captcha_failed", status: 400 }).includes("challenges.cloudflare.com"), "a failed bot check says what a blocker must allow");
+    ok(AE.authErrorMessage({ code: "brand_new_code", status: 418 }).includes("(brand_new_code)") && AE.authErrorMessage({}).includes("kontakt@xebeka.com"),
+      "an error we have no words for names its code and where to write");
+    ok(AE.isExpiredLink({ code: "otp_expired", status: 403 }) && !AE.isExpiredLink({ name: "AuthRetryableFetchError", status: 0 }),
+      "a spent link is told apart from a dropped connection");
+    ok(AE.safeNext("/play/") === "/play/" && ["//evil.example", "https://evil.example", "/\\evil.example", "", null].every((n) => AE.safeNext(n) === "/"),
+      "after logging in the site only ever goes to its own pages");
+    ok(AE.emailLooksValid("ana@example.com") && !AE.emailLooksValid("ana@example") && !AE.emailLooksValid("an a@example.com"),
+      "an obviously broken address is caught before the server");
+
+    // ---- the rest
+    const privacy = read("../web/src/pages/privacy.astro");
+    ok(privacy.includes("<strong>Cloudflare</strong>") && privacy.includes("Supabase, Vercel and Cloudflare are US companies"),
+      "the privacy policy names Cloudflare, whose bot check runs on the forms");
+    ok(typeof JSON.parse(read("../web/package.json")).dependencies?.["@supabase/supabase-js"] === "string"
+      && Object.keys(JSON.parse(read("../package.json")).dependencies ?? {}).length === 0,
+      "Supabase is the website's dependency; the game still ships none");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

@@ -10,8 +10,10 @@ import { WORLD_OPEN } from "../site.ts";
 interface Props {
   title: string;
   description: string;
+  /** Account pages: reachable, but kept out of search results. */
+  noindex?: boolean;
 }
-const { title, description } = Astro.props;
+const { title, description, noindex = false } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const here = Astro.url.pathname;
 
@@ -40,6 +42,7 @@ const LEGAL = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex" />}
     <link rel="canonical" href={canonical} />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -65,6 +68,12 @@ const LEGAL = [
           )}
         </nav>
         <div class="topbar__actions">
+          {/* Filled in by account-bar.ts when this browser holds a session. */}
+          <div class="account" data-account hidden>
+            <span class="account__email" data-account-email></span>
+            <button class="account__out" type="button" data-logout>Log out</button>
+          </div>
+          {WORLD_OPEN && <a class="topbar__login" href="/login/" data-login>Log in</a>}
           {WORLD_OPEN
             ? <a class="btn notch" href="/play/">Play</a>
             : <span class="btn btn--off notch" aria-disabled="true">Not open yet</span>}
@@ -90,5 +99,9 @@ const LEGAL = [
         </nav>
       </div>
     </footer>
+    <script>
+      import { initAccountBar } from "../lib/account-bar.ts";
+      initAccountBar();
+    </script>
   </body>
 </html>

@@ -1,0 +1,44 @@
+---
+import Auth from "../layouts/Auth.astro";
+---
+<Auth title="Log in · Xebeka" description="Log in to your Xebeka account.">
+  <div data-view="form">
+    <h1 class="auth__title" tabindex="-1">Log in</h1>
+    <form class="form" data-form novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input class="input" id="email" name="email" type="email" autocomplete="email" required maxlength="254" />
+      </div>
+      <div class="field">
+        <div class="field__row">
+          <label for="password">Password</label>
+          <a class="field__link" href="/reset-password/">Forgot password?</a>
+        </div>
+        <div class="pass">
+          <input class="input" id="password" name="password" type="password" autocomplete="current-password" required maxlength="72" />
+          <button class="pass__toggle" type="button" data-reveal aria-controls="password" aria-pressed="false">Show</button>
+        </div>
+      </div>
+      <p class="form__error" role="alert" data-error hidden></p>
+      <div class="form__resend" data-resend-wrap hidden>
+        <button class="btn btn--quiet notch" type="button" data-resend>Send the link again</button>
+        <p class="form__status" role="status" data-resend-status hidden></p>
+      </div>
+      <button class="btn btn--lg notch form__submit" type="submit" data-submit>Log in</button>
+    </form>
+    <p class="auth__alt">New to Xebeka? <a href="/signup/">Create account</a></p>
+  </div>
+
+  <div data-view="signed-in" hidden>
+    <h1 class="auth__title" tabindex="-1">You are logged in</h1>
+    <p class="auth__lead">This browser is logged in as <strong data-signed-email></strong>. To log in with another account, log out first.</p>
+    <div class="auth__actions">
+      <a class="btn notch" href="/">Go to the home page</a>
+      <button class="btn btn--quiet notch" type="button" data-page-logout>Log out</button>
+    </div>
+  </div>
+
+  <script>
+    import "../scripts/login.ts";
+  </script>
+</Auth>

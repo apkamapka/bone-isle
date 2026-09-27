@@ -1,0 +1,24 @@
+---
+import Base from "./Base.astro";
+
+/**
+ * The account pages (create account, log in, reset password, and the page
+ * the email links open): the river strip of the long pages, and one narrow
+ * card that rises over it. A page puts one or more [data-view] blocks in the
+ * card and its script shows one at a time.
+ */
+interface Props {
+  title: string;
+  description: string;
+}
+const { title, description } = Astro.props;
+---
+<Base title={title} description={description} noindex>
+  <div class="band" aria-hidden="true"></div>
+  <div class="auth">
+    <section class="auth__card notch-lg">
+      <slot />
+      <div class="captcha" data-captcha></div>
+    </section>
+  </div>
+</Base>

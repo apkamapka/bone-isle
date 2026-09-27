@@ -80,8 +80,9 @@ const TOC = [
   <p>
     The site and the game keep a few things in your browser's local storage: your sign-in session,
     your game settings and window layout, and the game data the game needs while you play. The game
-    cannot work without them, so we do not ask for consent. There are no advertising or tracking
-    cookies.
+    cannot work without them, so we do not ask for consent. The forms for creating an account, logging
+    in and resetting a password also run Cloudflare's bot check, which uses only what it needs to
+    tell people from bots. There are no advertising or tracking cookies.
   </p>
 
   <h2 id="processors">Who processes your data for us</h2>
@@ -91,6 +92,14 @@ const TOC = [
       is in Frankfurt, Germany.
     </li>
     <li><strong>Vercel</strong> hosts the website and the game.</li>
+    <li>
+      <strong>Cloudflare</strong> checks that the forms for creating an account, logging in and
+      resetting a password are used by people, not bots. For this it looks at technical signals such
+      as your IP address and browser. Cloudflare also uses these signals on its own account to
+      improve the check, as its
+      <a href="https://www.cloudflare.com/turnstile-privacy-policy/">Turnstile privacy notice</a>
+      explains.
+    </li>
     <li><strong>SEOHOST</strong>, in Poland, handles our email.</li>
     <li>
       <strong>Google</strong>, only if you choose to sign in with Google. Your Google account itself
@@ -98,7 +107,8 @@ const TOC = [
     </li>
   </ul>
   <p>
-    They process data only on our instructions. Supabase and Vercel are US companies, so some data
+    Apart from what Cloudflare does on its own account, they process data only on our instructions.
+    Supabase, Vercel and Cloudflare are US companies, so some data
     may be processed outside the European Economic Area. Those transfers are protected by the EU-US
     Data Privacy Framework or by the European Commission's Standard Contractual Clauses.
   </p>

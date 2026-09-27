@@ -1,0 +1,56 @@
+---
+import Auth from "../layouts/Auth.astro";
+---
+<Auth title="Create account · Xebeka" description="Create a free Xebeka account.">
+  <div data-view="form">
+    <h1 class="auth__title" tabindex="-1">Create account</h1>
+    <p class="auth__lead">One account holds up to five characters.</p>
+    <form class="form" data-form novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input class="input" id="email" name="email" type="email" autocomplete="email" required maxlength="254" />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="pass">
+          <input class="input" id="password" name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="72" aria-describedby="password-hint" />
+          <button class="pass__toggle" type="button" data-reveal aria-controls="password" aria-pressed="false">Show</button>
+        </div>
+        <p class="field__hint" id="password-hint">At least 8 characters.</p>
+      </div>
+      <label class="check">
+        <input type="checkbox" name="terms" required />
+        <span>I am 13 or older and I accept the <a href="/terms/" target="_blank" rel="noopener">Terms of Service</a>.</span>
+      </label>
+      <p class="form__error" role="alert" data-error hidden></p>
+      <button class="btn btn--lg notch form__submit" type="submit" data-submit>Create account</button>
+      <p class="form__fine">
+        Your email is used for your account and the emails that come with it, nothing else. <a href="/privacy/" target="_blank" rel="noopener">Privacy Policy</a>
+      </p>
+    </form>
+    <p class="auth__alt">Already have an account? <a href="/login/">Log in</a></p>
+  </div>
+
+  <div data-view="sent" hidden>
+    <h1 class="auth__title" tabindex="-1">Check your inbox</h1>
+    <p class="auth__lead">We sent a link to <strong data-sent-to></strong>. Open it to confirm your account. The link works for one hour.</p>
+    <p class="auth__text">Nothing there after a few minutes? Look in your spam folder, or send the link again.</p>
+    <div class="auth__actions">
+      <button class="btn btn--quiet notch" type="button" data-resend>Send the link again</button>
+    </div>
+    <p class="form__status" role="status" data-resend-status hidden></p>
+  </div>
+
+  <div data-view="signed-in" hidden>
+    <h1 class="auth__title" tabindex="-1">You are logged in</h1>
+    <p class="auth__lead">This browser is logged in as <strong data-signed-email></strong>. To create another account, log out first.</p>
+    <div class="auth__actions">
+      <a class="btn notch" href="/">Go to the home page</a>
+      <button class="btn btn--quiet notch" type="button" data-page-logout>Log out</button>
+    </div>
+  </div>
+
+  <script>
+    import "../scripts/signup.ts";
+  </script>
+</Auth>

@@ -1,0 +1,73 @@
+---
+import Auth from "../layouts/Auth.astro";
+---
+<Auth title="Confirm · Xebeka" description="Confirm your email address or set a new password.">
+  <div data-view="confirm" hidden>
+    <h1 class="auth__title" tabindex="-1">Confirm your email</h1>
+    <p class="auth__lead">One click and your Xebeka account is ready.</p>
+    <div class="form">
+      <p class="form__error" role="alert" data-confirm-error hidden></p>
+      <button class="btn btn--lg notch form__submit" type="button" data-confirm>Confirm my email</button>
+    </div>
+  </div>
+
+  <div data-view="confirmed" hidden>
+    <h1 class="auth__title" tabindex="-1">Account confirmed</h1>
+    <p class="auth__lead">Your account is ready, and you are logged in on this device.</p>
+    <div class="auth__actions">
+      <a class="btn notch" href="/">Go to the home page</a>
+    </div>
+  </div>
+
+  <div data-view="password" hidden>
+    <h1 class="auth__title" tabindex="-1">Set a new password</h1>
+    <form class="form" data-password-form novalidate>
+      <div class="field">
+        <label for="password">New password</label>
+        <div class="pass">
+          <input class="input" id="password" name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="72" aria-describedby="password-hint" />
+          <button class="pass__toggle" type="button" data-reveal aria-controls="password" aria-pressed="false">Show</button>
+        </div>
+        <p class="field__hint" id="password-hint">At least 8 characters.</p>
+      </div>
+      <p class="form__error" role="alert" data-password-error hidden></p>
+      <button class="btn btn--lg notch form__submit" type="submit" data-password-submit>Save new password</button>
+    </form>
+  </div>
+
+  <div data-view="saved" hidden>
+    <h1 class="auth__title" tabindex="-1">Password saved</h1>
+    <p class="auth__lead">Your new password works from now on, and you are logged in on this device.</p>
+    <div class="auth__actions">
+      <a class="btn notch" href="/">Go to the home page</a>
+    </div>
+  </div>
+
+  <div data-view="expired-email" hidden>
+    <h1 class="auth__title" tabindex="-1">This link has expired</h1>
+    <p class="auth__lead">A link works for one hour and only once. If your account is already confirmed, just log in. If not, log in anyway and we will offer to send a new link.</p>
+    <div class="auth__actions">
+      <a class="btn notch" href="/login/">Log in</a>
+    </div>
+  </div>
+
+  <div data-view="expired-recovery" hidden>
+    <h1 class="auth__title" tabindex="-1">This link has expired</h1>
+    <p class="auth__lead">A link works for one hour and only once. Ask for a new one and use the newest email.</p>
+    <div class="auth__actions">
+      <a class="btn notch" href="/reset-password/">Reset password</a>
+    </div>
+  </div>
+
+  <div data-view="missing" hidden>
+    <h1 class="auth__title" tabindex="-1">Nothing to confirm here</h1>
+    <p class="auth__lead">This page opens from the links in emails from Xebeka. Open the link in your newest email, or log in.</p>
+    <div class="auth__actions">
+      <a class="btn notch" href="/login/">Log in</a>
+    </div>
+  </div>
+
+  <script>
+    import "../scripts/confirm.ts";
+  </script>
+</Auth>
