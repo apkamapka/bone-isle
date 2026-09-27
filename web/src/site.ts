@@ -27,7 +27,7 @@ export const AUTH_STORAGE_KEY = "sb-yjtojtvakkcokomrzcyh-auth-token";
  * CAPTCHA protection in Supabase only once the site with the key is live,
  * or every sign-up and log-in will be refused.
  */
-export const TURNSTILE_SITE_KEY = "";
+export const TURNSTILE_SITE_KEY = "0x4AAAAAAFFga6j554FH6gZD";
 
 /* The date of the Terms of Service a new account accepts, kept with the
  * account. Change it together with "Last updated" in terms.astro. */
