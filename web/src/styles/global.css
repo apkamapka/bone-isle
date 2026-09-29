@@ -583,20 +583,28 @@ a:hover { color: var(--lantern-hi); }
 
 .form__fine { margin: 0; font-size: 14px; line-height: 1.5; color: var(--mist); }
 
-/* Continue with Google: Google's own button artwork, shown as it is. */
+/* Continue with Google, to Google's brand guidelines (light theme): white fill,
+   #747775 edge, #1F1F1F Roboto Medium 14px, the G at 20px, 12/10/12 px spacing. */
 .google { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 28px; }
 
 .google__btn {
-  display: block;
-  padding: 0;
-  border: 0;
-  border-radius: 22px;
-  background: none;
-  line-height: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #747775;
+  border-radius: 20px;
+  background: #ffffff;
+  color: #1f1f1f;
+  font: 500 14px/20px Roboto, Arial, sans-serif;
+  letter-spacing: 0.25px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.google__btn img { display: block; width: auto; height: 44px; }
+.google__btn img { display: block; width: 20px; height: 20px; }
+.google__btn:hover { background: #ededed; }
 .google__btn:focus-visible { outline: 2px solid var(--lantern); outline-offset: 3px; }
 .google__btn:disabled { opacity: 0.7; cursor: progress; }
 

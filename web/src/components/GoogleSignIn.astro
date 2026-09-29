@@ -1,15 +1,18 @@
 ---
 /**
  * Continue with Google, shown above the email form on /login/ and /signup/.
- * The picture is Google's own pre-approved button artwork, unchanged, as its
- * brand guidelines require; the option stays hidden until that file loads.
+ * The button follows Google's brand guidelines, light theme: white fill,
+ * #747775 edge, #1F1F1F text in Roboto Medium 14px, and Google's own "G"
+ * (web/public/art/google-g.svg, taken unchanged from Google's configurator).
+ * The option stays hidden until that file loads.
  * Going through Google can create an account, so the Terms notice sits here
  * on both pages.
  */
 ---
 <div class="google" data-google hidden>
   <button class="google__btn" type="button">
-    <img src="/art/google-continue.svg" alt="Continue with Google" height="44" />
+    <img src="/art/google-g.svg" alt="" width="20" height="20" />
+    <span>Continue with Google</span>
   </button>
   <p class="google__terms">
     By continuing with Google, you confirm you are 13 or older and accept the <a href="/terms/" target="_blank" rel="noopener">Terms of Service</a>.
