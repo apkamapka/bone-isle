@@ -583,6 +583,31 @@ a:hover { color: var(--lantern-hi); }
 
 .form__fine { margin: 0; font-size: 14px; line-height: 1.5; color: var(--mist); }
 
+/* Continue with Google: Google's own button artwork, shown as it is. */
+.google { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 28px; }
+
+.google__btn {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.google__btn img { display: block; width: auto; height: 44px; }
+.google__btn:focus-visible { outline: 2px solid var(--lantern); outline-offset: 3px; }
+.google__btn:disabled { opacity: 0.7; cursor: progress; }
+
+.google__terms { margin: 0; font-size: 14px; line-height: 1.5; color: var(--mist); }
+
+/* The line between Google and the email form. */
+.or { display: flex; align-items: center; gap: 14px; align-self: stretch; margin: 8px 0 0; font-size: 14px; color: var(--mist); }
+.or::before,
+.or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.google + .form { margin-top: 20px; }
+
 /* Turnstile draws itself here only when it wants a person to tick a box. */
 .captcha > * { margin-top: 24px; }
 

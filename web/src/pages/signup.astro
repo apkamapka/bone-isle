@@ -1,10 +1,12 @@
 ---
+import GoogleSignIn from "../components/GoogleSignIn.astro";
 import Auth from "../layouts/Auth.astro";
 ---
 <Auth title="Create account · Xebeka" description="Create a free Xebeka account.">
   <div data-view="form">
     <h1 class="auth__title" tabindex="-1">Create account</h1>
     <p class="auth__lead">One account holds up to five characters.</p>
+    <GoogleSignIn />
     <form class="form" data-form novalidate>
       <div class="field">
         <label for="email">Email</label>

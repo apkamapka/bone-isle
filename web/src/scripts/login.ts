@@ -2,6 +2,7 @@ import { logOut } from "../lib/account-bar.ts";
 import { authErrorMessage, emailLooksValid, safeNext } from "../lib/auth-errors.ts";
 import { mountCaptcha } from "../lib/captcha.ts";
 import { busy, el, field, flag, say, showView, wireReveal } from "../lib/forms.ts";
+import { wireGoogleButton } from "../lib/google.ts";
 import { supabase } from "../lib/supabase.ts";
 
 const form = el<HTMLFormElement>("form");
@@ -20,6 +21,7 @@ function fail(text: string, input: HTMLInputElement | null = null): void {
 
 async function main(): Promise<void> {
   wireReveal();
+  wireGoogleButton(next);
   el("page-logout").addEventListener("click", () => void logOut());
   const { data } = await supabase.auth.getSession();
   const email = data.session?.user.email;

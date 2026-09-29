@@ -19990,6 +19990,64 @@ async function main(): Promise<void> {
       "Supabase is the website's dependency; the game still ships none");
   }
 
+  console.log("\nEtap 76 — Continue with Google: a round trip to Google's own page and back, nothing from Google before the click:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const walk = (dir: string): string[] =>
+      fs.readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })
+        .flatMap((e) => (e.isDirectory() ? walk(`${dir}${e.name}/`) : [`${dir}${e.name}`]));
+    const shipped = [...walk("../web/src/"), ...walk("../supabase/")].filter((f) => /\.(ts|astro|html|sql|css)$/.test(f));
+    const G = await import("../web/src/lib/google.ts");
+
+    // ---- the trip out
+    ok(/^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(G.GOOGLE_CLIENT_ID), "the site names itself to Google by its public Client ID");
+    const out = new URL(G.googleAuthUrl({ redirectUri: "https://xebeka.com/auth/google/", state: "s1", hashedNonce: "ab12" }));
+    ok(out.origin + out.pathname === "https://accounts.google.com/o/oauth2/v2/auth", "the button leaves for Google's own sign-in page");
+    ok(out.searchParams.get("response_type") === "id_token" && out.searchParams.get("redirect_uri") === "https://xebeka.com/auth/google/"
+      && G.GOOGLE_RETURN_PATH === "/auth/google/", "...which answers with an ID token at /auth/google/, on our own domain");
+    ok(out.searchParams.get("scope") === "openid email", "only the email address is asked for: no name, no picture");
+    ok(out.searchParams.get("state") === "s1" && out.searchParams.get("nonce") === "ab12" && out.searchParams.get("prompt") === "select_account",
+      "each trip carries its state and hashed nonce, and lets the player pick the account");
+    ok(await G.sha256Hex("abc") === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "the nonce is hashed the way Supabase checks it: SHA-256 in lowercase hex");
+
+    // ---- the trip back
+    const back = G.parseGoogleReturn("#state=s1&id_token=h.p.s&authuser=0");
+    ok(back.idToken === "h.p.s" && back.state === "s1" && back.error === null, "the answer is read from after the #, which no server ever sees");
+    ok(G.parseGoogleReturn("#error=access_denied&state=s1").error === "access_denied", "...and so is a cancel");
+    const trip = JSON.stringify({ state: "s1", nonce: "n1", next: "/terms/", at: 1000 });
+    ok(G.matchPending(trip, "s1", 2000)?.nonce === "n1" && G.matchPending(trip, "s1", 2000)?.next === "/terms/",
+      "an answer to the trip that left from here goes through, to where the player was heading");
+    ok(G.matchPending(trip, "s2", 2000) === null && G.matchPending(null, "s1", 2000) === null && G.matchPending("{oops", "s1", 2000) === null,
+      "an answer that did not start here, or whose trip is gone, is refused");
+    ok(G.matchPending(trip, "s1", 1000 + G.PENDING_MAX_MS + 1) === null, "...and so is one that took too long");
+    ok(G.matchPending(JSON.stringify({ state: "s1", nonce: "n1", next: "//evil.example", at: 1000 }), "s1", 2000)?.next === "/",
+      "the landing page after Google is always one of ours");
+    const ret = read("../web/src/scripts/google-return.ts");
+    ok(ret.indexOf("history.replaceState") >= 0 && ret.indexOf("history.replaceState") < ret.indexOf("signInWithIdToken"),
+      "the ID token leaves the address bar before anything is done with it");
+    ok(ret.includes("takePendingRaw()") && read("../web/src/lib/google.ts").includes("sessionStorage.removeItem(STORE)"),
+      "a trip works once: the same answer opened twice is refused");
+    ok(ret.includes('signInWithIdToken({ provider: "google", token: back.idToken, nonce: pending.nonce })'),
+      "Supabase gets the token with the unhashed nonce, to check against it");
+    ok(ret.includes("terms_accepted: TERMS_VERSION"), "a Google account keeps the date of the Terms it accepted, like one made by email");
+
+    // ---- the pages
+    ok(["login", "signup"].every((p) => read(`../web/src/pages/${p}.astro`).includes("<GoogleSignIn />")), "log-in and sign-up both offer Continue with Google");
+    const block = read("../web/src/components/GoogleSignIn.astro");
+    ok(block.includes('src="/art/google-continue.svg"') && block.includes('data-google hidden'),
+      "...as Google's own button artwork, hidden until that file loads");
+    ok(block.includes("By continuing with Google, you confirm you are 13 or older and accept the"), "...with the 13+ and Terms notice under it");
+    ok(read("../web/src/pages/auth/google.astro").includes('import Auth from "../../layouts/Auth.astro"'), "the page Google returns to is an account page too, out of search results");
+    const googleScripts = shipped.filter((f) => /accounts\.google\.com\/gsi|apis\.google\.com|gstatic\.com/.test(read(f)));
+    ok(googleScripts.length === 0, `no Google script on our pages: Google hears of a visit only after the click${googleScripts.length ? " — " + googleScripts[0] : ""}`);
+    const secrets = shipped.filter((f) => /GOCSPX-/.test(read(f)));
+    ok(secrets.length === 0, "the Google client secret is nowhere in the site");
+    ok(read("../web/src/pages/privacy.astro").includes("from Google only your email address and the ID Google uses for your account"),
+      "the privacy policy says what Google hands over, and no more");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
