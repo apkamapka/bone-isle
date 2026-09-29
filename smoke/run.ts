@@ -20036,8 +20036,9 @@ async function main(): Promise<void> {
     // ---- the pages
     ok(["login", "signup"].every((p) => read(`../web/src/pages/${p}.astro`).includes("<GoogleSignIn />")), "log-in and sign-up both offer Continue with Google");
     const block = read("../web/src/components/GoogleSignIn.astro");
-    ok(block.includes('src="/art/google-g.svg"') && block.includes("<span>Continue with Google</span>") && block.includes('data-google hidden'),
-      "...with Google's own G and the approved words, hidden until the G loads");
+    ok(block.includes('src="/art/google-signin.png"') && block.includes('alt="Sign in with Google"') && block.includes('data-google hidden'),
+      "...as Google's own button picture, hidden until it loads");
+    ok(fs.existsSync(new URL("../web/public/art/google-signin.png", import.meta.url)), "...and that picture is in the repo");
     ok(block.includes("By continuing with Google, you confirm you are 13 or older and accept the"), "...with the 13+ and Terms notice under it");
     ok(read("../web/src/pages/auth/google.astro").includes('import Auth from "../../layouts/Auth.astro"'), "the page Google returns to is an account page too, out of search results");
     const googleScripts = shipped.filter((f) => /accounts\.google\.com\/gsi|apis\.google\.com|gstatic\.com/.test(read(f)));

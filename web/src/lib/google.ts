@@ -103,8 +103,8 @@ export async function startGoogleSignIn(next: string): Promise<void> {
 }
 
 /**
- * Shows the Google option once Google's "G" has loaded
- * (web/public/art/google-g.svg); without that file it stays hidden.
+ * Shows the Google option once Google's button picture has loaded
+ * (web/public/art/google-signin.png); without that file it stays hidden.
  */
 export function wireGoogleButton(next: string): void {
   const box = document.querySelector<HTMLElement>("[data-google]");
