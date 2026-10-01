@@ -96,6 +96,94 @@ are hosted on OpenGameArt.org. Primary collections these layers draw from:
 - LPC Expanded Pants — <https://opengameart.org/content/lpc-expanded-pants>
 - LPC Expanded Socks & Shoes — <https://opengameart.org/content/lpc-expanded-socks-shoes>
 
+
+## Player character, female — `public/hero-female-*.png` (layered)
+
+The female body of the player character, picked when a character is created.
+Built exactly like the male set above, from the **Universal LPC Spritesheet
+Character Generator**, and trimmed to just the frames the game uses.
+
+Reproducible character configuration (open in the generator to get the exact
+same character):
+
+<https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=female&body=Body_Color_light&expression=Neutral_light&clothes=Shortsleeve_gray&legs=Long_Pants_gray&shoes=Basic_Shoes_black&hair=Loose_white&head=Human_Female_light>
+
+Files: `hero-female-base.png` (body + head + eyes, never dyed) plus grayscale
+`hero-female-hair.png`, `hero-female-shirt.png`, `hero-female-pants.png` and
+`hero-female-shoes.png`.
+
+Changes made for the game: the generator's full export was repacked into the
+same 9x5 grid of 64px cells as the male set (the walk cycle and a two-frame
+idle for four facings, and the last frame of the death animation as the
+corpse); the hair, shirt, pants and shoes were converted to grayscale so the
+Wardrobe can dye them; and the shirt was cut away where the head covers it,
+because the game draws the dyed layers over the head.
+
+### Licence: OGA-BY 3.0, except the hair: CC-BY-SA 3.0
+
+Six of the seven layers are used under **OGA-BY 3.0**, as in the male set
+(see above for what that allows). The **Loose** hair is offered only under
+**CC-BY-SA 3.0 / GPL 3.0** and is used under **CC-BY-SA 3.0**
+(<https://creativecommons.org/licenses/by-sa/3.0/>). So `hero-female-hair.png`,
+and the female character as drawn in the game, are distributed under
+**CC-BY-SA 3.0**:
+
+- **Attribution is mandatory**, as for every layer.
+- **ShareAlike**: anyone may reuse `hero-female-hair.png` and the combined
+  character, and whatever is made from them must stay under CC-BY-SA 3.0.
+- **No DRM**: CC-BY-SA forbids technical restrictions on these files. A release
+  on a store that mandates DRM (iOS App Store, consoles) would need this hair
+  swapped for one offered under OGA-BY or CC0.
+
+### Artists, per layer
+
+**Base body — "Body Color" (female)**
+Benjamin K. Smith (BenCreating), bluecarrot16, TheraHedwig, Evert,
+MuffinElZangano, Durrani, Pierre Vigier (pvigier), Eliza Wyatt (ElizaWy),
+Matthew Krohn (makrohn), Johannes Sjolund (wulax), Stephen Challener (Redshrike)
+— OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0
+
+**Head — "Human Female"**
+bluecarrot16, Benjamin K. Smith (BenCreating), Stephen Challener (Redshrike)
+— OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0
+
+**Expression — "Neutral" (female face)**
+JaidynReiman, Eliza Wyatt (ElizaWy), Stephen Challener (Redshrike)
+— OGA-BY 3.0
+
+**Hair — "Loose"**
+JaidynReiman, Manuel Riecke (MrBeast)
+— CC-BY-SA 3.0 / GPL 3.0; used under **CC-BY-SA 3.0**
+
+**Shirt — "Shortsleeve" (female)**
+bluecarrot16, Eliza Wyatt (ElizaWy), JaidynReiman, Stephen Challener (Redshrike)
+— OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0
+
+**Legs — "Long Pants" (thin)**
+Eliza Wyatt (ElizaWy), JaidynReiman, Johannes Sjolund (wulax),
+Stephen Challener (Redshrike)
+— OGA-BY 3.0
+
+**Shoes — "Basic Shoes" (thin)**
+JaidynReiman, Joe White, Johannes Sjolund (wulax)
+— OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0
+
+### Sources
+
+- LPC Base Assets — <https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles>
+- LPC Character Bases — <https://opengameart.org/content/lpc-character-bases>
+- LPC Medieval Fantasy Character Sprites — <https://opengameart.org/content/lpc-medieval-fantasy-character-sprites>
+- LPC Ladies — <https://opengameart.org/content/lpc-ladies>
+- LPC 7 Women's Shirts — <https://opengameart.org/content/lpc-7-womens-shirts>
+- LPC Revised Character Basics — <https://opengameart.org/content/lpc-revised-character-basics>
+- ULPC Expanded Expressions — <https://opengameart.org/content/ulpc-expanded-expressions>
+- LPC Expanded Hair — <https://opengameart.org/content/lpc-expanded-hair>
+- LPC Expanded Pants — <https://opengameart.org/content/lpc-expanded-pants>
+- LPC Expanded Sit, Run, Jump & More — <https://opengameart.org/content/lpc-expanded-sit-run-jump-more>
+- ElizaWy's LPC clothing — <https://github.com/ElizaWy/LPC/tree/main/Characters/Clothing>
+- LPC Clothing Updates — <https://opengameart.org/content/lpc-clothing-updates>
+- LPC Expanded Socks & Shoes — <https://opengameart.org/content/lpc-expanded-socks-shoes>
+
 ## Bandit — `public/mob-bandit.png`, `public/mob-bandit-walk.png`, `public/mob-bandit-dead.png`
 
 The bandit is composed from the same **Universal LPC Spritesheet Character

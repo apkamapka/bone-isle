@@ -13,6 +13,7 @@ import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, iconW, iconH, hasPropArt, propSprite, CHEST_LIFT } from "./gfx/sprites.ts";
 import { itemSprite } from "./gfx/itemArt.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
+import { playerSex, setPlayerSex, sexFromQuery } from "./systems/sex.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
@@ -280,7 +281,12 @@ function resize(): void {
 }
 addEventListener("resize", resize);
 addEventListener("orientationchange", () => setTimeout(resize, 100));
-loadHeroSheet();
+/* TEMP-ETAP78-SEX — the body comes from the address (/play?sex=female) until
+ * etap 1.9 hands the game the character picked on the website. It is settled
+ * before the sheets load and before the first `t()`, so the body on screen
+ * and the Time Sage's grammar can never disagree. */
+setPlayerSex(sexFromQuery(location.search));
+loadHeroSheet(playerSex());
 resize();
 
 loadHudLayout(); // restore any customized mobile HUD positions + lock state

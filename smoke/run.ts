@@ -20119,6 +20119,86 @@ async function main(): Promise<void> {
       "Terms and Privacy say what deleting an account does");
   }
 
+  console.log("\nEtap 78 — the second body: a female hero, and a Time Sage who knows who he is talking to:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const SX = await import("../src/systems/sex.ts");
+    const HS = await import("../src/gfx/heroSheet.ts");
+    const SP = await import("../src/text/speech.ts");
+    const DL = await import("../src/ui/dialogue.ts");
+
+    // ---- which body (TEMP-ETAP78-SEX, until etap 1.9 hands over the picked character)
+    ok(SX.playerSex() === "male", "a character is male until told otherwise, as every character so far has been");
+    ok(SX.sexFromQuery("?sex=female") === "female" && SX.sexFromQuery("?lang=pl&sex=female") === "female",
+      "/play?sex=female plays the female body");
+    ok(SX.sexFromQuery("") === "male" && SX.sexFromQuery("?sex=Female") === "male" && SX.sexFromQuery("?sex=f") === "male",
+      "…and anything else the male one, so a mistyped link still shows a character");
+    ok(SX.isSex("male") && SX.isSex("female") && !SX.isSex("") && !SX.isSex(undefined), "exactly the two values the website stores");
+    const mainSrc = read("../src/main.ts");
+    const setAt = mainSrc.indexOf("setPlayerSex(sexFromQuery(location.search))");
+    ok(setAt > 0 && setAt < mainSrc.indexOf("loadHeroSheet(playerSex())"), "main.ts settles the sex before it loads the body");
+    ok(!/\bsex\b/i.test(read("../src/save.ts")) && !/\bsex\b/i.test(read("../src/systems/playerState.ts")),
+      "the sex is not progress: neither the save nor PlayerState carries it, so no reset or old save can change it");
+
+    // ---- both bodies on disk, in the grid the slicer cuts
+    const onDisk = (f: string): URL => new URL("../public/" + f.replace(/^\.\//, ""), import.meta.url);
+    const size = (f: string): string => {
+      const b = fs.readFileSync(onDisk(f));
+      return `${b.readUInt32BE(16)}x${b.readUInt32BE(20)}`;
+    };
+    for (const sex of ["male", "female"] as const) {
+      const files = Object.values(HS.heroLayerFiles(sex));
+      ok(Object.keys(HS.heroLayerFiles(sex)).join() === "base,hair,shirt,pants,shoes", `${sex}: a skin base and the four layers the Wardrobe dyes`);
+      ok(files.every((f) => fs.existsSync(onDisk(f))), `${sex}: every layer is in public/`);
+      ok(files.every((f) => size(f) === "576x320"), `${sex}: every layer is 576x320, the 9x5 grid the slicer cuts`);
+    }
+    ok(HS.heroLayerFiles("male").base === "./hero-base.png" && HS.heroLayerFiles("female").base === "./hero-female-base.png",
+      "the male set keeps the names it shipped with, the female set has its own");
+    HS.loadHeroSheet("female");
+    ok(!HS.heroReady() && HS.heroSprite("down", 1, false, 0, 0, true) === null, "headless, loading the female body is the same safe no-op");
+    const credits = read("../CREDITS.md");
+    const her = credits.slice(credits.indexOf("hero-female-"));
+    ok(her.includes("hero-female-hair.png") && her.includes("hair=Loose_white&head=Human_Female_light"),
+      "the female hero is credited by filename, with the generator link that rebuilds her");
+    ok(/"Loose"[\s\S]{0,200}CC-BY-SA 3\.0/.test(her), "…and her hair's CC-BY-SA licence is stated");
+
+    // ---- the Time Sage's grammar
+    const say = (k: string, lg: "en" | "pl" | "es" | "pt", sex: "male" | "female"): string => SP.t(k, lg, undefined, sex);
+    ok(say("sage.empty.blackannis", "pl", "male").startsWith("Wróciłeś.") && say("sage.empty.blackannis", "pl", "female").startsWith("Wróciłaś."),
+      "Chronos says Wróciłeś to a man and Wróciłaś to a woman");
+    ok(say("sage.empty.calanais", "pl", "female").startsWith("Zeszłaś aż pod świątynię i wróciłaś"), "…stems that change included");
+    ok(say("sage.attuned.calanais", "pl", "female").includes("wybrać samej") && say("sage.accept.calanais", "pl", "female").endsWith("zrozumiesz sama."),
+      "…and the adjectives, not only the verbs");
+    ok(say("sage.accept.minotaur", "pl", "female").includes("Miał miecz, miał odwagę i miał nić Ariadny")
+      && say("sage.accept.minotaur", "pl", "female").includes("Ty nie będziesz miała nici"),
+      "Theseus stays a man: only what is said TO the player changes");
+    ok(say("sage.empty.orc", "pl", "female").includes("co zaczął, będziesz musiała"), "…Gorak too, in the very same sentence");
+    ok(say("sage.accept.calanais", "es", "female").endsWith("tú sola.") && say("sage.accept.calanais", "es", "male").endsWith("tú solo."),
+      "Spanish agrees the adjective");
+    ok(say("sage.attuned.calanais", "pt", "female").includes("eu a fiz escolher sozinha")
+      && say("sage.attuned.calanais", "pt", "male").includes("eu o fiz escolher sozinho"),
+      "Portuguese agrees the pronoun as well as the adjective");
+    ok(SP.t("sage.empty.blackannis", "pl") === say("sage.empty.blackannis", "pl", "male"), "t() asks the character's sex when the caller does not say");
+    const ALT = /\{[^{}|]*\|[^{}|]*\}/;
+    const enAlt: string[] = [], bare: string[] = [], shown: string[] = [], tight: string[] = [];
+    for (const key of SP.textKeys()) {
+      if (ALT.test(SP.TEXT[key].en)) enAlt.push(key);
+      if (/(?:łeś|łbyś)(?!\p{L})/u.test(SP.TEXT[key].pl.replace(new RegExp(ALT.source, "g"), ""))) bare.push(key);
+      for (const lg of SP.LANGS) {
+        for (const sex of ["male", "female"] as const) {
+          const s = SP.t(key, lg, { lv: 99 }, sex);
+          if (/[{}|]/.test(s)) shown.push(`${key}/${lg}/${sex}`);
+          if (DL.paginate(s, 40, 6, (x: string) => x.length).some((page: string[]) => page.length > 6)) tight.push(`${key}/${lg}/${sex}`);
+        }
+      }
+    }
+    ok(enAlt.length === 0, "English never needs a second form");
+    ok(bare.length === 0, `no Polish "-łeś" said to the player is left without its "-łaś"${bare.length ? " — " + bare[0] : ""}`);
+    ok(shown.length === 0, `no brace or pipe ever reaches the screen, for either sex${shown.length ? " — " + shown[0] : ""}`);
+    ok(tight.length === 0, `the feminine forms fit the dialogue box as well as the masculine ones${tight.length ? " — " + tight[0] : ""}`);
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

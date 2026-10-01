@@ -1,13 +1,14 @@
 /**
  * The player's LPC sprite — now composited from LAYERS so the Wardrobe can
- * recolor it. Five sheets ship in public/, each 9 x 5 cells of 64 px in the
- * same layout:
+ * recolor it. Each body (male, female: systems/sex.ts) ships five sheets in
+ * public/, each 9 x 5 cells of 64 px in the same layout:
  *   rows 0..3 — walk cycle facing up / left / down / right, 9 frames each
  *   row 4 col 0 — the death frame (the body on the ground)
  *   row 4 cols 1..8 — the two-frame idle loop for the four facings
  *
  *   hero-base.png            body + head + eyes (skin, never dyed)
  *   hero-{hair,shirt,pants,shoes}.png   grayscale layers, 128 = mid-tone
+ *   hero-female-*.png        the same five for the female body
  *
  * On load, and whenever a dye changes, the four grayscale layers are tinted
  * (out = gray/128 * color, so the artwork's shading survives) and composited
@@ -15,13 +16,15 @@
  * The render loop still blits one canvas per frame.
  *
  * The layers are trimmed exports from the Universal LPC Spritesheet Character
- * Generator. See CREDITS.md; the artwork is OGA-BY 3.0 and the attribution is
- * not optional.
+ * Generator. See CREDITS.md: the male set is OGA-BY 3.0, and so is the female
+ * set except its hair, which is CC-BY-SA 3.0. The attribution is not optional.
  *
  * Loading is asynchronous and best-effort. Until the sheets arrive — and
  * forever, if they 404 — heroSprite() returns null and the caller falls back to
  * the procedural Adventurer outfit, which also keeps the Wardrobe dyes working.
  */
+
+import type { Sex } from "../systems/sex.ts";
 
 const CELL = 64;
 const COLS = 9;
@@ -44,7 +47,8 @@ const IDLE_COL: Record<LpcDir, number> = { up: 1, left: 3, down: 5, right: 7 };
 export type HeroZone = "hair" | "shirt" | "pants" | "shoes";
 /** Draw order of the tinted layers over the base (back to front). */
 const TINT_ORDER: readonly HeroZone[] = ["shoes", "pants", "shirt", "hair"];
-/** The classic silver/gray look — matches the character as first shipped. */
+/** The classic silver/gray look — matches the character as first shipped. The
+ *  female sheets were measured against the same four dyes and land on them too. */
 const DEFAULT_DYE: Record<HeroZone, string> = {
   hair: "#929292", shirt: "#494949", pants: "#494949", shoes: "#242424",
 };
@@ -137,17 +141,40 @@ function rebuild(): void {
   slice(composed);
 }
 
-const LAYER_SRC: Record<"base" | HeroZone, string> = {
-  base: "./hero-base.png",
-  hair: "./hero-hair.png",
-  shirt: "./hero-shirt.png",
-  pants: "./hero-pants.png",
-  shoes: "./hero-shoes.png",
+/** Each body's five sheets, in the order `loadHeroSheet` reads them. The male
+ *  set keeps the names it shipped with. */
+const LAYER_SRC: Readonly<Record<Sex, Readonly<Record<"base" | HeroZone, string>>>> = {
+  male: {
+    base: "./hero-base.png",
+    hair: "./hero-hair.png",
+    shirt: "./hero-shirt.png",
+    pants: "./hero-pants.png",
+    shoes: "./hero-shoes.png",
+  },
+  female: {
+    base: "./hero-female-base.png",
+    hair: "./hero-female-hair.png",
+    shirt: "./hero-female-shirt.png",
+    pants: "./hero-female-pants.png",
+    shoes: "./hero-female-shoes.png",
+  },
 };
 
-/** Kick off the load. No-op headless, so the smoke tests use the fallback. */
-export function loadHeroSheet(): void {
+/** The five files one body is drawn from. Exported for the smoke suite. */
+export function heroLayerFiles(sex: Sex): Readonly<Record<"base" | HeroZone, string>> {
+  return LAYER_SRC[sex];
+}
+
+/** Bumped by every load, so that an older load still in flight can never land
+ *  on top of a newer one. */
+let loadGen = 0;
+
+/** Kick off the load of one body. No-op headless, so the smoke tests use the
+ *  fallback. Until the new sheets arrive, whatever was drawn before stays. */
+export function loadHeroSheet(sex: Sex = "male"): void {
   if (typeof Image === "undefined" || typeof document === "undefined") return;
+  const gen = ++loadGen;
+  const src = LAYER_SRC[sex];
   const keys = ["base", "hair", "shirt", "pants", "shoes"] as const;
   const parts: Partial<Record<string, HTMLImageElement>> = {};
   let left = keys.length;
@@ -155,6 +182,7 @@ export function loadHeroSheet(): void {
   for (const k of keys) {
     const img = new Image();
     img.onload = () => {
+      if (gen !== loadGen) return; // a later load has taken over
       parts[k] = img;
       if (--left === 0 && !failed) {
         baseData = toData(parts.base!);
@@ -168,12 +196,13 @@ export function loadHeroSheet(): void {
       }
     };
     img.onerror = () => {
+      if (gen !== loadGen) return;
       if (!failed) {
         failed = true;
-        console.warn(`hero layer '${k}' failed to load, falling back to the baked outfit`);
+        console.warn(`hero layer '${k}' (${sex}) failed to load, falling back to the baked outfit`);
       }
     };
-    img.src = LAYER_SRC[k];
+    img.src = src[k];
   }
 }
 

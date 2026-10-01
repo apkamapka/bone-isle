@@ -26,13 +26,20 @@
  * English and Spanish about 25%, so hand-cut lines would fit one language and
  * spill in the other two.
  *
- * `{name}` is substituted from the caller's vars. There is no plural or gender
- * machinery and there should not be until a string needs it.
+ * `{name}` is substituted from the caller's vars. `{masc|fem}` is the one piece
+ * of grammar machinery, and it is here because strings needed it: Polish puts
+ * the player's sex into every past tense said to them ("{Wróciłeś|Wróciłaś}"),
+ * Spanish and Portuguese into a few adjectives ("{solo|sola}"). `t()` keeps
+ * the half that matches the character (systems/sex.ts); English never needs
+ * it. There is still no plural machinery, and there should not be until a
+ * string needs it.
  *
  * A missing translation falls back to English rather than throwing — but the
  * smoke suite fails on any key that is not complete in all three, so the
  * fallback should never actually run.
  */
+
+import { playerSex, type Sex } from "../systems/sex.ts";
 
 export type Lang = "en" | "pl" | "es" | "pt";
 
@@ -233,10 +240,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "I will open the door once more. You will find him exactly where you "
       + "left him.\n\n"
       + "This time, mind the cap.",
-    pl: "Zgubiłeś ją.\n\n"
+    pl: "{Zgubiłeś|Zgubiłaś} ją.\n\n"
       + "Szkoda. Redcap nie lubi, kiedy ktoś zabiera mu rzeczy.\n\n"
       + "Otworzę wrota jeszcze raz. Znajdziesz go dokładnie tam, gdzie go "
-      + "zostawiłeś.\n\n"
+      + "{zostawiłeś|zostawiłaś}.\n\n"
       + "Tym razem pilnuj czapki.",
     es: "Lo has perdido.\n\n"
       + "Lástima. Al Redcap no le gusta que le quiten cosas.\n\n"
@@ -336,7 +343,7 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "first.",
     pl: "Kárr wciąż siedzi pod ziemią.\n\n"
       + "Wciąż ma na głowie ten sam hełm.\n\n"
-      + "Jeśli chcesz go dla mnie, będziesz musiał najpierw przekonać jego, "
+      + "Jeśli chcesz go dla mnie, będziesz {musiał|musiała} najpierw przekonać jego, "
       + "żeby go oddał.",
     es: "Kárr sigue bajo tierra.\n\n"
       + "Sigue llevando el mismo yelmo.\n\n"
@@ -380,10 +387,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Kárr will have put it back on by now.\n\n"
       + "Do not worry. I will open the mound again.\n\n"
       + "Only this time, do not let him keep what you went in for.",
-    pl: "Zgubiłeś hełm.\n\n"
+    pl: "{Zgubiłeś|Zgubiłaś} hełm.\n\n"
       + "Kárr pewnie już go sobie założył.\n\n"
       + "Nie martw się. Otworzę kurhan ponownie.\n\n"
-      + "Tylko tym razem nie pozwól mu odejść z tym, po co tam przyszedłeś.",
+      + "Tylko tym razem nie pozwól mu odejść z tym, po co tam {przyszedłeś|przyszłaś}.",
     es: "Has perdido el yelmo.\n\n"
       + "Kárr ya se lo habrá vuelto a poner.\n\n"
       + "No te preocupes. Abriré el túmulo de nuevo.\n\n"
@@ -525,10 +532,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Black Annis did not.\n\n"
       + "That is not how this was meant to go.\n\n"
       + "The door is still open. Go back and finish what you started.",
-    pl: "Wróciłeś.\n\n"
+    pl: "{Wróciłeś|Wróciłaś}.\n\n"
       + "A Black Annis nie.\n\n"
       + "Nie tak miało być.\n\n"
-      + "Wrota wciąż są otwarte. Wróć tam i dokończ, co zacząłeś.",
+      + "Wrota wciąż są otwarte. Wróć tam i dokończ, co {zacząłeś|zaczęłaś}.",
     es: "Has vuelto.\n\n"
       + "Black Annis no.\n\n"
       + "No es así como debía terminar.\n\n"
@@ -572,7 +579,7 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Mówiono, że w środku zamknięto potwora.\n\n"
       + "Pół człowieka. Pół byka.\n\n"
       + "Minotaura.\n\n"
-      + "Jeśli chcesz poznać prawdę, będziesz musiał wejść tam, gdzie nikt nie powinien był wejść drugi raz.",
+      + "Jeśli chcesz poznać prawdę, będziesz {musiał|musiała} wejść tam, gdzie nikt nie powinien był wejść drugi raz.",
     es: "La cuarta puerta.\n\n"
       + "Creta.\n\n"
       + "Hace mucho, un rey mandó construir un lugar del que no se podía encontrar la salida.\n\n"
@@ -608,9 +615,9 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Co kilka lat wysyłano mu młodych ludzi jako ofiarę.\n\n"
       + "Aż pojawił się Tezeusz.\n\n"
       + "Miał miecz, miał odwagę i miał nić Ariadny.\n\n"
-      + "Ty nie będziesz miał nici.\n\n"
+      + "Ty nie będziesz {miał|miała} nici.\n\n"
       + "Więc jeśli usłyszysz za sobą ciężkie kroki...\n\n"
-      + "lepiej pamiętaj, którędy przyszedłeś.",
+      + "lepiej pamiętaj, którędy {przyszedłeś|przyszłaś}.",
     es: "El rey Minos no quería que nadie viera lo que había escondido bajo su palacio.\n\n"
       + "Por eso construyó el laberinto.\n\n"
       + "Cientos de pasillos. Callejones sin salida. Escaleras que no llevan a ninguna parte.\n\n"
@@ -804,7 +811,7 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "In a while you may have a great many more reasons to look in on them.",
     pl: "Rozumiem.\n\n"
       + "W takim razie nie przeszkadzaj im.\n\n"
-      + "Być może za jakiś czas będziesz miał znacznie więcej powodów, żeby "
+      + "Być może za jakiś czas będziesz {miał|miała} znacznie więcej powodów, żeby "
       + "tam zajrzeć.",
     es: "Entiendo.\n\n"
       + "En ese caso, no te cruces en su camino.\n\n"
@@ -872,10 +879,10 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "Gorak is presumably still alive.\n\n"
       + "And his army is still growing.\n\n"
       + "If you want to stop what he started, you will have to go back.",
-    pl: "Wróciłeś.\n\n"
+    pl: "{Wróciłeś|Wróciłaś}.\n\n"
       + "Gorak zapewne wciąż żyje.\n\n"
       + "A jego armia wciąż rośnie.\n\n"
-      + "Jeśli chcesz przerwać to, co zaczął, będziesz musiał wrócić.",
+      + "Jeśli chcesz przerwać to, co zaczął, będziesz {musiał|musiała} wrócić.",
     es: "Has vuelto.\n\n"
       + "Gorak sigue vivo, con toda probabilidad.\n\n"
       + "Y su ejército sigue creciendo.\n\n"
@@ -984,7 +991,7 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "William został martwy.\n\n"
       + "Ale coś małego wyszło z miejsca, w którym go ugotowali.\n\n"
       + "Od tamtej pory po Hermitage chodzi Redcap.\n\n"
-      + "Trzy rzeczy powinieneś wiedzieć.\n\n"
+      + "Trzy rzeczy {powinieneś|powinnaś} wiedzieć.\n\n"
       + "Czapka.\n\n"
       + "Nie jest ozdobą. Redcap trzyma w niej swoje życie.\n\n"
       + "Dopóki krew na niej jest mokra, on żyje.\n\n"
@@ -993,7 +1000,7 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Więc jeśli ją zdobędziesz — nie czekaj.\n\n"
       + "Żelazo.\n\n"
       + "Redcap nie boi się go tak, jak inne istoty z jego rodzaju.\n\n"
-      + "Sam chodzi w żelaznych butach i nosi żelazną broń. Będziesz słyszał "
+      + "Sam chodzi w żelaznych butach i nosi żelazną broń. Będziesz {słyszał|słyszała} "
       + "jego kroki, zanim go zobaczysz.\n\n"
       + "Nie próbuj go tym zatrzymać.\n\n"
       + "Szybkość.\n\n"
@@ -1142,10 +1149,10 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Nie musi cię dogonić.\n\n"
       + "Wystarczy, że będzie szedł.\n\n"
       + "Żelazo.\n\n"
-      + "Kárr ma go na sobie więcej, niż chciałbyś widzieć.\n\n"
+      + "Kárr ma go na sobie więcej, niż {chciałbyś|chciałabyś} widzieć.\n\n"
       + "Hełm. Zbroja. Broń.\n\n"
       + "Słabe ciosy będą odbijać się od niego jak deszcz od dachu.\n\n"
-      + "Jeśli chcesz go zranić, uderzaj tak, jakbyś naprawdę chciał go "
+      + "Jeśli chcesz go zranić, uderzaj tak, jakbyś naprawdę {chciał|chciała} go "
       + "zabić.\n\n"
       + "Ogień.\n\n"
       + "Żelazo pozwala ci go zranić.\n\n"
@@ -1157,7 +1164,7 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Kárr nie jest jedynym, który może wstać.\n\n"
       + "To, co zabije draugr, nie zawsze zostaje martwe.\n\n"
       + "Jeśli wejdziesz do jego komory, nie zakładaj, że kiedy pokonasz "
-      + "Kárra, będziesz już sam.",
+      + "Kárra, będziesz już {sam|sama}.",
     es: "Kárr era un hombre rico.\n\n"
       + "Tan rico que cuando lo enterraron metieron con él oro, armas y el "
       + "yelmo que llevó en vida.\n\n"
@@ -1193,7 +1200,7 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Kárr no es el único ahí abajo que puede levantarse.\n\n"
       + "Lo que un draugr mata no siempre sigue muerto.\n\n"
       + "Si entras en su cámara, no des por hecho que vencer a Kárr te deje "
-      + "solo en ella.",
+      + "{solo|sola} en ella.",
     pt: "Kárr era um homem rico.\n\n"
       + "Rico o bastante para que, ao enterrá-lo, pusessem com ele ouro, armas "
       + "e o elmo que usou em vida.\n\n"
@@ -1229,7 +1236,7 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "Kárr não é o único lá embaixo que pode se levantar.\n\n"
       + "O que um draugr mata nem sempre continua morto.\n\n"
       + "Se entrar na câmara dele, não pense que, vencendo Kárr, você vai ficar "
-      + "sozinho.",
+      + "{sozinho|sozinha}.",
   },
   "lore.title.blackannis": {
     en: "Dane Hills — 1794",
@@ -1414,8 +1421,8 @@ const LORE: Readonly<Record<string, Bundle>> = {
       + "To znaczy jedno z dwojga.\n\n"
       + "Albo Gorak zawiedzie sam.\n\n"
       + "Albo ktoś sprawi, że zawiedzie.\n\n"
-      + "Nie wysyłam cię, żebyś się dowiedział które.\n\n"
-      + "Wysyłam cię, żebyś był powodem.\n\n"
+      + "Nie wysyłam cię, żebyś się {dowiedział|dowiedziała} które.\n\n"
+      + "Wysyłam cię, żebyś {był|była} powodem.\n\n"
       + "Trzy rzeczy.\n\n"
       + "Jest największy, jakiego widziałem, większy od Minotaura, i jest wolniejszy od najszybszych ze swoich. Możesz się od niego oderwać. Oni ci na to nie pozwolą.\n\n"
       + "Nosi najcięższe żelazo, jakie ktokolwiek na tym świecie nosił. Cięższe niż Kárr. Lekki cios się od niego odbije.\n\n"
@@ -1729,21 +1736,21 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "I najwyraźniej nigdy nie znalazł drogi powrotnej.\n\n"
       + "Przejdź przez most. Potem zejdź pod świątynię.\n\n"
       + "Zobaczysz pięć kręgów.\n\n"
-      + "Resztę zrozumiesz sam.",
+      + "Resztę zrozumiesz {sam|sama}.",
     es: "La puerta está abierta.\n\n"
       + "Calanais no está hoy tan vacío como estuvo.\n\n"
       + "Alguien entró antes que tú.\n\n"
       + "Y por lo visto nunca encontró la vuelta.\n\n"
       + "Cruza el puente. Luego baja bajo el templo.\n\n"
       + "Verás cinco círculos.\n\n"
-      + "El resto lo entenderás tú solo.",
+      + "El resto lo entenderás tú {solo|sola}.",
     pt: "O portão está aberto.\n\n"
       + "Calanais hoje não está tão vazia quanto já foi.\n\n"
       + "Alguém entrou antes de você.\n\n"
       + "E, pelo visto, nunca achou o caminho de volta.\n\n"
       + "Atravesse a ponte. Depois desça por baixo do templo.\n\n"
       + "Você vai ver cinco círculos.\n\n"
-      + "O resto você descobre sozinho.",
+      + "O resto você descobre {sozinho|sozinha}.",
   },
   "sage.decline.calanais": {
     en: "Very well.\n\n"
@@ -1850,19 +1857,19 @@ const MISSION: Readonly<Record<string, Bundle>> = {
     pl: "...\n\n"
       + "Czujesz to?\n\n"
       + "Dobrze.\n\n"
-      + "Teraz już wiesz, dlaczego kazałem ci wybrać samemu.\n\n"
+      + "Teraz już wiesz, dlaczego kazałem ci wybrać {samemu|samej}.\n\n"
       + "Wróć do mnie.\n\n"
-      + "Chcę zobaczyć, co zrobiłeś z tym, co ci dałem.",
+      + "Chcę zobaczyć, co {zrobiłeś|zrobiłaś} z tym, co ci dałem.",
     es: "...\n\n"
       + "¿Lo sientes?\n\n"
       + "Bien.\n\n"
-      + "Ahora sabes por qué te hice elegir solo.\n\n"
+      + "Ahora sabes por qué te hice elegir {solo|sola}.\n\n"
       + "Vuelve a mí.\n\n"
       + "Quiero ver qué has hecho con lo que te di.",
     pt: "...\n\n"
       + "Sente isso?\n\n"
       + "Bom.\n\n"
-      + "Agora você sabe por que eu o fiz escolher sozinho.\n\n"
+      + "Agora você sabe por que eu {o|a} fiz escolher {sozinho|sozinha}.\n\n"
       + "Volte até mim.\n\n"
       + "Quero ver o que você fez com o que eu lhe dei.",
   },
@@ -1913,7 +1920,7 @@ const MISSION: Readonly<Record<string, Bundle>> = {
       + "nothing.\n\n"
       + "The circles are still burning.\n\n"
       + "Next time, step into one.",
-    pl: "Zszedłeś aż pod świątynię i wróciłeś bez niczego.\n\n"
+    pl: "{Zszedłeś|Zeszłaś} aż pod świątynię i {wróciłeś|wróciłaś} bez niczego.\n\n"
       + "Kręgi wciąż płoną.\n\n"
       + "Następnym razem wejdź do jednego.",
     es: "Bajaste hasta debajo del templo y volviste sin nada.\n\n"
@@ -2089,18 +2096,25 @@ export function hasText(key: string): boolean {
   return key in TEXT;
 }
 
+/** `{masc|fem}`: neither half may hold a brace or a pipe, so a `{lv}` hole is
+ *  never mistaken for one. */
+const BY_SEX = /\{([^{}|]*)\|([^{}|]*)\}/g;
+
 /**
- * One string, in one language, with `{name}` holes filled.
+ * One string, in one language, with `{masc|fem}` settled for the character's
+ * sex and `{name}` holes filled.
  *
  * An unknown key returns the key itself rather than an empty box: a visible
  * `sage.offer.wyrm` on screen is a bug report, and blank text is not.
  */
 export function t(
   key: string, lang: Lang, vars?: Readonly<Record<string, string | number>>,
+  sex: Sex = playerSex(),
 ): string {
   const bundle = TEXT[key];
   if (!bundle) return key;
-  let s = bundle[lang] || bundle[DEFAULT_LANG];
+  let s = (bundle[lang] || bundle[DEFAULT_LANG])
+    .replace(BY_SEX, (_all: string, masc: string, fem: string) => (sex === "female" ? fem : masc));
   if (vars) {
     for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
   }
