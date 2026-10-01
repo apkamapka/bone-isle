@@ -19,7 +19,7 @@ function fail(text: string, input: HTMLInputElement | null = null): void {
 
 async function main(): Promise<void> {
   wireReveal();
-  wireGoogleButton("/");
+  wireGoogleButton("/account/");
   el("page-logout").addEventListener("click", () => void logOut());
   const { data } = await supabase.auth.getSession();
   const email = data.session?.user.email;
@@ -56,7 +56,7 @@ form.addEventListener("submit", async (ev) => {
     return fail("This email address already has an account. Log in, or reset the password if you forgot it.", emailIn);
   }
   // Only when email confirmation is switched off in Supabase.
-  if (data.session) return location.assign("/");
+  if (data.session) return location.assign("/account/");
   sentTo = email;
   el("sent-to").textContent = email;
   showView("sent");

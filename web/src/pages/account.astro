@@ -1,0 +1,100 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="Manage account · Xebeka" description="Your Xebeka account and characters." noindex>
+  <div class="band" aria-hidden="true"></div>
+  <div class="panel" data-panel hidden>
+    <header class="panel__head notch-lg">
+      <div>
+        <h1 class="panel__title">Manage account</h1>
+        <p class="panel__who">Logged in as <strong data-email></strong>. <span data-method></span></p>
+      </div>
+      <button class="btn btn--quiet notch" type="button" data-page-logout>Log out</button>
+    </header>
+
+    <div class="panel__notice" data-deleting hidden>
+      <p>Your account and all its characters will be deleted on <strong data-deleting-date></strong>. Until then you can change your mind.</p>
+      <button class="btn notch" type="button" data-cancel-account>Cancel deletion</button>
+      <p class="form__error" role="alert" data-deleting-error hidden></p>
+    </div>
+
+    <section class="panel__card notch-lg" aria-labelledby="chars-title">
+      <div class="panel__row">
+        <h2 id="chars-title">Characters</h2>
+        <p class="panel__count" data-count></p>
+      </div>
+      <ul class="chars" data-chars></ul>
+      <p class="panel__text" data-chars-empty hidden>No characters yet. Create your first one below.</p>
+      <p class="form__error" role="alert" data-chars-error hidden></p>
+
+      <form class="form create" data-create novalidate>
+        <h3 class="create__title">Create a character</h3>
+        <div class="field">
+          <label for="char-name">Name</label>
+          <input class="input" id="char-name" name="name" type="text" autocomplete="off" spellcheck="false" required maxlength="20" aria-describedby="char-name-hint" />
+          <p class="field__hint" id="char-name-hint">3 to 20 letters, one to three words, like Ana Silva. Capitals are added for you.</p>
+        </div>
+        <fieldset class="field sex">
+          <legend>Sex</legend>
+          <div class="sex__options">
+            <label class="sex__opt"><input type="radio" name="sex" value="male" /><span>Male</span></label>
+            <label class="sex__opt"><input type="radio" name="sex" value="female" /><span>Female</span></label>
+          </div>
+        </fieldset>
+        <p class="form__error" role="alert" data-create-error hidden></p>
+        <button class="btn notch" type="submit" data-create-submit>Create character</button>
+      </form>
+      <p class="form__status" role="status" data-create-status hidden></p>
+      <p class="panel__text" data-full hidden>
+        This account holds 5 characters, the most it can. To make room, delete one; a character waiting to be deleted still counts until it is gone.
+      </p>
+    </section>
+
+    <section class="panel__card notch-lg" aria-labelledby="pass-title">
+      <h2 id="pass-title" data-pass-title>Change password</h2>
+      <p class="panel__text" data-pass-lead hidden></p>
+      <form class="form panel__form" data-pass-form novalidate>
+        <div class="field" data-current-wrap>
+          <label for="current">Current password</label>
+          <div class="pass">
+            <input class="input" id="current" name="current" type="password" autocomplete="current-password" maxlength="72" />
+            <button class="pass__toggle" type="button" data-reveal aria-controls="current" aria-pressed="false">Show</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="password">New password</label>
+          <div class="pass">
+            <input class="input" id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" aria-describedby="password-hint" />
+            <button class="pass__toggle" type="button" data-reveal aria-controls="password" aria-pressed="false">Show</button>
+          </div>
+          <p class="field__hint" id="password-hint">At least 8 characters.</p>
+        </div>
+        <p class="form__error" role="alert" data-pass-error hidden></p>
+        <p class="form__status" role="status" data-pass-status hidden></p>
+        <button class="btn notch" type="submit" data-pass-submit>Change password</button>
+      </form>
+    </section>
+
+    <section class="panel__card notch-lg" aria-labelledby="delete-title" data-delete-section>
+      <h2 id="delete-title">Delete account</h2>
+      <p class="panel__text">Your account and all its characters are deleted 7 days after you ask. Until then you can cancel here, and you can still log in and play.</p>
+      <div class="auth__actions" data-delete-start>
+        <button class="btn btn--quiet notch" type="button" data-delete-account>Delete account</button>
+      </div>
+      <div class="panel__confirm" data-delete-confirm hidden>
+        <p>Delete your account and all its characters on <strong data-delete-date></strong>?</p>
+        <div class="auth__actions">
+          <button class="btn btn--danger notch" type="button" data-delete-yes>Yes, delete my account</button>
+          <button class="btn btn--quiet notch" type="button" data-delete-no>Keep it</button>
+        </div>
+      </div>
+      <p class="form__error" role="alert" data-delete-error hidden></p>
+    </section>
+
+    <div class="captcha" data-captcha></div>
+  </div>
+
+  <script>
+    import "../scripts/account.ts";
+  </script>
+</Base>

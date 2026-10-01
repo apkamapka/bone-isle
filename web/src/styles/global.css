@@ -93,6 +93,7 @@ a:hover { color: var(--lantern-hi); }
 .btn:hover { background: var(--lantern-hi); color: var(--deep); }
 
 .btn,
+.account__link,
 .account__out,
 .topbar__login { white-space: nowrap; }
 
@@ -153,15 +154,7 @@ a:hover { color: var(--lantern-hi); }
 /* A logged-in player's corner: the email on wide screens, and Log out. */
 .account { display: flex; align-items: center; gap: 20px; }
 
-.account__email {
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 15px;
-  color: var(--mist);
-}
-
+.account__link,
 .account__out,
 .topbar__login {
   display: inline-flex;
@@ -176,12 +169,14 @@ a:hover { color: var(--lantern-hi); }
   cursor: pointer;
 }
 
+.account__link:hover,
 .account__out:hover,
 .topbar__login:hover { color: var(--lantern); }
 .account__out:disabled { color: var(--mist); cursor: default; }
 
-@media (max-width: 1180px) {
-  .account__email { display: none; }
+/* Below desktop width Log out lives in the account panel, to keep the bar on one line. */
+@media (max-width: 960px) {
+  .account__out { display: none; }
 }
 
 /* Between phone and desktop the menu and Log out share one row; closer gaps keep both. */
@@ -194,9 +189,9 @@ a:hover { color: var(--lantern-hi); }
   .topbar__actions { gap: 16px; }
 }
 
-/* On a phone the X alone names the site, to make room for Log out. */
-@media (max-width: 520px) {
-  .is-signed-in .brand__name { display: none; }
+/* On a narrow phone the X alone names the site, to make room for Log in / Log out. */
+@media (max-width: 420px) {
+  .brand__name { display: none; }
 }
 
 @media (max-width: 860px) {
@@ -606,4 +601,142 @@ a:hover { color: var(--lantern-hi); }
 @media (max-width: 560px) {
   .auth { margin-top: -40px; padding: 0 10px; }
   .auth__card { padding: 32px 20px 28px; }
+}
+
+/* ------------------------------------------------------------ account panel */
+
+/* Like the account cards, the panel rises over the river strip. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: calc(760px + 2 * var(--page-pad));
+  margin: -64px auto 0;
+  padding: 0 var(--page-pad);
+}
+
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px 32px;
+  padding: 40px;
+  background: var(--shallows);
+}
+
+.panel__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(32px, 4vw, 44px);
+  line-height: 1.1;
+}
+
+.panel__who { margin: 12px 0 0; color: var(--mist); }
+.panel__who strong { color: var(--bone); overflow-wrap: anywhere; }
+
+.panel__card { padding: 32px 40px 36px; background: var(--shallows); }
+
+.panel__card h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.panel__row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.panel__count { margin: 0; font-size: 15px; color: var(--mist); }
+.panel__text { margin: 12px 0 0; color: var(--mist); }
+.panel__card .form__error,
+.panel__card .form__status { margin-top: 16px; }
+.panel__card .form .form__error,
+.panel__card .form .form__status { margin-top: 0; }
+.panel__form,
+.create { max-width: 440px; }
+.panel .btn--quiet { background: var(--deep); }
+.panel .btn--quiet:hover { background: var(--line); }
+
+/* The account is going: said once, at the top, with the way back. */
+.panel__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 20px 24px;
+  border-left: 3px solid var(--ember);
+  background: rgb(255 157 133 / 0.09);
+}
+
+.panel__notice p { margin: 0; flex: 1 1 320px; }
+.panel__notice .form__error { flex-basis: 100%; }
+.panel__confirm { margin-top: 20px; padding: 16px 20px; background: var(--deep); }
+.panel__confirm p { margin: 0; }
+
+.chars { margin: 20px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+
+.char {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.char__name { display: block; font-family: var(--font-display); font-size: 22px; line-height: 1.25; }
+.char__meta { display: block; margin-top: 2px; font-size: 15px; color: var(--mist); }
+.char__meta--deleting { color: var(--ember); }
+
+.char__btn {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--mist);
+  font: 600 15px var(--font-body);
+  cursor: pointer;
+}
+
+.char__btn:hover { color: var(--bone); }
+.char__btn:disabled { cursor: progress; }
+.char__confirm { flex-basis: 100%; padding: 14px 16px; background: var(--deep); }
+.char__confirm p { margin: 0; }
+.char__confirm .auth__actions { margin-top: 14px; }
+.char__error { flex-basis: 100%; }
+
+.create { margin-top: 28px; }
+.create__title { margin: 0; font-size: 18px; }
+
+.sex { margin: 0; padding: 0; border: 0; min-width: 0; }
+.sex legend { margin-bottom: 8px; padding: 0; font-weight: 600; }
+.sex__options { display: flex; flex-wrap: wrap; gap: 10px; }
+.sex__opt { position: relative; cursor: pointer; }
+.sex__opt input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+
+.sex__opt span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 22px;
+  border: 1px solid var(--edge);
+  background: var(--deep);
+  font-weight: 600;
+}
+
+.sex__opt input:checked + span { border-color: var(--lantern); box-shadow: 0 0 0 1px var(--lantern); color: var(--lantern); }
+.sex__opt input:focus-visible + span { outline: 2px solid var(--lantern); outline-offset: 2px; }
+.sex__opt input[aria-invalid="true"] + span { border-color: var(--ember); }
+
+.btn--danger { background: var(--ember); color: var(--deep); }
+.btn--danger:hover { background: #ffb8a6; color: var(--deep); }
+
+@media (max-width: 560px) {
+  .panel { margin-top: -40px; padding: 0 10px; gap: 16px; }
+  .panel__head,
+  .panel__card { padding: 28px 20px; }
 }

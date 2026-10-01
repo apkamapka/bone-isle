@@ -19942,12 +19942,15 @@ async function main(): Promise<void> {
       "the four account pages share one layout");
     ok(read("../web/src/layouts/Auth.astro").includes("noindex") && read("../web/src/layouts/Base.astro").includes('<meta name="robots" content="noindex" />'),
       "...which keeps them out of search results");
-    ok(/\{WORLD_OPEN && <a[^>]*href="\/login\/"/.test(read("../web/src/layouts/Base.astro")),
-      "the top bar offers Log in only once the world is open");
+    ok(read("../web/src/layouts/Base.astro").includes('<a class="topbar__login" href="/login/" data-login>Log in</a>')
+      && !/WORLD_OPEN && <a[^>]*href="\/login\/"/.test(read("../web/src/layouts/Base.astro")),
+      "the top bar offers Log in to every visitor, before the world opens too");
     const bar = read("../web/src/lib/account-bar.ts");
     ok(bar.includes("localStorage.getItem(AUTH_STORAGE_KEY)") && bar.includes('await import("./supabase.ts")'),
       "a visitor with no session in the browser downloads no Supabase client");
     ok(bar.includes('signOut({ scope: "local" })'), "Log out ends the session on this browser only");
+    ok(bar.includes("a.hidden = email !== null") && bar.indexOf("a.hidden = true") < bar.indexOf("void refreshAccountBar()"),
+      "Log in leaves the top bar once someone is logged in, without flashing up while the session loads");
     ok(["signup", "confirm"].every((p) => /autocomplete="new-password"[^>]*minlength="8" maxlength="72"/.test(read(`../web/src/pages/${p}.astro`))),
       "a new password needs 8 characters and may have up to the 72 Supabase accepts");
 
@@ -20047,6 +20050,73 @@ async function main(): Promise<void> {
     ok(secrets.length === 0, "the Google client secret is nowhere in the site");
     ok(read("../web/src/pages/privacy.astro").includes("from Google only your email address and the ID Google uses for your account"),
       "the privacy policy says what Google hands over, and no more");
+  }
+
+  console.log("\nEtap 77 — Manage account: characters, password, and deleting the account after 7 days:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const C = await import("../web/src/lib/characters.ts");
+    const sql1 = read("../supabase/001-characters.sql");
+    const sql2 = read("../supabase/002-account-deletion.sql");
+
+    // ---- names: the panel says what the server would
+    ok(C.checkName("  ana   silva ").ok && (C.checkName("  ana   silva ") as { name: string }).name === "Ana Silva", "a name is tidied the way the server tidies it");
+    ok((C.checkName("mARY ann LEE") as { name: string }).name === "Mary Ann Lee", "...capitals included");
+    ok(!C.checkName("ab").ok && !C.checkName("Abcdefghij Klmnopqrst").ok, "3 to 20 characters, spaces counted");
+    ok(!C.checkName("R2D2").ok && !C.checkName("Zoë").ok && !C.checkName("Ana-Maria").ok, "letters A to Z only");
+    ok(!C.checkName("Ana B Cid").ok && !C.checkName("An Bo Cy Do").ok && C.checkName("Bo Lee").ok, "one to three words of at least two letters");
+    ok(sql1.includes("char_length(v_name) not between 3 and 20") && sql1.includes("'^[A-Z][a-z]+( [A-Z][a-z]+){0,2}$'"),
+      "...the same rules create_character enforces");
+
+    // ---- every refusal the database can raise has words
+    const raised = [...new Set([...(sql1 + sql2).matchAll(/raise exception '([A-Z_]+)'/g)].map((m) => m[1]))];
+    const generic = C.rpcErrorMessage({ message: "SOMETHING_ELSE" });
+    ok(raised.length === 9 && raised.every((r) => C.rpcErrorMessage({ message: r }) !== generic && !C.rpcErrorMessage({ message: r }).includes("(")),
+      `each of the ${raised.length} refusals in 001 and 002 has its own sentence`);
+    ok(C.rpcErrorMessage({ message: "NAME_TAKEN" }) === "Someone already has this name. Choose another." && C.rpcErrorMessage({ message: "CHAR_LIMIT" }).includes("5 characters"),
+      "...a taken name and the five-character limit among them");
+    ok(C.rpcErrorMessage({ message: "TypeError: Failed to fetch" }).startsWith("Could not reach the server"), "a dropped connection reads as one");
+    ok(C.rpcErrorMessage({ code: "PGRST202", message: "Could not find the function" }).includes("(PGRST202)"), "anything else names its code");
+
+    // ---- who logs in how
+    ok(C.hasPassword({ app_metadata: { providers: ["email"] } }) && !C.hasPassword({ app_metadata: { providers: ["google"] } })
+      && C.hasPassword({ app_metadata: { providers: ["google"] }, user_metadata: { password_set: true } }),
+      "an email account has a password; a Google one has one once its player sets it");
+    ok(C.signInMethod({ app_metadata: { providers: ["google"] } }) === "You log in with Google."
+      && C.signInMethod({ app_metadata: { providers: ["email", "google"] } }) === "You log in with Google, or with your email and password.",
+      "the panel says how the player logs in");
+    ok(C.formatDay("2026-10-08T12:00:00Z") === "8 October 2026", "days are written out, day first");
+
+    // ---- the panel
+    const page = read("../web/src/pages/account.astro");
+    const script = read("../web/src/scripts/account.ts");
+    ok(page.includes("noindex") && script.includes('location.replace("/login/?next=/account/")'), "Manage account is out of search results, and sends a guest to Log in and back");
+    ok(read("../web/src/scripts/login.ts").includes('safeNext(new URLSearchParams(location.search).get("next"), "/account/")'), "logging in lands in Manage account");
+    ok(read("../web/src/layouts/Base.astro").includes('<a class="account__link" href="/account/" data-account-link>Account</a>'), "the top bar's Account leads there");
+    ok(script.indexOf("signInWithPassword") > 0 && script.indexOf("signInWithPassword") < script.indexOf("supabase.auth.updateUser("),
+      "a password change checks the current password first, so a browser left logged in cannot take the account");
+    ok(script.includes('{ password: newIn.value, data: { password_set: true } }'), "a Google account that sets a password remembers it has one");
+    ok(script.includes('supabase.rpc("purge_deleted_accounts").then('), "every visit to the panel sweeps out accounts whose 7 days are over (a query left un-awaited would never run)");
+
+    // ---- deleting the account
+    for (const fn of ["account_deletion_at()", "schedule_account_deletion()", "cancel_account_deletion()", "purge_deleted_accounts()"]) {
+      const body = sql2.slice(sql2.indexOf(`function public.${fn}`), sql2.indexOf("$$;", sql2.indexOf(`function public.${fn}`)));
+      ok(body.includes("security definer") && body.includes("set search_path = ''"), `${fn} runs as its owner with an empty search_path`);
+    }
+    ok(sql2.includes("create table if not exists private.account_deletions") && sql2.includes("references auth.users (id) on delete cascade"),
+      "the schedule sits in the private schema and goes with the account");
+    ok(sql2.includes("now() + interval '7 days'") && sql2.includes("on conflict (user_id) do nothing"), "7 days, and asking again does not restart them");
+    ok(sql2.includes("delete from auth.users u") && sql1.includes("references auth.users (id) on delete cascade"), "the purge removes the login, and the characters follow it");
+    ok(/grant execute on function public\.purge_deleted_accounts\(\)\s+to anon, authenticated;/.test(sql2)
+      && !/grant execute on function public\.(schedule|cancel)_account_deletion\(\)\s+to anon/.test(sql2)
+      && sql2.includes("revoke all on table private.account_deletions"),
+      "anyone may sweep; only the player can schedule or cancel, and nobody reads the table");
+    const keepalive = read("../.github/workflows/supabase-keepalive.yml");
+    ok(keepalive.includes("/rest/v1/rpc/purge_deleted_characters") && keepalive.includes("/rest/v1/rpc/purge_deleted_accounts"), "the keep-alive sweeps characters and accounts three times a day");
+    ok(read("../web/src/pages/terms.astro").includes("characters, 7 days later; until then you can change your mind")
+      && read("../web/src/pages/privacy.astro").includes("until your account is deleted, 7 days after you ask"),
+      "Terms and Privacy say what deleting an account does");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

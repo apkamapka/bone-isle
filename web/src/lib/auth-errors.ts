@@ -54,6 +54,8 @@ export function authErrorMessage(err: unknown): string {
       return "This email address already has an account. Log in, or reset the password if you forgot it.";
     case "weak_password":
       return `Use a password of at least ${PASSWORD_MIN} characters.`;
+    case "reauthentication_needed":
+      return "For your safety, log out and log in again first.";
     case "same_password":
       return "Choose a password different from your current one.";
     case "email_address_invalid":
@@ -81,8 +83,8 @@ export function authErrorMessage(err: unknown): string {
 }
 
 /** Where to go after logging in: a path on this site, never another site. */
-export function safeNext(raw: string | null | undefined): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return "/";
+export function safeNext(raw: string | null | undefined, fallback = "/"): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return fallback;
   return raw;
 }
 

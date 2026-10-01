@@ -2,9 +2,9 @@
  * Switches and public keys that change the whole site at once.
  *
  * WORLD_OPEN stays false until etap 1.12. While it is false every Play button
- * is drawn in its "not open yet" state, nothing links into /play/, and the top
- * bar offers no "Log in" (the account pages work, but only by their address).
- * Flip it to true on opening day and all of that appears on every page.
+ * is drawn in its "not open yet" state and nothing links into /play/. Flip it
+ * to true on opening day and the buttons light up on every page. (Logging in
+ * and creating an account work before that; the top bar offers "Log in".)
  */
 export const WORLD_OPEN = false;
 
@@ -31,4 +31,4 @@ export const TURNSTILE_SITE_KEY = "0x4AAAAAAFFga6j554FH6gZD";
 
 /* The date of the Terms of Service a new account accepts, kept with the
  * account. Change it together with "Last updated" in terms.astro. */
-export const TERMS_VERSION = "2026-09-27";
+export const TERMS_VERSION = "2026-09-29";

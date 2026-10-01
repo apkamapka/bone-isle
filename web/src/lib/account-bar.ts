@@ -1,20 +1,20 @@
 import { AUTH_STORAGE_KEY } from "../site.ts";
 
 /**
- * The top bar's corner for a logged-in player: their email (on wide screens)
- * and Log out. A visitor with no session in storage has never logged in on
- * this browser, so the Supabase client is not even downloaded for them.
+ * The top bar's corner for a logged-in player: Account (the panel; the email
+ * shows on hover) and Log out, which on a phone lives in the panel instead.
+ * A visitor with no session in storage has never logged in on this browser,
+ * so the Supabase client is not even downloaded for them.
  */
 
 let wired = false;
 
 function paint(email: string | null): void {
   const box = document.querySelector<HTMLElement>("[data-account]");
-  const label = document.querySelector<HTMLElement>("[data-account-email]");
-  if (!box || !label) return;
+  const link = document.querySelector<HTMLElement>("[data-account-link]");
+  if (!box || !link) return;
   box.hidden = email === null;
-  label.textContent = email ?? "";
-  label.title = email ?? "";
+  link.title = email ? `Logged in as ${email}` : "";
   document.querySelectorAll<HTMLElement>("[data-login]").forEach((a) => {
     a.hidden = email !== null;
   });
@@ -58,5 +58,10 @@ export function initAccountBar(): void {
   } catch {
     /* storage blocked: nobody can be logged in */
   }
-  if (stored) void refreshAccountBar();
+  if (!stored) return;
+  // Someone has logged in on this browser: no "Log in" flashing up while the session loads.
+  document.querySelectorAll<HTMLElement>("[data-login]").forEach((a) => {
+    a.hidden = true;
+  });
+  void refreshAccountBar();
 }

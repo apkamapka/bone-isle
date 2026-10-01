@@ -70,10 +70,10 @@ const LEGAL = [
         <div class="topbar__actions">
           {/* Filled in by account-bar.ts when this browser holds a session. */}
           <div class="account" data-account hidden>
-            <span class="account__email" data-account-email></span>
+            <a class="account__link" href="/account/" data-account-link>Account</a>
             <button class="account__out" type="button" data-logout>Log out</button>
           </div>
-          {WORLD_OPEN && <a class="topbar__login" href="/login/" data-login>Log in</a>}
+          <a class="topbar__login" href="/login/" data-login>Log in</a>
           {WORLD_OPEN
             ? <a class="btn notch" href="/play/">Play</a>
             : <span class="btn btn--off notch" aria-disabled="true">Not open yet</span>}

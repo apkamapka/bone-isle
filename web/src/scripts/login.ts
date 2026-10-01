@@ -11,7 +11,8 @@ const submit = el<HTMLButtonElement>("submit");
 const resendWrap = el("resend-wrap");
 const resendStatus = el("resend-status");
 const captcha = mountCaptcha(el("captcha"));
-const next = safeNext(new URLSearchParams(location.search).get("next"));
+// After logging in the player lands in the account panel, unless a page sent them here.
+const next = safeNext(new URLSearchParams(location.search).get("next"), "/account/");
 let unconfirmed = "";
 
 function fail(text: string, input: HTMLInputElement | null = null): void {
