@@ -20278,6 +20278,57 @@ async function main(): Promise<void> {
     ok(read("../web/src/pages/index.astro").includes("Not open yet"), "the home page keeps its Not open yet until 1.12");
   }
 
+  console.log("\nEtap 80 — Ctrl+L, as in Tibia: back to the character list, but not in the middle of a fight:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const BT = await import("../src/systems/battle.ts");
+    const IN = await import("../src/input.ts");
+    const PS = await import("../src/systems/playerState.ts");
+
+    // ---- the fight clock
+    ok(PS.newPlayerState().lastBattleAt === -Infinity, "a character comes into the world out of battle");
+    BT.markBattle(1000);
+    ok(BT.inBattle(1000) && BT.inBattle(1059.9) && !BT.inBattle(1060.1) && Math.round(BT.battleLeft(1030)) === 30,
+      "a fight blocks logging out until a minute after its last blow");
+    PS.active().lastBattleAt = -Infinity;
+    ok(!BT.inBattle(1000), "…and with no fight there is no block");
+    ok(BT.LOGOUT_REFUSED === "You may not logout during or immediately after a fight!", "the refusal is in Tibia's own words");
+    ok(!read("../src/save.ts").includes("lastBattleAt"), "the clock is never saved: leaving the world ends the fight");
+
+    // ---- the key
+    const key = (o: Partial<KeyboardEvent>): boolean =>
+      IN.isLogoutKey({ key: "l", ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, ...o } as KeyboardEvent);
+    ok(key({ ctrlKey: true }) && key({ ctrlKey: true, key: "L" }), "Ctrl+L logs out, Caps Lock or not");
+    ok(!key({}) && !key({ ctrlKey: true, shiftKey: true }) && !key({ metaKey: true }), "…L alone is still Look, and nothing else logs out");
+    ok(!key({ ctrlKey: true, altKey: true, key: "ł" }), "AltGr+L types ł on a Polish keyboard and never logs anybody out");
+    ok(/if \(!isLogoutKey\(e\)\) return;[\s\S]{0,200}h\.onLogout\(\);\s*\}, true\);/.test(read("../src/input.ts")),
+      "the key is caught on the way down, so it works with the chat field open too");
+
+    // ---- what it does
+    const main = read("../src/main.ts");
+    const lo = main.slice(main.indexOf("function logout(): void {"), main.indexOf("setLogoutHandler(logout);"));
+    ok(lo.includes("!P.dead && inBattle()") && lo.includes("flash(LOGOUT_REFUSED"),
+      "in a fight it is refused in Tibia's words; a dead character may always go");
+    ok(lo.indexOf("saveGame(game);") > 0 && lo.indexOf("saveGame(game);") < lo.indexOf("location.reload();"),
+      "otherwise the world is saved first, then the page starts over at the character list");
+    ok(main.includes("onLogout: () => logout(),") && main.includes("setLogoutHandler(logout);"),
+      "Ctrl+L and Options' Logout are the same function");
+    const m0 = main.indexOf("updateMonsters(world, dt,"), s0 = main.indexOf("updateMonsterSpells(world, dt,");
+    ok(main.slice(m0, main.indexOf("mobDamageMult(m)));", m0)).includes("markBattle();")
+      && main.slice(s0, main.indexOf("hurtPlayer(world, P, adjusted, true);", s0)).includes("markBattle();"),
+      "a creature's blow or spell puts the player in battle, but not on a haven tile, where it never lands");
+    ok((read("../src/systems/combat.ts").match(/markBattle\(\);/g) ?? []).length === 2
+      && (read("../src/systems/crystals.ts").match(/markBattle\(\);/g) ?? []).length === 2,
+      "so do the player's own swing, shot or crystal at a creature; a training dummy does not");
+
+    // ---- the button
+    const panels = read("../src/ui/panels.ts");
+    const opt = panels.slice(panels.indexOf("function drawOptions("), panels.indexOf("The money changer's window."));
+    ok(opt.includes('"Logout"') && opt.includes("fn: () => logoutHandler()") && opt.includes("rowH * 4"),
+      "Options has a Logout button for a hand with no keyboard, in a row of its own");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

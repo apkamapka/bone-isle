@@ -28,6 +28,7 @@ import type { ItemKind } from "../items.ts";
 import { recordKill } from "./kills.ts";
 import { onTaskKill } from "./tasks.ts";
 import { active as activeState } from "./playerState.ts";
+import { markBattle } from "./battle.ts";
 import type { Player } from "../entities/player.ts";
 import type { World, Monster, Structure } from "../world/types.ts";
 
@@ -102,6 +103,7 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
   }
   m.hp -= dmg;
   markBloodHit(); // you drew blood — Shielding may train for the next minute
+  markBattle(); // …and you may not log out for the next one
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
   addFloat(world, m.x, m.y - 32, String(dmg), "#ffe27a");
@@ -163,6 +165,7 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
     : applyMonsterArmor(m, raw);
   m.hp -= dmg;
   markBloodHit(); // you drew blood — Shielding may train for the next minute
+  markBattle(); // …and you may not log out for the next one
   splash(world, m.x, m.y, bloodOf(m.kind));
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;

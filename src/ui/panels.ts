@@ -2856,13 +2856,20 @@ function drawWardrobe(p: PanelInput): void {
  * cell jumps straight to it, which is what a thumb wants. Vibration shows
  * "n/a" where the browser has no motor to offer (desktops, iPhones).
  */
+/** What Options' Logout does: main.ts hands in the same function as Ctrl+L. */
+let logoutHandler: () => void = () => {};
+
+export function setLogoutHandler(fn: () => void): void {
+  logoutHandler = fn;
+}
+
 function drawOptions(p: PanelInput): void {
   const { hud } = p;
   const { ctx, scale: S } = hud;
   const st = audioSettings();
   const w = 230 * S;
   const rowH = 28 * S;
-  const h = 18 * S + rowH * 3 + 8 * S;
+  const h = 18 * S + rowH * 4 + 8 * S;
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "OPTIONS")) return;
   const bw = 16 * S;
@@ -2919,6 +2926,15 @@ function drawOptions(p: PanelInput): void {
       if (next) buzz(40);
     } });
   }
+  /* LOGOUT, Ctrl+L for a hand with no keyboard: back to the character list,
+   * and refused during a fight exactly like the key. */
+  py += rowH;
+  const lw = 84 * S;
+  const lx = x + (w - lw) / 2;
+  const ly = py + (rowH - bh) / 2;
+  buttonBox(ctx, lx, ly, lw, bh, S, { face: "rgba(30,44,30,.95)", accent: "#caa15a", hover: hovering(p, lx, ly, lw, bh) });
+  hudText(hud, "Logout", lx + lw / 2, ly + bh / 2, 7.5 * S, "#ffe9a8", "center", true);
+  p.hotspots.push({ x: lx, y: ly, w: lw, h: bh, fn: () => logoutHandler() });
 }
 
 /**

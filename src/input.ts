@@ -55,6 +55,17 @@ export interface InputHandlers {
   /** Open (or close) the chat input. */
   onChat: () => void;
   onEscape: () => void;
+  /** Ctrl+L: leave the world for the character list, as in Tibia. */
+  onLogout: () => void;
+}
+
+/**
+ * Ctrl+L, Caps Lock or not. Ctrl+Alt is AltGr on a Polish keyboard, where it
+ * types ł, so that combination never logs anybody out; with Shift or the Mac's
+ * Command key it is not the shortcut either.
+ */
+export function isLogoutKey(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "metaKey" | "shiftKey">): boolean {
+  return e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && e.key.toLowerCase() === "l";
 }
 
 /**
@@ -65,6 +76,15 @@ export interface InputHandlers {
  * letting go of the movement hand.
  */
 export function initInput(canvas: HTMLCanvasElement, h: InputHandlers): void {
+  /* CTRL+L is caught on the way DOWN (capture), before the chat field, which
+   * swallows every other key while it is open, and before the `l` for Look
+   * below. It also stops the browser putting the cursor in the address bar. */
+  addEventListener("keydown", (e) => {
+    if (!isLogoutKey(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.repeat) h.onLogout();
+  }, true);
   addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();

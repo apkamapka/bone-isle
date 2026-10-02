@@ -14,6 +14,7 @@ import { SPR, iconW, iconH, hasPropArt, propSprite, CHEST_LIFT } from "./gfx/spr
 import { itemSprite } from "./gfx/itemArt.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { playerSex } from "./systems/sex.ts";
+import { inBattle, markBattle, LOGOUT_REFUSED } from "./systems/battle.ts";
 import { characterName } from "./systems/character.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
@@ -91,7 +92,7 @@ import {
   VITALS_FIT, GOLD_ROW_H, BTN_ROW_H, SWAP_H, BLOCK_BAR,
   type DockLayout, type DockBlock,
 } from "./ui/dock.ts";
-import { drawPanels, isDocked, visibleRows, stripCandidate, STRIP_KINDS, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
+import { drawPanels, setLogoutHandler, isDocked, visibleRows, stripCandidate, STRIP_KINDS, DOCKABLE_PANELS, type UiState, type Hotspot, type ItemSlot, type PanelActions, type PanelKind, type PanelWindow } from "./ui/panels.ts";
 import {
   openDialogue, closeDialogue, dialogueOpen, dialogueTap, advanceDialogue,
   tickDialogue, drawDialogue, type DialogueChoice,
@@ -2756,6 +2757,7 @@ initChatInput({ send: sendChat, cancel: closeChat });
 initWakeLock();
 
 initInput(screen, {
+  onLogout: () => logout(),
   toWorld: (sx, sy): Vec => ({ x: sx / vScale + cam.x, y: sy / vScale + cam.y }),
   onMove: (sx, sy) => { mouse.sx = sx; mouse.sy = sy; },
   onPanel: togglePanel,
@@ -4646,6 +4648,7 @@ function update(dt: number): void {
        * the tile the player is standing on RIGHT NOW, so stepping in cuts a
        * bolt already loosed rather than letting it land a beat later. */
       if (isSafeTile(world, P.tx, P.ty)) return;
+      markBattle();
       const d = MONSTER_DEFS[m.kind];
       const roll = ranged && d.ranged ? d.ranged.dmg : d.dmg;
       hurtPlayer(world, P, Math.round(rndi(roll[0], roll[1]) * mobDamageMult(m)));
@@ -4748,6 +4751,7 @@ function update(dt: number): void {
   // deliberately the same `hurtPlayer` the melee exchange uses — elemental
   // damage ignores armor on its own, inside the damage roll.
   updateMonsterSpells(world, dt, { tx: P.tx, ty: P.ty, dead: P.dead }, (dmg, el, name) => {
+    markBattle();
     const adjusted = Math.max(MIN_ELEMENTAL_DAMAGE,
       Math.round(dmg * elementEdgeMultiplier(el, playerElement())));
     hurtPlayer(world, P, adjusted, true);
@@ -7366,6 +7370,23 @@ function frame(now: number): void {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+/**
+ * Ctrl+L, and Options' Logout for a hand with no keyboard: back to the
+ * character list, as in Tibia (etap 1.9). Refused during a fight and for a
+ * minute after it (systems/battle.ts); a dead character may always go. The
+ * world is saved first, then the page starts over at boot.ts, which lists the
+ * account's characters with this one selected.
+ */
+function logout(): void {
+  if (!P.dead && inBattle()) {
+    flash(LOGOUT_REFUSED, "#ffffff");
+    return;
+  }
+  saveGame(game);
+  location.reload();
+}
+setLogoutHandler(logout);
 
 addEventListener("beforeunload", () => saveGame(game));
 

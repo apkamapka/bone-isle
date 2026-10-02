@@ -7,6 +7,7 @@
  */
 import { sfx } from "../audio.ts";
 import { markBloodHit } from "./skills.ts";
+import { markBattle } from "./battle.ts";
 import { monsterById } from "../world/entities.ts";
 import { ELEMENTS, ELEMENT_COLOR, TIER_CODE, crystalDamage, type Element, type Tier } from "./elements.ts";
 import { MONSTER_DEFS, monsterResist } from "../entities/monsters.ts";
@@ -503,7 +504,10 @@ export function useCrystal(
       removeItem(p.bag, kind, 1);
       startCooldown(kind);
       paint(world, shape, spec.element, spec.tier, FX_SLOT[spec.role]);
-      if (hit.length) markBloodHit();
+      if (hit.length) {
+        markBloodHit();
+        markBattle();
+      }
       for (const m of hit) damageWithElement(world, p, m, spec, col);
       sfx("cast");
       return true;
@@ -541,6 +545,7 @@ export function useCrystal(
     removeItem(p.bag, kind, 1);
     startCooldown(kind);
     markBloodHit();
+    markBattle();
     p.face = toX < p.x ? -1 : 1;
 
     // The projectile is cosmetic and the hit is already resolved, exactly as

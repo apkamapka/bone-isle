@@ -126,6 +126,9 @@ export interface PlayerState {
   shieldBlockTimes: number[];
   /** When this character last DEALT damage; gates Shielding advancement. */
   lastBloodHitAt: number;
+  /** When this character last fought: struck at a creature or was struck by one.
+   *  Tibia's logout block runs from here (systems/battle.ts). Never saved. */
+  lastBattleAt: number;
   /**
    * Crystal cooldowns: the per-ROLE clock and the per-FAMILY wheel.
    *
@@ -217,6 +220,7 @@ export function newPlayerState(): PlayerState {
     attuned: new Set<Element>(),
     shieldBlockTimes: [],
     lastBloodHitAt: -Infinity,
+    lastBattleAt: -Infinity,
     cooldowns: { role: new Map(), wheel: new Map() },
     actionSlots: defaultActionSlots(),
     actionSlotCount: SLOTS_MIN,
