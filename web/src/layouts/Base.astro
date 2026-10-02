@@ -74,9 +74,14 @@ const LEGAL = [
             <button class="account__out" type="button" data-logout>Log out</button>
           </div>
           <a class="topbar__login" href="/login/" data-login>Log in</a>
+          {/* Before the opening Play is for a logged-in player only:
+              account-bar.ts swaps the two once it finds a session. */}
           {WORLD_OPEN
             ? <a class="btn notch" href="/play/">Play</a>
-            : <span class="btn btn--off notch" aria-disabled="true">Not open yet</span>}
+            : <>
+                <a class="btn notch" href="/play/" data-play hidden>Play</a>
+                <span class="btn btn--off notch" aria-disabled="true" data-play-off>Not open yet</span>
+              </>}
         </div>
       </div>
     </header>

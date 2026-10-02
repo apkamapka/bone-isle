@@ -13,7 +13,8 @@ import { updateNpcs, faceToward } from "./entities/npcs.ts";
 import { SPR, iconW, iconH, hasPropArt, propSprite, CHEST_LIFT } from "./gfx/sprites.ts";
 import { itemSprite } from "./gfx/itemArt.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
-import { playerSex, setPlayerSex, sexFromQuery } from "./systems/sex.ts";
+import { playerSex } from "./systems/sex.ts";
+import { characterName } from "./systems/character.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
@@ -281,11 +282,7 @@ function resize(): void {
 }
 addEventListener("resize", resize);
 addEventListener("orientationchange", () => setTimeout(resize, 100));
-/* TEMP-ETAP78-SEX — the body comes from the address (/play?sex=female) until
- * etap 1.9 hands the game the character picked on the website. It is settled
- * before the sheets load and before the first `t()`, so the body on screen
- * and the Time Sage's grammar can never disagree. */
-setPlayerSex(sexFromQuery(location.search));
+// The entered character's body: boot.ts settled its sex before this file loaded.
 loadHeroSheet(playerSex());
 resize();
 
@@ -2748,19 +2745,12 @@ function sendChat(text: string): void {
 const CHAT_SPEAKER_ID = -1;
 
 /**
- * TEMP-ETAP70-NAME — the name over the player's head, until there is a real one.
- *
- * ONLINE: REPLACE THIS. Nobody has a name yet because nobody logs in: there
- * is one character per browser and it has never been asked what it is called.
- * The day accounts exist, the server hands every character its name, this
- * constant goes, and `nameplate` is given that name instead — for the local
- * player AND for every other player on screen, since they draw through the
- * same call. The chat's `SELF` ("You", systems/chat.ts) is the same seam on
- * the other side of the screen and wants the same fix at the same time.
- *
- * Grep TEMP-ETAP70-NAME to find everything that has to change with it.
+ * The name over the player's head: the character entered from the list on the
+ * way in (boot.ts, etap 1.9). Every other player, once there are any, draws
+ * through the same `nameplate` call with their own name. "Player" only where
+ * nobody logged in: `npm run dev` and the smoke suite.
  */
-const PLAYER_NAME = "Player";
+const PLAYER_NAME = characterName() ?? "Player";
 
 initChatInput({ send: sendChat, cancel: closeChat });
 initWakeLock();

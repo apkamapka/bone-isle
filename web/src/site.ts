@@ -1,10 +1,11 @@
 /**
  * Switches and public keys that change the whole site at once.
  *
- * WORLD_OPEN stays false until etap 1.12. While it is false every Play button
- * is drawn in its "not open yet" state and nothing links into /play/. Flip it
- * to true on opening day and the buttons light up on every page. (Logging in
- * and creating an account work before that; the top bar offers "Log in".)
+ * WORLD_OPEN stays false until etap 1.12. While it is false the home page says
+ * "Not open yet", and so does the top bar to anyone not logged in; a logged-in
+ * player gets Play there (etap 1.9: /play/ itself asks for a login and lists
+ * the account's characters). Flip it to true on opening day and Play lights up
+ * for everyone, on every page.
  */
 export const WORLD_OPEN = false;
 
@@ -16,8 +17,8 @@ export const WORLD_OPEN = false;
 export const SUPABASE_URL = "https://yjtojtvakkcokomrzcyh.supabase.co";
 export const SUPABASE_KEY = "sb_publishable_MJn1iEgInCW3zhRHxCip7w_4AhEygnn";
 
-/* Where the browser keeps the login session. The game at /play/ will read the
- * same key (etap 1.9), so the site and the game stay logged in together. */
+/* Where the browser keeps the login session. The game at /play/ reads the same
+ * key (src/net/account.ts), so the site and the game stay logged in together. */
 export const AUTH_STORAGE_KEY = "sb-yjtojtvakkcokomrzcyh-auth-token";
 
 /*

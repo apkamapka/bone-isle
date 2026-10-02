@@ -18,6 +18,13 @@ function paint(email: string | null): void {
   document.querySelectorAll<HTMLElement>("[data-login]").forEach((a) => {
     a.hidden = email !== null;
   });
+  // Before the opening (site.ts WORLD_OPEN) Play is a logged-in player's way into /play/.
+  document.querySelectorAll<HTMLElement>("[data-play]").forEach((el) => {
+    el.hidden = email === null;
+  });
+  document.querySelectorAll<HTMLElement>("[data-play-off]").forEach((el) => {
+    el.hidden = email !== null;
+  });
   document.documentElement.classList.toggle("is-signed-in", email !== null);
 }
 
@@ -62,6 +69,12 @@ export function initAccountBar(): void {
   // Someone has logged in on this browser: no "Log in" flashing up while the session loads.
   document.querySelectorAll<HTMLElement>("[data-login]").forEach((a) => {
     a.hidden = true;
+  });
+  document.querySelectorAll<HTMLElement>("[data-play]").forEach((el) => {
+    el.hidden = false;
+  });
+  document.querySelectorAll<HTMLElement>("[data-play-off]").forEach((el) => {
+    el.hidden = true;
   });
   void refreshAccountBar();
 }

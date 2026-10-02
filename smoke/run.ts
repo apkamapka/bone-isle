@@ -19588,10 +19588,9 @@ async function main(): Promise<void> {
     ok(/drawLifeBar\(/.test(plate70) && /drawNameTag\(vctx, x - cam\.x, top - cam\.y - NAME_GAP, name, pct\)/.test(plate70),
       "one call draws both, the name NAME_GAP above the bar and in the same percent");
     ok(!/[^.\w]lifeBar\(/.test(m70), "…and nothing draws a bar without its name any more");
-    ok(m70.includes('const PLAYER_NAME = "Player";'), "the player is called Player for now");
-    const tag70 = m70.slice(m70.indexOf("TEMP-ETAP70-NAME"), m70.indexOf('const PLAYER_NAME = "Player";'));
-    ok(tag70.length > 0 && /ONLINE: REPLACE THIS/.test(tag70),
-      "…and it says, in the tag, that the online build has to replace it (grep TEMP-ETAP70-NAME)");
+    ok(m70.includes('const PLAYER_NAME = characterName() ?? "Player";'),
+      "the player is called by the entered character's name, Player only where nobody logged in (etap 1.9)");
+    ok(!m70.includes("TEMP-ETAP70-NAME"), "…and the stand-in's tag went with it");
 
     /* THE STACK OVER A HEAD, in pixels above the feet. Bar frame 51..57, the
      * name's baseline NAME_GAP above it with capitals about eight pixels tall,
@@ -20128,16 +20127,12 @@ async function main(): Promise<void> {
     const SP = await import("../src/text/speech.ts");
     const DL = await import("../src/ui/dialogue.ts");
 
-    // ---- which body (TEMP-ETAP78-SEX, until etap 1.9 hands over the picked character)
+    // ---- which body: the entered character's (etap 1.9 retired the TEMP-ETAP78-SEX address switch)
     ok(SX.playerSex() === "male", "a character is male until told otherwise, as every character so far has been");
-    ok(SX.sexFromQuery("?sex=female") === "female" && SX.sexFromQuery("?lang=pl&sex=female") === "female",
-      "/play?sex=female plays the female body");
-    ok(SX.sexFromQuery("") === "male" && SX.sexFromQuery("?sex=Female") === "male" && SX.sexFromQuery("?sex=f") === "male",
-      "…and anything else the male one, so a mistyped link still shows a character");
     ok(SX.isSex("male") && SX.isSex("female") && !SX.isSex("") && !SX.isSex(undefined), "exactly the two values the website stores");
     const mainSrc = read("../src/main.ts");
-    const setAt = mainSrc.indexOf("setPlayerSex(sexFromQuery(location.search))");
-    ok(setAt > 0 && setAt < mainSrc.indexOf("loadHeroSheet(playerSex())"), "main.ts settles the sex before it loads the body");
+    ok(mainSrc.includes("loadHeroSheet(playerSex())") && !mainSrc.includes("TEMP-ETAP78") && !("sexFromQuery" in SX),
+      "main.ts loads the entered character's body, and the ?sex= switch is gone");
     ok(!/\bsex\b/i.test(read("../src/save.ts")) && !/\bsex\b/i.test(read("../src/systems/playerState.ts")),
       "the sex is not progress: neither the save nor PlayerState carries it, so no reset or old save can change it");
 
@@ -20197,6 +20192,90 @@ async function main(): Promise<void> {
     ok(bare.length === 0, `no Polish "-łeś" said to the player is left without its "-łaś"${bare.length ? " — " + bare[0] : ""}`);
     ok(shown.length === 0, `no brace or pipe ever reaches the screen, for either sex${shown.length ? " — " + shown[0] : ""}`);
     ok(tight.length === 0, `the feminine forms fit the dialogue box as well as the masculine ones${tight.length ? " — " + tight[0] : ""}`);
+  }
+
+  console.log("\nEtap 79 — the way in: no login, no world; then the account's characters, listed Tibia-style:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const AC = await import("../src/net/account.ts");
+    const CH = await import("../src/systems/character.ts");
+    const SX = await import("../src/systems/sex.ts");
+    const CHAT = await import("../src/systems/chat.ts");
+
+    // ---- one project and one login, seen from the site and from the game
+    const site = read("../web/src/site.ts");
+    const q = (k: string): string | undefined => new RegExp(`export const ${k} = "([^"]*)";`).exec(site)?.[1];
+    ok(q("SUPABASE_URL") === AC.SUPABASE_URL && q("SUPABASE_KEY") === AC.SUPABASE_KEY && q("AUTH_STORAGE_KEY") === AC.AUTH_STORAGE_KEY,
+      "the game talks to the website's Supabase project and reads the login the website stored");
+    ok(AC.LOGIN_URL === "/login/?next=/play/" && read("../web/src/scripts/login.ts").includes('get("next")'),
+      "no login sends the player to Log in, which sends them straight back to /play/");
+
+    // ---- the stored login, read without supabase-js
+    const now = Date.UTC(2026, 9, 2) / 1000;
+    const s79 = AC.parseSession(JSON.stringify({ access_token: "a", refresh_token: "r", expires_at: now + 3600, user: { id: "u" } }));
+    ok(s79?.accessToken === "a" && s79.refreshToken === "r" && s79.expiresAt === now + 3600, "the login supabase-js stores is read as it is");
+    ok(AC.parseSession(JSON.stringify({ currentSession: { access_token: "a", refresh_token: "r", expires_at: 1 } }))?.accessToken === "a",
+      "…and so is the older, wrapped shape");
+    ok(AC.parseSession(null) === null && AC.parseSession("{") === null && AC.parseSession("{}") === null
+      && AC.parseSession(JSON.stringify({ access_token: "", refresh_token: "r" })) === null,
+      "nothing, garbage or half a login is no login at all");
+    ok(AC.isFresh(s79!, (now + 3600 - 120) * 1000) && !AC.isFresh(s79!, (now + 3600 - 30) * 1000) && !AC.isFresh(s79!, (now + 7200) * 1000),
+      "a token with under a minute left is refreshed before it is used");
+
+    // ---- the characters
+    const rows = AC.cleanRows([
+      { id: "1", name: "Ann", sex: "female", delete_at: null },
+      { id: "2", name: "Bob", sex: "male", delete_at: "2026-10-09T12:00:00Z" },
+      { id: "3", name: "Odd", sex: "other", delete_at: null },
+      { id: 4, name: "Num", sex: "male" },
+      null,
+    ]);
+    ok(rows.length === 2 && rows[0].name === "Ann" && rows[0].sex === "female" && rows[1].deleteAt === "2026-10-09T12:00:00Z",
+      "the list keeps what the database says and drops anything that is not a character");
+    ok(AC.cleanRows({ message: "JWT expired" }).length === 0, "an error body is no list");
+    ok(AC.preselect(rows, "2") === 1 && AC.preselect(rows, "gone") === 0 && AC.preselect(rows, null) === 0,
+      "the character entered last on this browser starts selected, else the first");
+    const t79 = Date.UTC(2026, 9, 2, 12);
+    ok(AC.deletionNote(null, t79) === null && AC.deletionNote("2026-10-09T12:00:00Z", t79) === "deleted in 7 days"
+      && AC.deletionNote("2026-10-03T06:00:00Z", t79) === "deleted within a day" && AC.deletionNote("2026-10-01T00:00:00Z", t79) === "deleted within a day",
+      "a character waiting for deletion says so in the list, and still plays until then");
+
+    // ---- entering as one
+    ok(CH.characterName() === null && CH.characterId() === null && CHAT.SELF === "You",
+      "where nobody logged in (dev, this suite) there is no character and the chat still says You");
+    CH.enterAs({ id: "1", name: "Ann", sex: "female" });
+    ok(CH.characterName() === "Ann" && CH.characterId() === "1" && SX.playerSex() === "female",
+      "entering as a character sets its name and its sex together");
+    CH.enterAs({ id: "2", name: "Bob", sex: "male" });
+    ok(CH.characterName() === "Bob" && SX.playerSex() === "male", "…and entering as another replaces both");
+    ok(read("../src/systems/chat.ts").includes('export const SELF = characterName() ?? "You";')
+      && read("../src/main.ts").includes('const PLAYER_NAME = characterName() ?? "Player";'),
+      "the name over the head and in the chat is the character's");
+
+    // ---- nothing of the world before a character is entered
+    const html = read("../index.html");
+    ok(html.includes('<script type="module" src="/src/boot.ts"></script>') && !html.includes("src/main.ts"),
+      "the page starts at boot.ts, not at the world");
+    const boot = read("../src/boot.ts");
+    ok(/enterAs\(picked\);[\s\S]*await import\("\.\/main\.ts"\)/.test(boot) && !/^import[^\n]*main\.ts/m.test(boot)
+      && (boot.match(/import\("\.\/main\.ts"\)/g) ?? []).length === 1,
+      "boot.ts loads main.ts once, after enterAs: no monster moves and no Time Sage speaks before the player is someone");
+    ok(boot.includes("location.replace(LOGIN_URL)"), "no login: off to Log in, without leaving an empty /play/ in the history");
+    ok(boot.includes("if (!import.meta.env.DEV)"), "npm run dev, with no website beside it, starts the world as before");
+    const ui79 = read("../src/ui/charList.ts");
+    ok(ui79.includes("Select Character") && ui79.includes('"ArrowDown"') && ui79.includes('"Enter"') && ui79.includes("DOUBLE_TAP_MS"),
+      "the list reads like the Tibia client's and works by mouse, touch and keyboard");
+    ok(ui79.includes('toAccount("Account")') && ui79.includes('toAccount("Create a character")'),
+      "…with the way to the account page, where characters are made");
+
+    // ---- the site's Play button
+    const base = read("../web/src/layouts/Base.astro"), bar = read("../web/src/lib/account-bar.ts");
+    ok(base.includes('<a class="btn notch" href="/play/" data-play hidden>Play</a>') && base.includes("data-play-off>Not open yet</span>"),
+      "before the opening the top bar has Play for a logged-in player and Not open yet for everyone else");
+    ok(bar.includes('querySelectorAll<HTMLElement>("[data-play]")') && bar.includes('querySelectorAll<HTMLElement>("[data-play-off]")'),
+      "…swapped by the same code that swaps Log in for Account");
+    ok(read("../web/src/pages/index.astro").includes("Not open yet"), "the home page keeps its Not open yet until 1.12");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

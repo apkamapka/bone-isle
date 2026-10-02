@@ -34,6 +34,7 @@
  * false` and say so when opened, rather than being absent and appearing from
  * nowhere later.
  */
+import { characterName } from "./character.ts";
 import { nextEntityId } from "../world/entities.ts";
 
 export type ChannelId =
@@ -157,8 +158,9 @@ interface ChatState {
   active: ChannelId;
 }
 
-/** How the player's own lines are attributed. Never counts as unread. */
-export const SELF = "You";
+/** How the player's own lines are attributed: the character's name (etap 1.9),
+ *  "You" where nobody logged in. Never counts as unread. */
+export const SELF = characterName() ?? "You";
 
 const state: ChatState = { lines: [], bubbles: [], unread: {}, cooldown: {}, active: "local" };
 
