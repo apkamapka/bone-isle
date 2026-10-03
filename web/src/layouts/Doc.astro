@@ -1,5 +1,6 @@
 ---
 import Base from "./Base.astro";
+import { newsDate, newsIso } from "../lib/news.ts";
 
 /**
  * Every long page (terms, privacy, credits, and later the FAQ and the news
@@ -11,9 +12,11 @@ interface Props {
   description: string;
   heading: string;
   updated?: string;
+  /** A news post's day, shown under its headline. */
+  posted?: Date;
   toc?: { id: string; label: string }[];
 }
-const { title, description, heading, updated, toc = [] } = Astro.props;
+const { title, description, heading, updated, posted, toc = [] } = Astro.props;
 ---
 <Base title={title} description={description}>
   <div class="band" aria-hidden="true"></div>
@@ -21,6 +24,7 @@ const { title, description, heading, updated, toc = [] } = Astro.props;
     <article class="doc__body">
       <h1 class="doc__title">{heading}</h1>
       {updated && <p class="doc__date">Last updated {updated}</p>}
+      {posted && <p class="doc__date"><time datetime={newsIso(posted)}>{newsDate(posted)}</time></p>}
       <slot />
     </article>
     {toc.length > 0 && (

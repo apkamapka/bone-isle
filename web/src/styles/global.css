@@ -338,8 +338,13 @@ a:hover { color: var(--lantern-hi); }
 /* news */
 .news { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 
-.news__item { display: flex; flex-direction: column; gap: 12px; padding: 32px; background: var(--shallows); }
+.news__item { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 32px; background: var(--shallows); }
 .news__item p { margin: 0; }
+
+/* The whole card is the link to the post (etap 1.11), an easy target for a thumb. */
+.news__title a { color: var(--bone); text-decoration: none; }
+.news__title a::after { content: ""; position: absolute; inset: 0; }
+.news__item:hover .news__title a { color: var(--lantern); }
 
 .news__date { font-size: 15px; color: var(--mist); }
 
@@ -411,6 +416,9 @@ a:hover { color: var(--lantern-hi); }
 }
 
 .doc__date { margin: 18px 0 0; font-size: 15px; color: var(--mist); }
+
+/* the way back from a news post */
+.doc__body .doc__back { margin-top: 44px; font-size: 16px; }
 
 .doc__toc {
   position: sticky;

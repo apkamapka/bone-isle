@@ -20565,6 +20565,65 @@ async function main(): Promise<void> {
     SV.deleteSave();
   }
 
+  console.log("\nEtap 82 — news on xebeka.com: Markdown files in the repo, the newest on the home page, one page each:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const NW = await import("../web/src/lib/news.ts");
+
+    // ---- where the posts live
+    const cfg = read("../web/src/content.config.ts");
+    ok(cfg.includes('loader: glob({ pattern: "*.md", base: "./src/content/news" })') && cfg.includes("export const collections = { news };"),
+      "a post is a Markdown file in web/src/content/news, added on GitHub like any other file");
+    ok(cfg.includes("title: z.string().min(1),") && cfg.includes("date: z.coerce.date(),") && cfg.includes("summary: z.string().min(1),"),
+      "…with a title, a date and a summary, or the build stops and the site stays as it was");
+
+    // ---- the first post
+    const first = read("../web/src/content/news/welcome-to-xebeka.md");
+    const head = /^---\n([\s\S]*?)\n---\n/.exec(first)?.[1] ?? "";
+    ok(head.includes('title: "Welcome to Xebeka"') && head.includes("date: 2026-10-03") && /summary: ".+"/.test(head),
+      "the first post: Welcome to Xebeka, 3 October 2026");
+    ok(first.includes("The first world is called Pandora.") && first.includes("opens soon"), "…telling what Xebeka is and that Pandora opens soon");
+    ok(!/[\u2013\u2014]/.test(first), "…written with plain hyphens only, no long dashes");
+
+    // ---- dates and order
+    ok(NW.newsDate(new Date("2026-10-03")) === "3 October 2026" && NW.newsIso(new Date("2026-10-03")) === "2026-10-03",
+      "dates read 3 October 2026, like the rest of the site, in every time zone");
+    const order = NW.byNewest([
+      { id: "b", data: { date: new Date("2026-10-03") } },
+      { id: "old", data: { date: new Date("2026-09-01") } },
+      { id: "new", data: { date: new Date("2026-10-10") } },
+      { id: "a", data: { date: new Date("2026-10-03") } },
+    ]).map((p) => p.id).join(",");
+    ok(order === "new,a,b,old", "the newest come first, and two from the same day keep a fixed order");
+
+    // ---- the home page
+    const home = read("../web/src/pages/index.astro");
+    ok(NW.HOME_NEWS === 5 && home.includes('byNewest(await getCollection("news")).slice(0, HOME_NEWS)'),
+      "the home page lists the five newest posts");
+    ok(home.indexOf("Who waits past the bridges") < home.indexOf('<section class="section" id="news">') && home.includes("{news.length > 0 && ("),
+      "…under the creatures, where the news stood in the site's design, and not at all while there are none");
+    ok(home.includes('<article class="news__item notch-lg">') && home.includes('<h2 class="section__title">News</h2>'),
+      "…as the cards the site's design drew for them");
+    ok(home.includes("href={`/news/${post.id}/`}") && home.includes("<p>{post.data.summary}</p>") && home.includes("datetime={newsIso(post.data.date)}"),
+      "each with its date, its headline linking to its page, and its summary");
+    const css82 = read("../web/src/styles/global.css");
+    ok(css82.includes('.news__title a::after { content: ""; position: absolute; inset: 0; }') && (css82.match(/^\.news \{/gm) ?? []).length === 1,
+      "the whole card is the link, an easy target for a thumb");
+
+    // ---- a post's own page
+    const page = read("../web/src/pages/news/[slug].astro");
+    ok(page.includes('const posts = await getCollection("news");') && page.includes("params: { slug: post.id }"),
+      "every post gets its page at /news/<file name>/");
+    ok(page.includes("posted={post.data.date}") && page.includes('<a href="/#news">More news</a>') && page.includes("<Doc"),
+      "…in the same long-page layout as the Terms, with its date and a way back to the list");
+    ok(read("../web/src/layouts/Doc.astro").includes('{posted && <p class="doc__date"><time datetime={newsIso(posted)}>{newsDate(posted)}</time></p>}'),
+      "the post's date sits under its headline");
+
+    // ---- the menu opens in 1.12
+    ok(read("../web/src/layouts/Base.astro").includes('  { label: "News" },'), "the top bar's News entry stays dimmed until the opening (1.12)");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

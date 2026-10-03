@@ -1,9 +1,14 @@
 ---
+import { getCollection } from "astro:content";
 import Base from "../layouts/Base.astro";
 import { WORLD_OPEN } from "../site.ts";
+import { HOME_NEWS, byNewest, newsDate, newsIso } from "../lib/news.ts";
 
 // Left to right, as they stand on the strip in /art/creatures.png.
 const CREATURES = ["Goblin", "Skeleton", "Orc", "Minotaur", "Viking", "Black Knight", "Corsair"];
+
+// The newest posts from src/content/news (etap 1.11), under the creatures.
+const news = byNewest(await getCollection("news")).slice(0, HOME_NEWS);
 ---
 <Base
   title="Xebeka, an online RPG you play in the browser"
@@ -94,5 +99,22 @@ const CREATURES = ["Goblin", "Skeleton", "Orc", "Minotaur", "Viking", "Black Kni
       </div>
     </div>
   </section>
+
+  {news.length > 0 && (
+    <section class="section" id="news">
+      <div class="section__head">
+        <h2 class="section__title">News</h2>
+      </div>
+      <div class="news">
+        {news.map((post) => (
+          <article class="news__item notch-lg">
+            <time class="news__date" datetime={newsIso(post.data.date)}>{newsDate(post.data.date)}</time>
+            <h3 class="news__title"><a href={`/news/${post.id}/`}>{post.data.title}</a></h3>
+            <p>{post.data.summary}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  )}
 
 </Base>

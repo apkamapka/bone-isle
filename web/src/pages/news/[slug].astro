@@ -1,0 +1,22 @@
+---
+import { getCollection, render } from "astro:content";
+import Doc from "../../layouts/Doc.astro";
+
+/* One page per news post (etap 1.11); the posts are src/content/news/*.md. */
+export async function getStaticPaths() {
+  const posts = await getCollection("news");
+  return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+---
+<Doc
+  title={`${post.data.title} · Xebeka news`}
+  description={post.data.summary}
+  heading={post.data.title}
+  posted={post.data.date}
+>
+  <Content />
+  <p class="doc__back"><a href="/#news">More news</a></p>
+</Doc>
