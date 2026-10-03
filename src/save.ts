@@ -1,4 +1,11 @@
-/** localStorage persistence: full game snapshot keyed by a single slot. */
+/**
+ * The full game snapshot: built and read here, stored in one of two places.
+ *
+ * A character entered from the list (etap 1.10) keeps its own save in the
+ * database: saveGame hands it to net/cloudSave.ts and loadGame reads the one
+ * the database gave on entry. Where nobody logged in (`npm run dev`, the
+ * smoke suite) it is the single localStorage slot it always was.
+ */
 import { loadBuffs } from "./systems/buffs.ts";
 import type { Buffs } from "./systems/buffs.ts";
 import { buildWorlds, populateAll, type Game } from "./game.ts";
@@ -26,6 +33,7 @@ import type { Skull } from "./systems/pvp.ts";
 import { emptyStash, emptyCorpseBag, emptyEquipment, addItem, addStack, newContainer, giveGold, COIN_KINDS, ITEMS, AMMO_KINDS } from "./items.ts";
 import type { Bag, Equipment, ItemKind, ItemStack } from "./items.ts";
 import type { WorldKey, Structure, GroundItem, Corpse } from "./world/types.ts";
+import { online as cloudOnline, record as cloudRecord, enteredSave, SAVE_UNREADABLE } from "./net/cloudSave.ts";
 
 const KEY = "bone-isle-save-v2";
 
@@ -217,6 +225,7 @@ function decodeExplored(s: string, size: number): Uint8Array {
 }
 
 export function hasSave(): boolean {
+  if (cloudOnline()) return enteredSave() !== null;
   try {
     return localStorage.getItem(KEY) !== null;
   } catch {
@@ -276,6 +285,10 @@ export function saveGame(g: Game): void {
     outfit: outfitSave(),
     opened: g.opened,
   };
+  if (cloudOnline()) {
+    cloudRecord(data); // the character's own save: kept here, then to the database
+    return;
+  }
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch {
@@ -283,14 +296,32 @@ export function saveGame(g: Game): void {
   }
 }
 
-/** Load a saved game, or return null if none/corrupt. */
+/**
+ * Load a saved game, or return null if there is none, and main.ts starts a
+ * new one. A character held by this window loads the save the database gave
+ * on entry, never the browser's old slot. If that save exists but cannot be
+ * read (corrupt, or from a newer build than this one), this throws instead:
+ * a new character must never be saved over it.
+ */
 export function loadGame(): Game | null {
+  if (cloudOnline()) {
+    const saved = enteredSave();
+    if (saved === null) return null;
+    const g = loadFrom(saved);
+    if (!g) throw new Error(SAVE_UNREADABLE);
+    return g;
+  }
   let raw: string | null;
   try {
     raw = localStorage.getItem(KEY);
   } catch {
     return null;
   }
+  return loadFrom(raw);
+}
+
+/** A game from a save's JSON; null when there is none or it is corrupt. */
+function loadFrom(raw: string | null): Game | null {
   if (!raw) return null;
 
   let data: SaveData;

@@ -82,6 +82,7 @@ import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { planSwap, refused, freeSlots } from "./systems/loadout.ts";
 import { createGame, travelTo, applyGates, applyMissionPads, padRefusal, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
+import { push as pushSave, sendOnLeave, checkIn, startAutosave } from "./net/cloudSave.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, revealMinimap, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
 import { deckEnabled, mobileLayout, noDeck, overDeck, TOUCH_MIN_CSS, mapFocusFrac, mapFocusFracX, sheetSlots, sheetBand, stripRect, stripHandle, stripClaim, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
@@ -7371,24 +7372,55 @@ function frame(now: number): void {
 }
 requestAnimationFrame(frame);
 
+/** Shown when Ctrl+L cannot get the save to the database; the save stays kept in the browser. */
+const SAVE_FAILED = "Could not save to the server. Try again in a moment.";
+let leaving = false;
+
 /**
  * Ctrl+L, and Options' Logout for a hand with no keyboard: back to the
  * character list, as in Tibia (etap 1.9). Refused during a fight and for a
  * minute after it (systems/battle.ts); a dead character may always go. The
- * world is saved first, then the page starts over at boot.ts, which lists the
- * account's characters with this one selected.
+ * world is saved first and, for a character entered from the list, waits
+ * until the database has it (etap 1.10); then the page starts over at
+ * boot.ts, which lists the account's characters with this one selected.
  */
 function logout(): void {
   if (!P.dead && inBattle()) {
     flash(LOGOUT_REFUSED, "#ffffff");
     return;
   }
+  if (leaving) return;
+  leaving = true;
   saveGame(game);
-  location.reload();
+  void pushSave().then((r) => {
+    // "ended": the character was entered elsewhere meanwhile, and the page
+    // is already on its way back to the list with a notice saying so.
+    if (r === "saved") location.reload();
+    else if (r === "failed") {
+      leaving = false;
+      flash(SAVE_FAILED, "#ffffff");
+    }
+  });
 }
 setLogoutHandler(logout);
 
 addEventListener("beforeunload", () => saveGame(game));
+/* A hidden tab may never come back (a phone closes it without a word), so
+ * hiding it sends the save to the database as closing does (etap 1.10). Back
+ * in view, the game asks whether the character was entered elsewhere since. */
+addEventListener("pagehide", () => {
+  saveGame(game);
+  sendOnLeave();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    saveGame(game);
+    sendOnLeave();
+  } else {
+    checkIn();
+  }
+});
+startAutosave();
 
 // silence unused-import complaints for values referenced only in types/paths
 void STRUCTS;

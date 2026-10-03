@@ -8,7 +8,9 @@
  *   2. asks the database for the account's characters;
  *   3. lists them, the way the Tibia client does right after logging in;
  *   4. enters as the one picked: its name over the head and in the chat, its
- *      body and the Time Sage's grammar (systems/character.ts).
+ *      body and the Time Sage's grammar (systems/character.ts);
+ *   5. takes its save from the database (etap 1.10, net/cloudSave.ts), which
+ *      also makes this window the one the character is played from.
  * Only then is main.ts imported, so nothing of the world runs (no monster
  * moves, no Time Sage speaks) before the player is someone.
  *
@@ -20,6 +22,7 @@ import {
   LAST_CHARACTER_KEY, LOGIN_URL, fetchCharacters, freshSession, preselect, refresh, type CharacterRow,
 } from "./net/account.ts";
 import { enterAs } from "./systems/character.ts";
+import { SAVE_UNREADABLE, enterWorld, takeNotice, type EnterResult } from "./net/cloudSave.ts";
 import { mountCharList, type CharList } from "./ui/charList.ts";
 
 /** Off to the Log in page; `replace`, so Back does not return to an empty /play/. */
@@ -71,20 +74,54 @@ async function pickCharacter(ui: CharList): Promise<CharacterRow | null> {
   }
 }
 
+/** The database's entry for this character, with one refresh if the login was refused. */
+async function enterWorldAs(id: string): Promise<EnterResult> {
+  let s = await freshSession();
+  if (!s) return "login";
+  let r = await enterWorld(s, id);
+  if (r === "login") {
+    s = await refresh(s);
+    r = s ? await enterWorld(s, id) : "login";
+  }
+  return r;
+}
+
+/** Until a character is in the world with its save; null when the player was sent to log in. */
+async function enterCharacter(ui: CharList): Promise<CharacterRow | null> {
+  for (;;) {
+    const picked = await pickCharacter(ui);
+    if (!picked) return null;
+    enterAs(picked);
+    ui.loading("Entering the world…");
+    let r: EnterResult;
+    try {
+      r = await enterWorldAs(picked.id);
+    } catch {
+      await ui.error("The server could not be reached.");
+      continue;
+    }
+    if (r === "ok") return picked;
+    if (r === "login") return toLogin();
+    await ui.error("This character can no longer be played.");
+  }
+}
+
 async function boot(): Promise<void> {
   let ui: CharList | null = null;
   if (!import.meta.env.DEV) {
     ui = mountCharList();
-    const picked = await pickCharacter(ui);
-    if (!picked) return;
-    enterAs(picked);
-    ui.loading("Entering the world…");
+    // Why the world was left last time, when it was not the player's choice.
+    const notice = takeNotice();
+    if (notice) await ui.notice(notice);
+    if (!(await enterCharacter(ui))) return;
   }
   try {
     await import("./main.ts");
   } catch (err) {
     if (!ui) throw err;
-    await ui.error("The game could not be loaded.");
+    await ui.error(err instanceof Error && err.message === SAVE_UNREADABLE
+      ? "This character's save could not be read."
+      : "The game could not be loaded.");
     location.reload();
     return;
   }

@@ -1,6 +1,8 @@
 /**
  * The game's side of the account (etap 1.9): the login the website left in
- * this browser, refreshed when it has run out, and the account's characters.
+ * this browser, refreshed when it has run out, and the account's characters
+ * with the name of each one's world (etap 1.10). The save itself lives in
+ * net/cloudSave.ts.
  *
  * Plain `fetch` against Supabase's REST endpoints rather than supabase-js: the
  * game ships no production dependencies, and two calls do not justify the
@@ -39,6 +41,8 @@ export interface CharacterRow {
   sex: Sex;
   /** When a scheduled deletion takes effect, or null. The character plays until then. */
   deleteAt: string | null;
+  /** The name of the character's world (Pandora), or null if the database gave none. */
+  world: string | null;
 }
 
 /** The login supabase-js keeps, read without supabase-js. Anything else is no login. */
@@ -58,9 +62,9 @@ export function parseSession(text: string | null): Session | null {
   return { accessToken: access_token, refreshToken: refresh_token, expiresAt: typeof expires_at === "number" ? expires_at : 0 };
 }
 
-/** A token with under a minute left is refreshed before it is used. */
-export function isFresh(s: Session, nowMs: number = Date.now()): boolean {
-  return s.expiresAt * 1000 - nowMs > 60_000;
+/** A token with under a minute left (or `marginMs`) is refreshed before it is used. */
+export function isFresh(s: Session, nowMs: number = Date.now(), marginMs = 60_000): boolean {
+  return s.expiresAt * 1000 - nowMs > marginMs;
 }
 
 /** The database's answer, kept to what the list needs; whatever is not a character is dropped. */
@@ -69,9 +73,11 @@ export function cleanRows(raw: unknown): CharacterRow[] {
   const out: CharacterRow[] = [];
   for (const r of raw) {
     if (!r || typeof r !== "object") continue;
-    const { id, name, sex, delete_at } = r as Record<string, unknown>;
+    const { id, name, sex, delete_at, worlds } = r as Record<string, unknown>;
     if (typeof id !== "string" || typeof name !== "string" || !isSex(sex)) continue;
-    out.push({ id, name, sex, deleteAt: typeof delete_at === "string" ? delete_at : null });
+    // The world comes embedded as { name } (the characters_world_fkey join, 003).
+    const world = worlds && typeof worlds === "object" ? (worlds as Record<string, unknown>).name : null;
+    out.push({ id, name, sex, deleteAt: typeof delete_at === "string" ? delete_at : null, world: typeof world === "string" ? world : null });
   }
   return out;
 }
@@ -127,16 +133,20 @@ export async function refresh(s: Session): Promise<Session | null> {
   return next;
 }
 
-/** A login good for at least a minute, refreshed if it had to be; null means log in again. */
-export async function freshSession(): Promise<Session | null> {
+/**
+ * A login good for at least a minute (or `marginMs`), refreshed if it had to
+ * be; null means log in again. It reads the stored login every time, so a
+ * refresh the website did in another tab is picked up rather than repeated.
+ */
+export async function freshSession(marginMs = 60_000): Promise<Session | null> {
   const s = parseSession(stored());
   if (!s) return null;
-  return isFresh(s) ? s : refresh(s);
+  return isFresh(s, Date.now(), marginMs) ? s : refresh(s);
 }
 
 /** The account's characters, oldest first like the account page; "login" when the token is refused. */
 export async function fetchCharacters(s: Session): Promise<CharacterRow[] | "login"> {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/characters?select=id,name,sex,delete_at&order=created_at.asc`, {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/characters?select=id,name,sex,delete_at,worlds(name)&order=created_at.asc`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${s.accessToken}` },
   });
   if (r.status === 401 || r.status === 403) return "login";

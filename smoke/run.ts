@@ -20329,6 +20329,242 @@ async function main(): Promise<void> {
       "Options has a Logout button for a hand with no keyboard, in a row of its own");
   }
 
+  console.log("\nEtap 81 — every character keeps its own save in the database, and the list shows its world:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const AC = await import("../src/net/account.ts");
+    const CS = await import("../src/net/cloudSave.ts");
+    const SV = await import("../src/save.ts");
+    const { createGame } = await import("../src/game.ts");
+    const LS = globalThis.localStorage;
+
+    // ---- the database file (003, pasted into Supabase's SQL Editor)
+    const sql = read("../supabase/003-saves.sql");
+    ok(sql.includes("insert into public.worlds (id, name) values (1, 'Pandora')") && sql.includes("references public.worlds (id)"),
+      "world 1 is Pandora, and a character's world has to be one that exists");
+    ok(read("../supabase/001-characters.sql").includes("world      smallint not null default 1,"),
+      "…the world every character already had since 1.3, so nobody moves anywhere");
+    ok(sql.includes("grant select on table public.worlds to anon, authenticated;") && sql.includes("using (true);"),
+      "anyone may read the worlds' names");
+    ok(sql.includes("drop policy if exists characters_update_own on public.characters;")
+      && sql.includes("revoke update on table public.characters from public, anon, authenticated;"),
+      "a save is no longer written straight into the table…");
+    ok(/grant execute on function public\.enter_character\(uuid, uuid, jsonb\) to authenticated;/.test(sql)
+      && /grant execute on function public\.save_character\(uuid, uuid, jsonb\)\s+to authenticated;/.test(sql)
+      && !/execute on function public\.(enter|save)_character[^;]*to anon/.test(sql),
+      "…but only through enter_character and save_character, by a logged-in player");
+    ok(sql.includes("revoke all on table private.character_sessions from public, anon, authenticated;"),
+      "which window holds a character is never visible through the API");
+    ok((sql.match(/security definer/g) ?? []).length === 2 && (sql.match(/set search_path = ''/g) ?? []).length === 2,
+      "both functions run with an empty search path, like 001's");
+    ok(sql.includes("s.session = p_resume_session") && sql.includes("s.session = p_session") && sql.includes("return 'elsewhere';"),
+      "a kept save counts only from the session that made it, and an old window writes nothing");
+    ok((sql.match(/\bfor update;/g) ?? []).length === 2, "entering and saving lock the character's row, so the two never interleave");
+    ok(sql.includes("on conflict (id) do nothing") && !sql.includes("on conflict (id) do update"),
+      "running the file again changes nothing, not even a world renamed in the Table Editor");
+    ok(sql.includes("notify pgrst, 'reload schema';"), "the API picks up the new table and functions at once");
+
+    // ---- the list shows each character's world
+    ok(read("../src/net/account.ts").includes("select=id,name,sex,delete_at,worlds(name)&order=created_at.asc"),
+      "the list asks the database for each character's world by name");
+    const rows81 = AC.cleanRows([
+      { id: "1", name: "Ann", sex: "female", delete_at: null, worlds: { name: "Pandora" } },
+      { id: "2", name: "Bob", sex: "male", delete_at: null, worlds: null },
+      { id: "3", name: "Cid", sex: "male", delete_at: null },
+    ]);
+    ok(rows81.length === 3 && rows81[0].world === "Pandora" && rows81[1].world === null && rows81[2].world === null,
+      "…and keeps it, or nothing when the database gave none");
+    const ui81 = read("../src/ui/charList.ts");
+    ok(ui81.includes('w.className = "cl-world";') && ui81.includes("w.textContent = r.world;") && ui81.includes(".cl-world{"),
+      "each row shows the world on the right of the name");
+    ok(ui81.includes('return oneButton(message(text), "Ok");'), "the list can show a notice with Ok before it");
+
+    // ---- a stand-in for the database
+    type Call81 = { fn: string; args: Record<string, unknown>; keepalive: boolean; auth: string };
+    const calls: Call81[] = [];
+    let reply: (fn: string, args: Record<string, unknown>) => { status: number; json: unknown } = () => ({ status: 200, json: "ok" });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const fn = url.includes("/rpc/") ? url.split("/rpc/")[1] : url.includes("/auth/v1/token") ? "token" : url;
+      const body = typeof init?.body === "string" ? init.body : "";
+      const args = body ? JSON.parse(body) as Record<string, unknown> : {};
+      const h = (init?.headers ?? {}) as Record<string, string>;
+      calls.push({ fn, args, keepalive: init?.keepalive === true, auth: h.Authorization ?? "" });
+      const r = reply(fn, args);
+      return new Response(JSON.stringify(r.json), { status: r.status, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+    const notes = new Map<string, string>();
+    (globalThis as Record<string, unknown>).sessionStorage = {
+      getItem: (k: string) => notes.get(k) ?? null,
+      setItem: (k: string, v: string) => { notes.set(k, v); },
+      removeItem: (k: string) => { notes.delete(k); },
+    };
+    let left = 0;
+    const later = async (): Promise<void> => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 0)); };
+    const in1h = Math.floor(Date.now() / 1000) + 3600;
+    const sess = { accessToken: "tok", refreshToken: "ref", expiresAt: in1h };
+    LS.setItem(AC.AUTH_STORAGE_KEY, JSON.stringify({ access_token: "tok", refresh_token: "ref", expires_at: in1h }));
+    const fresh = (): void => { CS.resetCloudSave(); CS.setLeave(() => { left++; }); calls.length = 0; left = 0; };
+    const pend = (id: string): { s: string; d: Record<string, unknown> } | null => {
+      const t = LS.getItem(CS.PENDING_PREFIX + id);
+      return t ? JSON.parse(t) : null;
+    };
+
+    // ---- nobody logged in: the old single slot, untouched
+    fresh();
+    const g81 = createGame();
+    g81.player.taskPoints = 4321;
+    SV.deleteSave();
+    SV.saveGame(g81);
+    const legacy81 = LS.getItem("bone-isle-save-v2");
+    ok(!CS.online() && legacy81 !== null && SV.loadGame()?.player.taskPoints === 4321,
+      "where nobody logged in (dev, this suite) the game saves to the browser's one slot, as before");
+    ok(CS.LEGACY_SAVE_KEY === "bone-isle-save-v2" && read("../src/save.ts").includes('const KEY = "bone-isle-save-v2";'),
+      "…which is the slot the first entry removes");
+
+    // ---- entering a new character
+    reply = (fn) => fn === "enter_character" ? { status: 200, json: { status: "ok", session: "S1", save: null } } : { status: 200, json: "ok" };
+    ok(await CS.enterWorld(sess, "c1") === "ok" && CS.online() && CS.enteredSave() === null, "a new character enters with no save");
+    ok(calls[0].fn === "enter_character" && calls[0].args.p_id === "c1" && !("p_resume_save" in calls[0].args) && calls[0].auth === "Bearer tok",
+      "…asking the database as the logged-in player");
+    ok(LS.getItem("bone-isle-save-v2") === null, "the shared save from before accounts is gone: every character starts from its own, a new one from level 1");
+    ok(SV.loadGame() === null, "…so the world starts a new game for it, on its own island");
+    SV.saveGame(g81);
+    ok(LS.getItem("bone-isle-save-v2") === null && pend("c1")?.s === "S1" && pend("c1")?.d.v === 14,
+      "a character's save never lands in the old slot: it is kept under the character until the database has it");
+    calls.length = 0;
+    ok(await CS.push() === "saved" && calls.length === 1 && calls[0].fn === "save_character"
+      && calls[0].args.p_session === "S1" && (calls[0].args.p_save as Record<string, unknown>)?.v === 14,
+      "a push sends the newest save with this window's session");
+    ok(pend("c1") === null, "…and once the database has it, the kept copy goes");
+    calls.length = 0;
+    ok(await CS.push() === "saved" && calls.length === 0, "nothing new, nothing sent");
+
+    // ---- hiding or closing the tab
+    g81.player.taskPoints = 4322;
+    SV.saveGame(g81);
+    CS.sendOnLeave();
+    ok(calls.length === 1 && calls[0].keepalive && (calls[0].args.p_save as { player: { taskPoints: number } }).player.taskPoints === 4322,
+      "hiding or closing the tab sends the save in a request the browser finishes after the page is gone");
+    CS.sendOnLeave();
+    ok(calls.length === 1, "…once, even when hiding and closing both fire");
+    await later();
+    ok(pend("c1") === null, "…and when it arrives, the kept copy goes");
+    g81.player.taskPoints = 4323;
+    SV.saveGame(g81);
+    calls.length = 0;
+    CS.sendOnLeave(Date.now() + 2 * 3600_000);
+    ok(calls.length === 0 && pend("c1")?.d !== undefined, "with the login run out it sends nothing; the kept copy goes with the next entry");
+    CS.record({ v: 14, junk: "x".repeat(70_000) });
+    CS.sendOnLeave();
+    ok(calls.length === 0, "a save too big for a closing tab waits for the next push instead");
+
+    // ---- failures keep the save; a refused login ends the visit but keeps it too
+    SV.saveGame(g81);
+    reply = () => ({ status: 503, json: { message: "down" } });
+    ok(await CS.push() === "failed" && pend("c1")?.d !== undefined && left === 0, "the database down: the save stays kept, and the game goes on");
+    reply = (fn) => fn === "token" ? { status: 400, json: { error: "invalid_grant" } } : { status: 401, json: { message: "JWT expired" } };
+    ok(await CS.push() === "ended" && left === 1 && CS.takeNotice() === CS.NOTICE_LOGIN && pend("c1")?.s === "S1",
+      "a login the server refuses even after a refresh: back to log in, with the save kept for the next entry");
+    ok(CS.takeNotice() === null, "a notice is shown once");
+
+    // ---- a kept save goes along with the next entry
+    fresh();
+    reply = (fn) => fn === "enter_character" ? { status: 200, json: { status: "ok", session: "S2", save: { v: 14, from: "db" } } } : { status: 200, json: "ok" };
+    ok(await CS.enterWorld(sess, "c1") === "ok" && calls[0].args.p_resume_session === "S1"
+      && (calls[0].args.p_resume_save as { player: { taskPoints: number } }).player.taskPoints === 4323,
+      "the next entry hands the kept save to the database, with the session it was made under");
+    ok(pend("c1") === null && CS.enteredSave() === JSON.stringify({ v: 14, from: "db" }),
+      "…which decides; the game plays whatever the database hands back");
+
+    // ---- the newest entry wins
+    SV.saveGame(g81);
+    reply = () => ({ status: 200, json: "elsewhere" });
+    calls.length = 0;
+    ok(await CS.push() === "ended" && left === 1 && CS.takeNotice() === CS.NOTICE_ELSEWHERE,
+      "entered from another window or device since: this one writes nothing and goes back to the list, saying why");
+    ok(pend("c1") === null, "…dropping its kept save, which is older than what the other one plays");
+    calls.length = 0;
+    SV.saveGame(g81);
+    CS.sendOnLeave();
+    ok(await CS.push() === "ended" && calls.length === 0 && pend("c1") === null, "after that nothing more is sent or kept");
+    fresh();
+    reply = (fn) => fn === "enter_character" ? { status: 200, json: { status: "ok", session: "S3", save: null } } : { status: 200, json: "elsewhere" };
+    await CS.enterWorld(sess, "c1");
+    CS.checkIn();
+    await later();
+    ok(left === 1 && calls[1]?.fn === "save_character" && !("p_save" in calls[1].args) && CS.takeNotice() === CS.NOTICE_ELSEWHERE,
+      "a tab coming back into view asks, without writing, whether the character is still its own");
+    fresh();
+    reply = (fn) => fn === "enter_character" ? { status: 200, json: { status: "ok", session: "S4", save: null } } : { status: 200, json: "gone" };
+    await CS.enterWorld(sess, "c1");
+    SV.saveGame(g81);
+    ok(await CS.push() === "ended" && CS.takeNotice() === CS.NOTICE_GONE, "a character deleted meanwhile ends the visit too");
+
+    // ---- the minute timer
+    fresh();
+    reply = (fn) => fn === "enter_character" ? { status: 200, json: { status: "ok", session: "S5", save: null } } : { status: 200, json: "ok" };
+    await CS.enterWorld(sess, "c1");
+    SV.saveGame(g81);
+    calls.length = 0;
+    await CS.autosaveTick();
+    ok(calls.length === 1 && calls[0].fn === "save_character", "once a minute the newest save goes, if anything changed…");
+    calls.length = 0;
+    await CS.autosaveTick();
+    ok(calls.length === 0 && CS.PUSH_EVERY_MS === 60_000, "…and nothing goes when nothing did");
+    CS.startAutosave();
+    CS.resetCloudSave();
+
+    // ---- what entering can say
+    fresh();
+    reply = () => ({ status: 200, json: { status: "gone" } });
+    ok(await CS.enterWorld(sess, "c9") === "gone" && !CS.online(), "a character that is not this player's (or is deleted) cannot be entered");
+    reply = () => ({ status: 401, json: { message: "JWT expired" } });
+    ok(await CS.enterWorld(sess, "c9") === "login", "a refused login is told apart, so boot.ts can refresh it once");
+    reply = () => ({ status: 500, json: {} });
+    let threw81 = false;
+    try { await CS.enterWorld(sess, "c9"); } catch { threw81 = true; }
+    ok(threw81 && !CS.online(), "a database that cannot be reached is an error, never an empty save");
+
+    // ---- a save that exists is never replaced by a new game
+    SV.saveGame(g81); // nobody holds a character again: this writes the old slot
+    const real81 = JSON.parse(LS.getItem("bone-isle-save-v2")!);
+    SV.deleteSave();
+    reply = () => ({ status: 200, json: { status: "ok", session: "S6", save: real81 } });
+    await CS.enterWorld(sess, "c1");
+    ok(SV.loadGame()?.player.taskPoints === 4323, "a character with a save plays that save");
+    reply = () => ({ status: 200, json: { status: "ok", session: "S7", save: { v: 99 } } });
+    await CS.enterWorld(sess, "c1");
+    let err81 = "";
+    try { SV.loadGame(); } catch (e) { err81 = (e as Error).message; }
+    ok(err81 === CS.SAVE_UNREADABLE, "one that cannot be read (corrupt, or from a newer build) stops the entry instead of starting over on top of it");
+    const boot81 = read("../src/boot.ts");
+    ok(boot81.includes("err.message === SAVE_UNREADABLE") && boot81.includes("This character's save could not be read."),
+      "…and the list says so");
+
+    // ---- the way in and the way out
+    ok(/enterAs\(picked\);[\s\S]*await enterWorldAs\(picked\.id\)[\s\S]*await import\("\.\/main\.ts"\)/.test(boot81),
+      "the save is fetched after the pick and before any of the world loads");
+    ok(boot81.includes("const notice = takeNotice();") && boot81.includes("await ui.notice(notice);"),
+      "the list first says why the world was left, when it was not the player's choice");
+    const main81 = read("../src/main.ts");
+    const lo81 = main81.slice(main81.indexOf("function logout(): void {"), main81.indexOf("setLogoutHandler(logout);"));
+    ok(lo81.indexOf("saveGame(game);") < lo81.indexOf("pushSave()") && lo81.indexOf("pushSave()") < lo81.indexOf("location.reload();")
+      && lo81.includes('if (r === "saved") location.reload();') && lo81.includes("flash(SAVE_FAILED"),
+      "Ctrl+L waits until the database has the save; if it cannot get there, the player stays and is told");
+    ok(/addEventListener\("pagehide", \(\) => \{\s*saveGame\(game\);\s*sendOnLeave\(\);/.test(main81)
+      && /visibilityState === "hidden"\) \{\s*saveGame\(game\);\s*sendOnLeave\(\);\s*\} else \{\s*checkIn\(\);/.test(main81),
+      "closing or hiding the tab saves and sends; coming back asks whether the character is still this window's");
+    ok(main81.includes("startAutosave();"), "the minute timer starts with the world");
+
+    globalThis.fetch = realFetch;
+    CS.resetCloudSave();
+    LS.removeItem(AC.AUTH_STORAGE_KEY);
+    SV.deleteSave();
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

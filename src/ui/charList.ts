@@ -8,6 +8,7 @@
  *
  * Mouse, touch and keyboard: a click or tap selects a row, a second one on the
  * same row enters, and so do Ok and Enter; the arrow keys move the selection.
+ * Each row has the character's name and, on the right, its world (etap 1.10).
  */
 import { ACCOUNT_URL, deletionNote, type CharacterRow } from "../net/account.ts";
 
@@ -16,6 +17,8 @@ export interface CharList {
   loading(text: string): void;
   /** Something went wrong; resolves when "Try again" is pressed. */
   error(text: string): Promise<void>;
+  /** A word before the list, e.g. why the world was left; resolves when "Ok" is pressed. */
+  notice(text: string): Promise<void>;
   /** The account has no character yet: the way to make one. */
   empty(): void;
   /** The characters; resolves with the one entered. */
@@ -43,8 +46,11 @@ const CSS = `
 .cl-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:9px 10px;cursor:pointer}
 .cl-row:hover{background:#3a2f20}
 .cl-row[aria-selected="true"]{background:#6e571f;color:#fff3c8}
+.cl-who{display:flex;flex-direction:column;gap:2px;min-width:0}
 .cl-note{margin:0;font-weight:normal;font-size:12px;color:#d96a5a;white-space:nowrap}
 .cl-row[aria-selected="true"] .cl-note{color:#ffd2c8}
+.cl-world{font-weight:normal;color:#b8ab90;white-space:nowrap}
+.cl-row[aria-selected="true"] .cl-world{color:#fff3c8}
 .cl-foot{display:flex;justify-content:space-between;gap:10px;padding:0 12px 12px}
 .cl-foot:empty{display:none}
 .cl-btn{font:inherit;color:#ffe9a8;background:#3a2f20;border:1px solid #6e571f;box-shadow:inset 0 1px 0 #5a4a30;
@@ -87,6 +93,25 @@ export function mountCharList(): CharList {
     b.textContent = label;
     return b;
   };
+  /** A message with one button; resolves when it (or Enter) is pressed. */
+  const oneButton = (text: HTMLElement, label: string): Promise<void> =>
+    new Promise((resolve) => {
+      const b = button(label);
+      const go = (): void => {
+        onKeys(null);
+        resolve();
+      };
+      body.replaceChildren(text);
+      foot.replaceChildren(b);
+      b.addEventListener("click", go, { once: true });
+      onKeys((e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          go();
+        }
+      });
+      b.focus();
+    });
   const toAccount = (label: string): HTMLAnchorElement => {
     const a = document.createElement("a");
     a.className = "cl-btn";
@@ -103,23 +128,11 @@ export function mountCharList(): CharList {
     },
 
     error(text) {
-      return new Promise((resolve) => {
-        const again = button("Try again");
-        const go = (): void => {
-          onKeys(null);
-          resolve();
-        };
-        body.replaceChildren(message(text, "cl-msg cl-msg--err"));
-        foot.replaceChildren(again);
-        again.addEventListener("click", go, { once: true });
-        onKeys((e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            go();
-          }
-        });
-        again.focus();
-      });
+      return oneButton(message(text, "cl-msg cl-msg--err"), "Try again");
+    },
+
+    notice(text) {
+      return oneButton(message(text), "Ok");
     },
 
     empty() {
@@ -158,11 +171,20 @@ export function mountCharList(): CharList {
           li.className = "cl-row";
           li.id = `cl-row-${i}`;
           li.setAttribute("role", "option");
+          const who = document.createElement("span");
+          who.className = "cl-who";
           const n = document.createElement("span");
           n.textContent = r.name;
-          li.append(n);
+          who.append(n);
           const note = deletionNote(r.deleteAt);
-          if (note) li.append(message(note, "cl-note"));
+          if (note) who.append(message(note, "cl-note"));
+          li.append(who);
+          if (r.world) {
+            const w = document.createElement("span");
+            w.className = "cl-world";
+            w.textContent = r.world;
+            li.append(w);
+          }
           li.addEventListener("click", () => {
             const now = performance.now();
             if (lastTap.row === i && now - lastTap.at < DOUBLE_TAP_MS) return enter();
