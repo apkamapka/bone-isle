@@ -1,0 +1,32 @@
+---
+import Base from "./Base.astro";
+import { SECTIONS } from "../lib/library.ts";
+
+/**
+ * Every library page (etap 2): the river strip of the long pages, then the
+ * shelves as tabs, the open ones as links and the rest dimmed. The front
+ * page of the library leaves the tabs out, since it is the list of shelves.
+ */
+interface Props {
+  title: string;
+  description: string;
+  tabs?: boolean;
+}
+const { title, description, tabs = true } = Astro.props;
+const here = Astro.url.pathname;
+---
+<Base title={title} description={description}>
+  <div class="band" aria-hidden="true"></div>
+  <div class="lib">
+    {tabs && (
+      <nav class="lib__tabs" aria-label="Library">
+        {SECTIONS.map((s) =>
+          s.href
+            ? <a href={s.href} aria-current={here === s.href ? "page" : here.startsWith(s.href) ? "true" : undefined}>{s.label}</a>
+            : <span aria-disabled="true" title="Opens soon">{s.label}</span>
+        )}
+      </nav>
+    )}
+    <slot />
+  </div>
+</Base>

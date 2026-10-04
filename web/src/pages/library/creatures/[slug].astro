@@ -1,0 +1,135 @@
+---
+import Library from "../../../layouts/Library.astro";
+import Sprite from "../../../components/Sprite.astro";
+import { DATA, ITEM, PLACE, ELEMENT } from "../../../lib/game-data.ts";
+import { slugOf, creatureUrl, rarityLabel, span, num, taken, tilesPerSecond, listOf, fitScale } from "../../../lib/library.ts";
+
+export function getStaticPaths() {
+  return DATA.monsters.map((m) => ({ params: { slug: slugOf(m.kind) }, props: { kind: m.kind } }));
+}
+
+const { kind } = Astro.props;
+const m = DATA.monsters.find((c) => c.kind === kind)!;
+const nameOf = (k: string): string => DATA.monsters.find((c) => c.kind === k)?.name ?? k;
+
+// Most often first. The words are all a visitor gets: the chances stay here, in the build.
+const loot = [...m.loot]
+  .sort((a, b) => b.chance - a.chance)
+  .map((l) => ({ item: ITEM.get(l.item)!, n: l.n, rarity: rarityLabel(l.chance) }));
+const homes = DATA.worlds
+  .filter((w) => (w.monsters[kind] ?? 0) > 0)
+  .map((w) => ({ name: w.name, posts: w.monsters[kind] }))
+  .sort((a, b) => b.posts - a.posts || a.name.localeCompare(b.name));
+const resist = DATA.elements.map((e) => ({ label: e.label, mult: m.resist[e.id] ?? 1 }));
+const ordinary = resist.every((r) => r.mult === 1);
+const tasks = DATA.tasks.filter((t) => t.creatures.includes(kind));
+const board = DATA.npcs.find((n) => n.role === "tasks");
+const boardAt = board ? PLACE.get(board.places[0]?.place ?? "")?.name : undefined;
+
+const description =
+  `${m.name} in Xebeka: ${m.hp} hit points and ${m.exp} experience. ` +
+  `Lives in ${listOf(homes.slice(0, 2).map((h) => h.name))}${homes.length > 2 ? " and more" : ""}.` +
+  (loot.length > 0 ? ` Loot includes ${listOf(loot.slice(0, 3).map((l) => l.item.name))}.` : "");
+---
+<Library title={`${m.name} · Xebeka creatures`} description={description}>
+  <article>
+    <header class="beast-head">
+      <div class="beast-head__stage notch-lg">
+        {m.sprite && <Sprite sheet={m.sprite} scale={fitScale(m.sprite.frameW, 240)} walk label={`${m.name}, walking`} />}
+      </div>
+      <div class="beast-head__text">
+        <h1 class="lib__title">{m.name}</h1>
+        <dl class="beast-facts">
+          <div><dt>Hit points</dt><dd>{num(m.hp)}</dd></div>
+          <div><dt>Experience</dt><dd>{num(m.exp)}</dd></div>
+          <div><dt>Armor</dt><dd>{m.armor}</dd></div>
+          <div><dt>Speed</dt><dd>{tilesPerSecond(m.speed)} tiles/s</dd></div>
+          {m.element && <div><dt>Element</dt><dd>{ELEMENT.get(m.element)}</dd></div>}
+        </dl>
+      </div>
+    </header>
+
+    <div class="beast-body">
+      <section class="beast-part" aria-labelledby="loot">
+        <h2 class="beast-part__title" id="loot">Loot</h2>
+        {m.gold[1] > 0 && <p class="beast-part__lead">Carries {span(m.gold)} gold.</p>}
+        {loot.length > 0 && (
+          <table class="beast-loot">
+            <thead>
+              <tr><th scope="col">Item</th><th scope="col">Amount</th><th scope="col">Rarity</th></tr>
+            </thead>
+            <tbody>
+              {loot.map((l) => (
+                <tr>
+                  <td>
+                    <span class="beast-loot__item">
+                      {l.item.icon
+                        ? <img class="px" src={`/play/${l.item.icon}`} width="32" height="32" alt="" loading="lazy" decoding="async" />
+                        : <span class="beast-loot__blank" aria-hidden="true"></span>}
+                      {l.item.name}
+                    </span>
+                  </td>
+                  <td class="beast-num">{span(l.n)}</td>
+                  <td>{l.rarity}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <div class="beast-side">
+        <section class="beast-part" aria-labelledby="where">
+          <h2 class="beast-part__title" id="where">Where it lives</h2>
+          <ul class="beast-rows">
+            {homes.map((h) => <li><span>{h.name}</span><span class="beast-num">{h.posts} {h.posts === 1 ? "spawn" : "spawns"}</span></li>)}
+          </ul>
+        </section>
+
+        <section class="beast-part" aria-labelledby="attacks">
+          <h2 class="beast-part__title" id="attacks">Attacks</h2>
+          <ul class="beast-rows">
+            <li><span>Melee</span><span class="beast-num">{span(m.dmg)}</span></li>
+            {m.ranged && <li><span>Ranged, up to {m.ranged.tiles} tiles</span><span class="beast-num">{span(m.ranged.dmg)}</span></li>}
+            {m.spells.map((s) => (
+              <li>
+                <span>{s.name}, {ELEMENT.get(s.element)}{s.field && ", burning ground"}</span>
+                <span class="beast-num">{span(s.dmg)}{s.field && " a second"}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section class="beast-part" aria-labelledby="taken">
+          <h2 class="beast-part__title" id="taken">Damage taken</h2>
+          {ordinary ? <p class="beast-part__lead">100% from every element.</p> : (
+          <ul class="beast-rows">
+            {resist.map((r) => (
+              <li class:list={{ "is-weak": r.mult > 1, "is-plain": r.mult === 1 }}>
+                <span>{r.label}</span><span class="beast-num">{taken(r.mult)}</span>
+              </li>
+            ))}
+          </ul>
+          )}
+        </section>
+
+        {tasks.length > 0 && board && (
+          <section class="beast-part" aria-labelledby="task">
+            <h2 class="beast-part__title" id="task">Hunting task</h2>
+            {tasks.map((t) => (
+              <p class="beast-part__lead">
+                <strong>{t.title}</strong>, on {board.name}'s board{boardAt ? ` in ${boardAt}` : ""}, from level {t.reqLevel}:
+                {" "}{num(t.need)} kills
+                {t.creatures.length > 1 && (
+                  <> in all, counting {t.creatures.map((k, i) => (
+                    <>{i > 0 && (i === t.creatures.length - 1 ? " and " : ", ")}{k === kind ? nameOf(k) : <a href={creatureUrl(k)}>{nameOf(k)}</a>}</>
+                  ))}</>
+                )}. Pays {num(t.reward.gold)} gold, {num(t.reward.exp)} experience and {t.reward.points} task {t.reward.points === 1 ? "point" : "points"}.
+              </p>
+            ))}
+          </section>
+        )}
+      </div>
+    </div>
+  </article>
+</Library>

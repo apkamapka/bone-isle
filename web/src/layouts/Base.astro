@@ -19,16 +19,19 @@ const here = Astro.url.pathname;
 
 /*
  * The top bar shows the site's whole shape from day one. An entry without an
- * href is a page that opens later (etap 1.11 news, etap 2 library, etap 4
- * community) and is drawn dimmed. On phones the entries hide until at least
- * one is live, since a menu of dimmed words is no use there.
+ * href is a page that opens later (news at the opening, 1.12; etap 4
+ * community) and is drawn dimmed. The Library opened in etap 2.3. On phones
+ * the live entries get a row of their own under the bar and the dimmed ones
+ * stay off it, since a menu of dimmed words is no use there; while nothing
+ * is live the row is not drawn at all.
  */
 const NAV: { label: string; href?: string }[] = [
   { label: "News" },
-  { label: "Library" },
+  { label: "Library", href: "/library/" },
   { label: "Community" },
   { label: "Support" },
 ];
+const anyLive = NAV.some((item) => item.href);
 const LEGAL = [
   { label: "Terms of Service", href: "/terms/" },
   { label: "Privacy Policy", href: "/privacy/" },
@@ -60,10 +63,10 @@ const LEGAL = [
           <img class="brand__mark px" src="/art/emblem.png" width="48" height="50" alt="" />
           <span class="brand__name">Xebeka</span>
         </a>
-        <nav class="topnav" aria-label="Site">
+        <nav class:list={["topnav", { "topnav--none": !anyLive }]} aria-label="Site">
           {NAV.map((item) =>
             item.href
-              ? <a href={item.href}>{item.label}</a>
+              ? <a href={item.href} aria-current={here === item.href ? "page" : here.startsWith(item.href) ? "true" : undefined}>{item.label}</a>
               : <span aria-disabled="true" title="Opens with the game">{item.label}</span>
           )}
         </nav>

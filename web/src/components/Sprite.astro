@@ -1,0 +1,24 @@
+---
+import { spriteVars, type SheetLike } from "../lib/library.ts";
+
+/**
+ * A creature or townsperson from its walk sheet under /play/, facing the
+ * viewer at a whole-number scale. Standing still by default; `walk` runs the
+ * stride, which stops for anyone who asks their system for less motion.
+ */
+interface Props {
+  sheet: SheetLike;
+  scale: number;
+  walk?: boolean;
+  /** Read out by screen readers; without it the picture is decoration. */
+  label?: string;
+}
+const { sheet, scale, walk = false, label } = Astro.props;
+---
+<span
+  class:list={["sprite", { "sprite--walk": walk }]}
+  style={spriteVars(sheet, scale)}
+  role={label ? "img" : undefined}
+  aria-label={label}
+  aria-hidden={label ? undefined : "true"}
+></span>

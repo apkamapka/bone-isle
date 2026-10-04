@@ -53,8 +53,9 @@ import { RESEARCH, OFFERS, towerTierFor } from "../src/systems/tower.ts";
 import { COAL_PER_SMELT, GEM_COAL, GEM_TROPHIES, GEM_TROPHY_KINDS } from "../src/systems/smelt.ts";
 import { ELEMENTS, ELEMENT_LABEL, type Element, type Resistances } from "../src/systems/elements.ts";
 import { iconFile } from "../src/gfx/itemArt.ts";
-import { sheetSpec } from "../src/gfx/mobSheet.ts";
+import { sheetSpec, walkCycleSeconds } from "../src/gfx/mobSheet.ts";
 import { TERRAIN_SRC } from "../src/world/terrainImage.ts";
+import { FIELD_TICK_DMG } from "../src/systems/monsterSpells.ts";
 import { TILE, WORLD_SEED } from "../src/config.ts";
 import type { NpcKey, WorldKey } from "../src/world/types.ts";
 
@@ -116,12 +117,17 @@ export interface ExportItem extends Omit<ItemDef, "testLevel" | "testSkill"> {
 /** A walk sheet under /play/: 4 rows (up, left, down, right) of `cols` frames. */
 export interface ExportSheet {
   file: string;
+  /** The whole sheet, in px. */
+  w: number;
+  h: number;
   frameW: number;
   frameH: number;
   cols: number;
   rows: 4;
   /** Drawn from the side only: every row carries the side view. */
   sideOnly: boolean;
+  /** Seconds for one full stride, as the game walks it. */
+  cycleS: number;
 }
 
 export interface ExportMonster {
@@ -142,7 +148,11 @@ export interface ExportMonster {
   resist: Resistances;
   /** Distance attack, reach in tiles. */
   ranged: { tiles: number; dmg: readonly [number, number] } | null;
-  spells: { name: string; element: Element; dmg: readonly [number, number] }[];
+  /**
+   * A field spell has no impact of its own: it sets the ground burning, and
+   * `dmg` is what each tick of standing in it costs (`field` true).
+   */
+  spells: { name: string; element: Element; dmg: readonly [number, number]; field: boolean }[];
   respawnS: number | null;
   /** Null while the creature has no drawn sheet yet. */
   sprite: ExportSheet | null;
@@ -281,11 +291,14 @@ function sheetOf(id: string): ExportSheet | null {
   if (!spec || !size) return null;
   return {
     file: spec.src,
+    w: size.w,
+    h: size.h,
     frameW: Math.floor(size.w / spec.cols),
     frameH: Math.floor(size.h / spec.rows),
     cols: spec.cols,
     rows: spec.rows,
     sideOnly: spec.sideOnly,
+    cycleS: walkCycleSeconds(id),
   };
 }
 
@@ -446,7 +459,9 @@ export function collectGameData(): GameData {
       element: d.element ?? null,
       resist: { ...(monsterResist(d) ?? {}) },
       ranged: d.ranged ? { tiles: Math.round(d.ranged.range / TILE), dmg: d.ranged.dmg } : null,
-      spells: (d.spells ?? []).map((s) => ({ name: s.name, element: s.element, dmg: s.dmg })),
+      spells: (d.spells ?? []).map((s) => s.shape === "field"
+        ? { name: s.name, element: s.element, dmg: FIELD_TICK_DMG, field: true }
+        : { name: s.name, element: s.element, dmg: s.dmg, field: false }),
       respawnS: d.respawnS ?? null,
       sprite: sheetOf(kind),
     };

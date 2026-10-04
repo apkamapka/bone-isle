@@ -1,0 +1,32 @@
+---
+import Library from "../../layouts/Library.astro";
+import { SECTIONS } from "../../lib/library.ts";
+import { DATA } from "../../lib/game-data.ts";
+
+// What an open shelf holds, counted from the tables. A shelf opens with its line here.
+const COUNTS: Record<string, string> = {
+  Creatures: `${DATA.monsters.length} creatures`,
+};
+---
+<Library
+  title="Library · Xebeka"
+  description="The Xebeka library: every creature on the islands, with its hit points, experience, loot and where it lives, written from the game's own tables."
+  tabs={false}
+>
+  <header class="lib__head">
+    <h1 class="lib__title">Library</h1>
+    <p class="lib__intro">
+      What lives on the islands, what it carries and where to find it. Every page is written
+      from the game's own tables, so it changes when the game does.
+    </p>
+  </header>
+  <ul class="shelves">
+    {SECTIONS.map((s) => (
+      <li class:list={["shelf", "notch-lg", { "is-later": !s.href }]}>
+        <h2 class="shelf__title">{s.href ? <a href={s.href}>{s.label}</a> : s.label}</h2>
+        <p>{s.blurb}</p>
+        <p class="shelf__note">{s.href ? COUNTS[s.label] : "Opens soon"}</p>
+      </li>
+    ))}
+  </ul>
+</Library>

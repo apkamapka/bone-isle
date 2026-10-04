@@ -311,8 +311,8 @@ export function updateMonsterSpells(
  * flame should not be punished harder because a stronger creature set it. When
  * a second element wants fields of its own this is where the table goes.
  */
-const FIELD_TICK_S = 1.0;
-const FIELD_TICK_DMG: readonly [number, number] = [14, 30];
+export const FIELD_TICK_S = 1.0;
+export const FIELD_TICK_DMG: readonly [number, number] = [14, 30];
 
 /** Paint the footprint, roll the damage, and light anything that lingers. */
 function land(

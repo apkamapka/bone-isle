@@ -1,0 +1,32 @@
+---
+import Library from "../../../layouts/Library.astro";
+import Sprite from "../../../components/Sprite.astro";
+import { DATA } from "../../../lib/game-data.ts";
+import { creatureUrl, fitScale, num } from "../../../lib/library.ts";
+
+// Weakest first: the order a new player meets them in.
+const creatures = [...DATA.monsters].sort((a, b) => a.exp - b.exp || a.hp - b.hp || a.name.localeCompare(b.name));
+---
+<Library
+  title="Creatures · Xebeka"
+  description={`All ${creatures.length} creatures in Xebeka, from the weakest to the strongest, with their hit points, experience, loot and where each one lives.`}
+>
+  <header class="lib__head">
+    <h1 class="lib__title">Creatures</h1>
+    <p class="lib__intro">Every creature on the islands, from the weakest to the strongest.</p>
+  </header>
+  <ul class="bestiary">
+    {creatures.map((m) => (
+      <li class="beast notch">
+        <div class="beast__stage">
+          {m.sprite && <Sprite sheet={m.sprite} scale={fitScale(m.sprite.frameW, 128, 2)} />}
+        </div>
+        <h2 class="beast__name"><a href={creatureUrl(m.kind)}>{m.name}</a></h2>
+        <dl class="beast__stats">
+          <div><dt>HP</dt><dd>{num(m.hp)}</dd></div>
+          <div><dt>Exp</dt><dd>{num(m.exp)}</dd></div>
+        </dl>
+      </li>
+    ))}
+  </ul>
+</Library>

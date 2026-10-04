@@ -20772,7 +20772,86 @@ async function main(): Promise<void> {
     ok(/^Sitemap: https:\/\/xebeka\.com\/sitemap-index\.xml$/m.test(robots), "…and points it at the sitemap");
     ok(!/^Disallow:/m.test(robots) && read("../index.html").includes('<meta name="robots" content="noindex" />'),
       "the game at /play/ keeps out of search by its own noindex, never a robots.txt block that would hide the tag from Google");
-    ok(read("../web/src/layouts/Base.astro").includes('  { label: "Library" },'), "the top bar's Library entry stays dimmed until its first section opens (2.3)");
+  }
+
+  console.log("\nEtap 85 — the library opens: the creatures, weakest first, each with its own page:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const walk = (dir: string): string[] =>
+      fs.readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })
+        .flatMap((e) => (e.isDirectory() ? walk(`${dir}${e.name}/`) : [`${dir}${e.name}`]));
+    const LB = await import("../web/src/lib/library.ts");
+    const EX = await import("../tools/export-data.ts");
+    const { iconFile } = await import("../src/gfx/itemArt.ts");
+    const MS = await import("../src/systems/monsterSpells.ts");
+    const data = EX.collectGameData();
+    const template = (src: string): string => src.slice(src.indexOf("---", 3) + 3);
+
+    // ---- addresses
+    ok(LB.slugOf("orcWarrior") === "orc-warrior" && LB.slugOf("blackKnight") === "black-knight" && LB.slugOf("orc") === "orc",
+      "a page is addressed the way the game names its art: orcWarrior → orc-warrior");
+    ok(`item-${LB.slugOf("shortSword")}.png` === iconFile("shortSword"), "…the same rule as the item icons, so the two never drift apart");
+    ok(new Set(data.monsters.map((m) => LB.slugOf(m.kind))).size === data.monsters.length, "…and no two creatures share an address");
+    ok(LB.creatureUrl("orcWarrior") === "/library/creatures/orc-warrior/", "a creature's page lives at /library/creatures/<name>/");
+
+    // ---- rarity: the words a visitor reads instead of the numbers
+    const bands: [number, string][] = [[1, "Always"], [0.9, "Common"], [0.2, "Common"], [0.19, "Uncommon"], [0.05, "Uncommon"],
+      [0.049, "Semi-rare"], [0.01, "Semi-rare"], [0.0099, "Rare"], [0.005, "Rare"], [0.0049, "Very rare"]];
+    const wrongBand = bands.filter(([c, w]) => LB.rarityLabel(c) !== w);
+    ok(wrongBand.length === 0, `drops read Always, Common from 20%, Uncommon from 5%, Semi-rare from 1%, Rare from 0.5%, Very rare below${wrongBand.length ? " — " + wrongBand[0][0] : ""}`);
+    ok(data.monsters.every((m) => m.loot.every((l) => typeof LB.rarityLabel(l.chance) === "string")), "…and every drop in the tables gets a word");
+    const pages = ["../web/src/pages/library/index.astro", "../web/src/pages/library/creatures/index.astro", "../web/src/pages/library/creatures/[slug].astro"];
+    ok(pages.every((f) => !/chance/.test(template(read(f)))) && read(pages[2]).includes("rarity: rarityLabel(l.chance)"),
+      "no library page prints a chance: the creature page turns each one into its word before the markup");
+    const loadsData = /from "[^"]*\/game-data\.ts"/;
+    const dataUsers = walk("../web/src/").filter((f) => /\.(astro|ts)$/.test(f) && loadsData.test(read(f)));
+    ok(dataUsers.length === 3 && dataUsers.every((f) => f.endsWith(".astro") && read(f).search(loadsData) < read(f).indexOf("---", 3)),
+      "the tables are read in page frontmatter only, which runs at build time, never by a script a visitor downloads");
+
+    // ---- numbers as the site writes them
+    ok(LB.num(32000) === "32,000" && LB.span([1, 3]) === "1–3" && LB.span([2, 2]) === "2" && LB.span([1000, 32000]) === "1,000–32,000",
+      "counts carry thousands marks and ranges an en dash");
+    ok(LB.taken(0.5) === "50%" && LB.taken(1.1) === "110%" && LB.tilesPerSecond(48) === "1.5", "damage taken is a percentage, speed is tiles a second");
+    ok(LB.listOf(["A"]) === "A" && LB.listOf(["A", "B"]) === "A and B" && LB.listOf(["A", "B", "C"]) === "A, B and C", "lists read like English");
+    ok(MS.FIELD_TICK_S === 1 && read(pages[2]).includes('{s.field && " a second"}'), "a burning field's damage is per second, because the ground bills once a second");
+
+    // ---- the art: the game's own sheets, a whole-number scale
+    ok(LB.fitScale(32, 240) === 3 && LB.fitScale(110, 240) === 2 && LB.fitScale(64, 128, 2) === 2 && LB.fitScale(110, 128, 2) === 1,
+      "a creature is drawn at the biggest whole scale that fits, never stretched");
+    const orc = data.monsters.find((m) => m.kind === "orc")?.sprite;
+    const vars = orc ? LB.spriteVars(orc, 2) : "";
+    ok(vars.includes("--sprite: url(/play/mob-orc-walk.png)") && vars.includes(`--y: ${-2 * orc!.frameH * 2}px`) && vars.includes("--steps: 8"),
+      "…from its walk sheet under /play/, facing the viewer, walking over the eight stride frames");
+    const css = read("../web/src/styles/global.css");
+    ok(css.includes(".sprite--walk { animation: lib-walk var(--cycle) steps(var(--steps)) infinite; }")
+      && /prefers-reduced-motion: reduce\) \{\n  \.sprite--walk \{ animation: none; \}/.test(css),
+      "…and stands still for anyone whose system asks for less motion");
+
+    // ---- the pages
+    const one = read(pages[2]);
+    ok(one.includes("return DATA.monsters.map((m) => ({ params: { slug: slugOf(m.kind) }, props: { kind: m.kind } }));"),
+      "every creature in the tables gets its page, and only those");
+    ok(["Loot", "Where it lives", "Attacks", "Damage taken", "Hunting task"].every((h) => one.includes(`>${h}</h2>`)),
+      "a creature's page shows its loot, where it lives, its attacks, the damage it takes and the task that hunts it");
+    ok(one.includes("title={`${m.name} · Xebeka creatures`}") && one.includes("`${m.name} in Xebeka: ${m.hp} hit points and ${m.exp} experience. `"),
+      "…under a title and a description of its own, for search");
+    ok(read(pages[1]).includes("a.exp - b.exp || a.hp - b.hp || a.name.localeCompare(b.name)"), "the list runs from the weakest to the strongest");
+    ok(pages.every((f) => !/noindex/.test(read(f))), "library pages are for search, so they go in the sitemap");
+    ok(!one.includes('class="panel') && (css.match(/^\.panel__title \{/gm) ?? []).length === 1,
+      "the library's classes keep clear of the account panel's, which once dragged its margins onto the creature page");
+
+    // ---- the shelves and the menu
+    ok(LB.SECTIONS.map((x) => x.label).join(",") === "Creatures,Items,NPCs,Crystals,Places"
+      && LB.SECTIONS.filter((x) => x.href).map((x) => x.href).join(",") === "/library/creatures/",
+      "the library's shelves are Creatures, Items, NPCs, Crystals and Places, and Creatures is the one open");
+    const base = read("../web/src/layouts/Base.astro");
+    ok(base.includes('  { label: "Library", href: "/library/" },') && base.includes('  { label: "News" },'),
+      "the top bar's Library entry is live; News waits for the opening");
+    ok(base.includes('<nav class:list={["topnav", { "topnav--none": !anyLive }]} aria-label="Site">') && base.includes('aria-current={here === item.href ? "page"'),
+      "…marking where the visitor is, and naming the case of nothing live yet");
+    ok(css.includes(".topnav { order: 3; flex: 0 0 100%;") && css.includes("  .topnav [aria-disabled],\n  .topnav--none { display: none; }"),
+      "on a phone the live entries take their own row under the bar, without the dimmed ones");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
