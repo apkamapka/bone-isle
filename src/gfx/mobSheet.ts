@@ -264,6 +264,18 @@ function slice(img: HTMLImageElement, cols: number): Cut {
   return rows;
 }
 
+/**
+ * Where a creature's walk sheet lives and how it is cut, for the website's
+ * library (etap 2.1), which draws the same frames from the same file. A
+ * townsperson is asked for under the registry's `npc:` prefix. Null when the
+ * registry has no sheet for the id; whether the FILE exists is the caller's
+ * question, because the registry is allowed to name art that has not landed.
+ */
+export function sheetSpec(id: string): { src: string; cols: number; rows: 4; sideOnly: boolean } | null {
+  const src = SHEET_SRC[id];
+  return src ? { src: src.replace(/^\.\//, ""), cols: colsOf(id), rows: 4, sideOnly: SIDE_ONLY.has(id) } : null;
+}
+
 /** Start loading every directional sheet. No-op headless, safe to repeat. */
 export function loadMobSheets(): void {
   if (typeof Image === "undefined" || typeof document === "undefined") return;

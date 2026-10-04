@@ -20624,6 +20624,157 @@ async function main(): Promise<void> {
     ok(read("../web/src/layouts/Base.astro").includes('  { label: "News" },'), "the top bar's News entry stays dimmed until the opening (1.12)");
   }
 
+  console.log("\nEtap 83 — the library's tables: where everything comes from, and nothing of the missions:");
+  {
+    const fs = await import("node:fs");
+    const EX = await import("../tools/export-data.ts");
+    const MI = await import("../src/systems/missions.ts");
+    const pngSize = (file: string): { w: number; h: number } | null => {
+      const url = new URL(`../public/${file}`, import.meta.url);
+      if (!fs.existsSync(url)) return null;
+      const b = fs.readFileSync(url);
+      return b.toString("ascii", 12, 16) === "IHDR" ? { w: b.readUInt32BE(16), h: b.readUInt32BE(20) } : null;
+    };
+    const data = EX.collectGameData();
+    const places = new Set<string>(data.worlds.map((w) => w.key));
+    const creatures = new Set<string>(data.monsters.map((m) => m.kind));
+    const npcs = new Set<string>(data.npcs.map((n) => n.key));
+    const listed = new Set<string>(data.items.map((i) => i.key));
+
+    // ---- the missions stay out (etap 2.1: players find them by playing)
+    const owned = EX.missionPlaces();
+    ok(MI.MISSIONS.length > 0 && MI.MISSIONS.every((m) => owned.has(m.ground) && owned.has(m.echo)) && owned.size === MI.MISSIONS.length * 2,
+      "every mission's hunting ground and echo belong to the mission");
+    ok(data.worlds.length > 10 && data.worlds.every((w) => !owned.has(w.key)), "…and the library lists neither");
+    ok(["redcap", "draugr", "blackAnnis", "asterion", "gorak"].every((k) => !creatures.has(k)), "no boss is in the library");
+    ok(!creatures.has("viking") && !data.tasks.some((t) => t.id === "t_vikings"),
+      "…nor a creature that lives only on mission ground, nor the task that hunts it");
+    ok(MI.MISSIONS.every((m) => m.relic === undefined || !listed.has(m.relic)), "…nor a relic");
+    ok(!listed.has("ring") && !listed.has("guardRing") && !listed.has("healthRing"), "…nor the rings only the echoes' hoards hold");
+    ok(!npcs.has("timesage") && data.worlds.every((w) => w.npcs.every((n) => n.key !== "timesage")), "…nor Chronos, in the list or on a map");
+    ok((data.worlds.find((w) => w.key === "cellar")?.exits ?? []).map((e) => e.to).sort().join(",") === "bandit,reach,town",
+      "his cellar stays, as the way to the Gallows Coast and the Bone Reach, with none of its pads");
+    ok(data.worlds.every((w) => w.exits.every((e) => places.has(e.to))), "every way out of a listed place leads to a listed place");
+    const leak = /hermitage|haugr|tursachan|labyrinth|liddesdale|haramsey|calanais|danehills|orcisle|"bower"|"crete"|"gorak|timesage|chronos|bloodcap|gravehelm|haireffigy|minotaurearring/i
+      .exec(JSON.stringify(data));
+    ok(leak === null, `nothing of the missions is named anywhere in the tables${leak ? " — " + leak[0] : ""}`);
+
+    // ---- every item says where it comes from
+    ok(data.items.length > 100 && data.items.every((i) => i.sources.length > 0), "every item in the library has a way to get it");
+    const all = EX.itemSources();
+    const sourceless = (Object.keys(items.ITEMS) as (keyof typeof items.ITEMS)[]).filter((k) => {
+      const d = items.ITEMS[k];
+      if (d.testLevel !== undefined || d.testSkill !== undefined) return false;
+      const s = all.get(k);
+      return s === undefined || (s.listed.length === 0 && s.unlisted === 0);
+    });
+    const unnamed = sourceless.filter((k) => !EX.UNOBTAINABLE.has(k));
+    ok(unnamed.length === 0,
+      `an item nothing in the world hands out is named in UNOBTAINABLE, never left out quietly${unnamed.length ? " — " + unnamed[0] : ""}`);
+    const stale = [...EX.UNOBTAINABLE].filter((k) => !sourceless.includes(k));
+    ok(stale.length === 0, `…and UNOBTAINABLE names nothing that has a source now${stale.length ? " — " + stale[0] : ""}`);
+    ok(data.items.every((i) => !EX.UNOBTAINABLE.has(i.key)), "…so none of it reaches the library");
+    const badRef = data.items.flatMap((i) => i.sources
+      .filter((s) => (s.type === "drop" && !creatures.has(s.creature)) || (s.type === "shop" && !npcs.has(s.npc))
+        || (s.type === "chest" && !places.has(s.place)) || (s.type === "exchange" && !npcs.has(s.npc)))
+      .map((s) => `${i.key}:${s.type}`));
+    ok(badRef.length === 0, `every source names a listed creature, townsperson or place${badRef.length ? " — " + badRef[0] : ""}`);
+    const materials = data.items.flatMap((i) => i.sources.flatMap((s): string[] =>
+      s.type === "tower" ? [...Object.keys(s.cost), ...Object.keys(s.research?.cost ?? {})]
+        : s.type === "forge" ? ["coal", ...(s.method === "gem" ? s.trophies : [])]
+          : []).filter((k) => !listed.has(k)).map((k) => `${i.key}:${k}`));
+    ok(materials.length === 0,
+      `…and every material a shelf or a recipe asks for is in the library too${materials.length ? " — " + materials[0] : ""}`);
+    const via = (k: string, type: string) => data.items.find((i) => i.key === k)?.sources.filter((s) => s.type === type) ?? [];
+    ok(via("wood", "gather").length === 1 && via("stone", "gather").length === 1, "wood is chopped and stone is mined");
+    ok(via("iron", "forge").length === 1 && via("steel", "forge").length === 1 && via("essentialGem", "forge").length === 1,
+      "iron, steel and the Essential Gem come out of the Forge");
+    const ember = via("fireEmberShard", "tower")[0];
+    ok(ember?.type === "tower" && ember.element === "fire" && ember.towerTier === 1 && ember.research === null,
+      "an elemental crystal is bought at the tower, by a player attuned to its element");
+    ok(via("minotaurShield", "chest").some((s) => s.type === "chest" && s.place === "minodeep2"), "a listed place's chest counts as a source");
+    ok(via("platinumCoin", "exchange").some((s) => s.type === "exchange" && s.npc === "morgan"), "Morgan changes coins");
+    ok(via("hpPotion", "shop").some((s) => s.type === "shop" && s.npc === "herbalist") && via("steelHelm", "shop").length === 0,
+      "a shop's stock is a source; what it only buys is not");
+    ok((data.items.find((i) => i.key === "steelHelm")?.sellTo ?? []).some((s) => s.npc === "smith"), "…that is a place to sell instead");
+    ok(data.items.every((i) => i.sellTo.every((s) => npcs.has(s.npc) && s.price > 0)), "…and every such place is a listed shop that pays");
+    ok(typeof data.items.find((i) => i.key === "aegisRune")?.desc === "string", "a crystal carries the tower's own description");
+
+    // ---- townsfolk and their work
+    ok(data.npcs.length > 3 && data.npcs.every((n) => n.places.length > 0 && n.places.every((p) => places.has(p.place))),
+      "every townsperson in the library stands on a listed place");
+    ok(data.npcs.every((n) => (n.role === "shop") === (n.shop !== null)), "a townsperson keeps a shop exactly when the library calls them a trader");
+    ok(data.npcs.every((n) => n.sprite !== null), "…and each has a drawn sheet");
+    ok(!(data.npcs.find((n) => n.key === "elder")?.shop?.entries ?? []).some((e) => e.item === "ring"),
+      "a shop line with an unlisted item is left out: the elder's list no longer shows the ring he buys");
+    ok(data.tasks.length > 0 && data.tasks.every((t) => t.creatures.length > 0 && t.creatures.every((k) => creatures.has(k))),
+      "Grizelda's tasks name only listed creatures");
+
+    // ---- maps and art
+    const inside = (w: (typeof data.worlds)[number], tx: number, ty: number) => tx >= 0 && ty >= 0 && tx < w.w && ty < w.h;
+    ok(data.worlds.every((w) => [...w.spawns, ...w.npcs, ...w.exits].every((p) => inside(w, p.tx, p.ty))), "every marker lies on its own map");
+    ok(data.worlds.every((w) => w.spawns.every((s) => creatures.has(s.kind))
+      && Object.values(w.monsters).reduce((a, b) => a + b, 0) === w.spawns.length),
+      "…and the spawn markers are the spawn counts, post by post");
+    const wrongArt = data.worlds.filter((w) => {
+      const s = w.terrain ? pngSize(w.terrain) : null;
+      return !s || s.w !== w.w * TILE || s.h !== w.h * TILE;
+    });
+    ok(wrongArt.length === 0, `every listed place has its ground art, exactly its size in tiles at 32 px${wrongArt.length ? " — " + wrongArt[0].key : ""}`);
+    ok(data.monsters.every((m) => m.sprite !== null), "every creature in the library has a drawn sheet");
+    const badSheet = [...data.monsters.map((m) => m.sprite), ...data.npcs.map((n) => n.sprite)].filter((s) => {
+      if (!s) return false;
+      const z = pngSize(s.file);
+      return !z || s.frameW < 1 || s.frameH < 1 || s.frameW * s.cols > z.w || s.frameH * s.rows > z.h;
+    });
+    ok(badSheet.length === 0, `…cut into frames that fit the file${badSheet.length ? " — " + badSheet[0]?.file : ""}`);
+    ok(data.monsters.find((m) => m.kind === "dragon")?.sprite?.sideOnly === true && data.monsters.find((m) => m.kind === "orc")?.sprite?.cols === 9,
+      "…with the side-only creatures marked and each sheet's own frame count");
+    ok(data.items.every((i) => i.icon === null || pngSize(i.icon) !== null) && data.items.filter((i) => i.icon === null).every((i) => i.category === "coin"),
+      "every icon the library names is a file the game ships; only the coins are drawn in code");
+  }
+
+  console.log("\nEtap 84 — Google finds the way in: a sitemap of every public page, robots.txt, and /play/ out of search:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const walk = (dir: string): string[] =>
+      fs.readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })
+        .flatMap((e) => (e.isDirectory() ? walk(`${dir}${e.name}/`) : [`${dir}${e.name}`]));
+
+    // ---- the sitemap
+    const cfg = read("../web/astro.config.mjs");
+    const pkg = JSON.parse(read("../web/package.json"));
+    const lock = JSON.parse(read("../web/package-lock.json"));
+    ok(cfg.includes('import sitemap from "@astrojs/sitemap";') && cfg.includes("integrations: [sitemap({") && cfg.includes('site: "https://xebeka.com",'),
+      "the site build writes a sitemap, with full addresses on xebeka.com");
+    ok(typeof pkg.dependencies?.["@astrojs/sitemap"] === "string" && lock.packages?.["node_modules/@astrojs/sitemap"] !== undefined
+      && lock.packages?.[""]?.dependencies?.["@astrojs/sitemap"] === pkg.dependencies["@astrojs/sitemap"],
+      "…from Astro's own package, in the lockfile too, or Vercel's npm ci stops the deploy");
+
+    // ---- the pages that ask not to be indexed are exactly the pages it leaves out
+    const base = "../web/src/pages/";
+    const shy = walk(base).filter((f) => f.endsWith(".astro")).filter((f) => {
+      const s = read(f);
+      return /<(Base|Doc)\b[^>]*\snoindex\b/.test(s) || s.includes("layouts/Auth.astro");
+    }).map((f) => {
+      const rel = f.slice(base.length).replace(/\.astro$/, "");
+      return rel === "index" ? "/" : `/${rel.replace(/\/index$/, "")}/`;
+    }).sort();
+    const left = (/const NOINDEX = \[([^\]]*)\];/.exec(cfg)?.[1].match(/"[^"]+"/g) ?? []).map((s) => s.slice(1, -1)).sort();
+    ok(shy.length >= 6 && shy.join(",") === left.join(","),
+      `the sitemap leaves out exactly the pages that say noindex${shy.join(",") === left.join(",") ? "" : " — pages " + shy.join(" ") + " vs list " + left.join(" ")}`);
+    ok(cfg.includes("filter: (page) => !NOINDEX.includes(new URL(page).pathname),"), "…matched by path, the way the canonical link spells it");
+
+    // ---- robots.txt and the game
+    const robots = read("../web/public/robots.txt");
+    ok(/^User-agent: \*$/m.test(robots) && /^Allow: \/$/m.test(robots), "robots.txt lets every crawler in");
+    ok(/^Sitemap: https:\/\/xebeka\.com\/sitemap-index\.xml$/m.test(robots), "…and points it at the sitemap");
+    ok(!/^Disallow:/m.test(robots) && read("../index.html").includes('<meta name="robots" content="noindex" />'),
+      "the game at /play/ keeps out of search by its own noindex, never a robots.txt block that would hide the tag from Google");
+    ok(read("../web/src/layouts/Base.astro").includes('  { label: "Library" },'), "the top bar's Library entry stays dimmed until its first section opens (2.3)");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

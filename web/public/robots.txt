@@ -1,0 +1,6 @@
+# xebeka.com: every crawler is welcome. The game at /play/ keeps itself out of
+# search with its own noindex tag, which a crawler can only read if it may go in.
+User-agent: *
+Allow: /
+
+Sitemap: https://xebeka.com/sitemap-index.xml

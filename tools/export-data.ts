@@ -9,32 +9,119 @@
  *
  * Run by `npm run build:site` before the site is built, so every deploy
  * carries the tables of the code it was deployed with. The smoke suite calls
- * `collectGameData()` too (Etap 74), which is what keeps this file from
+ * `collectGameData()` too (Etap 74, 83), which is what keeps this file from
  * rotting quietly between website sessions.
  *
  * Exact drop chances ARE in the output. The site shows rarity labels instead
  * (a decision, not a limitation of the data), and it reads this file at build
  * time only, so the numbers never reach a visitor's browser.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THE LIBRARY LEAVES OUT (etap 2.1, Radek's call)
+ *
+ * Every trace of the Time Sage's missions: their hunting grounds and echoes,
+ * the bosses and whatever else lives only there, the relics, the hoards in
+ * the echoes, the pads in the cellar, and Chronos himself. Players find those
+ * by playing. The cut is made HERE, once, and not page by page, so no page can
+ * leak what the JSON never carried. It follows from three rules:
+ *
+ *   a place is listed unless a mission owns it (`MISSIONS`, ground and echo);
+ *   a creature is listed when it stands on a listed place;
+ *   an item is listed when something listed hands it out.
+ *
+ * Everything else is pruned to match: a shop line whose item is not listed,
+ * an exit to a place that is not, a task whose creatures are not.
+ *
+ * An item that NOTHING hands out, mission or not, is not an oversight to be
+ * pruned quietly: it is either a system this file forgot to read, or gear the
+ * code defines ahead of the world. The second kind is named in UNOBTAINABLE,
+ * and the smoke suite fails on anything sourceless that is not named there.
+ * ---------------------------------------------------------------------------
  */
 import "../smoke/stub.ts";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ITEMS, type ItemDef, type ItemKind } from "../src/items.ts";
 import { MONSTER_DEFS, MONSTER_KINDS, mobName, monsterResist } from "../src/entities/monsters.ts";
 import { SHOPS } from "../src/entities/npcs.ts";
 import { NPC_DATA } from "../src/world/generate.ts";
-import { buildWorlds } from "../src/game.ts";
+import { buildWorlds, CHEST_PRIZES } from "../src/game.ts";
+import { MISSIONS } from "../src/systems/missions.ts";
+import { TASKS } from "../src/systems/tasks.ts";
+import { RESEARCH, OFFERS, towerTierFor } from "../src/systems/tower.ts";
+import { COAL_PER_SMELT, GEM_COAL, GEM_TROPHIES, GEM_TROPHY_KINDS } from "../src/systems/smelt.ts";
 import { ELEMENTS, ELEMENT_LABEL, type Element, type Resistances } from "../src/systems/elements.ts";
+import { iconFile } from "../src/gfx/itemArt.ts";
+import { sheetSpec } from "../src/gfx/mobSheet.ts";
+import { TERRAIN_SRC } from "../src/world/terrainImage.ts";
 import { TILE, WORLD_SEED } from "../src/config.ts";
+import type { NpcKey, WorldKey } from "../src/world/types.ts";
 
 export type ItemCategory =
   | "weapon" | "distance weapon" | "shield" | "armor" | "jewellery"
   | "ammunition" | "crystal" | "potion" | "food" | "container" | "coin" | "material";
 
+/** Materials by item, as the game spends them. */
+export type Cost = Partial<Record<ItemKind, number>>;
+
+/**
+ * One way to get an item. Only LISTED things appear here: a creature that
+ * lives on a listed place, a townsperson the library shows, a listed place's
+ * chest. The Forge and the Alchemy Tower are buildings on every player's own
+ * island, so they are always listed.
+ */
+export type ItemSource =
+  /** `chance` is exact (0..1). The site turns it into a label. */
+  | { type: "drop"; creature: string; chance: number; n: readonly [number, number] }
+  /** Stocked by a shop, at this price in gold. */
+  | { type: "shop"; npc: string; price: number }
+  /** The one-time chest of a place, `n` at a time. */
+  | { type: "chest"; place: string; n: number }
+  /** Bought at the Alchemy Tower: `batch` charges for `gold` plus `cost`. */
+  | {
+      type: "tower";
+      towerTier: 1 | 2 | 3;
+      gold: number;
+      cost: Cost;
+      batch: number;
+      minLevel: number;
+      /** The element the player has to be attuned to, for the elemental shelf. */
+      element: Element | null;
+      /** A one-time research that opens the shelf; null when it is open from the start. */
+      research: { gold: number; cost: Cost } | null;
+    }
+  /** Smelted out of metal gear at the Forge, one batch of coal a piece. */
+  | { type: "forge"; method: "smelt"; forgeTier: 1 | 2; coal: number }
+  /** Cut at a tier-III Forge from coal and `kinds` different trophies. */
+  | { type: "forge"; method: "gem"; forgeTier: 3; coal: number; kinds: number; trophies: readonly ItemKind[] }
+  /** Chopped from trees or mined from rocks. */
+  | { type: "gather"; from: "tree" | "rock" }
+  /** Changed for other coins by a townsperson. */
+  | { type: "exchange"; npc: string };
+
 export interface ExportItem extends Omit<ItemDef, "testLevel" | "testSkill"> {
   key: ItemKind;
   category: ItemCategory;
+  /** The game's drawn icon under /play/, or null when the item is baked in code. */
+  icon: string | null;
+  /** What a crystal does, in the tower's own words. */
+  desc: string | null;
+  /** Every listed way to get it. Never empty: an item nothing hands out is not listed. */
+  sources: ItemSource[];
+  /** Listed shops that buy it, and what they pay. */
+  sellTo: { npc: string; price: number }[];
+}
+
+/** A walk sheet under /play/: 4 rows (up, left, down, right) of `cols` frames. */
+export interface ExportSheet {
+  file: string;
+  frameW: number;
+  frameH: number;
+  cols: number;
+  rows: 4;
+  /** Drawn from the side only: every row carries the side view. */
+  sideOnly: boolean;
 }
 
 export interface ExportMonster {
@@ -57,20 +144,55 @@ export interface ExportMonster {
   ranged: { tiles: number; dmg: readonly [number, number] } | null;
   spells: { name: string; element: Element; dmg: readonly [number, number] }[];
   respawnS: number | null;
+  /** Null while the creature has no drawn sheet yet. */
+  sprite: ExportSheet | null;
 }
+
+/** What a townsperson is for. Timesage's "missions" never reaches the JSON. */
+export type NpcRole = "shop" | "tasks" | "wardrobe" | "exchange" | "missions";
 
 export interface ExportNpc {
   key: string;
   name: string;
+  role: Exclude<NpcRole, "missions">;
+  /** Where they stand, on listed places only. */
+  places: { place: string; tx: number; ty: number }[];
+  sprite: ExportSheet | null;
+  /** Lines with an unlisted item are left out. */
   shop: { greeting: string; entries: { item: ItemKind; buy: number; sell: number }[] } | null;
+}
+
+export interface ExportTask {
+  id: string;
+  title: string;
+  /** Listed creatures only; a kill of any of them counts. */
+  creatures: string[];
+  /** Kills for the first hand-in; the n-th wants n times as many. */
+  need: number;
+  reqLevel: number;
+  reward: { points: number; gold: number; exp: number };
 }
 
 export interface ExportWorld {
   key: string;
   name: string;
   safe: boolean;
+  /** Size in tiles. */
+  w: number;
+  h: number;
+  /** The ground art under /play/, `w x h` tiles at 32 px; null when there is none. */
+  terrain: string | null;
   /** How many spawn posts each creature has on this map. */
   monsters: Record<string, number>;
+  /** Every spawn post, for the map's markers. */
+  spawns: { kind: string; tx: number; ty: number }[];
+  npcs: { key: string; tx: number; ty: number }[];
+  /** Ways out to other listed places. */
+  exits: { to: string; tx: number; ty: number; style: "portal" | "ladderDown" | "ladderUp" | "caveMouth" }[];
+  trees: number;
+  rocks: number;
+  /** The place's one-time chest, if it has one. */
+  chest: { item: ItemKind; n: number }[] | null;
 }
 
 export interface GameData {
@@ -79,7 +201,49 @@ export interface GameData {
   monsters: ExportMonster[];
   npcs: ExportNpc[];
   worlds: ExportWorld[];
+  tasks: ExportTask[];
 }
+
+/* ------------------------------------------------------------------ */
+/*  The cut                                                            */
+/* ------------------------------------------------------------------ */
+
+/** Every place a mission owns: its hunting ground and its echo. */
+export function missionPlaces(): ReadonlySet<string> {
+  return new Set<string>(MISSIONS.flatMap((m) => [m.ground, m.echo]));
+}
+
+/** Townsfolk who belong to the missions. Chronos hands them out and does nothing else. */
+export const MISSION_NPCS: ReadonlySet<NpcKey> = new Set<NpcKey>(["timesage"]);
+
+/**
+ * Gear the code defines and nothing in the world hands out yet: the sets that
+ * wait for the reward shelf, and the attunement Marks, whose lanes are opened
+ * at the circles of Calanais now. Remove a line when its item gets a source;
+ * the smoke suite says which line has gone stale.
+ */
+export const UNOBTAINABLE: ReadonlySet<ItemKind> = new Set<ItemKind>([
+  // the Hunter set (keys of the old Snakeskin set)
+  "snakeskinHelm", "snakeskinBody", "snakeskinLegs", "snakeskinBoots",
+  // tier 7: Golden (human line) and Vampire (beast line)
+  "goldenHelm", "goldenBody", "goldenLegs", "goldenBoots", "goldenShield", "sunspear",
+  "vampireHelm", "vampireBody", "vampireLegs", "vampireBoots", "vampireShield", "bloodletter",
+  // the Zephyr, the speed set
+  "zephyrHelm", "zephyrBody", "zephyrLegs", "zephyrBoots",
+  // the attunement Marks
+  "fireCrystal", "waterCrystal", "earthCrystal", "windCrystal", "lightningCrystal",
+]);
+
+/** What each townsperson is for, as main.ts opens their window. */
+const NPC_ROLE: Readonly<Record<NpcKey, NpcRole>> = {
+  smith: "shop",
+  herbalist: "shop",
+  elder: "shop",
+  taskmaster: "tasks",
+  tailor: "wardrobe",
+  morgan: "exchange",
+  timesage: "missions",
+};
 
 function categoryOf(d: ItemDef): ItemCategory {
   if (d.coin !== undefined) return "coin";
@@ -98,16 +262,176 @@ function categoryOf(d: ItemDef): ItemCategory {
 /** TEST items (instant levels, instant skills) are a developer's tools, not part of the world. */
 const isTestItem = (d: ItemDef): boolean => d.testLevel !== undefined || d.testSkill !== undefined;
 
+const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../public");
+
+/** Width and height from a PNG's header, or null when the file is not there. */
+function pngSize(file: string): { w: number; h: number } | null {
+  const path = resolve(PUBLIC_DIR, file);
+  if (!existsSync(path)) return null;
+  const head = Buffer.alloc(24);
+  const fd = openSync(path, "r");
+  try { readSync(fd, head, 0, 24, 0); } finally { closeSync(fd); }
+  if (head.toString("ascii", 12, 16) !== "IHDR") return null;
+  return { w: head.readUInt32BE(16), h: head.readUInt32BE(20) };
+}
+
+function sheetOf(id: string): ExportSheet | null {
+  const spec = sheetSpec(id);
+  const size = spec ? pngSize(spec.src) : null;
+  if (!spec || !size) return null;
+  return {
+    file: spec.src,
+    frameW: Math.floor(size.w / spec.cols),
+    frameH: Math.floor(size.h / spec.rows),
+    cols: spec.cols,
+    rows: spec.rows,
+    sideOnly: spec.sideOnly,
+  };
+}
+
+/**
+ * Every way to get every item, before the cut: `listed` are the sources the
+ * library may show, `unlisted` counts the ones only the missions give.
+ */
+export function itemSources(): Map<ItemKind, { listed: ItemSource[]; unlisted: number }> {
+  const hiddenPlaces = missionPlaces();
+  const worlds = Object.values(buildWorlds(WORLD_SEED));
+  const listedKinds = new Set<string>();
+  for (const w of worlds) {
+    if (hiddenPlaces.has(w.key)) continue;
+    for (const p of w.mobPosts ?? []) listedKinds.add(p.kind);
+  }
+
+  const out = new Map<ItemKind, { listed: ItemSource[]; unlisted: number }>();
+  const at = (k: ItemKind) => {
+    let e = out.get(k);
+    if (!e) out.set(k, (e = { listed: [], unlisted: 0 }));
+    return e;
+  };
+  const add = (k: ItemKind, s: ItemSource) => { at(k).listed.push(s); };
+  const hide = (k: ItemKind) => { at(k).unlisted++; };
+
+  // ---- creatures
+  for (const kind of MONSTER_KINDS) {
+    const d = MONSTER_DEFS[kind];
+    const listed = listedKinds.has(kind);
+    for (const l of d.loot) {
+      if (listed) add(l.kind, { type: "drop", creature: kind, chance: l.chance, n: l.n });
+      else hide(l.kind);
+    }
+    if (d.gold[1] > 0) {
+      if (listed) add("goldCoin", { type: "drop", creature: kind, chance: 1, n: d.gold });
+      else hide("goldCoin");
+    }
+  }
+
+  // ---- the relics: straight from the boss into the pack, never through a loot table
+  for (const m of MISSIONS) if (m.relic) hide(m.relic);
+
+  // ---- shops
+  for (const [key, shop] of Object.entries(SHOPS) as [NpcKey, NonNullable<(typeof SHOPS)[NpcKey]>][]) {
+    for (const e of shop.entries) {
+      if (e.buy <= 0) continue;
+      if (MISSION_NPCS.has(key)) hide(e.kind);
+      else add(e.kind, { type: "shop", npc: key, price: e.buy });
+    }
+  }
+
+  // ---- one-time chests
+  for (const [place, prizes] of Object.entries(CHEST_PRIZES) as [WorldKey, readonly (ItemKind | readonly [ItemKind, number])[]][]) {
+    for (const p of prizes) {
+      const [item, n] = typeof p === "string" ? [p, 1] : p;
+      if (hiddenPlaces.has(place)) hide(item);
+      else add(item, { type: "chest", place, n });
+    }
+  }
+
+  // ---- the Alchemy Tower
+  for (const r of RESEARCH) {
+    add(r.crystal, {
+      type: "tower",
+      towerTier: towerTierFor(r),
+      gold: r.buyGold ?? 0,
+      cost: { ...r.buyCost },
+      batch: r.buyN,
+      minLevel: r.minLevel ?? 1,
+      element: r.element ?? null,
+      research: r.openFromStart ? null : { gold: r.researchGold ?? 0, cost: { ...r.researchCost } },
+    });
+  }
+  for (const o of OFFERS) {
+    add(o.crystal, {
+      type: "tower",
+      towerTier: (o.tier + 1) as 1 | 2 | 3,
+      gold: o.gold,
+      cost: { ...o.cost },
+      batch: o.buyN,
+      minLevel: 1,
+      element: o.element,
+      research: null,
+    });
+  }
+
+  // ---- the Forge
+  add("iron", { type: "forge", method: "smelt", forgeTier: 1, coal: COAL_PER_SMELT });
+  add("steel", { type: "forge", method: "smelt", forgeTier: 2, coal: COAL_PER_SMELT });
+  add("essentialGem", { type: "forge", method: "gem", forgeTier: 3, coal: GEM_COAL, kinds: GEM_TROPHY_KINDS, trophies: [...GEM_TROPHIES] });
+
+  // ---- trees and rocks
+  add("wood", { type: "gather", from: "tree" });
+  add("stone", { type: "gather", from: "rock" });
+
+  // ---- the money changer
+  for (const coin of ["goldCoin", "platinumCoin"] as const) {
+    if (MISSION_NPCS.has("morgan")) hide(coin);
+    else add(coin, { type: "exchange", npc: "morgan" });
+  }
+
+  return out;
+}
+
+/** Descriptions the tower gives its crystals, by item. */
+function towerDescs(): Map<ItemKind, string> {
+  const out = new Map<ItemKind, string>();
+  for (const r of RESEARCH) out.set(r.crystal, r.desc);
+  for (const o of OFFERS) out.set(o.crystal, o.desc);
+  return out;
+}
+
 export function collectGameData(): GameData {
+  const hiddenPlaces = missionPlaces();
+  const built = Object.values(buildWorlds(WORLD_SEED));
+  const listedWorlds = built.filter((w) => !hiddenPlaces.has(w.key));
+  const placeKeys = new Set(listedWorlds.map((w) => w.key as string));
+
+  // ---- creatures: the ones standing on a listed place
+  const kinds = new Set<string>();
+  for (const w of listedWorlds) for (const p of w.mobPosts ?? []) kinds.add(p.kind);
+
+  // ---- items: the ones something listed hands out
+  const sources = itemSources();
+  const descs = towerDescs();
   const items: ExportItem[] = [];
   for (const key of Object.keys(ITEMS) as ItemKind[]) {
     const def = ITEMS[key];
     if (isTestItem(def)) continue;
+    const listed = sources.get(key)?.listed ?? [];
+    if (listed.length === 0) continue;
     const { testLevel: _l, testSkill: _s, ...rest } = def;
-    items.push({ key, category: categoryOf(def), ...rest });
+    const icon = iconFile(key);
+    items.push({
+      key,
+      category: categoryOf(def),
+      ...rest,
+      icon: existsSync(resolve(PUBLIC_DIR, icon)) ? icon : null,
+      desc: descs.get(key) ?? null,
+      sources: listed,
+      sellTo: [],
+    });
   }
+  const itemKeys = new Set<string>(items.map((i) => i.key));
 
-  const monsters: ExportMonster[] = MONSTER_KINDS.map((kind) => {
+  const monsters: ExportMonster[] = MONSTER_KINDS.filter((k) => kinds.has(k)).map((kind) => {
     const d = MONSTER_DEFS[kind];
     return {
       kind,
@@ -124,25 +448,72 @@ export function collectGameData(): GameData {
       ranged: d.ranged ? { tiles: Math.round(d.ranged.range / TILE), dmg: d.ranged.dmg } : null,
       spells: (d.spells ?? []).map((s) => ({ name: s.name, element: s.element, dmg: s.dmg })),
       respawnS: d.respawnS ?? null,
+      sprite: sheetOf(kind),
     };
   });
 
-  const npcs: ExportNpc[] = NPC_DATA.map(([key, name]) => {
+  // ---- townsfolk: everyone but the missions' own
+  const npcs: ExportNpc[] = [];
+  for (const [key, name] of NPC_DATA) {
+    if (MISSION_NPCS.has(key)) continue;
+    const role = NPC_ROLE[key];
+    if (role === "missions") continue;
     const shop = SHOPS[key];
-    return {
+    const places = listedWorlds.flatMap((w) =>
+      w.npcs.filter((n) => n.key === key).map((n) => ({ place: w.key as string, tx: n.tx, ty: n.ty })));
+    npcs.push({
       key,
       name,
+      role,
+      places,
+      sprite: sheetOf(`npc:${key}`),
       shop: shop
-        ? { greeting: shop.greeting, entries: shop.entries.map((e) => ({ item: e.kind, buy: e.buy, sell: e.sell })) }
+        ? {
+            greeting: shop.greeting,
+            entries: shop.entries.filter((e) => itemKeys.has(e.kind)).map((e) => ({ item: e.kind, buy: e.buy, sell: e.sell })),
+          }
         : null,
+    });
+  }
+  const npcKeys = new Set(npcs.map((n) => n.key));
+  for (const n of npcs) {
+    for (const e of n.shop?.entries ?? []) {
+      if (e.sell > 0) items.find((i) => i.key === e.item)?.sellTo.push({ npc: n.key, price: e.sell });
+    }
+  }
+
+  const worlds: ExportWorld[] = listedWorlds.map((w) => {
+    const counts: Record<string, number> = {};
+    for (const p of w.mobPosts ?? []) counts[p.kind] = (counts[p.kind] ?? 0) + 1;
+    const terrain = TERRAIN_SRC[w.key]?.replace(/^\.\//, "") ?? null;
+    const chest = CHEST_PRIZES[w.key];
+    return {
+      key: w.key,
+      name: w.name,
+      safe: w.safe,
+      w: w.w,
+      h: w.h,
+      terrain: terrain && existsSync(resolve(PUBLIC_DIR, terrain)) ? terrain : null,
+      monsters: counts,
+      spawns: (w.mobPosts ?? []).map((p) => ({ kind: p.kind, tx: p.tx, ty: p.ty })),
+      npcs: w.npcs.filter((n) => npcKeys.has(n.key)).map((n) => ({ key: n.key, tx: n.tx, ty: n.ty })),
+      exits: w.portals
+        .filter((p) => !p.inactive && placeKeys.has(p.dest))
+        .map((p) => ({ to: p.dest, tx: Math.floor(p.x / TILE), ty: Math.floor(p.y / TILE), style: p.style ?? "portal" })),
+      trees: w.trees.length,
+      rocks: w.rocks.length,
+      chest: chest ? chest.map((p) => (typeof p === "string" ? { item: p, n: 1 } : { item: p[0], n: p[1] })) : null,
     };
   });
 
-  const worlds: ExportWorld[] = Object.values(buildWorlds(WORLD_SEED)).map((w) => {
-    const counts: Record<string, number> = {};
-    for (const p of w.mobPosts ?? []) counts[p.kind] = (counts[p.kind] ?? 0) + 1;
-    return { key: w.key, name: w.name, safe: w.safe, monsters: counts };
-  });
+  const tasks: ExportTask[] = TASKS.map((t) => ({
+    id: t.id,
+    title: t.title,
+    creatures: t.goal.kinds.filter((k) => kinds.has(k)),
+    need: t.goal.need,
+    reqLevel: t.reqLevel,
+    reward: { points: t.reward.points, gold: t.reward.gold, exp: t.reward.exp },
+  })).filter((t) => t.creatures.length > 0);
 
   return {
     elements: ELEMENTS.map((id) => ({ id, label: ELEMENT_LABEL[id] })),
@@ -150,6 +521,7 @@ export function collectGameData(): GameData {
     monsters,
     npcs,
     worlds,
+    tasks,
   };
 }
 
@@ -163,6 +535,6 @@ if (runDirectly) {
   writeFileSync(OUT_FILE, JSON.stringify(data, null, 2) + "\n");
   console.log(
     `game data: ${data.items.length} items, ${data.monsters.length} creatures, ` +
-      `${data.npcs.length} NPCs, ${data.worlds.length} places -> ${OUT_FILE}`,
+      `${data.npcs.length} NPCs, ${data.worlds.length} places, ${data.tasks.length} tasks -> ${OUT_FILE}`,
   );
 }
