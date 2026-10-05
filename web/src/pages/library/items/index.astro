@@ -1,0 +1,52 @@
+---
+import Library from "../../../layouts/Library.astro";
+import { DATA, ELEMENT } from "../../../lib/game-data.ts";
+import { ITEM_GROUPS, SLOT_ORDER, itemUrl, itemSummary, num } from "../../../lib/library.ts";
+
+const elementLabel = (id: string): string => ELEMENT.get(id) ?? id;
+// Weakest first, the way a price list reads; armor head to boots first, then by worth.
+const order = (a: (typeof DATA.items)[number], b: (typeof DATA.items)[number]): number =>
+  SLOT_ORDER.indexOf(a.slot ?? "") - SLOT_ORDER.indexOf(b.slot ?? "") || a.value - b.value || a.name.localeCompare(b.name);
+const groups = ITEM_GROUPS
+  .map((g) => ({ ...g, items: DATA.items.filter((i) => i.category === g.category).sort(order) }))
+  .filter((g) => g.items.length > 0);
+const count = groups.reduce((n, g) => n + g.items.length, 0);
+---
+<Library
+  title="Items · Xebeka"
+  description={`All ${count} items in Xebeka, from weapons and armor to trophies and supplies, with their stats and where each one comes from.`}
+>
+  <header class="lib__head">
+    <h1 class="lib__title">Items</h1>
+    <p class="lib__intro">Everything a player can carry, group by group, weakest first. Crystals have a shelf of their own.</p>
+  </header>
+  <nav class="lib__jump" aria-label="Item groups">
+    {groups.map((g) => <a href={`#${g.id}`}>{g.label}</a>)}
+  </nav>
+  {groups.map((g) => (
+    <section class="item-group" aria-labelledby={g.id}>
+      <h2 class="entry-part__title" id={g.id}>{g.label}</h2>
+      <table class="entry-table">
+        <thead>
+          <tr><th scope="col">Item</th><th scope="col">Stats</th><th scope="col">Weight</th></tr>
+        </thead>
+        <tbody>
+          {g.items.map((i) => (
+            <tr>
+              <td>
+                <a class="entry-table__item" href={itemUrl(i.key)}>
+                  {i.icon
+                    ? <img class="px" src={`/play/${i.icon}`} width="32" height="32" alt="" loading="lazy" decoding="async" />
+                    : <span class="entry-table__blank" aria-hidden="true"></span>}
+                  {i.name}
+                </a>
+              </td>
+              <td class="item-group__stats">{itemSummary(i, elementLabel)}</td>
+              <td class="entry-num">{num(i.weight)} oz</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  ))}
+</Library>

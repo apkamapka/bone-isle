@@ -1,16 +1,17 @@
 ---
 import Library from "../../layouts/Library.astro";
-import { SECTIONS } from "../../lib/library.ts";
+import { SECTIONS, hasItemPage } from "../../lib/library.ts";
 import { DATA } from "../../lib/game-data.ts";
 
 // What an open shelf holds, counted from the tables. A shelf opens with its line here.
 const COUNTS: Record<string, string> = {
   Creatures: `${DATA.monsters.length} creatures`,
+  Items: `${DATA.items.filter((i) => hasItemPage(i.category)).length} items`,
 };
 ---
 <Library
   title="Library · Xebeka"
-  description="The Xebeka library: every creature on the islands, with its hit points, experience, loot and where it lives, written from the game's own tables."
+  description="The Xebeka library: every creature on the islands and every item they carry, with stats, loot, prices and where to find each one, written from the game's own tables."
   tabs={false}
 >
   <header class="lib__head">

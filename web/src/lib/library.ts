@@ -12,6 +12,14 @@ export function slugOf(key: string): string {
 }
 
 export const creatureUrl = (kind: string): string => `/library/creatures/${slugOf(kind)}/`;
+export const itemUrl = (key: string): string => `/library/items/${slugOf(key)}/`;
+
+/**
+ * Whether an item has a page of its own yet. Crystals get theirs with the
+ * Crystals shelf (etap 2.6), which needs the crystal rules the item tables do
+ * not carry; until then a crystal is named without a link.
+ */
+export const hasItemPage = (category: string): boolean => category !== "crystal";
 
 /**
  * The library's shelves, in menu order. A null href is a shelf that opens in
@@ -20,7 +28,7 @@ export const creatureUrl = (kind: string): string => `/library/creatures/${slugO
  */
 export const SECTIONS: readonly { label: string; href: string | null; blurb: string }[] = [
   { label: "Creatures", href: "/library/creatures/", blurb: "What you will fight, what it carries and where it lives." },
-  { label: "Items", href: null, blurb: "Weapons, armor, trophies and supplies, and how to get each one." },
+  { label: "Items", href: "/library/items/", blurb: "Weapons, armor, trophies and supplies, and how to get each one." },
   { label: "NPCs", href: null, blurb: "The people of Bonetown, and what they sell and buy." },
   { label: "Crystals", href: null, blurb: "The Alchemy Tower's shelf, element by element." },
   { label: "Places", href: null, blurb: "Maps of the islands and of the deeps below them." },
@@ -47,6 +55,16 @@ export function rarityLabel(chance: number): Rarity {
   return "Very rare";
 }
 
+/**
+ * A drop's band as a number, 0 for Always: what lists sort by. Inside a band
+ * they go by name, never by the exact chance, or the order itself would tell
+ * a careful reader which of two "Semi-rare" drops comes more often.
+ */
+export function rarityRank(chance: number): number {
+  const i = RARITY_BANDS.findIndex(([floor]) => chance >= floor);
+  return i < 0 ? RARITY_BANDS.length - 1 : i;
+}
+
 /** "3", or "1–3" for a range. */
 export function span(range: readonly [number, number]): string {
   return range[0] === range[1] ? num(range[0]) : `${num(range[0])}–${num(range[1])}`;
@@ -71,6 +89,109 @@ export function tilesPerSecond(pxPerS: number, tile = 32): string {
 export function listOf(words: readonly string[]): string {
   if (words.length <= 1) return words.join("");
   return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
+/** I, II, III: how the game numbers building tiers. */
+export function roman(n: number): string {
+  return ["0", "I", "II", "III", "IV", "V"][n] ?? `${n}`;
+}
+
+/** Seconds as a player would say them: 180 → "3 min", 45 → "45 s". */
+export function duration(s: number): string {
+  return s >= 60 && s % 60 === 0 ? `${num(s / 60)} min` : `${num(s)} s`;
+}
+
+/** The item list's groups, in order. Crystals are left to their own shelf. */
+export const ITEM_GROUPS: readonly { category: string; label: string; id: string }[] = [
+  { category: "weapon", label: "Weapons", id: "weapons" },
+  { category: "distance weapon", label: "Distance weapons", id: "distance-weapons" },
+  { category: "shield", label: "Shields", id: "shields" },
+  { category: "armor", label: "Armor", id: "armor" },
+  { category: "jewellery", label: "Jewellery", id: "jewellery" },
+  { category: "ammunition", label: "Ammunition", id: "ammunition" },
+  { category: "potion", label: "Potions", id: "potions" },
+  { category: "food", label: "Food", id: "food" },
+  { category: "container", label: "Containers", id: "containers" },
+  { category: "material", label: "Materials", id: "materials" },
+  { category: "coin", label: "Coins", id: "coins" },
+];
+
+/** The worn slots in the order a body is dressed, for sorting armor. */
+export const SLOT_ORDER: readonly string[] = ["head", "body", "legs", "boots"];
+
+const SLOT_KIND: Record<string, string> = {
+  head: "Helmet", body: "Body armor", legs: "Legs armor", boots: "Boots", ring: "Ring", amulet: "Amulet",
+};
+const CATEGORY_KIND: Record<string, string> = {
+  weapon: "Weapon", "distance weapon": "Distance weapon", shield: "Shield", ammunition: "Ammunition",
+  crystal: "Crystal", potion: "Potion", food: "Food", container: "Container", coin: "Coin", material: "Material",
+};
+
+/** What an item is, in a word or two: "Helmet", "Distance weapon", "Material". */
+export function itemKind(i: { category: string; slot?: string }): string {
+  return (i.slot && SLOT_KIND[i.slot]) || CATEGORY_KIND[i.category] || i.category;
+}
+
+/** The parts of an item the facts are read from, as the exporter writes them. */
+export interface ItemLike {
+  category: string;
+  slot?: string;
+  weight: number;
+  stack: number;
+  element?: string;
+  gear?: { atk?: number; def?: number; defBonus?: number; speed?: number; maxhp?: number; dist?: number };
+  bow?: { range: number; power: number };
+  ammo?: { dmg: number };
+  practice?: true;
+  deathProtect?: true;
+  pack?: { slots: number };
+  coin?: number;
+  heal?: number;
+  food?: number;
+}
+
+export interface Fact { label: string; value: string }
+
+/**
+ * An item's numbers as a player reads them, in a fixed order: what it does
+ * first, then weight and stack. A worn piece's guard is its armor; in the hand
+ * the same number is defense, the way the game itself splits them.
+ */
+export function itemFacts(i: ItemLike, elementLabel: (id: string) => string = (id) => id, tile = 32): Fact[] {
+  const out: Fact[] = [];
+  const g = i.gear ?? {};
+  const plus = (n: number): string => (n > 0 ? `+${num(n)}` : num(n));
+  const worn = i.category === "armor" || i.category === "jewellery";
+  if (g.atk !== undefined) out.push({ label: "Attack", value: num(g.atk) });
+  if (g.def !== undefined) out.push({ label: worn ? "Armor" : "Defense", value: num(g.def) });
+  if (g.defBonus !== undefined) out.push({ label: "Defense bonus", value: plus(g.defBonus) });
+  if (i.bow) {
+    out.push({ label: "Range", value: `${num(Math.round(i.bow.range / tile))} tiles` });
+    out.push({ label: "Power", value: plus(i.bow.power) });
+    out.push({ label: "Grip", value: "Two-handed" });
+  }
+  if (i.ammo) out.push({ label: "Damage", value: plus(i.ammo.dmg) });
+  if (i.element) out.push({ label: "Element", value: elementLabel(i.element) });
+  if (i.practice) out.push({ label: "Use", value: "Archery Range only" });
+  if (g.speed !== undefined) out.push({ label: "Speed", value: plus(g.speed) });
+  if (g.maxhp !== undefined) out.push({ label: "Hit points", value: plus(g.maxhp) });
+  if (g.dist !== undefined) out.push({ label: "Distance fighting", value: plus(g.dist) });
+  if (i.deathProtect) out.push({ label: "On death", value: "Keeps your items, then breaks" });
+  if (i.heal !== undefined) out.push({ label: "Heals", value: `${num(i.heal)} HP` });
+  if (i.food !== undefined) out.push({ label: "Regeneration", value: duration(i.food) });
+  if (i.pack) out.push({ label: "Slots", value: num(i.pack.slots) });
+  if (i.coin !== undefined) out.push({ label: "Worth", value: `${num(i.coin)} gold` });
+  out.push({ label: "Weight", value: `${num(i.weight)} oz` });
+  if (i.stack > 1) out.push({ label: "Stacks to", value: num(i.stack) });
+  return out;
+}
+
+/** The facts for a list row: what the item does, without weight and stack. */
+export function itemSummary(i: ItemLike, elementLabel?: (id: string) => string): string {
+  return itemFacts(i, elementLabel)
+    .filter((f) => f.label !== "Weight" && f.label !== "Stacks to")
+    .map((f) => `${f.label} ${f.value}`)
+    .join(", ");
 }
 
 /** A walk sheet as the exporter describes it: 4 rows (up, left, down, right). */

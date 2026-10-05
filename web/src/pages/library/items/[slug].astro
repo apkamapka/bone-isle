@@ -1,0 +1,181 @@
+---
+import Library from "../../../layouts/Library.astro";
+import { DATA, ITEM, PLACE, ELEMENT } from "../../../lib/game-data.ts";
+import {
+  slugOf, itemUrl, creatureUrl, hasItemPage, itemKind, itemFacts, rarityLabel, rarityRank, span, num, roman, listOf,
+} from "../../../lib/library.ts";
+
+export function getStaticPaths() {
+  return DATA.items
+    .filter((i) => hasItemPage(i.category))
+    .map((i) => ({ params: { slug: slugOf(i.key) }, props: { key: i.key } }));
+}
+
+const { key } = Astro.props;
+const item = ITEM.get(key)!;
+const elementLabel = (id: string): string => ELEMENT.get(id) ?? id;
+const facts = itemFacts(item, elementLabel);
+const kind = itemKind(item);
+
+const creature = new Map(DATA.monsters.map((m) => [m.kind as string, m]));
+const npcAt = (k: string): string => {
+  const n = DATA.npcs.find((x) => x.key === k);
+  const at = n ? PLACE.get(n.places[0]?.place ?? "")?.name : undefined;
+  return n ? (at ? `${n.name} in ${at}` : n.name) : k;
+};
+/** Another item, as a name and, when it has a page, a link. */
+const ref = (k: string) => {
+  const i = ITEM.get(k);
+  return { name: i?.name ?? k, href: i && hasItemPage(i.category) ? itemUrl(k) : null };
+};
+
+// By band, then by name. Only the word reaches the page; the chance stays here, in the
+// build, and so does its order inside a band.
+const drops = item.sources
+  .flatMap((s) => (s.type === "drop" ? [s] : []))
+  .map((s) => ({
+    kind: s.creature,
+    name: creature.get(s.creature)?.name ?? s.creature,
+    n: s.n,
+    rank: rarityRank(s.chance),
+    rarity: rarityLabel(s.chance),
+  }))
+  .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+const shops = item.sources.flatMap((s) => (s.type === "shop" ? [{ who: npcAt(s.npc), price: s.price }] : []));
+const others = item.sources.filter((s) => s.type !== "drop" && s.type !== "shop");
+const buyers = item.sellTo.map((s) => ({ who: npcAt(s.npc), price: s.price }));
+const set = item.set ? DATA.sets.find((x) => x.key === item.set) : undefined;
+
+const summary = facts.filter((f) => f.label !== "Weight" && f.label !== "Stacks to").slice(0, 2)
+  .map((f) => `${f.label.toLowerCase()} ${f.value}`);
+const how = drops.length > 0
+  ? `Dropped by ${listOf(drops.slice(0, 3).map((d) => d.name))}${drops.length > 3 ? " and more" : ""}.`
+  : shops.length > 0 ? `Sold by ${shops[0].who}.` : "";
+const description = `${item.name}, a ${kind.toLowerCase()} in Xebeka${summary.length ? `: ${summary.join(", ")}` : ""}. ${how}`.trim();
+---
+<Library title={`${item.name} · Xebeka items`} description={description}>
+  <article>
+    <header class="entry-head">
+      {item.icon && (
+        <div class="entry-head__stage entry-head__stage--item notch-lg">
+          <img class="px" src={`/play/${item.icon}`} width="128" height="128" alt={item.name} />
+        </div>
+      )}
+      <div class="entry-head__text">
+        <div>
+          <h1 class="lib__title">{item.name}</h1>
+          <p class="entry-head__kind">{kind}</p>
+        </div>
+        <dl class="entry-facts">
+          {facts.map((f) => <div><dt>{f.label}</dt><dd>{f.value}</dd></div>)}
+        </dl>
+      </div>
+    </header>
+
+    <div class="entry-body">
+      <section class="entry-part" aria-labelledby="get">
+        <h2 class="entry-part__title" id="get">How to get it</h2>
+
+        {drops.length > 0 && (
+          <>
+            <h3 class="entry-part__sub">Dropped by</h3>
+            <table class="entry-table">
+              <thead>
+                <tr><th scope="col">Creature</th><th scope="col">Amount</th><th scope="col">Rarity</th></tr>
+              </thead>
+              <tbody>
+                {drops.map((d) => (
+                  <tr>
+                    <td><a href={creatureUrl(d.kind)}>{d.name}</a></td>
+                    <td class="entry-num">{span(d.n)}</td>
+                    <td>{d.rarity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {shops.length > 0 && (
+          <>
+            <h3 class="entry-part__sub">Sold by</h3>
+            <ul class="entry-rows">
+              {shops.map((s) => <li><span>{s.who}</span><span class="entry-num">{num(s.price)} gold</span></li>)}
+            </ul>
+          </>
+        )}
+
+        {others.length > 0 && (
+          <>
+            <h3 class="entry-part__sub">{drops.length + shops.length > 0 ? "Other ways" : "Made or found"}</h3>
+            <ul class="entry-ways">
+              {others.map((s) => {
+                if (s.type === "chest") {
+                  return <li>In the one-time chest of {PLACE.get(s.place)?.name ?? s.place}{s.n > 1 ? `, ${num(s.n)} at once` : ""}.</li>;
+                }
+                if (s.type === "tower") {
+                  const cost = Object.entries(s.cost).map(([k, n]) => ({ ...ref(k), n: n ?? 0 }));
+                  const research = s.research ? Object.entries(s.research.cost).map(([k, n]) => ({ ...ref(k), n: n ?? 0 })) : [];
+                  return (
+                    <li>
+                      Bought at the Alchemy Tower, tier {roman(s.towerTier)}: {num(s.batch)} for {num(s.gold)} gold
+                      {cost.map((c, i) => <>{i === cost.length - 1 ? " and " : ", "}{num(c.n)} {c.href ? <a href={c.href}>{c.name}</a> : c.name}</>)}.
+                      {s.element && <> Only for a player attuned to {elementLabel(s.element)}.</>}
+                      {s.minLevel > 1 && <> From level {s.minLevel}.</>}
+                      {s.research && <> The tower researches it first, for {num(s.research.gold)} gold
+                        {research.map((c, i) => <>{i === research.length - 1 ? " and " : ", "}{num(c.n)} {c.href ? <a href={c.href}>{c.name}</a> : c.name}</>)}.</>}
+                    </li>
+                  );
+                }
+                if (s.type === "forge" && s.method === "smelt") {
+                  return <li>Smelted out of metal gear at the Forge, tier {roman(s.forgeTier)} and up, for {num(s.coal)} <a href={itemUrl("coal")}>coal</a> a piece.</li>;
+                }
+                if (s.type === "forge" && s.method === "gem") {
+                  const trophies = s.trophies.map((k) => ref(k));
+                  return (
+                    <li>
+                      Cut at the Forge, tier {roman(s.forgeTier)}, from {num(s.coal)} <a href={itemUrl("coal")}>coal</a> and
+                      one each of {num(s.kinds)} different trophies:{" "}
+                      {trophies.map((t, i) => <>{i > 0 && (i === trophies.length - 1 ? " or " : ", ")}{t.href ? <a href={t.href}>{t.name}</a> : t.name}</>)}.
+                    </li>
+                  );
+                }
+                if (s.type === "gather") return <li>{s.from === "tree" ? "Chopped from trees." : "Mined from rocks."}</li>;
+                if (s.type === "exchange") return <li>Changed for other coins by {npcAt(s.npc)}.</li>;
+                return null;
+              })}
+            </ul>
+          </>
+        )}
+      </section>
+
+      <div class="entry-side">
+        {item.category !== "coin" && (
+          <section class="entry-part" aria-labelledby="sell">
+            <h2 class="entry-part__title" id="sell">Where to sell</h2>
+            {buyers.length > 0 ? (
+              <ul class="entry-rows">
+                {buyers.map((b) => <li><span>{b.who}</span><span class="entry-num">{num(b.price)} gold</span></li>)}
+              </ul>
+            ) : <p class="entry-part__lead">No shop buys it.</p>}
+          </section>
+        )}
+
+        {set && (
+          <section class="entry-part" aria-labelledby="set">
+            <h2 class="entry-part__title" id="set">{set.name} set</h2>
+            <ul class="entry-rows">
+              {set.pieces.map((k) => {
+                const p = ITEM.get(k)!;
+                return <li><span>{k === key ? <strong>{p.name}</strong> : <a href={itemUrl(k)}>{p.name}</a>}</span><span>{itemKind(p)}</span></li>;
+              })}
+            </ul>
+            <p class="entry-part__lead entry-part__lead--after">
+              Worn whole: +{set.bonus} armor{set.speedBonus > 0 ? ` and +${set.speedBonus} speed` : ""}.
+            </p>
+          </section>
+        )}
+      </div>
+    </div>
+  </article>
+</Library>

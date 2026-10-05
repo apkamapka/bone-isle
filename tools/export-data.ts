@@ -42,7 +42,7 @@ import "../smoke/stub.ts";
 import { closeSync, existsSync, mkdirSync, openSync, readSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ITEMS, type ItemDef, type ItemKind } from "../src/items.ts";
+import { ITEMS, SET_BONUS, SET_SPEED_BONUS, type ItemDef, type ItemKind, type SetKey } from "../src/items.ts";
 import { MONSTER_DEFS, MONSTER_KINDS, mobName, monsterResist } from "../src/entities/monsters.ts";
 import { SHOPS } from "../src/entities/npcs.ts";
 import { NPC_DATA } from "../src/world/generate.ts";
@@ -205,6 +205,18 @@ export interface ExportWorld {
   chest: { item: ItemKind; n: number }[] | null;
 }
 
+/** A matched set: head, body, legs and boots worn together pay the bonus. */
+export interface ExportSet {
+  key: string;
+  name: string;
+  /** Armor for wearing it whole. */
+  bonus: number;
+  /** Speed for wearing it whole, where the set pays one. */
+  speedBonus: number;
+  /** Listed pieces only, head to boots. */
+  pieces: ItemKind[];
+}
+
 export interface GameData {
   elements: { id: Element; label: string }[];
   items: ExportItem[];
@@ -212,6 +224,7 @@ export interface GameData {
   npcs: ExportNpc[];
   worlds: ExportWorld[];
   tasks: ExportTask[];
+  sets: ExportSet[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -243,6 +256,9 @@ export const UNOBTAINABLE: ReadonlySet<ItemKind> = new Set<ItemKind>([
   // the attunement Marks
   "fireCrystal", "waterCrystal", "earthCrystal", "windCrystal", "lightningCrystal",
 ]);
+
+/** A set's name where it is not its key: the Hunter set keeps the Snakeskin's key (Etap 67). */
+const SET_NAME: Partial<Record<SetKey, string>> = { snakeskin: "Hunter" };
 
 /** What each townsperson is for, as main.ts opens their window. */
 const NPC_ROLE: Readonly<Record<NpcKey, NpcRole>> = {
@@ -530,6 +546,19 @@ export function collectGameData(): GameData {
     reward: { points: t.reward.points, gold: t.reward.gold, exp: t.reward.exp },
   })).filter((t) => t.creatures.length > 0);
 
+  // ---- sets: the ones with at least one listed piece, pieces head to boots
+  const slotOrder = ["head", "body", "legs", "boots"];
+  const sets: ExportSet[] = (Object.keys(SET_BONUS) as SetKey[]).map((key) => ({
+    key,
+    name: SET_NAME[key] ?? key.charAt(0).toUpperCase() + key.slice(1),
+    bonus: SET_BONUS[key],
+    speedBonus: SET_SPEED_BONUS[key] ?? 0,
+    pieces: items
+      .filter((i) => i.set === key)
+      .sort((a, b) => slotOrder.indexOf(a.slot ?? "") - slotOrder.indexOf(b.slot ?? ""))
+      .map((i) => i.key),
+  })).filter((s) => s.pieces.length > 0);
+
   return {
     elements: ELEMENTS.map((id) => ({ id, label: ELEMENT_LABEL[id] })),
     items,
@@ -537,6 +566,7 @@ export function collectGameData(): GameData {
     npcs,
     worlds,
     tasks,
+    sets,
   };
 }
 

@@ -2,7 +2,7 @@
 import Library from "../../../layouts/Library.astro";
 import Sprite from "../../../components/Sprite.astro";
 import { DATA, ITEM, PLACE, ELEMENT } from "../../../lib/game-data.ts";
-import { slugOf, creatureUrl, rarityLabel, span, num, taken, tilesPerSecond, listOf, fitScale } from "../../../lib/library.ts";
+import { slugOf, creatureUrl, itemUrl, hasItemPage, rarityLabel, rarityRank, span, num, taken, tilesPerSecond, listOf, fitScale } from "../../../lib/library.ts";
 
 export function getStaticPaths() {
   return DATA.monsters.map((m) => ({ params: { slug: slugOf(m.kind) }, props: { kind: m.kind } }));
@@ -12,10 +12,11 @@ const { kind } = Astro.props;
 const m = DATA.monsters.find((c) => c.kind === kind)!;
 const nameOf = (k: string): string => DATA.monsters.find((c) => c.kind === k)?.name ?? k;
 
-// Most often first. The words are all a visitor gets: the chances stay here, in the build.
-const loot = [...m.loot]
-  .sort((a, b) => b.chance - a.chance)
-  .map((l) => ({ item: ITEM.get(l.item)!, n: l.n, rarity: rarityLabel(l.chance) }));
+// By band, then by name. The words are all a visitor gets: the chances stay here, in the
+// build, and so does their order inside a band.
+const loot = m.loot
+  .map((l) => ({ item: ITEM.get(l.item)!, n: l.n, rank: rarityRank(l.chance), rarity: rarityLabel(l.chance) }))
+  .sort((a, b) => a.rank - b.rank || a.item.name.localeCompare(b.item.name));
 const homes = DATA.worlds
   .filter((w) => (w.monsters[kind] ?? 0) > 0)
   .map((w) => ({ name: w.name, posts: w.monsters[kind] }))
@@ -33,13 +34,13 @@ const description =
 ---
 <Library title={`${m.name} · Xebeka creatures`} description={description}>
   <article>
-    <header class="beast-head">
-      <div class="beast-head__stage notch-lg">
+    <header class="entry-head">
+      <div class="entry-head__stage notch-lg">
         {m.sprite && <Sprite sheet={m.sprite} scale={fitScale(m.sprite.frameW, 240)} walk label={`${m.name}, walking`} />}
       </div>
-      <div class="beast-head__text">
+      <div class="entry-head__text">
         <h1 class="lib__title">{m.name}</h1>
-        <dl class="beast-facts">
+        <dl class="entry-facts">
           <div><dt>Hit points</dt><dd>{num(m.hp)}</dd></div>
           <div><dt>Experience</dt><dd>{num(m.exp)}</dd></div>
           <div><dt>Armor</dt><dd>{m.armor}</dd></div>
@@ -49,12 +50,12 @@ const description =
       </div>
     </header>
 
-    <div class="beast-body">
-      <section class="beast-part" aria-labelledby="loot">
-        <h2 class="beast-part__title" id="loot">Loot</h2>
-        {m.gold[1] > 0 && <p class="beast-part__lead">Carries {span(m.gold)} gold.</p>}
+    <div class="entry-body">
+      <section class="entry-part" aria-labelledby="loot">
+        <h2 class="entry-part__title" id="loot">Loot</h2>
+        {m.gold[1] > 0 && <p class="entry-part__lead">Carries {span(m.gold)} <a href={itemUrl("goldCoin")}>gold</a>.</p>}
         {loot.length > 0 && (
-          <table class="beast-loot">
+          <table class="entry-table">
             <thead>
               <tr><th scope="col">Item</th><th scope="col">Amount</th><th scope="col">Rarity</th></tr>
             </thead>
@@ -62,14 +63,14 @@ const description =
               {loot.map((l) => (
                 <tr>
                   <td>
-                    <span class="beast-loot__item">
+                    <span class="entry-table__item">
                       {l.item.icon
                         ? <img class="px" src={`/play/${l.item.icon}`} width="32" height="32" alt="" loading="lazy" decoding="async" />
-                        : <span class="beast-loot__blank" aria-hidden="true"></span>}
-                      {l.item.name}
+                        : <span class="entry-table__blank" aria-hidden="true"></span>}
+                      {hasItemPage(l.item.category) ? <a href={itemUrl(l.item.key)}>{l.item.name}</a> : l.item.name}
                     </span>
                   </td>
-                  <td class="beast-num">{span(l.n)}</td>
+                  <td class="entry-num">{span(l.n)}</td>
                   <td>{l.rarity}</td>
                 </tr>
               ))}
@@ -78,35 +79,35 @@ const description =
         )}
       </section>
 
-      <div class="beast-side">
-        <section class="beast-part" aria-labelledby="where">
-          <h2 class="beast-part__title" id="where">Where it lives</h2>
-          <ul class="beast-rows">
-            {homes.map((h) => <li><span>{h.name}</span><span class="beast-num">{h.posts} {h.posts === 1 ? "spawn" : "spawns"}</span></li>)}
+      <div class="entry-side">
+        <section class="entry-part" aria-labelledby="where">
+          <h2 class="entry-part__title" id="where">Where it lives</h2>
+          <ul class="entry-rows">
+            {homes.map((h) => <li><span>{h.name}</span><span class="entry-num">{h.posts} {h.posts === 1 ? "spawn" : "spawns"}</span></li>)}
           </ul>
         </section>
 
-        <section class="beast-part" aria-labelledby="attacks">
-          <h2 class="beast-part__title" id="attacks">Attacks</h2>
-          <ul class="beast-rows">
-            <li><span>Melee</span><span class="beast-num">{span(m.dmg)}</span></li>
-            {m.ranged && <li><span>Ranged, up to {m.ranged.tiles} tiles</span><span class="beast-num">{span(m.ranged.dmg)}</span></li>}
+        <section class="entry-part" aria-labelledby="attacks">
+          <h2 class="entry-part__title" id="attacks">Attacks</h2>
+          <ul class="entry-rows">
+            <li><span>Melee</span><span class="entry-num">{span(m.dmg)}</span></li>
+            {m.ranged && <li><span>Ranged, up to {m.ranged.tiles} tiles</span><span class="entry-num">{span(m.ranged.dmg)}</span></li>}
             {m.spells.map((s) => (
               <li>
                 <span>{s.name}, {ELEMENT.get(s.element)}{s.field && ", burning ground"}</span>
-                <span class="beast-num">{span(s.dmg)}{s.field && " a second"}</span>
+                <span class="entry-num">{span(s.dmg)}{s.field && " a second"}</span>
               </li>
             ))}
           </ul>
         </section>
 
-        <section class="beast-part" aria-labelledby="taken">
-          <h2 class="beast-part__title" id="taken">Damage taken</h2>
-          {ordinary ? <p class="beast-part__lead">100% from every element.</p> : (
-          <ul class="beast-rows">
+        <section class="entry-part" aria-labelledby="taken">
+          <h2 class="entry-part__title" id="taken">Damage taken</h2>
+          {ordinary ? <p class="entry-part__lead">100% from every element.</p> : (
+          <ul class="entry-rows">
             {resist.map((r) => (
               <li class:list={{ "is-weak": r.mult > 1, "is-plain": r.mult === 1 }}>
-                <span>{r.label}</span><span class="beast-num">{taken(r.mult)}</span>
+                <span>{r.label}</span><span class="entry-num">{taken(r.mult)}</span>
               </li>
             ))}
           </ul>
@@ -114,10 +115,10 @@ const description =
         </section>
 
         {tasks.length > 0 && board && (
-          <section class="beast-part" aria-labelledby="task">
-            <h2 class="beast-part__title" id="task">Hunting task</h2>
+          <section class="entry-part" aria-labelledby="task">
+            <h2 class="entry-part__title" id="task">Hunting task</h2>
             {tasks.map((t) => (
-              <p class="beast-part__lead">
+              <p class="entry-part__lead">
                 <strong>{t.title}</strong>, on {board.name}'s board{boardAt ? ` in ${boardAt}` : ""}, from level {t.reqLevel}:
                 {" "}{num(t.need)} kills
                 {t.creatures.length > 1 && (

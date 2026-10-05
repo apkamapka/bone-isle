@@ -20806,7 +20806,7 @@ async function main(): Promise<void> {
       "no library page prints a chance: the creature page turns each one into its word before the markup");
     const loadsData = /from "[^"]*\/game-data\.ts"/;
     const dataUsers = walk("../web/src/").filter((f) => /\.(astro|ts)$/.test(f) && loadsData.test(read(f)));
-    ok(dataUsers.length === 3 && dataUsers.every((f) => f.endsWith(".astro") && read(f).search(loadsData) < read(f).indexOf("---", 3)),
+    ok(dataUsers.length >= 3 && dataUsers.every((f) => f.endsWith(".astro") && read(f).search(loadsData) < read(f).indexOf("---", 3)),
       "the tables are read in page frontmatter only, which runs at build time, never by a script a visitor downloads");
 
     // ---- numbers as the site writes them
@@ -20843,8 +20843,8 @@ async function main(): Promise<void> {
 
     // ---- the shelves and the menu
     ok(LB.SECTIONS.map((x) => x.label).join(",") === "Creatures,Items,NPCs,Crystals,Places"
-      && LB.SECTIONS.filter((x) => x.href).map((x) => x.href).join(",") === "/library/creatures/",
-      "the library's shelves are Creatures, Items, NPCs, Crystals and Places, and Creatures is the one open");
+      && LB.SECTIONS.find((x) => x.label === "Creatures")?.href === "/library/creatures/",
+      "the library's shelves are Creatures, Items, NPCs, Crystals and Places, and Creatures is open");
     const base = read("../web/src/layouts/Base.astro");
     ok(base.includes('  { label: "Library", href: "/library/" },') && base.includes('  { label: "News" },'),
       "the top bar's Library entry is live; News waits for the opening");
@@ -20852,6 +20852,71 @@ async function main(): Promise<void> {
       "…marking where the visitor is, and naming the case of nothing live yet");
     ok(css.includes(".topnav { order: 3; flex: 0 0 100%;") && css.includes("  .topnav [aria-disabled],\n  .topnav--none { display: none; }"),
       "on a phone the live entries take their own row under the bar, without the dimmed ones");
+  }
+
+  console.log("\nEtap 86 — the Items shelf: every item but the crystals, with its numbers, its sources and where to sell it:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const LB = await import("../web/src/lib/library.ts");
+    const EX = await import("../tools/export-data.ts");
+    const data = EX.collectGameData();
+    const template = (src: string): string => src.slice(src.indexOf("---", 3) + 3);
+    const listPage = read("../web/src/pages/library/items/index.astro");
+    const itemPage = read("../web/src/pages/library/items/[slug].astro");
+    const beastPage = read("../web/src/pages/library/creatures/[slug].astro");
+    const it = (k: string) => data.items.find((i) => i.key === k)!;
+    const facts = (k: string): string => LB.itemFacts(it(k), (id) => data.elements.find((e) => e.id === id)?.label ?? id)
+      .map((f) => `${f.label} ${f.value}`).join("; ");
+
+    // ---- the shelf and its addresses
+    ok(LB.SECTIONS.find((x) => x.label === "Items")?.href === "/library/items/", "the Items shelf is open");
+    ok(LB.itemUrl("orcishHelm") === "/library/items/orcish-helm/" && LB.hasItemPage("armor") && !LB.hasItemPage("crystal"),
+      "an item's page lives at /library/items/<name>/; the crystals wait for their own shelf");
+    ok(itemPage.includes(".filter((i) => hasItemPage(i.category))"), "every item but a crystal gets its page, and only those");
+    const cats = new Set(data.items.filter((i) => LB.hasItemPage(i.category)).map((i) => i.category as string));
+    const grouped = new Set(LB.ITEM_GROUPS.map((g) => g.category));
+    ok([...cats].every((c) => grouped.has(c)) && !grouped.has("crystal"), "the list has a group for every kind of item it shows, and none for crystals");
+
+    // ---- an item's numbers, as a player reads them
+    ok(facts("orcishHelm") === "Armor 2; Weight 45 oz", "a worn piece's guard reads as armor, with its weight");
+    ok(facts("bow").startsWith("Attack 1; Range 5 tiles; Power +4; Grip Two-handed"), "a bow gives its range in tiles, its power and its two hands");
+    ok(facts("fireEmberArrow").startsWith("Damage +10; Element Fire"), "an elemental arrow names its element");
+    ok(facts("hpPotion").startsWith("Heals 45 HP") && facts("meat").startsWith("Regeneration 3 min"), "a potion says what it heals, food how long it feeds");
+    ok(facts("backpack").startsWith("Slots 16") && facts("goldCoin").startsWith("Worth 1 gold") && facts("aolAmulet").includes("On death"),
+      "a container counts its slots, a coin its worth, the Amulet of Loss what it does when you die");
+    ok(!LB.itemSummary(it("orcishHelm")).includes("Weight") && LB.itemSummary(it("ironSword")).startsWith("Attack"), "a list row leaves weight to its own column");
+    ok(LB.roman(3) === "III" && LB.duration(180) === "3 min" && LB.duration(45) === "45 s", "tiers in Roman numerals, times as a player says them");
+
+    // ---- sources, and the chances that stay at home
+    ok([listPage, itemPage].every((f) => !/chance/.test(template(f))), "no item page prints a chance");
+    ok(LB.rarityRank(1) === 0 && LB.rarityRank(0.3) === 1 && LB.rarityRank(0.06) === 2 && LB.rarityRank(0.0049) === 5,
+      "a drop's band is a rank to sort by, Always first");
+    ok(itemPage.includes(".sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));")
+      && beastPage.includes(".sort((a, b) => a.rank - b.rank || a.item.name.localeCompare(b.item.name));"),
+      "drops are listed by band and then by name, so not even their order gives the exact chances away");
+    ok(["Dropped by", "Sold by", "Where to sell"].every((h) => itemPage.includes(`>${h}</h`)) && itemPage.includes("Alchemy Tower, tier")
+      && itemPage.includes("Smelted out of metal gear at the Forge") && itemPage.includes("one each of {num(s.kinds)} different trophies"),
+      "an item's page shows who drops it, who sells it, the tower, the forge, and who buys it back");
+    ok(beastPage.includes("hasItemPage(l.item.category) ? <a href={itemUrl(l.item.key)}>") && beastPage.includes('<a href={itemUrl("goldCoin")}>gold</a>'),
+      "a creature's loot now links to the items, and its gold to the coin");
+    const coal = data.items.find((i) => i.key === "coal");
+    ok(coal !== undefined && LB.hasItemPage(coal.category) && itemPage.includes('<a href={itemUrl("coal")}>coal</a>'), "the forge's coal links to a page that exists");
+
+    // ---- sets
+    ok(data.sets.length > 0 && data.sets.every((st) => st.pieces.length > 0 && st.pieces.every((k) => it(k)?.set === st.key && it(k)?.category === "armor")),
+      "every set lists its own pieces, all of them worn armor in the library");
+    ok(data.sets.every((st) => st.pieces.map((k) => it(k).slot).join(",") === LB.SLOT_ORDER.filter((sl) => st.pieces.some((k) => it(k).slot === sl)).join(",")),
+      "…head to boots");
+    ok(itemPage.includes("Worn whole: +{set.bonus} armor"), "an armor piece shows its set and what wearing it whole pays");
+
+    // ---- the list and the front page
+    ok(listPage.includes("a.value - b.value") && listPage.includes("SLOT_ORDER.indexOf(a.slot") && listPage.includes('<nav class="lib__jump"'),
+      "the list goes group by group, weakest first, armor head to boots, with links to jump between groups");
+    ok(itemPage.includes("title={`${item.name} · Xebeka items`}") && itemPage.includes("a ${kind.toLowerCase()} in Xebeka"),
+      "every item page has its own title and description for search");
+    ok(read("../web/src/pages/library/index.astro").includes("Items: `${DATA.items.filter((i) => hasItemPage(i.category)).length} items`,"),
+      "the library's front page counts the items on the open shelf");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
