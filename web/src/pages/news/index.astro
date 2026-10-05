@@ -1,0 +1,27 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import { byNewest, newsDate, newsIso } from "../../lib/news.ts";
+
+/* Every post, newest first: what the top bar's News opens (Oct 2026). The home page keeps the five newest. */
+const posts = byNewest(await getCollection("news"));
+---
+<Base title="News · Xebeka" description="News from Xebeka: what changed in the game and on the site, newest first.">
+  <div class="band" aria-hidden="true"></div>
+  <div class="lib">
+    <header class="lib__head">
+      <h1 class="lib__title">News</h1>
+    </header>
+    {posts.length > 0 ? (
+      <div class="news">
+        {posts.map((post) => (
+          <article class="news__item notch-lg">
+            <time class="news__date" datetime={newsIso(post.data.date)}>{newsDate(post.data.date)}</time>
+            <h2 class="news__title"><a href={`/news/${post.id}/`}>{post.data.title}</a></h2>
+            <p>{post.data.summary}</p>
+          </article>
+        ))}
+      </div>
+    ) : <p class="lib__intro">No news yet.</p>}
+  </div>
+</Base>

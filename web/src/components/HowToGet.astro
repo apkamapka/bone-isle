@@ -40,6 +40,7 @@ const others = item.sources.filter((s) => s.type !== "drop" && s.type !== "shop"
   <h2 class="entry-part__title" id="get">How to get it</h2>
 
   {!item.obtainable && <p class="entry-part__lead">Not in the world yet: nothing hands it out today.</p>}
+  {item.secretSource && <p class="entry-part__lead">Out in the world, somewhere the library leaves for you to find.</p>}
 
   {drops.length > 0 && (
     <>

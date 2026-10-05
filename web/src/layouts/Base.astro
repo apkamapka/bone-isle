@@ -19,14 +19,15 @@ const here = Astro.url.pathname;
 
 /*
  * The top bar shows the site's whole shape from day one. An entry without an
- * href is a page that opens later (news at the opening, 1.12; etap 4
- * community) and is drawn dimmed. The Library opened in etap 2.3. On phones
+ * href is a page that opens later (etap 4 community, support) and is drawn
+ * dimmed. The Library opened in etap 2.3, News with its first posts (Radek,
+ * Oct 2026, ahead of the 1.12 opening it was first planned for). On phones
  * the live entries get a row of their own under the bar and the dimmed ones
  * stay off it, since a menu of dimmed words is no use there; while nothing
  * is live the row is not drawn at all.
  */
 const NAV: { label: string; href?: string }[] = [
-  { label: "News" },
+  { label: "News", href: "/news/" },
   { label: "Library", href: "/library/" },
   { label: "Community" },
   { label: "Support" },

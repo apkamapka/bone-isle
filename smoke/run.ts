@@ -20615,13 +20615,13 @@ async function main(): Promise<void> {
     const page = read("../web/src/pages/news/[slug].astro");
     ok(page.includes('const posts = await getCollection("news");') && page.includes("params: { slug: post.id }"),
       "every post gets its page at /news/<file name>/");
-    ok(page.includes("posted={post.data.date}") && page.includes('<a href="/#news">More news</a>') && page.includes("<Doc"),
+    ok(page.includes("posted={post.data.date}") && page.includes('<a href="/news/">More news</a>') && page.includes("<Doc"),
       "…in the same long-page layout as the Terms, with its date and a way back to the list");
     ok(read("../web/src/layouts/Doc.astro").includes('{posted && <p class="doc__date"><time datetime={newsIso(posted)}>{newsDate(posted)}</time></p>}'),
       "the post's date sits under its headline");
 
     // ---- the menu opens in 1.12
-    ok(read("../web/src/layouts/Base.astro").includes('  { label: "News" },'), "the top bar's News entry stays dimmed until the opening (1.12)");
+    ok(read("../web/src/layouts/Base.astro").includes('  { label: "News", href: "/news/" },'), "the top bar's News entry is live, opened with the first posts");
   }
 
   console.log("\nEtap 83 — the library's tables: where everything comes from, and nothing of the missions:");
@@ -20650,7 +20650,8 @@ async function main(): Promise<void> {
     ok(!creatures.has("viking") && !data.tasks.some((t) => t.id === "t_vikings"),
       "…nor a creature that lives only on mission ground, nor the task that hunts it");
     ok(MI.MISSIONS.every((m) => m.relic === undefined || !listed.has(m.relic)), "…nor a relic");
-    ok(!listed.has("ring") && !listed.has("guardRing") && !listed.has("healthRing"), "…nor the rings only the echoes' hoards hold");
+    ok(["ring", "guardRing", "healthRing"].every((k) => data.items.some((i) => i.key === k && i.secretSource && i.sources.length === 0)),
+      "the rings only the echoes' hoards hold are listed, with where they wait kept back");
     ok(!npcs.has("timesage") && data.worlds.every((w) => w.npcs.every((n) => n.key !== "timesage")), "…nor Chronos, in the list or on a map");
     ok((data.worlds.find((w) => w.key === "cellar")?.exits ?? []).map((e) => e.to).sort().join(",") === "bandit,reach,town",
       "his cellar stays, as the way to the Gallows Coast and the Bone Reach, with none of its pads");
@@ -20660,8 +20661,9 @@ async function main(): Promise<void> {
     ok(leak === null, `nothing of the missions is named anywhere in the tables${leak ? " — " + leak[0] : ""}`);
 
     // ---- every item says where it comes from
-    ok(data.items.length > 100 && data.items.every((i) => (i.obtainable ? i.sources.length > 0 : i.sources.length === 0 && EX.UNOBTAINABLE.has(i.key))),
-      "every item in the library has a way to get it, or is gear the world is still waiting for, with none");
+    ok(data.items.length > 100 && data.items.every((i) => (!i.obtainable ? i.sources.length === 0 && EX.UNOBTAINABLE.has(i.key) && !i.secretSource
+      : i.secretSource ? i.sources.length === 0 : i.sources.length > 0)),
+      "every item in the library has a way to get it, a secret one, or is gear the world is still waiting for");
     const all = EX.itemSources();
     const sourceless = (Object.keys(items.ITEMS) as (keyof typeof items.ITEMS)[]).filter((k) => {
       const d = items.ITEMS[k];
@@ -20707,8 +20709,8 @@ async function main(): Promise<void> {
       "every townsperson in the library stands on a listed place");
     ok(data.npcs.every((n) => (n.role === "shop") === (n.shop !== null)), "a townsperson keeps a shop exactly when the library calls them a trader");
     ok(data.npcs.every((n) => n.sprite !== null), "…and each has a drawn sheet");
-    ok(!(data.npcs.find((n) => n.key === "elder")?.shop?.entries ?? []).some((e) => e.item === "ring"),
-      "a shop line with an unlisted item is left out: the elder's list no longer shows the ring he buys");
+    ok((data.npcs.find((n) => n.key === "elder")?.shop?.entries ?? []).some((e) => e.item === "ring" && e.sell > 0),
+      "a shop line shows whenever its item is listed: the elder buys the Power Ring, and his page says so");
     ok(data.tasks.length > 0 && data.tasks.every((t) => t.creatures.length > 0 && t.creatures.every((k) => creatures.has(k))),
       "Grizelda's tasks name only listed creatures");
 
@@ -20850,8 +20852,8 @@ async function main(): Promise<void> {
     ok(LB.SECTIONS.every((x) => x.href !== null) && !/Places|safe zone|\bmap\b/i.test(LB.SECTIONS.map((x) => x.label + " " + x.blurb).join(" ")),
       "every shelf is open, and none of them is a map: where a player is safe stays theirs to find out");
     const base = read("../web/src/layouts/Base.astro");
-    ok(base.includes('  { label: "Library", href: "/library/" },') && base.includes('  { label: "News" },'),
-      "the top bar's Library entry is live; News waits for the opening");
+    ok(base.includes('  { label: "Library", href: "/library/" },') && base.includes('  { label: "News", href: "/news/" },'),
+      "the top bar's Library entry is live, and News beside it");
     ok(base.includes('<nav class:list={["topnav", { "topnav--none": !anyLive }]} aria-label="Site">') && base.includes('aria-current={here === item.href ? "page"'),
       "…marking where the visitor is, and naming the case of nothing live yet");
     ok(css.includes(".topnav { order: 3; flex: 0 0 100%;") && css.includes("  .topnav [aria-disabled],\n  .topnav--none { display: none; }"),
@@ -21074,8 +21076,8 @@ async function main(): Promise<void> {
       "…so their sets show too, the Zephyr's speed and the Hunter's name with them");
     ok((data.npcs.find((n) => n.key === "smith")?.shop?.entries ?? []).some((e) => e.item === "goldenHelm" && e.sell > 0),
       "Chester's page lists the tier-7 pieces he already buys");
-    ok(!it("ring") && !it("guardRing") && !it("healthRing") && MISSIONS.every((m) => !m.relic || !it(m.relic)),
-      "what only the missions give stays out: the hoards' rings and the relics");
+    ok(it("ring")?.secretSource === true && MISSIONS.every((m) => !m.relic || !it(m.relic)),
+      "of what only the missions give, the rings show and the relics stay out");
     const how = read("../web/src/components/HowToGet.astro");
     const list = read("../web/src/pages/library/items/index.astro");
     const page = read("../web/src/pages/library/items/[slug].astro");
@@ -21086,6 +21088,37 @@ async function main(): Promise<void> {
       "the item list shows it dimmed, with the same words under its name");
     ok(page.includes('{kind}{!item.obtainable && ", not in the world yet"}') && page.includes('const how = !item.obtainable ? "Not in the world yet."'),
       "…and its own page says it under the name and in the description search engines read");
+  }
+
+  console.log("\nEtap 90 — the hoards' rings in the library with their source kept back, and News open in the top bar:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const EX = await import("../tools/export-data.ts");
+    const { MISSIONS } = await import("../src/systems/missions.ts");
+    const data = EX.collectGameData();
+    const it = (k: string) => data.items.find((i) => i.key === k);
+
+    // ---- the rings, and nothing that is the errand itself
+    const secret = data.items.filter((i) => i.secretSource).map((i) => i.key).sort().join(",");
+    ok(secret === "guardRing,healthRing,ring", `the items only a mission hands out are the three rings, listed with their source kept back — ${secret}`);
+    ok([...EX.RELICS].length === MISSIONS.filter((m) => m.relic).length && [...EX.RELICS].every((k) => !it(k)),
+      "the relics a boss gives for the Time Sage stay out of the library, every one");
+    const how = read("../web/src/components/HowToGet.astro");
+    ok(how.includes("{item.secretSource && <p class=\"entry-part__lead\">Out in the world, somewhere the library leaves for you to find.</p>}")
+      && read("../web/src/pages/library/items/[slug].astro").includes('item.secretSource ? "Where it comes from is yours to find."'),
+      "a ring's page says there is a way to get it, and leaves where for the player to find");
+    ok(!/hermitage|haugr|bower|labyrinth|gorak"|hoard|echo/i.test(JSON.stringify(data.items.filter((i) => i.secretSource))),
+      "…and nothing in its tables names the place");
+
+    // ---- News
+    const base = read("../web/src/layouts/Base.astro");
+    const list = read("../web/src/pages/news/index.astro");
+    ok(base.includes('  { label: "News", href: "/news/" },'), "News is a live entry in the top bar, on the phone row too");
+    ok(list.includes('byNewest(await getCollection("news"))') && !list.includes("HOME_NEWS") && list.includes('<article class="news__item notch-lg">'),
+      "/news/ lists every post, newest first, as the same cards the home page shows");
+    ok(list.includes('<h2 class="news__title">') && list.includes('<h1 class="lib__title">News</h1>'), "…under one News heading, each post's title a heading below it");
+    ok(list.includes(': <p class="lib__intro">No news yet.</p>}'), "…and says so plainly on a day there are none");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

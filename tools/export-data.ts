@@ -20,17 +20,20 @@
  * WHAT THE LIBRARY LEAVES OUT (etap 2.1, Radek's call)
  *
  * Every trace of the Time Sage's missions: their hunting grounds and echoes,
- * the bosses and whatever else lives only there, the relics, the hoards in
- * the echoes, the pads in the cellar, and Chronos himself. Players find those
- * by playing. The cut is made HERE, once, and not page by page, so no page can
- * leak what the JSON never carried. It follows from three rules:
+ * the bosses and whatever else lives only there, the relics brought back to
+ * him, the pads in the cellar, and Chronos himself. Players find those by
+ * playing. The cut is made HERE, once, and not page by page, so no page can
+ * leak what the JSON never carried. It follows from these rules:
  *
  *   a place is listed unless a mission owns it (`MISSIONS`, ground and echo);
  *   a creature is listed when it stands on a listed place;
  *   an item is listed when something listed hands it out, or when nothing
  *   hands it out yet at all (UNOBTAINABLE, below): a player should see the
- *   gear the world is still waiting for. Only what the missions alone give
- *   stays out.
+ *   gear the world is still waiting for;
+ *   an item only the missions hand out is listed too, with its source kept
+ *   back (`secretSource`): the rings in the echoes' hoards are worth knowing
+ *   about, where they wait is not. The relics alone stay out, being the
+ *   errands themselves (Radek's call, Oct 2026).
  *
  * Everything else is pruned to match: a shop line whose item is not listed,
  * an exit to a place that is not, a task whose creatures are not.
@@ -157,7 +160,12 @@ export interface ExportItem extends Omit<ItemDef, "testLevel" | "testSkill"> {
    * library shows it, says so, and lists no sources for it.
    */
   obtainable: boolean;
-  /** Every listed way to get it. Empty exactly when `obtainable` is false. */
+  /**
+   * True when something hands it out, but only on a mission: the page says
+   * there is a way and keeps where it is to itself. `sources` is empty then.
+   */
+  secretSource: boolean;
+  /** Every listed way to get it. Empty when `obtainable` is false or the source is a secret. */
   sources: ItemSource[];
   /** Listed shops that buy it, and what they pay. */
   sellTo: { npc: string; price: number }[];
@@ -295,6 +303,11 @@ export interface GameData {
 export function missionPlaces(): ReadonlySet<string> {
   return new Set<string>(MISSIONS.flatMap((m) => [m.ground, m.echo]));
 }
+
+/** What a boss gives straight into the pack, for the Time Sage: the errands themselves, never listed. */
+export const RELICS: ReadonlySet<ItemKind> = new Set<ItemKind>(
+  MISSIONS.flatMap((m) => (m.relic ? [m.relic] : [])),
+);
 
 /** Townsfolk who belong to the missions. Chronos hands them out and does nothing else. */
 export const MISSION_NPCS: ReadonlySet<NpcKey> = new Set<NpcKey>(["timesage"]);
@@ -570,9 +583,11 @@ export function collectGameData(): GameData {
   for (const key of Object.keys(ITEMS) as ItemKind[]) {
     const def = ITEMS[key];
     if (isTestItem(def)) continue;
-    const listed = sources.get(key)?.listed ?? [];
+    const entry = sources.get(key);
+    const listed = entry?.listed ?? [];
     const waiting = UNOBTAINABLE.has(key);
-    if (listed.length === 0 && !waiting) continue;
+    const secret = listed.length === 0 && (entry?.unlisted ?? 0) > 0 && !RELICS.has(key);
+    if (listed.length === 0 && !waiting && !secret) continue;
     const { testLevel: _l, testSkill: _s, ...rest } = def;
     const icon = iconFile(key);
     items.push({
@@ -582,6 +597,7 @@ export function collectGameData(): GameData {
       icon: existsSync(resolve(PUBLIC_DIR, icon)) ? icon : null,
       desc: descs.get(key) ?? null,
       obtainable: !waiting,
+      secretSource: secret,
       sources: listed,
       sellTo: [],
       crystalSpec: crystalSpecOf(key),
