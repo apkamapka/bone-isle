@@ -20872,7 +20872,7 @@ async function main(): Promise<void> {
     // ---- the shelf and its addresses
     ok(LB.SECTIONS.find((x) => x.label === "Items")?.href === "/library/items/", "the Items shelf is open");
     ok(LB.itemUrl("orcishHelm") === "/library/items/orcish-helm/" && LB.hasItemPage("armor") && !LB.hasItemPage("crystal"),
-      "an item's page lives at /library/items/<name>/; the crystals wait for their own shelf");
+      "an item's page lives at /library/items/<name>/; the crystals live on their own shelf");
     ok(itemPage.includes(".filter((i) => hasItemPage(i.category))"), "every item but a crystal gets its page, and only those");
     const cats = new Set(data.items.filter((i) => LB.hasItemPage(i.category)).map((i) => i.category as string));
     const grouped = new Set(LB.ITEM_GROUPS.map((g) => g.category));
@@ -20892,16 +20892,19 @@ async function main(): Promise<void> {
     ok([listPage, itemPage].every((f) => !/chance/.test(template(f))), "no item page prints a chance");
     ok(LB.rarityRank(1) === 0 && LB.rarityRank(0.3) === 1 && LB.rarityRank(0.06) === 2 && LB.rarityRank(0.0049) === 5,
       "a drop's band is a rank to sort by, Always first");
-    ok(itemPage.includes(".sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));")
+    const howToGet = read("../web/src/components/HowToGet.astro");
+    ok(howToGet.includes(".sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));")
       && beastPage.includes(".sort((a, b) => a.rank - b.rank || a.item.name.localeCompare(b.item.name));"),
       "drops are listed by band and then by name, so not even their order gives the exact chances away");
-    ok(["Dropped by", "Sold by", "Where to sell"].every((h) => itemPage.includes(`>${h}</h`)) && itemPage.includes("Alchemy Tower, tier")
-      && itemPage.includes("Smelted out of metal gear at the Forge") && itemPage.includes("one each of {num(s.kinds)} different trophies"),
+    ok(["Dropped by", "Sold by"].every((h) => howToGet.includes(`>${h}</h`)) && read("../web/src/components/WhereToSell.astro").includes(">Where to sell</h2>")
+      && itemPage.includes("<HowToGet item={item} />") && itemPage.includes("<WhereToSell item={item} />")
+      && howToGet.includes("Alchemy Tower, tier") && howToGet.includes("Smelted out of metal gear at the Forge")
+      && howToGet.includes("one each of {num(s.kinds)} different trophies"),
       "an item's page shows who drops it, who sells it, the tower, the forge, and who buys it back");
-    ok(beastPage.includes("hasItemPage(l.item.category) ? <a href={itemUrl(l.item.key)}>") && beastPage.includes('<a href={itemUrl("goldCoin")}>gold</a>'),
+    ok(beastPage.includes("<a href={itemHref(l.item)}>{l.item.name}</a>") && beastPage.includes('<a href={itemUrl("goldCoin")}>gold</a>'),
       "a creature's loot now links to the items, and its gold to the coin");
     const coal = data.items.find((i) => i.key === "coal");
-    ok(coal !== undefined && LB.hasItemPage(coal.category) && itemPage.includes('<a href={itemUrl("coal")}>coal</a>'), "the forge's coal links to a page that exists");
+    ok(coal !== undefined && LB.hasItemPage(coal.category) && howToGet.includes('<a href={itemUrl("coal")}>coal</a>'), "the forge's coal links to a page that exists");
 
     // ---- sets
     ok(data.sets.length > 0 && data.sets.every((st) => st.pieces.length > 0 && st.pieces.every((k) => it(k)?.set === st.key && it(k)?.category === "armor")),
@@ -20963,16 +20966,90 @@ async function main(): Promise<void> {
       "arrows come from the Forge's craft bench, as many and for as much wood as the recipe says");
     ok(items.RECIPES.every((r) => data.items.find((i) => i.key === r.out)?.sources.some((s) => s.type === "forge" && s.method === "craft")),
       "…and so does everything else the bench makes");
-    ok(itemPage.includes("Made at the Forge's craft bench:"), "an item's page says so");
+    ok(read("../web/src/components/HowToGet.astro").includes("Made at the Forge's craft bench:"), "an item's page says so");
 
     // ---- links between the shelves
-    ok(itemPage.includes("href: n ? npcUrl(n.key) : null") && itemPage.includes("{s.href ? <a href={s.href}>{s.name}</a> : s.name}{s.at && ` in ${s.at}`}"),
+    ok(read("../web/src/lib/game-data.ts").includes("href: n ? npcUrl(n.key) : null")
+      && read("../web/src/components/HowToGet.astro").includes("{s.href ? <a href={s.href}>{s.name}</a> : s.name}{s.at && ` in ${s.at}`}"),
       "an item's page links the townsfolk who sell and buy it");
     ok(beastPage.includes("on <a href={npcUrl(board.key)}>{board.name}</a>'s board"), "a creature's hunting task links to Grizelda");
     ok(listPage.includes('<ul class="roster">') && read("../web/src/pages/library/creatures/index.astro").includes('<ul class="roster">')
       && !read("../web/src/styles/global.css").includes(".bestiary"),
       "creatures and townsfolk share one roster of cards");
     ok(read("../web/src/pages/library/index.astro").includes("NPCs: `${DATA.npcs.length} people`,"), "the library's front page counts the townsfolk");
+  }
+
+  console.log("\nEtap 88 — the Crystals shelf: every crystal with its own page, the elements laid out form by tier:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const LB = await import("../web/src/lib/library.ts");
+    const EX = await import("../tools/export-data.ts");
+    const CR = await import("../src/systems/crystals.ts");
+    const EL = await import("../src/systems/elements.ts");
+    const CD = await import("../src/systems/cooldowns.ts");
+    const CF = await import("../src/config.ts");
+    const data = EX.collectGameData();
+    const template = (src: string): string => src.slice(src.indexOf("---", 3) + 3);
+    const listPage = read("../web/src/pages/library/crystals/index.astro");
+    const onePage = read("../web/src/pages/library/crystals/[slug].astro");
+    const crystals = data.items.filter((i) => i.category === "crystal");
+    const spec = (k: string) => data.items.find((i) => i.key === k)?.crystalSpec;
+
+    // ---- the shelf and its addresses
+    ok(LB.SECTIONS.find((x) => x.label === "Crystals")?.href === "/library/crystals/" && LB.crystalUrl("fireEmberShard") === "/library/crystals/fire-ember-shard/",
+      "the Crystals shelf is open, a crystal's page at /library/crystals/<name>/");
+    ok(LB.itemHref({ key: "healCrystal", category: "crystal" }) === "/library/crystals/heal-crystal/" && LB.itemHref({ key: "coal", category: "material" }) === "/library/items/coal/",
+      "a link to any item finds its shelf, so the Life Crystal in a creature's loot is a link now");
+    ok(onePage.includes('.filter((i) => i.category === "crystal")') && crystals.length > 0 && crystals.every((i) => i.crystalSpec !== null)
+      && data.items.every((i) => (i.crystalSpec !== null) === (i.category === "crystal")),
+      "every crystal gets a page, with a spec, and nothing else has one");
+    ok([listPage, onePage, read("../web/src/components/HowToGet.astro"), read("../web/src/components/WhereToSell.astro")].every((f) => !/chance/.test(template(f))),
+      "no crystal page, and no shared part, prints a chance");
+
+    // ---- what a crystal does, read from the crystal tables
+    const elemental = Object.keys(CR.CRYSTAL_SPECS);
+    ok(elemental.every((k) => spec(k)?.element === CR.CRYSTAL_SPECS[k].element && spec(k)?.tier === CR.CRYSTAL_SPECS[k].tier + 1),
+      "every elemental crystal carries its element and tier from CRYSTAL_SPECS");
+    const ember = spec("fireEmberShard");
+    const k1 = EL.TIER_MULT[0] * (1 + 1 / EL.CRYSTAL_LEVEL_SCALE);
+    ok(ember?.damage[0].level === 1 && ember.damage[0].dmg[0] === Math.round(CR.CRYSTAL_SPECS.fireEmberShard.base[0] * k1)
+      && ember.damage[0].dmg[1] === Math.round(CR.CRYSTAL_SPECS.fireEmberShard.base[1] * k1),
+      "its damage at a level is the game's own formula: base, times the tier, times the level's growth");
+    ok(EX.CRYSTAL_LEVELS.join(",") === "1,25,50,100" && crystals.filter((i) => i.crystalSpec!.element).every((i) => i.crystalSpec!.damage.length === 4),
+      "…quoted at levels 1, 25, 50 and 100");
+    ok(spec("fireEmberBurst")?.footprint === CR.BURST_TILES.length && spec("fireEmberNova")?.footprint === CR.NOVA_TILES.length
+      && spec("fireEmberWave")?.footprint === CR.WAVE_TILES.length && spec("fireEmberBurst")?.aimed === true,
+      "the tiles each shape covers are counted from its footprint, and only the Burst is aimed");
+    ok(spec("fireEmberShard")?.reachTiles === Math.round(CR.CRYSTAL_SPECS.fireEmberShard.range / TILE) && spec("fireEmberNova")?.reachTiles === null,
+      "reach is in tiles, and the shapes anchored on the caster have none");
+    ok(elemental.every((k) => spec(k)?.cooldownS === CD.ownCooldown(k as keyof typeof items.ITEMS) && spec(k)?.sharedS === CD.groupCooldown(k as keyof typeof items.ITEMS)),
+      "its cooldown and the wait it puts on the other attack crystals are the cooldown table's");
+    ok(spec("fireEmberRune")?.form === "knell" && spec("fireEmberRune")?.cooldownS === spec("fireEmberShard")?.cooldownS,
+      "a Knell is called a Knell, and cools on the Shard's clock");
+
+    // ---- the utility shelf
+    ok(spec("healCrystal")?.heal[0].hp === CF.HEAL_CRYSTAL_BASE + CF.HEAL_CRYSTAL_PER_LEVEL && spec("healRune")?.heal[1].hp === CF.HEAL_RUNE_BASE + 25 * CF.HEAL_RUNE_PER_LEVEL,
+      "the two life crystals heal what config says, level by level");
+    ok(read("../src/systems/crystals.ts").includes("const amount = HEAL_CRYSTAL_BASE + p.level * HEAL_CRYSTAL_PER_LEVEL;"),
+      "…because the Life Crystal reads its growth from a named constant now, not a bare 3");
+    ok(spec("hasteRune")?.durationS === CF.HASTE_RUNE_S && spec("mireRune")?.reachTiles === CF.MIRE_RUNE_TILES && spec("aegisRune")?.lockS === CF.AEGIS_LOCK_S
+      && spec("furyRune")?.afterS === CF.FURY_DEBT_S && spec("furyRune")?.lockS === CF.FURY_LOCK_S,
+      "haste, slowdown, protection and fury carry their durations and lockouts from config");
+    ok(spec("recallCrystal")?.cooldownS === null && LB.crystalFacts(spec("recallCrystal")!).some((f) => f.value === "Anywhere but Home Isle"),
+      "Recall waits on no clock, and its page says where it works");
+    const fury = LB.crystalFacts(spec("furyRune")!).map((f) => `${f.label} ${f.value}`).join("; ");
+    ok(fury === "Lasts 20 s; Then burns 5 min; Cooldown 4 s; Once every 30 min", `a utility crystal's facts read like the tower's own words — ${fury}`);
+
+    // ---- the pages
+    ok(listPage.includes('<a href="#utility">Utility</a>') && listPage.includes("Every element comes in the same five forms")
+      && listPage.includes('class="entry-table crystal-grid"'),
+      "the shelf lists the utility crystals, explains the five forms, and lays out each element form by tier");
+    ok(onePage.includes("<HowToGet item={item} />") && onePage.includes("<WhereToSell item={item} />") && [">Damage</h2>", ">Healing</h2>"].every((h) => onePage.includes(h)),
+      "a crystal's page shows its damage or its healing, and shares how-to-get and where-to-sell with the items");
+    ok(onePage.includes("title={`${item.name} · Xebeka crystals`}"), "…under a title of its own");
+    ok(read("../web/src/pages/library/index.astro").includes('Crystals: `${DATA.items.filter((i) => i.category === "crystal").length} crystals`,'),
+      "the library's front page counts the crystals");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

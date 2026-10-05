@@ -16,7 +16,7 @@ import { dist } from "../util.ts";
 import { TILE } from "../config.ts";
 import { bagCount, removeItem } from "../items.ts";
 import {
-  HEAL_CRYSTAL_BASE, MONSTER_AGGRO_HIT_S,
+  HEAL_CRYSTAL_BASE, HEAL_CRYSTAL_PER_LEVEL, MONSTER_AGGRO_HIT_S,
   HEAL_RUNE_BASE, HEAL_RUNE_PER_LEVEL, HASTE_RUNE_S, AEGIS_RUNE_S,
   MIRE_RUNE_S, MIRE_RUNE_TILES, FURY_RUNE_S, FURY_DEBT_S, FURY_DEBT_FRAC,
   FURY_DEBT_TICK_S,
@@ -452,7 +452,7 @@ export function useCrystal(
     }
     removeItem(p.bag, kind, 1);
     startCooldown(kind);
-    const amount = HEAL_CRYSTAL_BASE + p.level * 3;
+    const amount = HEAL_CRYSTAL_BASE + p.level * HEAL_CRYSTAL_PER_LEVEL;
     p.hp = Math.min(p.maxhp, p.hp + amount);
     // The same green flare the Grand Life Crystal throws, at two thirds the
     // size. Two heals that do the same thing to the same bar should not be two

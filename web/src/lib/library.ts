@@ -14,11 +14,16 @@ export function slugOf(key: string): string {
 export const creatureUrl = (kind: string): string => `/library/creatures/${slugOf(kind)}/`;
 export const itemUrl = (key: string): string => `/library/items/${slugOf(key)}/`;
 export const npcUrl = (key: string): string => `/library/npcs/${slugOf(key)}/`;
+export const crystalUrl = (key: string): string => `/library/crystals/${slugOf(key)}/`;
+
+/** Any item's page: the Crystals shelf for a crystal, the Items shelf for everything else. */
+export const itemHref = (i: { key: string; category: string }): string =>
+  i.category === "crystal" ? crystalUrl(i.key) : itemUrl(i.key);
 
 /**
- * Whether an item has a page of its own yet. Crystals get theirs with the
- * Crystals shelf (etap 2.6), which needs the crystal rules the item tables do
- * not carry; until then a crystal is named without a link.
+ * Whether an item belongs on the Items shelf. Crystals have a shelf of their
+ * own (etap 2.6), with the crystal rules the item tables do not carry; link
+ * to any item through `itemHref`, which knows which shelf it is on.
  */
 export const hasItemPage = (category: string): boolean => category !== "crystal";
 
@@ -31,7 +36,7 @@ export const SECTIONS: readonly { label: string; href: string | null; blurb: str
   { label: "Creatures", href: "/library/creatures/", blurb: "What you will fight, what it carries and where it lives." },
   { label: "Items", href: "/library/items/", blurb: "Weapons, armor, trophies and supplies, and how to get each one." },
   { label: "NPCs", href: "/library/npcs/", blurb: "The people of Bonetown, and what they sell and buy." },
-  { label: "Crystals", href: null, blurb: "The Alchemy Tower's shelf, element by element." },
+  { label: "Crystals", href: "/library/crystals/", blurb: "The Alchemy Tower's shelf, element by element." },
   { label: "Places", href: null, blurb: "Maps of the islands and of the deeps below them." },
 ];
 
@@ -193,6 +198,46 @@ export function itemSummary(i: ItemLike, elementLabel?: (id: string) => string):
     .filter((f) => f.label !== "Weight" && f.label !== "Stacks to")
     .map((f) => `${f.label} ${f.value}`)
     .join(", ");
+}
+
+/** The elemental forms, in the order the tower shelves them, with how each one picks what it hits. */
+export const CRYSTAL_FORMS: readonly { form: string; label: string; target: string }[] = [
+  { form: "shard", label: "Shard", target: "One creature" },
+  { form: "burst", label: "Burst", target: "A square you pick" },
+  { form: "nova", label: "Nova", target: "All around you" },
+  { form: "wave", label: "Wave", target: "Ahead of you" },
+  { form: "knell", label: "Knell", target: "One creature" },
+];
+
+/** What a crystal spec is made of, as the exporter writes it. */
+export interface CrystalLike {
+  form: string;
+  element: string | null;
+  tier: number | null;
+  reachTiles: number | null;
+  footprint: number | null;
+  cooldownS: number | null;
+  durationS: number | null;
+  lockS: number | null;
+  afterS: number | null;
+}
+
+/** A crystal's numbers for its page's header: what it is, what it reaches, how long it waits. */
+export function crystalFacts(c: CrystalLike, elementLabel: (id: string) => string = (id) => id): Fact[] {
+  const out: Fact[] = [];
+  const form = CRYSTAL_FORMS.find((f) => f.form === c.form);
+  if (c.element) out.push({ label: "Element", value: elementLabel(c.element) });
+  if (c.tier !== null) out.push({ label: "Tier", value: roman(c.tier) });
+  if (form) out.push({ label: "Hits", value: form.target });
+  // main.ts's doRecall: a journey home, refused only where you already are.
+  if (c.form === "recall") out.push({ label: "Works", value: "Anywhere but Home Isle" });
+  if (c.reachTiles !== null) out.push({ label: c.form === "slowdown" ? "Radius" : "Reach", value: `${num(c.reachTiles)} tiles` });
+  if (c.footprint !== null && c.footprint > 1) out.push({ label: "Tiles hit", value: num(c.footprint) });
+  if (c.durationS !== null) out.push({ label: "Lasts", value: duration(c.durationS) });
+  if (c.afterS !== null) out.push({ label: "Then burns", value: duration(c.afterS) });
+  if (c.cooldownS !== null) out.push({ label: "Cooldown", value: duration(c.cooldownS) });
+  if (c.lockS !== null) out.push({ label: "Once every", value: duration(c.lockS) });
+  return out;
 }
 
 /** A walk sheet as the exporter describes it: 4 rows (up, left, down, right). */

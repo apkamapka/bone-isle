@@ -2,7 +2,7 @@
 import Library from "../../../layouts/Library.astro";
 import Sprite from "../../../components/Sprite.astro";
 import { DATA, ITEM, PLACE, ELEMENT } from "../../../lib/game-data.ts";
-import { slugOf, creatureUrl, itemUrl, npcUrl, hasItemPage, rarityLabel, rarityRank, span, num, taken, tilesPerSecond, listOf, fitScale } from "../../../lib/library.ts";
+import { slugOf, creatureUrl, itemUrl, itemHref, npcUrl, rarityLabel, rarityRank, span, num, taken, tilesPerSecond, listOf, fitScale } from "../../../lib/library.ts";
 
 export function getStaticPaths() {
   return DATA.monsters.map((m) => ({ params: { slug: slugOf(m.kind) }, props: { kind: m.kind } }));
@@ -67,7 +67,7 @@ const description =
                       {l.item.icon
                         ? <img class="px" src={`/play/${l.item.icon}`} width="32" height="32" alt="" loading="lazy" decoding="async" />
                         : <span class="entry-table__blank" aria-hidden="true"></span>}
-                      {hasItemPage(l.item.category) ? <a href={itemUrl(l.item.key)}>{l.item.name}</a> : l.item.name}
+                      <a href={itemHref(l.item)}>{l.item.name}</a>
                     </span>
                   </td>
                   <td class="entry-num">{span(l.n)}</td>

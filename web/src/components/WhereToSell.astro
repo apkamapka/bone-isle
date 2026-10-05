@@ -1,0 +1,25 @@
+---
+import { townsperson } from "../lib/game-data.ts";
+import { num } from "../lib/library.ts";
+import type { ExportItem } from "../../../tools/export-data.ts";
+
+/** The shops that buy an item back, and what each one pays. */
+interface Props {
+  item: ExportItem;
+}
+const { item } = Astro.props;
+const buyers = item.sellTo.map((s) => ({ ...townsperson(s.npc), price: s.price }));
+---
+<section class="entry-part" aria-labelledby="sell">
+  <h2 class="entry-part__title" id="sell">Where to sell</h2>
+  {buyers.length > 0 ? (
+    <ul class="entry-rows">
+      {buyers.map((b) => (
+        <li>
+          <span>{b.href ? <a href={b.href}>{b.name}</a> : b.name}{b.at && ` in ${b.at}`}</span>
+          <span class="entry-num">{num(b.price)} gold</span>
+        </li>
+      ))}
+    </ul>
+  ) : <p class="entry-part__lead">No shop buys it.</p>}
+</section>

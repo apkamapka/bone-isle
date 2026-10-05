@@ -1,0 +1,130 @@
+---
+import Library from "../../../layouts/Library.astro";
+import { DATA, elementLabel } from "../../../lib/game-data.ts";
+import { crystalUrl, CRYSTAL_FORMS, roman, num, duration } from "../../../lib/library.ts";
+
+type Item = (typeof DATA.items)[number];
+const towerOf = (i: Item) => i.sources.find((s) => s.type === "tower");
+const fromLevel = (i: Item): number => {
+  const t = towerOf(i);
+  return t?.type === "tower" ? t.minLevel : 1;
+};
+
+const crystals = DATA.items.filter((i) => i.category === "crystal" && i.crystalSpec);
+// The utility shelf in the order a character can buy it, then by name.
+const utility = crystals
+  .filter((i) => i.crystalSpec!.element === null)
+  .sort((a, b) => fromLevel(a) - fromLevel(b) || a.name.localeCompare(b.name));
+const elemental = crystals.filter((i) => i.crystalSpec!.element !== null);
+const find = (el: string, form: string, tier: number) =>
+  elemental.find((i) => i.crystalSpec!.element === el && i.crystalSpec!.form === form && i.crystalSpec!.tier === tier);
+
+// The forms read the same in every element, so the first element speaks for them all.
+const first = DATA.elements[0].id;
+const forms = CRYSTAL_FORMS.map((f) => {
+  const tiers = [1, 2, 3].map((t) => find(first, f.form, t)?.crystalSpec ?? null);
+  const reach = tiers.map((c) => c?.reachTiles);
+  return {
+    ...f,
+    reach: reach.every((r) => r === null || r === undefined) ? "From where you stand" : `${reach.map((r) => num(r ?? 0)).join(", ")} tiles`,
+    tiles: num(tiers[0]?.footprint ?? 1),
+    cooldown: tiers.map((c) => (c?.cooldownS !== null && c?.cooldownS !== undefined ? num(c.cooldownS) : "")).join(", ") + " s",
+  };
+});
+const elements = DATA.elements.map((e) => ({
+  id: e.id,
+  label: e.label,
+  rows: CRYSTAL_FORMS.map((f) => ({ label: f.label, tiers: [1, 2, 3].map((t) => find(e.id, f.form, t)) })),
+}));
+---
+<Library
+  title="Crystals · Xebeka"
+  description={`All ${crystals.length} crystals in Xebeka: the utility crystals and the five elements' shards, bursts, novas, waves and knells, with their damage, reach and cooldowns.`}
+>
+  <header class="lib__head">
+    <h1 class="lib__title">Crystals</h1>
+    <p class="lib__intro">
+      Magic you carry. Every charge is one cast, and the Alchemy Tower on your island sells them by the
+      batch. The elemental shelf opens element by element, for a player attuned to it.
+    </p>
+  </header>
+  <nav class="lib__jump" aria-label="Crystal groups">
+    <a href="#utility">Utility</a>
+    <a href="#forms">The five forms</a>
+    {elements.map((e) => <a href={`#${e.id}`}>{e.label}</a>)}
+  </nav>
+
+  <section class="item-group" aria-labelledby="utility">
+    <h2 class="entry-part__title" id="utility">Utility crystals</h2>
+    <table class="entry-table">
+      <thead>
+        <tr><th scope="col">Crystal</th><th scope="col">What it does</th><th scope="col">From level</th></tr>
+      </thead>
+      <tbody>
+        {utility.map((i) => (
+          <tr>
+            <td>
+              <a class="entry-table__item" href={crystalUrl(i.key)}>
+                {i.icon && <img class="px" src={`/play/${i.icon}`} width="32" height="32" alt="" loading="lazy" decoding="async" />}
+                {i.name}
+              </a>
+            </td>
+            <td class="item-group__stats">{i.desc}</td>
+            <td class="entry-num">{fromLevel(i)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="item-group" aria-labelledby="forms">
+    <h2 class="entry-part__title" id="forms">The five forms</h2>
+    <p class="entry-part__lead">Every element comes in the same five forms, at tiers I, II and III. A higher tier hits harder and reaches further, and cools a little longer.</p>
+    <div class="entry-scroll">
+      <table class="entry-table">
+        <thead>
+          <tr><th scope="col">Form</th><th scope="col">Hits</th><th scope="col">Reach</th><th scope="col">Tiles hit</th><th scope="col">Cooldown</th></tr>
+        </thead>
+        <tbody>
+          {forms.map((f) => (
+            <tr>
+              <td><strong>{f.label}</strong></td>
+              <td>{f.target}</td>
+              <td>{f.reach}</td>
+              <td class="entry-num">{f.tiles}</td>
+              <td class="entry-num">{f.cooldown}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {elements.map((e) => (
+    <section class="item-group" aria-labelledby={e.id}>
+      <h2 class="entry-part__title" id={e.id}>{e.label}</h2>
+      <table class="entry-table crystal-grid">
+        <thead>
+          <tr><th scope="col">Form</th>{[1, 2, 3].map((t) => <th scope="col">Tier {roman(t)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {e.rows.map((r) => (
+            <tr>
+              <th scope="row">{r.label}</th>
+              {r.tiers.map((i) => (
+                <td>
+                  {i && (
+                    <a class="crystal-grid__cell" href={crystalUrl(i.key)}>
+                      {i.icon && <img class="px" src={`/play/${i.icon}`} width="32" height="32" alt="" loading="lazy" decoding="async" />}
+                      <span>{i.name}</span>
+                    </a>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  ))}
+</Library>

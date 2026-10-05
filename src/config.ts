@@ -294,7 +294,9 @@ export const ROCK_REGROW_S = 120;
 
 
 /** Crystals (charge-based, replace spells). Values are per single charge. */
-export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level*3
+export const HEAL_CRYSTAL_BASE = 30;    // HP healed = base + level * HEAL_CRYSTAL_PER_LEVEL
+/** The Life Crystal's growth with level, named so the website can quote it (etap 2.6). */
+export const HEAL_CRYSTAL_PER_LEVEL = 3;
 /**
  * ONE cooldown across every crystal — the elemental line and the Life Crystal
  * alike. Etap 30 merged what used to be an offence-only timer.

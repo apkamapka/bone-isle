@@ -18,7 +18,7 @@ const count = groups.reduce((n, g) => n + g.items.length, 0);
 >
   <header class="lib__head">
     <h1 class="lib__title">Items</h1>
-    <p class="lib__intro">Everything a player can carry, group by group, weakest first. Crystals have a shelf of their own.</p>
+    <p class="lib__intro">Everything a player can carry, group by group, weakest first. Crystals have <a href="/library/crystals/">a shelf of their own</a>.</p>
   </header>
   <nav class="lib__jump" aria-label="Item groups">
     {groups.map((g) => <a href={`#${g.id}`}>{g.label}</a>)}

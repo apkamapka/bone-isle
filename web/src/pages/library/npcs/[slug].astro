@@ -2,7 +2,7 @@
 import Library from "../../../layouts/Library.astro";
 import Sprite from "../../../components/Sprite.astro";
 import { DATA, ITEM, PLACE } from "../../../lib/game-data.ts";
-import { slugOf, itemUrl, creatureUrl, hasItemPage, num, listOf, fitScale } from "../../../lib/library.ts";
+import { slugOf, itemUrl, itemHref, creatureUrl, num, listOf, fitScale } from "../../../lib/library.ts";
 
 export function getStaticPaths() {
   return DATA.npcs.map((n) => ({ params: { slug: slugOf(n.key) }, props: { key: n.key } }));
@@ -15,7 +15,7 @@ const where = listOf([...new Set(n.places.map((p) => PLACE.get(p.place)?.name ??
 /** An item as a shop line shows it: icon, name, and a link when it has a page. */
 const line = (k: string) => {
   const i = ITEM.get(k)!;
-  return { key: k, name: i.name, icon: i.icon, href: hasItemPage(i.category) ? itemUrl(k) : null };
+  return { key: k, name: i.name, icon: i.icon, href: itemHref(i) };
 };
 const sells = (n.shop?.entries ?? []).filter((e) => e.buy > 0).map((e) => ({ ...line(e.item), price: e.buy }));
 const buys = (n.shop?.entries ?? []).filter((e) => e.sell > 0).map((e) => ({ ...line(e.item), price: e.sell }));

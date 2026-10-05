@@ -1,0 +1,122 @@
+---
+import Library from "../../../layouts/Library.astro";
+import HowToGet from "../../../components/HowToGet.astro";
+import WhereToSell from "../../../components/WhereToSell.astro";
+import { DATA, ITEM, elementLabel } from "../../../lib/game-data.ts";
+import { slugOf, crystalUrl, crystalFacts, CRYSTAL_FORMS, roman, span, num, duration } from "../../../lib/library.ts";
+
+export function getStaticPaths() {
+  return DATA.items
+    .filter((i) => i.category === "crystal")
+    .map((i) => ({ params: { slug: slugOf(i.key) }, props: { key: i.key } }));
+}
+
+const { key } = Astro.props;
+const item = ITEM.get(key)!;
+const c = item.crystalSpec!;
+const facts = crystalFacts(c, elementLabel);
+const form = CRYSTAL_FORMS.find((f) => f.form === c.form);
+const element = c.element ? elementLabel(c.element) : null;
+const kind = element && c.tier !== null ? `${element} ${form?.label ?? ""}, tier ${roman(c.tier)}` : "Utility crystal";
+
+// Its relatives on the shelf: the same form at the other tiers, the other forms at its tier.
+const elemental = DATA.items.filter((i) => i.category === "crystal" && i.crystalSpec?.element === c.element && c.element !== null);
+const tiers = [1, 2, 3].map((t) => elemental.find((i) => i.crystalSpec!.form === c.form && i.crystalSpec!.tier === t)).filter((i) => i !== undefined);
+const siblings = CRYSTAL_FORMS.map((f) => elemental.find((i) => i.crystalSpec!.form === f.form && i.crystalSpec!.tier === c.tier)).filter((i) => i !== undefined);
+
+const lead = c.damage[0]
+  ? ` ${form?.target ?? ""}, ${span(c.damage[0].dmg)} damage at level 1${c.reachTiles !== null ? `, up to ${num(c.reachTiles)} tiles away` : ""}.`
+  : c.heal[0] ? ` Heals ${num(c.heal[0].hp)} HP at level 1, more as you grow.` : item.desc ? ` ${item.desc}` : "";
+const description = `${item.name}, ${element ? `a tier ${roman(c.tier ?? 1)} ${element} crystal` : "a utility crystal"} in Xebeka.${lead} Bought at the Alchemy Tower.`;
+---
+<Library title={`${item.name} · Xebeka crystals`} description={description}>
+  <article>
+    <header class="entry-head">
+      {item.icon && (
+        <div class="entry-head__stage entry-head__stage--item notch-lg">
+          <img class="px" src={`/play/${item.icon}`} width="128" height="128" alt={item.name} />
+        </div>
+      )}
+      <div class="entry-head__text">
+        <div>
+          <h1 class="lib__title">{item.name}</h1>
+          <p class="entry-head__kind">{kind}</p>
+        </div>
+        {item.desc && <p class="entry-head__quote">{item.desc}</p>}
+        <dl class="entry-facts">
+          {facts.map((f) => <div><dt>{f.label}</dt><dd>{f.value}</dd></div>)}
+        </dl>
+      </div>
+    </header>
+
+    <div class="entry-body">
+      <div class="entry-main">
+        {c.damage.length > 0 && (
+          <section class="entry-part" aria-labelledby="damage">
+            <h2 class="entry-part__title" id="damage">Damage</h2>
+            <p class="entry-part__lead">
+              To each creature it catches, before that creature's resistance. It grows with your level.
+              {c.footprint !== null && c.footprint > 1 && <> Every creature on its {num(c.footprint)} tiles takes a full roll.</>}
+            </p>
+            <table class="entry-table">
+              <thead><tr><th scope="col">Your level</th><th scope="col">Damage</th></tr></thead>
+              <tbody>
+                {c.damage.map((d) => <tr><td class="entry-num">{d.level}</td><td class="entry-num">{span(d.dmg)}</td></tr>)}
+              </tbody>
+            </table>
+            {c.sharedS > 0 && (
+              <p class="entry-part__lead entry-part__lead--after">After it, every other attack crystal waits {duration(c.sharedS)}.</p>
+            )}
+          </section>
+        )}
+
+        {c.heal.length > 0 && (
+          <section class="entry-part" aria-labelledby="healing">
+            <h2 class="entry-part__title" id="healing">Healing</h2>
+            <p class="entry-part__lead">It heals more as you grow.</p>
+            <table class="entry-table">
+              <thead><tr><th scope="col">Your level</th><th scope="col">Heals</th></tr></thead>
+              <tbody>
+                {c.heal.map((h) => <tr><td class="entry-num">{h.level}</td><td class="entry-num">{num(h.hp)} HP</td></tr>)}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        <HowToGet item={item} />
+      </div>
+
+      <div class="entry-side">
+        {element && tiers.length > 1 && (
+          <section class="entry-part" aria-labelledby="tiers">
+            <h2 class="entry-part__title" id="tiers">{element} {form?.label}s</h2>
+            <ul class="entry-rows">
+              {tiers.map((i) => (
+                <li>
+                  <span>{i.key === key ? <strong>{i.name}</strong> : <a href={crystalUrl(i.key)}>{i.name}</a>}</span>
+                  <span>Tier {roman(i.crystalSpec!.tier ?? 1)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {element && siblings.length > 1 && (
+          <section class="entry-part" aria-labelledby="forms">
+            <h2 class="entry-part__title" id="forms">{element}, tier {roman(c.tier ?? 1)}</h2>
+            <ul class="entry-rows">
+              {siblings.map((i) => (
+                <li>
+                  <span>{i.key === key ? <strong>{i.name}</strong> : <a href={crystalUrl(i.key)}>{i.name}</a>}</span>
+                  <span>{CRYSTAL_FORMS.find((f) => f.form === i.crystalSpec!.form)?.label}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <WhereToSell item={item} />
+      </div>
+    </div>
+  </article>
+</Library>

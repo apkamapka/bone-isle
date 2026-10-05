@@ -57,6 +57,13 @@ import { iconFile } from "../src/gfx/itemArt.ts";
 import { sheetSpec, walkCycleSeconds } from "../src/gfx/mobSheet.ts";
 import { TERRAIN_SRC } from "../src/world/terrainImage.ts";
 import { FIELD_TICK_DMG } from "../src/systems/monsterSpells.ts";
+import { CRYSTAL_SPECS, BURST_TILES, NOVA_TILES, WAVE_TILES } from "../src/systems/crystals.ts";
+import { ownCooldown, groupCooldown } from "../src/systems/cooldowns.ts";
+import { TIER_MULT, CRYSTAL_LEVEL_SCALE } from "../src/systems/elements.ts";
+import {
+  HEAL_CRYSTAL_BASE, HEAL_CRYSTAL_PER_LEVEL, HEAL_RUNE_BASE, HEAL_RUNE_PER_LEVEL,
+  HASTE_RUNE_S, MIRE_RUNE_S, MIRE_RUNE_TILES, AEGIS_RUNE_S, AEGIS_LOCK_S, FURY_RUNE_S, FURY_DEBT_S, FURY_LOCK_S,
+} from "../src/config.ts";
 import { TILE, WORLD_SEED } from "../src/config.ts";
 import type { NpcKey, WorldKey } from "../src/world/types.ts";
 
@@ -104,6 +111,36 @@ export type ItemSource =
   /** Changed for other coins by a townsperson. */
   | { type: "exchange"; npc: string };
 
+/**
+ * What a crystal does, read from the crystal tables rather than restated:
+ * the elemental line from CRYSTAL_SPECS, the utility crystals from config.
+ * Damage and healing are given at a few levels, because both grow with the
+ * caster's; damage is per creature caught, before its resistance.
+ */
+export interface ExportCrystalSpec {
+  form: "shard" | "burst" | "nova" | "wave" | "knell" | "life" | "recall" | "haste" | "slowdown" | "protection" | "fury";
+  element: Element | null;
+  tier: 1 | 2 | 3 | null;
+  damage: { level: number; dmg: readonly [number, number] }[];
+  heal: { level: number; hp: number }[];
+  /** How far it reaches, in tiles; null for the shapes anchored on the caster. */
+  reachTiles: number | null;
+  /** Tiles the shape covers. */
+  footprint: number | null;
+  /** Thrown at a square rather than at a creature. */
+  aimed: boolean;
+  /** Seconds before this crystal can be used again; null where nothing waits. */
+  cooldownS: number | null;
+  /** Seconds every other attack crystal waits after this one. */
+  sharedS: number;
+  /** How long the effect lasts, in seconds. */
+  durationS: number | null;
+  /** Seconds before the same effect can be had again, where that is longer than the cooldown. */
+  lockS: number | null;
+  /** Fury's price: seconds of burn after it ends. */
+  afterS: number | null;
+}
+
 export interface ExportItem extends Omit<ItemDef, "testLevel" | "testSkill"> {
   key: ItemKind;
   category: ItemCategory;
@@ -115,6 +152,8 @@ export interface ExportItem extends Omit<ItemDef, "testLevel" | "testSkill"> {
   sources: ItemSource[];
   /** Listed shops that buy it, and what they pay. */
   sellTo: { npc: string; price: number }[];
+  /** For a crystal: what it does. Null for everything else. */
+  crystalSpec: ExportCrystalSpec | null;
 }
 
 /** A walk sheet under /play/: 4 rows (up, left, down, right) of `cols` frames. */
@@ -447,6 +486,56 @@ export function itemSources(): Map<ItemKind, { listed: ItemSource[]; unlisted: n
   return out;
 }
 
+/** The levels a crystal's damage and healing are quoted at. */
+export const CRYSTAL_LEVELS: readonly number[] = [1, 25, 50, 100];
+
+const FORM_OF: Readonly<Record<string, ExportCrystalSpec["form"]>> = {
+  shard: "shard", burst: "burst", nova: "nova", wave: "wave", rune: "knell",
+};
+const FOOTPRINT: Readonly<Record<string, number>> = {
+  shard: 1, rune: 1, burst: BURST_TILES.length, nova: NOVA_TILES.length, wave: WAVE_TILES.length,
+};
+
+/** One crystal's spec, or null for an item that is not a crystal. */
+export function crystalSpecOf(key: ItemKind): ExportCrystalSpec | null {
+  if (!ITEMS[key].crystal) return null;
+  const base = {
+    damage: [], heal: [], reachTiles: null, footprint: null, aimed: false,
+    cooldownS: ownCooldown(key), sharedS: groupCooldown(key), durationS: null, lockS: null, afterS: null,
+  } satisfies Partial<ExportCrystalSpec>;
+  const spec = CRYSTAL_SPECS[key];
+  if (spec) {
+    const mult = TIER_MULT[spec.tier];
+    return {
+      ...base,
+      form: FORM_OF[spec.role],
+      element: spec.element,
+      tier: (spec.tier + 1) as 1 | 2 | 3,
+      damage: CRYSTAL_LEVELS.map((level) => {
+        const k = mult * (1 + level / CRYSTAL_LEVEL_SCALE);
+        return { level, dmg: [Math.max(1, Math.round(spec.base[0] * k)), Math.max(1, Math.round(spec.base[1] * k))] as const };
+      }),
+      reachTiles: spec.range > 0 ? Math.round(spec.range / TILE) : null,
+      footprint: FOOTPRINT[spec.role] ?? null,
+      aimed: spec.role === "burst",
+    };
+  }
+  const util = { ...base, element: null, tier: null };
+  switch (key) {
+    case "healCrystal":
+      return { ...util, form: "life", heal: CRYSTAL_LEVELS.map((level) => ({ level, hp: HEAL_CRYSTAL_BASE + level * HEAL_CRYSTAL_PER_LEVEL })) };
+    case "healRune":
+      return { ...util, form: "life", heal: CRYSTAL_LEVELS.map((level) => ({ level, hp: HEAL_RUNE_BASE + level * HEAL_RUNE_PER_LEVEL })) };
+    // Recall is a journey, not a cast: main.ts spends the charge and travels, with no clock.
+    case "recallCrystal": return { ...util, form: "recall", cooldownS: null, sharedS: 0 };
+    case "hasteRune": return { ...util, form: "haste", durationS: HASTE_RUNE_S };
+    case "mireRune": return { ...util, form: "slowdown", durationS: MIRE_RUNE_S, reachTiles: MIRE_RUNE_TILES };
+    case "aegisRune": return { ...util, form: "protection", durationS: AEGIS_RUNE_S, lockS: AEGIS_LOCK_S };
+    case "furyRune": return { ...util, form: "fury", durationS: FURY_RUNE_S, lockS: FURY_LOCK_S, afterS: FURY_DEBT_S };
+    default: return null;
+  }
+}
+
 /** Descriptions the tower gives its crystals, by item. */
 function towerDescs(): Map<ItemKind, string> {
   const out = new Map<ItemKind, string>();
@@ -484,6 +573,7 @@ export function collectGameData(): GameData {
       desc: descs.get(key) ?? null,
       sources: listed,
       sellTo: [],
+      crystalSpec: crystalSpecOf(key),
     });
   }
   const itemKeys = new Set<string>(items.map((i) => i.key));
