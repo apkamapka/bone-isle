@@ -2,7 +2,7 @@
 import Library from "../../../layouts/Library.astro";
 import Sprite from "../../../components/Sprite.astro";
 import { DATA, ITEM, PLACE, ELEMENT } from "../../../lib/game-data.ts";
-import { slugOf, creatureUrl, itemUrl, hasItemPage, rarityLabel, rarityRank, span, num, taken, tilesPerSecond, listOf, fitScale } from "../../../lib/library.ts";
+import { slugOf, creatureUrl, itemUrl, npcUrl, hasItemPage, rarityLabel, rarityRank, span, num, taken, tilesPerSecond, listOf, fitScale } from "../../../lib/library.ts";
 
 export function getStaticPaths() {
   return DATA.monsters.map((m) => ({ params: { slug: slugOf(m.kind) }, props: { kind: m.kind } }));
@@ -119,7 +119,7 @@ const description =
             <h2 class="entry-part__title" id="task">Hunting task</h2>
             {tasks.map((t) => (
               <p class="entry-part__lead">
-                <strong>{t.title}</strong>, on {board.name}'s board{boardAt ? ` in ${boardAt}` : ""}, from level {t.reqLevel}:
+                <strong>{t.title}</strong>, on <a href={npcUrl(board.key)}>{board.name}</a>'s board{boardAt ? ` in ${boardAt}` : ""}, from level {t.reqLevel}:
                 {" "}{num(t.need)} kills
                 {t.creatures.length > 1 && (
                   <> in all, counting {t.creatures.map((k, i) => (

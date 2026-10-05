@@ -2,7 +2,7 @@
 import Library from "../../../layouts/Library.astro";
 import { DATA, ITEM, PLACE, ELEMENT } from "../../../lib/game-data.ts";
 import {
-  slugOf, itemUrl, creatureUrl, hasItemPage, itemKind, itemFacts, rarityLabel, rarityRank, span, num, roman, listOf,
+  slugOf, itemUrl, creatureUrl, npcUrl, hasItemPage, itemKind, itemFacts, rarityLabel, rarityRank, span, num, roman, listOf,
 } from "../../../lib/library.ts";
 
 export function getStaticPaths() {
@@ -18,10 +18,10 @@ const facts = itemFacts(item, elementLabel);
 const kind = itemKind(item);
 
 const creature = new Map(DATA.monsters.map((m) => [m.kind as string, m]));
-const npcAt = (k: string): string => {
+/** A townsperson as a source names them: a link to their page, and where they stand. */
+const npcAt = (k: string) => {
   const n = DATA.npcs.find((x) => x.key === k);
-  const at = n ? PLACE.get(n.places[0]?.place ?? "")?.name : undefined;
-  return n ? (at ? `${n.name} in ${at}` : n.name) : k;
+  return { name: n?.name ?? k, href: n ? npcUrl(n.key) : null, at: n ? PLACE.get(n.places[0]?.place ?? "")?.name ?? null : null };
 };
 /** Another item, as a name and, when it has a page, a link. */
 const ref = (k: string) => {
@@ -41,16 +41,16 @@ const drops = item.sources
     rarity: rarityLabel(s.chance),
   }))
   .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
-const shops = item.sources.flatMap((s) => (s.type === "shop" ? [{ who: npcAt(s.npc), price: s.price }] : []));
+const shops = item.sources.flatMap((s) => (s.type === "shop" ? [{ ...npcAt(s.npc), price: s.price }] : []));
 const others = item.sources.filter((s) => s.type !== "drop" && s.type !== "shop");
-const buyers = item.sellTo.map((s) => ({ who: npcAt(s.npc), price: s.price }));
+const buyers = item.sellTo.map((s) => ({ ...npcAt(s.npc), price: s.price }));
 const set = item.set ? DATA.sets.find((x) => x.key === item.set) : undefined;
 
 const summary = facts.filter((f) => f.label !== "Weight" && f.label !== "Stacks to").slice(0, 2)
   .map((f) => `${f.label.toLowerCase()} ${f.value}`);
 const how = drops.length > 0
   ? `Dropped by ${listOf(drops.slice(0, 3).map((d) => d.name))}${drops.length > 3 ? " and more" : ""}.`
-  : shops.length > 0 ? `Sold by ${shops[0].who}.` : "";
+  : shops.length > 0 ? `Sold by ${shops[0].name}${shops[0].at ? ` in ${shops[0].at}` : ""}.` : "";
 const description = `${item.name}, a ${kind.toLowerCase()} in Xebeka${summary.length ? `: ${summary.join(", ")}` : ""}. ${how}`.trim();
 ---
 <Library title={`${item.name} · Xebeka items`} description={description}>
@@ -100,7 +100,12 @@ const description = `${item.name}, a ${kind.toLowerCase()} in Xebeka${summary.le
           <>
             <h3 class="entry-part__sub">Sold by</h3>
             <ul class="entry-rows">
-              {shops.map((s) => <li><span>{s.who}</span><span class="entry-num">{num(s.price)} gold</span></li>)}
+              {shops.map((s) => (
+                <li>
+                  <span>{s.href ? <a href={s.href}>{s.name}</a> : s.name}{s.at && ` in ${s.at}`}</span>
+                  <span class="entry-num">{num(s.price)} gold</span>
+                </li>
+              ))}
             </ul>
           </>
         )}
@@ -127,6 +132,15 @@ const description = `${item.name}, a ${kind.toLowerCase()} in Xebeka${summary.le
                     </li>
                   );
                 }
+                if (s.type === "forge" && s.method === "craft") {
+                  const cost = Object.entries(s.cost).map(([k, n]) => ({ ...ref(k), n: n ?? 0 }));
+                  return (
+                    <li>
+                      Made at the Forge's craft bench: {num(s.batch)} for{" "}
+                      {cost.map((c, i) => <>{i > 0 && (i === cost.length - 1 ? " and " : ", ")}{num(c.n)} {c.href ? <a href={c.href}>{c.name}</a> : c.name}</>)}.
+                    </li>
+                  );
+                }
                 if (s.type === "forge" && s.method === "smelt") {
                   return <li>Smelted out of metal gear at the Forge, tier {roman(s.forgeTier)} and up, for {num(s.coal)} <a href={itemUrl("coal")}>coal</a> a piece.</li>;
                 }
@@ -141,7 +155,10 @@ const description = `${item.name}, a ${kind.toLowerCase()} in Xebeka${summary.le
                   );
                 }
                 if (s.type === "gather") return <li>{s.from === "tree" ? "Chopped from trees." : "Mined from rocks."}</li>;
-                if (s.type === "exchange") return <li>Changed for other coins by {npcAt(s.npc)}.</li>;
+                if (s.type === "exchange") {
+                  const m = npcAt(s.npc);
+                  return <li>Changed for other coins by {m.href ? <a href={m.href}>{m.name}</a> : m.name}{m.at && ` in ${m.at}`}.</li>;
+                }
                 return null;
               })}
             </ul>
@@ -155,7 +172,12 @@ const description = `${item.name}, a ${kind.toLowerCase()} in Xebeka${summary.le
             <h2 class="entry-part__title" id="sell">Where to sell</h2>
             {buyers.length > 0 ? (
               <ul class="entry-rows">
-                {buyers.map((b) => <li><span>{b.who}</span><span class="entry-num">{num(b.price)} gold</span></li>)}
+                {buyers.map((b) => (
+                  <li>
+                    <span>{b.href ? <a href={b.href}>{b.name}</a> : b.name}{b.at && ` in ${b.at}`}</span>
+                    <span class="entry-num">{num(b.price)} gold</span>
+                  </li>
+                ))}
               </ul>
             ) : <p class="entry-part__lead">No shop buys it.</p>}
           </section>

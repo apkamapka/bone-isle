@@ -15,14 +15,14 @@ const creatures = [...DATA.monsters].sort((a, b) => a.exp - b.exp || a.hp - b.hp
     <h1 class="lib__title">Creatures</h1>
     <p class="lib__intro">Every creature on the islands, from the weakest to the strongest.</p>
   </header>
-  <ul class="bestiary">
+  <ul class="roster">
     {creatures.map((m) => (
-      <li class="beast notch">
-        <div class="beast__stage">
+      <li class="roster__card notch">
+        <div class="roster__stage">
           {m.sprite && <Sprite sheet={m.sprite} scale={fitScale(m.sprite.frameW, 128, 2)} />}
         </div>
-        <h2 class="beast__name"><a href={creatureUrl(m.kind)}>{m.name}</a></h2>
-        <dl class="beast__stats">
+        <h2 class="roster__name"><a href={creatureUrl(m.kind)}>{m.name}</a></h2>
+        <dl class="roster__stats">
           <div><dt>HP</dt><dd>{num(m.hp)}</dd></div>
           <div><dt>Exp</dt><dd>{num(m.exp)}</dd></div>
         </dl>

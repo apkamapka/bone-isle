@@ -1,0 +1,172 @@
+---
+import Library from "../../../layouts/Library.astro";
+import Sprite from "../../../components/Sprite.astro";
+import { DATA, ITEM, PLACE } from "../../../lib/game-data.ts";
+import { slugOf, itemUrl, creatureUrl, hasItemPage, num, listOf, fitScale } from "../../../lib/library.ts";
+
+export function getStaticPaths() {
+  return DATA.npcs.map((n) => ({ params: { slug: slugOf(n.key) }, props: { key: n.key } }));
+}
+
+const { key } = Astro.props;
+const n = DATA.npcs.find((x) => x.key === key)!;
+const where = listOf([...new Set(n.places.map((p) => PLACE.get(p.place)?.name ?? p.place))]);
+
+/** An item as a shop line shows it: icon, name, and a link when it has a page. */
+const line = (k: string) => {
+  const i = ITEM.get(k)!;
+  return { key: k, name: i.name, icon: i.icon, href: hasItemPage(i.category) ? itemUrl(k) : null };
+};
+const sells = (n.shop?.entries ?? []).filter((e) => e.buy > 0).map((e) => ({ ...line(e.item), price: e.buy }));
+const buys = (n.shop?.entries ?? []).filter((e) => e.sell > 0).map((e) => ({ ...line(e.item), price: e.sell }));
+const tasks = n.role === "tasks" ? DATA.tasks : [];
+const creatureName = (k: string): string => DATA.monsters.find((m) => m.kind === k)?.name ?? k;
+const pays = (t: (typeof DATA.tasks)[number]): string =>
+  `${num(t.reward.gold)} gold, ${num(t.reward.exp)} experience, ${t.reward.points} task ${t.reward.points === 1 ? "point" : "points"}`;
+const gold = ITEM.get("goldCoin");
+const platinum = ITEM.get("platinumCoin");
+
+const facts = [
+  { label: "Stands in", value: where },
+  ...(sells.length > 0 ? [{ label: "Sells", value: `${num(sells.length)} items` }] : []),
+  ...(buys.length > 0 ? [{ label: "Buys", value: `${num(buys.length)} items` }] : []),
+  ...(tasks.length > 0 ? [{ label: "Tasks", value: num(tasks.length) }] : []),
+  ...(n.exchange ? [{ label: "Rate", value: `${num(n.exchange.rate)} gold to 1 platinum` }] : []),
+  ...(n.wardrobe ? [{ label: "Colours", value: num(n.wardrobe.colours) }] : []),
+];
+
+const who = `${n.name}, the ${n.title.toLowerCase()} of ${where}`;
+const description =
+  n.role === "shop" ? `${who}, in Xebeka: sells ${listOf(sells.slice(0, 3).map((s) => s.name))}${sells.length > 3 ? " and more" : ""}${buys.length > 0 ? `, and buys ${num(buys.length)} kinds of items` : ""}.`
+  : n.role === "tasks" ? `${who}, in Xebeka: ${num(tasks.length)} hunting tasks, with their creatures, kills, levels and rewards.`
+  : n.role === "exchange" ? `${who}, in Xebeka: ${num(n.exchange?.rate ?? 0)} gold coins for one platinum coin, and back.`
+  : `${who}, in Xebeka: dyes your ${listOf((n.wardrobe?.zones ?? []).map((z) => z.toLowerCase()))} in any of ${num(n.wardrobe?.colours ?? 0)} colours.`;
+---
+<Library title={`${n.name} · Xebeka NPCs`} description={description}>
+  <article>
+    <header class="entry-head">
+      <div class="entry-head__stage notch-lg">
+        {n.sprite && <Sprite sheet={n.sprite} scale={fitScale(n.sprite.frameW, 240)} walk label={`${n.name}, walking`} />}
+      </div>
+      <div class="entry-head__text">
+        <div>
+          <h1 class="lib__title">{n.name}</h1>
+          <p class="entry-head__kind">{n.title}</p>
+        </div>
+        {n.shop && <p class="entry-head__quote">“{n.shop.greeting}”</p>}
+        <dl class="entry-facts">
+          {facts.map((f) => <div><dt>{f.label}</dt><dd>{f.value}</dd></div>)}
+        </dl>
+      </div>
+    </header>
+
+    {n.role === "shop" && (
+      <div class="entry-body">
+        <section class="entry-part" aria-labelledby="sells">
+          <h2 class="entry-part__title" id="sells">Sells</h2>
+          {sells.length > 0 ? (
+            <table class="entry-table">
+              <thead><tr><th scope="col">Item</th><th scope="col">Price</th></tr></thead>
+              <tbody>
+                {sells.map((s) => (
+                  <tr>
+                    <td>
+                      <span class="entry-table__item">
+                        {s.icon
+                          ? <img class="px" src={`/play/${s.icon}`} width="32" height="32" alt="" loading="lazy" decoding="async" />
+                          : <span class="entry-table__blank" aria-hidden="true"></span>}
+                        {s.href ? <a href={s.href}>{s.name}</a> : s.name}
+                      </span>
+                    </td>
+                    <td class="entry-num">{num(s.price)} gold</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <p class="entry-part__lead">Nothing; {n.name} only buys.</p>}
+        </section>
+
+        <section class="entry-part" aria-labelledby="buys">
+          <h2 class="entry-part__title" id="buys">Buys</h2>
+          {buys.length > 0 ? (
+            <table class="entry-table">
+              <thead><tr><th scope="col">Item</th><th scope="col">Pays</th></tr></thead>
+              <tbody>
+                {buys.map((b) => (
+                  <tr>
+                    <td>
+                      <span class="entry-table__item">
+                        {b.icon
+                          ? <img class="px" src={`/play/${b.icon}`} width="32" height="32" alt="" loading="lazy" decoding="async" />
+                          : <span class="entry-table__blank" aria-hidden="true"></span>}
+                        {b.href ? <a href={b.href}>{b.name}</a> : b.name}
+                      </span>
+                    </td>
+                    <td class="entry-num">{num(b.price)} gold</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <p class="entry-part__lead">Nothing; {n.name} only sells.</p>}
+        </section>
+      </div>
+    )}
+
+    {n.role === "tasks" && (
+      <section class="entry-part entry-part--wide" aria-labelledby="board">
+        <h2 class="entry-part__title" id="board">The task board</h2>
+        <p class="entry-part__lead">
+          Take a task, hunt, and hand it in for the reward. Every task can be done again and again,
+          and kills past the count carry over into the next round.
+        </p>
+        <div class="entry-scroll">
+          <table class="entry-table">
+            <thead>
+              <tr>
+                <th scope="col">Task</th><th scope="col">Kills</th><th scope="col">From level</th>
+                <th scope="col" class="entry-table__wide">Reward</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map((t) => (
+                <tr>
+                  <td>
+                    <strong>{t.title}</strong>
+                    <span class="entry-table__note">
+                      {t.creatures.map((k, i) => <>{i > 0 && (i === t.creatures.length - 1 ? " and " : ", ")}<a href={creatureUrl(k)}>{creatureName(k)}</a></>)}
+                    </span>
+                    <span class="entry-table__note entry-table__phone">Pays {pays(t)}</span>
+                  </td>
+                  <td class="entry-num">{num(t.need)}</td>
+                  <td class="entry-num">{t.reqLevel}</td>
+                  <td class="entry-table__wide">{pays(t)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )}
+
+    {n.role === "exchange" && n.exchange && gold && platinum && (
+      <section class="entry-part entry-part--wide" aria-labelledby="change">
+        <h2 class="entry-part__title" id="change">Changing coins</h2>
+        <p class="entry-part__lead">
+          {n.name} turns <a href={itemUrl("goldCoin")}>{gold.name}s</a> into <a href={itemUrl("platinumCoin")}>{platinum.name}s</a>,
+          {" "}{num(n.exchange.rate)} for one, and platinum back into gold at the same rate. It costs nothing,
+          and a purse of platinum weighs a hundredth of the same gold.
+        </p>
+      </section>
+    )}
+
+    {n.role === "wardrobe" && n.wardrobe && (
+      <section class="entry-part entry-part--wide" aria-labelledby="dyes">
+        <h2 class="entry-part__title" id="dyes">The wardrobe</h2>
+        <p class="entry-part__lead">
+          {n.name} dyes your outfit. Pick a part, {listOf(n.wardrobe.zones.map((z) => z.toLowerCase()))}, and any of
+          {" "}{num(n.wardrobe.colours)} colours for it; the change shows on your character as you choose.
+        </p>
+      </section>
+    )}
+  </article>
+</Library>

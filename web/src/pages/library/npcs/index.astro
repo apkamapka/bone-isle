@@ -1,0 +1,32 @@
+---
+import Library from "../../../layouts/Library.astro";
+import Sprite from "../../../components/Sprite.astro";
+import { DATA, PLACE } from "../../../lib/game-data.ts";
+import { npcUrl, fitScale, listOf } from "../../../lib/library.ts";
+
+// In the order the town lists them (NPC_DATA): the stalls first, Morgan last.
+const npcs = DATA.npcs.map((n) => ({
+  ...n,
+  where: listOf([...new Set(n.places.map((p) => PLACE.get(p.place)?.name ?? p.place))]),
+}));
+---
+<Library
+  title="NPCs · Xebeka"
+  description={`The ${npcs.length} people of Bonetown in Xebeka: what each one sells and buys, the hunting tasks, the tailor and the money changer.`}
+>
+  <header class="lib__head">
+    <h1 class="lib__title">NPCs</h1>
+    <p class="lib__intro">The people you trade with, take tasks from and change your coins with.</p>
+  </header>
+  <ul class="roster">
+    {npcs.map((n) => (
+      <li class="roster__card notch">
+        <div class="roster__stage">
+          {n.sprite && <Sprite sheet={n.sprite} scale={fitScale(n.sprite.frameW, 128, 2)} />}
+        </div>
+        <h2 class="roster__name"><a href={npcUrl(n.key)}>{n.name}</a></h2>
+        <p class="roster__role">{n.title}, {n.where}</p>
+      </li>
+    ))}
+  </ul>
+</Library>

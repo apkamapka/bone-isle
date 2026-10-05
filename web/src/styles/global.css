@@ -432,10 +432,10 @@ a:hover { color: var(--lantern-hi); }
   .sprite--walk { animation: none; }
 }
 
-/* the creature list: weakest first, each card the link to its page */
-.bestiary { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+/* a roster of cards, each the link to its page: the creatures, weakest first, and the townsfolk */
+.roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 
-.beast {
+.roster__card {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -446,18 +446,20 @@ a:hover { color: var(--lantern-hi); }
   text-align: center;
 }
 
-.beast__stage { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 128px; overflow: hidden; }
+.roster__stage { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 128px; overflow: hidden; }
 
-.beast__name { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 19px; line-height: 1.25; }
-.beast__name a { color: var(--bone); text-decoration: none; }
-.beast__name a::after { content: ""; position: absolute; inset: 0; }
-.beast:hover .beast__name a { color: var(--lantern); }
+.roster__name { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 19px; line-height: 1.25; }
+.roster__name a { color: var(--bone); text-decoration: none; }
+.roster__name a::after { content: ""; position: absolute; inset: 0; }
+.roster__card:hover .roster__name a { color: var(--lantern); }
 
 /* pushed to the card's foot, so a row of cards lines its numbers up under one- and two-line names */
-.beast__stats { display: flex; gap: 16px; margin: auto 0 0; font-size: 15px; font-variant-numeric: tabular-nums; }
-.beast__stats div { display: flex; gap: 6px; }
-.beast__stats dt { color: var(--mist); }
-.beast__stats dd { margin: 0; }
+.roster__stats { display: flex; gap: 16px; margin: auto 0 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+.roster__stats div { display: flex; gap: 6px; }
+.roster__stats dt { color: var(--mist); }
+.roster__stats dd { margin: 0; }
+
+.roster__role { margin: -4px 0 0; font-size: 15px; color: var(--mist); }
 
 /* an entry's own page, a creature's or an item's: the art on its stage, the facts, then the parts */
 .entry-head { display: flex; align-items: center; gap: 48px; margin-bottom: 56px; }
@@ -481,6 +483,9 @@ a:hover { color: var(--lantern-hi); }
 
 .entry-head__kind { margin: 8px 0 0; font-size: 17px; color: var(--mist); }
 
+/* a townsperson's greeting, in their own words */
+.entry-head__quote { margin: 0; max-width: 560px; font-size: 18px; color: var(--mist); }
+
 .entry-facts { display: flex; flex-wrap: wrap; gap: 16px 40px; margin: 0; }
 .entry-facts div { display: flex; flex-direction: column; gap: 2px; }
 .entry-facts dt { font-size: 15px; color: var(--mist); }
@@ -500,6 +505,22 @@ a:hover { color: var(--lantern-hi); }
 .entry-part__title + .entry-part__sub { margin-top: 0; }
 
 .entry-ways { display: flex; flex-direction: column; gap: 12px; margin: 0; padding-left: 22px; }
+
+/* a part with no side column beside it: a townsperson's board, the money changer's rate */
+.entry-part--wide { max-width: 960px; }
+
+/* a table too wide for a phone scrolls inside itself, never the page */
+.entry-scroll { overflow-x: auto; }
+
+.entry-table__note { display: block; margin-top: 2px; font-size: 15px; color: var(--mist); }
+
+/* On a phone a wide table drops its last column and says it under the first. */
+.entry-table__phone { display: none; }
+
+@media (max-width: 640px) {
+  .entry-table__wide { display: none; }
+  .entry-table .entry-table__phone { display: block; }
+}
 
 .entry-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 

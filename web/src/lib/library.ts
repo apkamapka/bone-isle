@@ -13,6 +13,7 @@ export function slugOf(key: string): string {
 
 export const creatureUrl = (kind: string): string => `/library/creatures/${slugOf(kind)}/`;
 export const itemUrl = (key: string): string => `/library/items/${slugOf(key)}/`;
+export const npcUrl = (key: string): string => `/library/npcs/${slugOf(key)}/`;
 
 /**
  * Whether an item has a page of its own yet. Crystals get theirs with the
@@ -29,7 +30,7 @@ export const hasItemPage = (category: string): boolean => category !== "crystal"
 export const SECTIONS: readonly { label: string; href: string | null; blurb: string }[] = [
   { label: "Creatures", href: "/library/creatures/", blurb: "What you will fight, what it carries and where it lives." },
   { label: "Items", href: "/library/items/", blurb: "Weapons, armor, trophies and supplies, and how to get each one." },
-  { label: "NPCs", href: null, blurb: "The people of Bonetown, and what they sell and buy." },
+  { label: "NPCs", href: "/library/npcs/", blurb: "The people of Bonetown, and what they sell and buy." },
   { label: "Crystals", href: null, blurb: "The Alchemy Tower's shelf, element by element." },
   { label: "Places", href: null, blurb: "Maps of the islands and of the deeps below them." },
 ];

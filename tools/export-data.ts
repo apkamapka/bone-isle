@@ -42,7 +42,8 @@ import "../smoke/stub.ts";
 import { closeSync, existsSync, mkdirSync, openSync, readSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ITEMS, SET_BONUS, SET_SPEED_BONUS, type ItemDef, type ItemKind, type SetKey } from "../src/items.ts";
+import { ITEMS, RECIPES, SET_BONUS, SET_SPEED_BONUS, type ItemDef, type ItemKind, type SetKey } from "../src/items.ts";
+import { OUTFIT_COLORS, zoneLabels } from "../src/systems/outfit.ts";
 import { MONSTER_DEFS, MONSTER_KINDS, mobName, monsterResist } from "../src/entities/monsters.ts";
 import { SHOPS } from "../src/entities/npcs.ts";
 import { NPC_DATA } from "../src/world/generate.ts";
@@ -94,6 +95,8 @@ export type ItemSource =
     }
   /** Smelted out of metal gear at the Forge, one batch of coal a piece. */
   | { type: "forge"; method: "smelt"; forgeTier: 1 | 2; coal: number }
+  /** Made at the Forge's craft bench from materials, `batch` at a time. */
+  | { type: "forge"; method: "craft"; forgeTier: 1; batch: number; cost: Cost }
   /** Cut at a tier-III Forge from coal and `kinds` different trophies. */
   | { type: "forge"; method: "gem"; forgeTier: 3; coal: number; kinds: number; trophies: readonly ItemKind[] }
   /** Chopped from trees or mined from rocks. */
@@ -164,12 +167,18 @@ export type NpcRole = "shop" | "tasks" | "wardrobe" | "exchange" | "missions";
 export interface ExportNpc {
   key: string;
   name: string;
+  /** What the town calls them: "Smith", "Money changer". */
+  title: string;
   role: Exclude<NpcRole, "missions">;
   /** Where they stand, on listed places only. */
   places: { place: string; tx: number; ty: number }[];
   sprite: ExportSheet | null;
   /** Lines with an unlisted item are left out. */
   shop: { greeting: string; entries: { item: ItemKind; buy: number; sell: number }[] } | null;
+  /** The tailor's work: the outfit's dye zones and how many colours each takes. */
+  wardrobe: { zones: string[]; colours: number } | null;
+  /** The money changer's rate: gold coins for one platinum, and back. */
+  exchange: { rate: number } | null;
 }
 
 export interface ExportTask {
@@ -177,7 +186,10 @@ export interface ExportTask {
   title: string;
   /** Listed creatures only; a kill of any of them counts. */
   creatures: string[];
-  /** Kills for the first hand-in; the n-th wants n times as many. */
+  /**
+   * Kills per hand-in. An errand repeats forever, and a hand-in takes only
+   * `need` off the tally, so overkill carries into the next round (tasks.ts).
+   */
   need: number;
   reqLevel: number;
   reward: { points: number; gold: number; exp: number };
@@ -259,6 +271,17 @@ export const UNOBTAINABLE: ReadonlySet<ItemKind> = new Set<ItemKind>([
 
 /** A set's name where it is not its key: the Hunter set keeps the Snakeskin's key (Etap 67). */
 const SET_NAME: Partial<Record<SetKey, string>> = { snakeskin: "Hunter" };
+
+/** What the town calls each townsperson, for the library's pages. */
+const NPC_TITLE: Readonly<Record<NpcKey, string>> = {
+  smith: "Smith",
+  herbalist: "Herbalist",
+  elder: "Elder",
+  taskmaster: "Taskmaster",
+  tailor: "Tailor",
+  morgan: "Money changer",
+  timesage: "Time Sage",
+};
 
 /** What each townsperson is for, as main.ts opens their window. */
 const NPC_ROLE: Readonly<Record<NpcKey, NpcRole>> = {
@@ -406,6 +429,11 @@ export function itemSources(): Map<ItemKind, { listed: ItemSource[]; unlisted: n
   add("steel", { type: "forge", method: "smelt", forgeTier: 2, coal: COAL_PER_SMELT });
   add("essentialGem", { type: "forge", method: "gem", forgeTier: 3, coal: GEM_COAL, kinds: GEM_TROPHY_KINDS, trophies: [...GEM_TROPHIES] });
 
+  // ---- the Forge's craft bench (always open, from the first tier)
+  for (const r of RECIPES) {
+    add(r.out, { type: "forge", method: "craft", forgeTier: 1, batch: r.outN ?? 1, cost: { ...r.cost } });
+  }
+
   // ---- trees and rocks
   add("wood", { type: "gather", from: "tree" });
   add("stone", { type: "gather", from: "rock" });
@@ -495,6 +523,7 @@ export function collectGameData(): GameData {
     npcs.push({
       key,
       name,
+      title: NPC_TITLE[key],
       role,
       places,
       sprite: sheetOf(`npc:${key}`),
@@ -503,6 +532,12 @@ export function collectGameData(): GameData {
             greeting: shop.greeting,
             entries: shop.entries.filter((e) => itemKeys.has(e.kind)).map((e) => ({ item: e.kind, buy: e.buy, sell: e.sell })),
           }
+        : null,
+      wardrobe: role === "wardrobe"
+        ? { zones: Object.values(zoneLabels()), colours: OUTFIT_COLORS.length }
+        : null,
+      exchange: role === "exchange"
+        ? { rate: (ITEMS.platinumCoin.coin ?? 100) / (ITEMS.goldCoin.coin ?? 1) }
         : null,
     });
   }

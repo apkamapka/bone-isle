@@ -20681,7 +20681,7 @@ async function main(): Promise<void> {
     ok(badRef.length === 0, `every source names a listed creature, townsperson or place${badRef.length ? " — " + badRef[0] : ""}`);
     const materials = data.items.flatMap((i) => i.sources.flatMap((s): string[] =>
       s.type === "tower" ? [...Object.keys(s.cost), ...Object.keys(s.research?.cost ?? {})]
-        : s.type === "forge" ? ["coal", ...(s.method === "gem" ? s.trophies : [])]
+        : s.type === "forge" ? (s.method === "craft" ? Object.keys(s.cost) : ["coal", ...(s.method === "gem" ? s.trophies : [])])
           : []).filter((k) => !listed.has(k)).map((k) => `${i.key}:${k}`));
     ok(materials.length === 0,
       `…and every material a shelf or a recipe asks for is in the library too${materials.length ? " — " + materials[0] : ""}`);
@@ -20917,6 +20917,62 @@ async function main(): Promise<void> {
       "every item page has its own title and description for search");
     ok(read("../web/src/pages/library/index.astro").includes("Items: `${DATA.items.filter((i) => hasItemPage(i.category)).length} items`,"),
       "the library's front page counts the items on the open shelf");
+  }
+
+  console.log("\nEtap 87 — the NPCs shelf: the people of Bonetown, what they trade, the task board, the wardrobe and the money changer:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const LB = await import("../web/src/lib/library.ts");
+    const EX = await import("../tools/export-data.ts");
+    const OF = await import("../src/systems/outfit.ts");
+    const data = EX.collectGameData();
+    const template = (src: string): string => src.slice(src.indexOf("---", 3) + 3);
+    const listPage = read("../web/src/pages/library/npcs/index.astro");
+    const npcPage = read("../web/src/pages/library/npcs/[slug].astro");
+    const itemPage = read("../web/src/pages/library/items/[slug].astro");
+    const beastPage = read("../web/src/pages/library/creatures/[slug].astro");
+    const npc = (k: string) => data.npcs.find((n) => n.key === k);
+
+    // ---- the shelf and its addresses
+    ok(LB.SECTIONS.find((x) => x.label === "NPCs")?.href === "/library/npcs/" && LB.npcUrl("taskmaster") === "/library/npcs/taskmaster/",
+      "the NPCs shelf is open, a townsperson's page at /library/npcs/<key>/");
+    ok(npcPage.includes("return DATA.npcs.map((n) => ({ params: { slug: slugOf(n.key) }, props: { key: n.key } }));"), "every listed townsperson gets a page");
+    ok([listPage, npcPage].every((f) => !/chance/.test(template(f))), "no NPC page prints a chance");
+
+    // ---- what each of them is for
+    ok(data.npcs.every((n) => n.title.length > 0) && npc("morgan")?.title === "Money changer", "every townsperson carries the title the town knows them by");
+    ok(npc("tailor")?.wardrobe?.zones.join(",") === Object.values(OF.zoneLabels()).join(",") && npc("tailor")?.wardrobe?.colours === OF.OUTFIT_COLORS.length,
+      "Vito's page names the outfit's parts and counts the dyes from the wardrobe's own tables");
+    ok(npc("morgan")?.exchange?.rate === (items.ITEMS.platinumCoin.coin ?? 0) / (items.ITEMS.goldCoin.coin ?? 1), "Morgan's rate is the coins' own worth: 100 gold to a platinum");
+    ok(data.npcs.filter((n) => n.wardrobe).length === 1 && data.npcs.filter((n) => n.exchange).length === 1, "…and only the tailor dyes, only the money changer changes");
+    ok(["Sells", "Buys", "The task board", "Changing coins", "The wardrobe"].every((h) => npcPage.includes(`>${h}</h2>`)),
+      "a trader's page lists what they sell and buy; Grizelda's shows her board, Morgan's his rate, Vito's his dyes");
+    ok(npcPage.includes("{n.shop && <p class=\"entry-head__quote\">“{n.shop.greeting}”</p>}"), "a trader greets the visitor the way they greet a player");
+
+    // ---- the task board says how errands really repeat
+    ok(npcPage.includes("kills past the count carry over into the next round") && !read("../tools/export-data.ts").includes("n times as many"),
+      "the task board says what tasks.ts does: a task repeats, and overkill carries into the next round");
+    ok(npcPage.includes('class="entry-table__wide">{pays(t)}</td>') && npcPage.includes("entry-table__note entry-table__phone\">Pays {pays(t)}</span>"),
+      "…and on a phone the reward moves under the task's name instead of falling off the screen");
+
+    // ---- the craft bench is a source too
+    const arrow = data.items.find((i) => i.key === "arrow")?.sources.find((s) => s.type === "forge" && s.method === "craft");
+    const recipe = items.RECIPES.find((r) => r.out === "arrow");
+    ok(arrow?.type === "forge" && arrow.method === "craft" && arrow.batch === recipe?.outN && JSON.stringify(arrow.cost) === JSON.stringify(recipe?.cost),
+      "arrows come from the Forge's craft bench, as many and for as much wood as the recipe says");
+    ok(items.RECIPES.every((r) => data.items.find((i) => i.key === r.out)?.sources.some((s) => s.type === "forge" && s.method === "craft")),
+      "…and so does everything else the bench makes");
+    ok(itemPage.includes("Made at the Forge's craft bench:"), "an item's page says so");
+
+    // ---- links between the shelves
+    ok(itemPage.includes("href: n ? npcUrl(n.key) : null") && itemPage.includes("{s.href ? <a href={s.href}>{s.name}</a> : s.name}{s.at && ` in ${s.at}`}"),
+      "an item's page links the townsfolk who sell and buy it");
+    ok(beastPage.includes("on <a href={npcUrl(board.key)}>{board.name}</a>'s board"), "a creature's hunting task links to Grizelda");
+    ok(listPage.includes('<ul class="roster">') && read("../web/src/pages/library/creatures/index.astro").includes('<ul class="roster">')
+      && !read("../web/src/styles/global.css").includes(".bestiary"),
+      "creatures and townsfolk share one roster of cards");
+    ok(read("../web/src/pages/library/index.astro").includes("NPCs: `${DATA.npcs.length} people`,"), "the library's front page counts the townsfolk");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

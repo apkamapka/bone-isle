@@ -7,11 +7,12 @@ import { DATA } from "../../lib/game-data.ts";
 const COUNTS: Record<string, string> = {
   Creatures: `${DATA.monsters.length} creatures`,
   Items: `${DATA.items.filter((i) => hasItemPage(i.category)).length} items`,
+  NPCs: `${DATA.npcs.length} people`,
 };
 ---
 <Library
   title="Library · Xebeka"
-  description="The Xebeka library: every creature on the islands and every item they carry, with stats, loot, prices and where to find each one, written from the game's own tables."
+  description="The Xebeka library: every creature on the islands, every item they carry and the people of Bonetown, with stats, loot, prices and where to find each one."
   tabs={false}
 >
   <header class="lib__head">
