@@ -29,15 +29,19 @@ export const hasItemPage = (category: string): boolean => category !== "crystal"
 
 /**
  * The library's shelves, in menu order. A null href is a shelf that opens in
- * a later step of etap 2; it is drawn dimmed, the way the top bar draws the
- * pages that open with the game.
+ * a later step; it is drawn dimmed, the way the top bar draws the pages that
+ * open with the game.
+ *
+ * There is no Places shelf, on purpose (Radek's call, Oct 2026): a map of the
+ * islands would tell a player where they are safe, and that is theirs to find
+ * out. The exporter still carries the maps for the build, but no page shows
+ * them, and the tables never reach a visitor's browser.
  */
 export const SECTIONS: readonly { label: string; href: string | null; blurb: string }[] = [
   { label: "Creatures", href: "/library/creatures/", blurb: "What you will fight, what it carries and where it lives." },
   { label: "Items", href: "/library/items/", blurb: "Weapons, armor, trophies and supplies, and how to get each one." },
   { label: "NPCs", href: "/library/npcs/", blurb: "The people of Bonetown, and what they sell and buy." },
   { label: "Crystals", href: "/library/crystals/", blurb: "The Alchemy Tower's shelf, element by element." },
-  { label: "Places", href: null, blurb: "Maps of the islands and of the deeps below them." },
 ];
 
 export type Rarity = "Always" | "Common" | "Uncommon" | "Semi-rare" | "Rare" | "Very rare";

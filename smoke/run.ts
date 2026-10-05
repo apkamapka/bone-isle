@@ -20842,9 +20842,11 @@ async function main(): Promise<void> {
       "the library's classes keep clear of the account panel's, which once dragged its margins onto the creature page");
 
     // ---- the shelves and the menu
-    ok(LB.SECTIONS.map((x) => x.label).join(",") === "Creatures,Items,NPCs,Crystals,Places"
+    ok(LB.SECTIONS.map((x) => x.label).join(",") === "Creatures,Items,NPCs,Crystals"
       && LB.SECTIONS.find((x) => x.label === "Creatures")?.href === "/library/creatures/",
-      "the library's shelves are Creatures, Items, NPCs, Crystals and Places, and Creatures is open");
+      "the library's shelves are Creatures, Items, NPCs and Crystals, and Creatures is open");
+    ok(LB.SECTIONS.every((x) => x.href !== null) && !/Places|safe zone|\bmap\b/i.test(LB.SECTIONS.map((x) => x.label + " " + x.blurb).join(" ")),
+      "every shelf is open, and none of them is a map: where a player is safe stays theirs to find out");
     const base = read("../web/src/layouts/Base.astro");
     ok(base.includes('  { label: "Library", href: "/library/" },') && base.includes('  { label: "News" },'),
       "the top bar's Library entry is live; News waits for the opening");
