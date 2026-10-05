@@ -21,7 +21,8 @@ const droppers = item.sources.flatMap((s) => (s.type === "drop" ? [DATA.monsters
 const seller = item.sources.find((s) => s.type === "shop");
 const summary = facts.filter((f) => f.label !== "Weight" && f.label !== "Stacks to").slice(0, 2)
   .map((f) => `${f.label.toLowerCase()} ${f.value}`);
-const how = droppers.length > 0
+const how = !item.obtainable ? "Not in the world yet."
+  : droppers.length > 0
   ? `Dropped by ${listOf(droppers.slice(0, 3))}${droppers.length > 3 ? " and more" : ""}.`
   : seller?.type === "shop" ? (() => { const t = townsperson(seller.npc); return `Sold by ${t.name}${t.at ? ` in ${t.at}` : ""}.`; })() : "";
 const description = `${item.name}, a ${kind.toLowerCase()} in Xebeka${summary.length ? `: ${summary.join(", ")}` : ""}. ${how}`.trim();
@@ -37,7 +38,7 @@ const description = `${item.name}, a ${kind.toLowerCase()} in Xebeka${summary.le
       <div class="entry-head__text">
         <div>
           <h1 class="lib__title">{item.name}</h1>
-          <p class="entry-head__kind">{kind}</p>
+          <p class="entry-head__kind">{kind}{!item.obtainable && ", not in the world yet"}</p>
         </div>
         <dl class="entry-facts">
           {facts.map((f) => <div><dt>{f.label}</dt><dd>{f.value}</dd></div>)}

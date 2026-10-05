@@ -18,7 +18,10 @@ const count = groups.reduce((n, g) => n + g.items.length, 0);
 >
   <header class="lib__head">
     <h1 class="lib__title">Items</h1>
-    <p class="lib__intro">Everything a player can carry, group by group, weakest first. Crystals have <a href="/library/crystals/">a shelf of their own</a>.</p>
+    <p class="lib__intro">
+      Everything a player can carry, group by group, weakest first, and the gear the world has not
+      handed out yet. Crystals have <a href="/library/crystals/">a shelf of their own</a>.
+    </p>
   </header>
   <nav class="lib__jump" aria-label="Item groups">
     {groups.map((g) => <a href={`#${g.id}`}>{g.label}</a>)}
@@ -32,7 +35,7 @@ const count = groups.reduce((n, g) => n + g.items.length, 0);
         </thead>
         <tbody>
           {g.items.map((i) => (
-            <tr>
+            <tr class:list={{ "is-later": !i.obtainable }}>
               <td>
                 <a class="entry-table__item" href={itemUrl(i.key)}>
                   {i.icon
@@ -40,6 +43,7 @@ const count = groups.reduce((n, g) => n + g.items.length, 0);
                     : <span class="entry-table__blank" aria-hidden="true"></span>}
                   {i.name}
                 </a>
+                {!i.obtainable && <span class="entry-table__note">Not in the world yet</span>}
               </td>
               <td class="item-group__stats">{itemSummary(i, elementLabel)}</td>
               <td class="entry-num">{num(i.weight)} oz</td>

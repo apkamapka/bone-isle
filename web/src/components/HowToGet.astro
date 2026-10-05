@@ -39,6 +39,8 @@ const others = item.sources.filter((s) => s.type !== "drop" && s.type !== "shop"
 <section class="entry-part" aria-labelledby="get">
   <h2 class="entry-part__title" id="get">How to get it</h2>
 
+  {!item.obtainable && <p class="entry-part__lead">Not in the world yet: nothing hands it out today.</p>}
+
   {drops.length > 0 && (
     <>
       <h3 class="entry-part__sub">Dropped by</h3>

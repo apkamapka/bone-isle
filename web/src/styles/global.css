@@ -555,6 +555,11 @@ a:hover { color: var(--lantern-hi); }
 .item-group .entry-table__item:hover { color: var(--lantern); }
 .item-group__stats { color: var(--mist); }
 
+/* gear the world has not handed out yet: listed, dimmed the way the site dims what opens later */
+.item-group tr.is-later .entry-table__item { color: var(--mist); }
+.item-group tr.is-later img { opacity: 0.6; }
+.item-group tr.is-later .entry-table__note { padding-left: 44px; }
+
 /* an element's shelf: the five forms down, the three tiers across */
 .crystal-grid { table-layout: fixed; }
 .crystal-grid th[scope="row"] { width: 22%; padding-right: 12px; font-weight: 600; text-align: left; }

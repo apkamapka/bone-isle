@@ -27,15 +27,19 @@
  *
  *   a place is listed unless a mission owns it (`MISSIONS`, ground and echo);
  *   a creature is listed when it stands on a listed place;
- *   an item is listed when something listed hands it out.
+ *   an item is listed when something listed hands it out, or when nothing
+ *   hands it out yet at all (UNOBTAINABLE, below): a player should see the
+ *   gear the world is still waiting for. Only what the missions alone give
+ *   stays out.
  *
  * Everything else is pruned to match: a shop line whose item is not listed,
  * an exit to a place that is not, a task whose creatures are not.
  *
  * An item that NOTHING hands out, mission or not, is not an oversight to be
- * pruned quietly: it is either a system this file forgot to read, or gear the
+ * left in quietly: it is either a system this file forgot to read, or gear the
  * code defines ahead of the world. The second kind is named in UNOBTAINABLE,
- * and the smoke suite fails on anything sourceless that is not named there.
+ * listed with `obtainable: false` and no sources (Radek's call, Oct 2026), and
+ * the smoke suite fails on anything sourceless that is not named there.
  * ---------------------------------------------------------------------------
  */
 import "../smoke/stub.ts";
@@ -148,7 +152,12 @@ export interface ExportItem extends Omit<ItemDef, "testLevel" | "testSkill"> {
   icon: string | null;
   /** What a crystal does, in the tower's own words. */
   desc: string | null;
-  /** Every listed way to get it. Never empty: an item nothing hands out is not listed. */
+  /**
+   * False for gear nothing in the world hands out yet (UNOBTAINABLE): the
+   * library shows it, says so, and lists no sources for it.
+   */
+  obtainable: boolean;
+  /** Every listed way to get it. Empty exactly when `obtainable` is false. */
   sources: ItemSource[];
   /** Listed shops that buy it, and what they pay. */
   sellTo: { npc: string; price: number }[];
@@ -562,7 +571,8 @@ export function collectGameData(): GameData {
     const def = ITEMS[key];
     if (isTestItem(def)) continue;
     const listed = sources.get(key)?.listed ?? [];
-    if (listed.length === 0) continue;
+    const waiting = UNOBTAINABLE.has(key);
+    if (listed.length === 0 && !waiting) continue;
     const { testLevel: _l, testSkill: _s, ...rest } = def;
     const icon = iconFile(key);
     items.push({
@@ -571,6 +581,7 @@ export function collectGameData(): GameData {
       ...rest,
       icon: existsSync(resolve(PUBLIC_DIR, icon)) ? icon : null,
       desc: descs.get(key) ?? null,
+      obtainable: !waiting,
       sources: listed,
       sellTo: [],
       crystalSpec: crystalSpecOf(key),

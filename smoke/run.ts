@@ -20660,7 +20660,8 @@ async function main(): Promise<void> {
     ok(leak === null, `nothing of the missions is named anywhere in the tables${leak ? " — " + leak[0] : ""}`);
 
     // ---- every item says where it comes from
-    ok(data.items.length > 100 && data.items.every((i) => i.sources.length > 0), "every item in the library has a way to get it");
+    ok(data.items.length > 100 && data.items.every((i) => (i.obtainable ? i.sources.length > 0 : i.sources.length === 0 && EX.UNOBTAINABLE.has(i.key))),
+      "every item in the library has a way to get it, or is gear the world is still waiting for, with none");
     const all = EX.itemSources();
     const sourceless = (Object.keys(items.ITEMS) as (keyof typeof items.ITEMS)[]).filter((k) => {
       const d = items.ITEMS[k];
@@ -20673,7 +20674,8 @@ async function main(): Promise<void> {
       `an item nothing in the world hands out is named in UNOBTAINABLE, never left out quietly${unnamed.length ? " — " + unnamed[0] : ""}`);
     const stale = [...EX.UNOBTAINABLE].filter((k) => !sourceless.includes(k));
     ok(stale.length === 0, `…and UNOBTAINABLE names nothing that has a source now${stale.length ? " — " + stale[0] : ""}`);
-    ok(data.items.every((i) => !EX.UNOBTAINABLE.has(i.key)), "…so none of it reaches the library");
+    ok([...EX.UNOBTAINABLE].every((k) => data.items.some((i) => i.key === k && !i.obtainable)),
+      "…and all of it is in the library anyway, marked as not in the world yet (Radek: a player should see it)");
     const badRef = data.items.flatMap((i) => i.sources
       .filter((s) => (s.type === "drop" && !creatures.has(s.creature)) || (s.type === "shop" && !npcs.has(s.npc))
         || (s.type === "chest" && !places.has(s.place)) || (s.type === "exchange" && !npcs.has(s.npc)))
@@ -21052,6 +21054,38 @@ async function main(): Promise<void> {
     ok(onePage.includes("title={`${item.name} · Xebeka crystals`}"), "…under a title of its own");
     ok(read("../web/src/pages/library/index.astro").includes('Crystals: `${DATA.items.filter((i) => i.category === "crystal").length} crystals`,'),
       "the library's front page counts the crystals");
+  }
+
+  console.log("\nEtap 89 — the gear the world is still waiting for is in the library too, and says so:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const EX = await import("../tools/export-data.ts");
+    const { MISSIONS } = await import("../src/systems/missions.ts");
+    const data = EX.collectGameData();
+    const it = (k: string) => data.items.find((i) => i.key === k);
+    const waiting = data.items.filter((i) => !i.obtainable);
+    ok(waiting.length === EX.UNOBTAINABLE.size && waiting.every((i) => EX.UNOBTAINABLE.has(i.key) && i.sources.length === 0),
+      "every item nothing hands out yet is listed, with no sources, and nothing else is marked that way");
+    ok(["goldenHelm", "goldenShield", "sunspear", "vampireBody", "bloodletter", "zephyrBoots", "snakeskinHelm"].every((k) => it(k)?.obtainable === false),
+      "the Golden, Vampire, Zephyr and Hunter gear, the Sunspear and the Bloodletter among them");
+    ok(["golden", "vampire", "zephyr", "snakeskin"].every((k) => data.sets.some((st) => st.key === k && st.pieces.length === 4))
+      && data.sets.find((st) => st.key === "zephyr")?.speedBonus === items.SET_SPEED_BONUS.zephyr && data.sets.find((st) => st.key === "snakeskin")?.name === "Hunter",
+      "…so their sets show too, the Zephyr's speed and the Hunter's name with them");
+    ok((data.npcs.find((n) => n.key === "smith")?.shop?.entries ?? []).some((e) => e.item === "goldenHelm" && e.sell > 0),
+      "Chester's page lists the tier-7 pieces he already buys");
+    ok(!it("ring") && !it("guardRing") && !it("healthRing") && MISSIONS.every((m) => !m.relic || !it(m.relic)),
+      "what only the missions give stays out: the hoards' rings and the relics");
+    const how = read("../web/src/components/HowToGet.astro");
+    const list = read("../web/src/pages/library/items/index.astro");
+    const page = read("../web/src/pages/library/items/[slug].astro");
+    ok(how.includes("{!item.obtainable && <p class=\"entry-part__lead\">Not in the world yet: nothing hands it out today.</p>}"),
+      "an item's page says it is not in the world yet where its sources would be");
+    ok(list.includes('<tr class:list={{ "is-later": !i.obtainable }}>') && list.includes('{!i.obtainable && <span class="entry-table__note">Not in the world yet</span>}')
+      && read("../web/src/styles/global.css").includes(".item-group tr.is-later .entry-table__item { color: var(--mist); }"),
+      "the item list shows it dimmed, with the same words under its name");
+    ok(page.includes('{kind}{!item.obtainable && ", not in the world yet"}') && page.includes('const how = !item.obtainable ? "Not in the world yet."'),
+      "…and its own page says it under the name and in the description search engines read");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
