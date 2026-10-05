@@ -39,8 +39,9 @@ const others = item.sources.filter((s) => s.type !== "drop" && s.type !== "shop"
 <section class="entry-part" aria-labelledby="get">
   <h2 class="entry-part__title" id="get">How to get it</h2>
 
-  {!item.obtainable && <p class="entry-part__lead">Not in the world yet: nothing hands it out today.</p>}
-  {item.secretSource && <p class="entry-part__lead">Out in the world, somewhere the library leaves for you to find.</p>}
+  {/* Gear nothing hands out yet and the rings of the mission hoards read alike, on purpose:
+       if the words differed, the page would give away which is which (Radek, Oct 2026). */}
+  {item.sources.length === 0 && <p class="entry-part__lead">Unknown.</p>}
 
   {drops.length > 0 && (
     <>

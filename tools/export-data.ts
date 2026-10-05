@@ -42,7 +42,8 @@
  * left in quietly: it is either a system this file forgot to read, or gear the
  * code defines ahead of the world. The second kind is named in UNOBTAINABLE,
  * listed with `obtainable: false` and no sources (Radek's call, Oct 2026), and
- * the smoke suite fails on anything sourceless that is not named there.
+ * the smoke suite fails on anything sourceless that is not named there. The
+ * flag stays in the tables; no page shows it.
  * ---------------------------------------------------------------------------
  */
 import "../smoke/stub.ts";
@@ -156,13 +157,14 @@ export interface ExportItem extends Omit<ItemDef, "testLevel" | "testSkill"> {
   /** What a crystal does, in the tower's own words. */
   desc: string | null;
   /**
-   * False for gear nothing in the world hands out yet (UNOBTAINABLE): the
-   * library shows it, says so, and lists no sources for it.
+   * False for gear nothing in the world hands out yet (UNOBTAINABLE). The
+   * library lists it like any other item and its page says only that where it
+   * comes from is unknown, never that it is not in the world (Radek, Oct 2026).
    */
   obtainable: boolean;
   /**
-   * True when something hands it out, but only on a mission: the page says
-   * there is a way and keeps where it is to itself. `sources` is empty then.
+   * True when something hands it out, but only on a mission. `sources` is
+   * empty then, and the page reads exactly like a not-yet item's: "Unknown".
    */
   secretSource: boolean;
   /** Every listed way to get it. Empty when `obtainable` is false or the source is a secret. */

@@ -20677,7 +20677,7 @@ async function main(): Promise<void> {
     const stale = [...EX.UNOBTAINABLE].filter((k) => !sourceless.includes(k));
     ok(stale.length === 0, `…and UNOBTAINABLE names nothing that has a source now${stale.length ? " — " + stale[0] : ""}`);
     ok([...EX.UNOBTAINABLE].every((k) => data.items.some((i) => i.key === k && !i.obtainable)),
-      "…and all of it is in the library anyway, marked as not in the world yet (Radek: a player should see it)");
+      "…and all of it is in the library anyway, flagged in the tables (Radek: a player should see it)");
     const badRef = data.items.flatMap((i) => i.sources
       .filter((s) => (s.type === "drop" && !creatures.has(s.creature)) || (s.type === "shop" && !npcs.has(s.npc))
         || (s.type === "chest" && !places.has(s.place)) || (s.type === "exchange" && !npcs.has(s.npc)))
@@ -21081,13 +21081,12 @@ async function main(): Promise<void> {
     const how = read("../web/src/components/HowToGet.astro");
     const list = read("../web/src/pages/library/items/index.astro");
     const page = read("../web/src/pages/library/items/[slug].astro");
-    ok(how.includes("{!item.obtainable && <p class=\"entry-part__lead\">Not in the world yet: nothing hands it out today.</p>}"),
-      "an item's page says it is not in the world yet where its sources would be");
-    ok(list.includes('<tr class:list={{ "is-later": !i.obtainable }}>') && list.includes('{!i.obtainable && <span class="entry-table__note">Not in the world yet</span>}')
-      && read("../web/src/styles/global.css").includes(".item-group tr.is-later .entry-table__item { color: var(--mist); }"),
-      "the item list shows it dimmed, with the same words under its name");
-    ok(page.includes('{kind}{!item.obtainable && ", not in the world yet"}') && page.includes('const how = !item.obtainable ? "Not in the world yet."'),
-      "…and its own page says it under the name and in the description search engines read");
+    ok(how.includes('{item.sources.length === 0 && <p class="entry-part__lead">Unknown.</p>}') && !/obtainable|not in the world/i.test(how),
+      "an item's page says only that where it comes from is unknown, never that it is not in the world yet");
+    ok(!/obtainable|is-later|not in the world|handed out yet/i.test(list) && !read("../web/src/styles/global.css").includes("tr.is-later"),
+      "the item list shows it like any other item: no dimming, no note (Radek, Oct 2026)");
+    ok(!/obtainable|not in the world/i.test(page) && page.includes('const how = item.sources.length === 0 ? "Where it comes from is unknown."'),
+      "…and its own page and its description for search do not tell either");
   }
 
   console.log("\nEtap 90 — the hoards' rings in the library with their source kept back, and News open in the top bar:");
@@ -21105,9 +21104,8 @@ async function main(): Promise<void> {
     ok([...EX.RELICS].length === MISSIONS.filter((m) => m.relic).length && [...EX.RELICS].every((k) => !it(k)),
       "the relics a boss gives for the Time Sage stay out of the library, every one");
     const how = read("../web/src/components/HowToGet.astro");
-    ok(how.includes("{item.secretSource && <p class=\"entry-part__lead\">Out in the world, somewhere the library leaves for you to find.</p>}")
-      && read("../web/src/pages/library/items/[slug].astro").includes('item.secretSource ? "Where it comes from is yours to find."'),
-      "a ring's page says there is a way to get it, and leaves where for the player to find");
+    ok(!/secretSource/.test(how) && !/secretSource/.test(read("../web/src/pages/library/items/[slug].astro")),
+      "a ring's page reads exactly like a not-yet item's, \"Unknown\", so neither gives the other away");
     ok(!/hermitage|haugr|bower|labyrinth|gorak"|hoard|echo/i.test(JSON.stringify(data.items.filter((i) => i.secretSource))),
       "…and nothing in its tables names the place");
 
