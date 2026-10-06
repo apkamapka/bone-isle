@@ -347,11 +347,11 @@ Reproducible character configurations:
 
 - Minotaur —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_fur_tan&head=Minotaur_fur_tan&expression=Neutral_fur_tan&gloves=Gloves_iron&legs=Wide_pants_black>
-- Minotaur Archer —
+- Minotaur Fletcher —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_fur_tan&head=Minotaur_fur_tan&expression=Neutral_fur_tan&weapon=Crossbow_crossbow&gloves=Gloves_iron&legs=Wide_pants_black>
 - Minotaur Guard —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_fur_tan&head=Minotaur_fur_tan&expression=Neutral_fur_tan&gloves=Gloves_iron&legs=Wide_pants_black&weapon=Saber_saber&shield=Scutum_shield_scutum>
-- Minotaur Mage —
+- Minotaur Arcanist —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=muscular&body=Body_Color_fur_tan&head=Minotaur_fur_tan&expression=Neutral_fur_tan&gloves=Gloves_iron&legs=Wide_pants_black&weapon=S_staff_iron&cape=Tattered_teal>
 
 Beyond the collections listed under the player, these characters draw on the
@@ -367,7 +367,7 @@ cell's centre line (see `src/gfx/mobSheet.ts`). No pixel was repainted.
 
 `public/mob-minotaur-dead.png` is the last frame of the hurt row (row 20,
 column 6) of the plain minotaur export, cropped to the body. All four ranks
-share it: the archer's, guard's and mage's own death frames leave their gear
+share it: the fletcher's, guard's and arcanist's own death frames leave their gear
 lying beside the corpse, which reads as loot the game will not let you take.
 
 **ShareAlike:** these five files are derivative works of CC-BY-SA 3.0 artwork
@@ -400,11 +400,11 @@ Reproducible character configurations:
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&shoulders=Legion_iron&legs=Shorts_black>
 - Orc Warrior —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&shoulders=Legion_iron&legs=Armour_iron&arms=Armour_iron&gloves=Gloves_iron&shoes=Armour_iron&weapon=Dagger_dagger>
-- Orc Berserker —
+- Orc Ravager —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&legs=Shorts_orange&arms=Armour_iron&gloves=Gloves_copper&shoes=Armour_copper&weapon=Mace_mace&armour=Plate_copper&shoulders=Epaulets_orange>
 - Orc Archer —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&legs=Shorts_forest&gloves=Gloves_steel&shoes=Armour_steel&shoulders=Epaulets_forest&weapon=Crossbow_crossbow>
-- Orc Shaman —
+- Orc Evoker —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_dark_green&head=Orc_male_dark_green&expression=Neutral_dark_green&weapon=Gnarled_staff_bronze&shoes=Sandals_tan&legs=Legion_skirt_tan&cape=Tattered_orange&earrings=Moon_earrings_copper>
 
 Beyond the collections listed under the player, these characters draw on the
@@ -418,9 +418,9 @@ From each export only the walk block was kept — rows 8-11 (up, left, down,
 right), nine frames each — repacked into a 9x4 grid and cropped to one rectangle
 shared by every frame, symmetric about the source cell's centre line (see
 `src/gfx/mobSheet.ts`). No pixel was repainted. Frame sizes: 32x47 skeleton,
-32x49 goblin, 32x48 ghoul, 32x46 orc, 40x47 warrior, 52x47 berserker (the mace
-held out sideways, the widest sprite in the game until the demon skeleton's
-wings arrived), 44x47 archer, 38x46 shaman.
+32x49 goblin, 32x48 ghoul, 32x46 orc, 40x47 warrior, 52x47 ravager (the mace
+held out sideways, the widest sprite in the game until the demonic skeleton's
+wings arrived), 44x47 archer, 38x46 evoker.
 
 The bodies are the last frame of the hurt row (row 20, column 6) of each export,
 cropped to the body. All five orc ranks share `mob-orc-dead.png`, taken from the
@@ -436,7 +436,7 @@ take, and stretches the archer's body to 60px against the bare corpse's 40px.
 and are themselves published under **CC-BY-SA 3.0**. They must stay publicly
 available on those terms even if this repository is later made private.
 
-## Skeleton Warrior and Demon Skeleton
+## Skeleton Warrior and Demonic Skeleton
 
 `public/mob-skeleton-warrior-walk.png`, `public/mob-demon-skeleton-walk.png`.
 Neither has a body file of its own — both reuse `public/mob-skeleton-dead.png`,
@@ -452,7 +452,7 @@ Reproducible character configurations:
 
 - Skeleton Warrior —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Skeleton_skeleton&head=Skeleton_skeleton&expression=Neutral_light&hat=Barbarian_steel&gloves=Gloves_steel&legs=Armour_steel&weapon=Dagger_dagger>
-- Demon Skeleton —
+- Demonic Skeleton —
   <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&head=Skeleton_skeleton&expression=Neutral_all.lpcr.red&gloves=Gloves_steel&legs=Armour_steel&body=Skeleton_skeleton&wings=Bat_Wings_fur_white&shoulders=Epaulets_gray>
 
 Beyond the collections listed under the player, these two draw on the skeleton
@@ -464,7 +464,7 @@ From each export only the walk block was kept — rows 8-11 (up, left, down,
 right), nine frames each — repacked into a 9x4 grid and cropped to one rectangle
 shared by every frame, symmetric about the source cell's centre line (see
 `src/gfx/mobSheet.ts`). No pixel was repainted. Frame sizes: 40x49 warrior,
-64x49 demon. The demon is the widest creature in the game and by some margin:
+64x49 demonic skeleton, the widest creature in the game and by some margin:
 its spread wings fill the source cell edge to edge, so the crop could not be
 narrowed without clipping them.
 
@@ -1725,6 +1725,12 @@ the attack-nearest button, which replaced a procedurally drawn pair of blades.
 bar in the docked sidebar, in the phone menu and in the ≡ column. Drawn for
 Xebeka in code on the same 16x16 grid, in the black, grey and white of its
 row; no third-party source.
+
+`icon-battle.png` (Etap 91) is the battle mark: two crossed swords that show
+while a fight blocks logging out — on the STATUS bar in the docked sidebar, and
+after the location on the phone and in the floating HUD. Drawn for Xebeka in
+code on the same 16x16 grid, silver blades with gold hilts; no third-party
+source.
 
 Four more, on the same grid, for the combat controls:
 
