@@ -2571,21 +2571,23 @@ async function main(): Promise<void> {
       ok(src.includes('acts.push(["Move", "move"])') === false, "the Move button lives in the panel layer");
     }
 
-    /* --- #3: the HUD counts chests, the shop counts the purse -------------- */
+    /* --- #3: the HUD counts the purse you carry ---------------------------
+     * It counted the chests at home too, as a net-worth figure, until Etap 91:
+     * what the HUD answers now is what is on you (Radek's call, Oct 2026). */
     {
       const hud = fs.readFileSync("src/ui/hud.ts", "utf8");
-      ok(hud.includes("function totalGold"), "the HUD has a net-worth figure");
-      ok(hud.includes("totalGold(game, p)"), "…and the top-right box uses it");
+      ok(!hud.includes("totalGold"), "the HUD has no net-worth figure any more");
+      ok(hud.includes("const goldStr = `${p.gold}`;"), "…the top-right box shows the carried purse");
       const pn = fs.readFileSync("src/ui/panels.ts", "utf8");
       ok(pn.includes("Your gold (carried)"),
-        "…while the shop labels its own total, so the two disagreeing is not a bug report");
+        "…and the shop labels its own total the same way");
       // the arithmetic itself
       const p = mkP({ x: 0, y: 0 });
       items.giveGold(p.bag, 57);
       const chest = items.emptyStash(50);
       items.giveGold(chest, 3100);
       ok(items.walletAcross([p.bag, chest]) === 3157 && p.gold === 57,
-        "net worth counts both; the carried purse counts one");
+        "a cost that may draw on a chest counts both; the carried purse counts one bag");
     }
 
     /* --- #4: one coin die, struck twice ----------------------------------- */
@@ -20308,7 +20310,8 @@ async function main(): Promise<void> {
     // ---- what it does
     const main = read("../src/main.ts");
     const lo = main.slice(main.indexOf("function logout(): void {"), main.indexOf("setLogoutHandler(logout);"));
-    ok(lo.includes("!P.dead && inBattle()") && lo.includes("flash(LOGOUT_REFUSED"),
+    ok(lo.includes("if (logoutBlocked(P.dead)) {") && read("../src/systems/battle.ts").includes("return !dead && inBattle(now);")
+      && lo.includes("flash(LOGOUT_REFUSED"),
       "in a fight it is refused in Tibia's words; a dead character may always go");
     ok(lo.indexOf("saveGame(game);") > 0 && lo.indexOf("saveGame(game);") < lo.indexOf("location.reload();"),
       "otherwise the world is saved first, then the page starts over at the character list");
@@ -21117,6 +21120,118 @@ async function main(): Promise<void> {
       "/news/ lists every post, newest first, as the same cards the home page shows");
     ok(list.includes('<h2 class="news__title">') && list.includes('<h1 class="lib__title">News</h1>'), "…under one News heading, each post's title a heading below it");
     ok(list.includes(': <p class="lib__intro">No news yet.</p>}'), "…and says so plainly on a day there are none");
+  }
+
+  console.log("\nEtap 91 — five creatures renamed where a player reads them, the battle mark, and the purse you carry:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const MON = await import("../src/entities/monsters.ts");
+    const { ELITE_PREFIX } = await import("../src/systems/elite.ts");
+    const { TASKS } = await import("../src/systems/tasks.ts");
+    const EX = await import("../tools/export-data.ts");
+    const BT = await import("../src/systems/battle.ts");
+    const PS = await import("../src/systems/playerState.ts");
+    const HUD = await import("../src/ui/hud.ts");
+    const MOB = await import("../src/ui/mobile.ts");
+
+    // ---- the names: in the game, on the board, in the library, on the Credits page
+    const renamed: [string, string, string][] = [
+      ["orcBerserker", "Orc Ravager", "Orc Berserker"],
+      ["orcShaman", "Orc Evoker", "Orc Shaman"],
+      ["minotaurArcher", "Minotaur Fletcher", "Minotaur Archer"],
+      ["minotaurMage", "Minotaur Arcanist", "Minotaur Mage"],
+      ["demonSkeleton", "Demonic Skeleton", "Demon Skeleton"],
+    ];
+    const oldNames = new RegExp(renamed.map(([, , o]) => o).join("|"));
+    ok(renamed.every(([k, n]) => MON.mobName(k) === n),
+      "the five answer to their new names wherever the game prints one: over the head, Look, the kill line, the remains");
+    ok(renamed.every(([k]) => k in MON.MONSTER_DEFS)
+      && read("../src/gfx/mobSheet.ts").includes('orcBerserker: "./mob-orc-berserker-walk.png"'),
+      "…while the kinds and the files stay as they were, so sheets, maps and saves never notice");
+    ok(renamed.every(([k]) => MON.MONSTER_DEFS[k as never].name === undefined),
+      "…and they stay ranks: the new names live in RANK_NAMES, not in the field that marks a named boss");
+    ok(MON.mobLabel({ kind: "orcBerserker", elite: true } as never) === `${ELITE_PREFIX} Orc Ravager`,
+      "…and an elite wears its title in front of the new name");
+    ok(TASKS.every((t) => t.desc === t.goal.kinds.map((k) => MON.mobName(k)).join(", ")),
+      "every errand on the board lists its creatures by the names the game prints");
+    const task = (id: string) => TASKS.find((t) => t.id === id)!;
+    ok(task("t_berserkers").title === "Ravager Trophy" && task("t_demonskeletons").title === "Demonic Skeletons",
+      "…and the two errands named after a renamed creature carry the new name");
+    ok(!TASKS.some((t) => oldNames.test(t.title) || oldNames.test(t.desc)), "no errand still says an old name");
+    const data = EX.collectGameData();
+    const listed = renamed.filter(([k]) => data.monsters.some((m) => m.kind === k));
+    ok(listed.length === renamed.length && listed.every(([k, n]) => data.monsters.find((m) => m.kind === k)!.name === n),
+      `the library's tables carry the new names, all five (${listed.length})`);
+    ok(!oldNames.test(JSON.stringify(data.monsters.map((m) => m.name))) && !oldNames.test(JSON.stringify(data.tasks.map((t) => t.title))),
+      "…and no creature or errand in them says an old one");
+    const credits = read("../CREDITS.md");
+    ok(renamed.every(([, n]) => credits.includes(n)) && !oldNames.test(credits),
+      "the Credits page names them anew; only the file names keep the old words, being files");
+
+    // ---- the battle mark: up exactly while Ctrl+L says no
+    PS.active().lastBattleAt = -Infinity;
+    ok(!BT.logoutBlocked(false, 1000), "no fight: no mark, and the key works");
+    BT.markBattle(1000);
+    ok(BT.logoutBlocked(false, 1000) && BT.logoutBlocked(false, 1059.9) && !BT.logoutBlocked(false, 1060.1),
+      "a blow raises the mark for the minute the key is refused, and it drops the moment the key would work");
+    ok(!BT.logoutBlocked(true, 1000), "…a dead character may always go, so the dead are shown none");
+    PS.active().lastBattleAt = -Infinity;
+    const main = read("../src/main.ts");
+    const lo = main.slice(main.indexOf("function logout(): void {"), main.indexOf("setLogoutHandler(logout);"));
+    ok(lo.includes("if (logoutBlocked(P.dead)) {"), "Ctrl+L asks the same question the mark answers");
+    ok((main.match(/drawSquareIcon\(s?ctx, "battle"/g) ?? []).length === 3
+      && (main.match(/logoutBlocked\(P\.dead\)/g) ?? []).length === 4,
+      "the mark is drawn in all three layouts (column, phone strip, floating), each on that same rule");
+    const side = main.slice(main.indexOf("function drawSidebar"), main.indexOf("function drawDockControls"));
+    const status = side.slice(side.indexOf('header("status", "STATUS");'));
+    const markAt = status.indexOf('drawSquareIcon(ctx, "battle"');
+    ok(markAt >= 0 && markAt < status.indexOf("if (!r.collapsed)"),
+      "…in the column on the STATUS bar itself, so a folded block still shows it");
+    const icons = read("../src/ui/icons.ts");
+    ok(icons.includes('battle: "./icon-battle.png"') && icons.includes("battle: ["),
+      "the mark is drawn art, with a fallback shape if the file fails to load");
+    const png = fs.readFileSync(new URL("../public/icon-battle.png", import.meta.url));
+    ok(png.readUInt32BE(16) === 16 && png.readUInt32BE(20) === 16, "…on the same 16x16 grid as every other icon");
+
+    // ---- the phone strip: the place name has room in both orientations
+    for (const [w, h] of [[824, 1784], [1784, 824], [720, 1280], [1280, 720]] as const) {
+      const d = MOB.mobileLayout(w, h, 2);
+      const room = MOB.zoneEnd(d) - d.info.x;
+      ok(room > d.u * 2.5, `${d.landscape ? "sideways" : "upright"} ${w}x${h}: the location has ${Math.round(room)}px, room for a place name`);
+    }
+    const up = MOB.mobileLayout(824, 1784, 2);
+    ok(MOB.zoneEnd(up) === up.purse.x - up.u * 0.25, "…upright still stopping short of the purse it shares the row with");
+    ok(main.includes("zoneEnd(d) - d.info.x - markBox - d.gap"),
+      "…and the mark's room is held back from the label in a fight or out of one, so nothing jumps when a blow lands");
+
+    // ---- the purse: what is carried, drawn to the column's ruler
+    const { createPlayer: mk91 } = await import("../src/entities/player.ts");
+    const items91 = await import("../src/items.ts");
+    const pl = mk91({ x: 0, y: 0 });
+    items91.giveGold(pl.bag, 57);
+    let font = "";
+    const drawn: { text: string; font: string; x: number }[] = [];
+    const rec = new Proxy({}, {
+      get(_t, k) {
+        if (k === "font") return font;
+        if (k === "measureText") return (t: string) => ({ width: t.length * 0.6 * parseFloat(/([\d.]+)px/.exec(font)?.[1] ?? "10") });
+        if (k === "fillText") return (t: string, x: number) => { drawn.push({ text: t, font, x }); };
+        return () => undefined;
+      },
+      set(_t, k, v) { if (k === "font") font = String(v); return true; },
+    }) as unknown as CanvasRenderingContext2D;
+    const colS = 1.25, hudS = 3.375, rowW = 205;
+    const rowH = Math.round(14 * colS);
+    HUD.drawGoldTP({ ctx: rec, scale: hudS, screenW: 1920, screenH: 1080 }, pl, 0, 0, rowW, rowH, colS);
+    const g = drawn.find((d) => d.text === "57");
+    const px = g ? parseFloat(/([\d.]+)px/.exec(g.font)![1]) : NaN;
+    ok(!!g, "the sidebar's gold row shows the coins carried, not the chests at home");
+    ok(px <= rowH * 0.75, `…in a font sized to the column: ${px}px in a ${rowH}px row, where the HUD's ruler made it ${8 * hudS}px`);
+    ok(drawn.length >= 3 && drawn.every((d) => d.x >= 0 && d.x <= rowW), "…and every word of the row starts inside it");
+    ok(read("../src/ui/hud.ts").includes("tpX - 4 * S - goldX"), "…with the figure given a width that stops short of TP, however rich");
+    ok(!main.includes("totalGold") && main.includes("hudText(h, `${P.gold}`, d.purse.x"),
+      "the phone strip's purse is the carried one too");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
