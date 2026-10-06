@@ -55,7 +55,26 @@ export interface RangedDef {
 }
 
 /**
- * The name to print. The def's own if it has one, else the kind title-cased.
+ * What a RANK is called where that differs from its kind (Etap 91).
+ *
+ * Five ranks were renamed in the game and on the site, but not in the files
+ * (Radek's call, Oct 2026): the kind still keys the sprite sheets, the world
+ * specs, the task goals and the saves, and none of them notice. Kept apart
+ * from `MonsterDef.name`, which belongs to the named ones (a person, not a
+ * species) and is read elsewhere as "this one is a boss". A renamed rank is
+ * still a rank.
+ */
+export const RANK_NAMES: Readonly<Partial<Record<MonsterKind, string>>> = {
+  orcBerserker: "Orc Ravager",
+  orcShaman: "Orc Evoker",
+  minotaurArcher: "Minotaur Fletcher",
+  minotaurMage: "Minotaur Arcanist",
+  demonSkeleton: "Demonic Skeleton",
+};
+
+/**
+ * The name to print. The def's own if it has one (a named boss), else the
+ * rank's from `RANK_NAMES`, else the kind title-cased.
  *
  * Corpses store the kind as their `name`, so this is also what the remains of
  * a named boss read as.
@@ -63,6 +82,8 @@ export interface RangedDef {
 export function mobName(kind: string): string {
   const named = (MONSTER_DEFS as Record<string, { name?: string } | undefined>)[kind]?.name;
   if (named) return named;
+  const rank = (RANK_NAMES as Record<string, string | undefined>)[kind];
+  if (rank) return rank;
   /* Title-cased WORD BY WORD. The note on `MonsterDef.name` always said
    * "orcWarrior" title-cased was the answer, and the code only ever raised
    * the first letter — so the look said "You see OrcWarrior" and nobody
@@ -87,6 +108,9 @@ export interface MonsterDef {
    * the answer. It exists for the named ones — the bosses the folklore gives a
    * NAME rather than a species, where "Redcap" is a kind of creature and
    * "Robin Redcap" is a person who did specific things to specific people.
+   *
+   * A RANK the player knows by another name than its kind's is not one of
+   * these: see `RANK_NAMES` (Etap 91).
    *
    * Deliberately separate from the KIND, which stays as it is: the kind keys
    * the sprite sheets in `mobSheet.ts`, the corpse lookup, the world specs and
