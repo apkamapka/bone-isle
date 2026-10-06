@@ -55,6 +55,11 @@ export interface TaskReward {
 export interface TaskDef {
   id: string;
   title: string;
+  /** The creatures by the names the game prints (`mobName`), in `goal.kinds`
+   *  order. Typed out rather than derived, so the board needs nothing from the
+   *  bestiary; the smoke suite holds the two together (Etap 91), because five
+   *  of them were renamed once and a list typed by hand is the place an old
+   *  name survives. */
   desc: string;
   goal: TaskGoal;
   reward: TaskReward;
@@ -154,12 +159,12 @@ export const TASKS: readonly TaskDef[] = [
   },
   {
     id: "t_minotaurs", title: "Horned Legion",
-    desc: "Minotaur, Minotaur Archer",
+    desc: "Minotaur, Minotaur Fletcher",
     goal: { kinds: ["minotaur", "minotaurArcher"], need: 100 }, reward: C, reqLevel: 25,
   },
   {
-    id: "t_berserkers", title: "Berserker Trophy",
-    desc: "Orc Berserker, Orc Shaman",
+    id: "t_berserkers", title: "Ravager Trophy",
+    desc: "Orc Ravager, Orc Evoker",
     goal: { kinds: ["orcBerserker", "orcShaman"], need: 125 }, reward: D, reqLevel: 30,
   },
   {
@@ -169,7 +174,7 @@ export const TASKS: readonly TaskDef[] = [
   },
   {
     id: "t_minoguards", title: "Horned Guard",
-    desc: "Minotaur Guard, Minotaur Mage",
+    desc: "Minotaur Guard, Minotaur Arcanist",
     goal: { kinds: ["minotaurGuard", "minotaurMage"], need: 125 }, reward: D, reqLevel: 35,
   },
   {
@@ -178,8 +183,8 @@ export const TASKS: readonly TaskDef[] = [
     goal: { kinds: ["barbarian", "raider", "warlord", "chieftain"], need: 150 }, reward: E, reqLevel: 38,
   },
   {
-    id: "t_demonskeletons", title: "Demon Skeletons",
-    desc: "Demon Skeleton",
+    id: "t_demonskeletons", title: "Demonic Skeletons",
+    desc: "Demonic Skeleton",
     goal: { kinds: ["demonSkeleton"], need: 150 }, reward: E, reqLevel: 41,
   },
   {

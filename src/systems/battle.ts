@@ -33,3 +33,15 @@ export function battleLeft(now: number = nowS()): number {
 export function inBattle(now: number = nowS()): boolean {
   return battleLeft(now) > 0;
 }
+
+/**
+ * Would Ctrl+L be refused right now? A dead character may always go.
+ *
+ * The one rule behind both the refusal and the battle mark on the HUD (Etap
+ * 91): crossed swords showing means the key says no, and the moment they go
+ * the key works. Two copies of this condition would be two chances for the
+ * mark to promise a logout the key then refuses.
+ */
+export function logoutBlocked(dead: boolean, now: number = nowS()): boolean {
+  return !dead && inBattle(now);
+}
