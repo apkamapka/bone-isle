@@ -32,7 +32,10 @@ export type ControlIcon =
   /* Tibia's PvP marks. Two jobs each: the button that says whether you MEAN
    * to hit another player, and the mark that hangs beside the head of someone
    * who already has. Same art, drawn twice at different sizes. */
-  | "skullWhite" | "skullRed";
+  | "skullWhite" | "skullRed"
+  /* Not a button: the mark that shows while a fight blocks logging out
+   * (Etap 91). Tibia's crossed swords, gone the moment Ctrl+L would work. */
+  | "battle";
 
 /** The hand-drawn 16x16 art, one file per button.
  *
@@ -51,6 +54,7 @@ const ICON_SRC_FILE: Record<ControlIcon, string> = {
   stand: "./icon-stand.png",
   skullWhite: "./icon-skull-white.png",
   skullRed: "./icon-skull-red.png",
+  battle: "./icon-battle.png",
 };
 
 const loaded: Partial<Record<ControlIcon, CanvasImageSource>> = {};
@@ -92,6 +96,7 @@ const PALETTE_OFF = ["#0e0b06", "#c9b483", "#efe4c4"] as const;
 const GLYPH_PALETTE: Partial<Record<ControlIcon, readonly [string, string, string]>> = {
   skullWhite: ["#15110c", "#e8e8e8", "#ffffff"],
   skullRed: ["#2a0508", "#ed1c24", "#ff344f"],
+  battle: ["#6e4618", "#c3c3c3", "#ffffff"],
 };
 
 /**
@@ -220,6 +225,14 @@ const GLYPHS: Record<ControlIcon, readonly Cell[]> = {
     [4, 3, 2, 2, 0], [7, 3, 2, 2, 0],
     [5, 5, 2, 1, 0],
     [4, 7, 4, 3, 1], [5, 7, 1, 3, 0], [7, 7, 1, 3, 0],
+  ],
+  /* The attack button's pair of blades again, in silver: only ever seen if
+   * `icon-battle.png` fails to load. */
+  battle: [
+    [2, 2, 2, 2, 0], [3, 3, 2, 2, 1], [4, 4, 2, 2, 1], [5, 5, 2, 2, 2],
+    [6, 6, 2, 2, 1], [7, 7, 2, 2, 1], [8, 8, 2, 2, 0],
+    [8, 2, 2, 2, 0], [7, 3, 2, 2, 1], [6, 4, 2, 2, 1],
+    [4, 6, 2, 2, 1], [3, 7, 2, 2, 1], [2, 8, 2, 2, 0],
   ],
 };
 

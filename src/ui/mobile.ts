@@ -200,6 +200,21 @@ export function deckEnabled(cssW: number, cssH: number, touch: boolean): boolean
   return touch && Math.min(cssW, cssH) < 620;
 }
 
+/**
+ * Where the location label on the info row has to stop.
+ *
+ * Upright, the purse shares the row from the right, so the label stops short
+ * of it. Sideways the purse is a box of its own at the far end of the status
+ * row, and the label has the whole of its box. The deck used to take the
+ * purse's width off the info box in both orientations, which sideways left
+ * the label about ten pixels: every place read "…" (found while making room
+ * for the battle mark, Etap 91).
+ */
+export function zoneEnd(d: MobileLayout): number {
+  const shares = d.purse.x >= d.info.x && d.purse.x < d.info.x + d.info.w;
+  return shares ? d.purse.x - d.u * 0.25 : d.info.x + d.info.w;
+}
+
 /** Everything is off, but every field is present. The safe default. */
 export function noDeck(screenH = 0): MobileLayout {
   const z: Rect = { x: 0, y: 0, w: 0, h: 0 };

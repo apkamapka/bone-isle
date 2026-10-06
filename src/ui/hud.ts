@@ -6,7 +6,6 @@ import {
 } from "../config.ts";
 import { SPR, iconW, iconH } from "../gfx/sprites.ts";
 import { clamp } from "../util.ts";
-import { walletAcross } from "../items.ts";
 import { activeTasks, progressOf } from "../systems/tasks.ts";
 import { placeHud, hudUserScale } from "../systems/hudLayout.ts";
 import { carryCap, carriedWeight } from "../entities/player.ts";
@@ -373,23 +372,6 @@ function drawEffectStrip(h: HudCtx, p: Player, x: number, y: number, w: number, 
 }
 
 /**
- * Every gold piece the player owns: carried AND banked in their chests.
- *
- * Deliberately WIDER than `p.gold`, which counts only the coins in the worn
- * backpack. The HUD figure is a net-worth readout — the question it answers is
- * "how rich am I", and a number that dropped by three thousand because you
- * tidied your purse into a chest would answer it badly. Spending still comes
- * out of the right purse for each shop; see the shop panel, which labels its
- * own total as carried so the two can never be mistaken for each other.
- */
-export function totalGold(game: Game, p: Player): number {
-  const chests = game.worlds.home.structures
-    .filter((s) => s.key === "chest" && s.inv)
-    .map((s) => s.inv!);
-  return walletAcross([p.bag, ...chests]);
-}
-
-/**
  * Break `str` into lines that each fit `maxW`, at spaces where possible.
  *
  * Truncating with an ellipsis was the first answer and it was the wrong one:
@@ -435,10 +417,23 @@ export function hudLines(
   return ly;
 }
 
-/** Compact gold + TP row (used by the desktop sidebar). */
-export function drawGoldTP(h: HudCtx, p: Player, x: number, y: number, w: number, rowH: number, gold = p.gold): void {
-  const { ctx, scale: S } = h;
-  panel(h, x, y, w, rowH);
+/**
+ * The gold + TP row in the desktop sidebar's STATUS block.
+ *
+ * `S` is the COLUMN's unit, passed in the way `drawVitals` takes its own. The
+ * row was measured by the column and its text by the HUD, whose unit on a
+ * desktop is two to three times larger, so the figures stood taller than the
+ * frame around them (Etap 91). The coin had already been fitted to the row for
+ * the same reason; now the whole row answers to one ruler.
+ *
+ * The figure is the gold CARRIED: the coins in the worn backpack and every
+ * pack inside it, platinum at its worth, `p.gold`. Not the chests at home
+ * (Radek's call, Oct 2026): what the HUD answers is what you have on you.
+ */
+export function drawGoldTP(h: HudCtx, p: Player, x: number, y: number, w: number, rowH: number, S: number): void {
+  const { ctx } = h;
+  const hs: HudCtx = { ...h, scale: S };
+  panel(hs, x, y, w, rowH);
   /* Scale the coin to the ROW, not to a fixed multiple of the HUD unit. In
    * the sidebar the row is set by the column's own ruler, so a 1.5x coin
    * stood taller than the frame around it and clipped top and bottom. */
@@ -448,9 +443,25 @@ export function drawGoldTP(h: HudCtx, p: Player, x: number, y: number, w: number
   const cdh = iconH(cd, csc);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(cd, x + 5 * S, y + (rowH - cdh) / 2, cdw, cdh);
-  hudText(h, `${gold}`, x + 5 * S + cdw + 4 * S, y + rowH / 2, 8 * S, "#f3eedd", "left", true);
-  hudText(h, "TP", x + w - 8 * S - 24 * S, y + rowH / 2, 7 * S, "#9ad0ff", "left", true);
-  hudText(h, `${p.taskPoints}`, x + w - 6 * S, y + rowH / 2, 8 * S, "#f3eedd", "right", true);
+  const goldX = x + 5 * S + cdw + 4 * S;
+  const tpX = x + w - 8 * S - 24 * S;
+  // a width budget up to the TP label: however rich, the figure stops short of it
+  hudText(hs, `${p.gold}`, goldX, y + rowH / 2, 8 * S, "#f3eedd", "left", true, tpX - 4 * S - goldX);
+  hudText(hs, "TP", tpX, y + rowH / 2, 7 * S, "#9ad0ff", "left", true);
+  hudText(hs, `${p.taskPoints}`, x + w - 6 * S, y + rowH / 2, 8 * S, "#f3eedd", "right", true);
+}
+
+/**
+ * The location line under the wordmark, top left: where it is and what it says.
+ *
+ * One place for it, because in the floating layout the battle mark (Etap 91)
+ * is drawn straight after it by main.ts, which has to know where it ended.
+ */
+export function zoneLine(h: HudCtx, game: Game): { text: string; x: number; y: number; size: number } {
+  const S = h.scale;
+  const pad = 8 * S;
+  const safe = isSafeTile(game.current, game.player.tx, game.player.ty);
+  return { text: game.current.name + (safe ? " \u00b7 safe" : " \u00b7 danger"), x: pad + 2, y: pad + 18 * S, size: 8 * S };
 }
 
 export function drawHud(h: HudCtx, game: Game, p: Player): void {
@@ -480,7 +491,7 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
     const cd = SPR.coin;
     const cdw = iconW(cd, 2 * S);
     const cdh = iconH(cd, 2 * S);
-    const goldStr = `${totalGold(game, p)}`;
+    const goldStr = `${p.gold}`; // carried, as the sidebar's row (Etap 91)
     ctx.font = `bold ${9 * S}px monospace`;
     const goldW = ctx.measureText(goldStr).width;
     ctx.font = `${8 * S}px monospace`;
@@ -512,7 +523,8 @@ export function drawHud(h: HudCtx, game: Game, p: Player): void {
   // no room for a wordmark laid over the world, so both are skipped there.
   if (!h.fixedChrome) {
   hudText(h, "XEBEKA", pad + 2, pad + 7 * S, 11 * S, "#cfe8d2", "left", true);
-  hudText(h, game.current.name + (isSafeTile(game.current, game.player.tx, game.player.ty) ? " · safe" : " · danger"), pad + 2, pad + 18 * S, 8 * S, "rgba(207,232,210,.7)");
+  const z = zoneLine(h, game);
+  hudText(h, z.text, z.x, z.y, z.size, "rgba(207,232,210,.7)");
   }
 
   /* Board tracker: one line per errand in hand, up to three.
