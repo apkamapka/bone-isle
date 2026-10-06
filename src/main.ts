@@ -14,7 +14,7 @@ import { SPR, iconW, iconH, hasPropArt, propSprite, CHEST_LIFT } from "./gfx/spr
 import { itemSprite } from "./gfx/itemArt.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { playerSex } from "./systems/sex.ts";
-import { inBattle, markBattle, LOGOUT_REFUSED } from "./systems/battle.ts";
+import { logoutBlocked, markBattle, LOGOUT_REFUSED } from "./systems/battle.ts";
 import { characterName } from "./systems/character.ts";
 import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
@@ -83,9 +83,9 @@ import { planSwap, refused, freeSlots } from "./systems/loadout.ts";
 import { createGame, travelTo, applyGates, applyMissionPads, padRefusal, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { push as pushSave, sendOnLeave, checkIn, startAutosave } from "./net/cloudSave.ts";
-import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, totalGold, revealMinimap, type HudCtx } from "./ui/hud.ts";
+import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, hudFont, zoneLine, revealMinimap, type HudCtx } from "./ui/hud.ts";
 import { buttonBox, slotCell, popupFrame, raisedBox, sunkenBox, CHROME } from "./ui/chrome.ts";
-import { deckEnabled, mobileLayout, noDeck, overDeck, TOUCH_MIN_CSS, mapFocusFrac, mapFocusFracX, sheetSlots, sheetBand, stripRect, stripHandle, stripClaim, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
+import { deckEnabled, mobileLayout, noDeck, overDeck, zoneEnd, TOUCH_MIN_CSS, mapFocusFrac, mapFocusFracX, sheetSlots, sheetBand, stripRect, stripHandle, stripClaim, DECK_TABS, MAX_SHEETS, type MobileLayout } from "./ui/mobile.ts";
 import { drawControlIcon, ICON_SRC, type ControlIcon } from "./ui/icons.ts";
 import {
   dockEnabled, dockLayout, dockScale, overDock, toggleBlock, NO_DOCK,
@@ -5842,6 +5842,15 @@ function render(): void {
   const dock = dockLayout(screen.width, screen.height, dockUnit, sidebarW > 0);
   lastDock = dock;
   drawHud(hud, game, P);
+  /* The floating layout's battle mark (Etap 91), straight after the location
+   * line at the top left. The column and the phone strip draw their own. */
+  if (!sidebarW && !deck.on && logoutBlocked(P.dead)) {
+    const z = zoneLine(hud, game);
+    sctx.font = hudFont(z.size);
+    const box = Math.round(z.size * 1.6);
+    drawSquareIcon(sctx, "battle", z.x + sctx.measureText(z.text).width + Math.round(z.size * 0.5),
+      z.y - box / 2, box, box, false, undefined, 1);
+  }
   hotspots = [];
   itemSlots = [];
   drawChatLog();
@@ -6119,11 +6128,19 @@ function drawSidebar(h: HudCtx, d: DockLayout): void {
   }
 
   header("status", "STATUS");
+  /* The battle mark (Etap 91) rides on the bar, left of the fold arrow, where
+   * the map's bar keeps its gear: a folded STATUS still shows it. No box and
+   * no hotspot, being a state rather than a button. It shows exactly while
+   * Ctrl+L would be refused, by the same rule (systems/battle.ts). */
+  if (logoutBlocked(P.dead)) {
+    drawSquareIcon(ctx, "battle", d.innerX + d.innerW - Math.round(16 * S) - bar, d.blocks.status.y,
+      bar, bar, false, undefined, 1);
+  }
   {
     const r = d.blocks.status;
     if (!r.collapsed) {
       const goldH = Math.round(GOLD_ROW_H * S);
-      drawGoldTP(h, P, d.innerX, r.bodyY, d.innerW, goldH, totalGold(game, P));
+      drawGoldTP(h, P, d.innerX, r.bodyY, d.innerW, goldH, S);
       drawVitals(h, P, d.innerX, r.bodyY + goldH + Math.round(4 * S), S * VITALS_FIT);
     }
   }
@@ -6424,10 +6441,20 @@ function drawDeck(): void {
   }
   ctx.textBaseline = "middle";
 
-  // --- info row: where you are, and how rich -------------------------------
+  // --- info row: where you are, whether you may leave, and how rich -------
   const zone = world.name + (isSafeTile(world, P.tx, P.ty) ? " \u00b7 safe" : " \u00b7 danger");
-  hudText(h, zone, d.info.x, d.info.y + d.info.h / 2, u * 0.27, "#cfe8d2", "left", true,
-    d.info.w - d.purse.w - u * 0.25);
+  /* The battle mark (Etap 91) follows the location. Its room is held back from
+   * the label whether or not a fight is on: a label that shrank the moment a
+   * creature swung would be the strip flinching mid-fight. */
+  const markBox = Math.round(u * 0.42);
+  const zoneW = Math.max(1, zoneEnd(d) - d.info.x - markBox - d.gap);
+  hudText(h, zone, d.info.x, d.info.y + d.info.h / 2, u * 0.27, "#cfe8d2", "left", true, zoneW);
+  if (logoutBlocked(P.dead)) {
+    ctx.font = hudFont(u * 0.27, true);
+    const shown = Math.min(ctx.measureText(zone).width, zoneW);
+    drawSquareIcon(ctx, "battle", d.info.x + shown + d.gap, d.info.y + (d.info.h - markBox) / 2,
+      markBox, markBox, false, undefined, 1);
+  }
   const tp = `TP ${P.taskPoints}`;
   hudText(h, tp, d.purse.x + d.purse.w, d.purse.y + d.purse.h / 2, u * 0.25, "#9ad0ff", "right", true);
   ctx.font = `bold ${Math.round(u * 0.25)}px 'Courier New',monospace`;
@@ -6437,7 +6464,7 @@ function drawDeck(): void {
   const cw2 = iconW(coin, cs / coin.height);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(coin, Math.round(d.purse.x), Math.round(d.purse.y + (d.purse.h - cs) / 2), cw2, cs);
-  hudText(h, `${totalGold(game, P)}`, d.purse.x + cw2 + u * 0.12, d.purse.y + d.purse.h / 2,
+  hudText(h, `${P.gold}`, d.purse.x + cw2 + u * 0.12, d.purse.y + d.purse.h / 2,
     u * 0.27, "#f3eedd", "left", true, d.purse.w - cw2 - tpW - u * 0.2);
 
   // --- vitals: the two numbers you actually watch, HP and how full you are --
@@ -7385,7 +7412,7 @@ let leaving = false;
  * boot.ts, which lists the account's characters with this one selected.
  */
 function logout(): void {
-  if (!P.dead && inBattle()) {
+  if (logoutBlocked(P.dead)) {
     flash(LOGOUT_REFUSED, "#ffffff");
     return;
   }
