@@ -145,6 +145,11 @@ const SHEET_SRC: Record<string, string> = {
   skeletonWarrior: "./mob-skeleton-warrior-walk.png",
   demonSkeleton: "./mob-demon-skeleton-walk.png",
   dragon: "./mob-dragon-walk.png",
+  // TEMP-ETAP93-DRAGON: the new art on trial. All four views (its source ran
+  // up, right, down, left and was put in this order), a standing pose taken
+  // from its idle loop and eight strides; so no SIDE_ONLY, no SHEET_COLS, and
+  // a body about fifty pixels long keeps the standard one-second stride.
+  testDragon: "./mob-test-dragon-walk.png",
   blackKnight: "./mob-black-knight-walk.png",
   "npc:smith": "./npc-smith.png",
   "npc:herbalist": "./npc-herbalist.png",
@@ -237,6 +242,7 @@ const CORPSE_SRC: Record<string, string> = {
   minotaurGuard: "./mob-minotaur-dead.png",
   minotaurMage: "./mob-minotaur-dead.png",
   dragon: "./mob-dragon-dead.png",
+  testDragon: "./mob-test-dragon-dead.png", // TEMP-ETAP93-DRAGON
   blackKnight: "./mob-black-knight-dead.png",
 };
 
