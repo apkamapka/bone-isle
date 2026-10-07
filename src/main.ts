@@ -4968,7 +4968,7 @@ function resolveTarget(): void {
  */
 const MOB_SHADOW: Readonly<Record<string, number>> = {
   dragon: 24,
-  testDragon: 20, // TEMP-ETAP93-DRAGON: half the old body's length
+  testDragon: 24, // TEMP-ETAP93-DRAGON: doubled, as long as the old body
 };
 
 function drawShadow(x: number, y: number, w = 16): void {
