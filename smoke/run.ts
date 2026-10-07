@@ -21442,9 +21442,10 @@ async function main(): Promise<void> {
     const spec = MS.sheetSpec("testDragon");
     ok(!!spec && spec.cols === 9 && !spec.sideOnly, "a full four-view walk: a standing pose and eight strides, never side-only");
     const png = fs.readFileSync(new URL("../public/mob-test-dragon-walk.png", import.meta.url));
-    ok(png.readUInt32BE(16) === 9 * 56 && png.readUInt32BE(20) === 4 * 46, "the sheet is a 9x4 grid of 56x46 frames");
-    ok(fs.existsSync(new URL("../public/mob-test-dragon-dead.png", import.meta.url)), "…and it leaves a body of its own");
-    ok(MS.walkCycleSeconds("testDragon") === 1, "a body about fifty pixels long at the dragon's 51 px/s keeps the standard one-second stride");
+    ok(png.readUInt32BE(16) === 9 * 112 && png.readUInt32BE(20) === 4 * 92, "the sheet is a 9x4 grid of 112x92 frames, its source doubled");
+    const body = fs.readFileSync(new URL("../public/mob-test-dragon-dead.png", import.meta.url));
+    ok(body.readUInt32BE(16) === 128 && body.readUInt32BE(20) === 40, "…and it leaves a body of its own, doubled with it");
+    ok(MS.walkCycleSeconds("testDragon") === 1.9, "a body about 98 px long at the dragon's 51 px/s takes 1.9 s a stride, so it does not run on the spot");
     const data = EX.collectGameData();
     ok(!JSON.stringify(data).includes("testDragon") && !data.monsters.some((m) => m.name === "Test Dragon"),
       "the library never mentions it: no page, no spawn, no drop");
