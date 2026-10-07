@@ -52,7 +52,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ITEMS, RECIPES, SET_BONUS, SET_SPEED_BONUS, type ItemDef, type ItemKind, type SetKey } from "../src/items.ts";
 import { OUTFIT_COLORS, OUTFITS, WARDROBE_OUTFITS, zoneLabels } from "../src/systems/outfit.ts";
-import { MONSTER_DEFS, MONSTER_KINDS, mobName, monsterResist } from "../src/entities/monsters.ts";
+import { MONSTER_DEFS, MONSTER_KINDS, TEST_KINDS, mobName, monsterResist } from "../src/entities/monsters.ts";
 import { SHOPS } from "../src/entities/npcs.ts";
 import { NPC_DATA } from "../src/world/generate.ts";
 import { buildWorlds, CHEST_PRIZES } from "../src/game.ts";
@@ -324,6 +324,12 @@ export function missionPlaces(): ReadonlySet<string> {
   return new Set<string>(MISSIONS.flatMap((m) => [m.ground, m.echo]));
 }
 
+/** A map's creature posts as the library sees them: without the creatures
+ *  that are only being tried out (TEMP-ETAP93-DRAGON). */
+function listedPosts<P extends { kind: string }>(w: { mobPosts?: P[] }): P[] {
+  return (w.mobPosts ?? []).filter((p) => !(TEST_KINDS as ReadonlySet<string>).has(p.kind));
+}
+
 /** What a boss gives straight into the pack, for the Time Sage: the errands themselves, never listed. */
 export const RELICS: ReadonlySet<ItemKind> = new Set<ItemKind>(
   MISSIONS.flatMap((m) => (m.relic ? [m.relic] : [])),
@@ -433,7 +439,7 @@ export function itemSources(): Map<ItemKind, { listed: ItemSource[]; unlisted: n
   const listedKinds = new Set<string>();
   for (const w of worlds) {
     if (hiddenPlaces.has(w.key)) continue;
-    for (const p of w.mobPosts ?? []) listedKinds.add(p.kind);
+    for (const p of listedPosts(w)) listedKinds.add(p.kind);
   }
 
   const out = new Map<ItemKind, { listed: ItemSource[]; unlisted: number }>();
@@ -600,7 +606,7 @@ export function collectGameData(): GameData {
 
   // ---- creatures: the ones standing on a listed place
   const kinds = new Set<string>();
-  for (const w of listedWorlds) for (const p of w.mobPosts ?? []) kinds.add(p.kind);
+  for (const w of listedWorlds) for (const p of listedPosts(w)) kinds.add(p.kind);
 
   // ---- items: the ones something listed hands out
   const sources = itemSources();
@@ -700,7 +706,7 @@ export function collectGameData(): GameData {
 
   const worlds: ExportWorld[] = listedWorlds.map((w) => {
     const counts: Record<string, number> = {};
-    for (const p of w.mobPosts ?? []) counts[p.kind] = (counts[p.kind] ?? 0) + 1;
+    for (const p of listedPosts(w)) counts[p.kind] = (counts[p.kind] ?? 0) + 1;
     const terrain = TERRAIN_SRC[w.key]?.replace(/^\.\//, "") ?? null;
     const chest = CHEST_PRIZES[w.key];
     return {
@@ -711,7 +717,7 @@ export function collectGameData(): GameData {
       h: w.h,
       terrain: terrain && existsSync(resolve(PUBLIC_DIR, terrain)) ? terrain : null,
       monsters: counts,
-      spawns: (w.mobPosts ?? []).map((p) => ({ kind: p.kind, tx: p.tx, ty: p.ty })),
+      spawns: (listedPosts(w)).map((p) => ({ kind: p.kind, tx: p.tx, ty: p.ty })),
       npcs: w.npcs.filter((n) => npcKeys.has(n.key)).map((n) => ({ key: n.key, tx: n.tx, ty: n.ty })),
       exits: w.portals
         .filter((p) => !p.inactive && placeKeys.has(p.dest))
