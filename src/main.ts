@@ -27,7 +27,7 @@ import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoil
 import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
 import { setActiveBonus } from "./systems/derived.ts";
-import { applyOutfit, setOutfitColor, resetOutfitColors, type OutfitZone } from "./systems/outfit.ts";
+import { applyOutfit, setOutfitColor, resetOutfitColors, wearOutfit, type OutfitZone } from "./systems/outfit.ts";
 import { useCrystal, tickCrystalCooldown, crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
 import { cooldownFrac, isReady, startCooldown } from "./systems/cooldowns.ts";
 import {
@@ -60,7 +60,8 @@ import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } fro
 import { byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { placeOnGround, moveToPile } from "./world/ground.ts";
 import { TARGET_SEEK_PX, MIN_ELEMENTAL_DAMAGE } from "./config.ts";
-import { acceptTask, abandonTask, handInTask, taskById, hasRoomForTask, isActive, isComplete, rewardFits } from "./systems/tasks.ts";
+import { acceptTask, abandonTask, handInTask, taskById, hasRoomForTask, isActive, isComplete, rewardFits, maxActive, MAX_ACTIVE } from "./systems/tasks.ts";
+import { buyShelf, shelfEntry, shelfLabel, RANKS } from "./systems/shelf.ts";
 import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, exchangeCoins } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
@@ -711,6 +712,17 @@ const act: PanelActions = {
     if (outside && !inPlace && from) { openMoveChooser(from, _slotIndex); return; }
 
     if (def.crystal) { useCrystalItem(kind); return; }
+    if (def.blessing) {
+      /* Huntress' Blessing (Etap 92). One at a time: a second scroll on a
+       * blessed character is refused, and kept, which is also how a player
+       * finds out that the first one still holds. */
+      if (P.blessed) { flash("you are already blessed", "#c9a6ff"); return; }
+      if (!spend()) return;
+      P.blessed = true;
+      addFloat(cw(), P.x, P.y - 44, "blessed", "#c9a6ff");
+      sfx("reward");
+      return;
+    }
     if (def.food) {
       // Tibia rule: you can bank at most 20 minutes of fed time — eating past
       // it is refused (and the food is NOT consumed)
@@ -854,7 +866,7 @@ const act: PanelActions = {
     if (acceptTask(id, P.level)) { flash("task accepted", "#9ad0ff"); beep(440, 0.12, "sine", 0.05, 120); }
     /* The only reason a legal entry is ever refused: three is the ceiling.
      * Say which one it is rather than "no", because the fix is a click away. */
-    else if (!hasRoomForTask() && !isActive(id)) flash("three tasks is the limit", "#e0a06a");
+    else if (!hasRoomForTask() && !isActive(id)) flash(maxActive() > MAX_ACTIVE ? "four tasks is the limit" : "three tasks is the limit", "#e0a06a");
   },
   abandonTask: (id: string) => {
     if (abandonTask(id)) { flash("task dropped · kills still count", "#e0a06a"); beep(240, 0.1, "triangle", 0.05, -80); }
@@ -862,7 +874,7 @@ const act: PanelActions = {
   handInTask: (id: string) => {
     const res = handInTask(P, id, (xp) => grantExp(cw(), P, xp));
     if (res) {
-      flash(`+${res.reward.points} TP · ${res.title}`, "#9fe8a8");
+      flash(res.points > 0 ? `+${res.points} TP \u00b7 ${res.title}` : `${res.title} \u00b7 no TP at your level`, "#9fe8a8");
       sfx("reward");
     } else {
       /* Two ways to get here and they need different advice: an unfinished
@@ -871,6 +883,25 @@ const act: PanelActions = {
       const full = !!def && isComplete(def) && !rewardFits(P, def);
       flash(full ? "no room for the purse" : "not ready to hand in", "#e0a06a");
     }
+  },
+  buyShelf: (id: string) => {
+    const r = buyShelf(P, id);
+    if (r.ok) {
+      flash(`${shelfLabel(r.entry)} \u00b7 \u2212${r.entry.price} TP`, "#9fe8a8");
+      sfx("reward");
+      return;
+    }
+    const e = shelfEntry(id);
+    const why = r.why === "rank" && e ? `needs the rank of ${RANKS[e.rank].name}`
+      : r.why === "points" ? "not enough Task Points"
+      : r.why === "owned" ? "already yours"
+      : r.why === "heavy" ? "too heavy"
+      : r.why === "full" ? "bag full"
+      : "";
+    if (why) flash(why, "#e0a06a");
+  },
+  wearOutfit: (id: string) => {
+    if (wearOutfit(P, id)) beep(480, 0.05, "sine", 0.04, 60);
   },
   moveStack: (ref: ContainerRef, index: number) => { openMoveChooser(ref, index); },
   openNested: (ref: ContainerRef, index: number, win: PanelWindow) => { navInto(ref, index, win); },

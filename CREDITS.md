@@ -184,6 +184,56 @@ JaidynReiman, Joe White, Johannes Sjolund (wulax)
 - LPC Clothing Updates — <https://opengameart.org/content/lpc-clothing-updates>
 - LPC Expanded Socks & Shoes — <https://opengameart.org/content/lpc-expanded-socks-shoes>
 
+## Player character, Ranger outfit — `public/hero-ranger-*.png`, `public/hero-female-ranger-*.png` (layered)
+
+The Ranger outfit (Etap 92), bought at Grizelda's shelf and worn at Vito's
+Wardrobe. Built like the two bodies above, from the **Universal LPC Spritesheet
+Character Generator**, and drawn over the same skin bases (`hero-base.png`,
+`hero-female-base.png`), which the generator reproduces pixel for pixel.
+
+Reproducible configurations (open in the generator to get the same characters):
+
+- male: <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=male&body=Body_Color_light&expression=Neutral_light&shoes=Basic_Shoes_black&hair=Loose_white&hat=Hood_gray&head=Human_Male_light&sash=Obi_gray&clothes=Cardigan_gray&legs=Pants_gray&gloves=Gloves_cloth.gray>
+- female: <https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/#sex=female&body=Body_Color_light&expression=Neutral_light&shoes=Basic_Shoes_black&hair=Loose_white&hat=Hood_gray&clothes=Cardigan_gray&legs=Pants_gray&gloves=Gloves_cloth.gray&head=Human_Female_light&sash=Obi_gray>
+
+Files, male: `hero-ranger-hair.png` (the hood, with the loose hair under it),
+`hero-ranger-shirt.png` (the cardigan), `hero-ranger-pants.png` and
+`hero-ranger-shoes.png` (the shoes, the gloves and the obi sash, which the
+Wardrobe dyes together as "Details"). Female: `hero-female-ranger-hair.png`,
+`hero-female-ranger-shirt.png`, `hero-female-ranger-pants.png` and
+`hero-female-ranger-shoes.png`, the same four.
+
+Changes made for the game: the same 9x5 grid of 64px cells as the bodies above;
+every layer cut away wherever a layer drawn above it covers it, so each pixel
+belongs to exactly one dye row; converted to grayscale and normalised to the
+row's own mean, so the Wardrobe can dye them. The male configuration first
+supplied also carried a **Cape Trim**; it is left out, because without a cape
+it is a strip hanging in the air at the feet.
+
+### Licence: OGA-BY 3.0, except the hood file: CC-BY-SA 3.0
+
+The hood, cardigan, pants, gloves, obi and shoes are used under **OGA-BY 3.0**.
+The **Loose** hair is offered only under **CC-BY-SA 3.0 / GPL 3.0** and is used
+under **CC-BY-SA 3.0** (<https://creativecommons.org/licenses/by-sa/3.0/>). It
+shares its file with the hood, so `hero-ranger-hair.png` and
+`hero-female-ranger-hair.png`, and either character as drawn in the Ranger
+outfit, are distributed under **CC-BY-SA 3.0**, on the same terms as the female
+hair above: attribution, ShareAlike, and no DRM.
+
+### Artists, per layer
+
+- **Hood** — Johannes Sjölund (wulax), JaidynReiman. OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0.
+- **Cardigan** (long sleeve) — ElizaWy, JaidynReiman, Stephen Challener (Redshrike), Johannes Sjölund (wulax). OGA-BY 3.0.
+- **Pants** — bluecarrot16, JaidynReiman, ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike); the female (thin) cut also Joe White. OGA-BY 3.0 / GPL 3.0 / CC-BY-SA 3.0.
+- **Gloves** — Michael Whitlock (bigbeargames), Matthew Krohn (makrohn), Johannes Sjölund (wulax), bluecarrot16, JaidynReiman. OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0.
+- **Obi** — JaidynReiman. OGA-BY 3.0+ / CC-BY 3.0+ / GPL 3.0.
+- **Basic Shoes** — JaidynReiman, bluecarrot16, Johannes Sjölund (wulax); the female (thin) cut JaidynReiman, Joe White, Johannes Sjölund (wulax). OGA-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0.
+- **Loose hair** — JaidynReiman, Manuel Riecke (MrBeast). CC-BY-SA 3.0 / GPL 3.0.
+- Body, head and face: as credited for the two bodies above.
+
+Source for every line: the generator's `sheet_definitions`,
+<https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator>.
+
 ## Bandit — `public/mob-bandit.png`, `public/mob-bandit-walk.png`, `public/mob-bandit-dead.png`
 
 The bandit is composed from the same **Universal LPC Spritesheet Character
@@ -2120,8 +2170,8 @@ files in full.**
 re-saving it from an indexed palette to RGBA so it matches the other icons in
 the folder, which is the same one change the Guard Ring got.
 
-`item-gorak-tusk.png` is **recoloured**, and it is the only bought icon in the
-repository that is. The purchased artwork is a warm brown horn whose drawing is
+`item-gorak-tusk.png` is **recoloured**, the first bought icon in the
+repository to be (the shelf's two rings, below, followed it). The purchased artwork is a warm brown horn whose drawing is
 carried entirely by its luminance ramp; `tools/recolor_gorak_tusk.py` measures
 each pixel's luminance, normalises it across the icon's own range and looks the
 result up in a bone ramp. Shading, edges, dither and alpha come through
@@ -2133,6 +2183,32 @@ default, and the smoke suite asserts it. The rule set in Etap 53 is that no
 generator may destroy bought artwork the first time somebody runs the tools
 directory; this one writes to exactly such a path, so it is made incapable of
 running without the file it is meant to be transforming.
+
+## Grizelda's shelf — `item-fang-necklace.png`, `item-horn-necklace.png`, `item-trophy-necklace.png`, `item-stalker-ring.png`, `item-bowyer-ring.png`, `item-warden-ring.png`, `item-huntress-signet.png`, `item-blessing-scroll.png`
+
+Source: **CraftPix.net**, standard (non-Enterprise) licence —
+https://craftpix.net/file-licenses/
+
+Same terms as the Health Ring above, and **the public-repository warning in the
+buildings section applies to all eight files in full.** They were supplied as
+32x32 PNGs under the names in the right-hand column.
+
+| file | item | supplied as |
+| --- | --- | --- |
+| `item-fang-necklace.png` | Fang Necklace | `icons_8_43.png` |
+| `item-horn-necklace.png` | Horn Necklace | `icons_8_46.png` |
+| `item-trophy-necklace.png` | Trophy Necklace | `icons_8_50.png` |
+| `item-stalker-ring.png` | Stalker's Ring | `icons_8_10.png`, repainted |
+| `item-bowyer-ring.png` | Bowyer's Ring | `icons_8_05.png` |
+| `item-warden-ring.png` | Warden's Ring | `icons_8_06.png` |
+| `item-huntress-signet.png` | Huntress' Signet | `icons_8_17.png`, repainted |
+| `item-blessing-scroll.png` | Huntress' Blessing | `bless.png` |
+
+Six ship exactly as supplied, re-saved as RGBA. Two are **recoloured** by
+`tools/recolor_shelf_rings.py`, with the tusk's method (a luminance ramp, so
+only the hue moves): `icons_8_10.png` is the very picture `item-health-ring.png`
+wears, so the Stalker's Ring keeps every pixel of it and moves to green; the
+Signet's red band moves to gold, its green stone and its outline untouched.
 
 ## The Golden and Vampire sets — `item-golden-{helm,body,legs,boots,shield}.png`, `item-vampire-{helm,body,legs,boots,shield}.png`, `item-sunspear.png`, `item-bloodletter.png`
 

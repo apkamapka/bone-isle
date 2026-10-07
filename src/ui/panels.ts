@@ -8,7 +8,8 @@ import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost
 import { RESEARCH, isResearched, towerTierOk, levelOk,
   ATTUNEMENT, isAttuned, offersFor } from "../systems/tower.ts";
 import { ELEMENT_LABEL, ELEMENTS, type Element } from "../systems/elements.ts";
-import { MAX_ACTIVE, offeredTasks, activeTasks, isActive as taskInHand, progressOf, isComplete, rewardFits, pointsEarned, claimsOf } from "../systems/tasks.ts";
+import { maxActive, pointsFor, offeredTasks, activeTasks, isActive as taskInHand, progressOf, isComplete, rewardFits, pointsEarned, claimsOf } from "../systems/tasks.ts";
+import { SHELF, RANKS, rankIndex, nextRank, shelfLabel, shelfNote, shelfState, type ShelfEntry } from "../systems/shelf.ts";
 import type { TaskReward } from "../systems/tasks.ts";
 import { ITEMS, RECIPES, canCraftAcross, recipeCostText, bagCount, activeArrow, itemInfoLines, countAcross, isContainer, bagSlotsUsed, walletAcross, maxExchange } from "../items.ts";
 import { carryCap, carriedWeight, freeCap } from "../entities/player.ts";
@@ -16,7 +17,7 @@ import { loreRead, stageOf, currentMission } from "../systems/missions.ts";
 import { t } from "../text/speech.ts";
 import { lang } from "../systems/panelPrefs.ts";
 import { SHOPS, sellsFor } from "../entities/npcs.ts";
-import { OUTFIT_COLORS, HUE_STEPS, SAT_ROWS, zoneLabels, outfitState, type OutfitZone } from "../systems/outfit.ts";
+import { OUTFIT_COLORS, OUTFITS, HUE_STEPS, SAT_ROWS, zoneLabels, outfitState, wardrobeOutfits, type OutfitZone } from "../systems/outfit.ts";
 import { heroPreviewFrame } from "../gfx/heroSheet.ts";
 import { hudText, wrapText, hudLines, hudFont, type HudCtx } from "./hud.ts";
 import type { Player } from "../entities/player.ts";
@@ -34,7 +35,7 @@ import { panelZoom, stepPanelZoom, panelCollapsed, togglePanelCollapsed, panelRo
 import { CHROME, panelFrame, popupFrame, raisedBox, sunkenBox, slotCell, buttonBox, keyline, bevelPx, frameInset } from "./chrome.ts";
 import { NO_DOCK, dockScroll, dockOverflow, reportDockStack, type DockLayout } from "./dock.ts";
 import type { Rect } from "./mobile.ts";
-import { drawResizeArrows } from "./icons.ts";
+import { drawResizeArrows, drawControlIcon } from "./icons.ts";
 import { audioSettings, setSfxVolume, setAmbientVolume, setVibration, canVibrate, buzz, sfx } from "../audio.ts";
 
 /**
@@ -690,6 +691,10 @@ export interface PanelActions {
   acceptTask: (id: string) => void;
   abandonTask: (id: string) => void;
   handInTask: (id: string) => void;
+  /** Buy one thing off Grizelda's shelf (Etap 92). */
+  buyShelf: (id: string) => void;
+  /** Put on another owned outfit at the Wardrobe (Etap 92). */
+  wearOutfit: (id: string) => void;
   moveStack: (ref: ContainerRef, index: number) => void;
   /** Walk this window down into the container sitting in slot `index`. */
   /** Open the container in slot `index` of `ref` — in its own window. */
@@ -2367,8 +2372,9 @@ function drawQuests(p: PanelInput): void {
 
 /* ---------------- Task board (Grizzly Adams tasks) ---------------- */
 
-function rewardText(r: TaskReward): string {
-  const parts: string[] = [`${r.points} TP`];
+/** `points` is what the errand pays THIS character: none far below his level. */
+function rewardText(r: TaskReward, points: number = r.points): string {
+  const parts: string[] = [points > 0 ? `${points} TP` : "no TP"];
   if (r.gold) parts.push(`${r.gold}g`);
   if (r.exp) parts.push(`${r.exp}xp`);
   return parts.join(" \u00b7 ");
@@ -2391,10 +2397,9 @@ function rewardText(r: TaskReward): string {
  * from the moment it is taken, so an untouched entry reads as its goal rather
  * than as a row of zeroes. An abandoned one keeps its number and says so.
  *
- * The second tab is Grizelda's shelf, and it is empty on purpose: what the
- * Task Points buy is a separate piece of design. The tab ships now so the
- * points have a visible destination rather than being a number that does
- * nothing, and so the shelf lands in a place the player already knows.
+ * The second tab is Grizelda's shelf (Etap 92), drawn by `drawShelf`. The tab
+ * shipped empty first, so that the points had a visible destination, and the
+ * shelf landed where the player already knew to look.
  */
 function drawTasks(p: PanelInput): void {
   const { hud, player } = p;
@@ -2411,13 +2416,22 @@ function drawTasks(p: PanelInput): void {
   const tabH = 18 * S;
   const handRowH = 44 * S;
   const taskRowH = 30 * S;
+  const shelfRowH = 26 * S;
   const labelH = 12 * S;
   const handH = inHand.length ? inHand.length * handRowH : 24 * S;
   const onShop = p.ui.taskTab === "shop";
   const chrome = 18 * S + headerH + tabH + labelH + handH + labelH + 16 * S;
-  const { first, count } = listView(p, Math.max(1, avail.length), taskRowH, chrome);
-  const shown = avail.slice(first, first + count);
-  const h = onShop ? 18 * S + headerH + tabH + 56 * S : chrome + shown.length * taskRowH;
+  const shelfRows = onShop ? shelfList() : [];
+  const shopChrome = 18 * S + headerH + tabH + labelH + 16 * S;
+  /* One list per tab, and only the showing one asks for a view: the scroll
+   * offset belongs to the window, and sizing the hidden list would clamp it
+   * to the wrong length. */
+  const { first, count } = onShop
+    ? listView(p, Math.max(1, shelfRows.length), shelfRowH, shopChrome)
+    : listView(p, Math.max(1, avail.length), taskRowH, chrome);
+  const shown = onShop ? [] : avail.slice(first, first + count);
+  const shelfShown = shelfRows.slice(first, first + count);
+  const h = onShop ? shopChrome + shelfShown.length * shelfRowH : chrome + shown.length * taskRowH;
 
   const { x, y } = anchor(p, w, h);
   if (!goldPanel(p, x, y, w, h, "TASK BOARD \u2014 Grizelda")) return;
@@ -2444,19 +2458,16 @@ function drawTasks(p: PanelInput): void {
   ry += tabH;
 
   if (onShop) {
-    hudText(hud, "Grizelda has nothing on the shelf yet.", x + w / 2, ry + 14 * S, 8 * S,
-      "rgba(220,214,190,.6)", "center");
-    hudText(hud, "Keep the points \u2014 they are going to be worth something.", x + w / 2, ry + 30 * S,
-      6.5 * S, "rgba(202,162,58,.75)", "center");
+    drawShelf(p, x, y, ry, w, h, shelfRows, shelfShown, first, count, shelfRowH, labelH);
     return;
   }
 
   /* ---- in hand ---- */
-  hudText(hud, `IN HAND \u2014 ${inHand.length}/${MAX_ACTIVE}`, x + 12 * S, ry + 6 * S, 7 * S,
+  hudText(hud, `IN HAND \u2014 ${inHand.length}/${maxActive()}`, x + 12 * S, ry + 6 * S, 7 * S,
     "rgba(255,233,168,.85)", "left", true);
   ry += labelH;
   if (!inHand.length) {
-    hudText(hud, "Nothing in hand. Take up to three below.", x + 14 * S, ry + 8 * S, 8 * S,
+    hudText(hud, `Nothing in hand. Take up to ${maxActive() > 3 ? "four" : "three"} below.`, x + 14 * S, ry + 8 * S, 8 * S,
       "rgba(220,214,190,.6)", "left");
     ry += 24 * S;
   }
@@ -2493,7 +2504,7 @@ function drawTasks(p: PanelInput): void {
   }
 
   /* ---- on the board ---- */
-  const full = inHand.length >= MAX_ACTIVE;
+  const full = inHand.length >= maxActive();
   const head = full ? "ON THE BOARD \u2014 hands full"
     : avail.length > count ? `ON THE BOARD \u2014 ${avail.length}, easiest first`
     : "ON THE BOARD";
@@ -2523,7 +2534,7 @@ function drawTasks(p: PanelInput): void {
      * is taken, so "0/100" on an untouched row would read as lost progress. */
     hudText(hud, prog > 0 ? `${prog}/${t.goal.need}` : `${t.goal.need} kills`, rx, ry + 9 * S, 7 * S,
       ready ? "#9fe8a8" : prog > 0 ? "rgba(255,233,168,.8)" : "rgba(220,214,190,.6)", "right");
-    hudText(hud, rewardText(t.reward), rx, ry + 20 * S, 6.5 * S, "rgba(202,162,58,.9)", "right");
+    hudText(hud, rewardText(t.reward, pointsFor(t, player.level)), rx, ry + 20 * S, 6.5 * S, "rgba(202,162,58,.9)", "right");
     if (!full) {
       const id = t.id;
       const yy = ry;
@@ -2532,6 +2543,102 @@ function drawTasks(p: PanelInput): void {
     ry += taskRowH;
   }
   hudText(hud, "Counts once taken \u00b7 dropping keeps the tally \u00b7 errands repeat", x + w / 2,
+    y + h - 8 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
+}
+
+/* ---------------- Grizelda's shelf (Etap 92) ---------------- */
+
+type ShelfRow = { rank: number } | { entry: ShelfEntry };
+
+/** The shelf as the list shows it: each rank, then what it opens. */
+function shelfList(): ShelfRow[] {
+  const rows: ShelfRow[] = [];
+  RANKS.forEach((_, i) => {
+    rows.push({ rank: i });
+    for (const e of SHELF) if (e.rank === i) rows.push({ entry: e });
+  });
+  return rows;
+}
+
+/**
+ * Grizelda's shelf: the ranks in order, each followed by what it opens.
+ *
+ * A rank not yet reached shows its stock greyed rather than hidden. The shelf
+ * is the one place the game says what the hunting is for, and an empty list
+ * would hide the point of the points. The price is written on the button that
+ * pays it, which is green only when the click would buy.
+ */
+function drawShelf(
+  p: PanelInput, x: number, y: number, top: number, w: number, h: number,
+  rows: readonly ShelfRow[], shown: readonly ShelfRow[], first: number, count: number,
+  rowH: number, labelH: number,
+): void {
+  const { hud, player } = p;
+  const { ctx, scale: S } = hud;
+  let ry = top;
+  const held = rankIndex();
+  const nx = nextRank();
+  const status = held < 0 ? `NO RANK YET — ${RANKS[0].name} at ${RANKS[0].at}`
+    : nx ? `RANK: ${RANKS[held].name.toUpperCase()} — ${nx.name} at ${nx.at}`
+    : `RANK: ${RANKS[held].name.toUpperCase()}`;
+  hudText(hud, status, x + 12 * S, ry + 6 * S, 7 * S, "rgba(255,233,168,.85)", "left", true);
+  ry += labelH;
+  const scroll = rows.length > count;
+  if (scroll) scrollBar(p, x + w - (SCROLLBAR_W + 4) * S, ry, count * rowH, rows.length, count, first);
+  const rowW = scroll ? w - 12 * S - (SCROLLBAR_W + 4) * S : w - 12 * S;
+  const rx = x + 6 * S + rowW - 6 * S;
+  for (const row of shown) {
+    if ("rank" in row) {
+      const k = RANKS[row.rank];
+      const reached = held >= row.rank;
+      hudText(hud, k.name.toUpperCase(), x + 12 * S, ry + rowH - 9 * S, 7.5 * S,
+        reached ? "#ffe9a8" : "rgba(170,160,140,.7)", "left", true);
+      hudText(hud, `${k.at} lifetime TP`, rx, ry + rowH - 9 * S, 6.5 * S,
+        reached ? "rgba(202,162,58,.9)" : "rgba(170,160,140,.6)", "right");
+      ry += rowH;
+      continue;
+    }
+    const e = row.entry;
+    const st = shelfState(player, e);
+    const locked = st === "rank";
+    const owned = st === "owned";
+    const box = 20 * S;
+    const ix = x + 10 * S;
+    const iy = ry + (rowH - box) / 2;
+    slotCell(ctx, ix, iy, box, box, S);
+    const g = e.good;
+    if (g.type === "item") {
+      const spr = itemSprite(g.item);
+      const sc = 1.4 * S;
+      icon(p, spr, ix + (box - iconW(spr, sc)) / 2, iy + (box - iconH(spr, sc)) / 2, sc);
+    } else {
+      const sz = Math.max(16, Math.floor((box - 4 * S) / 16) * 16);
+      drawControlIcon(ctx, g.type === "outfit" ? "equip" : "quest", ix + (box - sz) / 2, iy + (box - sz) / 2, sz, false);
+    }
+    const bw = 52 * S;
+    const bh = 16 * S;
+    const tx = ix + box + 6 * S;
+    const textW = rx - bw - 6 * S - tx;
+    hudText(hud, shelfLabel(e), tx, ry + 9 * S, 8 * S,
+      locked ? "#8a8070" : owned ? "#9fe8a8" : "#f3eedd", "left", true, textW);
+    hudText(hud, shelfNote(e), tx, ry + 19 * S, 6 * S, "rgba(220,214,190,.55)", "left", false, textW);
+    const bx = rx - bw;
+    const by = ry + (rowH - bh) / 2;
+    const can = st === "ok" || st === "heavy";
+    buttonBox(ctx, bx, by, bw, bh, S, {
+      face: can ? "rgba(52,110,52,.92)" : "rgba(48,48,48,.7)",
+      accent: can ? "#9fe8a8" : undefined,
+      hover: can && hovering(p, bx, by, bw, bh),
+    });
+    hudText(hud, owned ? "owned" : `${e.price} TP`, bx + bw / 2, by + bh / 2, 7.5 * S,
+      can ? "#eaffea" : st === "points" ? "#d9a07a" : "#9a9a9a", "center", true);
+    if (can) {
+      const id = e.id;
+      p.hotspots.push({ x: bx, y: by, w: bw, h: bh, fn: () => p.act.buyShelf(id) });
+    }
+    ry += rowH;
+  }
+  hudText(hud, "Ranks count every point earned · spending keeps them", x + w / 2,
     y + h - 8 * S, 6.5 * S, "rgba(220,214,190,.55)", "center");
 }
 
@@ -2832,6 +2939,28 @@ function drawWardrobe(p: PanelInput): void {
     }
     const ii = i;
     p.hotspots.push({ x: gx, y: gy, w: sw, h: sw, fn: () => p.act.setOutfitColor(dyeZone, ii) });
+  }
+
+  // the outfit (Etap 92), under the palette: arrows through what this
+  // character owns. The dyes stay; they are the character's, not the outfit's.
+  {
+    const owned = wardrobeOutfits();
+    const wearing = st.current;
+    const oy = gy0 + gridH + 10 * S;
+    hudText(hud, "Outfit", gx0, oy, 6.5 * S, "rgba(220,214,190,.6)", "left");
+    const rowY = oy + 6 * S;
+    const aw = 14 * S;
+    if (owned.length > 1) {
+      const at = Math.max(0, owned.indexOf(wearing));
+      ([[gx0, -1, "‹"], [gx0 + gridW - aw, 1, "›"]] as const).forEach(([ax, step, glyph]) => {
+        buttonBox(ctx, ax, rowY, aw, btnH, S, { hover: hovering(p, ax, rowY, aw, btnH) });
+        hudText(hud, glyph, ax + aw / 2, rowY + btnH / 2, 9 * S, "#e8dcc0", "center", true);
+        const next = owned[(at + step + owned.length) % owned.length];
+        p.hotspots.push({ x: ax, y: rowY, w: aw, h: btnH, fn: () => p.act.wearOutfit(next) });
+      });
+    }
+    hudText(hud, OUTFITS[wearing]?.name ?? wearing, gx0 + gridW / 2, rowY + btnH / 2, 8 * S,
+      "#ffe9a8", "center", true, gridW - 2 * aw - 8 * S);
   }
 
   // reset to the classic look

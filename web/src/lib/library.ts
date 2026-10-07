@@ -120,6 +120,7 @@ export const ITEM_GROUPS: readonly { category: string; label: string; id: string
   { category: "jewellery", label: "Jewellery", id: "jewellery" },
   { category: "ammunition", label: "Ammunition", id: "ammunition" },
   { category: "potion", label: "Potions", id: "potions" },
+  { category: "scroll", label: "Scrolls", id: "scrolls" },
   { category: "food", label: "Food", id: "food" },
   { category: "container", label: "Containers", id: "containers" },
   { category: "material", label: "Materials", id: "materials" },
@@ -134,7 +135,7 @@ const SLOT_KIND: Record<string, string> = {
 };
 const CATEGORY_KIND: Record<string, string> = {
   weapon: "Weapon", "distance weapon": "Distance weapon", shield: "Shield", ammunition: "Ammunition",
-  crystal: "Crystal", potion: "Potion", food: "Food", container: "Container", coin: "Coin", material: "Material",
+  crystal: "Crystal", potion: "Potion", scroll: "Scroll", food: "Food", container: "Container", coin: "Coin", material: "Material",
 };
 
 /** What an item is, in a word or two: "Helmet", "Distance weapon", "Material". */
@@ -154,6 +155,7 @@ export interface ItemLike {
   ammo?: { dmg: number };
   practice?: true;
   deathProtect?: true;
+  blessing?: boolean;
   pack?: { slots: number };
   coin?: number;
   heal?: number;
@@ -187,6 +189,7 @@ export function itemFacts(i: ItemLike, elementLabel: (id: string) => string = (i
   if (g.maxhp !== undefined) out.push({ label: "Hit points", value: plus(g.maxhp) });
   if (g.dist !== undefined) out.push({ label: "Distance fighting", value: plus(g.dist) });
   if (i.deathProtect) out.push({ label: "On death", value: "Keeps your items, then breaks" });
+  if (i.blessing) out.push({ label: "Use", value: "Your next death costs half the experience" });
   if (i.heal !== undefined) out.push({ label: "Heals", value: `${num(i.heal)} HP` });
   if (i.food !== undefined) out.push({ label: "Regeneration", value: duration(i.food) });
   if (i.pack) out.push({ label: "Slots", value: num(i.pack.slots) });

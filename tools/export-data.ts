@@ -51,13 +51,14 @@ import { closeSync, existsSync, mkdirSync, openSync, readSync, writeFileSync } f
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ITEMS, RECIPES, SET_BONUS, SET_SPEED_BONUS, type ItemDef, type ItemKind, type SetKey } from "../src/items.ts";
-import { OUTFIT_COLORS, zoneLabels } from "../src/systems/outfit.ts";
+import { OUTFIT_COLORS, OUTFITS, WARDROBE_OUTFITS, zoneLabels } from "../src/systems/outfit.ts";
 import { MONSTER_DEFS, MONSTER_KINDS, mobName, monsterResist } from "../src/entities/monsters.ts";
 import { SHOPS } from "../src/entities/npcs.ts";
 import { NPC_DATA } from "../src/world/generate.ts";
 import { buildWorlds, CHEST_PRIZES } from "../src/game.ts";
 import { MISSIONS } from "../src/systems/missions.ts";
-import { TASKS } from "../src/systems/tasks.ts";
+import { TASKS, TP_LEVEL_GAP } from "../src/systems/tasks.ts";
+import { SHELF, RANKS, shelfLabel, shelfNote } from "../src/systems/shelf.ts";
 import { RESEARCH, OFFERS, towerTierFor } from "../src/systems/tower.ts";
 import { COAL_PER_SMELT, GEM_COAL, GEM_TROPHIES, GEM_TROPHY_KINDS } from "../src/systems/smelt.ts";
 import { ELEMENTS, ELEMENT_LABEL, type Element, type Resistances } from "../src/systems/elements.ts";
@@ -77,7 +78,7 @@ import type { NpcKey, WorldKey } from "../src/world/types.ts";
 
 export type ItemCategory =
   | "weapon" | "distance weapon" | "shield" | "armor" | "jewellery"
-  | "ammunition" | "crystal" | "potion" | "food" | "container" | "coin" | "material";
+  | "ammunition" | "crystal" | "potion" | "scroll" | "food" | "container" | "coin" | "material";
 
 /** Materials by item, as the game spends them. */
 export type Cost = Partial<Record<ItemKind, number>>;
@@ -117,7 +118,9 @@ export type ItemSource =
   /** Chopped from trees or mined from rocks. */
   | { type: "gather"; from: "tree" | "rock" }
   /** Changed for other coins by a townsperson. */
-  | { type: "exchange"; npc: string };
+  | { type: "exchange"; npc: string }
+  /** On Grizelda's shelf (Etap 92): `points` Task Points, from the rank `rank`. */
+  | { type: "shelf"; npc: string; points: number; rank: string };
 
 /**
  * What a crystal does, read from the crystal tables rather than restated:
@@ -234,7 +237,7 @@ export interface ExportNpc {
   /** Lines with an unlisted item are left out. */
   shop: { greeting: string; entries: { item: ItemKind; buy: number; sell: number }[] } | null;
   /** The tailor's work: the outfit's dye zones and how many colours each takes. */
-  wardrobe: { zones: string[]; colours: number } | null;
+  wardrobe: { zones: string[]; colours: number; outfits: { name: string; shelf: boolean }[] } | null;
   /** The money changer's rate: gold coins for one platinum, and back. */
   exchange: { rate: number } | null;
 }
@@ -287,6 +290,20 @@ export interface ExportSet {
   pieces: ItemKind[];
 }
 
+/** Who keeps the shelf: the task board's NPC. */
+const SHELF_NPC = "taskmaster";
+
+/** Grizelda's shelf (Etap 92), for her page. */
+export interface ExportShelf {
+  npc: string;
+  /** Lifetime Task Points that reach each rank, lowest first. */
+  ranks: { name: string; at: number }[];
+  /** What the points buy, in shelf order. `item` is null for the outfit and the task slot. */
+  entries: { id: string; name: string; note: string; item: ItemKind | null; rank: number; price: number }[];
+  /** An errand more than this many levels below the character pays no points. */
+  pointGap: number;
+}
+
 export interface GameData {
   elements: { id: Element; label: string }[];
   items: ExportItem[];
@@ -295,6 +312,7 @@ export interface GameData {
   worlds: ExportWorld[];
   tasks: ExportTask[];
   sets: ExportSet[];
+  shelf: ExportShelf;
 }
 
 /* ------------------------------------------------------------------ */
@@ -367,6 +385,7 @@ function categoryOf(d: ItemDef): ItemCategory {
   if (d.ammo) return "ammunition";
   if (d.crystal) return "crystal";
   if (d.heal !== undefined) return "potion";
+  if (d.blessing) return "scroll";
   if (d.food !== undefined) return "food";
   return "material";
 }
@@ -450,6 +469,11 @@ export function itemSources(): Map<ItemKind, { listed: ItemSource[]; unlisted: n
       if (MISSION_NPCS.has(key)) hide(e.kind);
       else add(e.kind, { type: "shop", npc: key, price: e.buy });
     }
+  }
+
+  // ---- Grizelda's shelf (Etap 92): Task Points, behind a rank
+  for (const e of SHELF) {
+    if (e.good.type === "item") add(e.good.item, { type: "shelf", npc: SHELF_NPC, points: e.price, rank: RANKS[e.rank].name });
   }
 
   // ---- one-time chests
@@ -653,7 +677,14 @@ export function collectGameData(): GameData {
           }
         : null,
       wardrobe: role === "wardrobe"
-        ? { zones: Object.values(zoneLabels()), colours: OUTFIT_COLORS.length }
+        ? {
+            zones: Object.values(zoneLabels()),
+            colours: OUTFIT_COLORS.length,
+            outfits: WARDROBE_OUTFITS.map((id) => ({
+              name: OUTFITS[id]?.name ?? id,
+              shelf: SHELF.some((e) => e.good.type === "outfit" && e.good.outfit === id),
+            })),
+          }
         : null,
       exchange: role === "exchange"
         ? { rate: (ITEMS.platinumCoin.coin ?? 100) / (ITEMS.goldCoin.coin ?? 1) }
@@ -713,6 +744,20 @@ export function collectGameData(): GameData {
       .map((i) => i.key),
   })).filter((s) => s.pieces.length > 0);
 
+  const shelf: ExportShelf = {
+    npc: SHELF_NPC,
+    ranks: RANKS.map((r) => ({ name: r.name, at: r.at })),
+    entries: SHELF.map((e) => ({
+      id: e.id,
+      name: shelfLabel(e),
+      note: shelfNote(e),
+      item: e.good.type === "item" && itemKeys.has(e.good.item) ? e.good.item : null,
+      rank: e.rank,
+      price: e.price,
+    })),
+    pointGap: TP_LEVEL_GAP,
+  };
+
   return {
     elements: ELEMENTS.map((id) => ({ id, label: ELEMENT_LABEL[id] })),
     items,
@@ -721,6 +766,7 @@ export function collectGameData(): GameData {
     worlds,
     tasks,
     sets,
+    shelf,
   };
 }
 

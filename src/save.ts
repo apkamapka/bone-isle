@@ -119,6 +119,8 @@ interface SaveData {
     gold?: number;
     taskPoints?: number; level: number; exp: number; expNext: number;
     fedS?: number;
+    /** Huntress' Blessing (Etap 92). Absent means none. */
+    blessed?: boolean;
     /**
      * Rune effects. Absent in every save written before them, which loads as
      * "nothing up" — see loadBuffs().
@@ -258,6 +260,7 @@ export function saveGame(g: Game): void {
       hp: p.hp, maxhp: p.maxhp,
       taskPoints: p.taskPoints, level: p.level, exp: p.exp, expNext: p.expNext,
       fedS: p.fedS,
+      blessed: p.blessed || undefined,
       buffs: { ...p.buffs },
       ammo: p.ammo ?? undefined,
       pack: p.pack, eq: p.eq,
@@ -448,6 +451,7 @@ function loadFrom(raw: string | null): Game | null {
   placeWalker(player, sp.x * pos, sp.y * pos); // scale a v2 position, then snap to its tile centre
   player.taskPoints = sp.taskPoints ?? 0; player.level = sp.level;
   player.fedS = sp.fedS ?? 0; // older saves start hungry
+  player.blessed = sp.blessed === true; // older saves come back unblessed
   player.buffs = loadBuffs(sp.buffs); // older saves come back with nothing up
   // Recompute expNext from level so older saves adopt the current XP curve.
   player.exp = sp.exp; player.expNext = expNeeded(player.level);

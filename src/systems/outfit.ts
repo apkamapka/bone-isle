@@ -2,15 +2,15 @@
  * Outfits (Etap 10): the player's look, Tibia-style split into an OUTFIT (the
  * pixel map — which character shape you wear) and its COLORS (three dye zones
  * re-tinted at bake time). Colors are freely changeable at the Wardrobe in
- * Bonetown from day one; additional outfit maps arrive later as loot-box
- * unlocks, which is why `owned`/`current` are already saved — when new
- * outfits ship, the save format doesn't move.
+ * Bonetown from day one. More outfits come from Grizelda's shelf (Etap 92:
+ * the Ranger), and `owned`/`current` were saved from the start, so the save
+ * format did not move when the first one shipped.
  *
  * Module state (like skills/tasks): serialize/load/reset from save.ts/game.ts.
  */
 import { PLAYER_MAP, bake } from "../gfx/sprites.ts";
 import { ADV_DOWN, ADV_SIDE, ADV_UP } from "../gfx/adventurer.ts";
-import { setHeroDyes, type HeroZone } from "../gfx/heroSheet.ts";
+import { setHeroDyes, setHeroLook, type HeroZone, type HeroLook } from "../gfx/heroSheet.ts";
 import { active as activeState } from "./playerState.ts";
 import type { Player } from "../entities/player.ts";
 
@@ -34,10 +34,15 @@ const ADV_LABELS: Readonly<Record<OutfitZone, string>> = {
 const HERO_LABELS: Readonly<Record<OutfitZone, string>> = {
   hair: "Hair", primary: "Shirt", secondary: "Pants", shoes: "Shoes",
 };
+/** The Ranger's rows (Etap 92): the hood carries the strands under it, and the
+ *  last row dyes the shoes, the gloves and the sash together. */
+const RANGER_LABELS: Readonly<Record<OutfitZone, string>> = {
+  hair: "Hood", primary: "Cardigan", secondary: "Pants", shoes: "Details",
+};
 
 /** Captions for the Wardrobe swatch rows. */
 export function zoneLabels(): Readonly<Record<OutfitZone, string>> {
-  return HERO_LABELS;
+  return OUTFITS[state.current]?.lpc?.labels ?? HERO_LABELS;
 }
 
 /**
@@ -113,6 +118,9 @@ interface OutfitDef {
   name: string;
   frames: Readonly<Record<Facing, readonly string[]>>;
   labels: Readonly<Record<OutfitZone, string>>;
+  /** LPC clothes of its own (Etap 92): the hero's layer set and the Wardrobe's
+   *  captions for it. Absent means the Adventurer's clothes. */
+  lpc?: { look: HeroLook; labels: Readonly<Record<OutfitZone, string>> };
 }
 
 function oneView(map: readonly string[]): Readonly<Record<Facing, readonly string[]>> {
@@ -126,8 +134,22 @@ export const OUTFITS: Readonly<Record<string, OutfitDef>> = {
     labels: ADV_LABELS,
   },
   classic: { name: "Classic", frames: oneView(PLAYER_MAP), labels: LEGACY_LABELS },
+  /* The first outfit with LPC clothes of its own, bought at Grizelda's shelf
+   * (Etap 92). Headless, or if its sheets fail, it falls back to the
+   * Adventurer's baked maps like everything else. */
+  ranger: {
+    name: "Ranger",
+    frames: { down: ADV_DOWN, side: ADV_SIDE, up: ADV_UP },
+    labels: RANGER_LABELS,
+    lpc: { look: "ranger", labels: RANGER_LABELS },
+  },
 };
 const DEFAULT_OUTFIT = "adventurer";
+
+/** What the Wardrobe lets a character switch between, in order, of what he
+ *  owns. "classic" is a fallback map with no LPC clothes of its own, so on
+ *  screen it IS the Adventurer: it still loads, but it is not offered. */
+export const WARDROBE_OUTFITS: readonly string[] = ["adventurer", "ranger"];
 
 /** Persisted shape (a plain snapshot of the module state below). */
 export interface OutfitSave {
@@ -224,6 +246,7 @@ export function applyOutfit(p: Player): void {
   const set = bakeOutfitSprites();
   p.sprDir = set;
   p.spr = set.down; // keep the generic walker field in sync (shadows, corpses)
+  setHeroLook(heroLookOf(state.current));
   setHeroDyes(heroDyeColors());
 }
 
@@ -246,6 +269,36 @@ export function resetOutfitColors(p: Player): void {
 /** New game: module state must not leak a previous character's wardrobe. */
 export function resetOutfit(): void {
   Object.assign(state, defaults());
+}
+
+/** The LPC clothes an outfit is drawn in. */
+export function heroLookOf(id: string): HeroLook {
+  return OUTFITS[id]?.lpc?.look ?? "adventurer";
+}
+
+export function ownsOutfit(id: string): boolean {
+  return state.owned.includes(id);
+}
+
+/** Add an outfit to the wardrobe (Grizelda's shelf). Owning is for good. */
+export function grantOutfit(id: string): boolean {
+  if (!(id in OUTFITS) || state.owned.includes(id)) return false;
+  state.owned = [...state.owned, id];
+  return true;
+}
+
+/** The outfits the Wardrobe lets this character switch between. */
+export function wardrobeOutfits(): string[] {
+  return WARDROBE_OUTFITS.filter((o) => state.owned.includes(o));
+}
+
+/** Put on another owned outfit. The dyes stay: they are the character's, not
+ *  the outfit's, as in Tibia. */
+export function wearOutfit(p: Player, id: string): boolean {
+  if (!(id in OUTFITS) || !state.owned.includes(id) || state.current === id) return false;
+  state.current = id;
+  applyOutfit(p);
+  return true;
 }
 
 /** Snapshot for the save file. */

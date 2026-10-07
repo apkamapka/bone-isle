@@ -26,17 +26,24 @@
  * the bag is a photograph, not a tally — so they are gone rather than bent
  * into a shape they never fitted.
  *
- * Task Points still accrue on every hand-in and still show in the HUD. There
- * is nothing to spend them on yet, by decision: the reward shelf is a separate
- * piece of design and an empty shop is more honest than a placeholder one.
+ * Task Points accrue on hand-ins and are spent at Grizelda's shelf (Etap 92,
+ * systems/shelf.ts). An errand more than TP_LEVEL_GAP levels below the
+ * character pays its gold and experience but no points: without that, a
+ * veteran clearing the low grounds would earn points faster there than where
+ * his level is, and the shelf would be priced for nobody.
  */
 import { giveGold, walletRoomFor } from "../items.ts";
 import { active as activeState } from "./playerState.ts";
 import type { MonsterKind } from "../world/types.ts";
 import type { Player } from "../entities/player.ts";
 
-/** Errands in hand at once. Three, as in the game this board comes from. */
+/** Errands in hand at once. Three, as in the game this board comes from; the
+ *  shelf sells a fourth (`maxActive`). */
 export const MAX_ACTIVE = 3;
+
+/** An errand more than this many levels below the character pays no Task
+ *  Points (Etap 92, Radek's call). Its gold and experience are paid as ever. */
+export const TP_LEVEL_GAP = 15;
 
 export interface TaskGoal {
   /** Everything that counts. One entry for a single rank, several for a camp. */
@@ -229,6 +236,15 @@ const rt = {
   set claims(v: Record<string, number>) { activeState().tasks.claims = v; },
   get earned() { return activeState().tasks.earned; },
   set earned(v: number) { activeState().tasks.earned = v; },
+  /** Slots bought at the shelf on top of MAX_ACTIVE: 0 or 1. Kept off the
+   *  state entirely while it is 0, so a board nobody bought from is the same
+   *  object it always was. */
+  get extra() { return activeState().tasks.extra ?? 0; },
+  set extra(v: number) {
+    const t = activeState().tasks;
+    if (v > 0) t.extra = v;
+    else delete t.extra;
+  },
 };
 
 export function taskById(id: string): TaskDef | undefined {
@@ -244,8 +260,31 @@ export function isActive(id: string): boolean {
   return rt.active.includes(id);
 }
 
+/** Errands this character may hold at once. */
+export function maxActive(): number {
+  return MAX_ACTIVE + extraSlots();
+}
+
+/** How many slots the shelf has added. */
+export function extraSlots(): number {
+  return rt.extra;
+}
+
+/** The shelf's fourth slot. One is sold; a second grant does nothing. */
+export function grantExtraSlot(): boolean {
+  if (rt.extra >= 1) return false;
+  rt.extra = 1;
+  return true;
+}
+
+/** Task Points this errand pays a character of this level: none when the
+ *  errand is more than TP_LEVEL_GAP levels below him. */
+export function pointsFor(def: TaskDef, level: number): number {
+  return level - def.reqLevel > TP_LEVEL_GAP ? 0 : def.reward.points;
+}
+
 export function hasRoomForTask(): boolean {
-  return rt.active.length < MAX_ACTIVE;
+  return rt.active.length < maxActive();
 }
 
 export function pointsEarned(): number {
@@ -337,6 +376,8 @@ export interface HandInResult {
   reward: TaskReward;
   /** Which hand-in this was for that entry — 1 the first time, 2 the next. */
   time: number;
+  /** Task Points actually paid: `reward.points`, or none far below the level. */
+  points: number;
 }
 
 /**
@@ -357,11 +398,14 @@ export function handInTask(p: Player, id: string, giveExp: (n: number) => void):
   rt.progress = { ...rt.progress, [def.id]: Math.max(0, (rt.progress[def.id] ?? 0) - def.goal.need) };
   rt.active = rt.active.filter((x) => x !== def.id);
   const r = def.reward;
-  p.taskPoints += r.points;
-  rt.earned += r.points;
+  /* The level that counts is the one the character hands in at, before the
+   * hand-in's own experience can lift it. */
+  const points = pointsFor(def, p.level);
+  p.taskPoints += points;
+  rt.earned += points;
   if (r.gold) giveGold(p.bag, r.gold);
   if (r.exp) giveExp(r.exp);
-  return { title: def.title, reward: r, time };
+  return { title: def.title, reward: r, time, points };
 }
 
 /* ---------------- save / load ---------------- */
@@ -375,6 +419,8 @@ export interface TaskSave {
   claims: Record<string, number>;
   /** Lifetime Task Points earned, which no spending ever reduces. */
   earned: number;
+  /** Task slots bought at the shelf (Etap 92): 1, or absent for none. */
+  extra?: number;
 }
 
 /** The pre-Etap shape: one errand, its own kill tally, lifetime points. */
@@ -388,6 +434,7 @@ export function taskState(): TaskSave {
   return {
     active: [...rt.active], progress: { ...rt.progress },
     claims: { ...rt.claims }, earned: rt.earned,
+    ...(rt.extra > 0 ? { extra: rt.extra } : {}),
   };
 }
 
@@ -419,6 +466,7 @@ export function loadTaskState(s: (Partial<TaskSave> & LegacyTaskSave) | undefine
   rt.progress = {};
   rt.claims = {};
   rt.earned = typeof s?.earned === "number" && s.earned > 0 ? Math.floor(s.earned) : 0;
+  rt.extra = s?.extra === 1 ? 1 : 0;
   if (!s) return;
 
   const ids = Array.isArray(s.active) ? s.active
@@ -427,7 +475,7 @@ export function loadTaskState(s: (Partial<TaskSave> & LegacyTaskSave) | undefine
   const seen = new Set<string>();
   for (const id of ids) {
     if (typeof id !== "string" || seen.has(id) || !taskById(id)) continue;
-    if (rt.active.length >= MAX_ACTIVE) break;
+    if (rt.active.length >= maxActive()) break;
     seen.add(id);
     rt.active = [...rt.active, id];
   }
@@ -448,4 +496,5 @@ export function resetTasks(): void {
   rt.progress = {};
   rt.claims = {};
   rt.earned = 0;
+  rt.extra = 0;
 }

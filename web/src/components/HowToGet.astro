@@ -5,8 +5,8 @@ import type { ExportItem } from "../../../tools/export-data.ts";
 
 /**
  * Every listed way to get an item: who drops it, who sells it, and the rest
- * (the tower, the forge, a chest, trees and rocks, the money changer). The
- * item pages and the crystal pages share it, so each source is put into words
+ * (the tower, the forge, a chest, trees and rocks, the money changer,
+ * Grizelda's shelf). The item pages and the crystal pages share it, so each source is put into words
  * in one place.
  */
 interface Props {
@@ -118,6 +118,15 @@ const others = item.sources.filter((s) => s.type !== "drop" && s.type !== "shop"
                 Cut at the Forge, tier {roman(s.forgeTier)}, from {num(s.coal)} <a href={itemUrl("coal")}>coal</a> and
                 one each of {num(s.kinds)} different trophies:{" "}
                 {trophies.map((t, i) => <>{i > 0 && (i === trophies.length - 1 ? " or " : ", ")}{t.href ? <a href={t.href}>{t.name}</a> : t.name}</>)}.
+              </li>
+            );
+          }
+          if (s.type === "shelf") {
+            const g = townsperson(s.npc);
+            return (
+              <li>
+                Bought from {g.href ? <a href={`${g.href}#shelf`}>{g.name}</a> : g.name}{g.at && ` in ${g.at}`} for
+                {" "}{num(s.points)} Task Points, from the rank of {s.rank}.
               </li>
             );
           }

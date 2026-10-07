@@ -19,12 +19,15 @@ const set = item.set ? DATA.sets.find((x) => x.key === item.set) : undefined;
 
 const droppers = item.sources.flatMap((s) => (s.type === "drop" ? [DATA.monsters.find((m) => m.kind === s.creature)?.name ?? s.creature] : []));
 const seller = item.sources.find((s) => s.type === "shop");
+const shelf = item.sources.find((s) => s.type === "shelf");
 const summary = facts.filter((f) => f.label !== "Weight" && f.label !== "Stacks to").slice(0, 2)
   .map((f) => `${f.label.toLowerCase()} ${f.value}`);
 const how = item.sources.length === 0 ? "Where it comes from is unknown."
   : droppers.length > 0
   ? `Dropped by ${listOf(droppers.slice(0, 3))}${droppers.length > 3 ? " and more" : ""}.`
-  : seller?.type === "shop" ? (() => { const t = townsperson(seller.npc); return `Sold by ${t.name}${t.at ? ` in ${t.at}` : ""}.`; })() : "";
+  : seller?.type === "shop" ? (() => { const t = townsperson(seller.npc); return `Sold by ${t.name}${t.at ? ` in ${t.at}` : ""}.`; })()
+  : shelf?.type === "shelf" ? (() => { const t = townsperson(shelf.npc); return `Bought with Task Points from ${t.name}${t.at ? ` in ${t.at}` : ""}.`; })()
+  : "";
 const description = `${item.name}, a ${kind.toLowerCase()} in Xebeka${summary.length ? `: ${summary.join(", ")}` : ""}. ${how}`.trim();
 ---
 <Library title={`${item.name} · Xebeka items`} description={description}>

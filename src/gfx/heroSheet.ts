@@ -9,6 +9,9 @@
  *   hero-base.png            body + head + eyes (skin, never dyed)
  *   hero-{hair,shirt,pants,shoes}.png   grayscale layers, 128 = mid-tone
  *   hero-female-*.png        the same five for the female body
+ *   hero-ranger-*.png, hero-female-ranger-*.png
+ *                            the Ranger outfit's four layers (Etap 92), drawn
+ *                            over the same two bases
  *
  * On load, and whenever a dye changes, the four grayscale layers are tinted
  * (out = gray/128 * color, so the artwork's shading survives) and composited
@@ -17,7 +20,9 @@
  *
  * The layers are trimmed exports from the Universal LPC Spritesheet Character
  * Generator. See CREDITS.md: the male set is OGA-BY 3.0, and so is the female
- * set except its hair, which is CC-BY-SA 3.0. The attribution is not optional.
+ * set except its hair, which is CC-BY-SA 3.0, and so are the Ranger's layers
+ * except the hood file, which carries the same loose hair and is CC-BY-SA 3.0
+ * too. The attribution is not optional.
  *
  * Loading is asynchronous and best-effort. Until the sheets arrive — and
  * forever, if they 404 — heroSprite() returns null and the caller falls back to
@@ -45,6 +50,8 @@ const ROW: Record<LpcDir, number> = { up: 0, left: 1, down: 2, right: 3 };
 const IDLE_COL: Record<LpcDir, number> = { up: 1, left: 3, down: 5, right: 7 };
 
 export type HeroZone = "hair" | "shirt" | "pants" | "shoes";
+/** The clothes a body is drawn in: the shipped set, or an outfit's own (Etap 92). */
+export type HeroLook = "adventurer" | "ranger";
 /** Draw order of the tinted layers over the base (back to front). */
 const TINT_ORDER: readonly HeroZone[] = ["shoes", "pants", "shirt", "hair"];
 /** The classic silver/gray look — matches the character as first shipped. The
@@ -141,40 +148,59 @@ function rebuild(): void {
   slice(composed);
 }
 
-/** Each body's five sheets, in the order `loadHeroSheet` reads them. The male
- *  set keeps the names it shipped with. */
-const LAYER_SRC: Readonly<Record<Sex, Readonly<Record<"base" | HeroZone, string>>>> = {
-  male: {
-    base: "./hero-base.png",
-    hair: "./hero-hair.png",
-    shirt: "./hero-shirt.png",
-    pants: "./hero-pants.png",
-    shoes: "./hero-shoes.png",
+/** The skin each body is drawn on, whatever it wears. */
+const BASE_SRC: Readonly<Record<Sex, string>> = {
+  male: "./hero-base.png",
+  female: "./hero-female-base.png",
+};
+
+/** The four dye layers of each look, per body. The Adventurer keeps the names
+ *  it shipped with; every other look sits on the same two bases (Etap 92). */
+const LOOK_SRC: Readonly<Record<HeroLook, Readonly<Record<Sex, Readonly<Record<HeroZone, string>>>>>> = {
+  adventurer: {
+    male: { hair: "./hero-hair.png", shirt: "./hero-shirt.png", pants: "./hero-pants.png", shoes: "./hero-shoes.png" },
+    female: {
+      hair: "./hero-female-hair.png", shirt: "./hero-female-shirt.png",
+      pants: "./hero-female-pants.png", shoes: "./hero-female-shoes.png",
+    },
   },
-  female: {
-    base: "./hero-female-base.png",
-    hair: "./hero-female-hair.png",
-    shirt: "./hero-female-shirt.png",
-    pants: "./hero-female-pants.png",
-    shoes: "./hero-female-shoes.png",
+  ranger: {
+    male: {
+      hair: "./hero-ranger-hair.png", shirt: "./hero-ranger-shirt.png",
+      pants: "./hero-ranger-pants.png", shoes: "./hero-ranger-shoes.png",
+    },
+    female: {
+      hair: "./hero-female-ranger-hair.png", shirt: "./hero-female-ranger-shirt.png",
+      pants: "./hero-female-ranger-pants.png", shoes: "./hero-female-ranger-shoes.png",
+    },
   },
 };
 
-/** The five files one body is drawn from. Exported for the smoke suite. */
-export function heroLayerFiles(sex: Sex): Readonly<Record<"base" | HeroZone, string>> {
-  return LAYER_SRC[sex];
+/** The five files one body in one look is drawn from, in the order
+ *  `loadHeroSheet` reads them. Exported for the smoke suite. */
+export function heroLayerFiles(sex: Sex, look: HeroLook = "adventurer"): Readonly<Record<"base" | HeroZone, string>> {
+  return { base: BASE_SRC[sex], ...LOOK_SRC[look][sex] };
 }
 
 /** Bumped by every load, so that an older load still in flight can never land
  *  on top of a newer one. */
 let loadGen = 0;
 
-/** Kick off the load of one body. No-op headless, so the smoke tests use the
- *  fallback. Until the new sheets arrive, whatever was drawn before stays. */
-export function loadHeroSheet(sex: Sex = "male"): void {
+/** The body and the clothes last asked for; `setHeroLook` reloads with them. */
+let curSex: Sex = "male";
+let curLook: HeroLook = "adventurer";
+let bodyAsked = false;
+
+/** Kick off the load of one body, in a look (the last one asked for unless
+ *  named). No-op headless, so the smoke tests use the fallback. Until the new
+ *  sheets arrive, whatever was drawn before stays. */
+export function loadHeroSheet(sex: Sex = "male", look: HeroLook = curLook): void {
+  curSex = sex;
+  curLook = look;
+  bodyAsked = true;
   if (typeof Image === "undefined" || typeof document === "undefined") return;
   const gen = ++loadGen;
-  const src = LAYER_SRC[sex];
+  const src = heroLayerFiles(sex, look);
   const keys = ["base", "hair", "shirt", "pants", "shoes"] as const;
   const parts: Partial<Record<string, HTMLImageElement>> = {};
   let left = keys.length;
@@ -204,6 +230,20 @@ export function loadHeroSheet(sex: Sex = "male"): void {
     };
     img.src = src[k];
   }
+}
+
+/** Change the clothes (the Wardrobe's outfit, Etap 92). A save can name its
+ *  outfit before main.ts asks for a body, so until then this only remembers
+ *  the look; once a body is loaded it reloads, if the look really changed. */
+export function setHeroLook(look: HeroLook): void {
+  if (look === curLook) return;
+  curLook = look;
+  if (bodyAsked) loadHeroSheet(curSex, look);
+}
+
+/** The look last asked for. */
+export function heroLook(): HeroLook {
+  return curLook;
 }
 
 /** Apply Wardrobe dye colors (hex) and rebuild the cached sheet. */

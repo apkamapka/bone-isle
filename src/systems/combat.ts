@@ -354,10 +354,16 @@ export function killMonster(world: World, p: Player, m: Monster): void {
  *  - you lose a fraction of TOTAL experience (you can de-level),
  *  - every skill loses a fraction of its current tries (can drop a level).
  * The amulet never protects experience or skills — exactly like in Tibia.
+ * A Huntress' Blessing (Etap 92) halves the experience lost, once.
  */
 export function applyDeathPenalty(world: World, p: Player): void {
+  /* The blessing is spent by this death, whatever it costs, and it halves the
+   * experience lost. Items and skills are not its business. */
+  const blessed = p.blessed;
+  p.blessed = false;
+  if (blessed) addFloat(world, p.x, p.y - 80, "the blessing held", "#c9a6ff");
   if (p.level < DEATH_PENALTY_LEVEL) {
-    p.exp = Math.floor(p.exp * 0.9);
+    p.exp = Math.floor(p.exp * (blessed ? 0.95 : 0.9));
     return;
   }
 
@@ -419,7 +425,7 @@ export function applyDeathPenalty(world: World, p: Player): void {
 
   // --- experience (10% of TOTAL — can de-level) ---
   const total = totalExpFor(p.level) + p.exp;
-  const newTotal = Math.max(0, Math.floor(total * (1 - DEATH_EXP_LOSS)));
+  const newTotal = Math.max(0, Math.floor(total * (1 - (blessed ? DEATH_EXP_LOSS / 2 : DEATH_EXP_LOSS))));
   let lv = p.level;
   while (lv > 1 && newTotal < totalExpFor(lv)) lv--;
   p.level = lv;

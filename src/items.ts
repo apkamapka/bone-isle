@@ -148,6 +148,10 @@ export type ItemKind =
   | "ring" | "guardRing" | "healthRing" | "amulet"
   // Amulet of Loss: protects your items on death (consumed), Tibia-style
   | "aolAmulet"
+  // Grizelda's shelf (Etap 92): bought with Task Points, found nowhere else
+  | "fangNecklace" | "hornNecklace" | "trophyNecklace"
+  | "stalkerRing" | "bowyerRing" | "wardenRing" | "huntressSignet"
+  | "blessingScroll"
   // containers & test gear (Etap 11)
   | "backpack" | "levelStone" | "skillStone"
   // currency (Etap 27): money is carried, weighed and dropped like anything else
@@ -298,6 +302,10 @@ export interface ItemDef {
   /** Amulet of Loss: worn in the amulet slot, consumed on death, protects
    *  your backpack + equipment from dropping (never exp or skills). */
   deathProtect?: true;
+  /** Huntress' Blessing (Etap 92): used from the pack, it blesses the
+   *  character until the next death, which then costs half the experience.
+   *  One at a time: a second scroll is refused while the first holds. */
+  blessing?: true;
   /** Container: this item HAS slots of its own, and opens as a window.
    *  Tibia's rule, not the old additive one — a backpack inside a backpack is
    *  a second container you open, never extra cells bolted onto the first. */
@@ -806,6 +814,28 @@ fireEmberShard: { name: "Ember Shard", stack: 999, value: 9, weight: 2, crystal:
    * the first two hoards (3 000 and 2 000) can afford one and a level-40
    * character still notices buying the next. */
   aolAmulet: { name: "Amulet of Loss", stack: 1, value: 2500, weight: 4, slot: "amulet", deathProtect: true },
+  /* GRIZELDA'S SHELF (Etap 92): seven pieces of jewellery and a scroll that
+   * exist nowhere else; no loot table, chest or shop has them. Task Points
+   * buy them (systems/shelf.ts), and VALUE ZERO is what keeps the points from
+   * turning into gold: no shop pays for a thing worth nothing.
+   *
+   * The rings sit BESIDE the three from the hoards, not above them. Each
+   * hoard ring still leads in its own stat (attack, guard, health), the
+   * Stalker's in speed and the Bowyer's in Distance, and the Signet is the
+   * best ring all round while leading in nothing. The necklaces share their
+   * slot with the Amulet of Loss, so wearing one is choosing it over the pack.
+   *
+   * Icons: CraftPix, see CREDITS.md. The Stalker's Ring is repainted green,
+   * because as bought it is the Health Ring's own picture, and the Signet's
+   * band gold, because red put it a glance away from the same ring. */
+  fangNecklace:   { name: "Fang Necklace", stack: 1, value: 0, weight: 4, slot: "amulet", gear: { maxhp: 40, speed: 3 } },
+  hornNecklace:   { name: "Horn Necklace", stack: 1, value: 0, weight: 4, slot: "amulet", gear: { atk: 1, maxhp: 40 } },
+  trophyNecklace: { name: "Trophy Necklace", stack: 1, value: 0, weight: 5, slot: "amulet", gear: { atk: 1, maxhp: 70, speed: 5 } },
+  stalkerRing:    { name: "Stalker's Ring", stack: 1, value: 0, weight: 2, slot: "ring", gear: { speed: 8 } },
+  bowyerRing:     { name: "Bowyer's Ring", stack: 1, value: 0, weight: 2, slot: "ring", gear: { dist: 3 } },
+  wardenRing:     { name: "Warden's Ring", stack: 1, value: 0, weight: 2, slot: "ring", gear: { defBonus: 1, maxhp: 30 } },
+  huntressSignet: { name: "Huntress' Signet", stack: 1, value: 0, weight: 2, slot: "ring", gear: { atk: 1, defBonus: 1, maxhp: 30, speed: 5 } },
+  blessingScroll: { name: "Huntress' Blessing", stack: 100, value: 0, weight: 1, blessing: true },
   // Backpack: buy it at the smith. A CONTAINER, not a capacity upgrade — it
   // holds BAG_SIZE slots of its own and opens as its own window, so a pack in
   // a pack is a second bag to open rather than cells bolted onto the first.
@@ -1503,6 +1533,7 @@ export function itemInfoLines(kind: ItemKind, st?: ItemStack | null): string[] {
   if (d.gear?.maxhp) lines.push(`Max HP +${d.gear.maxhp}`);
   if (d.crystal) lines.push(`Charge item (1 use per unit)`);
   if (d.deathProtect) lines.push(`Protects your items on death`, `(one use — the amulet shatters)`);
+  if (d.blessing) lines.push(`Use it: your next death costs`, `half the experience (one at a time)`);
   if (d.pack) {
     const held = st?.items ?? null;
     const used = held ? held.filter((q) => q !== null).length : null;

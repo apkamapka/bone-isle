@@ -1320,6 +1320,10 @@ export const BAKED_ITEM_SPR: Readonly<Record<ItemKind, HTMLCanvasElement>> = {
   // silhouette at twelve pixels, and the only pair in the table where sharing
   // a stand-in is the RIGHT answer rather than a placeholder.
   ring: SPR.eqRing, guardRing: SPR.eqRing, healthRing: SPR.eqRing, amulet: SPR.eqAmulet, aolAmulet: SPR.eqAol,
+  // Grizelda's shelf (Etap 92): drawn icons ship for all eight; these only show if a file fails
+  fangNecklace: SPR.eqAmulet, hornNecklace: SPR.eqAmulet, trophyNecklace: SPR.eqAmulet,
+  stalkerRing: SPR.eqRing, bowyerRing: SPR.eqRing, wardenRing: SPR.eqRing, huntressSignet: SPR.eqRing,
+  blessingScroll: SPR.crystalRecall,
   leatherHelm: SPR.gearStubHead, snakeskinHelm: SPR.gearStubHead, leatherBody: SPR.gearStubBody, snakeskinBody: SPR.gearStubBody,
   leatherLegs: SPR.gearStubLegs, snakeskinLegs: SPR.gearStubLegs, leatherBoots: SPR.gearStubBoots, snakeskinBoots: SPR.gearStubBoots,
   leatherShield: SPR.gearStubShield, studdedHelm: SPR.gearStubHead, goblinHelm: SPR.gearStubHead,

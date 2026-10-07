@@ -21234,6 +21234,187 @@ async function main(): Promise<void> {
       "the phone strip's purse is the carried one too");
   }
 
+  console.log("\nEtap 92 — Grizelda's shelf: ranks, rewards, the blessing, the Ranger, and no points far below your level:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const pngSize = (f: string): string => {
+      const b = fs.readFileSync(new URL("../public/" + f.replace(/^\.\//, ""), import.meta.url));
+      return `${b.readUInt32BE(16)}x${b.readUInt32BE(20)}`;
+    };
+    const SH = await import("../src/systems/shelf.ts");
+    const TK = await import("../src/systems/tasks.ts");
+    const OF = await import("../src/systems/outfit.ts");
+    const HS = await import("../src/gfx/heroSheet.ts");
+    const IT = await import("../src/items.ts");
+    const IA = await import("../src/gfx/itemArt.ts");
+    const PL = await import("../src/entities/player.ts");
+    const CB = await import("../src/systems/combat.ts");
+    const CF = await import("../src/config.ts");
+    const GM = await import("../src/game.ts");
+    const SV = await import("../src/save.ts");
+    const NP = await import("../src/entities/npcs.ts");
+    const MO = await import("../src/entities/monsters.ts");
+    const EX = await import("../tools/export-data.ts");
+    TK.resetTasks();
+    OF.resetOutfit();
+
+    // ---- the stock: ten rewards behind Grizzly Adams' five ranks
+    ok(SH.RANKS.map((r) => r.at).join() === "10,20,40,70,100", "five ranks, at 10, 20, 40, 70 and 100 lifetime points");
+    ok(SH.SHELF.length === 10 && SH.SHELF.every((e) => e.rank >= 0 && e.rank < SH.RANKS.length && e.price > 0),
+      "ten rewards, each behind a rank and a price");
+    const kept = SH.SHELF.filter((e) => e.good.type !== "item" || !IT.ITEMS[e.good.item].blessing)
+      .reduce((n, e) => n + e.price, 0);
+    ok(kept === 270, `everything that is kept costs ${kept} points, about three times what levels 1 to 50 pay`);
+
+    // ---- found nowhere else, worth nothing to a shop
+    const shelfItems = SH.SHELF.flatMap((e) => (e.good.type === "item" ? [e.good.item] : []));
+    ok(shelfItems.length === 8 && shelfItems.every((k) => IT.ITEMS[k].value === 0),
+      "eight items, each worth nothing to a shop, so the points never turn into gold");
+    const sold = Object.values(NP.SHOPS).flatMap((s) => (s ? s.entries.map((e) => e.kind as string) : []));
+    const dropped = Object.values(MO.MONSTER_DEFS).flatMap((d) => d.loot.map((l) => l.kind as string));
+    const chested = (Object.values(GM.CHEST_PRIZES) as unknown as (string | readonly [string, number])[][])
+      .flatMap((ps) => ps.map((q) => (typeof q === "string" ? q : q[0])));
+    ok(shelfItems.every((k) => !sold.includes(k) && !dropped.includes(k) && !chested.includes(k)),
+      "…and none is sold, dropped or found in a chest anywhere else");
+    ok(shelfItems.every((k) => pngSize(IA.iconFile(k)) === "32x32"), "every one has its 32x32 icon on disk");
+    const gear = (k: string): Record<string, number> =>
+      ((IT.ITEMS as unknown as Record<string, { gear?: Record<string, number> }>)[k].gear ?? {});
+    ok((gear("ring").atk ?? 0) > (gear("huntressSignet").atk ?? 0)
+      && (gear("guardRing").defBonus ?? 0) > (gear("huntressSignet").defBonus ?? 0)
+      && (gear("healthRing").maxhp ?? 0) > (gear("huntressSignet").maxhp ?? 0)
+      && (gear("stalkerRing").speed ?? 0) > (gear("huntressSignet").speed ?? 0),
+      "the hoard rings still lead in their own stat; the Signet is the best all round and first in nothing");
+
+    // ---- ranks are lifetime, prices are spendable
+    const p = PL.createPlayer({ x: 0, y: 0 });
+    ok(SH.rankIndex(0) === -1 && SH.rankIndex(10) === 0 && SH.rankIndex(39) === 1 && SH.rankIndex(100) === 4,
+      "a rank is read off lifetime points");
+    ok(SH.shelfState(p, SH.shelfEntry("fangNecklace")!) === "rank", "no rank, no necklace");
+    TK.loadTaskState({ active: [], progress: {}, claims: {}, earned: 25 });
+    p.taskPoints = 10;
+    let r = SH.buyShelf(p, "fangNecklace");
+    ok(r.ok && IT.bagCount(p.bag, "fangNecklace") === 1 && p.taskPoints === 2,
+      "a buy takes the price from the points in hand and puts the necklace in the pack");
+    ok(SH.rankIndex() === 1, "…and costs no rank: Ranger stays Ranger on two points");
+    r = SH.buyShelf(p, "stalkerRing");
+    ok(!r.ok && r.why === "points", "a ring the purse cannot cover is refused, and says why");
+    p.taskPoints = 100;
+    r = SH.buyShelf(p, "bowyerRing");
+    ok(!r.ok && r.why === "rank", "…and so is one above the rank, whatever the purse");
+
+    // ---- the Ranger outfit
+    ok(!OF.ownsOutfit("ranger") && OF.wardrobeOutfits().join() === "adventurer", "a new character owns the Adventurer alone");
+    r = SH.buyShelf(p, "outfitRanger");
+    ok(r.ok && OF.ownsOutfit("ranger") && OF.wardrobeOutfits().join() === "adventurer,ranger", "the Ranger goes into the wardrobe");
+    ok(SH.shelfState(p, SH.shelfEntry("outfitRanger")!) === "owned" && !SH.buyShelf(p, "outfitRanger").ok,
+      "…once: an outfit is not sold twice");
+    ok(OF.wearOutfit(p, "ranger") && OF.outfitState().current === "ranger" && HS.heroLook() === "ranger",
+      "put on at the Wardrobe, it changes the hero's clothes");
+    ok(Object.values(OF.zoneLabels()).join() === "Hood,Cardigan,Pants,Details", "…and the dye rows read Hood, Cardigan, Pants, Details");
+    for (const sex of ["male", "female"] as const) {
+      const files = HS.heroLayerFiles(sex, "ranger");
+      ok(Object.keys(files).join() === "base,hair,shirt,pants,shoes" && files.base === HS.heroLayerFiles(sex).base,
+        `${sex} Ranger: the same skin base, four dye layers of its own`);
+      ok(Object.values(files).every((f) => pngSize(f) === "576x320"), `${sex} Ranger: every layer on disk, in the 9x5 grid`);
+    }
+    ok(OF.wearOutfit(p, "adventurer") && HS.heroLook() === "adventurer" && OF.zoneLabels().hair === "Hair",
+      "taking it off brings the Adventurer back, captions and all");
+    ok(!OF.wearOutfit(p, "classic"), "an outfit the character does not own cannot be worn");
+
+    // ---- the fourth slot
+    ok(TK.maxActive() === 3, "three errands in hand, as ever");
+    TK.loadTaskState({ active: [], progress: {}, claims: {}, earned: 45 });
+    p.taskPoints = 100;
+    r = SH.buyShelf(p, "taskSlot");
+    ok(r.ok && TK.maxActive() === 4 && TK.extraSlots() === 1 && p.taskPoints === 70, "Big Game Hunter buys a fourth slot for 30");
+    ok(SH.shelfState(p, SH.shelfEntry("taskSlot")!) === "owned", "…sold once");
+    TK.loadTaskState(JSON.parse(JSON.stringify(TK.taskState())));
+    ok(TK.maxActive() === 4, "…and it survives the save");
+    for (const t of TK.TASKS.slice(0, 5)) TK.acceptTask(t.id, 50);
+    ok(TK.activeTasks().length === 4 && !TK.hasRoomForTask(), "four errands in hand, and no fifth");
+
+    // ---- no points far below your level
+    TK.resetTasks();
+    ok(TK.maxActive() === 3 && TK.taskState().extra === undefined, "a reset board is back to three, with no slot field at all");
+    const low = TK.TASKS.find((t) => t.reqLevel <= 5)!;
+    ok(TK.TP_LEVEL_GAP === 15 && TK.pointsFor(low, low.reqLevel + 15) === low.reward.points && TK.pointsFor(low, low.reqLevel + 16) === 0,
+      "an errand pays its points up to 15 levels below the character, and none past that");
+    const hp = PL.createPlayer({ x: 0, y: 0 });
+    hp.level = low.reqLevel + 20;
+    TK.acceptTask(low.id, hp.level);
+    for (let i = 0; i < low.goal.need; i++) TK.onTaskKill(low.goal.kinds[0]);
+    let gotExp = 0;
+    const gold0 = hp.gold;
+    const res = TK.handInTask(hp, low.id, (n) => { gotExp += n; });
+    ok(!!res && res.points === 0 && hp.taskPoints === 0 && TK.pointsEarned() === 0,
+      "handed in twenty levels up: no points, and the lifetime count does not move");
+    ok(gotExp === low.reward.exp && hp.gold - gold0 === low.reward.gold, "…but the gold and the experience are paid in full");
+    ok(read("../src/ui/panels.ts").includes("rewardText(t.reward, pointsFor(t, player.level))"),
+      "the board says so on the row, before the errand is taken");
+
+    // ---- the blessing
+    ok(IT.ITEMS.blessingScroll.blessing === true && IT.ITEMS.blessingScroll.value === 0, "the Huntress' Blessing is a scroll, worth nothing to a shop");
+    const worlds = GM.buildWorlds(CF.WORLD_SEED);
+    const die = (blessed: boolean): number => {
+      const q = PL.createPlayer({ x: 100, y: 100 });
+      q.level = CF.DEATH_PENALTY_LEVEL + 10; q.exp = 0; q.expNext = CF.expNeeded(q.level);
+      q.blessed = blessed;
+      const before = CF.totalExpFor(q.level) + q.exp;
+      CB.applyDeathPenalty(worlds.home, q);
+      ok(!q.blessed, `${blessed ? "a blessed" : "an unblessed"} death leaves the character unblessed`);
+      return before - (CF.totalExpFor(q.level) + q.exp);
+    };
+    const plain = die(false);
+    const halved = die(true);
+    ok(plain > 0 && Math.abs(halved - plain / 2) <= 1, `a blessed death costs half the experience (${halved} of ${plain})`);
+    const main = read("../src/main.ts");
+    const use = main.slice(main.indexOf("if (def.blessing) {"), main.indexOf("if (def.food) {"));
+    ok(use.includes("if (P.blessed)") && use.includes("P.blessed = true") && use.indexOf("if (P.blessed)") < use.indexOf("spend()"),
+      "the scroll blesses when used, and a second is refused, and kept, while the first holds");
+
+    // ---- one save carries all of it
+    {
+      const g = GM.createGame();
+      g.player.blessed = true;
+      OF.grantOutfit("ranger");
+      OF.wearOutfit(g.player, "ranger");
+      TK.grantExtraSlot();
+      SV.saveGame(g);
+      TK.resetTasks();
+      OF.resetOutfit();
+      const g2 = SV.loadGame()!;
+      ok(g2.player.blessed === true && OF.outfitState().current === "ranger" && OF.ownsOutfit("ranger") && TK.maxActive() === 4,
+        "the blessing, the Ranger and the fourth slot all come back from a save");
+    }
+
+    // ---- the library
+    const data = EX.collectGameData();
+    ok(data.shelf.ranks.length === 5 && data.shelf.entries.length === 10 && data.shelf.pointGap === 15 && data.shelf.npc === "taskmaster",
+      "the library carries the shelf: five ranks, ten rewards, the 15-level rule");
+    const viaShelf = data.items.filter((i) => i.sources.some((s) => s.type === "shelf"));
+    ok(viaShelf.length === 8 && viaShelf.every((i) => i.sources.length === 1), "the eight items are listed, the shelf their only source");
+    ok(data.items.find((i) => i.key === "blessingScroll")?.category === "scroll", "…the blessing under Scrolls");
+    const tailor = data.npcs.find((n) => n.role === "wardrobe");
+    ok(tailor?.wardrobe?.outfits.map((o) => `${o.name}:${o.shelf}`).join() === "Adventurer:false,Ranger:true",
+      "Vito's page names both outfits, and where the Ranger comes from");
+    const npcPage = read("../web/src/pages/library/npcs/[slug].astro");
+    ok(npcPage.includes('id="shelf"') && npcPage.includes("shelf.pointGap"), "Grizelda's page shows her shelf and the rule");
+    ok(read("../web/src/components/HowToGet.astro").includes('s.type === "shelf"'), "an item's page says it is bought with Task Points");
+    const credits = read("../CREDITS.md");
+    const shipped = [
+      ...shelfItems.map((k) => IA.iconFile(k)),
+      ...(["male", "female"] as const).flatMap((s) => Object.entries(HS.heroLayerFiles(s, "ranger"))
+        .filter(([z]) => z !== "base").map(([, f]) => f.replace(/^\.\//, ""))),
+    ];
+    ok(shipped.length === 16 && shipped.every((f) => credits.includes(f)), "all sixteen new files are credited by filename");
+    ok(credits.includes("hat=Hood_gray") && credits.includes("recolor_shelf_rings.py")
+      && fs.existsSync(new URL("../tools/recolor_shelf_rings.py", import.meta.url)),
+      "…the Ranger with the generator links that rebuild it, the two repainted rings with the script that repaints them");
+    TK.resetTasks();
+    OF.resetOutfit();
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

@@ -68,6 +68,9 @@ export interface Player {
   /** Seconds of "fed" time left — HP regenerates only while this is > 0.
    *  Eating food banks more, capped at FED_MAX_S (Tibia's 20 minutes). */
   fedS: number;
+  /** Huntress' Blessing (Etap 92): set by the scroll, spent by the next death,
+   *  which then costs half the experience. Saved. */
+  blessed: boolean;
   /** Timed effects from the utility runes. Saved — see systems/buffs.ts. */
   buffs: Buffs;
   atkRate: number;
@@ -138,6 +141,7 @@ export function createPlayer(spawn: Vec): Player {
     expNext: expNeeded(1),
     atkCd: 0,
     fedS: 0,
+    blessed: false,
     buffs: newBuffs(),
     atkRate: PLAYER_ATTACK_RATE,
     regen: 0,

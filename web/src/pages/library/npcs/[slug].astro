@@ -1,7 +1,7 @@
 ---
 import Library from "../../../layouts/Library.astro";
 import Sprite from "../../../components/Sprite.astro";
-import { DATA, ITEM, PLACE } from "../../../lib/game-data.ts";
+import { DATA, ITEM, PLACE, townsperson } from "../../../lib/game-data.ts";
 import { slugOf, itemUrl, itemHref, creatureUrl, num, listOf, fitScale } from "../../../lib/library.ts";
 
 export function getStaticPaths() {
@@ -25,20 +25,39 @@ const pays = (t: (typeof DATA.tasks)[number]): string =>
   `${num(t.reward.gold)} gold, ${num(t.reward.exp)} experience, ${t.reward.points} task ${t.reward.points === 1 ? "point" : "points"}`;
 const gold = ITEM.get("goldCoin");
 const platinum = ITEM.get("platinumCoin");
+/** Grizelda's shelf (Etap 92): each rank, with what it opens. */
+const shelf = n.role === "tasks" ? DATA.shelf : null;
+const shelfRanks = shelf
+  ? shelf.ranks.map((r, i) => ({
+      ...r,
+      entries: shelf.entries.filter((e) => e.rank === i).map((e) => {
+        const it = e.item ? ITEM.get(e.item) : undefined;
+        return { ...e, icon: it?.icon ?? null, href: it ? itemHref(it) : null };
+      }),
+    }))
+  : [];
+const shelfOwner = townsperson(DATA.shelf.npc).name;
+const outfitParts = (n.wardrobe?.outfits ?? []).map((o) =>
+  o.shelf ? `the ${o.name} comes from ${shelfOwner}'s shelf` : `the ${o.name} is everyone's from the start`);
+const outfitLine = outfitParts.length > 1
+  ? `${outfitParts.join("; ").replace(/^t/, "T")}. The colours are yours, not the outfit's, and come along when you change.`
+  : "";
 
 const facts = [
   { label: "Stands in", value: where },
   ...(sells.length > 0 ? [{ label: "Sells", value: `${num(sells.length)} items` }] : []),
   ...(buys.length > 0 ? [{ label: "Buys", value: `${num(buys.length)} items` }] : []),
   ...(tasks.length > 0 ? [{ label: "Tasks", value: num(tasks.length) }] : []),
+  ...(shelf ? [{ label: "Shelf", value: `${num(shelf.entries.length)} rewards` }] : []),
   ...(n.exchange ? [{ label: "Rate", value: `${num(n.exchange.rate)} gold to 1 platinum` }] : []),
   ...(n.wardrobe ? [{ label: "Colours", value: num(n.wardrobe.colours) }] : []),
+  ...(n.wardrobe ? [{ label: "Outfits", value: num(n.wardrobe.outfits.length) }] : []),
 ];
 
 const who = `${n.name}, the ${n.title.toLowerCase()} of ${where}`;
 const description =
   n.role === "shop" ? `${who}, in Xebeka: sells ${listOf(sells.slice(0, 3).map((s) => s.name))}${sells.length > 3 ? " and more" : ""}${buys.length > 0 ? `, and buys ${num(buys.length)} kinds of items` : ""}.`
-  : n.role === "tasks" ? `${who}, in Xebeka: ${num(tasks.length)} hunting tasks, with their creatures, kills, levels and rewards.`
+  : n.role === "tasks" ? `${who}, in Xebeka: ${num(tasks.length)} hunting tasks, with their creatures, kills, levels and rewards, and the ${num(shelf?.entries.length ?? 0)} rewards her Task Points buy.`
   : n.role === "exchange" ? `${who}, in Xebeka: ${num(n.exchange?.rate ?? 0)} gold coins for one platinum coin, and back.`
   : `${who}, in Xebeka: dyes your ${listOf((n.wardrobe?.zones ?? []).map((z) => z.toLowerCase()))} in any of ${num(n.wardrobe?.colours ?? 0)} colours.`;
 ---
@@ -118,6 +137,7 @@ const description =
         <p class="entry-part__lead">
           Take a task, hunt, and hand it in for the reward. Every task can be done again and again,
           and kills past the count carry over into the next round.
+          {shelf && <> A task more than {shelf.pointGap} levels below yours still pays its gold and experience, but no Task Points.</>}
         </p>
         <div class="entry-scroll">
           <table class="entry-table">
@@ -148,6 +168,45 @@ const description =
       </section>
     )}
 
+    {shelf && (
+      <section class="entry-part entry-part--wide" aria-labelledby="shelf">
+        <h2 class="entry-part__title" id="shelf">The shelf</h2>
+        <p class="entry-part__lead">
+          Task Points buy from {n.name}'s shelf, and nothing on it is sold or found anywhere else. Each rank opens a
+          part of it. Ranks count every point you have ever earned, so spending never costs one.
+        </p>
+        {shelfRanks.map((r) => (
+          <>
+            <h3 class="entry-part__sub">{r.name}, from {num(r.at)} points</h3>
+            <div class="entry-scroll">
+              <table class="entry-table">
+                <thead>
+                  <tr><th scope="col">Reward</th><th scope="col" class="entry-table__wide">What it does</th><th scope="col">Price</th></tr>
+                </thead>
+                <tbody>
+                  {r.entries.map((e) => (
+                    <tr>
+                      <td>
+                        <span class="entry-table__item">
+                          {e.icon
+                            ? <img class="px" src={`/play/${e.icon}`} width="32" height="32" alt="" loading="lazy" decoding="async" />
+                            : <span class="entry-table__blank" aria-hidden="true"></span>}
+                          {e.href ? <a href={e.href}>{e.name}</a> : e.name}
+                        </span>
+                        <span class="entry-table__note entry-table__phone">{e.note}</span>
+                      </td>
+                      <td class="entry-table__wide">{e.note}</td>
+                      <td class="entry-num">{num(e.price)} TP</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ))}
+      </section>
+    )}
+
     {n.role === "exchange" && n.exchange && gold && platinum && (
       <section class="entry-part entry-part--wide" aria-labelledby="change">
         <h2 class="entry-part__title" id="change">Changing coins</h2>
@@ -166,6 +225,7 @@ const description =
           {n.name} dyes your outfit. Pick a part, {listOf(n.wardrobe.zones.map((z) => z.toLowerCase()))}, and any of
           {" "}{num(n.wardrobe.colours)} colours for it; the change shows on your character as you choose.
         </p>
+        {outfitLine && <p class="entry-part__lead">{outfitLine}</p>}
       </section>
     )}
   </article>
