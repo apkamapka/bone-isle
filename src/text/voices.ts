@@ -106,6 +106,7 @@ const VOICE_OF: Partial<Record<MonsterKind, Voice>> = {
   minotaur: MINOTAUR, minotaurArcher: MINOTAUR, minotaurGuard: MINOTAUR, minotaurMage: MINOTAUR,
   skeleton: UNDEAD, skeletonWarrior: UNDEAD, demonSkeleton: UNDEAD, ghoul: UNDEAD,
   snake: SNAKE, dragon: DRAGON, blackKnight: KNIGHT,
+  testDragon: DRAGON, // TEMP-ETAP93-DRAGON
 };
 
 /* Bonetown, calling out across the square. Chronos does not. */
