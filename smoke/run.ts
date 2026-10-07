@@ -1778,8 +1778,8 @@ async function main(): Promise<void> {
     // Kin like Asterion — five orc ranks are the same creature smaller — and
     // the first one in the chain who is nobody's folklore: invented for this
     // game, which is what his errand is actually about.
-    ok(MONSTER_KINDS.length === 45,
-      `bestiary holds 45 kinds (18 + 21 humans + redcap + draugr + blackAnnis + asterion + gorak + the TEMP-ETAP93-DRAGON test dragon), got ${MONSTER_KINDS.length}`);
+    ok(MONSTER_KINDS.length === 44,
+      `bestiary holds 44 kinds (18 + 21 humans + redcap + draugr + blackAnnis + asterion + gorak), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
     for (const k of MONSTER_KINDS) {
@@ -1793,7 +1793,7 @@ async function main(): Promise<void> {
     // A shooter's weapon range may EXCEED aggro — that only bites once you
     // provoke one and then retreat. What must hold: an UNPROVOKED monster never
     // attacks from beyond aggro, whatever its own range.
-    const shooters = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].ranged && k !== "testDragon"); // TEMP-ETAP93-DRAGON: the dragon on trial is outside the bestiary's design
+    const shooters = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].ranged);
     ok(shooters.length === 10, `ten distance fighters in the bestiary, got ${shooters.length}`);
     ok(MONSTER_AGGRO_RANGE === 6 * TILE, "aggro range is a tight 6 tiles");
     {
@@ -1823,12 +1823,12 @@ async function main(): Promise<void> {
     const dragon = MONSTER_DEFS.dragon;
     ok(dragon.hp === 1000 && dragon.exp === 900, "dragon is the 1000 hp / 900 exp boss");
     ok((dragon.respawnS ?? 0) >= 600, "the dragon's lair refills on a long clock");
-    const slowRespawn = new Set(["dragon", "blackKnight", "testDragon"]); // TEMP-ETAP93-DRAGON: the copy keeps the dragon's clock
+    const slowRespawn = new Set(["dragon", "blackKnight"]);
     ok(MONSTER_KINDS.every((k) => (MONSTER_DEFS[k].respawnS ?? MONSTER_RESPAWN_S)
       === (slowRespawn.has(k) ? 600 : MONSTER_RESPAWN_S)),
       "only the two top-of-curve creatures override the standard respawn");
     for (const rare of ["dragonShield", "fireSword", "dragonBody"] as const) {
-      const only = MONSTER_KINDS.filter((k) => k !== "testDragon" && MONSTER_DEFS[k].loot.some((e) => e.kind === rare)); // TEMP-ETAP93-DRAGON: the dragon on trial is outside the bestiary's design
+      const only = MONSTER_KINDS.filter((k) => MONSTER_DEFS[k].loot.some((e) => e.kind === rare));
       ok(only.length === 1 && only[0] === "dragon", `${rare} drops from the dragon alone`);
     }
     // killMonster schedules the dragon's respawn on its own clock
@@ -2215,7 +2215,7 @@ async function main(): Promise<void> {
       "…and a Knell wants one Essence at tier II and two at tier III");
     ok(new Set(needEssence.map((o) => o.element)).size === 5, "…with no element left out");
     const droppers = Object.entries(M.MONSTER_DEFS)
-      .filter(([k, d]) => k !== "testDragon" && d.loot.some((l) => l.kind === "magicEssence")) // TEMP-ETAP93-DRAGON: the dragon on trial is outside the bestiary's design
+      .filter(([, d]) => d.loot.some((l) => l.kind === "magicEssence"))
       .map(([k]) => k);
     // Etap 59 widened the sources: the dragon, the Black Knight at the top of
     // the ladder, and the two casters rarely. Nothing else, and never a chest.
@@ -3668,8 +3668,7 @@ async function main(): Promise<void> {
 
     // the split has to hold in practice, not just in the mask
     const { populateWorld: popTown, createGame } = await import("../src/game.ts");
-    // TEMP-ETAP93-DRAGON: 84 posts of the road ladder, and the dragon on trial
-    ok(town.mobPosts?.length === 85, `the 84 authored creature posts and the trial dragon came across (${town.mobPosts?.length})`);
+    ok(town.mobPosts?.length === 84, `the 84 authored creature posts came across (${town.mobPosts?.length})`);
 
     /* --- ten camps, one rank each, plus four snakes ------------------------
      * The ladder is checked by SHAPE rather than by tile: every rank on the
@@ -3707,8 +3706,7 @@ async function main(): Promise<void> {
      * fails, somebody added a post without checking the neighbours, and the
      * symptom in play is a level 1 pulling three beggars at once. */
     const cfg = await import("../src/config.ts");
-    // TEMP-ETAP93-DRAGON: the dragon on trial is not part of the ladder and stands where the camps leave most room
-    const posts2 = town.mobPosts!.filter((p) => p.kind !== "testDragon");
+    const posts2 = town.mobPosts!;
     let closest = 99, worst = "";
     for (let i = 0; i < posts2.length; i++) {
       for (let j = i + 1; j < posts2.length; j++) {
@@ -3744,24 +3742,24 @@ async function main(): Promise<void> {
     ok(east.length + southwest.length === wild.length,
       `every wild warrior is in one of the two pockets, none loose among the road ladder (${east.length}/${southwest.length})`);
     ok(east.length >= 3 && southwest.length >= 3, "…and neither pocket is a single sentry");
-    ok(byKind.size === 13, `twelve kinds in all, and the trial dragon (${byKind.size})`); // TEMP-ETAP93-DRAGON
+    ok(byKind.size === 12, `twelve kinds in all (${byKind.size})`);
 
     // THE test that matters: a real game start, not a hand-driven populate.
     // Calling populateWorld directly proves the function works while the town
     // stands empty in the actual game, which is exactly what happened once.
     const fresh = createGame(WORLD_SEED);
-    ok(fresh.worlds.town.monsters.length === 85, // TEMP-ETAP93-DRAGON: 84 and the trial
+    ok(fresh.worlds.town.monsters.length === 84,
       "starting a game actually puts the camps on the map");
     // and the same must hold after a save round-trip: loadGame() rebuilds the
     // worlds from scratch, so it goes through populateAll all over again
     const { saveGame, loadGame } = await import("../src/save.ts");
     saveGame(fresh);
     const restored = loadGame();
-    ok(restored !== null && restored.worlds.town.monsters.length === 85, // TEMP-ETAP93-DRAGON
+    ok(restored !== null && restored.worlds.town.monsters.length === 84,
       "loading a save leaves the town populated too");
 
     popTown(town, WORLD_SEED);
-    ok(town.monsters.length === 85, "exactly as many creatures as the map asks for — no roster padding"); // TEMP-ETAP93-DRAGON: 84 and the trial
+    ok(town.monsters.length === 84, "exactly as many creatures as the map asks for — no roster padding");
     ok(town.monsters.every((m) => !inHaven(town, m.tx, m.ty)),
       "not one creature spawned inside the haven");
     // authored placement means EXACT placement, not "somewhere in the region"
@@ -7621,7 +7619,7 @@ async function main(): Promise<void> {
     ok(avgGold("minotaurGuard") > avgGold("minotaur"),
       "an elite carries a fatter purse than the rank and file");
     let risesWithDanger = true;
-    const byExp = [...MONSTER_KINDS].filter((k) => k !== "testDragon").sort((a, b) => D[a].exp - D[b].exp); // TEMP-ETAP93-DRAGON: the dragon on trial is outside the bestiary's design
+    const byExp = [...MONSTER_KINDS].sort((a, b) => D[a].exp - D[b].exp);
     for (let i = 5; i < byExp.length; i++) {
       if (avgGold(byExp[i]) < avgGold(byExp[i - 5]) * 0.8) risesWithDanger = false;
     }
@@ -21417,42 +21415,20 @@ async function main(): Promise<void> {
     OF.resetOutfit();
   }
 
-  console.log("\nEtap 93 (TEMP-ETAP93-DRAGON) — the dragon's new art on trial, south of Bonetown:");
+  console.log("\nEtap 93 retired — the trial dragon is gone (Radek's call, Oct 2026):");
   {
     const fs = await import("node:fs");
     const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
     const MON = await import("../src/entities/monsters.ts");
-    const MS = await import("../src/gfx/mobSheet.ts");
-    const GM = await import("../src/game.ts");
-    const CF = await import("../src/config.ts");
-    const EX = await import("../tools/export-data.ts");
-    const d = MON.MONSTER_DEFS.dragon;
-    const t = MON.MONSTER_DEFS.testDragon;
-    const same = (x: object): string => JSON.stringify({ ...x, spr: 0 });
-    ok(t !== d && same(t) === same(d) && t.spr === d.spr,
-      "the test dragon is the dragon in every number: health, damage, armor, fire, spells, loot, respawn");
-    ok(MON.mobName("testDragon") === "Test Dragon" && MON.TEST_KINDS.has("testDragon"),
-      "…named so it is never taken for the real one, and marked as a creature on trial");
-    const ws = GM.buildWorlds(CF.WORLD_SEED);
-    const here = Object.values(ws).flatMap((w) =>
-      (w.mobPosts ?? []).filter((p) => p.kind === "testDragon").map((p) => ({ w: w.key as string, tx: p.tx, ty: p.ty })));
-    const town = ws.town;
-    ok(here.length === 1 && here[0].w === "town" && here[0].ty > 73 && town.safeMask![here[0].ty * town.w + here[0].tx] === 0,
-      `one of it, on the wild island south of the town (${here.map((p) => `${p.w}@${p.tx},${p.ty}`).join()})`);
-    const spec = MS.sheetSpec("testDragon");
-    ok(!!spec && spec.cols === 9 && !spec.sideOnly, "a full four-view walk: a standing pose and eight strides, never side-only");
-    const png = fs.readFileSync(new URL("../public/mob-test-dragon-walk.png", import.meta.url));
-    ok(png.readUInt32BE(16) === 9 * 112 && png.readUInt32BE(20) === 4 * 92, "the sheet is a 9x4 grid of 112x92 frames, its source doubled");
-    const body = fs.readFileSync(new URL("../public/mob-test-dragon-dead.png", import.meta.url));
-    ok(body.readUInt32BE(16) === 128 && body.readUInt32BE(20) === 40, "…and it leaves a body of its own, doubled with it");
-    ok(MS.walkCycleSeconds("testDragon") === 1.9, "a body about 98 px long at the dragon's 51 px/s takes 1.9 s a stride, so it does not run on the spot");
-    const data = EX.collectGameData();
-    ok(!JSON.stringify(data).includes("testDragon") && !data.monsters.some((m) => m.name === "Test Dragon"),
-      "the library never mentions it: no page, no spawn, no drop");
-    for (const f of ["../src/world/types.ts", "../src/entities/monsters.ts", "../src/gfx/mobSheet.ts",
-      "../src/world/townSpec.ts", "../tools/export-data.ts", "../src/main.ts", "../src/text/voices.ts"]) {
-      ok(read(f).includes("TEMP-ETAP93-DRAGON"), `${f.slice(3)} carries the TEMP-ETAP93-DRAGON tag, so taking it out finds every line`);
-    }
+    ok(!(MON.MONSTER_KINDS as readonly string[]).includes("testDragon"), "there is no test dragon in the bestiary");
+    const touched = ["../src/world/types.ts", "../src/entities/monsters.ts", "../src/gfx/mobSheet.ts",
+      "../src/world/townSpec.ts", "../tools/export-data.ts", "../src/main.ts", "../src/text/voices.ts"];
+    ok(touched.every((f) => !read(f).includes("TEMP-ETAP93-DRAGON") && !read(f).includes("testDragon")),
+      "…and no line of it is left in any file it touched");
+    /* Its two sheets may still sit in public/ (mob-test-dragon-walk.png and
+     * mob-test-dragon-dead.png): an upload adds and overwrites but cannot
+     * delete. What matters is that nothing asks for them. */
+    ok(!read("../src/gfx/mobSheet.ts").includes("mob-test-dragon"), "nothing loads its two sheets any more");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

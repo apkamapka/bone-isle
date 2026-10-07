@@ -185,7 +185,7 @@ const TOWN_ROWS: readonly string[] = [
   "~~~~~~~~~~~~....RR.m..T....T.....0..:::::::........4...m...........T.4..R.....T............T...R.....~~~~~",
   "~~~~~~~~~~~~~...........F.RRRT......:~~~~~:....T..........T.F..R.........o..........T...T.R..........~~~~~",
   "~~~~~~~~~~~~~~.............M.T.R.....~~~~~....T....T.T.......4.....TT...........m.....TR.R...T.......~~~~~",
-  "~~~~~~~~~~~~~~~............T.........~~~~~......R....TR.V.........TT...RT...........T.....T.....5....~~~~~",
+  "~~~~~~~~~~~~~~~............T.........~~~~~......R....TR...........TT...RT...........T.....T.....5....~~~~~",
   "~~~~~~~~~~~~~~~~........TT...........~~~~~..T..T............T...T..T.....T..............T...T........~~~~~",
   "~~~~~~~~~~~~~~~~~~.......RT..T.T.....~~~~.4.R.T.R..T.R............R..T.T........TR.........M........~~~~~~",
   "~~~~~~~~~~~~~~~~~~~............R.....~~~~................T....R......R...m...5......o..5............~~~~~~",
@@ -363,9 +363,6 @@ export const TOWN_SPEC: HandmadeSpec = {
     // and the spit at the far end of island B, which is a step above anything
     // else on the map: eight wild warriors, 250 health apiece
     w: "wildWarrior",
-    // TEMP-ETAP93-DRAGON: the dragon's new art on trial, eleven rows south of
-    // the south bridge, where the camps leave the most room (five tiles)
-    V: "testDragon",
   },
   scenery: {
     // nine kinds repeated, one landmark, three stalls — see the note above on

@@ -366,11 +366,7 @@ export type MonsterKind =
   // …and here is that company. A man in black plate who fights the dragon's
   // fight with lightning instead of fire: narrower shapes, shorter cooldowns,
   // and legs fast enough to close the gap the dragon has to lumber across.
-  | "blackKnight"
-  // TEMP-ETAP93-DRAGON: the dragon's new artwork on trial (Oct 2026). The
-  // dragon in every number, standing south of Bonetown. If the art is kept it
-  // moves onto `dragon` and this kind goes; the tag finds every line.
-  | "testDragon";
+  | "blackKnight";
 
 /** A live monster instance. */
 export interface Monster {

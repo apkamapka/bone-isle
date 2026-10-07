@@ -1441,20 +1441,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
       { kind: "knightSword", chance: 0.005, n: [1, 1] },
     ],
   },
-
-  /* TEMP-ETAP93-DRAGON: the dragon's new artwork on trial (Oct 2026). A copy
-   * of the dragon in every number, filled in just below this table because a
-   * record literal cannot read its own entries. It stands south of Bonetown,
-   * the library never lists it (TEST_KINDS), and when the art is kept it moves
-   * onto `dragon` and this kind goes. */
-  testDragon: undefined as unknown as MonsterDef,
 };
-
-(MONSTER_DEFS as Record<MonsterKind, MonsterDef>).testDragon = { ...MONSTER_DEFS.dragon }; // TEMP-ETAP93-DRAGON
-
-/** Creatures that exist only to be tried out: real in the game, absent from
- *  the library's pages. TEMP-ETAP93-DRAGON. */
-export const TEST_KINDS: ReadonlySet<MonsterKind> = new Set<MonsterKind>(["testDragon"]);
 
 export const MONSTER_KINDS = Object.keys(MONSTER_DEFS) as MonsterKind[];
 

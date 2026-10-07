@@ -65,7 +65,6 @@ const WALK_CYCLE_S = 1.0;
  */
 const WALK_CYCLE_OVERRIDE: Readonly<Record<string, number>> = {
   dragon: 1.75,
-  testDragon: 1.9, // TEMP-ETAP93-DRAGON: doubled, about 98 px long at the dragon's 51 px/s
 };
 
 /**
@@ -146,12 +145,6 @@ const SHEET_SRC: Record<string, string> = {
   skeletonWarrior: "./mob-skeleton-warrior-walk.png",
   demonSkeleton: "./mob-demon-skeleton-walk.png",
   dragon: "./mob-dragon-walk.png",
-  // TEMP-ETAP93-DRAGON: the new art on trial. All four views (its source ran
-  // up, right, down, left and was put in this order), a standing pose taken
-  // from its idle loop and eight strides, drawn at twice the size of its
-  // source (Radek's call, after seeing it at 1x); so no SIDE_ONLY and no
-  // SHEET_COLS, and its stride is in WALK_CYCLE_OVERRIDE.
-  testDragon: "./mob-test-dragon-walk.png",
   blackKnight: "./mob-black-knight-walk.png",
   "npc:smith": "./npc-smith.png",
   "npc:herbalist": "./npc-herbalist.png",
@@ -244,7 +237,6 @@ const CORPSE_SRC: Record<string, string> = {
   minotaurGuard: "./mob-minotaur-dead.png",
   minotaurMage: "./mob-minotaur-dead.png",
   dragon: "./mob-dragon-dead.png",
-  testDragon: "./mob-test-dragon-dead.png", // TEMP-ETAP93-DRAGON
   blackKnight: "./mob-black-knight-dead.png",
 };
 
