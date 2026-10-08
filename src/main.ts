@@ -9,7 +9,7 @@ import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx
 import { attuneFrame, ATTUNE_SPAN } from "./gfx/attuneSheet.ts";
 import { drawAmbientField } from "./gfx/spellFx.ts";
 import { scenerySprite, FOOTPRINT, SCENERY_NAME } from "./gfx/sceneryArt.ts";
-import { updateNpcs, faceToward } from "./entities/npcs.ts";
+import { updateNpcs } from "./entities/npcs.ts";
 import { SPR, iconW, iconH, hasPropArt, propSprite, treeSprite, CHEST_LIFT } from "./gfx/sprites.ts";
 import { itemSprite } from "./gfx/itemArt.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
@@ -17,16 +17,16 @@ import { playerSex } from "./systems/sex.ts";
 import { logoutBlocked, markBattle, LOGOUT_REFUSED } from "./systems/battle.ts";
 import { characterName } from "./systems/character.ts";
 import { clamp, dist, rndi } from "./util.ts";
-import { playerSpeed, refreshDerived, freeCap } from "./entities/player.ts";
+import { playerSpeed, refreshDerived } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName, mobLabel, tickMonsterSlows } from "./entities/monsters.ts";
-import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster, grantExp } from "./systems/combat.ts";
+import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { STRUCTS, structCenter, canPlaceAt, tierOf, footprint, solidRows } from "./systems/building.ts";
 import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow, structSprite } from "./gfx/buildingArt.ts";
 import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { setActiveBonus } from "./systems/derived.ts";
-import { setOutfitColor, resetOutfitColors, wearOutfit, type OutfitZone } from "./systems/outfit.ts";
+import { type OutfitZone } from "./systems/outfit.ts";
 import { outfitSprites, syncOutfitArt } from "./gfx/outfitArt.ts";
 import { tickCrystalCooldown, crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
 import { cooldownFrac } from "./systems/cooldowns.ts";
@@ -40,27 +40,19 @@ import {
   hudUserScale, stepHudUserScale, hudMenuOpen, toggleHudMenu, applyHudPreset, snapHudGroup,
   type HudGroup,
 } from "./systems/hudLayout.ts";
-import { isAttuned, markAttuned, clearAttuned, playerElement } from "./systems/tower.ts";
+import { isAttuned, markAttuned, playerElement } from "./systems/tower.ts";
 import { tickBuffs, debtBite } from "./systems/buffs.ts";
 import { ELEMENT_LABEL, ELEMENT_COLOR, FIELD_BURN_TICK_S, FIELD_BURN_DMG, elementEdgeMultiplier,
   type Element } from "./systems/elements.ts";
 import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
-import { totalExpFor, expNeeded } from "./config.ts";
-import {
-  MISSIONS, stageOf, setStage, offeredMission, currentMission,
-  missionHandedIn, relicLost, missionByGround, groundOpen,
-  loreSeen, markLoreSeen, resetMissions, resetMission, missionById, type MissionDef,
-  relicTaken, grantsAttunement, missionByEcho,
-} from "./systems/missions.ts";
+import { stageOf, missionByGround, groundOpen, loreSeen, markLoreSeen, relicTaken, grantsAttunement, missionByEcho } from "./systems/missions.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
 import { monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
 import { SHOPS } from "./entities/npcs.ts";
-import { TARGET_SEEK_PX, MIN_ELEMENTAL_DAMAGE } from "./config.ts";
-import { acceptTask, abandonTask, handInTask, taskById, hasRoomForTask, isActive, isComplete, rewardFits, maxActive, MAX_ACTIVE } from "./systems/tasks.ts";
-import { buyShelf, shelfEntry, shelfLabel, RANKS } from "./systems/shelf.ts";
-import { addItem, countAcross, removeAcross, ITEMS, itemWeight, bagCount, isContainer, equippedBow, activeArrow, bestPracticeArrow, compactBag } from "./items.ts";
+import { MIN_ELEMENTAL_DAMAGE } from "./config.ts";
+import { ITEMS, bagCount, isContainer, equippedBow, activeArrow, bestPracticeArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
   SELF, activeChannel, bubbleFor, formatLine, lineAlpha, logServer,
@@ -85,7 +77,7 @@ import { terrainImage, bakedTerrain } from "./gfx/terrainArt.ts";
 import { loadAllArt } from "./gfx/loadArt.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
-import { createGame, travelTo, applyGates, applyMissionPads, padRefusal, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
+import { createGame, travelTo, applyGates, applyMissionPads, padRefusal, respawnAtHome, homeChests, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { push as pushSave, sendOnLeave, checkIn, startAutosave } from "./net/cloudSave.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, hudFont, zoneLine, revealMinimap, type HudCtx } from "./ui/hud.ts";
@@ -106,20 +98,27 @@ import {
 import { t } from "./text/speech.ts";
 import { lang } from "./systems/panelPrefs.ts";
 import { Tile, isUnderground } from "./world/types.ts";
-import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
-import type { EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
+import type { Vec, World, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
+import type { EqSlot, ItemKind, Recipe } from "./items.ts";
 import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays } from "./systems/containers.ts";
 import { tell, withinReach, structInReach, nearStructure, nearNpc, refuseFromProtection } from "./intents/actor.ts";
 import {
   refCtxOf, refSlots, refUsable, moveItems, takeAllFrom, closeIfEmpty, takeOne,
   dropFromContainer, liftFloorStack, wearPackFrom, wearPackFromFloor, movePackTo, dropWornPack, unequipInto,
 } from "./intents/containers.ts";
-import { dropToGround, throwGroundItem, pickupGround, dropFromEq } from "./intents/ground.ts";
+import { throwGroundItem, pickupGround, dropFromEq } from "./intents/ground.ts";
 import { useItem, equipItem, unequip, cycleAmmo, changeCoins, swapWeapon } from "./intents/use.ts";
 import { buy, sell, testGrant } from "./intents/trade.ts";
 import { craft, smelt, makeGem, upgrade, build } from "./intents/craft.ts";
 import { attune, buyOffer, research, buyCrystal } from "./intents/tower.ts";
 import { castCrystal, recall } from "./intents/cast.ts";
+import { takeTask, dropTask, turnInTask, buyFromShelf, changeOutfit, dyeOutfit, resetDyes } from "./intents/npcs.ts";
+import {
+  talkToSage, acceptMission, declineMission, restartMenu, replayMission, missionReport, replayCommand,
+  forgetEverything, openTreasure, type SageChoice, type SageSpeech,
+} from "./intents/missions.ts";
+import { setTarget, targetNearest } from "./intents/target.ts";
+import { onSaveNow } from "./systems/persist.ts";
 import type { ContainerRef, RefWorld } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -316,6 +315,8 @@ loadHudLayout(); // restore any customized mobile HUD positions + lock state
 loadPanelPrefs(); // restore per-window zoom + collapse preferences
 
 const game: Game = loadGame() ?? createGame();
+// "save now" from a request (a chest opened, an errand taken) is the browser's save
+onSaveNow(saveGame);
 // keep passive structure bonuses (Garden HP) in sync from the start
 setActiveBonus({ maxhp: 0 });
 refreshDerived(game.player);
@@ -710,47 +711,11 @@ const act: PanelActions = {
   },
   buy: (kind: ItemKind) => { if (ui.npc) buy(game, ui.npc, kind); },
   sell: (kind: ItemKind) => { if (ui.npc) sell(game, ui.npc, kind); },
-  acceptTask: (id: string) => {
-    if (acceptTask(id, P.level)) { flash("task accepted", "#9ad0ff"); beep(440, 0.12, "sine", 0.05, 120); }
-    /* The only reason a legal entry is ever refused: three is the ceiling.
-     * Say which one it is rather than "no", because the fix is a click away. */
-    else if (!hasRoomForTask() && !isActive(id)) flash(maxActive() > MAX_ACTIVE ? "four tasks is the limit" : "three tasks is the limit", "#e0a06a");
-  },
-  abandonTask: (id: string) => {
-    if (abandonTask(id)) { flash("task dropped · kills still count", "#e0a06a"); beep(240, 0.1, "triangle", 0.05, -80); }
-  },
-  handInTask: (id: string) => {
-    const res = handInTask(P, id, (xp) => grantExp(cw(), P, xp));
-    if (res) {
-      flash(res.points > 0 ? `+${res.points} TP \u00b7 ${res.title}` : `${res.title} \u00b7 no TP at your level`, "#9fe8a8");
-      sfx("reward");
-    } else {
-      /* Two ways to get here and they need different advice: an unfinished
-       * errand, or a finished one whose purse has nowhere to go. */
-      const def = taskById(id);
-      const full = !!def && isComplete(def) && !rewardFits(P, def);
-      flash(full ? "no room for the purse" : "not ready to hand in", "#e0a06a");
-    }
-  },
-  buyShelf: (id: string) => {
-    const r = buyShelf(P, id);
-    if (r.ok) {
-      flash(`${shelfLabel(r.entry)} \u00b7 \u2212${r.entry.price} TP`, "#9fe8a8");
-      sfx("reward");
-      return;
-    }
-    const e = shelfEntry(id);
-    const why = r.why === "rank" && e ? `needs the rank of ${RANKS[e.rank].name}`
-      : r.why === "points" ? "not enough Task Points"
-      : r.why === "owned" ? "already yours"
-      : r.why === "heavy" ? "too heavy"
-      : r.why === "full" ? "bag full"
-      : "";
-    if (why) flash(why, "#e0a06a");
-  },
-  wearOutfit: (id: string) => {
-    if (wearOutfit(id)) beep(480, 0.05, "sine", 0.04, 60);
-  },
+  acceptTask: (id: string) => { takeTask(game, id); },
+  abandonTask: (id: string) => { dropTask(game, id); },
+  handInTask: (id: string) => { turnInTask(game, id); },
+  buyShelf: (id: string) => { buyFromShelf(game, id); },
+  wearOutfit: (id: string) => { changeOutfit(game, id); },
   moveStack: (ref: ContainerRef, index: number) => { openMoveChooser(ref, index); },
   openNested: (ref: ContainerRef, index: number, win: PanelWindow) => { navInto(ref, index, win); },
   navUp: (ref: ContainerRef) => { navUp(ref); },
@@ -769,15 +734,8 @@ const act: PanelActions = {
    * which is how you get two packs side by side, as in Tibia. */
   openBag: () => { openContainer({ c: "bag" }); },
   cycleAmmo: () => { cycleAmmo(game); },
-  setOutfitColor: (zone: OutfitZone, idx: number) => {
-    setOutfitColor(zone, idx);
-    beep(480, 0.05, "sine", 0.04, 60);
-  },
-  resetOutfitColors: () => {
-    resetOutfitColors();
-    flash("back to the classic look", "#e8dcc0");
-    beep(360, 0.08, "sine", 0.04);
-  },
+  setOutfitColor: (zone: OutfitZone, idx: number) => { dyeOutfit(game, zone, idx); },
+  resetOutfitColors: () => { resetDyes(game); },
   close: (kind: PanelKind) => { closeWindow(kind); },
 };
 
@@ -1410,22 +1368,22 @@ function openContextMenu(sx: number, sy: number): void {
   const m = nearestHit(world.monsters, at, (x) => x.hp > 0);
   if (m) {
     entries.push({ verb: "attack", label: `Attack ${mobLabel(m)}`, enabled: true,
-      run: () => { P.target = { kind: "mob", id: m.id }; P.dest = null; P.gather = null; } });
+      run: () => { setTarget(game, { kind: "mob", id: m.id }, false); } });
   }
   const c = nearestHit(world.corpses, at);
   if (c) {
     entries.push({ verb: "loot", label: "Look inside", enabled: true,
-      run: () => { P.target = { kind: "corpse", id: c.id }; P.dest = null; } });
+      run: () => { setTarget(game, { kind: "corpse", id: c.id }, false); } });
   }
   const gi = nearestHit(world.ground, at);
   if (gi) {
     entries.push({ verb: "take", label: `Take ${ITEMS[gi.kind].name}`, enabled: true,
-      run: () => { P.target = { kind: "ground", id: gi.id }; P.dest = null; } });
+      run: () => { setTarget(game, { kind: "ground", id: gi.id }, false); } });
   }
   const n = nearestHit(world.npcs, at);
   if (n) {
     entries.push({ verb: "talk", label: `Talk to ${n.name}`, enabled: true,
-      run: () => { P.target = { kind: "npc", id: n.id }; n.talk = NPC_TALK_HOLD_S; P.dest = null; } });
+      run: () => { setTarget(game, { kind: "npc", id: n.id }, false); } });
     /* The entry this whole menu was built for. Greyed rather than missing:
      * the shape the player learns today is the shape they keep. */
     entries.push({ verb: "trade", label: `Trade with ${n.name}`, enabled: false,
@@ -1670,7 +1628,7 @@ function sendChat(text: string): void {
    * `import.meta.env.DEV` is false in `vite build`, so the branch is gone from
    * the deployed bundle rather than merely hard to find in it. */
   if (import.meta.env.DEV && text.trim().toLowerCase() === "/forget") {
-    forgetEverything();
+    forgetEverything(game);
     closeChat();
     return;
   }
@@ -1701,12 +1659,12 @@ function sendChat(text: string): void {
      * reading is the wrong thing to put behind the shorter word. It also has
      * to be discoverable somewhere, and the ids are not guessable — `draugr`
      * is not what the mission is called on screen. */
-    missionReport();
+    missionReport(game);
     closeChat();
     return;
   }
   if (text.trim().toLowerCase().startsWith("/replay ")) {
-    replayCommand(text.trim().toLowerCase().slice("/replay ".length).trim());
+    replayCommand(game, text.trim().toLowerCase().slice("/replay ".length).trim());
     closeChat();
     return;
   }
@@ -2214,54 +2172,6 @@ addEventListener("pointerup", (e) => {
 addEventListener("pointercancel", () => { dockDrag = null; hudDrag = null; if (itemDrag && !itemDrag.touch) itemDrag = null; suppressClick = false; endDrag(); });
 
 /**
- * One-time treasure chests, Tibia-style: the first open yields the prize with
- * the classic "You have found a ...", every later open is just an empty chest.
- * Opened IDs persist in the save. If the reward doesn't fit the bag (weight or
- * slots), it drops at the player's feet instead of being lost.
- */
-function openTreasure(s: Structure): void {
-  const id = `treasure:${cw().key}:${s.tx},${s.ty}`;
-  if (game.opened.includes(id)) { flash("the chest is empty", "#bdb59c"); return; }
-  game.opened.push(id);
-  // World-keyed prizes. A chest may hold more than one piece — Orc Deep -1
-  // buries both plate pieces together — and an entry may carry a count, which
-  // is how the minotaur hoard pays ten platinum without reading as ten finds.
-  // Anything unmapped falls back to the classic blade, so old saves behave
-  // identically.
-  const prizes = CHEST_PRIZES[cw().key] ?? (["marrowBlade"] as const);
-  const parts: string[] = [];
-  for (const prize of prizes) {
-    const kind: ItemKind = Array.isArray(prize) ? prize[0] : (prize as ItemKind);
-    const n: number = Array.isArray(prize) ? prize[1] : 1;
-    // A stack that will not fit is dropped WHOLE rather than split across the
-    // bag and the floor: two half-piles of platinum is worse to pick up than
-    // one whole one, and `addItem` already reports the remainder it refused.
-    const fits = freeCap(P) >= itemWeight(kind, n) && addItem(P.bag, kind, n) === 0;
-    if (!fits) dropToGround(game, kind, n);
-    parts.push(n > 1 ? `${n} ${ITEMS[kind].name}` : ITEMS[kind].name);
-  }
-  flash(`You have found ${parts.join(" and ")}.`, "#ffe9a8");
-  sfx("reward");
-  saveGame(game);
-}
-
-/**
- * Chronos, downstairs, in front of the pads.
- *
- * One line per click, because that is what `flash` is — a line, not a dialogue
- * box. So the conversation is a state machine rather than a script: what he
- * says is a pure function of where the chain stands, and clicking him again
- * repeats the current state rather than advancing past it. The one click that
- * DOES advance is the handover, and the one that pays is the hand-in.
- *
- * The lost-relic branch is the reconcile point for `relicLost`. Nothing else
- * watches the pack — a cap can leave it by being dropped on death, sold, or
- * traded away, and chasing every one of those from the inventory code would
- * mean four hooks that must all agree. Here there is one, at the only place
- * the answer matters: the man who wants the cap notices you do not have it,
- * and the door you need opens again.
- */
-/**
  * One speech from the sage, in the box, in the reader's language.
  *
  * `flash` used to be the whole of his voice, and `flash` is a LINE: the log
@@ -2287,319 +2197,30 @@ function sageSays(
 }
 
 /**
- * TEMP-ETAP42 — the testing reset, reached by typing `/forget` into the chat.
+ * Put what Chronos says in his box, and wire his answers to the requests
+ * behind them.
  *
- * The mission chain is one-shot per character by design, which makes the whole
- * of it untestable a second time without rolling a new one. This puts the
- * character back to "has never met him": stages and chronicles wiped, the
- * relic taken out of the pack so a mission that no longer exists cannot leave
- * its prize behind, and the lair's one-time chest un-opened so the pad, the
- * boss, the purse and the way home can all be walked again.
- *
- * The chest is the part that pays out real coin every run, so a character used
- * for this is not a character to read gold balance off — and that same chest is
- * why the branch in `sendChat` is gated on `import.meta.env.DEV`. Thirty
- * platinum, given out again on every `/forget`, is a mint on a shared shard.
- *
- * Grep TEMP-ETAP42 to pull the whole thing — this function, its branch in
- * `sendChat`, and its string in speech.ts.
+ * What he says is decided by `talkToSage` and the other errand requests
+ * (intents/missions.ts), the way a server will decide it; the box, its pages
+ * and its buttons are the client's.
  */
-/**
- * TEMP-ETAP43 — put the mission chain back to the start without paying for it.
- *
- * `forgetEverything` with the two mints removed; see the note on its `/replay`
- * branch in `sendChat` for why that difference is what lets this one ship.
- *
- * The exp claw-back reuses the death penalty's own arithmetic rather than
- * subtracting from `p.exp`: totals are what the curve is defined on, and
- * taking 2400 off a character sitting on 300 into a level has to walk him
- * backwards down it rather than leave him on a negative bar.
- */
-/**
- * The chain and where this character stands in it, written to the log.
- *
- * Also the help text for `/replay`, and deliberately the same lines for both:
- * the ids are what the command takes and the stages are what it changes, so a
- * player who can see one can work out the other. The usage line goes LAST
- * because the overlay keeps the newest six lines and drops the rest, so the
- * one line that has to survive a long catalogue is the one printed last.
- */
-function missionReport(): void {
-  for (const m of MISSIONS) {
-    const st = stageOf(m.id, P.level);
-    logServer(`${m.id} · lv ${m.reqLevel} · ${st} — ${t(`mission.title.${m.id}`, lang())}`, "#b9a6d8");
-  }
-  logServer("/replay <id> re-opens one errand · /replay all re-opens the chain", "#b9a6d8");
+function showSage(s: SageSpeech): void {
+  sageSays(s.key, {
+    vars: s.vars,
+    choices: s.choices?.map((c) => ({ key: c.key, run: () => sageAnswer(c) })),
+    then: s.thenTalk ? () => showSage(talkToSage(game)) : undefined,
+  });
 }
 
-/** `/replay <something>`. An id, or `all`, or a typo — and a typo must not be
- *  read as "all", which is why the fall-through lists instead of guessing. */
-function replayCommand(arg: string): void {
-  if (arg === "all") { replayMissions(); return; }
-  const m = missionById(arg);
-  if (!m) {
-    logServer(`no errand called "${arg}"`, "#d96a5a");
-    missionReport();
-    return;
+/** One of his answers, pressed. */
+function sageAnswer(c: SageChoice): void {
+  switch (c.does) {
+    case "leave": return; // the box is already closed
+    case "accept": { const s = acceptMission(game, c.mission); if (s) showSage(s); return; }
+    case "decline": showSage(declineMission(c.mission)); return;
+    case "restart": showSage(restartMenu(game)); return;
+    case "replay": replayMission(game, c.mission); showSage(talkToSage(game)); return;
   }
-  replayMissions(m);
-}
-
-/**
- * Put one errand — or the whole chain — back to where it started.
- *
- * `only` is the Etap 44 half. The whole-chain reset was the only thing here
- * and it made re-testing the SECOND mission cost the first one as well: the
- * chain gates on the previous link being `closed`, so wiping the lot meant
- * walking Liddesdale again before Haramsey would open. That is a twenty-minute
- * toll on a one-minute fix, which is the sort of friction that stops a thing
- * from being re-tested at all.
- *
- * Everything that made the full reset safe to ship in front of players is
- * unchanged and applies per mission: no chest is re-opened, and the reward for
- * anything actually being un-closed is taken back.
- */
-function replayMissions(only?: MissionDef): void {
-  const list = only ? [only] : MISSIONS;
-  let owed = 0;
-  for (const m of list) if (stageOf(m.id, P.level) === "closed") owed += m.rewardExp;
-  for (const m of list) {
-    resetMission(m.id);
-    // A bossless errand carries nothing back, so there is nothing to strip.
-    if (m.relic) {
-      const held = countAcross([P.bag], m.relic);
-      if (held > 0) removeAcross([P.bag], m.relic, held);
-    }
-    // …but an errand that pays in STATE has to give the state back, or
-    // replaying it is a free element every time. The one-time-chest flag is
-    // not the guard here — the circles are not chests and never touched it.
-    if (grantsAttunement(m)) clearAttuned();
-  }
-  if (owed > 0) {
-    const total = Math.max(0, totalExpFor(P.level) + P.exp - owed);
-    let lv = P.level;
-    while (lv > 1 && total < totalExpFor(lv)) lv--;
-    P.level = lv;
-    P.exp = total - totalExpFor(lv);
-    P.expNext = expNeeded(lv);
-    refreshDerived(P);
-    if (P.hp > P.maxhp) P.hp = P.maxhp;
-  }
-  applyMissionPads(game.worlds, P.level);
-  saveGame(game);
-  const what = only ? t(`mission.title.${only.id}`, lang()) : "his errands";
-  flash(owed > 0
-    ? `Chronos takes back ${what} — and the ${owed} xp he paid for them`
-    : `Chronos takes back ${what}`, "#b9a6d8");
-  // …and say where that leaves the chain, because the answer is not always the
-  // obvious one: rolling a later link back can leave an earlier one closed, and
-  // rolling an earlier one back does NOT re-lock the links above it.
-  missionReport();
-}
-
-function forgetEverything(): void {
-  resetMissions();
-  for (const m of MISSIONS) {
-    if (m.relic) {
-      const held = countAcross([P.bag], m.relic);
-      if (held > 0) removeAcross([P.bag], m.relic, held);
-    }
-    if (grantsAttunement(m)) clearAttuned();
-  }
-  game.opened = game.opened.filter((id) => !MISSIONS.some((m) => id.startsWith(`treasure:${m.echo}:`)));
-  applyMissionPads(game.worlds, P.level);
-  saveGame(game);
-  flash("Chronos has forgotten you", "#b9a6d8");
-}
-
-/**
- * The way OUT of a conversation, on every speech that ends one.
- *
- * A speech with no answers already closes on a tap, so this button changes
- * nothing mechanically — and that is the point. Without it the last page of a
- * conversation is a wall of text with a blinking arrow, and the player has to
- * guess that tapping the world dismisses it. A labelled door is not a feature,
- * it is the absence of a small puzzle nobody asked for.
- */
-function leaveChoice(): DialogueChoice {
-  return { key: "sage.choice.notYet", run: () => { /* the box is already closed */ } };
-}
-
-function acceptMission(m: MissionDef): void {
-  setStage(m.id, "active");
-  beep(520, 0.22, "sine", 0.06, 300);
-  // The pad that lights is usually on a map the player is not standing on, so
-  // the sweep runs over every world rather than the current one.
-  applyMissionPads(game.worlds, P.level);
-  saveGame(game);
-  // The box holds the prose; the log holds the record. One line, the objective.
-  logServer(t(`mission.goal.${m.id}`, lang()), "#b9a6d8");
-  sageSays(`sage.accept.${m.id}`);
-}
-
-/**
- * TEMP-ETAP45-TESTMENU — "Start over", and the picker behind it.
- *
- * `/replay draugr` already does this and does it better, but it is a typed
- * command on a game that is played on a phone half the time, and a command
- * nobody can reach is a command nobody uses. This is the same call with a
- * thumb on it.
- *
- * IT IS FOR TESTING AND IT COMES OUT. Not because it is dangerous — it runs
- * `replayMissions`, which hands out nothing, takes the reward back and leaves
- * every one-time chest opened — but because a player who has just finished
- * Kárr should not be offered "start over" by the man who paid him for it. The
- * conversation belongs to the errand, not to the build.
- *
- * Grep TEMP-ETAP45-TESTMENU to pull the whole thing: this function, the two
- * strings in speech.ts and the four call sites below.
- */
-/**
- * Erase every copy of `kind` lying anywhere in the world, at any depth.
- *
- * The reconcile half of the relic rule. `carriesBound` stops one leaving the
- * player; this cleans up the copies that got out before the gates were
- * complete — an old save, a body from a death on the walk home, a pack the
- * player dropped in a build where dropping was allowed.
- *
- * Bodies and loose stacks only. Storage Chests are deliberately NOT swept: a
- * relic in a chest means the character genuinely put it there under some
- * earlier build, and taking it out of a chest while the player watches reads
- * as theft rather than as bookkeeping. It cannot be carried out to the sage
- * either, so the sage will simply keep asking — which is the honest state.
- */
-function sweepRelic(kind: ItemKind): void {
-  const scrub = (slots: (ItemStack | null)[], depth = 0): void => {
-    if (depth > 8) return;
-    for (let i = 0; i < slots.length; i++) {
-      const st = slots[i];
-      if (!st) continue;
-      if (st.kind === kind) { slots[i] = null; continue; }
-      if (st.items) scrub(st.items, depth + 1);
-    }
-  };
-  for (const key of Object.keys(game.worlds) as WorldKey[]) {
-    const w = game.worlds[key];
-    for (const c of w.corpses) scrub(c.items);
-    for (let i = w.ground.length - 1; i >= 0; i--) {
-      const gi = w.ground[i];
-      if (gi.kind === kind) { w.ground.splice(i, 1); continue; }
-      if (gi.items) scrub(gi.items);
-    }
-  }
-}
-
-function restartChoice(): DialogueChoice[] {
-  // Nothing to put back means no button: on a fresh character every stage is
-  // `locked` or `available`, and an answer that opens a menu of things that
-  // have not happened yet is noise.
-  const started = MISSIONS.filter((m) => stageOf(m.id, P.level) !== "locked"
-    && stageOf(m.id, P.level) !== "available");
-  if (!started.length) return [];
-  return [{ key: "sage.test.restart", run: () => sageSays("sage.test.pick", {
-    choices: [
-      // Titles, not ids. `mission.title.*` is what the quest log calls them
-      // and what the chronicle is filed under, so the picker reads as a shelf
-      // of his own errands rather than as a list of internal names.
-      ...started.map((m) => ({
-        key: `mission.title.${m.id}`,
-        run: () => { replayMissions(m); talkToSage(); },
-      })),
-      leaveChoice(),
-    ],
-  }) }];
-}
-
-function talkToSage(): void {
-  const cur = currentMission(P.level);
-  if (cur) {
-    const stage = stageOf(cur.id, P.level);
-    if (stage === "complete") {
-      // A bossless errand has nothing to hand over: reaching `complete` at all
-      // means the circle was walked into and the element is already written.
-      // So the hand-in is unconditional for it, and the empty-hands branch
-      // below — the whole `relicLost` reconciliation — is skipped, because a
-      // state cannot go missing on the walk home.
-      if (!cur.relic || countAcross([P.bag], cur.relic) > 0) {
-        if (cur.relic) removeAcross([P.bag], cur.relic, 1);
-        missionHandedIn(cur.id, P.level);
-        grantExp(cw(), P, cur.rewardExp);
-        sfx("reward");
-        saveGame(game);
-        logServer(`${t(`mission.title.${cur.id}`, lang())}: ${cur.rewardExp} xp`, "#b9a6d8");
-        /* He thanks you and then, without being asked again, moves on to
-         * whatever he has next — the following errand if the chain has one and
-         * the player is high enough for it, the level to come back at if not.
-         *
-         * Handing in used to END the conversation, which meant the player was
-         * shown the reward speech and then a single button offering to wipe
-         * the chain, and had to walk away and click him a second time to find
-         * out there was more. Running `talkToSage` again is safe and finite:
-         * the mission is `closed` by now, so this pass falls through to the
-         * offer or to the level line and stops there. */
-        sageSays(`sage.handIn.${cur.id}`, { then: talkToSage });
-        return;
-      }
-      /* He wanted it and you have not got it. The echo reopens — and the world
-       * behind it is swept first.
-       *
-       * THIS SWEEP IS WHAT LETS THE RELIC SIT ON THE BODY. Etap 45 moved it
-       * off the pack and onto the corpse, which reopens the old duplication
-       * route at exactly one seam: a helm still lying in a body Kárr left
-       * behind, plus a door the sage has just unlocked, is two helms one walk
-       * apart. Nothing else can produce a second one — `wantsRelic` refuses
-       * while the stage is `complete`, `boundRelic` refuses to let a held one
-       * out of the pack, and a body that rots takes what is in it.
-       *
-       * It is also, word for word, what he says while he does it: Kárr pewnie
-       * już go sobie założył. He has put it back on. The line was written
-       * before the sweep existed and turned out to describe it exactly. */
-      /* The sweep runs over EVERY world, and in depth.
-       *
-       * It used to look in one place and at one level: `game.worlds[cur.echo]`,
-       * top-level corpse slots and top-level ground stacks. Both bounds were
-       * wrong for the same reason — the relic does not stay where the mission
-       * left it. A player who dies on the walk home leaves a body on the
-       * SURFACE with the cap in it, and a player who tucked it inside a spare
-       * backpack leaves it one slot deeper than the loop could see. Either way
-       * the sweep found nothing, reopened the door, and there were two.
-       *
-       * Reaching into every world is cheap and it is honest: the rule is "one
-       * of these exists at a time", and a rule that only holds on one map is
-       * not the rule. */
-      if (cur.relic) sweepRelic(cur.relic);
-      relicLost(cur.id, P.level);
-      applyMissionPads(game.worlds, P.level);
-      saveGame(game);
-      // TEMP-ETAP45-TESTMENU: `restartChoice()` on each idle branch.
-      sageSays(`sage.empty.${cur.id}`, { choices: [...restartChoice(), leaveChoice()] });
-      return;
-    }
-    sageSays(`sage.remind.${cur.id}`, { choices: [...restartChoice(), leaveChoice()] });
-    return;
-  }
-
-  const next = offeredMission(P.level);
-  if (next) {
-    /* Two answers, and the errand is taken by the FIRST of them rather than by
-     * the act of talking. Walking up to him used to be consent — the stage
-     * moved to `active` before he had said what the job was — which is a poor
-     * bargain to strike on the player's behalf and made the offer speech read
-     * as a briefing for something already agreed. */
-    sageSays(`sage.offer.${next.id}`, { choices: [
-      { key: "sage.choice.what", run: () => acceptMission(next) },
-      { key: "sage.choice.notYet", run: () => sageSays(`sage.decline.${next.id}`) },
-      ...restartChoice(),
-    ] });
-    return;
-  }
-
-  // Nothing to offer: either every link is closed, or the next one is above the
-  // player's level. Say which, because "not yet" with no reason was the whole
-  // of what he used to say and it told nobody anything.
-  const nextLocked = MISSIONS.find((m) => stageOf(m.id, P.level) === "locked");
-  if (nextLocked) sageSays("sage.locked", { choices: [...restartChoice(), leaveChoice()], vars: { lv: nextLocked.reqLevel } });
-  else sageSays("sage.cold", { choices: [...restartChoice(), leaveChoice()] });
 }
 
 /**
@@ -2662,13 +2283,7 @@ function worldClick(w: Vec): void {
     const mspr = mobSprite(m.kind);
     if (Math.abs(w.x - m.x) < mspr.width / 2 && w.y > m.y - mspr.height && w.y < m.y + 10) {
       // clicking the monster you're already attacking STOPS the attack (Tibia-style toggle)
-      if (P.target?.kind === "mob" && P.target.id === m.id) {
-        P.target = null;
-        flash("attack stopped", "#8ab6ff");
-        return;
-      }
-      P.target = { kind: "mob", id: m.id };
-      P.dest = null; P.gather = null; moveMarker = null;
+      if (setTarget(game, { kind: "mob", id: m.id }) === "marked") moveMarker = null;
       return;
     }
   }
@@ -2681,8 +2296,8 @@ function worldClick(w: Vec): void {
   for (let i = world.ground.length - 1; i >= 0; i--) {
     const gi = world.ground[i];
     if (Math.abs(w.x - gi.x) < 18 && w.y > gi.y - 28 && w.y < gi.y + 8) {
-      P.target = { kind: "ground", id: gi.id };
-      P.dest = null; P.gather = null; moveMarker = null;
+      setTarget(game, { kind: "ground", id: gi.id });
+      moveMarker = null;
       return;
     }
   }
@@ -2690,8 +2305,8 @@ function worldClick(w: Vec): void {
   // anything else, which is what opens the window on arrival.
   for (const c of world.corpses) {
     if (Math.abs(w.x - c.x) < 20 && Math.abs(w.y - c.y) < 16) {
-      P.target = { kind: "corpse", id: c.id };
-      P.dest = null; P.gather = null; moveMarker = null;
+      setTarget(game, { kind: "corpse", id: c.id });
+      moveMarker = null;
       return;
     }
   }
@@ -2699,12 +2314,9 @@ function worldClick(w: Vec): void {
   for (const n of world.npcs) {
     const spr = npcSpr(n);
     if (Math.abs(w.x - n.x) < spr.width / 2 && w.y > n.y - spr.height && w.y < n.y + 10) {
-      P.target = { kind: "npc", id: n.id };
-      // clicked: he stops where he is and turns to face you, Tibia-style. The
-      // hold is refreshed by tickNpcTalk for as long as the conversation lasts.
-      n.talk = NPC_TALK_HOLD_S;
-      faceToward(n, P.x, P.y);
-      P.dest = null; P.gather = null; moveMarker = null;
+      // he stops and turns to face you — the request does that
+      setTarget(game, { kind: "npc", id: n.id });
+      moveMarker = null;
       return;
     }
   }
@@ -2721,17 +2333,9 @@ function worldClick(w: Vec): void {
     const half = Math.max(SPR.corpse.width / 2, (n * TILE) / 2);
     const reach = Math.max(SPR.corpse.height * 2, solidRows(s.key) * TILE);
     if (Math.abs(w.x - c.x) < half && w.y > c.baseY - reach && w.y < c.baseY + 8) {
-      if (s.key === "dummy" || s.key === "range") {
-        // re-clicking the dummy you're training on stops the attack (toggle)
-        if (P.target?.kind === "dummy" && P.target.id === s.id) {
-          P.target = null;
-          flash("attack stopped", "#8ab6ff");
-          return;
-        }
-        P.target = { kind: "dummy", id: s.id };
-      }
-      else P.target = { kind: "structure", id: s.id };
-      P.dest = null; P.gather = null; moveMarker = null;
+      // re-clicking the dummy you're training on stops the attack (toggle)
+      const kind = s.key === "dummy" || s.key === "range" ? "dummy" : "structure";
+      if (setTarget(game, { kind, id: s.id }) === "marked") moveMarker = null;
       return;
     }
   }
@@ -2874,35 +2478,29 @@ function forgivingTap(world: World, w: Vec): boolean {
 
   const m = pick(world.monsters.filter((x) => x.hp > 0));
   if (m) {
-    if (P.target?.kind === "mob" && P.target.id === m.id) {
-      P.target = null;
-      flash("attack stopped", "#8ab6ff");
-      return true;
-    }
-    P.target = { kind: "mob", id: m.id };
-    P.dest = null; P.gather = null; moveMarker = null;
+    // the creature already marked: the tap stops the attack (Tibia's toggle)
+    if (setTarget(game, { kind: "mob", id: m.id }) === "marked") moveMarker = null;
     return true;
   }
   const gi = pick(world.ground);
   if (gi) {
-    P.target = { kind: "ground", id: gi.id };
-    P.dest = null; P.gather = null; moveMarker = null;
+    setTarget(game, { kind: "ground", id: gi.id });
+    moveMarker = null;
     return true;
   }
   const c = pick(world.corpses);
   if (c) {
     // no fight on: mark and walk, like anything else. The loot-while-attacking
     // dance is handled at the top, where it belongs.
-    P.target = { kind: "corpse", id: c.id };
-    P.dest = null; P.gather = null; moveMarker = null;
+    setTarget(game, { kind: "corpse", id: c.id });
+    moveMarker = null;
     return true;
   }
   const n = pick(world.npcs);
   if (n) {
-    P.target = { kind: "npc", id: n.id };
-    n.talk = NPC_TALK_HOLD_S;
-    faceToward(n, P.x, P.y);
-    P.dest = null; P.gather = null; moveMarker = null;
+    // he stops and turns to face you — the request does that
+    setTarget(game, { kind: "npc", id: n.id });
+    moveMarker = null;
     return true;
   }
   return false;
@@ -3728,43 +3326,10 @@ function update(dt: number): void {
   if (saveTimer > 5) { saveTimer = 0; saveGame(game); }
 }
 
-/**
- * Mark the nearest creature — or let the current mark go.
- *
- * Chase is half a feature without something to chase. Until now the only way
- * to pick a fight was to tap the creature itself, which is fine alone on a
- * beach and hopeless in a corridor with four skeletons and (soon) three other
- * players standing on each other. This is Tibia's crossed-swords button.
- *
- * Nearest by WALKING distance would be the honest measure, but a BFS per
- * keypress across a 105x100 floor to answer "which one is closest" is a lot
- * of work for a question the player is asking about what they can see. Line
- * of sight plus straight-line distance gets the same answer everywhere it
- * matters and cannot pick something through a wall.
- */
+/** Mark the nearest creature, or let the current mark go (intents/target.ts).
+ *  Picking one forgets a body the player was walking over to loot. */
 function attackNearest(): void {
-  // pressing it again with a mark in hand releases it — one key, both ways
-  if (P.target?.kind === "mob") {
-    P.target = null;
-    flash("target released", "#8ab6ff");
-    return;
-  }
-  const world = cw();
-  let best: Monster | null = null;
-  let bestD = Infinity;
-  for (const m of world.monsters) {
-    if (m.hp <= 0) continue;
-    const d = dist(P.x, P.y, m.x, m.y);
-    if (d >= bestD || d > TARGET_SEEK_PX) continue;
-    if (!lineOfSight(world, P.x, P.y, m.x, m.y)) continue;
-    best = m;
-    bestD = d;
-  }
-  if (!best) { flash("nothing in sight", "#e0a06a"); return; }
-  P.target = { kind: "mob", id: best.id };
-  P.dest = null;
-  P.gather = null;
-  pendingLoot = null;
+  if (targetNearest(game) === "marked") pendingLoot = null;
 }
 
 function resolveTarget(): void {
@@ -3846,7 +3411,7 @@ function resolveTarget(): void {
         // due WEST of him, on the same row. It said north for as long as
         // nobody walked it.
         flash("Chronos: \u201cthe trapdoor west of here. History is kept downstairs.\u201d", "#b9a6d8");
-      } else talkToSage();
+      } else showSage(talkToSage(game));
     }
     // Someone with neither a shop nor a panel of their own has nothing to open
     // yet — say so rather than putting an empty window on screen.
@@ -3859,7 +3424,7 @@ function resolveTarget(): void {
     if (st.key === "forge") openWindow("forge");
     else if (st.key === "tower") openWindow("tower");
     else if (st.key === "chest") { ui.stash = st; openWindow("stash"); }
-    else if (st.key === "treasure") openTreasure(st);
+    else if (st.key === "treasure") openTreasure(game, st);
     P.target = null;
   }
 }
