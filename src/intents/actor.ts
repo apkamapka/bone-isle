@@ -28,9 +28,11 @@
  * you are looking at.
  */
 import type { Game } from "../game.ts";
-import type { Structure } from "../world/types.ts";
-import { PANEL_REACH_TILES } from "../config.ts";
+import type { Npc, Structure } from "../world/types.ts";
+import { PANEL_REACH_TILES, USE_RANGE_PX } from "../config.ts";
+import { dist } from "../util.ts";
 import { chebToPoint } from "../world/grid.ts";
+import { isSafeTile } from "../world/collision.ts";
 import { structGap } from "../systems/building.ts";
 import { floatSelf, logLine } from "../systems/fxEvents.ts";
 
@@ -64,4 +66,59 @@ export function withinReach(g: Game, x: number, y: number): boolean {
 /** The same reach, against a placed structure's footprint. */
 export function structInReach(g: Game, s: Structure): boolean {
   return structGap(s, g.player.tx, g.player.ty) <= PANEL_REACH_TILES;
+}
+
+/** Is the player near any owned Home-Isle structure of the given kinds? The
+ *  Forge and the Tower answer only to someone standing at them. */
+export function nearStructure(g: Game, ...keys: string[]): boolean {
+  if (g.current !== g.worlds.home) return false;
+  for (const s of g.worlds.home.structures) {
+    if (!keys.includes(s.key)) continue;
+    if (structInReach(g, s)) return true;
+  }
+  return false;
+}
+
+/** Is the player near an NPC accepted by `match` on the current island? A
+ *  counter serves only whoever is standing at it. */
+export function nearNpc(g: Game, match: (n: Npc) => boolean): boolean {
+  const P = g.player;
+  return g.current.npcs.some((n) => match(n) && dist(P.x, P.y, n.x, n.y) < USE_RANGE_PX);
+}
+
+/**
+ * Is the player standing somewhere they may not fight from?
+ *
+ * A protection zone is a protection zone: you cannot strike out of one and
+ * nothing can reach you inside it. Half of that was already true — a creature
+ * cannot walk into a haven (`occOf` refuses the tile, `pushMonster` refuses
+ * the spawn) — and the missing half is what made it an exploit rather than a
+ * refuge. From a safe tile you could shell a pack that had no way to answer:
+ * crystals, arrows, and a sword swung across the boundary all landed.
+ *
+ * `mayHit` in pvp.ts has always said this about PLAYERS and its comment notes
+ * that monsters never come through it. This is the same sentence about
+ * everything else, so the zone finally means one thing rather than two.
+ */
+export function inProtection(g: Game): boolean {
+  const P = g.player;
+  return isSafeTile(g.current, P.tx, P.ty);
+}
+
+/**
+ * Refuse an attack made from a protection zone, and say so once.
+ *
+ * Once is the whole reason this is a function. Auto-attack asks twice a
+ * second, so a refusal that flashed every time it was asked would bury the
+ * screen; the mark is dropped instead, which is what Tibia does when you step
+ * into a temple and is a thing the player can actually see happen.
+ */
+export function refuseFromProtection(g: Game): boolean {
+  const P = g.player;
+  if (!inProtection(g)) return false;
+  if (P.target) {
+    P.target = null;
+    tell(g, "no fighting from a protected zone", "#8ab6ff");
+  }
+  return true;
 }

@@ -15,10 +15,10 @@ import { refreshDerived, canCarry, freeCap } from "../entities/player.ts";
 import { grantExp } from "../systems/combat.ts";
 import { skills, type SkillKey } from "../systems/skills.ts";
 import { isReady, startCooldown } from "../systems/cooldowns.ts";
-import { freeSlots } from "../systems/loadout.ts";
+import { freeSlots, planSwap, refused } from "../systems/loadout.ts";
 import { rootOf, type ContainerRef } from "../systems/containers.ts";
 import { sound, tone, floatAt, floatSelf } from "../systems/fxEvents.ts";
-import { tell } from "./actor.ts";
+import { tell, nearNpc } from "./actor.ts";
 import { refSlots, refUsable, closeIfEmpty } from "./containers.ts";
 import { dropToGround } from "./ground.ts";
 
@@ -244,6 +244,8 @@ export function cycleAmmo(g: Game): void {
  */
 export function changeCoins(g: Game, to: "goldCoin" | "platinumCoin", n: number): void {
   const P = g.player;
+  // only over Morgan's counter, to whoever is standing at it
+  if (!nearNpc(g, (q) => q.key === "morgan")) { tell(g, "too far away", "#d96a5a"); return; }
   if (to === "goldCoin") {
     const added = (ITEMS.goldCoin.weight * 100 - ITEMS.platinumCoin.weight) * n;
     if (added > freeCap(P)) { tell(g, "too heavy", "#d96a5a"); return; }
@@ -251,4 +253,30 @@ export function changeCoins(g: Game, to: "goldCoin" | "platinumCoin", n: number)
   if (!exchangeCoins(P.bag, to, n)) { tell(g, "no room in bag", "#d96a5a"); return; }
   tell(g, to === "platinumCoin" ? `+${n} platinum` : `+${n * 100} gold`, "#ffe9a8");
   sound("coins");
+}
+
+/**
+ * Quick weapon swap: toggles the equipped weapon between a bow and a melee
+ * weapon, pulling the best matching spare from the pack. Reuses the normal
+ * equip path so the two-handed bow↔shield rule and bag stow-away still apply.
+ *
+ * The CHOICE is made in `systems/loadout.ts` and only carried out here — see
+ * that file for the two bugs that split it in half, both of which were about
+ * what the search could see rather than about what the button does.
+ */
+export function swapWeapon(g: Game): void {
+  const P = g.player;
+  if (P.dead) return;
+  const plan = planSwap(P.bag, P.eq.weapon, P.eq.shield);
+  if (refused(plan)) {
+    if (plan.no === "room") {
+      tell(g, "no room to stow the shield", "#e0a06a");
+    } else {
+      tell(g, plan.toBow ? "no bow in your pack" : "no melee weapon in your pack", "#e0a06a");
+    }
+    return;
+  }
+  equipItem(g, plan.weapon); // removes from the tree, equips, stows the previous
+  if (plan.shield) equipItem(g, plan.shield);
+  tell(g, `equipped ${ITEMS[plan.weapon].name}`, "#b9e07f");
 }
