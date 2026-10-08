@@ -1787,9 +1787,11 @@ async function main(): Promise<void> {
       `bestiary holds 44 kinds (18 + 21 humans + redcap + draugr + blackAnnis + asterion + gorak), got ${MONSTER_KINDS.length}`);
     // every loot entry references a real item, every def carries a live sprite
     let lootOk = true, sprOk = true;
+    const { SPR: sprTable } = await import("../src/gfx/sprites.ts");
     for (const k of MONSTER_KINDS) {
       const d = MONSTER_DEFS[k];
-      if (!d.spr) sprOk = false;
+      // a NAME since Etap 3.1b — and it has to be one the client can draw
+      if (!d.art || !(d.art in sprTable)) sprOk = false;
       for (const e of d.loot) if (!items.ITEMS[e.kind]) lootOk = false;
     }
     ok(lootOk, "every loot entry maps to a real item");
@@ -1961,15 +1963,14 @@ async function main(): Promise<void> {
   console.log("Etap 10 — Wardrobe (outfit dyes):");
   {
     const outfit = await import("../src/systems/outfit.ts");
-    const p = createPlayer({ x: 0, y: 0 });
     outfit.resetOutfit();
     const d0 = outfit.outfitState();
     ok(d0.hair === 57 && d0.primary === 95 && d0.secondary === 95 && d0.shoes === 114 && d0.current === "adventurer",
       "fresh state is the silver/gray look in the 133-dye rack");
-    outfit.setOutfitColor(p, "hair", 11);
-    outfit.setOutfitColor(p, "primary", 4);
+    outfit.setOutfitColor("hair", 11);
+    outfit.setOutfitColor("primary", 4);
     ok(outfit.outfitState().hair === 11 && outfit.outfitState().primary === 4, "dye picks stick");
-    outfit.setOutfitColor(p, "secondary", 999);
+    outfit.setOutfitColor("secondary", 999);
     ok(outfit.outfitState().secondary === 95, "an out-of-range dye is refused");
     // save round-trip
     const snap = outfit.outfitSave();
@@ -3077,10 +3078,12 @@ async function main(): Promise<void> {
   {
     console.log("Etap 13 — Adventurer outfit (directional sprites + dye zones):");
     const of = await import("../src/systems/outfit.ts");
+    // the baked outfit is the client's since Etap 3.1b; the state stays in `of`
+    const oa = await import("../src/gfx/outfitArt.ts");
     const gfxSrc = await import("../src/gfx/sprites.ts");
     of.resetOutfit();
 
-    const set = of.bakeOutfitSprites();
+    const set = oa.bakeOutfitSprites();
     ok(!!set.down && !!set.side && !!set.up, "three facings bake");
     // the maps are still 12x16; the bake is SPRITE_SCALE bigger since Etap 17
     const advSrc = (c: HTMLCanvasElement): HTMLCanvasElement => gfxSrc.spriteSource(c);
@@ -3113,13 +3116,12 @@ async function main(): Promise<void> {
       "the front view has eyes set in skin");
 
     // dyeing must change the sprite but never its geometry
-    const before = of.bakeOutfitSprites().down.width;
-    const P = { spr: null, sprDir: null } as never;
-    of.setOutfitColor(P, "primary", 12);
-    of.setOutfitColor(P, "secondary", 6);
+    const before = oa.bakeOutfitSprites().down.width;
+    of.setOutfitColor("primary", 12);
+    of.setOutfitColor("secondary", 6);
     ok(of.outfitState().primary === 12 && of.outfitState().secondary === 6,
       "dye picks land in state");
-    ok(of.bakeOutfitSprites().down.width === before, "dyeing leaves geometry alone");
+    ok(oa.bakeOutfitSprites().down.width === before, "dyeing leaves geometry alone");
 
     // zone captions follow the worn outfit
     // the 133-dye rack: Tibia's own 19 x 7 grid, generated not hand-listed
@@ -3147,8 +3149,8 @@ async function main(): Promise<void> {
     ok(of.outfitState().hair === 57 && of.outfitState().primary === 95,
       "out-of-range indices fall back to the default look");
     // restore the dyes the round-trip check below expects
-    of.setOutfitColor(P, "primary", 12);
-    of.setOutfitColor(P, "secondary", 6);
+    of.setOutfitColor("primary", 12);
+    of.setOutfitColor("secondary", 6);
 
     ok(of.zoneLabels().hair === "Hair" && of.zoneLabels().primary === "Shirt"
       && of.zoneLabels().secondary === "Pants" && of.zoneLabels().shoes === "Shoes",
@@ -3165,7 +3167,7 @@ async function main(): Promise<void> {
 
     // the legacy glyph outfit still bakes (single view repeated)
     of.loadOutfitSave({ hair: 0, primary: 1, secondary: 2, current: "classic", owned: ["adventurer", "classic"] });
-    const cls = of.bakeOutfitSprites();
+    const cls = oa.bakeOutfitSprites();
     ok(cls.down.width === cls.side.width && cls.side.height === cls.up.height,
       "single-view outfits render identically in every facing");
     ok(of.zoneLabels().hair === "Hair", "Classic keeps the original captions");
@@ -3294,7 +3296,9 @@ async function main(): Promise<void> {
 
     // ---- the terrain canvas is NOT baked at TILE (phones would refuse it) ----
     const zw = buildWorlds(WORLD_SEED);
-    ok(zw.home.mapCanvas.width === zw.home.w * cfg.MAP_TILE,
+    // the fallback picture is the client's since Etap 3.1b, painted on demand
+    const { bakedTerrain: bakedT } = await import("../src/gfx/terrainArt.ts");
+    ok(bakedT(zw.home).canvas.width === zw.home.w * cfg.MAP_TILE,
       "the map canvas is painted at MAP_TILE, not TILE");
     /* …and no single map's bitmap is one a phone would refuse. The Deep
      * Wildlands continent used to be the one that mattered here (368x272);
@@ -3303,7 +3307,7 @@ async function main(): Promise<void> {
     let biggest = 0;
     let biggestKey = "";
     for (const w of Object.values(zw)) {
-      const px = w.mapCanvas.width * w.mapCanvas.height;
+      const px = bakedT(w).canvas.width * bakedT(w).canvas.height;
       if (px > biggest) { biggest = px; biggestKey = w.key; }
     }
     ok(biggest < 30_000_000,
@@ -3424,7 +3428,8 @@ async function main(): Promise<void> {
     const home = buildWorlds(WORLD_SEED).home;
 
     ok(home.w === 35 && home.h === 35, "the island is the 35x35 grid exported from Tiled");
-    ok(home.mapImage === undefined, "headless: no terrain image, the baked canvas carries on");
+    ok((await import("../src/gfx/terrainArt.ts")).terrainImage(home) === null,
+      "headless: no terrain image, the baked canvas carries on");
     ok(home.trees.length === 9,
       "9 of 12 authored trees made it across — 3 stood on the shoreline");
     ok(home.rocks.length === 10, "…and all 10 rocks (the duplicate marker is gone)");
@@ -3824,7 +3829,9 @@ async function main(): Promise<void> {
 
   console.log("Beggar — the floor of the ladder (the bandit's old job):");
   {
-    const { MONSTER_DEFS, mobSprite, setMobArt } = await import("../src/entities/monsters.ts");
+    const { MONSTER_DEFS } = await import("../src/entities/monsters.ts");
+    const { mobSprite, setMobArt } = await import("../src/gfx/mobArt.ts");
+    const { SPR: SPRb } = await import("../src/gfx/sprites.ts");
     const b = MONSTER_DEFS.beggar;
     ok(b !== undefined, "the beggar is a defined creature");
     ok(!("rat" in MONSTER_DEFS), "the rat is gone, not merely hidden");
@@ -3844,13 +3851,13 @@ async function main(): Promise<void> {
     ok(b.gold[1] > 0, "being a person, it carries coin");
 
     // artwork: baked fallback headless, and installing a PNG must take over
-    ok(mobSprite("beggar") === b.spr, "headless it draws with the baked fallback");
+    ok(mobSprite("beggar") === SPRb[b.art], "headless it draws with the baked fallback");
     const art = document.createElement("canvas");
     art.width = 30; art.height = 53;
     setMobArt("beggar", art);
     ok(mobSprite("beggar") === art, "loaded artwork wins");
     setMobArt("beggar", null);
-    ok(mobSprite("beggar") === b.spr, "clearing it restores the fallback");
+    ok(mobSprite("beggar") === SPRb[b.art], "clearing it restores the fallback");
 
     // it must actually be in the world the newcomer reaches first
     const { populateWorld: pop } = await import("../src/game.ts");
@@ -4041,7 +4048,7 @@ async function main(): Promise<void> {
     // the bake. If a twentieth man is ever added, this is the line that will
     // notice he went in on the placeholder.
     const onPlaceholder = MONSTER_KINDS.filter((k) =>
-      MONSTER_DEFS[k].spr === MONSTER_DEFS.beggar.spr
+      MONSTER_DEFS[k].art === MONSTER_DEFS.beggar.art
       // Registered, not named a particular way. The old form demanded the file
       // be `mob-${k}-walk.png`, which multi-word kinds have never obeyed —
       // demonSkeleton has always loaded mob-demon-skeleton-walk.png — so it
@@ -4839,7 +4846,7 @@ async function main(): Promise<void> {
     const worlds = buildWorlds(WORLD_SEED);
     const all = Object.values(worlds);
     ok(all.every((w) => Array.isArray(w.fires)), "every world carries a fire list");
-    ok(all.every((w) => w.decos.every((d) => d.spr !== gfx.SPR.campfire)),
+    ok(all.every((w) => w.decos.every((d) => (d.art as string) !== "campfire")),
       "no campfire is left in the baked decoration list");
     /* The Deep Wildlands used to be what lit fires here; after Etap 40 the
      * hand-drawn maps are, via the `F` glyph. Checked across all of them at
@@ -7366,11 +7373,12 @@ async function main(): Promise<void> {
     ok(D.beggar.hp < D.chieftain.hp / 40, "the ladder spans a real range, beggar to chieftain");
 
     /* --- one placeholder, shared, until each gets its own art --- */
-    const placeheld = HUMANS.filter((k) => D[k].spr === SPR.humanFoe);
+    const placeheld = HUMANS.filter((k) => D[k].art === "humanFoe");
     ok(placeheld.length === HUMANS.length - 1,
       `every new human shares one placeholder bake (${placeheld.length}), the bandit keeps its own`);
-    ok(D.bandit.spr !== SPR.humanFoe, "the bandit already has art and does not regress to the placeholder");
-    ok(M.mobSprite("chieftain") === SPR.humanFoe, "…and it is what actually draws until a PNG lands");
+    ok(D.bandit.art !== "humanFoe", "the bandit already has art and does not regress to the placeholder");
+    ok((await import("../src/gfx/mobArt.ts")).mobSprite("chieftain") === SPR.humanFoe,
+      "…and it is what actually draws until a PNG lands");
 
     /* --- planning stage: NOT placed in the world yet --- */
     const gameSrc = fs.readFileSync(new URL("../src/game.ts", import.meta.url), "utf8");
@@ -7914,11 +7922,11 @@ async function main(): Promise<void> {
     // hole. This is the guarantee that a 404 costs looks and nothing else.
     let holes = 0;
     for (const key of B.STRUCT_KEYS) {
-      for (let t = 1; t <= 3; t++) if (B.structSprite(key, t) !== B.STRUCTS[key].spr) holes++;
+      for (let t = 1; t <= 3; t++) if (A.structSprite(key, t) !== A.structStandIn(key)) holes++;
     }
     ok(holes === 0, "with no artwork loaded every tier still draws its baked stand-in");
-    ok(B.structSprite("forge") === B.structSprite("forge", 1), "the tier argument defaults to I");
-    ok(!!B.structSprite("treasure"), "the world-placed treasure chest still resolves");
+    ok(A.structSprite("forge") === A.structSprite("forge", 1), "the tier argument defaults to I");
+    ok(!!A.structSprite("treasure"), "the world-placed treasure chest still resolves");
     ok(A.buildingArt("forge", 1) === null && A.buildingFrame("dummy", 1, 0, 0) === null,
       "…and the artwork lookups answer null rather than guessing");
 
@@ -10703,8 +10711,10 @@ async function main(): Promise<void> {
     ok(icons.includes("imageSmoothingEnabled = false"),
       "the drawn icons are blitted nearest-neighbour, so 16px art stays square");
     ok(icons.includes("loadControlIcons"), "…loaded once at startup with the rest of the art");
-    const game = nfs.readFileSync("src/game.ts", "utf8");
-    ok(game.includes("loadControlIcons()"), "…and something actually calls it");
+    // since Etap 3.1b the client loads every picture once at boot, not game.ts
+    const loadArt = nfs.readFileSync("src/gfx/loadArt.ts", "utf8");
+    ok(loadArt.includes("loadControlIcons()") && nfs.readFileSync("src/main.ts", "utf8").includes("loadAllArt();"),
+      "…and something actually calls it");
   }
 
   console.log("Etap 35 — the portrait phone gets a deck, and only the portrait phone:");
@@ -14468,7 +14478,7 @@ async function main(): Promise<void> {
      *
      * Written as a relation to TILE rather than as 30 x 20, so a future
      * redraw is free to be any size that actually fits. */
-    const chestSpr = B43.structSprite("treasure");
+    const chestSpr = A43b.structSprite("treasure");
     ok(chestSpr.width <= TILE, `the chest is no wider than its square (${chestSpr.width} of ${TILE})`);
     ok(chestSpr.height <= TILE, `…nor taller (${chestSpr.height} of ${TILE})`);
     ok(S43.CHEST_LIFT === Math.round((TILE - chestSpr.height) / 2),
@@ -16032,16 +16042,20 @@ async function main(): Promise<void> {
     ok(seaBody.indexOf("WATER_SWELL_COLOR") < seaBody.indexOf("WATER_GLINT_COLOR"),
       "…and it is drawn UNDER them — a glint dimmed by the swell is backwards");
 
-    /* THE SHORE, on maps that have an export. `world.coastWater` is filled by
-     * the procedural baker and by nothing else, so `art ? [] : coastWater` left
-     * every hand-drawn map with a sea that moved and an edge that did not. */
-    /* The list EXISTS on these maps — the procedural baker fills it whether or
+    /* THE SHORE, on maps that have an export. The coast list is filled by the
+     * procedural baker and by nothing else, so drawing it only when there is no
+     * picture left every hand-drawn map with a sea that moved and an edge that
+     * did not. */
+    /* The list EXISTS for these maps — the procedural baker fills it whether or
      * not an export is present. What killed the shoreline was the draw, which
-     * reads `art ? [] : world.coastWater`: on any map with an export the loop
-     * is handed an empty array and the coast never moves. Pinned as the reason
+     * reads the list only when the map has no picture: on any map with an
+     * export the loop is handed an empty array and the coast never moves. Pinned as the reason
      * rather than as the data, because the data was never the problem and a
      * test that said otherwise would send the next reader to the wrong file. */
-    ok(/for \(const cwv of art \? \[\] : world\.coastWater\)/.test(main49),
+    // the list moved with the baked fallback to gfx/terrainArt.ts in Etap 3.1b;
+    // `bake` is null exactly when the map has its picture
+    ok(/const bake = art \? null : bakedTerrain\(world\);/.test(main49)
+      && /for \(const cwv of bake \? bake\.coast : \[\]\)/.test(main49),
       "the baked coast list is still skipped on exported maps — that is the gate that killed it");
     for (const key of ["town", "calanais", "liddesdale", "haramsey"] as const) {
       ok(W49[key].tile.some((row) => row.some((t) => t === Tile49.Water)),
@@ -16691,7 +16705,9 @@ async function main(): Promise<void> {
       return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
     };
     const artSrc = fsSh.readFileSync(new URL("../src/gfx/sceneryArt.ts", import.meta.url), "utf8");
-    const srcBlock = artSrc.slice(artSrc.indexOf("const SRC:"), artSrc.indexOf("export const FOOTPRINT"));
+    // the footprint tables moved to world/scenery.ts in Etap 3.1b; SRC still
+    // ends where their re-export begins
+    const srcBlock = artSrc.slice(artSrc.indexOf("const SRC:"), artSrc.indexOf("export { SCENERY_NAME"));
     const files = new Map<string, string>();
     for (const m of srcBlock.matchAll(/(\w+):\s*"\.\/([a-z0-9-]+\.png)"/g)) files.set(m[1], m[2]);
     let drifted = 0;
@@ -21321,7 +21337,9 @@ async function main(): Promise<void> {
     ok(r.ok && OF.ownsOutfit("ranger") && OF.wardrobeOutfits().join() === "adventurer,ranger", "the Ranger goes into the wardrobe");
     ok(SH.shelfState(p, SH.shelfEntry("outfitRanger")!) === "owned" && !SH.buyShelf(p, "outfitRanger").ok,
       "…once: an outfit is not sold twice");
-    ok(OF.wearOutfit(p, "ranger") && OF.outfitState().current === "ranger" && HS.heroLook() === "ranger",
+    const OA92 = await import("../src/gfx/outfitArt.ts");
+    ok(OF.wearOutfit("ranger") && OF.outfitState().current === "ranger"
+      && (OA92.syncOutfitArt(), HS.heroLook() === "ranger"),
       "put on at the Wardrobe, it changes the hero's clothes");
     ok(Object.values(OF.zoneLabels()).join() === "Hood,Cardigan,Pants,Details", "…and the dye rows read Hood, Cardigan, Pants, Details");
     for (const sex of ["male", "female"] as const) {
@@ -21330,9 +21348,9 @@ async function main(): Promise<void> {
         `${sex} Ranger: the same skin base, four dye layers of its own`);
       ok(Object.values(files).every((f) => pngSize(f) === "576x320"), `${sex} Ranger: every layer on disk, in the 9x5 grid`);
     }
-    ok(OF.wearOutfit(p, "adventurer") && HS.heroLook() === "adventurer" && OF.zoneLabels().hair === "Hair",
+    ok(OF.wearOutfit("adventurer") && (OA92.syncOutfitArt(), HS.heroLook() === "adventurer") && OF.zoneLabels().hair === "Hair",
       "taking it off brings the Adventurer back, captions and all");
-    ok(!OF.wearOutfit(p, "classic"), "an outfit the character does not own cannot be worn");
+    ok(!OF.wearOutfit("classic"), "an outfit the character does not own cannot be worn");
 
     // ---- the fourth slot
     ok(TK.maxActive() === 3, "three errands in hand, as ever");
@@ -21390,7 +21408,7 @@ async function main(): Promise<void> {
       const g = GM.createGame();
       g.player.blessed = true;
       OF.grantOutfit("ranger");
-      OF.wearOutfit(g.player, "ranger");
+      OF.wearOutfit("ranger");
       TK.grantExtraSlot();
       SV.saveGame(g);
       TK.resetTasks();
@@ -21690,6 +21708,182 @@ async function main(): Promise<void> {
     AF.clearAuraFx();
     CH.resetChat();
     rps31a();
+  }
+
+  console.log("\nEtap 3.1b — the world names its pictures, and only the client holds them:");
+  {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const GM = await import("../src/game.ts");
+    const SV = await import("../src/save.ts");
+    const MON = await import("../src/entities/monsters.ts");
+    const BLD = await import("../src/systems/building.ts");
+    const OF = await import("../src/systems/outfit.ts");
+    const GEN = await import("../src/world/generate.ts");
+    const FAC = await import("../src/world/facing.ts");
+    const SPRS = await import("../src/gfx/sprites.ts");
+    const MA = await import("../src/gfx/mobArt.ts");
+    const NA = await import("../src/gfx/npcArt.ts");
+    const BA = await import("../src/gfx/buildingArt.ts");
+    const TA = await import("../src/gfx/terrainArt.ts");
+    const OA = await import("../src/gfx/outfitArt.ts");
+    const MS = await import("../src/gfx/mobSheet.ts");
+    const HS = await import("../src/gfx/heroSheet.ts");
+    const { MAP_TILE: MAPT } = await import("../src/config.ts");
+    const { Tile: TL } = await import("../src/world/types.ts");
+
+    /* ---- the boundary, read off the source ------------------------------
+     * 3.1a kept the logic from PLAYING effects; this keeps it from touching
+     * pictures at all. Every import in every logic file is resolved, type-only
+     * ones included, and none may reach the client — no exceptions left. */
+    const srcDir = new URL("../src/", import.meta.url);
+    const logicFiles: string[] = [];
+    for (const dir of ["systems", "entities", "world", "text"]) {
+      for (const f of fs.readdirSync(new URL(`${dir}/`, srcDir))) if (f.endsWith(".ts")) logicFiles.push(`${dir}/${f}`);
+    }
+    logicFiles.push("items.ts", "game.ts", "config.ts", "util.ts", "save.ts");
+    /* The screen, the speakers and the input — not `net/`: save.ts still
+     * chooses between the browser and the database, and that is a question
+     * for 3.11, when saving becomes the server's alone. */
+    const CLIENT = (t: string): boolean =>
+      /^(gfx|ui|sound)\//.test(t) || ["audio.ts", "fx.ts", "fxClient.ts", "main.ts", "boot.ts", "input.ts"].includes(t);
+    const importRe = /import\s+(?:type\s+)?(?:\*\s+as\s+\w+|\{[^}]*\}|\w+)\s+from\s+"([^"]+)"|export\s+(?:type\s+)?(?:\*|\{[^}]*\})\s+from\s+"([^"]+)"/g;
+    const strip = (t: string): string => t
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n").map((l) => l.replace(/(^|[^:"'`\\])\/\/.*$/, "$1")).join("\n");
+    const reaches: string[] = [];
+    const touches: string[] = [];
+    for (const f of logicFiles) {
+      const text = fs.readFileSync(new URL(f, srcDir), "utf8");
+      for (const mt of text.matchAll(importRe)) {
+        const spec = mt[1] ?? mt[2];
+        if (!spec.startsWith(".")) continue;
+        const target = path.posix.normalize(path.posix.join(path.posix.dirname(f), spec));
+        if (CLIENT(target)) reaches.push(`${f} -> ${target}`);
+      }
+      const code = strip(text);
+      if (/HTMLCanvasElement|HTMLImageElement|CanvasRenderingContext2D|CanvasImageSource|\bdocument\.|new Image\b/.test(code)) {
+        touches.push(f);
+      }
+    }
+    ok(reaches.length === 0, `no logic file imports the screen, the speakers or the input${reaches.length ? ": " + reaches.join("; ") : ""}`);
+    ok(touches.length === 0, `…nor names a canvas, an image or the document${touches.length ? ": " + touches.join(", ") : ""}`);
+
+    const gameSrc31b = read("../src/game.ts");
+    ok(!/load[A-Za-z]*Art\(|loadMobSheets\(|loadFireSheet\(|loadControlIcons\(|loadTerrainImages\(/.test(strip(gameSrc31b)),
+      "building the islands starts no artwork loading");
+    const main31b = read("../src/main.ts");
+    ok(main31b.indexOf("loadAllArt();") > 0
+      && main31b.indexOf("loadAllArt();") < main31b.indexOf("const game: Game = loadGame() ?? createGame();"),
+      "the client starts every picture loading once, before the first island is built");
+    const loadArt31b = read("../src/gfx/loadArt.ts");
+    for (const fn of ["loadTerrainArt", "loadPropArt", "loadMobSheets", "loadFireSheet", "loadSceneryArt", "loadBuildingArt",
+      "loadControlIcons", "loadItemArt", "loadSpellArt", "loadAuraArt", "loadAttuneArt"]) {
+      ok(loadArt31b.includes(`${fn}();`), `…${fn} among them`);
+    }
+
+    /* ---- building a world makes no picture at all ------------------------ */
+    const doc = (globalThis as unknown as { document: { createElement: (...a: unknown[]) => unknown } }).document;
+    const realCreate = doc.createElement;
+    let made = 0;
+    doc.createElement = (...a: unknown[]) => { made++; return realCreate(...a); };
+    let g31: import("../src/game.ts").Game;
+    let g31b: import("../src/game.ts").Game | null;
+    try {
+      g31 = GM.createGame();
+      SV.saveGame(g31);
+      g31b = SV.loadGame();
+    } finally {
+      doc.createElement = realCreate;
+    }
+    ok(made === 0, `a new game and a loaded one are built without a single canvas (${made})`);
+    ok(!!g31b, "…and the loaded one is really there");
+
+    /* ---- and nothing in it holds one ------------------------------------- */
+    const pictures: string[] = [];
+    const seen31 = new Set<object>();
+    const walk = (v: unknown, where: string, depth: number): void => {
+      if (!v || typeof v !== "object" || depth > 12 || pictures.length > 5) return;
+      if (seen31.has(v)) return;
+      seen31.add(v);
+      if (ArrayBuffer.isView(v)) return;
+      const o = v as Record<string, unknown>;
+      if (typeof o.getContext === "function" || typeof o.naturalWidth === "number") { pictures.push(where); return; }
+      for (const k of Object.keys(o)) {
+        const d = Object.getOwnPropertyDescriptor(o, k);
+        if (d && "value" in d) walk(d.value, `${where}.${k}`, depth + 1);
+      }
+    };
+    walk(g31b, "game", 0);
+    walk(MON.MONSTER_DEFS, "MONSTER_DEFS", 0);
+    walk(BLD.STRUCTS, "STRUCTS", 0);
+    walk(OF.OUTFITS, "OUTFITS", 0);
+    walk(GEN.NPC_DATA, "NPC_DATA", 0);
+    ok(seen31.size > 10_000, `the walk really covers the game (${seen31.size} objects)`);
+    ok(pictures.length === 0, `no world, creature, building, outfit or townsperson holds a picture${pictures.length ? ": " + pictures.join(", ") : ""}`);
+    const home31 = g31b!.worlds.home;
+    ok(!("mapCanvas" in home31) && !("mapImage" in home31) && !("coastWater" in home31),
+      "a world carries no picture of itself and no coast list");
+    ok(!("spr" in g31b!.player) && !("sprDir" in g31b!.player), "…the character none of himself");
+
+    /* ---- every name the logic writes, the client can draw ----------------- */
+    ok(MON.MONSTER_KINDS.every((k) => MON.MONSTER_DEFS[k].art in SPRS.SPR && MA.mobSprite(k) === SPRS.SPR[MON.MONSTER_DEFS[k].art]),
+      "every creature's stand-in is a picture the client has, and is what it draws headless");
+    ok(GEN.NPC_DATA.every(([key, , art]) => art in SPRS.SPR && NA.npcSprite(key) === SPRS.SPR[art]),
+      "…every townsperson's too");
+    const allWorlds = Object.values(g31b!.worlds);
+    ok(allWorlds.every((w) => w.decos.every((d) => d.art in SPRS.SPR)) && allWorlds.some((w) => w.decos.length > 0),
+      "…and every decoration's");
+    let structHoles = 0;
+    for (const key of BLD.STRUCT_KEYS) {
+      const standIn = BA.structStandIn(key);
+      if (!standIn || BA.structStandIn(key) !== standIn) structHoles++;
+      for (let t = 1; t <= 3; t++) if (!BA.structSprite(key, t)) structHoles++;
+    }
+    ok(structHoles === 0, "every building resolves at every tier, to one stand-in baked once");
+    ok(BA.structStandIn("nonsense") === null && BA.structSprite("nonsense") === SPRS.SPR.rock,
+      "…and a key nobody knows falls back to a rock, as it always did");
+
+    const trees31 = allWorlds.flatMap((w) => w.trees);
+    ok(trees31.length > 2 && trees31.every((t) => SPRS.treeSprite(t) === SPRS.treeSprite(t)),
+      "a tree keeps its own picture from frame to frame");
+    ok(SPRS.treeSprite(trees31[0]) !== SPRS.treeSprite(trees31[1]),
+      "…and, until the artwork lands, it is its own and not its neighbour's");
+
+    const reach31 = g31b!.worlds.reach;
+    const bt = TA.bakedTerrain(reach31);
+    ok(TA.bakedTerrain(reach31) === bt, "a map's fallback picture is painted once and kept");
+    ok(bt.canvas.width === reach31.w * MAPT && bt.canvas.height === reach31.h * MAPT, "…at MAP_TILE, as before");
+    ok(bt.coast.length > 0 && bt.coast.every((c) => {
+      const tx = Math.floor(c.x / (MAPT * 2)), ty = Math.floor(c.y / (MAPT * 2));
+      return reach31.tile[ty][tx] === TL.Water;
+    }), `…with its coast list on water squares only (${bt.coast.length})`);
+    ok(TA.terrainImage(reach31) === null, "…and headless there is no picture to prefer over it");
+
+    /* ---- the outfit: state in the logic, pictures in the client ---------- */
+    OF.resetOutfit();
+    const worn1 = OA.outfitSprites();
+    ok(OA.outfitSprites() === worn1, "the baked outfit is kept while nothing changes");
+    OF.setOutfitColor("primary", 12);
+    const worn2 = OA.outfitSprites();
+    ok(worn2 !== worn1 && OA.outfitSprites() === worn2, "…and baked again once, after a dye changes");
+    OA.syncOutfitArt();
+    OF.grantOutfit("ranger");
+    ok(HS.heroLook() === "adventurer" && OF.wearOutfit("ranger")
+      && OF.outfitState().current === "ranger" && HS.heroLook() === "adventurer",
+      "putting the Ranger on changes state only — the hero is not touched from the logic");
+    OA.syncOutfitArt();
+    ok(HS.heroLook() === "ranger", "…and the client dresses the hero in it on the next frame");
+    OF.resetOutfit();
+    OA.syncOutfitArt();
+    ok(HS.heroLook() === "adventurer", "…and back");
+
+    /* ---- facing is the creature's, not the sheet's ------------------------ */
+    ok(MS.stepFacing === FAC.stepFacing && MS.dirOfStep === FAC.dirOfStep,
+      "the sheets read the one facing rule the creatures use");
+    ok(FAC.stepFacing("dragon", 0, 1, "left") === "left" && FAC.stepFacing("orc", 0, 1, "left") === "down",
+      "…a dragon keeps its profile on a straight step down, an orc turns to face it");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
