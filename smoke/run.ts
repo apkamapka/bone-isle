@@ -23240,6 +23240,62 @@ async function main(): Promise<void> {
       "Chronos offers no way to start an errand over");
   }
 
+  console.log("\nTwo backpacks at once, and drops on the backpack land in it:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const main = read("../src/main.ts");
+    const pan = read("../src/ui/panels.ts");
+    const fnBody = (name: string): string => {
+      const at = main.indexOf(`function ${name}(`);
+      return at < 0 ? "" : main.slice(at, main.indexOf("\n}\n", at));
+    };
+
+    /* ---- what the Bag slot does with what is dropped on it ---------------- */
+    const drop = fnBody("resolveItemDrop");
+    ok(drop.includes('if (it.eqSlot === "pack") { dropOnBagSlot(d); return; }'),
+      "a drop on the paperdoll's Bag slot asks what the dropped thing is");
+    ok(/if \(!P\.pack \|\| isContainer\(d\.kind\)\) \{ wearDragged\(d\); return; \}\s*intoWornPack\(d\);/.test(fnBody("dropOnBagSlot")),
+      "…a pack is put on (and so is anything while none is worn); everything else goes INTO the worn pack");
+    const into = fnBody("intoWornPack");
+    ok(into.includes("unequipInto(game, d.eqSlot, bag)") && into.includes("liftFloorStack(game, d.floor, bag, null)")
+      && into.includes("askThenMove(d.ref, d.index, bag, null)"),
+      "…from a paperdoll slot, off the floor, or out of any container, asking how many of a stack");
+    ok(/if \(!P\.pack\) \{ flash\("you are not wearing a backpack"/.test(into),
+      "…and with no pack on, it says so instead of guessing");
+
+    /* ---- the backpack BUTTON is a drop target, and the HUD is not the map --- */
+    ok(drop.includes("if (bagButtonAt(rx, ry)) { intoWornPack(d); return; }")
+      && drop.indexOf("bagButtonAt(rx, ry)") < drop.indexOf("containerWindowAt(rx, ry)"),
+      "a drop on the backpack button goes into the worn pack");
+    ok((main.match(/bagButtons\.push\(/g) ?? []).length === 3 && main.includes("touchButtons = [];\n  bagButtons = [];"),
+      "…all three of them: the column's, the phone deck's and the floating one, fresh every frame");
+    ok(drop.includes("if (overChrome(rx, ry)) return;")
+      && drop.indexOf("if (overChrome(rx, ry)) return;") < drop.indexOf("released on the map"),
+      "a stack let go over any other button or the side column goes nowhere — never onto the floor");
+    const chrome = fnBody("overChrome");
+    ok(chrome.includes("overDeck(deck, sx, sy)") && chrome.includes("lastDock.w > 0 && sx >= lastDock.x")
+      && chrome.includes("touchButtons.some("),
+      "…the chrome being the phone's plates, the side column and every HUD button");
+
+    /* ---- two packs on screen ------------------------------------------------- */
+    ok(main.includes('if (which === "bag") { toggleBag(); return; }'), "the backpack button has a rule of its own");
+    const tog = fnBody("toggleBag");
+    ok(/const showing = windowShowing\(\{ c: "bag" \}\);/.test(tog) && tog.includes('if (hasWindow("bag")) openContainer({ c: "bag" });'),
+      "…when the bag window has walked into a pack, the button opens the backpack BESIDE it instead of closing it");
+    ok(tog.includes('if (showing.kind === "bag") { closeWindow("bag"); return; }'),
+      "…and when the backpack itself is on screen, the button closes that window");
+    ok((main.match(/panelOn\((panel|kind)\)/g) ?? []).length === 3,
+      "…lit when the backpack itself is on screen, not merely when some bag window is");
+    const menu = main.slice(main.indexOf("function openContextMenu("), main.indexOf("function closeContextMenu("));
+    ok(menu.includes('label: "Open in new window"') && menu.includes('{ c: "nested", via: it.ref, i: it.index }')
+      && menu.includes("openContainer(there)"),
+      "a pack's menu offers Tibia's other verb: open it in a window of its own");
+    ok(read("../src/ui/contextMenu.ts").includes('| "open"'), "…with a verb of its own");
+    ok(/if \(ref\.c === "bag"\) return p\.player\.pack \? ITEMS\[p\.player\.pack\.kind\]\.name\.toUpperCase\(\) : top;/.test(pan),
+      "the second window shows the backpack's name, not CONTAINER");
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

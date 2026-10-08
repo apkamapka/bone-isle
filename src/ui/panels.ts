@@ -2213,7 +2213,7 @@ function drawContainerWin(p: PanelInput): void {
   const used = slots.filter((q) => q !== null).length;
   const foot = rows < allRows
     ? `${used}/${slots.length} · ${at * cols + 1}\u2013${Math.min((at + rows) * cols, slots.length)}`
-    : `${used}/${slots.length} · ${containerHome(ref)}`;
+    : `${used}/${slots.length} · ${ref.c === "bag" ? "on your back" : containerHome(ref)}`;
   hudText(hud, foot, x + w / 2, y + h - 11 * S, 6.5 * S,
     rows < allRows ? "#e8c06a" : "rgba(220,214,190,.6)", "center", false, w - 12 * S);
   resizeGrip(p, x, y, w, h);
@@ -2788,6 +2788,8 @@ function navBar(p: PanelInput, x: number, y: number, ref: ContainerRef): void {
 
 /** What to write on a container window's title bar. */
 function containerTitle(p: PanelInput, ref: ContainerRef, top: string): string {
+  // the worn pack, opened beside a window that walked into a pack inside it
+  if (ref.c === "bag") return p.player.pack ? ITEMS[p.player.pack.kind].name.toUpperCase() : top;
   const st = stackAt(ref, refCtx(p));
   return st ? ITEMS[st.kind].name.toUpperCase() : top;
 }

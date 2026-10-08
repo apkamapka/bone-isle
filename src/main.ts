@@ -664,7 +664,42 @@ function toggleWindow(kind: PanelKind): void {
 }
 
 function togglePanel(which: PanelKind): void {
+  if (which === "bag") { toggleBag(); return; }
   toggleWindow(which);
+}
+
+/**
+ * The backpack button (and its key).
+ *
+ * The bag window walks INTO a pack you click inside it, Tibia's way — and the
+ * button used to answer that by closing the window, because a "bag" window
+ * was open. So there was no way to have the backpack and the pack inside it
+ * on screen together. Now the button asks what the player can SEE: if no
+ * window shows the backpack itself, it opens one beside the other; if one
+ * does, that one closes.
+ */
+function toggleBag(): void {
+  ui.placing = null;
+  if (!P.pack) { toggleWindow("bag"); return; } // the "no backpack" notice
+  const showing = windowShowing({ c: "bag" });
+  if (showing) {
+    if (showing.kind === "bag") { closeWindow("bag"); return; }
+    ui.windows.splice(ui.windows.indexOf(showing), 1);
+    beep(300, 0.05, "sine", 0.04);
+    return;
+  }
+  if (hasWindow("bag")) openContainer({ c: "bag" });
+  else openWindow("bag");
+}
+
+/** Is the backpack itself on screen? What its button lights up for. */
+function bagShown(): boolean {
+  return P.pack ? !!windowShowing({ c: "bag" }) : hasWindow("bag");
+}
+
+/** Whether a panel's button should read as on. */
+function panelOn(kind: PanelKind): boolean {
+  return kind === "bag" ? bagShown() : hasWindow(kind);
 }
 
 /* ---------------- panel actions ---------------- */
@@ -764,7 +799,7 @@ function resolveItemDrop(rx: number, ry: number): void {
 
     // onto the paperdoll
     if (it.eqSlot) {
-      if (it.eqSlot === "pack") { wearDragged(d); return; }
+      if (it.eqSlot === "pack") { dropOnBagSlot(d); return; }
       if (d.ref) act.equipItem(d.kind, d.index);
       return;
     }
@@ -783,6 +818,9 @@ function resolveItemDrop(rx: number, ry: number): void {
     return;
   }
 
+  // ---- released on a backpack button: into the pack you are wearing ----
+  if (bagButtonAt(rx, ry)) { intoWornPack(d); return; }
+
   // ---- released over a window, but not on a cell: aim at that container ----
   const overRef = containerWindowAt(rx, ry);
   if (overRef) {
@@ -793,6 +831,12 @@ function resolveItemDrop(rx: number, ry: number): void {
     return;
   }
   if (pointInOpenPanel(rx, ry)) return; // some other panel — cancel quietly
+  /* …and the same for the rest of the HUD. A stack let go over a button, the
+   * side column or the phone's plates used to fall through to the throw below
+   * and land on whatever tile lay under the chrome — which is how a handful
+   * of gold dropped on the backpack button ended up on the floor. The chrome
+   * is not the map; a drop there goes nowhere. */
+  if (overChrome(rx, ry)) return;
 
   // ---- released on the map → throw it there (Tibia-style) ----
   const wx = rx / vScale + cam.x;
@@ -928,6 +972,55 @@ function sendStack(from: ContainerRef, index: number): boolean {
 }
 
 /* ---------------- the worn backpack ---------------- */
+
+/**
+ * Something dropped on the Bag slot of the paperdoll.
+ *
+ * Tibia's rule, and the one Radek expected: it goes INTO the pack you are
+ * wearing. It used to be read as "wear this", always — so a handful of gold
+ * from a pack inside the backpack, dropped on the slot, was refused as "not a
+ * backpack" and went nowhere. Only a pack dropped there is put ON (the one it
+ * replaces then rides inside it, as before), and so is anything at all while
+ * no pack is worn — there is nothing to put it into.
+ */
+function dropOnBagSlot(d: NonNullable<typeof itemDrag>): void {
+  if (!P.pack || isContainer(d.kind)) { wearDragged(d); return; }
+  intoWornPack(d);
+}
+
+/**
+ * Into the worn backpack, wherever the stack came from: a pack inside it, a
+ * chest, a body, the floor or the paperdoll. The Bag slot does this for
+ * everything but a pack; the backpack BUTTON does it for packs too, since a
+ * button that opens your bag has nothing to wear.
+ */
+function intoWornPack(d: NonNullable<typeof itemDrag>): void {
+  if (!P.pack) { flash("you are not wearing a backpack", "#e0a06a"); return; }
+  const bag: ContainerRef = { c: "bag" };
+  if (d.eqSlot === "pack") return; // the pack itself, dropped on its own button
+  if (d.eqSlot) { unequipInto(game, d.eqSlot, bag); return; }
+  if (d.floor) { liftFloorStack(game, d.floor, bag, null); return; }
+  // already loose in the backpack: there is no "more inside" to move it to
+  if (d.ref && !sameRef(d.ref, bag)) askThenMove(d.ref, d.index, bag, null);
+}
+
+/**
+ * Where the backpack buttons are this frame — the column's, the phone deck's
+ * and the floating panel column's. Each is a drop target as well as a button.
+ */
+let bagButtons: { x: number; y: number; w: number; h: number }[] = [];
+function bagButtonAt(sx: number, sy: number): boolean {
+  return bagButtons.some((b) => sx >= b.x && sx < b.x + b.w && sy >= b.y && sy < b.y + b.h);
+}
+
+/** Is this point on the HUD rather than the map: a button, the side column,
+ *  or one of the phone's two plates? Geometry only — unlike
+ *  `overTouchButton`, which also swallows presses while a mode is armed. */
+function overChrome(sx: number, sy: number): boolean {
+  if (overDeck(deck, sx, sy)) return true;
+  if (lastDock.w > 0 && sx >= lastDock.x) return true;
+  return touchButtons.some((b) => sx >= b.x && sx < b.x + b.w && sy >= b.y && sy < b.y + b.h);
+}
 
 /** Put on the backpack the player just dragged onto the Bag slot. */
 function wearDragged(d: NonNullable<typeof itemDrag>): void {
@@ -1322,6 +1415,15 @@ function openContextMenu(sx: number, sy: number): void {
     const kind = it.kind;
     const entries: MenuEntry[] = [{ verb: "look", label: `Look at ${ITEMS[kind].name}`, enabled: true,
       run: () => { ui.inspect = kind; } }];
+    /* A PACK gets the second verb Tibia gives it. A click walks the window
+     * you clicked in into the pack — and this opens it in a window of its
+     * own instead, so the pack and the one it sits in are both on screen. */
+    const inPack: ContainerRef | null = it.eqSlot === "pack" ? { c: "bag" }
+      : it.ref && isContainer(kind) ? { c: "nested", via: it.ref, i: it.index } : null;
+    if (inPack && slotsOf(inPack, refCtx())) {
+      const there = inPack;
+      entries.push({ verb: "open", label: "Open in new window", enabled: true, run: () => { openContainer(there); } });
+    }
     ctxMenu = { sx, sy, at: { x: 0, y: 0 }, entries, rects: [] };
     return;
   }
@@ -3961,7 +4063,8 @@ function drawDockControls(d: DockLayout, top: number): void {
   const bh = Math.round(BTN_ROW_H * S);
   pbtns.forEach(([glyph, panel], i) => {
     const bx = d.innerX + i * (bw + gap);
-    const on = hasWindow(panel);
+    const on = panelOn(panel);
+    if (panel === "bag") bagButtons.push({ x: bx, y: top, w: bw, h: bh });
     buttonBox(sctx, bx, top, bw, bh, S, {
       on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
     });
@@ -4386,7 +4489,8 @@ function drawDeck(): void {
     ctx.fillRect(d.mapLeft, d.topH, Math.max(1, d.mapRight - d.mapLeft), lowest - d.topH + d.gap);
     d.tabs.forEach((r, i) => {
       const kind = DECK_TABS[i] as PanelKind;
-      const on = hasWindow(kind);
+      const on = panelOn(kind);
+      if (kind === "bag") bagButtons.push({ ...r });
       buttonBox(ctx, r.x, r.y, r.w, r.h, scale, {
         on, face: on ? "rgba(202,162,58,.92)" : undefined, accent: on ? CHROME.goldText : undefined,
       });
@@ -4788,6 +4892,7 @@ function drawContextMenu(): void {
 
 function drawTouchControls(): void {
   touchButtons = [];
+  bagButtons = [];
   hudGrips = [];
   actionSlotRects = [];
 
@@ -4831,7 +4936,8 @@ function drawTouchControls(): void {
     if (menuOpen) {
       let by = panelPos.y + togH + gap;
       for (const [label, glyph, panel] of pbtns) {
-        tButton(panelPos.x, by, bs, label, glyph, hasWindow(panel), () => togglePanel(panel));
+        if (panel === "bag") bagButtons.push({ x: panelPos.x, y: by, w: bs, h: bs });
+        tButton(panelPos.x, by, bs, label, glyph, panelOn(panel), () => togglePanel(panel));
         by += bs + gap;
       }
     }

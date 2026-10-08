@@ -37,7 +37,8 @@ export type MenuVerb =
   | "take"
   | "talk"
   | "trade"
-  | "use";
+  | "use"
+  | "open";
 
 export interface MenuEntry {
   verb: MenuVerb;
