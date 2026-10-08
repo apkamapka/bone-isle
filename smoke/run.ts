@@ -2913,7 +2913,7 @@ async function main(): Promise<void> {
     ok(!panelsSrc27.includes("exchangeSplit"), "…on the panel side too");
     ok(panelsSrc27.includes('case "exchange": drawExchange(p); break;'),
       "the exchange window is drawn from its own panel");
-    ok(/exchange["'],\s*\(\) => nearNpc\(\(n\) => n\.key === "morgan"\)/.test(mainSrc27),
+    ok(/exchange["'],\s*\(\) => nearNpc\(game, \(n\) => n\.key === "morgan"\)/.test(mainSrc27),
       "…and it closes itself when you walk away from him");
   }
 
@@ -13595,16 +13595,19 @@ async function main(): Promise<void> {
   {
     const rfs = await import("node:fs");
     const rm = rfs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    // since Etap 3.1c the rule is a request's (intents/actor.ts) and so is casting (intents/cast.ts)
+    const ra = rfs.readFileSync(new URL("../src/intents/actor.ts", import.meta.url), "utf8");
+    const rc = rfs.readFileSync(new URL("../src/intents/cast.ts", import.meta.url), "utf8");
 
     /* Half of this was already true: a creature cannot walk into a haven.
      * That was taken for a sanctuary, but a crossbowman reaches 300px and a
      * sword reaches across the boundary tile, so the haven only ever stopped
      * the ones that had to come to you — while you shelled them freely. */
-    ok(/function inProtection\(\): boolean \{\s*\n\s*return isSafeTile\(cw\(\), P\.tx, P\.ty\);/.test(rm),
+    ok(/function inProtection\(g: Game\): boolean \{\s*\n\s*const P = g\.player;\s*\n\s*return isSafeTile\(g\.current, P\.tx, P\.ty\);/.test(ra),
       "the zone is read off the tile the player is standing on");
     for (const name of ["tickMeleeFire", "tickRangedFire"]) {
       const at = rm.indexOf("function " + name + "(");
-      ok(at > 0 && rm.slice(at, at + 220).includes("refuseFromProtection()"),
+      ok(at > 0 && rm.slice(at, at + 220).includes("refuseFromProtection(game)"),
         `…and ${name === "tickMeleeFire" ? "the sword" : "the bow"} will not swing out of it`);
     }
     /* Counted off the CODE with the comments stripped out first. The prose
@@ -13612,9 +13615,15 @@ async function main(): Promise<void> {
      * it is NOT called, and a raw text count reads that explanation as a sixth
      * gate. Same trap the `/tp` DEV-flag test walked into: a test that can be
      * failed by a comment about the test is worse than no test. */
-    const rmCode = rm.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
-    ok((rmCode.match(/refuseFromProtection\(\)/g) ?? []).length === 5,
-      "…nor will either cast path: four gates plus the one definition");
+    const code = (t: string): string => t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+    const rmCode = code(rm);
+    /* Four gates and one definition, as before — but both cast paths now go
+     * through the one request, so its single gate answers for the two. */
+    ok((rmCode.match(/refuseFromProtection\(game\)/g) ?? []).length === 2
+      && (code(rc).match(/refuseFromProtection\(g\)/g) ?? []).length === 1
+      && (rmCode.match(/castCrystal\(game, kind/g) ?? []).length === 2
+      && (code(ra).match(/export function refuseFromProtection\(/g) ?? []).length === 1,
+      "…nor will either cast path: both swings, one cast request that both paths go through, and the one definition");
 
     /* ETAP 48 — AND THE GATE IS ON THE OFFENSIVE CRYSTALS ONLY.
      *
@@ -13627,11 +13636,11 @@ async function main(): Promise<void> {
      * The rule is "you may not strike out of a refuge", not "no magic
      * indoors". A town you cannot bind your wounds in is exactly backwards for
      * the one map whose job is to be where you recover. */
-    const useBody = rm.slice(rm.indexOf("function useCrystalItem"),
-      rm.indexOf("function isOffensiveCrystal"));
-    ok(/isOffensiveCrystal\(kind\) && refuseFromProtection\(\)/.test(useBody),
+    const useBody = rc.slice(rc.indexOf("function castCrystal"),
+      rc.indexOf("function isOffensiveCrystal"));
+    ok(/isOffensiveCrystal\(kind\) && refuseFromProtection\(g\)/.test(useBody),
       "a crystal is refused by the zone only if it HITS something");
-    ok(/return CRYSTAL_SPECS\[kind\] !== undefined;/.test(rm),
+    ok(/return CRYSTAL_SPECS\[kind\] !== undefined;/.test(rc),
       "…and 'hits something' is the shard/burst/nova/wave table, not a hand-written list");
     /* Life and Recall must stay OUT of that table, or the fix silently undoes
      * itself the day somebody adds a spec entry for them. */
@@ -13651,15 +13660,16 @@ async function main(): Promise<void> {
     /* Recall was NEVER gated by the zone — `doRecall` returns before the check
      * — so a recall that does nothing in town is an empty stack and not this
      * bug. Pinned so the two never get merged into one path by accident. */
-    const recallBody = rm.slice(rm.indexOf("function doRecall"), rm.indexOf("function tpHome"));
-    ok(!/refuseFromProtection/.test(recallBody),
+    const recallBody = rc.slice(rc.indexOf("function recall"), rc.indexOf("function refuseUntowered"));
+    ok(recallBody.length > 0 && !/refuseFromProtection/.test(recallBody)
+      && useBody.indexOf('if (kind === "recallCrystal") { recall(g); return; }') < useBody.indexOf("refuseFromProtection"),
       "travelling home out of a safe zone was never a refusal and still is not");
     ok(/if \(isSafeTile\(world, P\.tx, P\.ty\)\) return;/.test(rm),
       "…and nothing a creature throws lands on someone standing inside");
     /* Auto-attack asks twice a second, so a refusal that flashed every time it
      * was asked would bury the screen. Dropping the mark is what Tibia does
      * and is a thing the player can watch happen. */
-    ok(/P\.target = null;\s*\n\s*flash\("no fighting from a protected zone"/.test(rm),
+    ok(/P\.target = null;\s*\n\s*tell\(g, "no fighting from a protected zone"/.test(ra),
       "…stepping in drops the mark, rather than nagging twice a second");
   }
 
@@ -13667,6 +13677,7 @@ async function main(): Promise<void> {
   {
     const rfs = await import("node:fs");
     const rm = rfs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const rc = rfs.readFileSync(new URL("../src/intents/cast.ts", import.meta.url), "utf8"); // Etap 3.1c
     const TW = await import("../src/systems/tower.ts");
     const CS2 = await import("../src/systems/crystals.ts");
     const EL = await import("../src/systems/elements.ts");
@@ -13675,11 +13686,12 @@ async function main(): Promise<void> {
      * caring the moment a crystal was in a bag, so a level-one tower plus one
      * generous friend equalled a level-three tower — every stone spent on the
      * building bought a shopping list rather than a capability. */
-    ok(/function refuseUntowered\(kind: ItemKind\): boolean \{/.test(rm),
+    ok(/function refuseUntowered\(g: Game, kind: ItemKind\): boolean \{/.test(rc),
       "using a crystal asks the player's own tower");
-    ok(/spec\.tier <= towerTier\(\) - 1/.test(rm),
+    ok(/spec\.tier <= towerTier\(g\) - 1/.test(rc),
       "…with the SAME subtraction the shelf uses, so the two cannot disagree");
-    ok((rm.match(/refuseUntowered\(kind\)/g) ?? []).length === 2,
+    ok((rc.match(/refuseUntowered\(g, kind\)/g) ?? []).length === 1
+      && (rm.match(/castCrystal\(game, kind/g) ?? []).length === 2,
       "…on both cast paths, the aimed one and the plain one");
 
     /* The shelf's side of that equality, checked against the real table. */
@@ -15993,8 +16005,9 @@ async function main(): Promise<void> {
       "…and refuses on a corpse, and refuses when you are already standing at home");
     /* Recall still costs a crystal. `/tp` is the free one and it is the ONLY
      * free one — if this ever fails, the crystal has quietly become optional. */
-    const recallBody = mainTp.slice(mainTp.indexOf("function doRecall"),
-      mainTp.indexOf("function tpHome"));
+    const castTp = nfs47.readFileSync("src/intents/cast.ts", "utf8"); // moved in Etap 3.1c
+    const recallBody = castTp.slice(castTp.indexOf("function recall"),
+      castTp.indexOf("function refuseUntowered"));
     ok(/bagCount\(P\.bag, "recallCrystal"\)/.test(recallBody)
       && /removeItem\(P\.bag, "recallCrystal", 1\)/.test(recallBody),
       "the recall CRYSTAL still checks the stack and still spends one");
@@ -22151,10 +22164,15 @@ async function main(): Promise<void> {
 
     IT.addItem(p.bag, "goldCoin", 100);
     const plat0 = count("platinumCoin");
+    const morgan = g.worlds.town.npcs.find((q) => q.key === "morgan")!;
+    g.current = g.worlds.town;
+    stand(morgan.tx + 1, morgan.ty);
     fresh();
     US.changeCoins(g, "platinumCoin", 1);
     ok(count("platinumCoin") === plat0 + 1 && said()[0] === "+1 platinum" && !!heard("coins"),
       "a hundred gold become one platinum at Morgan's counter");
+    g.current = home;
+    stand(spawn.tx, spawn.ty);
 
     IT.addItem(p.bag, "hpPotion", 2);
     CD.resetCooldowns();
@@ -22176,6 +22194,321 @@ async function main(): Promise<void> {
     const kinds = new Set(all.map((e) => e.fx));
     ok([...kinds].every((k) => ["float", "log", "tone", "sound"].includes(k)),
       `everything the item requests report is a float, a log line, a tone or a sound (${[...kinds].join(", ")})`);
+    stop();
+  }
+
+  console.log("\nEtap 3.1c-2 — trading, the Forge, the Tower and casting are requests too:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const FX = await import("../src/systems/fxEvents.ts");
+    const GM = await import("../src/game.ts");
+    const IT = await import("../src/items.ts");
+    const BLD = await import("../src/systems/building.ts");
+    const PL = await import("../src/entities/player.ts");
+    const SM = await import("../src/systems/smelt.ts");
+    const TW = await import("../src/systems/tower.ts");
+    const CRY = await import("../src/systems/crystals.ts");
+    const CD = await import("../src/systems/cooldowns.ts");
+    const { SHOPS } = await import("../src/entities/npcs.ts");
+    const ACT = await import("../src/intents/actor.ts");
+    const US = await import("../src/intents/use.ts");
+    const TR = await import("../src/intents/trade.ts");
+    const CF = await import("../src/intents/craft.ts");
+    const TO = await import("../src/intents/tower.ts");
+    const CA = await import("../src/intents/cast.ts");
+    const { nextEntityId } = await import("../src/world/entities.ts");
+    const COL = await import("../src/world/collision.ts");
+    const { TILE: T, USE_RANGE_PX } = await import("../src/config.ts");
+    type Ev = import("../src/systems/fxEvents.ts").FxEvent;
+    type Kind = import("../src/items.ts").ItemKind;
+    type Npc = import("../src/world/types.ts").Npc;
+
+    /* ---- the split, read off the source ---------------------------------- */
+    const strip = (t: string): string => t
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n").map((l) => l.replace(/(^|[^:"'`\\])\/\/.*$/, "$1")).join("\n");
+    const main = read("../src/main.ts");
+    const moved = ["craftAt", "doTestGrant", "forgeTier", "towerTier", "doSmelt", "giveMaterial", "doMakeGem",
+      "doUpgrade", "doAttune", "doBuyOffer", "doResearch", "doBuyCrystal", "swapWeapon", "isOffensiveCrystal",
+      "doRecall", "doBuy", "doSell", "inProtection", "refuseFromProtection", "refuseUntowered", "nearStructure",
+      "nearNpc", "recomputeBonuses"];
+    const left = moved.filter((f) => new RegExp(`\\bfunction ${f}\\(`).test(main));
+    ok(left.length === 0, `main.ts defines none of the trade, Forge, Tower or casting rules any more${left.length ? ": " + left.join(", ") : ""}`);
+    ok(["smelt: (kind: ItemKind) => { smelt(game, kind); },", "testGrant: (kind: ItemKind) => { testGrant(game, kind); },",
+      "makeGem: () => { makeGem(game); },", "upgrade: (s: Structure) => { upgrade(game, s); },",
+      "craft: (r: Recipe) => { craft(game, r); },", "attune: (el: Element) => { attune(game, el); },",
+      "buyOffer: (id: string) => { buyOffer(game, id); },", "research: (id: string) => { research(game, id); },",
+      "buyCrystal: (id: string) => { buyCrystal(game, id); },",
+      "buy: (kind: ItemKind) => { if (ui.npc) buy(game, ui.npc, kind); },",
+      "sell: (kind: ItemKind) => { if (ui.npc) sell(game, ui.npc, kind); },"].every((l) => main.includes(l)),
+      "…the panels' buttons for them only pass the request on");
+    ok(main.includes("castCrystal(game, kind, { x: w.x, y: w.y });") && main.includes("  castCrystal(game, kind);\n}")
+      && /if \(build\(game, key, w\.x, w\.y\) !== "blocked"\) \{/.test(main),
+      "…as do the aimed click, the plain cast and the second tap that builds");
+    const files = ["trade", "craft", "tower", "cast"].map((f) => [f, read(`../src/intents/${f}.ts`)] as const);
+    const touching = files.filter(([, t]) => /\bui\.|closeWindow|openWindow|aimPending|placeGhost/.test(strip(t))).map(([f]) => f);
+    ok(touching.length === 0, `none of them touches a window or a cursor${touching.length ? ": " + touching.join(", ") : ""}`);
+    const shouting = files.filter(([, t]) => /\b(addFloat|addFlare|logServer|beep|sfx)\(/.test(strip(t))).map(([f]) => f);
+    ok(shouting.length === 0, `…nor plays, paints or logs anything itself${shouting.length ? ": " + shouting.join(", ") : ""}`);
+
+    const evs: Ev[] = [];
+    const all: Ev[] = [];
+    const stop = FX.onFx((e) => { evs.push(e); all.push(e); });
+    const fresh = (): void => { evs.length = 0; };
+    const said = (): string[] => evs.filter((e): e is Extract<Ev, { fx: "log" }> => e.fx === "log").map((e) => e.text);
+    const tones = (): number[] => evs.filter((e): e is Extract<Ev, { fx: "tone" }> => e.fx === "tone").map((e) => e.freq);
+    const heard = (id: string): boolean => evs.some((e) => e.fx === "sound" && e.id === id);
+
+    const g = GM.createGame();
+    const p = g.player;
+    // a seasoned character: a fresh one cannot carry what a whole shopping trip weighs
+    p.level = 60;
+    PL.refreshDerived(p);
+    const home = g.worlds.home;
+    const town = g.worlds.town;
+    const count = (k: string): number => IT.bagCount(p.bag, k as Kind);
+    const stand = (tx: number, ty: number): void => { p.tx = tx; p.ty = ty; p.x = tx * T + T / 2; p.y = ty * T + T / 2; };
+    const spawn = { tx: p.tx, ty: p.ty };
+
+    /* ---- a counter in Bonetown ------------------------------------------ */
+    g.current = town;
+    const seller = town.npcs.find((n) => {
+      const s = SHOPS[n.key];
+      return !!s && s.entries.some((e) => e.buy > 0) && s.entries.some((e) => e.sell > 0 && !IT.ITEMS[e.kind].coin && !IT.isContainer(e.kind));
+    }) as Npc | undefined;
+    ok(!!seller, "Bonetown has a counter that buys and sells");
+    const shop = SHOPS[seller!.key]!;
+    const ware = [...shop.entries].filter((e) => e.buy > 0).sort((a, b) => a.buy - b.buy)[0];
+    IT.addItem(p.bag, "platinumCoin", 5); // coins weigh; platinum weighs least
+    stand(seller!.tx + 1, seller!.ty);
+    ok(ACT.nearNpc(g, (n) => n === seller), `standing beside ${seller!.name} is standing at the counter`);
+    const gold0 = p.gold;
+    const have0 = count(ware.kind);
+    fresh();
+    TR.buy(g, seller!, ware.kind);
+    ok(count(ware.kind) === have0 + 1 && p.gold === gold0 - ware.buy && heard("coins"),
+      `buying a ${IT.ITEMS[ware.kind].name} takes the price and hands it over`);
+    const sw = shop.entries.find((e) => e.sell > 0 && !IT.ITEMS[e.kind].coin && !IT.isContainer(e.kind))!;
+    IT.addItem(p.bag, sw.kind, 1);
+    const gold1 = p.gold;
+    const sold0 = count(sw.kind);
+    fresh();
+    TR.sell(g, seller!, sw.kind);
+    ok(count(sw.kind) === sold0 - 1 && p.gold === gold1 + sw.sell && heard("coins"), "…and selling pays the shelf's price");
+    stand(seller!.tx + Math.ceil(USE_RANGE_PX / T) + 2, seller!.ty);
+    fresh();
+    TR.buy(g, seller!, ware.kind);
+    TR.sell(g, seller!, sw.kind);
+    ok(count(ware.kind) === have0 + 1 && count(sw.kind) === sold0 - 1
+      && said().length === 2 && said().every((t) => t === "too far away"),
+      "…but only to whoever stands at the counter — from across the street both are refused");
+    const morgan = town.npcs.find((n) => n.key === "morgan")!;
+    IT.addItem(p.bag, "goldCoin", 100);
+    const plat0 = count("platinumCoin");
+    fresh();
+    US.changeCoins(g, "platinumCoin", 1);
+    ok(count("platinumCoin") === plat0 && said()[0] === "too far away", "Morgan changes no money for someone across the square");
+    stand(morgan.tx + 1, morgan.ty);
+    US.changeCoins(g, "platinumCoin", 1);
+    ok(count("platinumCoin") === plat0 + 1, "…and does at his counter");
+    const tg0 = p.gold;
+    const tw0 = count("wood");
+    TR.testGrant(g, "wood");
+    ok(count("wood") === tw0 + Math.min(100, IT.ITEMS.wood.stack) && p.gold === tg0 - 1,
+      "the TEST shop still sells a slot's worth for one gold, wherever it is opened");
+    IT.removeItem(p.bag, "wood", count("wood") - 10); // a hundred logs would make the next purchases too heavy
+
+    /* ---- the Forge ------------------------------------------------------- */
+    g.current = home;
+    const plot = (key: string, avoid: { tx: number; ty: number }[] = []): { tx: number; ty: number } => {
+      for (let y = 2; y < home.h - 6; y++) {
+        for (let x = 2; x < home.w - 6; x++) {
+          if (avoid.some((a) => Math.abs(a.tx - x) < 6 && Math.abs(a.ty - y) < 6)) continue;
+          if (BLD.canPlaceAt(home, key, x, y)) return { tx: x, ty: y };
+        }
+      }
+      throw new Error("no room for a " + key);
+    };
+    const fpad = plot("forge");
+    const forge = { id: nextEntityId(), key: "forge", tx: fpad.tx, ty: fpad.ty, tier: 1, anim: 0, hurtT: 0 };
+    home.structures.push(forge as never);
+    BLD.applyStructureSolidity(home);
+    const atForge = { tx: fpad.tx, ty: fpad.ty + BLD.footprint("forge") };
+    stand(atForge.tx, atForge.ty);
+    ok(ACT.nearStructure(g, "forge") && CF.forgeTier(g) === 1, "standing at a Forge I");
+    const rec = IT.RECIPES.find((r) => r.out === "arrow")!;
+    const ar0 = count("arrow");
+    fresh();
+    ok(CF.craft(g, rec) && count("arrow") === ar0 + (rec.outN ?? 1)
+      && said()[0] === `crafted ${IT.ITEMS.arrow.name}` && tones()[0] === 360,
+      "arrows are made at the Forge, with the click they always made");
+    const smeltable = (Object.keys(IT.ITEMS) as Kind[]).find((k) => SM.canSmelt(k)
+      && SM.smeltYield(k, 1, IT.ITEMS[k].slot).iron > 0)!;
+    IT.addItem(p.bag, smeltable, 1);
+    IT.addItem(p.bag, "coal", 1);
+    const iron0 = count("iron");
+    const yieldIron = SM.smeltYield(smeltable, 1, IT.ITEMS[smeltable].slot).iron;
+    fresh();
+    CF.smelt(g, smeltable);
+    ok(count(smeltable) === 0 && count("iron") === iron0 + yieldIron && heard("forge"),
+      `a ${IT.ITEMS[smeltable].name} goes into the furnace and comes out as ${yieldIron} iron`);
+    fresh();
+    CF.makeGem(g);
+    ok(said()[0] === "needs a Forge III", "a gem wants a Forge III");
+    forge.tier = 3;
+    for (const t of SM.GEM_TROPHIES.slice(0, SM.GEM_TROPHY_KINDS)) IT.addItem(p.bag, t, 1);
+    IT.addItem(p.bag, "coal", SM.GEM_COAL);
+    const gem0 = count("essentialGem");
+    fresh();
+    CF.makeGem(g);
+    ok(count("essentialGem") === gem0 + 1 && said()[0] === "cut an Essential Gem" && tones()[0] === 660,
+      "…and at one, three different trophies and the coal cut it");
+    forge.tier = 1;
+    stand(atForge.tx, atForge.ty + 4);
+    const ar1 = count("arrow");
+    IT.addItem(p.bag, smeltable, 1);
+    IT.addItem(p.bag, "coal", 1);
+    fresh();
+    ok(!CF.craft(g, rec), "…and nothing is made from four squares off");
+    CF.smelt(g, smeltable);
+    CF.makeGem(g);
+    ok(count("arrow") === ar1 && count(smeltable) === 1 && said().length === 3 && said().every((t) => t === "too far away"),
+      "…nor smelted, nor cut: the Forge answers only whoever stands at it");
+
+    /* ---- building and raising ----------------------------------------------- */
+    const chestCost = BLD.buildCost("chest", BLD.countOwned(home, "chest"));
+    for (const [k, n] of Object.entries(chestCost)) IT.addItem(p.bag, k as Kind, (n as number) * 2);
+    const cpad = plot("chest", [fpad]);
+    const owned0 = BLD.countOwned(home, "chest");
+    fresh();
+    ok(CF.build(g, "chest", (cpad.tx + 1) * T, (cpad.ty + 1) * T) === "built" && BLD.countOwned(home, "chest") === owned0 + 1,
+      "a chest is built on Home Isle out of what the pack holds");
+    for (const [k, n] of Object.entries(BLD.buildCost("chest", BLD.countOwned(home, "chest")))) IT.addItem(p.bag, k as Kind, n as number);
+    ok(CF.build(g, "chest", (cpad.tx + 1) * T, (cpad.ty + 1) * T) === "blocked" && said().at(-1) === "can't build here",
+      "…not twice on the same square, and the client stays in build mode for another try");
+    g.current = town;
+    ok(CF.build(g, "chest", (cpad.tx + 1) * T, (cpad.ty + 1) * T) === "away", "…and nothing is built away from Home Isle");
+    g.current = home;
+    const kept = p.pack!.items;
+    p.pack!.items = IT.emptyStash(16);
+    fresh();
+    ok(CF.build(g, "chest", (cpad.tx + 3) * T, (cpad.ty + 1) * T) === "poor" && said()[0] === "not enough materials",
+      "…nor out of an empty pack, which ends build mode");
+    p.pack!.items = kept;
+    const upCost = BLD.upgradeCost("forge", 1)!;
+    for (const [k, n] of Object.entries(upCost)) IT.addItem(p.bag, k as Kind, n as number);
+    fresh();
+    CF.upgrade(g, forge as never);
+    ok(forge.tier === 2, "a Forge I is raised to a Forge II from the build panel");
+    const stray = { ...forge, id: nextEntityId(), tier: 1 };
+    CF.upgrade(g, stray as never);
+    ok(stray.tier === 1, "…but only a building that stands on Home Isle — a request names one, it does not bring it");
+
+    /* ---- the Alchemy Tower ---------------------------------------------- */
+    const tpad = plot("tower", [fpad, cpad]);
+    const tower = { id: nextEntityId(), key: "tower", tx: tpad.tx, ty: tpad.ty, tier: 1, anim: 0, hurtT: 0 };
+    home.structures.push(tower as never);
+    BLD.applyStructureSolidity(home);
+    const atTower = { tx: tpad.tx, ty: tpad.ty + BLD.footprint("tower") };
+    stand(atTower.tx, atTower.ty);
+    ok(ACT.nearStructure(g, "tower") && TO.towerTier(g) === 1, "standing at an Alchemy Tower I");
+    const life = TW.researchById("life")!;
+    IT.addItem(p.bag, "platinumCoin", 10);
+    fresh();
+    TO.research(g, "life");
+    ok(TW.isResearched("life") && said()[0] === `researched ${life.name}`, "Life Crystals are researched at the Tower");
+    const heal0 = count("healCrystal");
+    TO.buyCrystal(g, "life");
+    ok(count("healCrystal") === heal0 + life.buyN, `…and bought there, ${life.buyN} at a time`);
+    const el = "fire" as const;
+    IT.addItem(p.bag, TW.ATTUNEMENT[el], 1);
+    fresh();
+    TO.attune(g, el);
+    ok(TW.isAttuned(el) && count(TW.ATTUNEMENT[el]) === 0 && tones()[0] === 600, "a stone attunes the Fire lane");
+    const offer = TW.offersFor(el, TO.towerTier(g))[0];
+    const off0 = count(offer.crystal);
+    TO.buyOffer(g, offer.id);
+    ok(count(offer.crystal) === off0 + offer.buyN, `…which opens its shelf: ${offer.buyN} ${IT.ITEMS[offer.crystal].name}`);
+    stand(atTower.tx, atTower.ty + 4);
+    const heal1 = count("healCrystal");
+    fresh();
+    TO.buyCrystal(g, "life");
+    TO.buyOffer(g, offer.id);
+    ok(count("healCrystal") === heal1 && count(offer.crystal) === off0 + offer.buyN
+      && said().length === 2 && said().every((t) => t === "too far away"),
+      "…and the Tower sells nothing to someone four squares off");
+
+    /* ---- casting ---------------------------------------------------------- */
+    stand(atTower.tx, atTower.ty);
+    CD.resetCooldowns();
+    p.hp = p.maxhp;
+    fresh();
+    CA.castCrystal(g, "healCrystal");
+    ok(count("healCrystal") === heal1 && evs.some((e) => e.fx === "float" && e.self && e.text === "full hp"),
+      "a Life Crystal is kept when there is nothing to heal");
+    p.hp = 1;
+    CA.castCrystal(g, "healCrystal");
+    ok(p.hp > 1 && count("healCrystal") === heal1 - 1, "…and spent on a wound");
+    const high = (Object.keys(CRY.CRYSTAL_SPECS) as Kind[]).find((k) => CRY.CRYSTAL_SPECS[k]!.tier === 2)!;
+    IT.addItem(p.bag, high, 1);
+    const reach = g.worlds.reach;
+    g.current = reach;
+    let wild: { tx: number; ty: number } | null = null;
+    for (let y = 0; y < reach.h && !wild; y++) {
+      for (let x = 0; x < reach.w; x++) if (!COL.isSafeTile(reach, x, y)) { wild = { tx: x, ty: y }; break; }
+    }
+    stand(wild!.tx, wild!.ty);
+    ok(!ACT.inProtection(g), "out on Bone Reach nothing is protected");
+    fresh();
+    CA.castCrystal(g, high);
+    ok(count(high) === 1 && said()[0] === "needs an Alchemy Tower III",
+      `a tier-III ${IT.ITEMS[high].name} needs an Alchemy Tower III, and is kept`);
+    g.current = home;
+    ok(CA.isOffensiveCrystal(offer.crystal) && !CA.isOffensiveCrystal("healCrystal") && !CA.isOffensiveCrystal("recallCrystal"),
+      "only what hurts is offensive: not Life, not Recall");
+    g.current = town;
+    stand(morgan.tx + 1, morgan.ty);
+    ok(ACT.inProtection(g), "Bonetown is a protected zone");
+    p.target = { kind: "mob", id: 1 } as never;
+    const shot0 = count(offer.crystal);
+    fresh();
+    CA.castCrystal(g, offer.crystal);
+    ok(count(offer.crystal) === shot0 && p.target === null && said()[0] === "no fighting from a protected zone",
+      "nothing that hurts is cast out of it: the mark is dropped, the crystal kept");
+    fresh();
+    CA.castCrystal(g, offer.crystal, { x: p.x + 2 * T, y: p.y });
+    ok(count(offer.crystal) === shot0 && said().length === 0, "…aimed or not, and it says so only once");
+    CD.resetCooldowns();
+    p.hp = 1;
+    CA.castCrystal(g, "healCrystal");
+    ok(p.hp > 1, "…while a wound can still be bound there");
+    IT.addItem(p.bag, "recallCrystal", 1);
+    fresh();
+    CA.castCrystal(g, "recallCrystal");
+    ok(g.current === home && count("recallCrystal") === 0 && said()[0] === "recalled home"
+      && evs.some((e) => e.fx === "flare" && e.name === "recall" && e.world === home),
+      "a Recall Crystal is spent to go home, out of the town as from anywhere, and flares on arrival");
+    fresh();
+    CA.recall(g);
+    ok(said()[0] === "already home", "…and is refused at home");
+
+    /* ---- the weapon swap ------------------------------------------------- */
+    stand(spawn.tx, spawn.ty);
+    const blade = (Object.keys(IT.ITEMS) as Kind[]).find((k) => IT.ITEMS[k].slot === "weapon" && !IT.ITEMS[k].bow)!;
+    IT.addItem(p.bag, blade, 1);
+    const blades0 = count(blade);
+    US.equipItem(g, blade);
+    fresh();
+    US.swapWeapon(g);
+    ok(p.eq.weapon === "bow" && count(blade) === blades0 && said().at(-1) === `equipped ${IT.ITEMS.bow.name}`,
+      `the swap takes the bow up and stows the ${IT.ITEMS[blade].name}`);
+    US.swapWeapon(g);
+    ok(p.eq.weapon === blade && count("bow") === 1, "…and puts it back for the blade");
+
+    const kinds = new Set(all.map((e) => e.fx));
+    ok([...kinds].every((k) => ["float", "log", "tone", "sound", "flare", "blast", "bolt", "blood", "shot"].includes(k)),
+      `what these requests report are events the client already knows (${[...kinds].join(", ")})`);
     stop();
   }
 
