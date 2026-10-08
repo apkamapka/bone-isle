@@ -14,8 +14,7 @@
  * question with an answer.
  */
 import type { Monster, MonsterKind, World } from "../world/types.ts";
-import { addFloat } from "../fx.ts";
-import { sfx } from "../audio.ts";
+import { sound, floatAt } from "./fxEvents.ts";
 
 export const COWARDS: ReadonlySet<MonsterKind> = new Set<MonsterKind>([
   "beggar", "vagrant", "thief", "poacher", "smuggler",
@@ -67,7 +66,7 @@ export function tickHealer(w: World, m: Monster, dt: number, active: boolean): n
   if (amt <= 0) return 0;
   patient.hp += amt;
   m.healCd = HEAL_CD_S;
-  addFloat(w, patient.x, patient.y - 32, `+${amt}`, HEAL_COLOR);
-  sfx("mobheal");
+  floatAt(w, patient.x, patient.y - 32, `+${amt}`, HEAL_COLOR);
+  sound("mobheal", { world: w, x: patient.x, y: patient.y });
   return amt;
 }

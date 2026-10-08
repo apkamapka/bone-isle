@@ -1,5 +1,5 @@
 /** Tibia-style skills: levels that climb as you use them, plus gear bonuses. */
-import { sfx } from "../audio.ts";
+import { sound } from "./fxEvents.ts";
 import { gearStat, gearStatOf, equippedBow, SET_BONUS, completeSet } from "../items.ts";
 import {
   MELEE_FIST_ATK, MIN_HIT_RATIO,
@@ -161,7 +161,7 @@ export function addSkillXp(key: SkillKey, n: number, onLevel?: SkillUpFx): void 
     s.pts -= skillNeed(s);
     s.lv++;
     onLevel?.(`${s.name} → ${s.lv}`);
-    sfx("skillup");
+    sound("skillup");
   }
 }
 

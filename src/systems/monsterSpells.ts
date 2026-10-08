@@ -50,7 +50,8 @@
  * punches tree-shaped holes in a wall of fire, which reads as a bug.
  */
 import { TILE } from "../config.ts";
-import { addBlast, addBolt, addField, burningTiles } from "../gfx/spellFx.ts";
+import { blast, bolt } from "./fxEvents.ts";
+import { addField, burningTiles } from "./fields.ts";
 import { ELEMENT_COLOR, type Element, type Tier } from "../systems/elements.ts";
 import { groundBlocked } from "../world/collision.ts";
 import { rndi } from "../util.ts";
@@ -325,7 +326,7 @@ function land(
     if (spell.shape === "field") {
       addField(w, tx, ty, spell.element, spell.tier, spell.fieldS ?? 6);
     } else {
-      addBlast(w, tx, ty, spell.element, spell.tier, "burst", delay);
+      blast(w, tx, ty, spell.element, spell.tier, "burst", delay);
     }
   }
   // The bolt is thrown for the shapes that travel to a point. A cone comes out
@@ -333,7 +334,7 @@ function land(
   // throw, and drawing one would put a fireball inside the creature's chest.
   if (spell.shape === "bolt" || spell.shape === "field") {
     const { tx, ty } = p.tiles[0];
-    addBolt(
+    bolt(
       w, caster.x, caster.y - 12,
       tx * TILE + TILE / 2, ty * TILE + TILE / 2,
       spell.element, spell.tier,

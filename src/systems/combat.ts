@@ -5,16 +5,13 @@ import {
   DEATH_PENALTY_LEVEL, DEATH_EXP_LOSS, DEATH_SKILL_LOSS, DEATH_EQ_DROP_CHANCE, PLAYER_CORPSE_DECAY_S,
   SHIELD_BLOCK_MAX, SHIELD_BLOCK_WINDOW_S, MIN_ELEMENTAL_DAMAGE, MIN_DAMAGE_TO_MONSTER,
 } from "../config.ts";
-import { sfx, buzz } from "../audio.ts";
 import { aegisCut, clearBuffsOnDeath, furyMult } from "./buffs.ts";
-import { addFloat } from "../fx.ts";
 import { ELEMENT_COLOR, resistanceOf } from "./elements.ts";
 import type { Element } from "./elements.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { MONSTER_DEFS, rollLoot, monsterResist, mobLabel } from "../entities/monsters.ts";
-import { splash, pool, bloodOf } from "../gfx/blood.ts";
+import { sound, buzz, floatAt, floatSelf, logLine, bleed, bloodOf, projectile } from "./fxEvents.ts";
 import { mobExpMult, mergeLoot } from "./elite.ts";
-import { logServer } from "./chat.ts";
 import { missionByEcho, wantsRelic, relicTaken, extractBound } from "./missions.ts";
 import { ITEMS, removeItem, addStack, corpseBag, emptyCorpseBag, bagCount, newContainer, contentsOf } from "../items.ts";
 import { refreshDerived } from "../entities/player.ts";
@@ -38,29 +35,6 @@ import type { World, Monster, Structure } from "../world/types.ts";
  * Elemental damage is meant to skip this function entirely — that bypass is
  * the whole argument for spending resources on crystals.
  */
-/**
- * Where to shout when a relic changes hands.
- *
- * `killMonster` puts the relic straight into the pack — never into the corpse —
- * which is right, and which has one bad consequence nobody predicted: the one
- * thing the player came for arrives SILENTLY, at the same moment a loot window
- * opens on the body showing forty-five gold. Radek killed Kárr, read the corpse
- * window, found coin, and reported that the boss had dropped nothing; the helm
- * was in his backpack the whole time.
- *
- * A float above the head is not enough for that — it fades in two seconds and
- * the eye is on the loot window. So the grant also goes to the Server Log,
- * which is a place the player can scroll back to. This module cannot reach the
- * log directly (it is main.ts's), so main.ts hands it down at boot; headless,
- * the default no-op means the smoke suite never has to know.
- */
-type RelicNotice = (text: string, color: string) => void;
-let relicNotice: RelicNotice = () => {};
-
-export function setRelicNotice(fn: RelicNotice): void {
-  relicNotice = fn;
-}
-
 export function applyMonsterArmor(m: Monster, raw: number): number {
   const armor = MONSTER_DEFS[m.kind].armor ?? 0;
   if (armor <= 0) return raw;
@@ -78,7 +52,7 @@ export function burnMonster(world: World, p: Player, m: Monster, el: Element, ra
   const dmg = Math.max(MIN_ELEMENTAL_DAMAGE, Math.round(raw * resistanceOf(monsterResist(MONSTER_DEFS[m.kind]), el)));
   m.hp -= dmg;
   m.hurtT = 0.15;
-  addFloat(world, m.x, m.y - 32, String(dmg), ELEMENT_COLOR[el]);
+  floatAt(world, m.x, m.y - 32, String(dmg), ELEMENT_COLOR[el]);
   if (m.hp <= 0) {
     killMonster(world, p, m);
     return true;
@@ -94,11 +68,11 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
   // armour values back.
   const dmg = applyMonsterArmor(m,
     Math.round(rollMeleeDamage(attackPower(p.level, p.eq)) * furyMult(p.buffs)));
-  addSkillXp("sword", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+  addSkillXp("sword", 1, (t) => floatSelf(world, p.x, p.y - 52, t, "#7dff9e"));
   if (dmg <= 0) {
     // the classic Tibia whiff — the swing lands for nothing
-    addFloat(world, m.x, m.y - 32, "poof", "#9aa0a8");
-    sfx("whiff");
+    floatAt(world, m.x, m.y - 32, "poof", "#9aa0a8");
+    sound("whiff", { world, x: m.x, y: m.y });
     return false;
   }
   m.hp -= dmg;
@@ -106,9 +80,9 @@ export function playerAttack(world: World, p: Player, m: Monster): boolean {
   markBattle(); // …and you may not log out for the next one
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
-  addFloat(world, m.x, m.y - 32, String(dmg), "#ffe27a");
-  sfx("hit");
-  splash(world, m.x, m.y, bloodOf(m.kind));
+  floatAt(world, m.x, m.y - 32, String(dmg), "#ffe27a");
+  sound("hit", { world, x: m.x, y: m.y });
+  bleed(world, m.x, m.y, bloodOf(m.kind));
   if (m.hp <= 0) {
     killMonster(world, p, m);
     return true;
@@ -139,20 +113,20 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   const arrowDmg = ITEMS[arrowKind].ammo?.dmg ?? 0;
   if (!removeItem(p.bag, arrowKind, 1)) return false;
   const flight = Math.hypot(m.x - p.x, m.y - p.y) / SHOT_SPEED;
-  world.shots.push({
+  projectile(world, {
     fromX: p.x, fromY: p.y - 16,
     toX: m.x, toY: m.y - 12,
     p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow",
     color: arrowTint(arrowKind),
   });
   if (m.x < p.x) p.face = -1; else p.face = 1;
-  sfx("bow");
+  sound("bow", { world, x: p.x, y: p.y });
   // accuracy first, Tibia-style: the arrow is spent either way, a miss trains
   // Distance once, a hit trains it DOUBLE (as in the real skill system)
   if (Math.random() > distanceHitChance(p.eq)) {
     m.aggroT = MONSTER_AGGRO_HIT_S; // even a whizzing miss provokes the target
-    addFloat(world, m.x, m.y - 32, "miss", "#9aa0a8");
-    addSkillXp("dist", 1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+    floatAt(world, m.x, m.y - 32, "miss", "#9aa0a8");
+    addSkillXp("dist", 1, (t) => floatSelf(world, p.x, p.y - 52, t, "#7dff9e"));
     return false;
   }
   // An elemental arrow carries the crystal channel on its head: it skips the
@@ -166,11 +140,11 @@ export function playerShoot(world: World, p: Player, m: Monster, arrowKind: Item
   m.hp -= dmg;
   markBloodHit(); // you drew blood — Shielding may train for the next minute
   markBattle(); // …and you may not log out for the next one
-  splash(world, m.x, m.y, bloodOf(m.kind));
+  bleed(world, m.x, m.y, bloodOf(m.kind));
   m.hurtT = 0.15;
   m.aggroT = MONSTER_AGGRO_HIT_S;
-  addFloat(world, m.x, m.y - 32, String(dmg), el ? ELEMENT_COLOR[el] : "#bfe08a");
-  addSkillXp("dist", 2, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+  floatAt(world, m.x, m.y - 32, String(dmg), el ? ELEMENT_COLOR[el] : "#bfe08a");
+  addSkillXp("dist", 2, (t) => floatSelf(world, p.x, p.y - 52, t, "#7dff9e"));
   if (m.hp <= 0) {
     killMonster(world, p, m);
     return true;
@@ -192,17 +166,17 @@ export function shootDummy(world: World, p: Player, s: Structure, arrowKind: Ite
   s.hurtT = 0.2;
   s.anim = 0;
   const flight = Math.hypot(tx - p.x, ty - p.y) / SHOT_SPEED;
-  world.shots.push({ fromX: p.x, fromY: p.y - 16, toX: tx, toY: ty - 12, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow", color: arrowTint(arrowKind) });
+  projectile(world, { fromX: p.x, fromY: p.y - 16, toX: tx, toY: ty - 12, p: 0, dur: Math.max(0.06, flight), bone: arrowKind === "boneArrow", color: arrowTint(arrowKind) });
   if (Math.random() > distanceHitChance(p.eq)) {
-    addFloat(world, c.x, s.ty * TILE - 8, "miss", "#9aa0a8");
-    addSkillXp("dist", 1 * DUMMY_TIER_RATE[0], (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+    floatAt(world, c.x, s.ty * TILE - 8, "miss", "#9aa0a8");
+    addSkillXp("dist", 1 * DUMMY_TIER_RATE[0], (t) => floatSelf(world, p.x, p.y - 52, t, "#7dff9e"));
     return true;
   }
   const dmg = rollDistanceDamage(dp);
-  addFloat(world, c.x, s.ty * TILE - 8, String(dmg), "#bfe08a");
+  floatAt(world, c.x, s.ty * TILE - 8, String(dmg), "#bfe08a");
   markBloodHit(); // a dummy still counts as swinging at something
-  addSkillXp("dist", 2 * DUMMY_TIER_RATE[0], (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
-  sfx("bow");
+  addSkillXp("dist", 2 * DUMMY_TIER_RATE[0], (t) => floatSelf(world, p.x, p.y - 52, t, "#7dff9e"));
+  sound("bow", { world, x: p.x, y: p.y });
   return true;
 }
 
@@ -211,31 +185,31 @@ export function hitDummy(world: World, p: Player, s: Structure): void {
   const dmg = rollMeleeDamage(attackPower(p.level, p.eq));
   s.hurtT = 0.2;
   s.anim = 0;
-  addFloat(world, structCenter(s).x, s.ty * TILE - 8, dmg > 0 ? String(dmg) : "poof", dmg > 0 ? "#d8d2c0" : "#9aa0a8");
+  floatAt(world, structCenter(s).x, s.ty * TILE - 8, dmg > 0 ? String(dmg) : "poof", dmg > 0 ? "#d8d2c0" : "#9aa0a8");
   markBloodHit();
   // Rate follows the post's tier now (Etap 24): the old standalone War Dummy
   // became tier II of this same structure, and tier III is simply faster.
   const dt = tierOf(s) - 1;
-  addSkillXp("sword", 1 * DUMMY_TIER_RATE[dt], (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+  addSkillXp("sword", 1 * DUMMY_TIER_RATE[dt], (t) => floatSelf(world, p.x, p.y - 52, t, "#7dff9e"));
   // Shielding lags melee at every tier: its doubled cost is paid back by
   // blocking two creatures at once, and a post in the ground is exactly one.
   const shield = DUMMY_TIER_SHIELD[dt];
-  if (shield > 0) addShieldXp(shield, (t) => addFloat(world, p.x, p.y - 76, t, "#7dff9e"));
-  sfx("knock");
+  if (shield > 0) addShieldXp(shield, (t) => floatSelf(world, p.x, p.y - 76, t, "#7dff9e"));
+  sound("knock", { world, x: structCenter(s).x, y: s.ty * TILE });
 }
 
 /** Grant xp and process any level-ups. */
 export function grantExp(world: World, p: Player, exp: number): void {
   p.exp += exp;
-  addFloat(world, p.x, p.y - 36, `+${exp} xp`, "#caa6ff");
+  floatSelf(world, p.x, p.y - 36, `+${exp} xp`, "#caa6ff");
   while (p.exp >= p.expNext) {
     p.exp -= p.expNext;
     p.level++;
     p.expNext = expNeeded(p.level);
     refreshDerived(p);
     p.hp = p.maxhp;
-    addFloat(world, p.x, p.y - 48, "LEVEL UP!", "#7dff9e");
-    sfx("levelup");
+    floatAt(world, p.x, p.y - 48, "LEVEL UP!", "#7dff9e");
+    sound("levelup");
     buzz([30, 40, 30]);
   }
 }
@@ -243,7 +217,7 @@ export function grantExp(world: World, p: Player, exp: number): void {
 /** Resolve a monster death: xp, level-ups, a lootable corpse, schedule respawn. */
 export function killMonster(world: World, p: Player, m: Monster): void {
   const d = MONSTER_DEFS[m.kind];
-  sfx("kill");
+  sound("kill", { world, x: m.x, y: m.y });
   grantExp(world, p, d.exp * mobExpMult(m));
 
   const firstRoll = rollLoot(m.kind);
@@ -304,8 +278,12 @@ export function killMonster(world: World, p: Player, m: Monster): void {
   if (md && relic && relicOnBody) {
     relicTaken(md.id, p.level);
     items.push({ kind: relic, n: 1 });
-    addFloat(world, p.x, p.y - 64, ITEMS[relic].name, "#b9a6d8");
-    relicNotice(`${ITEMS[relic].name} — it is on the body. Loot him.`, "#b9a6d8");
+    floatSelf(world, p.x, p.y - 64, ITEMS[relic].name, "#b9a6d8");
+    /* The relic is on the BODY, and a float is not enough to say so: it fades
+     * in two seconds while the eye is on a loot window full of coin. Radek
+     * killed Kárr, read the window, and reported that the boss had dropped
+     * nothing. The Server Log is somewhere the player can scroll back to. */
+    logLine(`${ITEMS[relic].name} — it is on the body. Loot him.`, "#b9a6d8");
   }
   world.corpses.push({
     id: nextEntityId(),
@@ -330,10 +308,10 @@ export function killMonster(world: World, p: Player, m: Monster): void {
    * and runs whatever the player is doing; `onTaskKill` advances only the
    * errands actually in hand, which is what makes taking one from Grizelda
    * the moment that matters. */
-  pool(world, m.x, m.y, bloodOf(m.kind));
+  bleed(world, m.x, m.y, bloodOf(m.kind), true);
   if (m.elite) {
-    logServer(`You slew an ${mobLabel(m)}.`, "#ffd23a");
-    addFloat(world, m.x, m.y - 44, "ELITE", "#ffd23a");
+    logLine(`You slew an ${mobLabel(m)}.`, "#ffd23a");
+    floatAt(world, m.x, m.y - 44, "ELITE", "#ffd23a");
   }
   recordKill(m.kind);
   onTaskKill(m.kind);
@@ -361,7 +339,7 @@ export function applyDeathPenalty(world: World, p: Player): void {
    * experience lost. Items and skills are not its business. */
   const blessed = p.blessed;
   p.blessed = false;
-  if (blessed) addFloat(world, p.x, p.y - 80, "the blessing held", "#c9a6ff");
+  if (blessed) floatSelf(world, p.x, p.y - 80, "the blessing held", "#c9a6ff");
   if (p.level < DEATH_PENALTY_LEVEL) {
     p.exp = Math.floor(p.exp * (blessed ? 0.95 : 0.9));
     return;
@@ -371,7 +349,7 @@ export function applyDeathPenalty(world: World, p: Player): void {
   const aol = p.eq.amulet && ITEMS[p.eq.amulet].deathProtect ? p.eq.amulet : null;
   if (aol) {
     p.eq.amulet = null; // consumed
-    addFloat(world, p.x, p.y - 60, "Amulet of Loss shattered!", "#c9a6ff");
+    floatSelf(world, p.x, p.y - 60, "Amulet of Loss shattered!", "#c9a6ff");
   } else {
     const body = emptyCorpseBag();
     /* The backpack drops AS ITSELF, whole, contents and all — one object in
@@ -419,7 +397,7 @@ export function applyDeathPenalty(world: World, p: Player): void {
     }
     if (lost) {
       world.corpses.push({ id: nextEntityId(), name: "your body", x: p.x, y: p.y, items: body, t: PLAYER_CORPSE_DECAY_S });
-      addFloat(world, p.x, p.y - 60, "you dropped your backpack!", "#ff9e6a");
+      floatSelf(world, p.x, p.y - 60, "you dropped your backpack!", "#ff9e6a");
     }
   }
 
@@ -505,19 +483,19 @@ export function hurtPlayer(
 
   // Shielding trains only on hits the shield actually engaged — more than
   // SHIELD_BLOCK_MAX attackers won't train it faster, exactly like Tibia.
-  if (blocked) addShieldXp(1, (t) => addFloat(world, p.x, p.y - 52, t, "#7dff9e"));
+  if (blocked) addShieldXp(1, (t) => floatSelf(world, p.x, p.y - 52, t, "#7dff9e"));
   // A hit fully absorbed shows no number at all, only the puff or spark below:
   // eight bandits scratching uselessly at a knight should look quiet, not spam
   // a column of "-0". Pierced hits (past the shield cap) glow hotter so a
   // swarm still reads as danger.
-  if (dmg > 0) addFloat(world, p.x, p.y - 36, `-${dmg}`, blocked ? "#ff6a5e" : "#ff9e3a");
+  if (dmg > 0) floatAt(world, p.x, p.y - 36, `-${dmg}`, blocked ? "#ff6a5e" : "#ff9e3a");
   // whichever layer did the most work announces itself: armor sparks, shield puffs
   if (reduced >= 1) {
     const shieldWon = fromShield > fromArmor;
-    addFloat(world, p.x + 16, p.y - 20, shieldWon ? "puff" : "spark", shieldWon ? "#9ec8ff" : "#d8d2c0");
+    floatAt(world, p.x + 16, p.y - 20, shieldWon ? "puff" : "spark", shieldWon ? "#9ec8ff" : "#d8d2c0");
   }
-  sfx(dmg > 0 ? "hurt" : "block");
-  if (dmg > 0 && !elemental) splash(world, p.x, p.y, "red");
+  sound(dmg > 0 ? "hurt" : "block", { world, x: p.x, y: p.y });
+  if (dmg > 0 && !elemental) bleed(world, p.x, p.y, "red");
   if (dmg > 0 && dmg >= p.maxhp * 0.15) buzz(35);
   if (p.hp <= 0) {
     p.hp = 0;
@@ -532,7 +510,7 @@ export function hurtPlayer(
     // Fury gone wrong.
     clearBuffsOnDeath(p.buffs);
     applyDeathPenalty(world, p);
-    sfx("death");
+    sound("death", { world, x: p.x, y: p.y });
     buzz([90, 60, 180]);
     return true;
   }

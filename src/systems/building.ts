@@ -1,7 +1,6 @@
 /** Building system: structure catalog, tiers, affordability, free-form placement. */
 import { TILE } from "../config.ts";
-import { sfx } from "../audio.ts";
-import { addFloat } from "../fx.ts";
+import { sound, floatSelf } from "./fxEvents.ts";
 import { dist } from "../util.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { SPR, bakeForge, bakeLibrary, bakeDummy, bakeRange, bakeChest, bakeTreasureChest } from "../gfx/sprites.ts";
@@ -333,8 +332,8 @@ export function tryPlace(home: World, p: Player, key: StructKey, wx: number, wy:
   home.structures.push({ id: nextEntityId(), key, tx, ty, tier: 1, anim: Math.random() * 6, hurtT: 0, ...(key === "chest" ? { inv: emptyStash(CHEST_SLOTS[0]) } : {}) });
   markSolid(home, key, tx, ty);
   unstick(home, p); // if you built on the tile you were standing on, step out of it
-  addFloat(home, tx * TILE + TILE, ty * TILE, `${def.name} built!`, "#ffe27a");
-  sfx("build");
+  floatSelf(home, tx * TILE + TILE, ty * TILE, `${def.name} built!`, "#ffe27a");
+  sound("build", { world: home, x: tx * TILE + TILE, y: ty * TILE + TILE });
   return true;
 }
 
@@ -357,8 +356,8 @@ export function tryUpgrade(home: World, p: Player, s: Structure, stash?: readonl
     while (s.inv.length < want) s.inv.push(null);
   }
   const def = STRUCTS[s.key as StructKey];
-  addFloat(home, s.tx * TILE + TILE, s.ty * TILE, `${def.name} ${"I".repeat(s.tier)}!`, "#ffe27a");
-  sfx("build");
+  floatSelf(home, s.tx * TILE + TILE, s.ty * TILE, `${def.name} ${"I".repeat(s.tier)}!`, "#ffe27a");
+  sound("build", { world: home, x: s.tx * TILE + TILE, y: s.ty * TILE + TILE });
   return true;
 }
 

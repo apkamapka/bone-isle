@@ -5,13 +5,11 @@
  * the elemental line. Recall is a travel action handled in the main loop
  * (it needs the game object).
  */
-import { sfx } from "../audio.ts";
 import { markBloodHit } from "./skills.ts";
 import { markBattle } from "./battle.ts";
 import { monsterById } from "../world/entities.ts";
 import { ELEMENTS, ELEMENT_COLOR, TIER_CODE, crystalDamage, type Element, type Tier } from "./elements.ts";
 import { MONSTER_DEFS, monsterResist } from "../entities/monsters.ts";
-import { addFloat } from "../fx.ts";
 import { dist } from "../util.ts";
 import { TILE } from "../config.ts";
 import { bagCount, removeItem } from "../items.ts";
@@ -22,11 +20,10 @@ import {
   FURY_DEBT_TICK_S,
 } from "../config.ts";
 import { aegisReady, furyReady, startAegis, startFury, startHaste } from "./buffs.ts";
-import { addFlare } from "../gfx/auraFx.ts";
 import { cooldownLeft, blockedBy, startCooldown, tickCooldowns, resetCooldowns } from "./cooldowns.ts";
 import { killMonster } from "./combat.ts";
 import { lineOfSight, groundBlocked } from "../world/collision.ts";
-import { addBlast, addBolt } from "../gfx/spellFx.ts";
+import { sound, floatAt, floatSelf, flare, blast, bolt } from "./fxEvents.ts";
 import type { Player } from "../entities/player.ts";
 import type { Facing } from "./outfit.ts";
 import type { World } from "../world/types.ts";
@@ -214,11 +211,11 @@ function pickTarget(world: World, p: Player, range: number): World["monsters"][n
   const marked = t && t.kind === "mob" ? monsterById(world, t.id) : undefined;
   if (marked && marked.hp > 0) {
     if (dist(p.x, p.y, marked.x, marked.y) > range) {
-      addFloat(world, p.x, p.y - 44, "too far", "#ff9e6a");
+      floatSelf(world, p.x, p.y - 44, "too far", "#ff9e6a");
       return null;
     }
     if (!lineOfSight(world, p.x, p.y, marked.x, marked.y)) {
-      addFloat(world, p.x, p.y - 44, "no line of sight", "#ff9e6a");
+      floatSelf(world, p.x, p.y - 44, "no line of sight", "#ff9e6a");
       return null;
     }
     return marked;
@@ -231,7 +228,7 @@ function pickTarget(world: World, p: Player, range: number): World["monsters"][n
     const d = dist(p.x, p.y, m.x, m.y);
     if (d < bd && lineOfSight(world, p.x, p.y, m.x, m.y)) { bd = d; best = m; }
   }
-  if (!best) addFloat(world, p.x, p.y - 44, "no target", "#ff9e6a");
+  if (!best) floatSelf(world, p.x, p.y - 44, "no target", "#ff9e6a");
   return best;
 }
 
@@ -262,7 +259,7 @@ function paint(
 ): void {
   for (const s of tiles) {
     if (groundBlocked(world, s.tx, s.ty)) continue;
-    addBlast(world, s.tx, s.ty, el, tier, slot, s.delay);
+    blast(world, s.tx, s.ty, el, tier, slot, s.delay);
   }
 }
 
@@ -286,7 +283,7 @@ function damageWithElement(
   m.hurtT = 0.2;
   m.aggroT = MONSTER_AGGRO_HIT_S;
   const resisted = (resist?.[spec.element] ?? 1) < 1;
-  addFloat(world, m.x, m.y - 32, resisted ? `${dmg}!` : String(dmg), col);
+  floatAt(world, m.x, m.y - 32, resisted ? `${dmg}!` : String(dmg), col);
   if (m.hp <= 0) killMonster(world, p, m);
 }
 
@@ -324,21 +321,21 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   // Life Crystal's refusals, word for word.
   if (kind === "healRune") {
     if (p.hp >= p.maxhp) {
-      addFloat(world, p.x, p.y - 44, "full hp", "#7dff9e");
+      floatSelf(world, p.x, p.y - 44, "full hp", "#7dff9e");
       return false;
     }
     const why = blockedBy(kind);
     if (why) {
-      addFloat(world, p.x, p.y - 44, why === "own" ? "still cooling" : "too soon", "#8ab6ff");
+      floatSelf(world, p.x, p.y - 44, why === "own" ? "still cooling" : "too soon", "#8ab6ff");
       return false;
     }
     removeItem(p.bag, kind, 1);
     startCooldown(kind);
     const amount = HEAL_RUNE_BASE + p.level * HEAL_RUNE_PER_LEVEL;
     p.hp = Math.min(p.maxhp, p.hp + amount);
-    addFlare(world, p.x, p.y - 24, "mend");
-    addFloat(world, p.x, p.y - 40, `+${amount}`, "#3ee07a");
-    sfx("heal");
+    flare(world, p.x, p.y - 24, "mend");
+    floatAt(world, p.x, p.y - 40, `+${amount}`, "#3ee07a");
+    sound("heal", { world, x: p.x, y: p.y });
     return true;
   }
 
@@ -349,7 +346,7 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   if (kind === "furyRune" && !furyReady(b)) {
     const left = b.debt > 0 ? b.debt : b.furyLock;
     const msg = b.debt > 0 ? "still burning" : `fury in ${Math.ceil(left / 60)} min`;
-    addFloat(world, p.x, p.y - 44, msg, "#e01e5a");
+    floatSelf(world, p.x, p.y - 44, msg, "#e01e5a");
     return false;
   }
   // Same shape for Aegis, and for the same reason: its five-minute lock is the
@@ -357,13 +354,13 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
   // would teach the player the wrong number.
   if (kind === "aegisRune" && !aegisReady(b)) {
     const msg = b.aegis > 0 ? "already guarded" : `guard in ${Math.ceil(b.aegisLock / 60)} min`;
-    addFloat(world, p.x, p.y - 44, msg, "#dfe6f2");
+    floatSelf(world, p.x, p.y - 44, msg, "#dfe6f2");
     return false;
   }
 
   const why = blockedBy(kind);
   if (why) {
-    addFloat(world, p.x, p.y - 44, why === "own" ? "still cooling" : "too soon", "#8ab6ff");
+    floatSelf(world, p.x, p.y - 44, why === "own" ? "still cooling" : "too soon", "#8ab6ff");
     return false;
   }
   removeItem(p.bag, kind, 1);
@@ -371,9 +368,9 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
 
   if (kind === "hasteRune") {
     startHaste(b, HASTE_RUNE_S);
-    addFlare(world, p.x, p.y - 24, "speed");
-    addFloat(world, p.x, p.y - 40, "swift", "#ffd23a");
-    sfx("buff");
+    flare(world, p.x, p.y - 24, "speed");
+    floatAt(world, p.x, p.y - 40, "swift", "#ffd23a");
+    sound("buff", { world, x: p.x, y: p.y });
     return true;
   }
   if (kind === "aegisRune") {
@@ -382,9 +379,9 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
     // and says "this is on"; the flare is the moment it went on, and without it
     // the two crystals that leave something behind are the only two whose CAST
     // you cannot see.
-    addFlare(world, p.x, p.y - 24, "guard", 1.15);
-    addFloat(world, p.x, p.y - 40, "guarded", "#dfe6f2");
-    sfx("buff");
+    flare(world, p.x, p.y - 24, "guard", 1.15);
+    floatAt(world, p.x, p.y - 40, "guarded", "#dfe6f2");
+    sound("buff", { world, x: p.x, y: p.y });
     return true;
   }
   if (kind === "mireRune") {
@@ -397,19 +394,20 @@ function useUtilityRune(world: World, p: Player, kind: ItemKind): boolean {
       if (Math.hypot(m.x - p.x, m.y - p.y) > reach) continue;
       m.slowS = MIRE_RUNE_S;
       caught++;
-      addFloat(world, m.x, m.y - 30, "slowed", "#3a8fe0");
+      floatAt(world, m.x, m.y - 30, "slowed", "#3a8fe0");
     }
-    addFlare(world, p.x, p.y - 24, "slow");
-    addFloat(world, p.x, p.y - 40, caught ? `slowed x${caught}` : "slowdown", "#3a8fe0");
-    sfx("mire");
+    flare(world, p.x, p.y - 24, "slow");
+    floatAt(world, p.x, p.y - 40, caught ? `slowed x${caught}` : "slowdown", "#3a8fe0");
+    sound("mire", { world, x: p.x, y: p.y });
     return true;
   }
   // furyRune
   startFury(b, FURY_RUNE_S, FURY_DEBT_S);
-  addFlare(world, p.x, p.y - 24, "fury", 1.4);
-  addFloat(world, p.x, p.y - 40, "FURY", "#e01e5a");
-  addFloat(world, p.x, p.y - 56, `${Math.round(FURY_DEBT_FRAC * 100)}% every ${FURY_DEBT_TICK_S}s after`, "#ff9ad0");
-  sfx("fury");
+  flare(world, p.x, p.y - 24, "fury", 1.4);
+  floatAt(world, p.x, p.y - 40, "FURY", "#e01e5a");
+  // What it will cost is for the one who cast it; everyone else sees the fury.
+  floatSelf(world, p.x, p.y - 56, `${Math.round(FURY_DEBT_FRAC * 100)}% every ${FURY_DEBT_TICK_S}s after`, "#ff9ad0");
+  sound("fury", { world, x: p.x, y: p.y });
   return true;
 }
 
@@ -426,13 +424,13 @@ export function useCrystal(
 ): boolean {
   if (p.dead) return false;
   if (bagCount(p.bag, kind) <= 0) {
-    addFloat(world, p.x, p.y - 44, "no crystal", "#8ab6ff");
+    floatSelf(world, p.x, p.y - 44, "no crystal", "#8ab6ff");
     return false;
   }
 
   if (kind === "healCrystal") {
     if (p.hp >= p.maxhp) {
-      addFloat(world, p.x, p.y - 44, "full hp", "#7dff9e");
+      floatSelf(world, p.x, p.y - 44, "full hp", "#7dff9e");
       return false;
     }
     // Healing shares ONE timer with the elemental line (Etap 30). Tibia pays
@@ -446,7 +444,7 @@ export function useCrystal(
      * tell them apart, so it taught the player nothing about what to do. */
     const why = blockedBy(kind);
     if (why) {
-      addFloat(world, p.x, p.y - 44,
+      floatSelf(world, p.x, p.y - 44,
         why === "own" ? "still cooling" : "too soon", "#8ab6ff");
       return false;
     }
@@ -458,9 +456,9 @@ export function useCrystal(
     // size. Two heals that do the same thing to the same bar should not be two
     // pictures to learn — the size IS the difference, and it is the difference
     // that matters.
-    addFlare(world, p.x, p.y - 24, "mend", 0.65);
-    addFloat(world, p.x, p.y - 40, `+${amount}`, "#7dff9e");
-    sfx("heal");
+    flare(world, p.x, p.y - 24, "mend", 0.65);
+    floatAt(world, p.x, p.y - 40, `+${amount}`, "#7dff9e");
+    sound("heal", { world, x: p.x, y: p.y });
     return true;
   }
 
@@ -475,7 +473,7 @@ export function useCrystal(
      * tell them apart, so it taught the player nothing about what to do. */
     const why = blockedBy(kind);
     if (why) {
-      addFloat(world, p.x, p.y - 44,
+      floatSelf(world, p.x, p.y - 44,
         why === "own" ? "still cooling" : "too soon", "#8ab6ff");
       return false;
     }
@@ -509,7 +507,7 @@ export function useCrystal(
         markBattle();
       }
       for (const m of hit) damageWithElement(world, p, m, spec, col);
-      sfx("cast");
+      sound("cast", { world, x: p.x, y: p.y });
       return true;
     }
 
@@ -523,15 +521,15 @@ export function useCrystal(
       // quietly and keep the charge — the cursor gets armed instead.
       if (!aim) return false;
       if (dist(p.x, p.y, aim.x, aim.y) > spec.range) {
-        addFloat(world, p.x, p.y - 44, "too far", "#ff9e6a");
+        floatSelf(world, p.x, p.y - 44, "too far", "#ff9e6a");
         return false;
       }
       if (!lineOfSight(world, p.x, p.y, aim.x, aim.y)) {
-        addFloat(world, p.x, p.y - 44, "no line of sight", "#ff9e6a");
+        floatSelf(world, p.x, p.y - 44, "no line of sight", "#ff9e6a");
         return false;
       }
       if (groundBlocked(world, Math.floor(aim.x / TILE), Math.floor(aim.y / TILE))) {
-        addFloat(world, p.x, p.y - 44, "you cannot throw there", "#ff9e6a");
+        floatSelf(world, p.x, p.y - 44, "you cannot throw there", "#ff9e6a");
         return false;
       }
       toX = aim.x;
@@ -559,7 +557,7 @@ export function useCrystal(
     // way — zero here, the bolt's travel for the other two.
     const flight = spec.role === "rune"
       ? 0
-      : addBolt(world, p.x, p.y - 16, toX, toY - 12, spec.element, spec.tier);
+      : bolt(world, p.x, p.y - 16, toX, toY - 12, spec.element, spec.tier);
     const ox = Math.floor(toX / TILE);
     const oy = Math.floor(toY / TILE);
     const shape: Struck[] = spec.role === "burst"
@@ -578,8 +576,8 @@ export function useCrystal(
     for (const m of caught) damageWithElement(world, p, m, spec, col);
     // The Knell tolls: low, long, and falling. It is the only crystal whose
     // sound is meant to land AFTER you have already seen the thing die.
-    if (spec.role === "rune") sfx("rune");
-    else sfx("cast");
+    if (spec.role === "rune") sound("rune", { world, x: p.x, y: p.y });
+    else sound("cast", { world, x: p.x, y: p.y });
     return true;
   }
 

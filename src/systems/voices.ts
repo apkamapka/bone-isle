@@ -11,7 +11,7 @@
 import type { World } from "../world/types.ts";
 import { TILE } from "../config.ts";
 import { rnd } from "../util.ts";
-import { bubble } from "./chat.ts";
+import { speech } from "./fxEvents.ts";
 import { fleeLine, npcLine, voiceLine, VOICE_COLOR } from "../text/voices.ts";
 import { isFleeing } from "./mobTactics.ts";
 
@@ -35,7 +35,7 @@ export function tickVoices(w: World, dt: number, px: number, py: number): void {
       if (!m.fleeSaid) {
         m.fleeSaid = true;
         const line = near ? fleeLine(m.kind) : null;
-        if (line) bubble(m.id, line, VOICE_COLOR);
+        if (line) speech(w, m.id, m.x, m.y, line, VOICE_COLOR);
       }
       continue;
     }
@@ -46,7 +46,7 @@ export function tickVoices(w: World, dt: number, px: number, py: number): void {
     if (!near || gap > 0) continue;
     const line = voiceLine(m.kind, !!m.engaged);
     if (!line) continue;
-    bubble(m.id, line, VOICE_COLOR);
+    speech(w, m.id, m.x, m.y, line, VOICE_COLOR);
     gap = VOICE_GAP_S;
   }
   for (const n of w.npcs) {
@@ -57,6 +57,6 @@ export function tickVoices(w: World, dt: number, px: number, py: number): void {
     if (n.talk > 0) continue;
     if (Math.max(Math.abs(n.tx - ptx), Math.abs(n.ty - pty)) > NPC_VOICE_RANGE_TILES) continue;
     const line = npcLine(n.key);
-    if (line) bubble(n.id, line, VOICE_COLOR);
+    if (line) speech(w, n.id, n.x, n.y, line, VOICE_COLOR);
   }
 }
