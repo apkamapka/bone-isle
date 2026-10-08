@@ -4,7 +4,9 @@ import { itemSprite } from "../gfx/itemArt.ts";
 import { skills, skillNeed, attackPower, mastery, defenseArmor, shieldBlockMax, distanceSkill } from "../systems/skills.ts";
 import { stance, setStance, STANCES, STANCE_LABEL, STANCE_COLOR } from "../systems/stance.ts";
 import { MIN_HIT_RATIO } from "../config.ts";
-import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost, structSprite, countOwned } from "../systems/building.ts";
+import { STRUCTS, STRUCT_KEYS, canAfford, costText, tierOf, maxTier, upgradeCost, buildCost, countOwned } from "../systems/building.ts";
+import { structSprite } from "../gfx/buildingArt.ts";
+import { outfitSprites } from "../gfx/outfitArt.ts";
 import { RESEARCH, isResearched, towerTierOk, levelOk,
   ATTUNEMENT, isAttuned, offersFor } from "../systems/tower.ts";
 import { ELEMENT_LABEL, ELEMENTS, type Element } from "../systems/elements.ts";
@@ -2866,7 +2868,7 @@ function drawStash(p: PanelInput): void {
 let dyeZone: OutfitZone = "primary";
 
 function drawWardrobe(p: PanelInput): void {
-  const { hud, player } = p;
+  const { hud } = p;
   const { ctx, scale: S } = hud;
   const st = outfitState();
   const zones: readonly OutfitZone[] = ["hair", "primary", "secondary", "shoes"];
@@ -2904,7 +2906,7 @@ function drawWardrobe(p: PanelInput): void {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(lpc, lx + (previewW - dw) / 2, top + (previewH - dh) / 2, dw, dh);
   } else {
-    const spr = player.spr;
+    const spr = outfitSprites().down;
     const psc = Math.max(1, Math.floor((previewH - 8 * S) / iconH(spr, 1)));
     icon(p, spr, lx + (previewW - iconW(spr, psc)) / 2, top + (previewH - iconH(spr, psc)) / 2, psc);
   }
