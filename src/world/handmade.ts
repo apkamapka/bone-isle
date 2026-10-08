@@ -22,11 +22,10 @@
  * the smoke tests re-validate row lengths, feature counts and a walkable spawn.
  */
 import { TILE } from "../config.ts";
-import { SPR, bakeTree } from "../gfx/sprites.ts";
-import { NPC_DATA, bakeWorldCanvas } from "./generate.ts";
+import { NPC_DATA } from "./generate.ts";
 import { npcRest } from "../entities/npcs.ts";
 import { nextEntityId } from "./entities.ts";
-import { FOOTPRINT, BLOCK, paintedTiles } from "../gfx/sceneryArt.ts";
+import { FOOTPRINT, BLOCK, paintedTiles } from "./scenery.ts";
 import type { MonsterKind, SceneryKind } from "./types.ts";
 import type { Element } from "../systems/elements.ts";
 import { Tile } from "./types.ts";
@@ -118,9 +117,10 @@ export interface HandmadeSpec {
   scenery?: Readonly<Record<string, SceneryKind>>;
 }
 
-/** NPC display name + sprite, keyed for O(1) lookup while parsing. */
-const NPC_BY_KEY = new Map<NpcKey, { name: string; spr: HTMLCanvasElement; roam: number }>(
-  NPC_DATA.map(([key, name, spr, roam]) => [key, { name, spr, roam }]),
+/** NPC display name + beat radius, keyed for O(1) lookup while parsing. His
+ *  picture is the client's to find from his key (gfx/npcArt.ts). */
+const NPC_BY_KEY = new Map<NpcKey, { name: string; roam: number }>(
+  NPC_DATA.map(([key, name, , roam]) => [key, { name, roam }]),
 );
 
 const baseTileOf = (ch: string): Tile => {
@@ -206,11 +206,10 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     buildSpots: [],
     portals: [],
     gates: [],
-    coastWater: [],
     explored: new Uint8Array(W * H),
     // Authored maps have no radial silhouette; the baker no longer needs one.
     landR: () => Math.max(W, H),
-    mapCanvas: document.createElement("canvas"),
+    grassShift: spec.grassShift,
   };
 
   /**
@@ -261,7 +260,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           // 32x56, anchored on the bottom of its square: one tile wide, and the
           // crown reaches into the square north of it.
           if (nearWater([{ tx: x, ty: y }, { tx: x, ty: y - 1 }])) break;
-          w.trees.push({ tx: x, ty: y, spr: bakeTree(), hp: 3, maxhp: 3, stump: false, respawnT: 0, hurtT: 0 });
+          w.trees.push({ tx: x, ty: y, hp: 3, maxhp: 3, stump: false, respawnT: 0, hurtT: 0 });
           solid[y][x] = true;
           break;
         case "R":
@@ -281,10 +280,10 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
         case "H":
           // Herbs are gone (Etap 26); the character survives as plain decor so
           // hand-authored maps keep their scatter without an edit pass.
-          w.decos.push({ spr: SPR.mushroom, tx: x, ty: y });
+          w.decos.push({ art: "mushroom", tx: x, ty: y });
           break;
         case "M":
-          w.decos.push({ spr: SPR.mushroom, tx: x, ty: y });
+          w.decos.push({ art: "mushroom", tx: x, ty: y });
           break;
         case "F":
           // A campfire does NOT seal its square, on any map.
@@ -312,7 +311,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
           w.fires.push({ tx: x, ty: y, phase: (x * 7 + y * 13) % 10 / 10 });
           break;
         case "o":
-          w.decos.push({ spr: SPR.bones, tx: x, ty: y });
+          w.decos.push({ art: "bones", tx: x, ty: y });
           break;
         case "B":
           w.buildSpots.push({ tx: x, ty: y, built: null });
@@ -405,7 +404,7 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
               const b = place.beat ?? {};
               w.npcs.push({
                 id: nextEntityId(),
-                key: place.key, name: meta.name, spr: meta.spr, bob: (x + y) % 3,
+                key: place.key, name: meta.name, bob: (x + y) % 3,
                 x: cx, y: cy, tx: x, ty: y,
                 hx: x, hy: y,
                 bx0: x - (b.west ?? meta.roam), bx1: x + (b.east ?? meta.roam),
@@ -420,7 +419,6 @@ export function makeHandmadeWorld(spec: HandmadeSpec): World {
     }
   }
 
-  bakeWorldCanvas(w, spec.grassShift ?? 0);
   return w;
 }
 

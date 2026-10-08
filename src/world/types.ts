@@ -1,6 +1,10 @@
 /** Shared data shapes for the world: terrain, nodes, monsters, NPCs. */
-import type { MobDir } from "../gfx/mobSheet.ts";
 import type { Bag, ItemStack } from "../items.ts";
+
+/** Which way a creature or townsperson faces, in the order the LPC walk sheets
+ *  lay their rows out. Defined here, not beside the sheets, since Etap 3.1b:
+ *  facing is part of the creature, and the server will decide it. */
+export type MobDir = "up" | "left" | "down" | "right";
 
 /** Terrain tile codes. (Plain const object so the syntax is fully erasable.) */
 export const Tile = {
@@ -147,11 +151,11 @@ export interface LevelGate {
   lv: number;
 }
 
-/** Choppable tree node, occupies one tile. */
+/** Choppable tree node, occupies one tile. Every tree is drawn with the same
+ *  picture, so it names none (gfx/sprites.ts `treeSprite`). */
 export interface Tree {
   tx: number;
   ty: number;
-  spr: HTMLCanvasElement;
   hp: number;
   maxhp: number;
   stump: boolean;
@@ -170,9 +174,14 @@ export interface RockNode {
   hurtT: number;
 }
 
-/** Ground decoration baked into the map canvas (non-interactive). */
+/** The pictures a ground decoration can be: keys of the client's baked
+ *  sprite table (gfx/sprites.ts `SPR`). */
+export type DecoArt = "mushroom" | "bones";
+
+/** Ground decoration painted into the map's fallback picture (non-interactive).
+ *  Holds the NAME of its picture since Etap 3.1b, not the picture. */
 export interface Deco {
-  spr: HTMLCanvasElement;
+  art: DecoArt;
   tx: number;
   ty: number;
 }
@@ -263,13 +272,6 @@ export interface Reserved {
   x: number;
   y: number;
   r: number;
-}
-
-/** Animated coastal water tile (foam/wave dashes). */
-export interface CoastWater {
-  x: number;
-  y: number;
-  ph: number;
 }
 
 /** Item stack lying on the ground (e.g. dropped when the bag is full). */
@@ -382,7 +384,6 @@ export interface Monster {
   /** Logical tile the creature stands on (claims) — grid movement core. */
   tx: number;
   ty: number;
-  spr: HTMLCanvasElement;
   hp: number;
   maxhp: number;
   speed: number;
@@ -511,7 +512,6 @@ export interface Npc {
   y: number;
   tx: number;
   ty: number;
-  spr: HTMLCanvasElement;
   bob: number;
   /** The tile he was authored on — the centre of his beat. */
   hx: number;
@@ -645,7 +645,6 @@ export interface World {
   /** Level-sealed doorways, toggled by applyGates(). The mission maps will
    *  use these to hold the echo's entrance shut until the player is ready. */
   gates: LevelGate[];
-  coastWater: CoastWater[];
   /** Authored spawn point (world px) — the map's own start tile. Hand-drawn
    *  maps mark it with a glyph; when absent the player lands beside a portal
    *  exactly as before, so procedural islands are unaffected. */
@@ -677,11 +676,13 @@ export interface World {
    *  Maps carrying these populate from them instead of scattering a roster,
    *  and each creature respawns back onto its own post. */
   mobPosts?: { kind: MonsterKind; tx: number; ty: number }[];
-  /** Pre-rendered terrain (a Tiled "export as image" PNG) drawn 1:1 in place
-   *  of the procedural bake. Native tile resolution, so it is sharper than
-   *  `mapCanvas`, which is painted at half scale and blown up. Attached
-   *  asynchronously — until the image arrives the baked canvas shows. */
-  mapImage?: HTMLImageElement;
   landR: (theta: number) => number;
-  mapCanvas: HTMLCanvasElement;
+  /**
+   * A tint for the grass in the map's fallback picture — the one painted from
+   * the glyph grid for the moment before the map's PNG arrives. A world holds
+   * no picture of itself since Etap 3.1b: the client finds the PNG by the
+   * world's key (world/terrainImage.ts) and bakes the fallback on demand
+   * (gfx/terrainArt.ts). This number is all the bake needs from the spec.
+   */
+  grassShift?: number;
 }

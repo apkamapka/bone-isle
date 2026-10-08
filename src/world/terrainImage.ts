@@ -1,5 +1,6 @@
 /**
- * Pre-rendered terrain images (Tiled "Export as Image").
+ * Pre-rendered terrain images (Tiled "Export as Image"): which picture each
+ * map is drawn with, by name.
  *
  * A hand-drawn map's look comes from the tilesets it was painted with, which
  * the game itself does not ship — so instead of re-implementing a `.tsx`
@@ -8,15 +9,14 @@
  * stays authoritative, so every rule, test and save path behaves the same
  * whether or not the image ever loads.
  *
- * The load is asynchronous and failure is harmless — the procedural bake in
- * `mapCanvas` is already sitting there as a fallback, which also keeps the
- * headless smoke tests (no `Image`, no `document`) running untouched.
+ * This file only NAMES the pictures. Since Etap 3.1b a world holds none of
+ * its own: the client loads them (gfx/terrainArt.ts), refuses one exported at
+ * the wrong size, and paints a fallback from the glyph grid until one lands.
  *
  * The image must be exported at NATIVE tile size (TILE px per tile) with the
  * object layers hidden, so it lines up 1:1 with the collision grid.
  */
-import { TILE } from "../config.ts";
-import type { World, WorldKey } from "./types.ts";
+import type { WorldKey } from "./types.ts";
 
 /** Which maps have an exported terrain picture, and where it lives. */
 /**
@@ -56,33 +56,3 @@ export const TERRAIN_SRC: Partial<Record<WorldKey, string>> = {
   orcIsle: "./orcisle-terrain.png",
   gorak: "./gorak-terrain.png",
 };
-
-/**
- * Kick off terrain loading for every world that has an exported image.
- * Safe to call more than once; safe headless (returns immediately).
- */
-export function loadTerrainImages(worlds: Record<WorldKey, World>): void {
-  if (typeof Image === "undefined" || typeof document === "undefined") return;
-  for (const key of Object.keys(TERRAIN_SRC) as WorldKey[]) {
-    const w = worlds[key];
-    const src = TERRAIN_SRC[key];
-    if (!w || !src || w.mapImage) continue;
-    const img = new Image();
-    img.onload = () => {
-      // A mismatched export would silently shift the whole map against its
-      // collision grid, so refuse it loudly rather than draw something wrong.
-      if (img.naturalWidth !== w.w * TILE || img.naturalHeight !== w.h * TILE) {
-        console.warn(
-          `terrain '${key}': image is ${img.naturalWidth}x${img.naturalHeight}, ` +
-          `expected ${w.w * TILE}x${w.h * TILE} — keeping the baked terrain`,
-        );
-        return;
-      }
-      w.mapImage = img;
-    };
-    img.onerror = () => {
-      console.warn(`terrain '${key}' failed to load, keeping the baked terrain`);
-    };
-    img.src = src;
-  }
-}
