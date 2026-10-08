@@ -5612,8 +5612,10 @@ async function main(): Promise<void> {
   console.log("A campfire burns what stands in it:");
   {
     const fs = await import("node:fs");
-    const { FIRE_BURN_TICK_S, FIRE_BURN_DMG, FIRE_LIFT } = await import("../src/gfx/fireSheet.ts");
-    const main = fs.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const { FIRE_LIFT } = await import("../src/gfx/fireSheet.ts");
+    // Etap 3.1d: what a fire costs is the game tick's, not the picture's
+    const { FIRE_BURN_TICK_S, FIRE_BURN_DMG } = await import("../src/tick/fight.ts");
+    const burn = fs.readFileSync(new URL("../src/tick/fight.ts", import.meta.url), "utf8");
     const spells = fs.readFileSync(new URL("../src/systems/monsterSpells.ts", import.meta.url), "utf8");
 
     ok(FIRE_BURN_TICK_S > 0 && FIRE_BURN_DMG[0] > 0 && FIRE_BURN_DMG[1] > FIRE_BURN_DMG[0],
@@ -5622,10 +5624,10 @@ async function main(): Promise<void> {
     const field = /FIELD_TICK_DMG: readonly \[number, number\] = \[(\d+), (\d+)\]/.exec(spells)!;
     ok(FIRE_BURN_DMG[1] < Number(field[2]),
       `…less than the ${field[1]}-${field[2]} a monster's burning ground bites`);
-    ok(/const raw = rndi\(FIRE_BURN_DMG\[0\], FIRE_BURN_DMG\[1\]\);/.test(main)
-      && /hurtPlayer\(world, P, dmg, true\)/.test(main),
+    ok(/const raw = rndi\(FIRE_BURN_DMG\[0\], FIRE_BURN_DMG\[1\]\);/.test(burn)
+      && /hurtPlayer\(world, P, dmg, true\)/.test(burn),
       "…and it lands elemental, so no shield or armour is raised against it");
-    ok(/const key = `\$\{world\.key\}\|\$\{f\.tx\}\|\$\{f\.ty\}`/.test(main),
+    ok(/const key = `\$\{world\.key\}\|\$\{f\.tx\}\|\$\{f\.ty\}`/.test(burn),
       "…on a clock kept per tile, so crossing three fires costs three bites");
     ok(FIRE_LIFT > 0, "and the flame is still lifted onto the middle of its own square");
   }
@@ -11517,14 +11519,16 @@ async function main(): Promise<void> {
 
     /* Wiring. `chasing()` has to gate BOTH walk-up paths — the melee approach
      * and the archer closing the gap — or "stand" only half works. */
-    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
-    ok(main.includes('const chaseBlocked = !chasing()'),
+    // Etap 3.1d: the walk-up is the game tick's now (tick/tick.ts)
+    const tk = (await import("node:fs")).readFileSync("src/tick/tick.ts", "utf8");
+    ok(tk.includes('const chaseBlocked = !chasing()'),
       "the melee approach consults chase before taking a step");
-    ok(main.includes('(P.target.kind === "mob" || P.target.kind === "dummy")'),
+    ok(tk.includes('(P.target.kind === "mob" || P.target.kind === "dummy")'),
       "…and only for creatures: a corpse or a chest is still walked to");
-    ok(main.includes("if (chasing() && (d > mode.reach || blocked))"),
+    ok(tk.includes("if (chasing() && (d > mode.reach || blocked))"),
       "the archer's gap-closing consults it too");
-    ok(main.indexOf("else if (chaseBlocked) {") < main.indexOf("const moved = walkGrid(world, toTile(tp.x)"),
+    ok(tk.indexOf("else if (chaseBlocked) {") > 0
+      && tk.indexOf("else if (chaseBlocked) {") < tk.indexOf("const moved = walkGrid(g, world, toTile(tp.x)"),
       "standing our ground is decided BEFORE the walk, not after it");
 
     /* Attack-nearest must not reach through walls, and must be releasable. */
@@ -11714,11 +11718,16 @@ async function main(): Promise<void> {
     /* The liveness checks the ids replaced must be GONE, not merely bypassed:
      * leaving them would mean two sources of truth about whether a target is
      * still real, which is how they drift apart. */
-    ok(!main.includes("!cw().monsters.includes(m)"),
+    // Etap 3.1d: the fire ticks and the walk-up are the game tick's now, so
+    // the old guards must stay gone from there as well
+    const fs32 = await import("node:fs");
+    const tick32 = ["src/tick/tick.ts", "src/tick/fight.ts", "src/tick/targets.ts"]
+      .map((f) => fs32.readFileSync(f, "utf8")).join("\n");
+    ok(!main.includes("!cw().monsters.includes(m)") && !tick32.includes("monsters.includes(m)"),
       "the old `monsters.includes` liveness check is gone from the fire ticks");
-    ok(!main.includes("if (cw().ground.includes(t.gi))"),
+    ok(!main.includes("if (cw().ground.includes(t.gi))") && !tick32.includes("ground.includes("),
       "…and the ground `includes` guard is gone from resolveTarget");
-    ok(main.includes("const m = targetMob(t);\n  if (!m || m.hp <= 0) { P.target = null; return; }"),
+    ok(tick32.includes("const m = targetMob(g, t);\n  if (!m || m.hp <= 0) { P.target = null; return; }"),
       "…replaced by a failed lookup, which answers both questions at once");
 
     const cry = (await import("node:fs")).readFileSync("src/systems/crystals.ts", "utf8");
@@ -11928,9 +11937,16 @@ async function main(): Promise<void> {
     const loop33 = main.slice(main.indexOf("function update(dt: number): void {"));
     ok(loop33.length > 0 && loop33.includes("tickChat(dt);"),
       "…inside the frame loop at all, rather than somewhere that runs once");
-    ok(loop33.indexOf("tickChat(dt);") < loop33.indexOf("if (P.dead) {"),
+    /* Since Etap 3.1d the death branch is the game tick's (tick/tick.ts) and
+     * the frame loop hands it the frame in one call. The chat's clock is the
+     * screen's and runs above that call; the skull's is the game's and runs
+     * at the top of the tick, above ITS death branch. */
+    const tick33 = nfs.readFileSync("src/tick/tick.ts", "utf8");
+    const game33 = tick33.slice(tick33.indexOf("export function tickGame("));
+    ok(loop33.indexOf("tickChat(dt);") > 0
+      && loop33.indexOf("tickChat(dt);") < loop33.indexOf("const tick = tickGame(game, dt, controls);"),
       "…on the LIVING path, above the death branch that returns past it");
-    ok(loop33.indexOf("tickSkull(dt);") < loop33.indexOf("if (P.dead) {"),
+    ok(game33.indexOf("tickSkull(dt);") > 0 && game33.indexOf("tickSkull(dt);") < game33.indexOf("if (P.dead) {"),
       "…and the skull's clock with it: dying does not launder a frag");
     ok(main.includes("sayBubble(m.id"), "creatures can speak over their own heads");
 
@@ -12509,7 +12525,7 @@ async function main(): Promise<void> {
     ok(main.includes("function walkToPoint("), "walking to a point is one function now");
     ok(main.includes("groundEntries(() => walkToPoint(at), () => lookAtTile(at))"),
       "…and \"Walk here\" is what calls it, so the verb survived the change");
-    ok(main.includes("&& attackMode().ranged;\n  if (!keepShot) P.target = null;"),
+    ok(main.includes("&& attackMode(game).ranged;\n  if (!keepShot) P.target = null;"),
       "…carrying the kiting rule with it: walking with a bow drawn keeps the mark");
 
     /* Scoped to the builder's own body: `lookAtTile` above it searches the
@@ -13355,13 +13371,18 @@ async function main(): Promise<void> {
 
     /* --- the wiring, read off the source ------------------------------------ */
     const main42 = fs42.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    const portalFn = main42.slice(main42.indexOf("function checkPortals"),
-      main42.indexOf("function update("));
-    ok(/if \(dialogueOpen\(\)\) return;/.test(portalFn),
+    // Etap 3.1d: the pads and the feet are the game tick's; "is a box up" is
+    // one of the four things it asks the screen (TickControls.reading)
+    const places42 = fs42.readFileSync(new URL("../src/tick/places.ts", import.meta.url), "utf8");
+    const tick42 = fs42.readFileSync(new URL("../src/tick/tick.ts", import.meta.url), "utf8");
+    const portalFn = places42.slice(places42.indexOf("function checkPortals"));
+    ok(places42.indexOf("function checkPortals") > 0 && /if \(c\.reading\(\)\) return;/.test(portalFn)
+      && /reading: \(\) => dialogueOpen\(\)/.test(main42),
       "a box on the pad holds the jump until it is closed");
     ok(/markLoreSeen/.test(portalFn) && portalFn.indexOf("markLoreSeen") < portalFn.lastIndexOf("travelTo"),
       "…and the chronicle is told BEFORE the jump, in the cellar, where it is safe to read");
-    ok(/dialogueOpen\(\) \? \{ dx: 0, dy: 0 \} : moveAxis\(\)/.test(main42),
+    ok(/c\.reading\(\) \? \{ dx: 0, dy: 0 \} : c\.axis\(\)/.test(tick42)
+      && /axis: \(\) => moveAxis\(\)/.test(main42),
       "the feet stop while it is up");
     ok(main42.indexOf("if (dialogueTap(sx, sy)) return;") < main42.indexOf("for (let i = hotspots.length - 1"),
       "…and its taps are taken before the hotspot sweep, so the thumb deck cannot steal them");
@@ -13608,6 +13629,9 @@ async function main(): Promise<void> {
     // since Etap 3.1c the rule is a request's (intents/actor.ts) and so is casting (intents/cast.ts)
     const ra = rfs.readFileSync(new URL("../src/intents/actor.ts", import.meta.url), "utf8");
     const rc = rfs.readFileSync(new URL("../src/intents/cast.ts", import.meta.url), "utf8");
+    // …and since Etap 3.1d the swings and the creatures' turn are the game tick's
+    const rf = rfs.readFileSync(new URL("../src/tick/fight.ts", import.meta.url), "utf8");
+    const rt = rfs.readFileSync(new URL("../src/tick/tick.ts", import.meta.url), "utf8");
 
     /* Half of this was already true: a creature cannot walk into a haven.
      * That was taken for a sanctuary, but a crossbowman reaches 300px and a
@@ -13616,8 +13640,8 @@ async function main(): Promise<void> {
     ok(/function inProtection\(g: Game\): boolean \{\s*\n\s*const P = g\.player;\s*\n\s*return isSafeTile\(g\.current, P\.tx, P\.ty\);/.test(ra),
       "the zone is read off the tile the player is standing on");
     for (const name of ["tickMeleeFire", "tickRangedFire"]) {
-      const at = rm.indexOf("function " + name + "(");
-      ok(at > 0 && rm.slice(at, at + 220).includes("refuseFromProtection(game)"),
+      const at = rf.indexOf("function " + name + "(");
+      ok(at > 0 && rf.slice(at, at + 220).includes("refuseFromProtection(g)"),
         `…and ${name === "tickMeleeFire" ? "the sword" : "the bow"} will not swing out of it`);
     }
     /* Counted off the CODE with the comments stripped out first. The prose
@@ -13629,7 +13653,8 @@ async function main(): Promise<void> {
     const rmCode = code(rm);
     /* Four gates and one definition, as before — but both cast paths now go
      * through the one request, so its single gate answers for the two. */
-    ok((rmCode.match(/refuseFromProtection\(game\)/g) ?? []).length === 2
+    ok((code(rf).match(/refuseFromProtection\(g\)/g) ?? []).length === 2
+      && (rmCode.match(/refuseFromProtection\(/g) ?? []).length === 0
       && (code(rc).match(/refuseFromProtection\(g\)/g) ?? []).length === 1
       && (rmCode.match(/castCrystal\(game, kind/g) ?? []).length === 2
       && (code(ra).match(/export function refuseFromProtection\(/g) ?? []).length === 1,
@@ -13674,7 +13699,7 @@ async function main(): Promise<void> {
     ok(recallBody.length > 0 && !/refuseFromProtection/.test(recallBody)
       && useBody.indexOf('if (kind === "recallCrystal") { recall(g); return; }') < useBody.indexOf("refuseFromProtection"),
       "travelling home out of a safe zone was never a refusal and still is not");
-    ok(/if \(isSafeTile\(world, P\.tx, P\.ty\)\) return;/.test(rm),
+    ok(/if \(isSafeTile\(world, P\.tx, P\.ty\)\) return;/.test(rt),
       "…and nothing a creature throws lands on someone standing inside");
     /* Auto-attack asks twice a second, so a refusal that flashed every time it
      * was asked would bury the screen. Dropping the mark is what Tibia does
@@ -15462,15 +15487,16 @@ async function main(): Promise<void> {
      * elemental bypass of shield and armour, and no floating label, because
      * the glow under your feet is the label. */
     const EL48c = await import("../src/systems/elements.ts");
-    const FS48 = await import("../src/gfx/fireSheet.ts");
-    const mainBurn = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    // Etap 3.1d: the fire's numbers and its burning are the game tick's
+    // (tick/fight.ts, which ends with the two burn passes)
+    const FS48 = await import("../src/tick/fight.ts");
+    const mainBurn = (await import("node:fs")).readFileSync("src/tick/fight.ts", "utf8");
     ok(EL48c.FIELD_BURN_TICK_S === FS48.FIRE_BURN_TICK_S,
       "an element field bites on the camp fire's clock");
     ok(EL48c.FIELD_BURN_DMG[0] === FS48.FIRE_BURN_DMG[0]
       && EL48c.FIELD_BURN_DMG[1] === FS48.FIRE_BURN_DMG[1],
       `…for the camp fire's damage (${EL48c.FIELD_BURN_DMG.join("-")})`);
-    const burnBody = mainBurn.slice(mainBurn.indexOf("function tickCampfireBurn"),
-      mainBurn.indexOf("let refusedCircle"));
+    const burnBody = mainBurn.slice(mainBurn.indexOf("function tickCampfireBurn"));
     ok(burnBody.length > 0 && /for \(const nd of world\.ambientFx\)/.test(burnBody),
       "the burn tick walks the element fields, not only the fires");
     ok(/const raw = rndi\(FIELD_BURN_DMG\[0\], FIELD_BURN_DMG\[1\]\);/.test(burnBody)
@@ -15957,8 +15983,10 @@ async function main(): Promise<void> {
       const cal = M47b.missionById("calanais");
       ok(cal !== undefined && cal.echo === "tursachan" && !cal.relic,
         "Calanais is the bossless errand, and Na Tursachan is its echo");
-      const mainCal = mainTp.slice(mainTp.indexOf("function checkAttuneCircles"),
-        mainTp.indexOf("function checkPortals"));
+      // Etap 3.1d: the circles are the game tick's (tick/places.ts)
+      const placesCal = (await import("node:fs")).readFileSync("src/tick/places.ts", "utf8");
+      const mainCal = placesCal.slice(placesCal.indexOf("function checkAttuneCircles"),
+        placesCal.indexOf("function checkPortals"));
       ok(/stageOf\(md\.id, P\.level\) !== "active"/.test(mainCal),
         "…and the circles refuse anyone whose errand is not active, so the stage cannot self-heal");
     }
@@ -16329,17 +16357,20 @@ async function main(): Promise<void> {
      *
      * Source-level, like the `/tp` block, because this is module-scope game
      * code the suite cannot import. */
-    const body48 = main48.slice(main48.indexOf("function checkAttuneCircles"),
-      main48.indexOf("function checkPortals"));
+    // Etap 3.1d: the circles are the game tick's (tick/places.ts), and the
+    // latch is kept per player rather than in one module-wide variable
+    const places48 = (await import("node:fs")).readFileSync("src/tick/places.ts", "utf8");
+    const body48 = places48.slice(places48.indexOf("function checkAttuneCircles"),
+      places48.indexOf("function checkPortals"));
     ok(body48.length > 0, "`checkAttuneCircles` has a body to check");
-    ok(/let refusedCircle: string \| null = null;/.test(main48),
+    ok(/const refusedCircles = new WeakMap<Player, string \| null>\(\);/.test(places48),
       "the refusal is latched on a square rather than fired every tick");
     const flashLine = body48.slice(body48.indexOf("isAttuned(nd.el)"),
       body48.indexOf("markAttuned(nd.el)"));
-    ok(/if \(refusedCircle !== here\)/.test(flashLine)
-      && flashLine.indexOf("refusedCircle !== here") < flashLine.indexOf('t("attune.already"'),
+    ok(/if \(\(refusedCircles\.get\(P\) \?\? null\) !== here\)/.test(flashLine)
+      && flashLine.indexOf("!== here") < flashLine.indexOf('t("attune.already"'),
       "…and the guard is IN FRONT of the flash, not after it");
-    ok((body48.match(/refusedCircle = null;/g) ?? []).length === 2,
+    ok((body48.match(/refusedCircles\.set\(P, null\);/g) ?? []).length === 2,
       "…cleared both ways out: stepping off a circle, and leaving the sanctum");
     /* Keyed on WHICH circle, not on a timer. A timer would have made the
      * second of two rings checked in a row say nothing, which is precisely
@@ -16347,8 +16378,8 @@ async function main(): Promise<void> {
     ok(/const here = `\$\{nd\.tx\},\$\{nd\.ty\}`/.test(body48),
       "…and on which circle, so checking a second ring answers about that ring");
     /* The success path is untouched. */
-    ok(/markAttuned\(nd\.el\)/.test(body48) && /saveGame\(game\)/.test(body48)
-      && /sageSays\("sage\.attuned\.calanais"/.test(body48),
+    ok(/markAttuned\(nd\.el\)/.test(body48) && /saveNow\(g\)/.test(body48)
+      && /c\.notice\(\{ kind: "sage", key: "sage\.attuned\.calanais" \}\)/.test(body48),
       "…while taking an element you do NOT have still attunes, saves and speaks");
   }
 
@@ -19858,7 +19889,7 @@ async function main(): Promise<void> {
     ok(both.items.length === 2 && both.gold === 12, "its body is searched twice");
     ok(/grantExp\(world, p, d\.exp \* mobExpMult\(m\)\)/.test(combat) && /mergeLoot\(firstRoll, rollLoot\(m\.kind\)\)/.test(combat),
       "…and the kill pays both out");
-    ok(/mobDamageMult\(caster\)/.test(read("../src/systems/monsterSpells.ts")) && /mobDamageMult\(m\)/.test(read("../src/main.ts")),
+    ok(/mobDamageMult\(caster\)/.test(read("../src/systems/monsterSpells.ts")) && /mobDamageMult\(m\)/.test(read("../src/tick/tick.ts")),
       "…its swings, shots and spells all carry the extra weight");
     ok(/if \(rollElite\(fresh\.kind\)\) makeElite\(fresh\)/.test(mons), "…rolled where every creature is made");
 
@@ -20380,9 +20411,12 @@ async function main(): Promise<void> {
       "otherwise the world is saved first, then the page starts over at the character list");
     ok(main.includes("onLogout: () => logout(),") && main.includes("setLogoutHandler(logout);"),
       "Ctrl+L and Options' Logout are the same function");
-    const m0 = main.indexOf("updateMonsters(world, dt,"), s0 = main.indexOf("updateMonsterSpells(world, dt,");
-    ok(main.slice(m0, main.indexOf("mobDamageMult(m)));", m0)).includes("markBattle();")
-      && main.slice(s0, main.indexOf("hurtPlayer(world, P, adjusted, true);", s0)).includes("markBattle();"),
+    // Etap 3.1d: the creatures' turn is the game tick's (tick/tick.ts)
+    const tickSrc = read("../src/tick/tick.ts");
+    const m0 = tickSrc.indexOf("updateMonsters(world, dt,"), s0 = tickSrc.indexOf("updateMonsterSpells(world, dt,");
+    ok(m0 > 0 && s0 > 0
+      && tickSrc.slice(m0, tickSrc.indexOf("mobDamageMult(m)));", m0)).includes("markBattle();")
+      && tickSrc.slice(s0, tickSrc.indexOf("hurtPlayer(world, P, adjusted, true);", s0)).includes("markBattle();"),
       "a creature's blow or spell puts the player in battle, but not on a haven tile, where it never lands");
     ok((read("../src/systems/combat.ts").match(/markBattle\(\);/g) ?? []).length === 2
       && (read("../src/systems/crystals.ts").match(/markBattle\(\);/g) ?? []).length === 2,
@@ -21524,7 +21558,7 @@ async function main(): Promise<void> {
      * and 3.1b is where they go. */
     const srcDir = new URL("../src/", import.meta.url);
     const logicFiles: string[] = [];
-    for (const dir of ["systems", "entities", "world", "text", "intents"]) { // intents/: Etap 3.1c
+    for (const dir of ["systems", "entities", "world", "text", "intents", "tick"]) { // intents/: 3.1c, tick/: 3.1d
       for (const f of fs.readdirSync(new URL(`${dir}/`, srcDir))) if (f.endsWith(".ts")) logicFiles.push(`${dir}/${f}`);
     }
     logicFiles.push("items.ts", "game.ts", "config.ts", "util.ts", "save.ts");
@@ -21561,7 +21595,16 @@ async function main(): Promise<void> {
     ok(main31a.indexOf("installFxClient();") > 0
       && main31a.indexOf("installFxClient();") < main31a.indexOf("const game: Game = loadGame() ?? createGame();"),
       "main.ts starts listening before the first island is built");
-    ok((main31a.match(/updateSpellFx\(dt\);[^\n]*\n\s*(?:\/\/[^\n]*\n\s*)?tickFields\(dt\);/g) ?? []).length === 2,
+    /* Since Etap 3.1d the burning ground is the game tick's, aged on both of
+     * its paths, and the spell art is the frame's, aged once right after the
+     * tick and before the frame stops for a dead player. */
+    const tick31a = read("../src/tick/tick.ts");
+    const frame31a = main31a.slice(main31a.indexOf("function update(dt: number): void {"));
+    const at31a = frame31a.indexOf("const tick = tickGame(game, dt, controls);");
+    ok((tick31a.match(/\n\s*tickFields\(dt\);/g) ?? []).length === 2
+      && (main31a.match(/\n\s*updateSpellFx\(dt\);/g) ?? []).length === 1
+      && at31a > 0 && at31a < frame31a.indexOf("updateSpellFx(dt);")
+      && frame31a.indexOf("updateSpellFx(dt);") < frame31a.indexOf("if (tick.dead) return;"),
       "…and the burning ground ages on the same beat as the spells, alive and dead");
 
     /* ---- the same numbers on both sides --------------------------------- */
@@ -21774,7 +21817,7 @@ async function main(): Promise<void> {
      * ones included, and none may reach the client — no exceptions left. */
     const srcDir = new URL("../src/", import.meta.url);
     const logicFiles: string[] = [];
-    for (const dir of ["systems", "entities", "world", "text", "intents"]) { // intents/: Etap 3.1c
+    for (const dir of ["systems", "entities", "world", "text", "intents", "tick"]) { // intents/: 3.1c, tick/: 3.1d
       for (const f of fs.readdirSync(new URL(`${dir}/`, srcDir))) if (f.endsWith(".ts")) logicFiles.push(`${dir}/${f}`);
     }
     logicFiles.push("items.ts", "game.ts", "config.ts", "util.ts", "save.ts");
@@ -22781,6 +22824,320 @@ async function main(): Promise<void> {
       `what these requests report are events the client already knows (${[...kinds].join(", ")})`);
     unsave();
     stop();
+  }
+
+  console.log("\nEtap 3.1d — the world moves on by itself: one tick of the game, run without a screen:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const FX = await import("../src/systems/fxEvents.ts");
+    const GM = await import("../src/game.ts");
+    const PSt = await import("../src/systems/playerState.ts");
+    const PS = await import("../src/systems/persist.ts");
+    const MS = await import("../src/systems/missions.ts");
+    const TW = await import("../src/systems/tower.ts");
+    const BT = await import("../src/systems/battle.ts");
+    const SP = await import("../src/text/speech.ts");
+    const PP = await import("../src/systems/panelPrefs.ts");
+    const MO = await import("../src/entities/monsters.ts");
+    const GR = await import("../src/world/grid.ts");
+    const COL = await import("../src/world/collision.ts");
+    const TK = await import("../src/tick/tick.ts");
+    const FT = await import("../src/tick/fight.ts");
+    const { nextEntityId } = await import("../src/world/entities.ts");
+    const { TILE: T, FED_HP_PER_S } = await import("../src/config.ts");
+    type Ev = import("../src/systems/fxEvents.ts").FxEvent;
+    type Target = import("../src/entities/player.ts").Target;
+    type Notice = import("../src/tick/controls.ts").TickNotice;
+    type Controls = import("../src/tick/controls.ts").TickControls;
+    type World = import("../src/world/types.ts").World;
+
+    /* ---- the split, read off the source ---------------------------------- */
+    const strip = (t: string): string => t
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n").map((l) => l.replace(/(^|[^:"'`\\])\/\/.*$/, "$1")).join("\n");
+    const main = read("../src/main.ts");
+    const moved = ["tickRangedFire", "tickMeleeFire", "strike", "resolveTarget", "walkGrid", "faceDelta",
+      "tickCampfireBurn", "tickMonsterBurn", "checkAttuneCircles", "checkPortals", "targetMob", "attackMode",
+      "warnNoArrows", "targetPoint", "gatherPoint"];
+    const left = moved.filter((f) => new RegExp(`\\bfunction ${f}\\(`).test(main));
+    ok(left.length === 0, `main.ts runs none of the world's turn itself any more${left.length ? ": " + left.join(", ") : ""}`);
+    const frame = main.slice(main.indexOf("function update(dt: number): void {"), main.indexOf("function attackNearest("));
+    ok((main.match(/\btickGame\(/g) ?? []).length === 1 && frame.includes("const tick = tickGame(game, dt, controls);"),
+      "…the frame loop hands the frame to `tickGame`, once");
+    ok(main.includes("axis: () => moveAxis(),") && main.includes("reading: () => dialogueOpen(),")
+      && main.includes("arrive: (t) => { useArrived(t); },")
+      && main.includes('if (n.kind === "sage") sageSays(n.key, { then: () => {} });')
+      && main.includes("else openDialogue({ titleKey: n.titleKey, bodyKey: n.bodyKey });"),
+      "…and answers the four things it asks: the steering, a box being up, a thing reached, a box to show");
+    ok(frame.indexOf("if (tick.steered) pendingLoot = null;") > frame.indexOf("const tick = tickGame(")
+      && frame.indexOf("if (tick.dead) return;") > frame.indexOf("updateSpellFx(dt);"),
+      "…forgetting the body it was walking to when the player steers, and drawing a dead player's last spells");
+    const files = ["controls", "targets", "walk", "fight", "places", "tick"].map((f) => [f, strip(read(`../src/tick/${f}.ts`))] as const);
+    const ui = files.filter(([, t]) => /\bui\.|closeWindow|openWindow|openDialogue|dialogueOpen|sageSays|showSage|saveGame|moveAxis|pendingLoot|\bdocument\b|\bwindow\.|localStorage|requestAnimationFrame/.test(t)).map(([f]) => f);
+    ok(ui.length === 0, `the tick opens no window, reads no key and saves nothing the browser's way${ui.length ? ": " + ui.join(", ") : ""}`);
+    const paints = files.filter(([, t]) => /\b(addFloat|addFlare|addBolt|addBlast|logServer|beep|sfx|updateFloats|updateSpellFx|tickAuraFx|revealMinimap|setAmbient|tickBlood)\(/.test(t)).map(([f]) => f);
+    ok(paints.length === 0, `…paints, plays and logs nothing itself, and ages none of the screen's effects${paints.length ? ": " + paints.join(", ") : ""}`);
+    const logic = /^\.\.\/(systems|entities|world|text|intents)\/[\w/]+\.ts$|^\.\.\/(game|config|util|items)\.ts$|^\.\/\w+\.ts$/;
+    const stray: string[] = [];
+    for (const [f, t] of files) for (const m of t.matchAll(/from "([^"]+)"/g)) if (!logic.test(m[1])) stray.push(`${f} -> ${m[1]}`);
+    ok(stray.length === 0, `…and imports the game's logic only, nothing of the screen's${stray.length ? ": " + stray.join("; ") : ""}`);
+    const fire = read("../src/gfx/fireSheet.ts");
+    ok(!/FIRE_BURN|from "\.\.\/tick\//.test(strip(fire)) && /export const FIRE_BURN_DMG/.test(files.find(([f]) => f === "fight")![1]),
+      "what a campfire costs is the game's number now, kept with the burning rather than with the picture");
+
+    /* ---- the same tick, run here --------------------------------------------- */
+    const before = PSt.active();
+    const evs: Ev[] = [];
+    const stop = FX.onFx((e) => { evs.push(e); });
+    const fresh = (): void => { evs.length = 0; };
+    const said = (): string[] => evs.filter((e): e is Extract<Ev, { fx: "log" }> => e.fx === "log").map((e) => e.text);
+    const heard = (id: string): boolean => evs.some((e) => e.fx === "sound" && e.id === id);
+    const g = GM.createGame();          // a fresh character as well (createGame resets the state)
+    const p = g.player;
+    let saves = 0;
+    const unsave = PS.onSaveNow((gg) => { if (gg === g) saves++; });
+    let axis = { dx: 0, dy: 0 };
+    let reading = false;
+    const arrived: Target[] = [];
+    const notices: Notice[] = [];
+    const c: Controls = {
+      axis: () => axis,
+      reading: () => reading,
+      arrive: (t) => { arrived.push(t); },
+      notice: (n) => { notices.push(n); },
+    };
+    const stand = (tx: number, ty: number): void => {
+      GR.placeWalker(p, tx * T + T / 2, ty * T + T / 2);
+      p.dest = null; p.target = null; p.gather = null;
+    };
+    const run = (secs: number, until: () => boolean = () => false, dt = 0.05): void => {
+      for (let s = 0; s < secs && !until(); s += dt) TK.tickGame(g, dt, c);
+    };
+    /** A square from which `n` straight steps stay on open ground. */
+    const lane = (w: World, tx: number, ty: number, n: number): readonly [number, number] | null => {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        let open = true;
+        for (let i = 1; i <= n && open; i++) open = GR.walkable(w, tx + dx * i, ty + dy * i);
+        if (open) return [dx, dy];
+      }
+      return null;
+    };
+
+    const home = g.worlds.home;
+    g.current = home;
+    const sp = COL.worldSpawn(home);
+    const hx = Math.floor(sp.x / T), hy = Math.floor(sp.y / T);
+    stand(hx, hy);
+    p.atkCd = 1;
+    p.tpCd = 1;
+    const r0 = TK.tickGame(g, 0.25, c);
+    ok(r0.dead === false && r0.steered === false, "a tick of the game runs in Node, with no screen and no browser");
+    ok(Math.abs(p.atkCd - 0.75) < 1e-9 && Math.abs(p.tpCd - 0.75) < 1e-9, "…and the clocks run down on it");
+
+    /* ---- the feet --------------------------------------------------------------- */
+    const way = lane(home, hx, hy, 3);
+    ok(way !== null, "(somewhere on Home Isle with three open squares in a row)");
+    const [wx, wy] = way!;
+    stand(hx, hy);
+    axis = { dx: wx, dy: wy };
+    p.dest = { x: 1, y: 1 };
+    const r1 = TK.tickGame(g, 0.05, c);
+    ok(r1.steered && p.dest === null, "steering by hand is reported back, and cancels a walk already in flight");
+    run(1);
+    ok(p.tx !== hx || p.ty !== hy, "…and the feet move on the tick");
+    stand(hx, hy);
+    reading = true;
+    p.dest = { x: (hx + 2 * wx) * T + T / 2, y: (hy + 2 * wy) * T + T / 2 };
+    const r2 = TK.tickGame(g, 0.5, c);
+    ok(!r2.steered && p.tx === hx && p.ty === hy && p.dest === null,
+      "a box on the screen stops the feet: the keys, and a click already in flight");
+    reading = false;
+    axis = { dx: 0, dy: 0 };
+    p.dest = { x: (hx + 2 * wx) * T + T / 2, y: (hy + 2 * wy) * T + T / 2 };
+    run(5, () => p.dest === null);
+    ok(p.tx === hx + 2 * wx && p.ty === hy + 2 * wy && p.dest === null, "a click is walked to, and let go of on arrival");
+
+    /* ---- a thing walked up to is handed over to be used ---------------------------- */
+    stand(hx, hy);
+    const body = { id: nextEntityId(), name: "a test body", x: (hx + 3 * wx) * T + T / 2, y: (hy + 3 * wy) * T + T / 2, items: [], t: 999 };
+    home.corpses.push(body as never);
+    p.target = { kind: "corpse", id: body.id };
+    run(5, () => arrived.length > 0);
+    ok(arrived.length === 1 && arrived[0].kind === "corpse" && arrived[0].id === body.id && p.target === null,
+      "walking up to a body hands it to the client to open — once — and lets go of the mark");
+    ok(Math.max(Math.abs(p.tx - (hx + 3 * wx)), Math.abs(p.ty - (hy + 3 * wy))) <= 1,
+      "…from beside it, by the rule its window closes on");
+
+    /* ---- no blow out of a refuge ---------------------------------------------------- */
+    fresh();
+    p.target = { kind: "mob", id: 424242 };
+    TK.tickGame(g, 0.05, c);
+    ok(p.target === null && said().includes("no fighting from a protected zone"),
+      "on safe ground the mark is dropped, and the player told why");
+
+    /* ---- the fed clock -------------------------------------------------------------- */
+    p.hp = p.maxhp - 10;
+    p.fedS = 5;
+    TK.tickGame(g, 1, c);
+    ok(Math.abs(p.hp - (p.maxhp - 10 + FED_HP_PER_S)) < 1e-9 && Math.abs(p.fedS - 4) < 1e-9,
+      "a fed player heals on the tick, and the meal runs down with it");
+    p.fedS = 0;
+    p.hp = p.maxhp;
+
+    /* ---- a fire bites per square, per second ------------------------------------------ */
+    stand(hx, hy);
+    home.fires.push({ tx: hx, ty: hy, phase: 0 });
+    TK.tickGame(g, 0.05, c);
+    const bite = p.maxhp - p.hp;
+    ok(bite >= FT.FIRE_BURN_DMG[0] && bite <= FT.FIRE_BURN_DMG[1],
+      `standing in a campfire bites on the tick (${bite}, straight past shield and armour)`);
+    TK.tickGame(g, 0.5, c);
+    ok(p.maxhp - p.hp === bite, "…once a second, not once a frame");
+    home.fires.push({ tx: hx + wx, ty: hy + wy, phase: 0 });
+    stand(hx + wx, hy + wy);
+    TK.tickGame(g, 0.05, c);
+    ok(p.maxhp - p.hp > bite, "…and the next fire along bites at once: the clock is kept per square");
+    home.fires.length = 0;
+    p.hp = p.maxhp;
+
+    /* ---- the creatures' turn ---------------------------------------------------------- */
+    const town = g.worlds.town;
+    const others = town.monsters.splice(0);   // just the one creature in this scene
+    town.respawns.length = 0;
+    const portalAt = (w: World, tx: number, ty: number): boolean =>
+      w.portals.some((pt) => COL.portalCovers(pt, tx * T + T / 2, ty * T + T / 2));
+    const bare = (w: World, tx: number, ty: number): boolean => GR.walkable(w, tx, ty) && !portalAt(w, tx, ty)
+      && !w.fires.some((f) => f.tx === tx && f.ty === ty) && !w.ambientFx.some((f) => f.tx === tx && f.ty === ty);
+    let open: { tx: number; ty: number } | null = null;
+    let haven: { tx: number; ty: number } | null = null;
+    for (let ty = 2; ty < town.h - 2; ty++) {
+      for (let tx = 2; tx < town.w - 2; tx++) {
+        if (!bare(town, tx, ty) || !bare(town, tx + 1, ty) || COL.isSafeTile(town, tx + 1, ty)) continue;
+        if (!open && !COL.isSafeTile(town, tx, ty)) open = { tx, ty };
+        if (!haven && COL.isSafeTile(town, tx, ty)) haven = { tx, ty };
+      }
+    }
+    ok(open !== null && haven !== null, "(Bonetown has open ground, and a haven with open ground beside it)");
+    g.current = town;
+    stand(open!.tx, open!.ty);
+    ok(MO.spawnAtPost(town, "highwayman", open!.tx + 1, open!.ty) && town.monsters[0]?.tx === open!.tx + 1,
+      "(a highwayman is posted on the next square)");
+    const mob = town.monsters[0];
+    const hp0 = mob.hp;
+    p.target = { kind: "mob", id: mob.id };
+    p.atkCd = 0;
+    TK.tickGame(g, 0.05, c);
+    ok(Math.abs(p.atkCd - p.atkRate) < 1e-9, "a marked creature in reach is swung at on the tick, and the arm goes on its cooldown");
+    run(3, () => mob.hp < hp0);
+    ok(mob.hp < hp0, "…and the blows land");
+    p.target = null;
+    p.hp = p.maxhp;
+    PSt.active().lastBattleAt = -Infinity;    // the player's own swings started the fight; forget that
+    ok(!BT.inBattle(), "(out of battle again)");
+    run(4, () => p.hp < p.maxhp);
+    ok(p.hp < p.maxhp && !p.dead, "a creature beside the player strikes back on the tick");
+    ok(BT.inBattle(), "…and its blow puts the player in battle");
+    // on a haven square nothing lands — the creature cannot follow, and its blows are cut
+    town.monsters.length = 0;
+    stand(haven!.tx, haven!.ty);
+    ok(MO.spawnAtPost(town, "highwayman", haven!.tx + 1, haven!.ty) && town.monsters[0]?.tx === haven!.tx + 1,
+      "(and another beside a haven square)");
+    p.hp = p.maxhp;
+    run(5);
+    ok(p.hp === p.maxhp, "…but on a haven square nothing it throws reaches the player");
+    town.monsters.length = 0;
+
+    /* ---- what time does to the ground ------------------------------------------------- */
+    stand(open!.tx, open!.ty);
+    const rot = { id: nextEntityId(), name: "a rotting body", x: 0, y: 0, items: [], t: 0.1 };
+    const wood = { id: nextEntityId(), kind: "wood", n: 1, x: 0, y: 0, t: 0.1 };
+    const pack = { id: nextEntityId(), kind: "backpack", n: 1, x: 0, y: 0, t: 0.1 };
+    town.corpses.push(rot as never);
+    town.ground.push(wood as never, pack as never);
+    TK.tickGame(g, 0.2, c);
+    ok(!town.corpses.includes(rot as never) && !town.ground.includes(wood as never),
+      "a body and a stray stack rot away on the tick");
+    ok(town.ground.includes(pack as never), "…and a bag left on the floor does not");
+
+    /* ---- death ------------------------------------------------------------------------ */
+    p.dead = true;
+    p.deadT = 1;
+    const d1 = TK.tickGame(g, 0.5, c);
+    ok(d1.dead && p.dead && Math.abs(p.deadT - 0.5) < 1e-9, "a dead player's tick says so, and counts down to waking");
+    const d2 = TK.tickGame(g, 0.6, c);
+    ok(d2.dead && !p.dead && g.current === home && p.hp === p.maxhp, "…and wakes him at home, whole");
+    town.monsters.push(...others);
+
+    /* ---- the pads ---------------------------------------------------------------------- */
+    p.level = 60;
+    MS.setStage("calanais", "active");
+    const cellar = g.worlds.cellar;
+    g.current = cellar;
+    const pad = cellar.portals.find((pt) => pt.dest === "calanais")!;
+    GR.placeWalker(p, pad.x, pad.y);
+    p.tpCd = 0;
+    saves = 0;
+    notices.length = 0;
+    TK.tickGame(g, 0.05, c);
+    const lore = notices[0];
+    ok(!pad.inactive && g.current === cellar && notices.length === 1 && lore?.kind === "lore"
+      && lore.titleKey === "lore.title.calanais" && lore.bodyKey === "lore.calanais",
+      "the first step onto an errand's pad tells its chronicle instead of jumping");
+    ok(MS.loreSeen("calanais") && saves === 1, "…and keeps that it was told, at once");
+    reading = true;
+    run(0.5);
+    ok(g.current === cellar, "…and holds the jump while the box is up");
+    reading = false;
+    fresh();
+    TK.tickGame(g, 0.05, c);
+    ok(g.current === g.worlds.calanais && heard("portal"), "…and takes it on the first tick after the box closes");
+    const cal = g.worlds.calanais;
+    const stair = cal.portals.find((pt) => pt.dest === "tursachan")!;
+    GR.placeWalker(p, stair.x, stair.y);
+    p.tpCd = 0;
+    notices.length = 0;
+    TK.tickGame(g, 0.05, c);
+    const word = notices[0];
+    ok(g.current === g.worlds.tursachan && word?.kind === "lore" && word.bodyKey === "sage.descend.calanais",
+      "the stair to the sanctum carries the player down, and the sage's word goes with him");
+
+    /* ---- the circles -------------------------------------------------------------------- */
+    const sanct = g.worlds.tursachan;
+    const nd = sanct.attuneNodes[0];
+    ok(!TW.isAttuned(nd.el), "(a character without that element)");
+    stand(nd.tx, nd.ty);
+    saves = 0;
+    notices.length = 0;
+    fresh();
+    TK.tickGame(g, 0.05, c);
+    const gift = notices[0];
+    ok(TW.isAttuned(nd.el) && MS.stageOf("calanais", p.level) === "complete" && saves === 1 && heard("chime")
+      && gift?.kind === "sage" && gift.key === "sage.attuned.calanais",
+      "stepping into a circle attunes, saves, rings and has the sage speak — all from the tick");
+    MS.setStage("calanais", "active");
+    const already = SP.t("attune.already", PP.lang());
+    const told = (): number => said().filter((s) => s === already).length;
+    fresh();
+    run(0.5);
+    ok(told() === 1, "a circle already carried says so once per visit, not once a tick");
+    let off: { tx: number; ty: number } | null = null;
+    for (let r = 2; r < 8 && !off; r++) {
+      for (const [dx, dy] of [[r, 0], [-r, 0], [0, r], [0, -r]] as const) {
+        const tx = nd.tx + dx, ty = nd.ty + dy;
+        if (sanct.attuneNodes.every((o) => Math.max(Math.abs(o.tx - tx), Math.abs(o.ty - ty)) > 1)) { off = { tx, ty }; break; }
+      }
+    }
+    stand(off!.tx, off!.ty);
+    TK.tickGame(g, 0.05, c);
+    stand(nd.tx, nd.ty);
+    fresh();
+    run(0.5);
+    ok(told() === 1, "…and says it again after stepping off and back on");
+
+    unsave();
+    stop();
+    PSt.setActive(before);
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
