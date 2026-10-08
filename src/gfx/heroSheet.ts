@@ -30,6 +30,7 @@
  */
 
 import type { Sex } from "../systems/sex.ts";
+import type { HeroLook } from "../systems/outfit.ts";
 
 const CELL = 64;
 const COLS = 9;
@@ -50,8 +51,9 @@ const ROW: Record<LpcDir, number> = { up: 0, left: 1, down: 2, right: 3 };
 const IDLE_COL: Record<LpcDir, number> = { up: 1, left: 3, down: 5, right: 7 };
 
 export type HeroZone = "hair" | "shirt" | "pants" | "shoes";
-/** The clothes a body is drawn in: the shipped set, or an outfit's own (Etap 92). */
-export type HeroLook = "adventurer" | "ranger";
+/** The clothes a body is drawn in: the shipped set, or an outfit's own (Etap
+ *  92). Named with the outfits in systems/outfit.ts since Etap 3.1b. */
+export type { HeroLook };
 /** Draw order of the tinted layers over the base (back to front). */
 const TINT_ORDER: readonly HeroZone[] = ["shoes", "pants", "shirt", "hair"];
 /** The classic silver/gray look — matches the character as first shipped. The

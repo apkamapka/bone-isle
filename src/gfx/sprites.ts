@@ -983,6 +983,26 @@ export function propSprite(k: PropName): HTMLCanvasElement {
   return propOverride[k] ?? SPR[k];
 }
 
+/** Each tree's own baked stand-in, made the first time it is drawn without
+ *  artwork and kept, so a tree keeps its shape from frame to frame. */
+const treeBakes = new WeakMap<object, HTMLCanvasElement>();
+
+/**
+ * The picture to draw a tree with: the loaded artwork, which every tree
+ * shares, or until it arrives a stand-in of the tree's own. Trees carried
+ * their canvas themselves until Etap 3.1b; a world holds no picture now, so
+ * the client keeps one per tree here and forgets it with the tree.
+ */
+export function treeSprite(tree: object): HTMLCanvasElement {
+  if (treeArt) return treeArt;
+  let c = treeBakes.get(tree);
+  if (!c) {
+    c = bakeTree();
+    treeBakes.set(tree, c);
+  }
+  return c;
+}
+
 /** Tall sketchy conifer — every call produces a slightly different tree. */
 export function bakeTree(): HTMLCanvasElement {
   if (treeArt) return treeArt;

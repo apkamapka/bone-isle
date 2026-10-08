@@ -26,7 +26,8 @@
  * bottom-centre to match `drawSprite()`, and carries no painted ground shadow
  * (the renderer still draws its own under a building).
  */
-import { adoptSprite } from "./sprites.ts";
+import { SPR, adoptSprite, bakeForge, bakeLibrary, bakeDummy, bakeRange, bakeChest, bakeTreasureChest } from "./sprites.ts";
+import type { StructKey } from "../systems/building.ts";
 
 /** One still image per tier, lowest first. A one-entry list is a structure
  *  with no upgrades, and the top entry covers every tier above it. */
@@ -234,4 +235,41 @@ export function artSources(key: string): readonly string[] {
 /** True when a structure's artwork is a recoil sheet rather than a still. */
 export function isAnimatedBuilding(key: string): boolean {
   return key in SHEET;
+}
+
+/* ---- the baked stand-ins ------------------------------------------------ */
+
+/** How each building is baked when no artwork is loaded. Moved here from the
+ *  catalog in Etap 3.1b: the catalog names a building, the client draws it. */
+const STAND_IN: Readonly<Partial<Record<string, () => HTMLCanvasElement>>> = {
+  forge: bakeForge,
+  tower: bakeLibrary,
+  dummy: bakeDummy,
+  range: bakeRange,
+  chest: bakeChest,
+  treasure: bakeTreasureChest,
+} satisfies Readonly<Record<StructKey | "treasure", () => HTMLCanvasElement>>;
+
+/** Each stand-in is baked the first time it is needed, then kept. */
+const baked: Partial<Record<string, HTMLCanvasElement>> = {};
+
+/** The baked stand-in for a structure key, or null for a key with none. */
+export function structStandIn(key: string): HTMLCanvasElement | null {
+  const make = STAND_IN[key];
+  if (!make) return null;
+  return (baked[key] ??= make());
+}
+
+/**
+ * Look up the sprite for a placed structure at a given tier.
+ *
+ * The tier matters because the drawn artwork rebuilds a structure in a better
+ * material as it climbs — a Forge III is stone and steel where a Forge I is
+ * planks. The baked stand-in knows nothing of tiers, so every tier of an
+ * unrendered structure keeps sharing one sprite exactly as before; only the
+ * artwork splits them. The sage's treasure chest has no artwork and no tiers.
+ */
+export function structSprite(key: string, tier: number = 1): HTMLCanvasElement {
+  if (key === "treasure") return structStandIn("treasure")!;
+  return buildingArt(key, tier) ?? structStandIn(key) ?? SPR.rock;
 }
