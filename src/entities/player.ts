@@ -192,12 +192,20 @@ export function carryCap(p: Player): number {
 }
 
 /**
- * Current weight (oz) the player is hauling. Worn gear does not count — but
- * the backpack does, both its own 18 oz and everything nested inside it,
- * which is the only brake on stuffing packs inside packs forever.
+ * Current weight (oz) the player is hauling: everything on him, Tibia's way.
+ *
+ * The backpack counts, both its own 18 oz and everything nested inside it,
+ * which is the only brake on stuffing packs inside packs forever. And since
+ * Etap 3.1e WORN GEAR counts too. It used not to, so swapping the sword and
+ * shield for the bow changed the load by whatever went into the pack — the
+ * same two items, carried either way, weighing something different depending
+ * on which hand held them. Radek: "dźwiga obie rzeczy, nie ważne którą
+ * używa". A thing on you weighs the same on your back as in your bag.
  */
 export function carriedWeight(p: Player): number {
-  return p.pack ? ITEMS[p.pack.kind].weight + bagWeight(p.bag) : 0;
+  let worn = 0;
+  for (const kind of Object.values(p.eq)) if (kind) worn += ITEMS[kind].weight;
+  return worn + (p.pack ? ITEMS[p.pack.kind].weight + bagWeight(p.bag) : 0);
 }
 
 /** Spare carry capacity in oz (never negative for display purposes). */

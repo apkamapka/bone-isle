@@ -11,7 +11,7 @@ import type { EqSlot, ItemKind } from "../items.ts";
 import { ITEMS, addItem, removeItem, cycleArrow, exchangeCoins } from "../items.ts";
 import { FED_MAX_S, totalExpFor } from "../config.ts";
 import { rndi } from "../util.ts";
-import { refreshDerived, canCarry, freeCap } from "../entities/player.ts";
+import { refreshDerived, freeCap } from "../entities/player.ts";
 import { grantExp } from "../systems/combat.ts";
 import { skills, type SkillKey } from "../systems/skills.ts";
 import { isReady, startCooldown } from "../systems/cooldowns.ts";
@@ -208,9 +208,8 @@ export function unequip(g: Game, slot: EqSlot): void {
   const P = g.player;
   const cur = P.eq[slot];
   if (!cur) return;
-  // worn gear doesn't count toward carry cap, so moving it into the bag adds
-  // weight — respect the cap the same way every other pickup does
-  if (!canCarry(P, cur)) { tell(g, "too heavy"); return; }
+  // worn gear is carried weight already (Etap 3.1e), so moving it into the
+  // pack changes nothing on the scales — only room can refuse it
   if (addItem(P.bag, cur, 1) > 0) { tell(g, "bag full"); return; }
   P.eq[slot] = null;
   refreshDerived(P);

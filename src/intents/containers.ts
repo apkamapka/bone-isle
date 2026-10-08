@@ -13,7 +13,7 @@
  */
 import type { Game } from "../game.ts";
 import type { Bag, EqSlot, ItemStack } from "../items.ts";
-import { ITEMS, addItem, addStack, bagWeight, bagSlotsUsed, itemWeight, stackSlotCost, isContainer } from "../items.ts";
+import { ITEMS, addItem, addStack, bagWeight, bagSlotsUsed, stackSlotCost, isContainer } from "../items.ts";
 import type { Corpse, GroundItem } from "../world/types.ts";
 import {
   slotsOf, baseOf, rootOf, sameRef, isInside, depthOf, MAX_NEST_DEPTH,
@@ -417,9 +417,8 @@ export function unequipInto(g: Game, slot: EqSlot, to: ContainerRef): void {
   if (!dst) return;
   const room = chestRoomLeft(g, to);
   if (room !== null && room < 1) { tell(g, "the chest is full", "#d96a5a"); return; }
-  // worn gear never counted toward carry cap, so putting it in the bag can
-  // push you over — the same check a pickup gets
-  if (rootOf(to) === "player" && itemWeight(kind, 1) > freeCap(P)) { tell(g, "too heavy", "#d96a5a"); return; }
+  // worn gear is carried weight already (Etap 3.1e): moving it into one of
+  // your own packs weighs nothing extra, and into a chest it only lightens you
   if (!addStack(dst, { kind, n: 1 })) { tell(g, "no room", "#d96a5a"); return; }
   P.eq[slot] = null;
   refreshDerived(P);

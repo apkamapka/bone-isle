@@ -194,8 +194,8 @@ export function pickupGround(g: Game, gi: GroundItem): void {
 }
 
 /** Take gear off a paperdoll slot and throw it on the ground (optionally aimed).
- *  Worn gear never counted toward carry cap, so this needs no weight check —
- *  it goes straight from the body to the floor, Tibia-style. */
+ *  Nothing to weigh: it goes straight from the body to the floor, Tibia-style,
+ *  and only lightens the load. */
 export function dropFromEq(g: Game, slot: EqSlot, tx?: number, ty?: number): void {
   const P = g.player;
   const kind = P.eq[slot];

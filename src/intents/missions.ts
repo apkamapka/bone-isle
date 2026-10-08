@@ -36,9 +36,7 @@ import { dropToGround } from "./ground.ts";
 export type SageChoice =
   | { key: string; does: "leave" }
   | { key: string; does: "accept"; mission: string }
-  | { key: string; does: "decline"; mission: string }
-  | { key: string; does: "restart" }
-  | { key: string; does: "replay"; mission: string };
+  | { key: string; does: "decline"; mission: string };
 
 /** One speech: a text key in speech.ts, the words that fill it, its answers. */
 export interface SageSpeech {
@@ -138,10 +136,9 @@ export function talkToSage(g: Game): SageSpeech {
       relicLost(cur.id, P.level);
       applyMissionPads(g.worlds, P.level);
       saveNow(g);
-      // TEMP-ETAP45-TESTMENU: `restartChoice()` on each idle branch.
-      return { key: `sage.empty.${cur.id}`, choices: [...restartChoice(g), LEAVE] };
+      return { key: `sage.empty.${cur.id}`, choices: [LEAVE] };
     }
-    return { key: `sage.remind.${cur.id}`, choices: [...restartChoice(g), LEAVE] };
+    return { key: `sage.remind.${cur.id}`, choices: [LEAVE] };
   }
 
   const next = offeredMission(P.level);
@@ -154,7 +151,6 @@ export function talkToSage(g: Game): SageSpeech {
     return { key: `sage.offer.${next.id}`, choices: [
       { key: "sage.choice.what", does: "accept", mission: next.id },
       { key: "sage.choice.notYet", does: "decline", mission: next.id },
-      ...restartChoice(g),
     ] };
   }
 
@@ -162,8 +158,8 @@ export function talkToSage(g: Game): SageSpeech {
   // player's level. Say which, because "not yet" with no reason was the whole
   // of what he used to say and it told nobody anything.
   const nextLocked = MISSIONS.find((m) => stageOf(m.id, P.level) === "locked");
-  if (nextLocked) return { key: "sage.locked", choices: [...restartChoice(g), LEAVE], vars: { lv: nextLocked.reqLevel } };
-  return { key: "sage.cold", choices: [...restartChoice(g), LEAVE] };
+  if (nextLocked) return { key: "sage.locked", choices: [LEAVE], vars: { lv: nextLocked.reqLevel } };
+  return { key: "sage.cold", choices: [LEAVE] };
 }
 
 /** Take the errand he has just offered. Anything else is refused: an errand
@@ -185,55 +181,6 @@ export function acceptMission(g: Game, id: string): SageSpeech | null {
 /** "Not yet": what he says to an offer turned down. Nothing changes. */
 export function declineMission(id: string): SageSpeech {
   return { key: `sage.decline.${id}` };
-}
-
-/**
- * TEMP-ETAP45-TESTMENU — "Start over", and the picker behind it.
- *
- * `/replay draugr` already does this and does it better, but it is a typed
- * command on a game that is played on a phone half the time, and a command
- * nobody can reach is a command nobody uses. This is the same call with a
- * thumb on it.
- *
- * IT IS FOR TESTING AND IT COMES OUT. Not because it is dangerous — it runs
- * `replayMissions`, which hands out nothing, takes the reward back and leaves
- * every one-time chest opened — but because a player who has just finished
- * Kárr should not be offered "start over" by the man who paid him for it. The
- * conversation belongs to the errand, not to the build.
- *
- * Grep TEMP-ETAP45-TESTMENU to pull the whole thing: this function, the two
- * strings in speech.ts and the four call sites below.
- */
-function restartChoice(g: Game): SageChoice[] {
-  return startedMissions(g).length ? [{ key: "sage.test.restart", does: "restart" }] : [];
-}
-
-/** Nothing to put back means no button: on a fresh character every stage is
- *  `locked` or `available`, and an answer that opens a menu of things that
- *  have not happened yet is noise. */
-function startedMissions(g: Game): MissionDef[] {
-  const lv = g.player.level;
-  return MISSIONS.filter((m) => stageOf(m.id, lv) !== "locked" && stageOf(m.id, lv) !== "available");
-}
-
-/** The picker behind "Start over": one answer per errand begun, then the door. */
-export function restartMenu(g: Game): SageSpeech {
-  return {
-    key: "sage.test.pick",
-    choices: [
-      // Titles, not ids. `mission.title.*` is what the quest log calls them
-      // and what the chronicle is filed under, so the picker reads as a shelf
-      // of his own errands rather than as a list of internal names.
-      ...startedMissions(g).map((m): SageChoice => ({ key: `mission.title.${m.id}`, does: "replay", mission: m.id })),
-      LEAVE,
-    ],
-  };
-}
-
-/** One errand from the picker, put back to its start. */
-export function replayMission(g: Game, id: string): void {
-  const m = missionById(id);
-  if (m && startedMissions(g).includes(m)) replayMissions(g, m);
 }
 
 /**

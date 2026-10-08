@@ -892,28 +892,6 @@ const SAGE: Readonly<Record<string, Bundle>> = {
       + "E o exército dele continua crescendo.\n\n"
       + "Se quer interromper o que ele começou, vai ter que voltar.",
   },
-
-  /* --- TEMP-ETAP45-TESTMENU ---------------------------------------------
-   * The two strings behind the "start over" answer. They are HERE rather
-   * than in their own bundle so that pulling the feature is one contiguous
-   * cut in each of the three files it touches; grep TEMP-ETAP45-TESTMENU.
-   *
-   * Written in his voice anyway, because a debug button that says "DEBUG:
-   * reset mission" in the middle of a conversation is the kind of thing that
-   * ships by accident, and one written like this at least does not look like
-   * an accident while it is here. */
-  "sage.test.restart": {
-    en: "Start over.",
-    pl: "Zacznij od nowa.",
-    es: "Empezar de nuevo.",
-    pt: "Começar de novo.",
-  },
-  "sage.test.pick": {
-    en: "Which of them would you live through again?",
-    pl: "Którą z nich chcesz przeżyć jeszcze raz?",
-    es: "¿Cuál de ellas quieres vivir otra vez?",
-    pt: "Qual delas você quer viver de novo?",
-  },
 };
 
 /* ==========================================================================

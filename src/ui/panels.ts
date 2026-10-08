@@ -1781,14 +1781,26 @@ function forgeCraft(p: PanelInput, x: number, ry: number, w: number, rowH: numbe
  * empty for anyone who does the natural thing and dumps loot in a chest
  * before walking to the forge. And one row per SLOT meant a stack of six
  * breastplates drew six identical rows, which reads as a rendering bug.
+ *
+ * And every pack INSIDE them, at any depth. Only the top level used to be
+ * read, so a Minotaur set carried in a spare backpack showed one pair of
+ * boots of the two — the pair that happened to lie loose — while the furnace
+ * itself (`removeAcross`) would have taken pieces from the packs all along.
+ * The list now counts exactly what the furnace can reach.
  */
+/** Rows the SMELT tab shows at once before it scrolls. */
+const SMELT_ROWS = 12;
+
 function smeltableRows(player: Player, chests: readonly Bag[]): { kind: ItemKind; n: number }[] {
   const seen = new Map<ItemKind, number>();
-  for (const bag of [player.bag, ...chests]) {
+  const walk = (bag: Bag): void => {
     for (const sl of bag) {
-      if (sl && canSmelt(sl.kind)) seen.set(sl.kind, (seen.get(sl.kind) ?? 0) + sl.n);
+      if (!sl) continue;
+      if (canSmelt(sl.kind)) seen.set(sl.kind, (seen.get(sl.kind) ?? 0) + sl.n);
+      if (sl.items) walk(sl.items);
     }
-  }
+  };
+  for (const bag of [player.bag, ...chests]) walk(bag);
   return [...seen].map(([kind, n]) => ({ kind, n }));
 }
 
@@ -1811,12 +1823,19 @@ function forgeSmelt(
     hudText(hud, "Leather, cloth, bone and dragon scale never do.", x + w / 2, ry + 16 * S, 7 * S, "rgba(220,214,190,.4)", "center");
     return ry + rowH;
   }
-  for (const row of rows.slice(0, 12)) {
+  /* Twelve rows at most, as the window is sized; anything past them scrolls
+   * rather than being cut off without a word. */
+  const shown = Math.min(rows.length, SMELT_ROWS);
+  const scroll = rows.length > shown;
+  const first = scroll ? scrollRow(p.win, rows.length, shown) : 0;
+  if (scroll) scrollBar(p, x + w - (SCROLLBAR_W + 4) * S, ry, shown * rowH, rows.length, shown, first);
+  const rowW = scroll ? w - 8 * S - (SCROLLBAR_W + 4) * S : w - 8 * S;
+  for (const row of rows.slice(first, first + shown)) {
     const y = smeltYield(row.kind, tier as 1 | 2 | 3, ITEMS[row.kind].slot);
     const ok = coal >= COAL_PER_SMELT;
-    if (hovering(p, x + 4 * S, ry, w - 8 * S, rowH - 2 * S) && ok) {
+    if (hovering(p, x + 4 * S, ry, rowW, rowH - 2 * S) && ok) {
       hud.ctx.fillStyle = "rgba(202,162,58,.15)";
-      hud.ctx.fillRect(x + 4 * S, ry, w - 8 * S, rowH - 2 * S);
+      hud.ctx.fillRect(x + 4 * S, ry, rowW, rowH - 2 * S);
     }
     const spr = itemSprite(row.kind);
     icon(p, spr, x + 10 * S, ry + (rowH - iconH(spr, 2 * S)) / 2, 2 * S);
@@ -1828,10 +1847,10 @@ function forgeSmelt(
     // the raw value, which is twice his price — a Plate Armor read "110g at
     // Chester" and sold for 55 — and it is the one number the tab exists to
     // weigh the melt against.
-    hudText(hud, `${sellsFor("smith", row.kind)}g at Chester`, x + w - 12 * S, ry + 13 * S, 7 * S, "rgba(220,214,190,.45)", "right");
+    hudText(hud, `${sellsFor("smith", row.kind)}g at Chester`, x + 4 * S + rowW - 4 * S, ry + 13 * S, 7 * S, "rgba(220,214,190,.45)", "right");
     if (ok) {
       const rr = row; const ryy = ry;
-      p.hotspots.push({ x: x + 4 * S, y: ryy, w: w - 8 * S, h: rowH - 2 * S, fn: () => p.act.smelt(rr.kind) });
+      p.hotspots.push({ x: x + 4 * S, y: ryy, w: rowW, h: rowH - 2 * S, fn: () => p.act.smelt(rr.kind) });
     }
     ry += rowH;
   }

@@ -14993,44 +14993,19 @@ async function main(): Promise<void> {
     const walk = Math.hypot(padY - CY45, padX - CX45);
     ok(walk > 5 && walk < 14, `the ring is the first thing you walk into, not where you land (${walk.toFixed(1)} tiles)`);
 
-    /* --- TEMP-ETAP45-TESTMENU ----------------------------------------------
-     * Tagged, and the tag is the removal handle. The test is the reminder:
-     * pull the tag and this block goes red until the feature is pulled too,
-     * which is the arrangement TEMP-ETAP42 and TEMP-ETAP43 already use. */
+    /* --- TEMP-ETAP45-TESTMENU, PULLED (Etap 3.1e) ---------------------------
+     * Radek, once the chain was tested: the errands are one per character, so
+     * the sage no longer offers "start over". The whole feature went — the
+     * answer, the picker, its two strings and the client's two cases — and
+     * nothing of it may creep back by halves. */
     const mis45 = fs45.readFileSync(new URL("../src/intents/missions.ts", import.meta.url), "utf8"); // Etap 3.1c
-    ok(/TEMP-ETAP45-TESTMENU/.test(mis45), "the start-over menu is tagged for removal");
-    ok(SP45.hasText("sage.test.restart") && SP45.hasText("sage.test.pick"),
-      "…and its two strings are written, so the button is not raw English on a Polish screen");
-    const menu45 = mis45.slice(mis45.indexOf("function restartChoice"),
-      mis45.indexOf("export function sweepRelic"));
-    ok(/replayMissions\(g, m\)/.test(menu45),
-      "…and it goes through the same claw-back as `/replay`, so it hands out nothing either");
-    ok(/mission\.title\.\$\{m\.id\}/.test(menu45),
-      "…offering titles rather than internal ids, since a player is reading it");
-    /* Only what has actually been started. On a fresh character the whole
-     * chain is `locked` or `available` and a menu of things that have not
-     * happened is noise on the one conversation that matters most. */
-    ok(/!== "locked"/.test(menu45) && /!== "available"/.test(menu45),
-      "…and it only lists errands there is something to put back");
-    ok(/return startedMissions\(g\)\.length \? \[\{ key: "sage\.test\.restart", does: "restart" \}\] : \[\];/.test(menu45),
-      "…so a character who has never taken one is not offered the button at all");
-    /* On the idle branches, and NOT on the hand-in: the one screen where the
-     * only answer should be about the next errand is the one where he has just
-     * paid you for the last. That was TEMP-ETAP42's exact mistake. */
-    ok((mis45.match(/restartChoice\(g\)/g) ?? []).length >= 5,
-      "…on every speech that ends a conversation");
-    const handIn45 = mis45.slice(mis45.indexOf("return { key: `sage.handIn."), mis45.indexOf("/* He wanted it"));
-    ok(handIn45.length > 0 && !/restartChoice/.test(handIn45),
-      "…but never as the answer to being thanked, which is where the last one went wrong");
-
-    /* The picker and the menu it hangs off both have to fit the box like any
-     * other speech; a debug string is still a string on a phone. */
-    for (const lg of SP45.LANGS) {
-      for (const key of ["sage.test.restart", "sage.test.pick"]) {
-        const pages = DL45.paginate(SP45.t(key, lg), 40, 6, ruler45);
-        ok(pages.length === 1 && pages[0].length <= 2, `${key}/${lg} fits an answer row`);
-      }
-    }
+    const mainNoMenu = fs45.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    ok(!/TEMP-ETAP45-TESTMENU|restartChoice|restartMenu|replayMission\b/.test(mis45 + mainNoMenu),
+      "the sage's start-over menu is gone, every piece of it");
+    ok(!SP45.hasText("sage.test.restart") && !SP45.hasText("sage.test.pick"),
+      "…its two strings with it");
+    ok(!/does: "restart"|does: "replay"/.test(mis45) && !/case "restart"|case "replay"/.test(mainNoMenu),
+      "…and no answer of his can put an errand back any more");
     void M45;
   }
 
@@ -16017,8 +15992,9 @@ async function main(): Promise<void> {
       mainTp.indexOf("const CHAT_SPEAKER_ID")));
     ok(dispatchSrc.includes('"/tp"'), "the stripped dispatch still holds the branch");
     const devHits = (dispatchSrc.match(/import\.meta\.env\.DEV/g) ?? []).length;
-    ok(devHits === 1,
-      `only ONE command in \`sendChat\` is compiled out of the build (${devHits})`);
+    // three since Etap 3.1e: `/forget`, and `/replay` both bare and with an id
+    ok(devHits === 3 && (dispatchSrc.match(/import\.meta\.env\.DEV[^\n]*"\/replay/g) ?? []).length === 2,
+      `only the testing commands in \`sendChat\` are compiled out of the build, \`/forget\` and \`/replay\` (${devHits})`);
     const devLine = dispatchSrc.slice(dispatchSrc.indexOf("import.meta.env.DEV"),
       dispatchSrc.indexOf("import.meta.env.DEV") + 120);
     ok(devLine.includes('"/forget"') && !devLine.includes('"/tp"'),
@@ -22708,15 +22684,8 @@ async function main(): Promise<void> {
     ok(took?.key === `sage.accept.${first.id}` && MS.stageOf(first.id, p.level) === "active" && saves === 1
       && said().length === 1 && tones()[0] === 520, "…and the offered one is taken: the stage moves, the goal is logged, the save is written");
     s = MI.talkToSage(g);
-    ok(s.key === `sage.remind.${first.id}` && s.choices?.some((c) => c.does === "restart") && s.choices.at(-1)?.does === "leave",
-      "talked to again, he reminds — with the testing restart now that something has begun");
-    const menu = MI.restartMenu(g);
-    ok(menu.key === "sage.test.pick" && menu.choices?.[0].does === "replay"
-      && (menu.choices[0] as { mission: string }).mission === first.id && menu.choices.at(-1)?.does === "leave",
-      "…whose picker lists the errand begun");
-    MI.replayMission(g, first.id);
-    ok(MS.stageOf(first.id, p.level) === "available", "…and puts it back to the start");
-    MI.acceptMission(g, first.id);
+    ok(s.key === `sage.remind.${first.id}` && s.choices?.length === 1 && s.choices[0].does === "leave",
+      "talked to again, he reminds — and offers no way to start it over (Etap 3.1e)");
     MS.setStage(first.id, "complete");
     const lv0 = p.level;
     const xp0 = p.exp;
@@ -23208,6 +23177,67 @@ async function main(): Promise<void> {
       `the same seed plays the same session to the same end (${a.r?.hash === b.r?.hash ? `${a.r?.hash} both times` : `${a.r?.hash}, then ${b.r?.hash}`})`);
     ok(!!a.r && !!c.r && c.code === 0 && a.r.hash !== c.r.hash,
       `…and another seed plays another, as cleanly (${c.r?.hash})`);
+  }
+
+  console.log("\nEtap 3.1e fixes — the furnace sees inside packs, worn gear has weight, errands are not replayed:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const GM = await import("../src/game.ts");
+    const IT = await import("../src/items.ts");
+    const PL = await import("../src/entities/player.ts");
+    const USE = await import("../src/intents/use.ts");
+    const MI = await import("../src/intents/missions.ts");
+    const SM = await import("../src/systems/smelt.ts");
+    type Kind = import("../src/items.ts").ItemKind;
+
+    /* ---- the furnace's list reads every pack, at any depth ---------------- */
+    const pan = read("../src/ui/panels.ts");
+    const rows = pan.slice(pan.indexOf("function smeltableRows("), pan.indexOf("function forgeSmelt("));
+    ok(/if \(sl\.items\) walk\(sl\.items\);/.test(rows) && /for \(const bag of \[player\.bag, \.\.\.chests\]\) walk\(bag\);/.test(rows),
+      "the SMELT tab counts gear inside packs too, in the backpack and in the chests");
+    const smeltSrc = pan.slice(pan.indexOf("function forgeSmelt("), pan.indexOf("function forgeGems("));
+    ok(/rows\.slice\(first, first \+ shown\)/.test(smeltSrc) && /scrollBar\(p,/.test(smeltSrc),
+      "…and a list longer than the window scrolls instead of being cut off at twelve");
+    // what the furnace itself reaches: a boots pair loose and one in a spare pack
+    const g = GM.createGame();
+    const p = g.player;
+    p.pack = IT.newContainer("backpack");
+    const spare = IT.newContainer("backpack")!;
+    IT.addItem(spare.items!, "minotaurBoots" as Kind, 1);
+    IT.addItem(p.bag, "minotaurBoots" as Kind, 1);
+    IT.addStack(p.bag, spare);
+    IT.addItem(p.bag, "coal" as Kind, 5);
+    ok(IT.countAcross([p.bag], "minotaurBoots" as Kind) === 2, "(two pairs of Minotaur boots: one loose, one in a spare pack)");
+    ok(SM.applySmelt([p.bag], "minotaurBoots" as Kind, 2) !== null && SM.applySmelt([p.bag], "minotaurBoots" as Kind, 2) !== null
+      && IT.countAcross([p.bag], "minotaurBoots" as Kind) === 0,
+      "…and the furnace melts both, the one in the spare pack as well");
+
+    /* ---- worn gear weighs what it weighs, worn or packed ----------------- */
+    p.eq.weapon = "ironSword";
+    p.eq.shield = "dragonShield";
+    IT.addItem(p.bag, "longbow" as Kind, 1);
+    PL.refreshDerived(p);
+    const before = PL.carriedWeight(p);
+    ok(before >= IT.ITEMS.ironSword.weight + IT.ITEMS.dragonShield.weight + IT.ITEMS.longbow.weight,
+      `the sword and shield in hand count toward the load (${before} oz)`);
+    USE.swapWeapon(g);
+    ok(p.eq.weapon === "longbow" && p.eq.shield === null && PL.carriedWeight(p) === before,
+      `…so swapping them for the bow leaves the load where it was (${PL.carriedWeight(p)} oz)`);
+    USE.swapWeapon(g);
+    ok(p.eq.weapon === "ironSword" && p.eq.shield === "dragonShield" && PL.carriedWeight(p) === before,
+      "…and so does swapping back");
+    IT.addItem(p.bag, "stone" as Kind, Math.ceil(PL.carryCap(p) / IT.ITEMS.stone.weight) + 5);
+    ok(PL.freeCap(p) < 0, "(loaded past the cap)");
+    USE.unequip(g, "weapon");
+    ok(p.eq.weapon === null && IT.countAcross([p.bag], "ironSword" as Kind) === 1,
+      "taking gear off into your own pack is never 'too heavy': it weighed the same on you");
+
+    /* ---- the sage puts nothing back ---------------------------------------- */
+    p.level = 200;
+    const s = MI.talkToSage(g);
+    ok((s.choices ?? []).every((c) => c.does !== ("restart" as never) && c.does !== ("replay" as never)),
+      "Chronos offers no way to start an errand over");
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);

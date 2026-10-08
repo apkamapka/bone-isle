@@ -100,7 +100,7 @@ import { attune, buyOffer, research, buyCrystal } from "./intents/tower.ts";
 import { castCrystal, recall } from "./intents/cast.ts";
 import { takeTask, dropTask, turnInTask, buyFromShelf, changeOutfit, dyeOutfit, resetDyes } from "./intents/npcs.ts";
 import {
-  talkToSage, acceptMission, declineMission, restartMenu, replayMission, missionReport, replayCommand,
+  talkToSage, acceptMission, declineMission, missionReport, replayCommand,
   forgetEverything, openTreasure, type SageChoice, type SageSpeech,
 } from "./intents/missions.ts";
 import { setTarget, targetNearest } from "./intents/target.ts";
@@ -1034,7 +1034,7 @@ function useCrystalItem(kind: ItemKind): void {
  * WHY IT IS NOT SHAPED LIKE `/forget`. `import.meta.env.DEV` is false in
  * `vite build`, and the deployed build is the only one Radek walks. A rescue
  * compiled out of the build that needs rescuing is not a rescue. Same argument
- * that put `/replay` in front of everybody.
+ * that once put `/replay` in front of everybody.
  *
  * WHY IT IS TEMP ANYWAY. It is recall's effect without recall's crystal, which
  * is a hole in a real item: on a shared shard a free ride out of any fight is
@@ -1639,8 +1639,12 @@ function sendChat(text: string): void {
    *                relic in again and you are paid it again, so the round trip
    *                is worth zero and running it in a loop is worth zero.
    *
-   * What it costs is the walk, which is the whole point. Grep TEMP-ETAP43. */
-  if (text.trim().toLowerCase() === "/replay" || text.trim().toLowerCase() === "/missions") {
+   * What it costs is the walk, which is the whole point. Grep TEMP-ETAP43.
+   *
+   * DEV ONLY since Etap 3.1e, like `/forget`: Radek, once the chain was
+   * tested — the errands are one per character, and the live game must not
+   * offer a way round that. The sage's "start over" answer went the same day. */
+  if (import.meta.env.DEV && (text.trim().toLowerCase() === "/replay" || text.trim().toLowerCase() === "/missions")) {
     /* Bare `/replay` LISTS rather than wipes, which is a change from Etap 43
      * and the reason for it is that the wipe is now the rarer of the two. With
      * one link in the chain "put it all back" and "put that one back" were the
@@ -1652,7 +1656,7 @@ function sendChat(text: string): void {
     closeChat();
     return;
   }
-  if (text.trim().toLowerCase().startsWith("/replay ")) {
+  if (import.meta.env.DEV && text.trim().toLowerCase().startsWith("/replay ")) {
     replayCommand(game, text.trim().toLowerCase().slice("/replay ".length).trim());
     closeChat();
     return;
@@ -2207,8 +2211,6 @@ function sageAnswer(c: SageChoice): void {
     case "leave": return; // the box is already closed
     case "accept": { const s = acceptMission(game, c.mission); if (s) showSage(s); return; }
     case "decline": showSage(declineMission(c.mission)); return;
-    case "restart": showSage(restartMenu(game)); return;
-    case "replay": replayMission(game, c.mission); showSage(talkToSage(game)); return;
   }
 }
 
