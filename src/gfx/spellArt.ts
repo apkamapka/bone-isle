@@ -39,9 +39,11 @@
  * the loader no-ops and the smoke tests run against the fallback.
  */
 import { ELEMENTS, ELEMENT_COLOR, type Element, type Tier } from "../systems/elements.ts";
+import type { FxSlot } from "../systems/fxEvents.ts";
 
-/** The five pictures a spell can ask for. */
-export type FxSlot = "bolt" | "burst" | "wave" | "nova" | "hit" | "rune" | "field";
+/** The pictures a spell can ask for. Named in systems/fxEvents.ts since Etap
+ *  3.1a, because the logic asks for a bloom by slot. */
+export type { FxSlot };
 
 export const FX_SLOTS: readonly FxSlot[] = ["bolt", "burst", "wave", "nova", "hit", "rune", "field"];
 

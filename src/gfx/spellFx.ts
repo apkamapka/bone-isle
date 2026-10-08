@@ -19,8 +19,9 @@
  *          The odd one out: a blast is over when its animation is, a field
  *          outlives its animation and so has to loop and be told when to
  *          stop. It is also the only effect that is still dangerous after the
- *          cast that made it — the damage lives in monsterSpells, this module
- *          only knows how to keep the tile alight.
+ *          cast that made it, which is why its list moved to
+ *          systems/fields.ts in Etap 3.1a — the damage tick needs it where
+ *          there is no screen. This module only draws it.
  *
  * Both are world-bound so an explosion on Bone Reach does not flash over Home
  * Isle, the same guard `fx.ts` puts on floating text.
@@ -31,6 +32,8 @@
  */
 import { TILE } from "../config.ts";
 import { ELEMENT_COLOR, type Element, type Tier } from "../systems/elements.ts";
+import { BOLT_SPEED, boltFlight } from "../systems/fxEvents.ts";
+import { allFields, fieldCount, clearFields, type Field } from "../systems/fields.ts";
 import {
   FX_FPS, BOLT_FPS, fxFrameIndex, fxDuration, loopFrameIndex, spellSheet, type FxSlot,
 } from "./spellArt.ts";
@@ -104,42 +107,23 @@ interface Bolt {
   dur: number;
 }
 
+const blasts: Blast[] = [];
+const bolts: Bolt[] = [];
+
 /**
- * A tile that has been set alight and stays that way.
- *
- * `life` is the WHOLE burn, not the animation's length: the sheet loops
- * underneath for as long as the field lasts. The last fifth fades out so a
+ * How much of a field's life is spent fading out. The last fifth fades so a
  * field expires instead of vanishing between one frame and the next — a flame
  * that blinks off is the clearest way to tell a player the rules changed
  * without warning them.
  */
-interface Field {
-  world: World;
-  /** Tile indices, so the damage tick can compare them without arithmetic. */
-  tx: number;
-  ty: number;
-  /** Tile CENTRE in world px. */
-  x: number;
-  y: number;
-  el: Element;
-  tier: Tier;
-  t: number;
-  life: number;
-}
-
-const blasts: Blast[] = [];
-const bolts: Bolt[] = [];
-const fields: Field[] = [];
-
-/** How much of a field's life is spent fading out. */
 const FIELD_FADE = 0.2;
 
 /** A field's share of the usual glow — see `drawField`. */
 const FIELD_GLOW = 0.45;
 
-/** How fast a bolt crosses the map, px/s. Matches the arrow so a fireball and
- *  an arrow fired at the same creature arrive together. */
-export const BOLT_SPEED = 1040;
+/** How fast a bolt crosses the map, px/s. Defined beside the events in
+ *  systems/fxEvents.ts, because the logic times the bloom after a bolt. */
+export { BOLT_SPEED };
 
 /**
  * Light a tile. Coordinates are TILE indices, not pixels — every caller here
@@ -164,45 +148,9 @@ export function addBolt(
   world: World, fromX: number, fromY: number, toX: number, toY: number,
   el: Element, tier: Tier,
 ): number {
-  const dur = Math.max(0.06, Math.hypot(toX - fromX, toY - fromY) / BOLT_SPEED);
+  const dur = boltFlight(fromX, fromY, toX, toY);
   bolts.push({ world, fromX, fromY, toX, toY, el, tier, t: 0, dur });
   return dur;
-}
-
-/**
- * Set a tile alight for `life` seconds. Re-lighting a tile that is already
- * burning REFRESHES it rather than stacking a second flame on the same square:
- * two fields on one tile draw at double brightness and read as a bug, and the
- * damage tick would charge twice for standing still once.
- */
-export function addField(
-  world: World, tx: number, ty: number, el: Element, tier: Tier, life: number,
-): void {
-  const live = fields.find((f) => f.world === world && f.tx === tx && f.ty === ty);
-  if (live) {
-    live.el = el;
-    live.tier = tier;
-    live.t = 0;
-    live.life = Math.max(live.life, life);
-    return;
-  }
-  fields.push({
-    world, tx, ty,
-    x: tx * TILE + TILE / 2,
-    y: ty * TILE + TILE / 2,
-    el, tier, t: 0, life,
-  });
-}
-
-/**
- * The tiles burning in `world` right now, for whoever has to decide that
- * standing there hurts. Returned as a fresh array: the caller must not be able
- * to reach in and edit the list it is iterating.
- */
-export function burningTiles(world: World): { tx: number; ty: number; el: Element }[] {
-  return fields
-    .filter((f) => f.world === world)
-    .map((f) => ({ tx: f.tx, ty: f.ty, el: f.el }));
 }
 
 /** How long one blast lives, given whatever artwork it has right now. */
@@ -211,6 +159,10 @@ function blastLife(b: Blast): number {
   return sheet ? fxDuration(sheet.base.length, FX_FPS) : BARE_BLAST_S;
 }
 
+/**
+ * Age the blasts and bolts. Burning tiles are NOT aged here any more: they
+ * are world state, and `tickFields` (systems/fields.ts) runs them beside this.
+ */
 export function updateSpellFx(dt: number): void {
   for (let i = blasts.length - 1; i >= 0; i--) {
     const b = blasts[i];
@@ -221,11 +173,6 @@ export function updateSpellFx(dt: number): void {
     const s = bolts[i];
     s.t += dt;
     if (s.t >= s.dur) bolts.splice(i, 1);
-  }
-  for (let i = fields.length - 1; i >= 0; i--) {
-    const f = fields[i];
-    f.t += dt;
-    if (f.t >= f.life) fields.splice(i, 1);
   }
 }
 
@@ -315,7 +262,7 @@ export interface SpellDrawable {
  */
 export function spellBlastDrawables(world: World): SpellDrawable[] {
   const out: SpellDrawable[] = [];
-  for (const f of fields) {
+  for (const f of allFields()) {
     if (f.world !== world) continue;
     // Sorted on the tile's TOP edge, not its centre. A field is ground: a
     // creature standing in one has to draw over it, and at the centre the two
@@ -494,12 +441,12 @@ export function drawSpellBolts(
 
 /** Live counts. Tests and nothing else. */
 export function spellFxCounts(): { blasts: number; bolts: number; fields: number } {
-  return { blasts: blasts.length, bolts: bolts.length, fields: fields.length };
+  return { blasts: blasts.length, bolts: bolts.length, fields: fieldCount() };
 }
 
-/** Wipe every effect — used when travelling, and by the tests. */
+/** Wipe every effect, burning tiles included — the tests, and nothing else. */
 export function clearSpellFx(): void {
   blasts.length = 0;
   bolts.length = 0;
-  fields.length = 0;
+  clearFields();
 }

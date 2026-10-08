@@ -13,21 +13,14 @@
  * burning floor does not — the element paints its own effect, and blood under
  * a fireball reads as two things happening at once.
  */
-import type { MonsterKind, World } from "../world/types.ts";
+import type { World } from "../world/types.ts";
 import { mulberry32 } from "../util.ts";
+import type { BloodKind } from "../systems/fxEvents.ts";
 
-export type BloodKind = "red" | "green" | "bone";
-
-const GREEN: ReadonlySet<MonsterKind> = new Set<MonsterKind>(["snake"]);
-const BONE: ReadonlySet<MonsterKind> = new Set<MonsterKind>([
-  "skeleton", "skeletonWarrior", "demonSkeleton", "ghoul", "draugr",
-]);
-
-export function bloodOf(kind: MonsterKind): BloodKind {
-  if (GREEN.has(kind)) return "green";
-  if (BONE.has(kind)) return "bone";
-  return "red";
-}
+/* WHO bleeds what is decided where the hit is reported — systems/fxEvents.ts,
+ * since Etap 3.1a — and arrives here as a `blood` event. Re-exported so the
+ * old import path still reads. */
+export { bloodOf, type BloodKind } from "../systems/fxEvents.ts";
 
 /** How long a decal lies there; the last BLOOD_FADE_S of it fades. */
 export const BLOOD_LIFE_S = 60;

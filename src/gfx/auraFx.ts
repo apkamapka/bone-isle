@@ -28,9 +28,11 @@
 import { loopFrameIndex, fxFrameIndex, fxDuration } from "./spellArt.ts";
 import type { Buffs } from "../systems/buffs.ts";
 import type { World } from "../world/types.ts";
+import type { AuraName } from "../systems/fxEvents.ts";
 
-/** Which aura art a thing uses. Matches `public/fx-aura-<name>.png`. */
-export type AuraName = "guard" | "fury" | "mend" | "speed" | "slow" | "recall";
+/** Which aura art a thing uses. Named in systems/fxEvents.ts since Etap 3.1a,
+ *  because the logic asks for a flare by name. */
+export type { AuraName };
 
 export const AURA_NAMES: readonly AuraName[] =
   ["guard", "fury", "mend", "speed", "slow", "recall"];
