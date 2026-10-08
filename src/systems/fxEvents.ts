@@ -23,9 +23,10 @@
  *   - An event with a PLACE (a world and a spot in it) is a fact about that
  *     place, for whoever can see it: a damage number, blood, a spell, the
  *     sound of a hit.
- *   - A float marked `self`, a sound with no `at`, a buzz and a log line are
- *     for the character the code is acting for: a refusal ("too far"), a
- *     skill advance, a reward, the phone shaking, a line in the Server Log.
+ *   - A float marked `self`, a sound with no `at`, a tone, a buzz and a log
+ *     line are for the character the code is acting for: a refusal ("too
+ *     far"), a skill advance, a reward, the click of a stack landing in the
+ *     bag, the phone shaking, a line in the Server Log.
  *
  * WHAT DOES NOT BELONG HERE
  * -------------------------
@@ -57,6 +58,9 @@ export type FxSlot = "bolt" | "burst" | "wave" | "nova" | "hit" | "rune" | "fiel
 
 /** What a body leaves on the ground. */
 export type BloodKind = "red" | "green" | "bone";
+
+/** The shape of a tone's oscillator. */
+export type Wave = "sine" | "square" | "triangle" | "sawtooth";
 
 const GREEN: ReadonlySet<MonsterKind> = new Set<MonsterKind>(["snake"]);
 const BONE: ReadonlySet<MonsterKind> = new Set<MonsterKind>([
@@ -105,6 +109,10 @@ export type FxEvent =
   | { fx: "float"; world: World; x: number; y: number; text: string; color: string; self: boolean }
   /** A line in the acting character's Server Log. */
   | { fx: "log"; text: string; color?: string }
+  /** A short synthesised blip for the acting character: a stack landing in a
+   *  bag, a sword going on, a coin purse changing hands. `slide` bends the
+   *  pitch by that many Hz over the blip. */
+  | { fx: "tone"; freq: number; dur: number; wave: Wave; vol: number; slide?: number }
   /** A creature or townsperson says something over its head. `who` is its id. */
   | { fx: "speech"; world: World; x: number; y: number; who: number; text: string; color: string }
   /** A splash under a hit, or a pool under a body. */
@@ -165,6 +173,11 @@ export function floatSelf(world: World, x: number, y: number, text: string, colo
 
 export function logLine(text: string, color?: string): void {
   emit(color === undefined ? { fx: "log", text } : { fx: "log", text, color });
+}
+
+/** The blips the item moves make (Etap 3.1c) — the numbers `beep` was given. */
+export function tone(freq: number, dur: number, wave: Wave, vol: number, slide?: number): void {
+  emit(slide === undefined ? { fx: "tone", freq, dur, wave, vol } : { fx: "tone", freq, dur, wave, vol, slide });
 }
 
 export function speech(world: World, who: number, x: number, y: number, text: string, color: string): void {
