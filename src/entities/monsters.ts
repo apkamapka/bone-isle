@@ -1,12 +1,11 @@
 /** Monster definitions, post spawning and the wander/chase/attack AI. */
 import { rnd, rndi, wrnd, dist } from "../util.ts";
 import { SPAWN_AVOID_PLAYER_PX, MONSTER_AGGRO_RANGE, MONSTER_AGGRO_HOLD_RANGE, POST_LEASH_PX, SHOT_SPEED, TILE, MIRE_RUNE_MULT } from "../config.ts";
-import { SPR } from "../gfx/sprites.ts";
 import { lineOfSight } from "../world/collision.ts";
 import { nextEntityId } from "../world/entities.ts";
 import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
 import { inHaven } from "../world/collision.ts";
-import { stepFacing } from "../gfx/mobSheet.ts";
+import { stepFacing } from "../world/facing.ts";
 import { blast, bolt, projectile } from "../systems/fxEvents.ts";
 import { beginCast, isCasting, type MonsterSpell } from "../systems/monsterSpells.ts";
 import type { Occupied } from "../world/grid.ts";
@@ -99,8 +98,24 @@ export function mobLabel(m: Monster): string {
   return m.elite ? `${ELITE_PREFIX} ${mobName(m.kind)}` : mobName(m.kind);
 }
 
+/**
+ * The baked stand-ins a creature can be drawn as before its sheet loads. Names
+ * only: each is a key of the client's sprite table (gfx/sprites.ts `SPR`), and
+ * the type checker holds the client to having every one of them.
+ */
+export type MobArt =
+  | "dragon" | "ghoul" | "goblin" | "humanFoe" | "minotaur" | "minotaurArcher"
+  | "minotaurGuard" | "minotaurMage" | "orc" | "orcArcher" | "orcBerserker" | "orcShaman"
+  | "orcWarrior" | "rat" | "skeleton" | "snake";
+
 export interface MonsterDef {
-  spr: HTMLCanvasElement;
+  /**
+   * The NAME of the picture this creature is drawn with until (or unless) its
+   * own walk sheet loads — a key of the baked sprite table the client keeps.
+   * A name and not the picture since Etap 3.1b: a server has no pictures to
+   * hold, and the client looks the name up (gfx/mobArt.ts).
+   */
+  art: MobArt;
   /**
    * What the player is told this thing is called.
    *
@@ -210,27 +225,6 @@ export function monsterResist(def: MonsterDef): Resistances | undefined {
  * rarer, heavier hits, exactly the old-Tibia feel. A monster's actual hit is
  * rolled uniformly inside `dmg` and then reduced by the player's defense.
  */
-/**
- * Creature artwork loaded from PNGs, keyed by kind.
- *
- * `MONSTER_DEFS` is readonly and its baked sprite is the guaranteed fallback,
- * so drawn artwork lives beside it: `mobSprite()` prefers the loaded canvas
- * and drops back to the bake when there is none. Instances copy the sprite at
- * spawn, so anything alive when a PNG lands is swept by the loader.
- */
-const mobArt: Partial<Record<MonsterKind, HTMLCanvasElement>> = {};
-
-/** Install artwork for a creature; pass null to fall back to the baked sprite. */
-export function setMobArt(k: MonsterKind, c: HTMLCanvasElement | null): void {
-  if (c) mobArt[k] = c;
-  else delete mobArt[k];
-}
-
-/** The sprite a creature of this kind should draw with. */
-export function mobSprite(k: MonsterKind): HTMLCanvasElement {
-  return mobArt[k] ?? MONSTER_DEFS[k].spr;
-}
-
 /* ------------------------------------------------------------------ *
  *  MONSTER BUDGET — what a creature meant for a given level should cost
  *
@@ -327,7 +321,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 1. The floor of the game: it must not be able to kill a fresh
   // character even if the player walks away from the keyboard mid-fight.
   beggar: {
-    spr: SPR.humanFoe, hp: 15, dmg: [3, 7], speed: 49, atkRate: 2.0, exp: 10, gold: [1, 2], danger: 0.02,
+    art: "humanFoe", hp: 15, dmg: [3, 7], speed: 49, atkRate: 2.0, exp: 10, gold: [1, 2], danger: 0.02,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "leatherHelm", chance: 0.01, n: [1, 1] },
@@ -339,7 +333,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 2
   vagrant: {
-    spr: SPR.humanFoe, hp: 25, dmg: [3, 9], speed: 51, atkRate: 2.0, exp: 15, gold: [1, 4], danger: 0.04, armor: 1,
+    art: "humanFoe", hp: 25, dmg: [3, 9], speed: 51, atkRate: 2.0, exp: 15, gold: [1, 4], danger: 0.04, armor: 1,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "leatherHelm", chance: 0.01, n: [1, 1] },
@@ -353,7 +347,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 3. Quick and light — the first creature that can actually run the
   // player down, which is what teaches that speed is a stat.
   thief: {
-    spr: SPR.humanFoe, hp: 30, dmg: [4, 11], speed: 66, atkRate: 2.0, exp: 25, gold: [2, 5], danger: 0.05, armor: 1,
+    art: "humanFoe", hp: 30, dmg: [4, 11], speed: 66, atkRate: 2.0, exp: 25, gold: [2, 5], danger: 0.05, armor: 1,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "leatherHelm", chance: 0.015, n: [1, 1] },
@@ -368,7 +362,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // spiders gone nothing taught kiting before the orc archer on cave1, which
   // is twenty levels too late. A sling: short reach, weak in melee.
   poacher: {
-    spr: SPR.humanFoe, hp: 45, dmg: [3, 8], speed: 56, atkRate: 2.0, exp: 40, gold: [3, 9], danger: 0.08, armor: 1,
+    art: "humanFoe", hp: 45, dmg: [3, 8], speed: 56, atkRate: 2.0, exp: 40, gold: [3, 9], danger: 0.08, armor: 1,
     ranged: { range: 160, dmg: [6, 17], color: "#a89a72" }, // slung stones
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
@@ -384,7 +378,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 6. Promoted out of the level-1 slot it used to hold: the bandit is
   // now the "you can fight" checkpoint rather than the tutorial dummy.
   bandit: {
-    spr: SPR.rat, hp: 65, dmg: [7, 17], speed: 53, atkRate: 2.0, exp: 45, gold: [4, 11], danger: 0.06, armor: 3,
+    art: "rat", hp: 65, dmg: [7, 17], speed: 53, atkRate: 2.0, exp: 45, gold: [4, 11], danger: 0.06, armor: 3,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "hpPotion", chance: 0.08, n: [1, 1] },
@@ -398,7 +392,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 8
   smuggler: {
-    spr: SPR.humanFoe, hp: 85, dmg: [8, 21], speed: 54, atkRate: 2.0, exp: 60, gold: [5, 14], danger: 0.12, armor: 3,
+    art: "humanFoe", hp: 85, dmg: [8, 21], speed: 54, atkRate: 2.0, exp: 60, gold: [5, 14], danger: 0.12, armor: 3,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.015, n: [1, 1] },
@@ -412,7 +406,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 9. Glass cannon: hits a rank above its HP and moves faster than
   // anything else at this depth, so it must be answered rather than tanked.
   cutthroat: {
-    spr: SPR.humanFoe, hp: 80, dmg: [9, 23], speed: 68, atkRate: 2.0, exp: 80, gold: [5, 16], danger: 0.15, armor: 4,
+    art: "humanFoe", hp: 80, dmg: [9, 23], speed: 68, atkRate: 2.0, exp: 80, gold: [5, 16], danger: 0.15, armor: 4,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.02, n: [1, 1] },
@@ -431,7 +425,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // against a hail of weak blows, so this is where a low-skill character
   // learns its weapon matters.
   deserter: {
-    spr: SPR.humanFoe, hp: 125, dmg: [10, 28], speed: 49, atkRate: 2.0, exp: 90, gold: [7, 19], danger: 0.18, armor: 7,
+    art: "humanFoe", hp: 125, dmg: [10, 28], speed: 49, atkRate: 2.0, exp: 90, gold: [7, 19], danger: 0.18, armor: 7,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.03, n: [1, 1] },
@@ -447,7 +441,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 12
   brigand: {
-    spr: SPR.humanFoe, hp: 125, dmg: [11, 30], speed: 56, atkRate: 2.0, exp: 100, gold: [7, 21], danger: 0.2, armor: 6,
+    art: "humanFoe", hp: 125, dmg: [11, 30], speed: 56, atkRate: 2.0, exp: 100, gold: [7, 21], danger: 0.2, armor: 6,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.03, n: [1, 1] },
@@ -461,7 +455,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 14. The bridge into the fantastic bestiary: beat this and the
   // skeletons and goblins at 15-16 are the next honest step.
   highwayman: {
-    spr: SPR.humanFoe, hp: 160, dmg: [13, 34], speed: 60, atkRate: 2.0, exp: 130, gold: [11, 32], danger: 0.25, armor: 7,
+    art: "humanFoe", hp: 160, dmg: [13, 34], speed: 60, atkRate: 2.0, exp: 130, gold: [11, 32], danger: 0.25, armor: 7,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "studdedHelm", chance: 0.03, n: [1, 1] },
@@ -504,7 +498,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   redcap: {
     // Named, because the folklore names him: Robin Redcap, familiar to William
     // de Soulis of Hermitage. Henderson has him as Redcap Sly.
-    spr: SPR.humanFoe,
+    art: "humanFoe",
     name: "Robin Redcap",
     /* HP DOUBLED, 300 -> 600, on Radek's call after walking the fight twice.
      * Nothing else moves with it: his damage, his speed and his stones are all
@@ -571,7 +565,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   draugr: {
     // Named, because Grettis saga names him: Kárr inn gamli, buried on
     // Haramsey, who drove every farmer off the island except the one he liked.
-    spr: SPR.humanFoe,
+    art: "humanFoe",
     name: "Kárr the Old",
     /* HP DOUBLED, 900 -> 1800, on Radek's call after walking the fight — the
      * same correction the redcap got in Etap 42 and for the same reason.
@@ -664,7 +658,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   blackAnnis: {
     // Named, because the county names her — Black Annis, Black Anna, Cat Anna.
     // Heyrick's 1794 poem is the first time she reaches print.
-    spr: SPR.humanFoe,
+    art: "humanFoe",
     name: "Black Annis",
     hp: 2200, dmg: [42, 108], speed: 79, atkRate: 2.0, exp: 1300,
     gold: [50, 95], danger: 0.5, armor: 6,
@@ -749,7 +743,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  Knossos, on his own square, and nowhere else in the game.
    * ================================================================== */
   asterion: {
-    spr: SPR.minotaur,
+    art: "minotaur",
     name: "Asterion",
     hp: 2800, dmg: [50, 128], speed: 70, atkRate: 2.0, exp: 2100,
     gold: [70, 140], danger: 0.5, armor: 24,
@@ -843,7 +837,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  square, and nowhere else in the game.
    * ================================================================== */
   gorak: {
-    spr: SPR.orc,
+    art: "orc",
     name: "Gorak",
     hp: 3600, dmg: [58, 148], speed: 64, atkRate: 2.0, exp: 2600,
     gold: [90, 180], danger: 0.5, armor: 28,
@@ -864,7 +858,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 3. The one animal left, and the only creature that never wore armour:
   // it stays down in the opening band beside the vagrants.
   snake: {
-    spr: SPR.snake, hp: 30, dmg: [4, 11], speed: 58, atkRate: 2.0, exp: 20, gold: [1, 4], danger: 0.1, resist: { earth: 0.6, ice: 1.5 },
+    art: "snake", hp: 30, dmg: [4, 11], speed: 58, atkRate: 2.0, exp: 20, gold: [1, 4], danger: 0.1, resist: { earth: 0.6, ice: 1.5 },
     loot: [
       // No set any more (Etap 67): the snakeskin suit it carried at 1% a
       // piece became the Hunter set, which nothing drops yet.
@@ -881,7 +875,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    * camp is also exactly what the gem recipe's "three DIFFERENT kinds" rule
    * exists to prevent: goblins plus a few snakes was a whole gem. */
   skeleton: {
-    spr: SPR.skeleton, hp: 160, dmg: [14, 36], speed: 41, atkRate: 2.0, exp: 135, gold: [7, 20], danger: 0.3, armor: 7, resist: { shadow: 0.6, fire: 1.3 },
+    art: "skeleton", hp: 160, dmg: [14, 36], speed: 41, atkRate: 2.0, exp: 135, gold: [7, 20], danger: 0.3, armor: 7, resist: { shadow: 0.6, fire: 1.3 },
     loot: [
       { kind: "bones", chance: 0.9, n: [1, 3] },
       { kind: "cursedRib", chance: 0.08, n: [1, 1] },
@@ -889,7 +883,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 16
   goblin: {
-    spr: SPR.goblin, hp: 175, dmg: [14, 38], speed: 60, atkRate: 2.0, exp: 150, gold: [7, 21], danger: 0.4, armor: 7,
+    art: "goblin", hp: 175, dmg: [14, 38], speed: 60, atkRate: 2.0, exp: 150, gold: [7, 21], danger: 0.4, armor: 7,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "goblinFang", chance: 0.08, n: [1, 1] },
@@ -905,7 +899,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 16. The human ladder's answer to the goblin, stat for stat — the two
   // families are meant to be interchangeable at equal level.
   mercenary: {
-    spr: SPR.humanFoe, hp: 175, dmg: [14, 38], speed: 53, atkRate: 2.0, exp: 150, gold: [10, 28], danger: 0.3, armor: 9,
+    art: "humanFoe", hp: 175, dmg: [14, 38], speed: 53, atkRate: 2.0, exp: 150, gold: [10, 28], danger: 0.3, armor: 9,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "chainHelm", chance: 0.03, n: [1, 1] },
@@ -918,7 +912,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 18
   corsair: {
-    spr: SPR.humanFoe, hp: 190, dmg: [16, 42], speed: 61, atkRate: 2.0, exp: 185, gold: [11, 32], danger: 0.35, armor: 9,
+    art: "humanFoe", hp: 190, dmg: [16, 42], speed: 61, atkRate: 2.0, exp: 185, gold: [11, 32], danger: 0.35, armor: 9,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "chainHelm", chance: 0.03, n: [1, 1] },
@@ -935,7 +929,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // legion steel, the same suit the brigand wears eight levels below him. If
   // that reads wrong at the tile, it is the sheet to change, not this line.
   wildWarrior: {
-    spr: SPR.humanFoe, hp: 250, dmg: [18, 46], speed: 56, atkRate: 2.0, exp: 200, gold: [12, 35], danger: 0.4,
+    art: "humanFoe", hp: 250, dmg: [18, 46], speed: 56, atkRate: 2.0, exp: 200, gold: [12, 35], danger: 0.4,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "chainHelm", chance: 0.025, n: [1, 1] },
@@ -975,7 +969,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    *  his arm, the axe in his hand, and the coal off his fire.
    * ================================================================== */
   viking: {
-    spr: SPR.humanFoe,
+    art: "humanFoe",
     hp: 265, dmg: [19, 50], speed: 54, atkRate: 2.0, exp: 215, gold: [14, 34],
     danger: 0.6, armor: 16,
     /* NO IRON AND NO STEEL. The forge materials are SMELTED from looted gear
@@ -999,12 +993,12 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 20
   ghoul: {
-    spr: SPR.ghoul, hp: 240, dmg: [18, 46], speed: 51, atkRate: 2.0, exp: 200, gold: [9, 26], danger: 0.5, armor: 9, resist: { shadow: 0.5, fire: 1.4 },
+    art: "ghoul", hp: 240, dmg: [18, 46], speed: 51, atkRate: 2.0, exp: 200, gold: [9, 26], danger: 0.5, armor: 9, resist: { shadow: 0.5, fire: 1.4 },
     loot: [{ kind: "bones", chance: 0.8, n: [1, 3] }, { kind: "ghoulClaw", chance: 0.1, n: [1, 1] }],
   },
   // lvl 21
   orc: {
-    spr: SPR.orc, hp: 240, dmg: [18, 48], speed: 49, atkRate: 2.0, exp: 215, gold: [9, 27], danger: 0.62, armor: 11,
+    art: "orc", hp: 240, dmg: [18, 48], speed: 49, atkRate: 2.0, exp: 215, gold: [9, 27], danger: 0.62, armor: 11,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "orcEar", chance: 0.08, n: [1, 1] },
@@ -1021,7 +1015,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // on the same two-second beat — the armour is what the rank is, not the
   // goblin under it.
   goblinLegionary: {
-    spr: SPR.goblin, hp: 270, dmg: [19, 51], speed: 54, atkRate: 2.0, exp: 230, gold: [13, 37], danger: 0.6, armor: 14,
+    art: "goblin", hp: 270, dmg: [19, 51], speed: 54, atkRate: 2.0, exp: 230, gold: [13, 37], danger: 0.6, armor: 14,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "goblinFang", chance: 0.08, n: [1, 1] },
@@ -1038,7 +1032,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // chased rather than merely walked away from. The bow in her loot is the
   // poacher's compromise repeated — there is no sling to drop.
   amazon: {
-    spr: SPR.humanFoe, hp: 220, dmg: [10, 26], speed: 63, atkRate: 2.0, exp: 245, gold: [13, 39], danger: 0.45, armor: 9,
+    art: "humanFoe", hp: 220, dmg: [10, 26], speed: 63, atkRate: 2.0, exp: 245, gold: [13, 39], danger: 0.45, armor: 9,
     ranged: { range: 190, dmg: [22, 57], color: "#a89a72" }, // slung stones
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
@@ -1057,7 +1051,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
    * ================================================================== */
   // lvl 25
   orcArcher: {
-    spr: SPR.orcArcher, hp: 240, dmg: [12, 29], speed: 54, atkRate: 2.0, exp: 280, gold: [11, 32], danger: 0.55, armor: 10,
+    art: "orcArcher", hp: 240, dmg: [12, 29], speed: 54, atkRate: 2.0, exp: 280, gold: [11, 32], danger: 0.55, armor: 10,
     ranged: { range: 220, dmg: [24, 64], color: "#b98a4e" }, // crossbow bolts
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
@@ -1073,7 +1067,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 25. The longest human reach in the game, and it out-ranges its own
   // awareness by a wide margin — provoke one and retreat and it punishes you.
   hunter: {
-    spr: SPR.humanFoe, hp: 240, dmg: [12, 29], speed: 58, atkRate: 2.0, exp: 305, gold: [15, 44], danger: 0.5, armor: 9,
+    art: "humanFoe", hp: 240, dmg: [12, 29], speed: 58, atkRate: 2.0, exp: 305, gold: [15, 44], danger: 0.5, armor: 9,
     ranged: { range: 280, dmg: [24, 64] },
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
@@ -1088,7 +1082,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 26
   orcWarrior: {
-    spr: SPR.orcWarrior, hp: 335, dmg: [22, 59], speed: 51, atkRate: 2.0, exp: 295, gold: [15, 44], danger: 0.6, armor: 16,
+    art: "orcWarrior", hp: 335, dmg: [22, 59], speed: 51, atkRate: 2.0, exp: 295, gold: [15, 44], danger: 0.6, armor: 16,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "orcEar", chance: 0.08, n: [1, 1] },
@@ -1103,7 +1097,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 27
   minotaur: {
-    spr: SPR.minotaur, hp: 365, dmg: [23, 61], speed: 51, atkRate: 2.0, exp: 310, gold: [12, 35], danger: 0.8, armor: 14,
+    art: "minotaur", hp: 365, dmg: [23, 61], speed: 51, atkRate: 2.0, exp: 310, gold: [12, 35], danger: 0.8, armor: 14,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "minotaurHorn", chance: 0.08, n: [1, 1] },
@@ -1120,7 +1114,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // the guard climbed to 36 and this one holds 28 as the heavy of its own
   // band — same silhouette, eight levels apart.
   skeletonWarrior: {
-    spr: SPR.skeleton, hp: 365, dmg: [24, 63], speed: 49, atkRate: 2.0, exp: 345, gold: [16, 47], danger: 0.85, armor: 18, resist: { shadow: 0.6, fire: 1.3 },
+    art: "skeleton", hp: 365, dmg: [24, 63], speed: 49, atkRate: 2.0, exp: 345, gold: [16, 47], danger: 0.85, armor: 18, resist: { shadow: 0.6, fire: 1.3 },
     loot: [
       { kind: "cursedRib", chance: 0.08, n: [1, 1] },
       { kind: "marrowHelm", chance: 0.01, n: [1, 1] },
@@ -1141,7 +1135,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 28. Shield and plate: the human wall, and the armour rating is the
   // whole fight — a trained character walks through it, an untrained one does not.
   gladiator: {
-    spr: SPR.humanFoe, hp: 365, dmg: [24, 63], speed: 54, atkRate: 2.0, exp: 345, gold: [22, 64], danger: 0.6, armor: 15,
+    art: "humanFoe", hp: 365, dmg: [24, 63], speed: 54, atkRate: 2.0, exp: 345, gold: [22, 64], danger: 0.6, armor: 15,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "plateHelm", chance: 0.02, n: [1, 1] },
@@ -1154,7 +1148,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 30
   minotaurArcher: {
-    spr: SPR.minotaurArcher, hp: 325, dmg: [14, 35], speed: 51, atkRate: 2.0, exp: 385, gold: [14, 39], danger: 0.68, armor: 14,
+    art: "minotaurArcher", hp: 325, dmg: [14, 35], speed: 51, atkRate: 2.0, exp: 385, gold: [14, 39], danger: 0.68, armor: 14,
     ranged: { range: 300, dmg: [29, 75], color: "#efe9d6" }, // bone-tipped bolts
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
@@ -1170,7 +1164,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 30. The most HP of any human, the least armour of its tier: it dies
   // to a good weapon and grinds down a bad one.
   barbarian: {
-    spr: SPR.humanFoe, hp: 440, dmg: [26, 67], speed: 60, atkRate: 2.0, exp: 365, gold: [18, 53], danger: 0.65, armor: 14,
+    art: "humanFoe", hp: 440, dmg: [26, 67], speed: 60, atkRate: 2.0, exp: 365, gold: [18, 53], danger: 0.65, armor: 14,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "plateHelm", chance: 0.02, n: [1, 1] },
@@ -1183,7 +1177,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 31
   orcShaman: {
-    spr: SPR.orcShaman, hp: 300, dmg: [14, 36], speed: 44, atkRate: 2.0, exp: 440, gold: [14, 40], danger: 0.72, armor: 12, resist: { fire: 0.6, ice: 1.4 },
+    art: "orcShaman", hp: 300, dmg: [14, 36], speed: 44, atkRate: 2.0, exp: 440, gold: [14, 40], danger: 0.72, armor: 12, resist: { fire: 0.6, ice: 1.4 },
     ranged: { range: 260, dmg: [30, 78], color: "#8a6cff", fx: { el: "shadow", tier: 0 } }, // crackling magic bolt
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
@@ -1200,7 +1194,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 32
   raider: {
-    spr: SPR.humanFoe, hp: 440, dmg: [27, 71], speed: 58, atkRate: 2.0, exp: 420, gold: [25, 73], danger: 0.7, armor: 15,
+    art: "humanFoe", hp: 440, dmg: [27, 71], speed: 58, atkRate: 2.0, exp: 420, gold: [25, 73], danger: 0.7, armor: 15,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "plateHelm", chance: 0.02, n: [1, 1] },
@@ -1218,7 +1212,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 35. Fastest creature in the game at 88 — still under the player's
   // base 116, because nothing should be able to outrun a retreat outright.
   orcBerserker: {
-    spr: SPR.orcBerserker, hp: 495, dmg: [29, 78], speed: 75, atkRate: 2.0, exp: 460, gold: [20, 59], danger: 0.8, armor: 18,
+    art: "orcBerserker", hp: 495, dmg: [29, 78], speed: 75, atkRate: 2.0, exp: 460, gold: [20, 59], danger: 0.8, armor: 18,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "orcEar", chance: 0.08, n: [1, 1] },
@@ -1233,7 +1227,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 36
   minotaurGuard: {
-    spr: SPR.minotaurGuard, hp: 565, dmg: [30, 80], speed: 48, atkRate: 2.0, exp: 480, gold: [21, 61], danger: 0.85, armor: 22,
+    art: "minotaurGuard", hp: 565, dmg: [30, 80], speed: 48, atkRate: 2.0, exp: 480, gold: [21, 61], danger: 0.85, armor: 22,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "minotaurHorn", chance: 0.08, n: [1, 1] },
@@ -1249,7 +1243,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 36. The human mini-boss: the heaviest armour on a person, meant to
   // stand at the middle of a camp with a pack of raiders around him.
   warlord: {
-    spr: SPR.humanFoe, hp: 540, dmg: [30, 80], speed: 51, atkRate: 2.0, exp: 555, gold: [28, 82], danger: 0.8, armor: 20,
+    art: "humanFoe", hp: 540, dmg: [30, 80], speed: 51, atkRate: 2.0, exp: 555, gold: [28, 82], danger: 0.8, armor: 20,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "steelHelm", chance: 0.02, n: [1, 1] },
@@ -1262,7 +1256,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   },
   // lvl 37
   minotaurMage: {
-    spr: SPR.minotaurMage, hp: 410, dmg: [17, 42], speed: 44, atkRate: 2.0, exp: 605, gold: [22, 63], danger: 0.9, armor: 16, resist: { storm: 0.5, earth: 1.4 },
+    art: "minotaurMage", hp: 410, dmg: [17, 42], speed: 44, atkRate: 2.0, exp: 605, gold: [22, 63], danger: 0.9, armor: 16, resist: { storm: 0.5, earth: 1.4 },
     ranged: { range: 280, dmg: [35, 91], color: "#ff8a3a", wide: true, fx: { el: "fire", tier: 0 } }, // fire bolt
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
@@ -1279,7 +1273,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // lvl 40. The top of the human ladder, and deliberately the demon
   // skeleton's equal in weight class: the two families meet at the end.
   chieftain: {
-    spr: SPR.humanFoe, hp: 685, dmg: [33, 88], speed: 54, atkRate: 2.0, exp: 680, gold: [32, 91], danger: 0.9, armor: 21,
+    art: "humanFoe", hp: 685, dmg: [33, 88], speed: 54, atkRate: 2.0, exp: 680, gold: [32, 91], danger: 0.9, armor: 21,
     loot: [
       { kind: "coal", chance: 0.4, n: [1, 3] },
       { kind: "steelHelm", chance: 0.02, n: [1, 1] },
@@ -1303,7 +1297,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // never allows. It sits at 40 rather than 35 because nothing else would
   // occupy the stretch between the minotaur mage and the boss.
   demonSkeleton: {
-    spr: SPR.skeleton, hp: 710, dmg: [33, 88], speed: 53, atkRate: 2.0, exp: 655, gold: [23, 68], danger: 0.97, armor: 24, resist: { fire: 0.5, shadow: 0.3, storm: 1.5 },
+    art: "skeleton", hp: 710, dmg: [33, 88], speed: 53, atkRate: 2.0, exp: 655, gold: [23, 68], danger: 0.97, armor: 24, resist: { fire: 0.5, shadow: 0.3, storm: 1.5 },
     loot: [
       { kind: "cursedRib", chance: 0.08, n: [1, 1] },
       { kind: "marrowHelm", chance: 0.02, n: [1, 1] },
@@ -1342,7 +1336,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
   // warning, and the whole thing read as harmless. Both were roughly halved,
   // the windups cut to a beat, and the floor overlay dropped.
   dragon: {
-    spr: SPR.dragon, hp: 1000, dmg: [41, 109], speed: 51, atkRate: 2.0, exp: 900, gold: [90, 210], danger: 0.99, armor: 28, element: "fire",
+    art: "dragon", hp: 1000, dmg: [41, 109], speed: 51, atkRate: 2.0, exp: 900, gold: [90, 210], danger: 0.99, armor: 28, element: "fire",
     ranged: { range: 320, dmg: [47, 122], color: "#ff5a2a", wide: true, brute: true, fx: { el: "fire", tier: 0 } }, // dragon fire
     spells: [
       // The eight tiles touching it. `range` on a caster-anchored shape is not
@@ -1401,7 +1395,7 @@ export const MONSTER_DEFS: Readonly<Record<MonsterKind, MonsterDef>> = {
      * what a dragon pays for the same fight. The difference went back into coin
      * rather than a new drop — he is a knight, and what a knight carries that
      * a dragon does not is money. */
-    spr: SPR.humanFoe, hp: 950, dmg: [44, 112], speed: 58, atkRate: 2.0, exp: 880, gold: [120, 250], danger: 0.98, armor: 28, element: "storm",
+    art: "humanFoe", hp: 950, dmg: [44, 112], speed: 58, atkRate: 2.0, exp: 880, gold: [120, 250], danger: 0.98, armor: 28, element: "storm",
     ranged: { range: 300, dmg: [42, 106], color: "#7dd8ff", fx: { el: "storm", tier: 0 }, brute: true }, // arcing bolt
     spells: [
       // The ring, for when he is being hugged — same role as the dragon's
@@ -1476,7 +1470,6 @@ function pushMonster(
     y: tileCenter(ty),
     tx,
     ty,
-    spr: mobSprite(kind),
     hp: d.hp,
     maxhp: d.hp,
     speed: d.speed,

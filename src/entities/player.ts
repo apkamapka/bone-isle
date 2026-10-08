@@ -2,8 +2,7 @@
 import { newBuffs, hasteMult } from "../systems/buffs.ts";
 import type { Buffs } from "../systems/buffs.ts";
 import { HP_BASE, HP_PER_LEVEL, PLAYER_BASE_HP, PLAYER_BASE_SPEED, SPEED_PER_LEVEL, PLAYER_ATTACK_RATE, expNeeded, CAP_BASE, CAP_PER_LEVEL } from "../config.ts";
-import { bakeOutfitSprites } from "../systems/outfit.ts";
-import type { Facing, DirSprites } from "../systems/outfit.ts";
+import type { Facing } from "../systems/outfit.ts";
 import { toTile, tileCenter } from "../world/grid.ts";
 import { activeBonus } from "../systems/derived.ts";
 import { ITEMS, walletValue, emptyEquipment, gearStat, setSpeedBonus, itemWeight, bagWeight, addItem, newContainer, NO_BAG } from "../items.ts";
@@ -49,7 +48,6 @@ export interface Player {
   /** Logical tile the player stands on (claims) — grid movement core. */
   tx: number;
   ty: number;
-  spr: HTMLCanvasElement;
   hp: number;
   maxhp: number;
   /**
@@ -90,10 +88,9 @@ export interface Player {
   tpCd: number;
   bob: number;
   face: 1 | -1;
-  /** Which of the three baked views to draw. `side` is mirrored by `face`. */
+  /** Which of the three views to draw. `side` is mirrored by `face`. The
+   *  pictures themselves are the client's (gfx/outfitArt.ts) since Etap 3.1b. */
   dir: Facing;
-  /** The current outfit baked in all three facings. */
-  sprDir: DirSprites;
   /**
    * The worn backpack, or null when you are carrying nothing to carry things
    * in. Tibia's rule: the bag is an OBJECT you wear, not a property of being
@@ -119,7 +116,6 @@ export function createPlayer(spawn: Vec): Player {
   // pick up the first stick of wood, which is a tutorial nobody wants.
   const pack = newContainer("backpack")!;
   const bag = pack.items!;
-  const startSet = bakeOutfitSprites();
   // No crystals at all. Every one of them — even the healing kind — is now
   // something the Alchemy Tower sells you, and the action slots start bound
   // to two you cannot yet afford on purpose: the empty counts are the hint.
@@ -132,7 +128,6 @@ export function createPlayer(spawn: Vec): Player {
     y: tileCenter(toTile(spawn.y)),
     tx: toTile(spawn.x),
     ty: toTile(spawn.y),
-    spr: startSet.down,
     hp: PLAYER_BASE_HP,
     maxhp: PLAYER_BASE_HP,
     taskPoints: 0,
@@ -155,7 +150,6 @@ export function createPlayer(spawn: Vec): Player {
     bob: 0,
     face: 1,
     dir: "down",
-    sprDir: startSet,
     pack,
     get bag(): Bag { return this.pack?.items ?? NO_BAG; },
     get gold(): number { return walletValue(this.bag); },
