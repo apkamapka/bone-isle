@@ -9,6 +9,11 @@ function ok(cond: boolean, name: string): void {
 }
 
 async function main(): Promise<void> {
+  /* Etap 3.1a: the logic reports what should be seen and heard as events, and
+   * the client turns them into sounds, floats, blood and spell art. Most of
+   * what this suite checks is what reaches the screen, so it listens exactly
+   * as the game does — installed before the first test runs. */
+  (await import("../src/fxClient.ts")).installFxClient();
   const { createPlayer } = await import("../src/entities/player.ts");
   const items = await import("../src/items.ts");
   const tasks = await import("../src/systems/tasks.ts");
@@ -4631,7 +4636,10 @@ async function main(): Promise<void> {
       "his beat is the square one tile west and one south");
     const seen = new Set<string>();
     let escaped = "";
-    for (let i = 0; i < 6000; i++) {
+    // 200 seconds of pacing, not 100: his steps are dice, and at 6000 ticks
+    // about one run in three hundred never reached the fourth tile and failed
+    // the suite for nothing. At 12000 that was zero in fifteen hundred.
+    for (let i = 0; i < 12000; i++) {
       updateNpcs(cellar, 1 / 60, -9999, -9999);
       seen.add(`${deep.tx},${deep.ty}`);
       if (deep.tx < 14 || deep.tx > 15 || deep.ty < 14 || deep.ty > 15) escaped = `${deep.tx},${deep.ty}`;
@@ -8722,6 +8730,7 @@ async function main(): Promise<void> {
   {
     const MS = await import("../src/systems/monsterSpells.ts");
     const X = await import("../src/gfx/spellFx.ts");
+    const FL = await import("../src/systems/fields.ts");
     const { MONSTER_DEFS, spawnAtPost } = await import("../src/entities/monsters.ts");
     const mob = await import("../src/gfx/mobSheet.ts");
     const art = await import("../src/gfx/spellArt.ts");
@@ -8914,8 +8923,8 @@ async function main(): Promise<void> {
     ok(hits === 1, "a field bites at once if it lands under you");
     ok(X.spellFxCounts().fields === 5, "…lighting five tiles");
     ok(X.spellFxCounts().blasts === 0, "…and leaving no one-shot bloom behind");
-    ok(X.burningTiles(w).length === 5, "…all of which report as burning");
-    ok(X.burningTiles(ws.town).length === 0, "…on this island only");
+    ok(FL.burningTiles(w).length === 5, "…all of which report as burning");
+    ok(FL.burningTiles(ws.town).length === 0, "…on this island only");
 
     MS.updateMonsterSpells(w, 0.1, { tx: ox + 3, ty: oy, dead: false }, () => { hits++; });
     ok(hits === 1, "…and not again on the very next frame");
@@ -8935,21 +8944,21 @@ async function main(): Promise<void> {
     MS.updateMonsterSpells(w, field.windupS + 0.01, { tx: ox - 5, ty: oy, dead: false },
       () => { hits++; });
     ok(hits === 0, "a field dodged cleanly costs nothing");
-    ok(X.burningTiles(w).length === 5, "…though the ground still catches");
+    ok(FL.burningTiles(w).length === 5, "…though the ground still catches");
 
     // the fire goes out on its own
-    X.updateSpellFx(field.fieldS! + 0.1);
-    ok(X.burningTiles(w).length === 0, "the field burns out on schedule");
+    FL.tickFields(field.fieldS! + 0.1);
+    ok(FL.burningTiles(w).length === 0, "the field burns out on schedule");
     ok(X.spellFxCounts().fields === 0, "…and stops drawing");
 
     // re-lighting a tile refreshes it instead of stacking a second flame
     X.clearSpellFx();
-    X.addField(w, ox, oy, "fire", 0, 4);
-    X.addField(w, ox, oy, "fire", 0, 4);
+    FL.addField(w, ox, oy, "fire", 0, 4);
+    FL.addField(w, ox, oy, "fire", 0, 4);
     ok(X.spellFxCounts().fields === 1, "two casts on one tile leave one flame");
-    X.updateSpellFx(3);
-    X.addField(w, ox, oy, "fire", 0, 4);
-    X.updateSpellFx(2);
+    FL.tickFields(3);
+    FL.addField(w, ox, oy, "fire", 0, 4);
+    FL.tickFields(2);
     ok(X.spellFxCounts().fields === 1, "…and re-lighting it extends the burn");
     X.clearSpellFx();
     ok(X.spellFxCounts().fields === 0, "clearSpellFx puts every fire out");
@@ -8959,7 +8968,7 @@ async function main(): Promise<void> {
     // over it. Without the bias the two tie on the tile centre and a player
     // standing in five fields disappears behind his own square.
     X.clearSpellFx();
-    X.addField(w, 10, 10, "fire", 0, 3);
+    FL.addField(w, 10, 10, "fire", 0, 3);
     X.addBlast(w, 10, 10, "fire", 0, "burst", 0);
     const fd = X.spellBlastDrawables(w);
     ok(fd.length === 2, "a field and a blast on one tile are both drawable");
@@ -14486,7 +14495,8 @@ async function main(): Promise<void> {
     const { MONSTER_DEFS: MD43, spawnAtPost: spawn43 } = await import("../src/entities/monsters.ts");
 
     const said: string[] = [];
-    CB43.setRelicNotice((textLine) => { said.push(textLine); });
+    const FX43 = await import("../src/systems/fxEvents.ts");
+    const stopSaid = FX43.onFx((e) => { if (e.fx === "log") said.push(e.text); });
     const m43 = MM43b.MISSIONS[MM43b.MISSIONS.length - 1];
     {
       const ws = buildWorlds(WORLD_SEED);
@@ -14550,7 +14560,7 @@ async function main(): Promise<void> {
       ok(MM43b.stageOf(m43.id, p.level) === "active" && MM43b.echoOpen(m43.echo, p.level),
         "…while a relic lost some OTHER way still reopens the echo, as it always did");
     }
-    CB43.setRelicNotice(() => {});
+    stopSaid();
     rps43b(); MM43b.resetMissions();
 
     /* --- the viking's art: registered, shipped, credited -------------------- */
@@ -19739,9 +19749,10 @@ async function main(): Promise<void> {
     ok(BL.bloodOn(fw).length === BL.BLOOD_MAX_PER_WORLD, `a long fight never piles past ${BL.BLOOD_MAX_PER_WORLD} on one map`);
     BL.clearBlood();
     const combat = read("../src/systems/combat.ts");
-    ok(/sfx\("hit"\);\s*splash\(world, m\.x, m\.y, bloodOf\(m\.kind\)\)/.test(combat), "a sword hit splashes");
-    ok(/if \(dmg > 0 && !elemental\) splash\(world, p\.x, p\.y, "red"\)/.test(combat), "…the player bleeds from a blow, never from an element");
-    ok(/pool\(world, m\.x, m\.y, bloodOf\(m\.kind\)\)/.test(combat), "…and every kill leaves a pool");
+    // Etap 3.1a: combat REPORTS the blood as an event; fxClient.ts paints it.
+    ok(/sound\("hit", \{ world, x: m\.x, y: m\.y \}\);\s*bleed\(world, m\.x, m\.y, bloodOf\(m\.kind\)\)/.test(combat), "a sword hit splashes");
+    ok(/if \(dmg > 0 && !elemental\) bleed\(world, p\.x, p\.y, "red"\)/.test(combat), "…the player bleeds from a blow, never from an element");
+    ok(/bleed\(world, m\.x, m\.y, bloodOf\(m\.kind\), true\)/.test(combat), "…and every kill leaves a pool");
 
     // ---- voices
     const lines = VO.allVoiceLines();
@@ -19831,7 +19842,8 @@ async function main(): Promise<void> {
     ok(hi === 1 && lo === 0 && AU.audioSettings().sfx === 0.8, "volumes stay between silent and full, in tenths");
     ok(AU.ambientFor("town") === "town" && AU.ambientFor("home" as never) === "sea", "Bonetown sounds like a town, the islands like the sea");
     const combatBeeps = (combat.match(/\bbeep\(/g) ?? []).length;
-    ok(combatBeeps === 0 && /sfx\("levelup"\);\s*buzz\(/.test(combat) && /sfx\("death"\);\s*buzz\(/.test(combat),
+    ok(combatBeeps === 0 && /sound\("levelup"\);\s*buzz\(/.test(combat)
+      && /sound\("death", \{ world, x: p\.x, y: p\.y \}\);\s*buzz\(/.test(combat),
       "combat speaks in named sounds, and a level-up or a death buzzes the phone");
 
     // ---- options
@@ -21429,6 +21441,255 @@ async function main(): Promise<void> {
      * mob-test-dragon-dead.png): an upload adds and overwrites but cannot
      * delete. What matters is that nothing asks for them. */
     ok(!read("../src/gfx/mobSheet.ts").includes("mob-test-dragon"), "nothing loads its two sheets any more");
+  }
+
+  console.log("\nEtap 3.1a — the logic reports effects as events, and only the client puts them on screen:");
+  {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const FX = await import("../src/systems/fxEvents.ts");
+    const FC = await import("../src/fxClient.ts");
+    const FL = await import("../src/systems/fields.ts");
+    const SFX = await import("../src/gfx/spellFx.ts");
+    const AF = await import("../src/gfx/auraFx.ts");
+    const BL = await import("../src/gfx/blood.ts");
+    const FT = await import("../src/fx.ts");
+    const CH = await import("../src/systems/chat.ts");
+    const CB = await import("../src/systems/combat.ts");
+    const C = await import("../src/systems/crystals.ts");
+    const VO = await import("../src/systems/voices.ts");
+    const MON = await import("../src/entities/monsters.ts");
+    const { resetPlayerState: rps31a } = await import("../src/systems/playerState.ts");
+    type Ev = import("../src/systems/fxEvents.ts").FxEvent;
+
+    /* ---- the boundary, read off the source ------------------------------
+     * Every import in every logic file is resolved and checked: nothing may
+     * come from the modules that play a sound, paint a number, spill blood or
+     * draw a spell, and nothing may write the chat log or a speech bubble.
+     * The two art LOADERS game.ts still calls at boot are the one exception,
+     * and 3.1b is where they go. */
+    const srcDir = new URL("../src/", import.meta.url);
+    const logicFiles: string[] = [];
+    for (const dir of ["systems", "entities", "world", "text"]) {
+      for (const f of fs.readdirSync(new URL(`${dir}/`, srcDir))) if (f.endsWith(".ts")) logicFiles.push(`${dir}/${f}`);
+    }
+    logicFiles.push("items.ts", "game.ts", "config.ts", "util.ts", "save.ts");
+    const EFFECT_MODULES = new Set(["audio.ts", "fx.ts", "sound/synth.ts", "gfx/blood.ts", "gfx/spellFx.ts"]);
+    const ART_LOADERS = new Set(["loadAuraArt", "loadSpellArt"]);
+    const CHAT_WRITERS = new Set(["push", "logServer", "logLoot", "bubble"]);
+    const importRe = /import\s+(type\s+)?(?:(\*\s+as\s+\w+)|\{([^}]*)\}|(\w+))\s+from\s+"([^"]+)"/g;
+    const breaches: string[] = [];
+    let scanned = 0;
+    for (const f of logicFiles) {
+      const text = fs.readFileSync(new URL(f, srcDir), "utf8");
+      for (const mt of text.matchAll(importRe)) {
+        const [, isType, star, names, def, spec] = mt;
+        if (!spec.startsWith(".")) continue;
+        scanned++;
+        const target = path.posix.normalize(path.posix.join(path.posix.dirname(f), spec));
+        const named = (names ?? "").split(",")
+          .map((n) => n.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0])
+          .filter(Boolean);
+        if (EFFECT_MODULES.has(target)) breaches.push(`${f} -> ${target}`);
+        else if (target === "gfx/auraFx.ts" || target === "gfx/spellArt.ts") {
+          if (isType || star || def || named.some((n) => !ART_LOADERS.has(n))) breaches.push(`${f} -> ${target}`);
+        } else if (target === "systems/chat.ts" && (star || named.some((n) => CHAT_WRITERS.has(n)))) {
+          breaches.push(`${f} -> chat {${named.join(",")}}`);
+        }
+      }
+    }
+    ok(logicFiles.length > 60 && scanned > 300, `the scan really reads the logic (${logicFiles.length} files, ${scanned} imports)`);
+    ok(breaches.length === 0,
+      `no logic file plays a sound, paints an effect or writes the log itself${breaches.length ? ": " + breaches.join("; ") : ""}`);
+    ok(!("setRelicNotice" in CB), "the relic's Server Log line is an event now, not a hook main.ts hands down");
+
+    const main31a = read("../src/main.ts");
+    ok(main31a.indexOf("installFxClient();") > 0
+      && main31a.indexOf("installFxClient();") < main31a.indexOf("const game: Game = loadGame() ?? createGame();"),
+      "main.ts starts listening before the first island is built");
+    ok((main31a.match(/updateSpellFx\(dt\);[^\n]*\n\s*(?:\/\/[^\n]*\n\s*)?tickFields\(dt\);/g) ?? []).length === 2,
+      "…and the burning ground ages on the same beat as the spells, alive and dead");
+
+    /* ---- the same numbers on both sides --------------------------------- */
+    ok(FX.boltFlight(0, 0, FX.BOLT_SPEED, 0) === 1 && SFX.BOLT_SPEED === FX.BOLT_SPEED,
+      "a bolt crosses BOLT_SPEED pixels in a second, and the drawing agrees on the speed");
+    ok(SFX.addBolt({ key: "e31a" } as never, 0, 0, 300, 40, "fire", 0) === FX.boltFlight(0, 0, 300, 40),
+      "…and on the flight time the logic times its bloom by");
+    ok(FX.boltFlight(5, 5, 5, 5) === 0.06, "…with a zero-length bolt still on screen for a moment");
+    ok(BL.bloodOf === FX.bloodOf, "who bleeds what is decided in one place");
+    SFX.clearSpellFx();
+
+    /* ---- a fight to work with ------------------------------------------- */
+    const ws = buildWorlds(WORLD_SEED);
+    const ground = ws.reach;
+    const post = (ground.mobPosts ?? []).find((q) => q.kind === "goblin")!;
+    const fresh = (): import("../src/world/types.ts").Monster => {
+      ok(MON.spawnAtPost(ground, "goblin", post.tx, post.ty), "a goblin stands on its post");
+      return ground.monsters[ground.monsters.length - 1];
+    };
+    rps31a();
+    ground.monsters.length = 0;
+    ground.corpses.length = 0;
+    ground.shots.length = 0;
+
+    /* ---- no screen at all: the logic runs, and paints nothing ----------- */
+    FC.uninstallFxClient();
+    try {
+      SFX.clearSpellFx();
+      BL.clearBlood();
+      AF.clearAuraFx();
+      CH.resetChat();
+      const floats0 = FT.floatCount();
+      const m = fresh();
+      m.elite = true;
+      const p = createPlayer({ x: m.x - 100, y: m.y });
+      p.pack = items.newContainer("backpack")!;
+      items.addItem(p.bag, "arrow", 5);
+      items.addItem(p.bag, "fireEmberShard", 2);
+      p.eq.weapon = "bow";
+      const exp0 = p.exp;
+      CB.playerShoot(ground, p, m, "arrow");
+      C.tickCrystalCooldown(99);
+      C.useCrystal(ground, p, "fireEmberShard");
+      CB.burnMonster(ground, p, m, "fire", 99999);
+      p.hp = p.maxhp * 10;
+      const hp0 = p.hp;
+      CB.hurtPlayer(ground, p, 200);
+      FL.clearFields();
+      FL.addField(ground, 5, 5, "fire", 0, 2);
+      ok(!ground.monsters.includes(m) && p.exp > exp0 && p.hp < hp0 && items.bagCount(p.bag, "arrow") === 4,
+        "with nobody listening the fight still happens: an arrow spent, a creature dead, exp paid, a wound taken");
+      ok(FT.floatCount() === floats0 && BL.bloodOn(ground).length === 0 && ground.shots.length === 0,
+        "…and not one number, stain or arrow reached the screen");
+      ok(SFX.spellFxCounts().blasts === 0 && SFX.spellFxCounts().bolts === 0 && AF.flareCount() === 0,
+        "…nor any spell art");
+      ok(CH.chatLines().length === 0, "…nor a line in the log, though an elite died");
+      ok(FL.burningTiles(ground).length === 1 && SFX.spellFxCounts().fields === 1,
+        "but burning ground is world state: it burns with no screen, and the drawing reads it from there");
+      FL.tickFields(2.01);
+      ok(FL.burningTiles(ground).length === 0, "…and goes out on its own clock");
+    } finally {
+      FC.installFxClient();
+    }
+
+    /* ---- what the logic says, word for word ------------------------------ */
+    const heard: Ev[] = [];
+    const stop = FX.onFx((e) => { heard.push(e); });
+    try {
+      // a kill: the number, the death, the exp, the pool — in that order
+      const m = fresh();
+      const p = createPlayer({ x: m.x - 64, y: m.y });
+      p.pack = items.newContainer("backpack")!;
+      heard.length = 0;
+      CB.burnMonster(ground, p, m, "fire", 99999);
+      const first = heard[0];
+      ok(first?.fx === "float" && !first.self && first.world === ground && first.x === m.x,
+        "a burn reports its damage over the creature, for everyone who can see it");
+      const kill = heard.find((e) => e.fx === "sound" && e.id === "kill");
+      ok(kill?.fx === "sound" && kill.at?.world === ground && kill.at.x === m.x && kill.at.y === m.y,
+        "…the kill is heard where the creature fell");
+      ok(heard.some((e) => e.fx === "float" && e.self && /^\+\d+ xp$/.test(e.text)),
+        "…the experience is said to the one who earned it");
+      const last = heard[heard.length - 1];
+      ok(last?.fx === "blood" && last.pool && last.blood === FX.bloodOf("goblin"),
+        "…and the body leaves its pool last, as it always did");
+
+      // a sword hit: number, sound, splash, one after the other
+      const m2 = fresh();
+      m2.hp = 1e6;
+      m2.maxhp = 1e6;
+      p.level = 200;
+      heard.length = 0;
+      for (let i = 0; i < 40 && !heard.some((e) => e.fx === "sound" && e.id === "hit"); i++) CB.playerAttack(ground, p, m2);
+      const hi = heard.findIndex((e) => e.fx === "sound" && e.id === "hit");
+      const hitAt = heard[hi];
+      ok(hi > 0 && hitAt.fx === "sound" && hitAt.at?.x === m2.x, "a sword hit is heard at the creature");
+      ok(heard[hi - 1]?.fx === "float" && heard[hi + 1]?.fx === "blood",
+        "…between its number and its splash, the order the inline calls had");
+
+      // a wound: the number, the sound, the blood and the buzz
+      p.hp = p.maxhp * 10;
+      heard.length = 0;
+      CB.hurtPlayer(ground, p, p.maxhp);
+      ok(heard.some((e) => e.fx === "sound" && (e.id === "hurt" || e.id === "block") && e.at?.x === p.x),
+        "a blow on the player is heard where the player stands");
+      ok(heard.some((e) => e.fx === "float" && !e.self && e.text.startsWith("-"))
+        && heard.some((e) => e.fx === "blood" && e.blood === "red" && !e.pool),
+        "…shows its number to everyone and bleeds red");
+      ok(heard.some((e) => e.fx === "buzz" && e.pattern === 35), "…and a heavy one shakes the phone");
+      heard.length = 0;
+      CB.hurtPlayer(ground, p, 50, true);
+      ok(!heard.some((e) => e.fx === "blood"), "an element burns, it does not bleed");
+
+      // crystals: a refusal is personal, a Shard is a bolt and a bloom timed to it
+      heard.length = 0;
+      C.tickCrystalCooldown(99);
+      C.useCrystal(ground, p, "fireEmberShard");
+      ok(heard.length === 1 && heard[0].fx === "float" && heard[0].self && heard[0].text === "no crystal",
+        "a refused crystal says why, to the one who pressed it");
+      items.addItem(p.bag, "fireEmberShard", 1);
+      p.x = m2.x - 96; p.y = m2.y;
+      heard.length = 0;
+      C.tickCrystalCooldown(99);
+      ok(C.useCrystal(ground, p, "fireEmberShard"), "a Shard flies at the creature in front of it");
+      const b = heard.find((e) => e.fx === "bolt");
+      const bl = heard.find((e) => e.fx === "blast");
+      ok(b?.fx === "bolt" && bl?.fx === "blast" && bl.slot === "hit"
+        && bl.delay === FX.boltFlight(b.fromX, b.fromY, b.toX, b.toY),
+        "…as a bolt, and a bloom that waits exactly the bolt's flight");
+      ok(heard.some((e) => e.fx === "sound" && e.id === "cast" && e.at?.x === p.x), "…cast with a sound at the caster");
+
+      // an arrow: the projectile reaches the map through the client
+      items.addItem(p.bag, "arrow", 1);
+      p.eq.weapon = "bow";
+      const shots0 = ground.shots.length;
+      heard.length = 0;
+      CB.playerShoot(ground, p, m2, "arrow");
+      const sh = heard.find((e) => e.fx === "shot");
+      ok(sh?.fx === "shot" && ground.shots.length === shots0 + 1 && ground.shots.includes(sh.shot),
+        "an arrow is reported, and the client puts that very arrow in flight");
+
+      // an elite's death is told in the Server Log
+      const m3 = fresh();
+      m3.elite = true;
+      CH.resetChat();
+      heard.length = 0;
+      CB.burnMonster(ground, p, m3, "fire", 99999);
+      const slew = heard.find((e) => e.fx === "log");
+      ok(slew?.fx === "log" && /^You slew an /.test(slew.text), "an elite's death goes to the log as an event");
+      ok(CH.chatLines().some((l) => /^You slew an /.test(l.text)), "…and the client writes it there");
+
+      // a creature talking is speech over its own head — alone on the map, so
+      // no neighbour speaks first and holds the rest quiet for three seconds
+      ground.monsters.length = 0;
+      const m4 = fresh();
+      m4.voiceT = 0;
+      heard.length = 0;
+      VO.tickVoices(ground, 100, m4.x, m4.y);
+      const said = heard.find((e) => e.fx === "speech" && e.who === m4.id);
+      ok(said?.fx === "speech" && said.world === ground && said.x === m4.x,
+        "a creature's line is reported as speech, with whose and where");
+      ok(!!CH.bubbleFor(m4.id), "…and the client hangs the bubble over it");
+    } finally {
+      stop();
+    }
+
+    /* ---- the client listens once, however often it is asked ------------- */
+    FC.installFxClient();
+    FC.installFxClient();
+    const before = FT.floatCount();
+    FX.floatAt(ground, 10, 10, "once", "#fff");
+    ok(FT.floatCount() === before + 1, "installing the client twice still plays an event once");
+
+    ground.monsters.length = 0;
+    ground.corpses.length = 0;
+    ground.shots.length = 0;
+    SFX.clearSpellFx();
+    BL.clearBlood();
+    AF.clearAuraFx();
+    CH.resetChat();
+    rps31a();
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
