@@ -7,7 +7,7 @@ import { nextEntityId } from "../world/entities.ts";
 import { toTile, tileCenter, glideWalker, tryStep, chebTiles, octile, STEPS8, walkable } from "../world/grid.ts";
 import { inHaven } from "../world/collision.ts";
 import { stepFacing } from "../gfx/mobSheet.ts";
-import { addBlast, addBolt } from "../gfx/spellFx.ts";
+import { blast, bolt, projectile } from "../systems/fxEvents.ts";
 import { beginCast, isCasting, type MonsterSpell } from "../systems/monsterSpells.ts";
 import type { Occupied } from "../world/grid.ts";
 import type { World, Monster, MonsterKind } from "../world/types.ts";
@@ -1803,10 +1803,10 @@ export function updateMonsters(
         if (rd.fx) {
           // A magic jab flies as a real bolt and blooms where it lands. The
           // bloom is timed off the bolt's own flight so the two never separate.
-          const tt = addBolt(w, m.x, m.y - 16, target.x, target.y - 12, rd.fx.el, rd.fx.tier);
-          addBlast(w, ptx, pty, rd.fx.el, rd.fx.tier, "hit", tt);
+          const tt = bolt(w, m.x, m.y - 16, target.x, target.y - 12, rd.fx.el, rd.fx.tier);
+          blast(w, ptx, pty, rd.fx.el, rd.fx.tier, "hit", tt);
         } else {
-          w.shots.push({
+          projectile(w, {
             fromX: m.x, fromY: m.y - 16,
             toX: target.x, toY: target.y - 12,
             p: 0, dur: Math.max(0.06, d / SHOT_SPEED),
