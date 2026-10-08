@@ -1,34 +1,31 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, MONSTERS_ENABLED, RESPAWN_RETRY_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, WATER_GLINT_CUT, WATER_GLINT_LEN_VAR, WATER_GLINT_SPEED_VAR, WATER_SWELL_COLOR, WATER_SWELL_ALPHA, WATER_SWELL_LEN, WATER_SWELL_SPEED, COAST_FOAM_COLOR, COAST_FOAM_SPEED, COAST_FOAM_CUT, COAST_FOAM_DASHES, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
-import { unstick, lineOfSight, groundBlocked, portalCovers, isSafeTile } from "./world/collision.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, WATER_GLINT_CUT, WATER_GLINT_LEN_VAR, WATER_GLINT_SPEED_VAR, WATER_SWELL_COLOR, WATER_SWELL_ALPHA, WATER_SWELL_LEN, WATER_SWELL_SPEED, COAST_FOAM_COLOR, COAST_FOAM_SPEED, COAST_FOAM_CUT, COAST_FOAM_DASHES, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
+import { unstick, lineOfSight, groundBlocked, isSafeTile } from "./world/collision.ts";
 import { carryCap, carriedWeight } from "./entities/player.ts";
-import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
+import { toTile, atCenter } from "./world/grid.ts";
 import { nearestHit, footprintHit } from "./world/pick.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
-import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx/fireSheet.ts";
+import { campfireFrame, FIRE_LIFT } from "./gfx/fireSheet.ts";
 import { attuneFrame, ATTUNE_SPAN } from "./gfx/attuneSheet.ts";
 import { drawAmbientField } from "./gfx/spellFx.ts";
 import { scenerySprite, FOOTPRINT, SCENERY_NAME } from "./gfx/sceneryArt.ts";
-import { updateNpcs } from "./entities/npcs.ts";
 import { SPR, iconW, iconH, hasPropArt, propSprite, treeSprite, CHEST_LIFT } from "./gfx/sprites.ts";
 import { itemSprite } from "./gfx/itemArt.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { playerSex } from "./systems/sex.ts";
-import { logoutBlocked, markBattle, LOGOUT_REFUSED } from "./systems/battle.ts";
+import { logoutBlocked, LOGOUT_REFUSED } from "./systems/battle.ts";
 import { characterName } from "./systems/character.ts";
-import { clamp, dist, rndi } from "./util.ts";
-import { playerSpeed, refreshDerived } from "./entities/player.ts";
+import { clamp, dist } from "./util.ts";
+import { refreshDerived } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
-import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName, mobLabel, tickMonsterSlows } from "./entities/monsters.ts";
-import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster } from "./systems/combat.ts";
-import { gatherTick, tickRegrowth } from "./systems/gather.ts";
+import { mobName, mobLabel } from "./entities/monsters.ts";
 import { STRUCTS, structCenter, canPlaceAt, tierOf, footprint, solidRows } from "./systems/building.ts";
 import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow, structSprite } from "./gfx/buildingArt.ts";
 import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { type OutfitZone } from "./systems/outfit.ts";
 import { outfitSprites, syncOutfitArt } from "./gfx/outfitArt.ts";
-import { tickCrystalCooldown, crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
+import { crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
 import { cooldownFrac } from "./systems/cooldowns.ts";
 import {
   actionSlots, setSlot, BINDABLE_CRYSTALS,
@@ -40,20 +37,15 @@ import {
   hudUserScale, stepHudUserScale, hudMenuOpen, toggleHudMenu, applyHudPreset, snapHudGroup,
   type HudGroup,
 } from "./systems/hudLayout.ts";
-import { isAttuned, markAttuned, playerElement } from "./systems/tower.ts";
-import { tickBuffs, debtBite } from "./systems/buffs.ts";
-import { ELEMENT_LABEL, ELEMENT_COLOR, FIELD_BURN_TICK_S, FIELD_BURN_DMG, elementEdgeMultiplier,
-  type Element } from "./systems/elements.ts";
+import { ELEMENT_COLOR, type Element } from "./systems/elements.ts";
 import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
-import { stageOf, missionByGround, groundOpen, loreSeen, markLoreSeen, relicTaken, grantsAttunement, missionByEcho } from "./systems/missions.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
-import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
-import { monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
+import { pvpArmed, togglePvpArmed, skull, skullIcon, type Skull } from "./systems/pvp.ts";
+import { corpseById, groundById, structureById } from "./world/entities.ts";
 import { SHOPS } from "./entities/npcs.ts";
-import { MIN_ELEMENTAL_DAMAGE } from "./config.ts";
-import { ITEMS, bagCount, isContainer, equippedBow, activeArrow, bestPracticeArrow, compactBag } from "./items.ts";
-import { addFloat, updateFloats, drawFloats } from "./fx.ts";
+import { ITEMS, bagCount, isContainer, compactBag } from "./items.ts";
+import { updateFloats, drawFloats } from "./fx.ts";
 import {
   SELF, activeChannel, bubbleFor, formatLine, lineAlpha, logServer,
   markAllRead, overlayLines, say, tickChat, unread,
@@ -63,13 +55,9 @@ import { groundEntries, playerEntries, type ContextMenu, type MenuEntry } from "
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
 import { tickAuraFx, drawAuras, drawFlares } from "./gfx/auraFx.ts";
 import { lifePercent, lifeTrail, sweepLifeTrails, drawLifeBar, drawNameTag, drawNpcTag, NAME_GAP } from "./gfx/lifeBar.ts";
-import { updateMonsterSpells } from "./systems/monsterSpells.ts";
-import { tickFields } from "./systems/fields.ts";
 import { installFxClient } from "./fxClient.ts";
-import { unlockAudio, beep, sfx, setAmbient, ambientFor } from "./audio.ts";
+import { unlockAudio, beep, setAmbient, ambientFor } from "./audio.ts";
 import { drawBlood, tickBlood } from "./gfx/blood.ts";
-import { tickVoices } from "./systems/voices.ts";
-import { mobDamageMult } from "./systems/elite.ts";
 import { drawEliteAura } from "./gfx/eliteAura.ts";
 import { mobSprite } from "./gfx/mobArt.ts";
 import { npcSprite } from "./gfx/npcArt.ts";
@@ -77,7 +65,7 @@ import { terrainImage, bakedTerrain } from "./gfx/terrainArt.ts";
 import { loadAllArt } from "./gfx/loadArt.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
-import { createGame, travelTo, applyGates, applyMissionPads, padRefusal, respawnAtHome, homeChests, type Game } from "./game.ts";
+import { createGame, travelTo, homeChests, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { push as pushSave, sendOnLeave, checkIn, startAutosave } from "./net/cloudSave.ts";
 import { drawHud, drawVitals, drawGoldTP, drawMinimapAt, hudText, hudFont, zoneLine, revealMinimap, type HudCtx } from "./ui/hud.ts";
@@ -95,13 +83,11 @@ import {
   openDialogue, closeDialogue, dialogueOpen, dialogueTap, advanceDialogue,
   tickDialogue, drawDialogue, type DialogueChoice,
 } from "./ui/dialogue.ts";
-import { t } from "./text/speech.ts";
-import { lang } from "./systems/panelPrefs.ts";
 import { Tile, isUnderground } from "./world/types.ts";
-import type { Vec, World, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
+import type { Vec, World, Corpse, GroundItem, Npc, Structure } from "./world/types.ts";
 import type { EqSlot, ItemKind, Recipe } from "./items.ts";
-import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays } from "./systems/containers.ts";
-import { tell, withinReach, structInReach, nearStructure, nearNpc, refuseFromProtection } from "./intents/actor.ts";
+import { slotsOf, baseOf, rootOf, sameRef, isInside } from "./systems/containers.ts";
+import { tell, withinReach, structInReach, nearStructure, nearNpc } from "./intents/actor.ts";
 import {
   refCtxOf, refSlots, refUsable, moveItems, takeAllFrom, closeIfEmpty, takeOne,
   dropFromContainer, liftFloorStack, wearPackFrom, wearPackFromFloor, movePackTo, dropWornPack, unequipInto,
@@ -119,6 +105,9 @@ import {
 } from "./intents/missions.ts";
 import { setTarget, targetNearest } from "./intents/target.ts";
 import { onSaveNow } from "./systems/persist.ts";
+import { tickGame } from "./tick/tick.ts";
+import type { TickControls } from "./tick/controls.ts";
+import { targetCorpse, targetGround, targetNpc, targetStruct, targetPoint, gatherPoint, attackMode } from "./tick/targets.ts";
 import type { ContainerRef, RefWorld } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -1284,7 +1273,7 @@ function walkToPoint(at: Vec): void {
   P.gather = null;
   const keepShot = !!P.target
     && (P.target.kind === "mob" || P.target.kind === "dummy")
-    && attackMode().ranged;
+    && attackMode(game).ranged;
   if (!keepShot) P.target = null;
   moveMarker = { x: at.x, y: at.y, t: 0.5 };
 }
@@ -2375,36 +2364,6 @@ function worldClick(w: Vec): void {
 
 /* ---------------- interaction ranges ---------------- */
 
-/* ---------------- resolving the target ----------------
- *
- * The five helpers below turn the held id back into the thing itself, in the
- * CURRENT world, or null when it is gone. Null is the useful half: a monster
- * that died, a corpse that decayed, a stack somebody else picked up — all of
- * them stop resolving on their own, so the "is this still real?" question
- * that used to be scattered through the update loop as `includes()` calls is
- * answered by the same call that fetches the thing.
- *
- * Each one refuses a target of the wrong kind, so a call site cannot resolve
- * a corpse id against the monster list and get a coincidental hit. */
-
-function targetMob(t: Target | null = P.target): Monster | null {
-  return t?.kind === "mob" ? monsterById(cw(), t.id) ?? null : null;
-}
-function targetCorpse(t: Target | null = P.target): Corpse | null {
-  return t?.kind === "corpse" ? corpseById(cw(), t.id) ?? null : null;
-}
-function targetGround(t: Target | null = P.target): GroundItem | null {
-  return t?.kind === "ground" ? groundById(cw(), t.id) ?? null : null;
-}
-function targetNpc(t: Target | null = P.target): Npc | null {
-  return t?.kind === "npc" ? npcById(cw(), t.id) ?? null : null;
-}
-/** Dummies and plain structures share a list, so they share a resolver. */
-function targetStruct(t: Target | null = P.target): Structure | null {
-  return t?.kind === "dummy" || t?.kind === "structure"
-    ? structureById(cw(), t.id, game.worlds.home) ?? null : null;
-}
-
 /**
  * Tap tolerance: on TOUCH, a tap that lands near something counts as a tap on it.
  *
@@ -2506,177 +2465,6 @@ function forgivingTap(world: World, w: Vec): boolean {
   return false;
 }
 
-function targetPoint(): Vec | null {
-  const t = P.target;
-  if (!t) return null;
-  if (t.kind === "mob") { const m = targetMob(t); return m ? { x: m.x, y: m.y } : null; }
-  if (t.kind === "corpse") { const c = targetCorpse(t); return c ? { x: c.x, y: c.y } : null; }
-  if (t.kind === "ground") { const g = targetGround(t); return g ? { x: g.x, y: g.y } : null; }
-  if (t.kind === "npc") { const n = targetNpc(t); return n ? { x: n.x, y: n.y } : null; }
-  // structure: stand just below the sprite base (footprint-aware anchor)
-  const st = targetStruct(t);
-  if (!st) return null;
-  const c = structCenter(st);
-  return { x: c.x, y: c.baseY - 4 };
-}
-
-function gatherPoint(): Vec | null {
-  const g = P.gather;
-  if (!g) return null;
-  const o = g.obj;
-  return { x: o.tx * TILE + TILE / 2, y: o.ty * TILE + TILE / 2 };
-}
-
-/**
- * How the player engages a monster right now. A bow with arrows shoots from
- * afar (its own reach); anything else closes to melee range. A bow with no
- * arrows falls back to a melee poke so you're never fully stuck.
- */
-function attackMode(): { ranged: boolean; reach: number; arrow: ItemKind | null } {
-  const bow = equippedBow(P.eq);
-  if (bow) {
-    // at the Archery Range practice arrows fire first (that's their job);
-    // against anything else only combat arrows count.
-    const t = P.target;
-    const arrow = t?.kind === "dummy" && targetStruct(t)?.key === "range"
-      ? bestPracticeArrow(P.bag, P.ammo)
-      : activeArrow(P.bag, P.ammo);
-    if (arrow) return { ranged: true, reach: bow.range, arrow };
-  }
-  return { ranged: false, reach: MELEE_REACH_PX, arrow: null };
-}
-
-let noArrowWarnT = 0;
-function warnNoArrows(): void {
-  if (noArrowWarnT > 0) return;
-  noArrowWarnT = ARROW_MISS_WARN_S;
-  flash("no arrows", "#ff9e6a");
-}
-
-/**
- * Fire the currently-kept ranged target when it's within reach and the attack is
- * off cooldown. Runs every frame while kiting, independent of movement, so you
- * can walk away and still loose arrows. Faces the target and drops it on death.
- */
-function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind | null }): void {
-  if (refuseFromProtection(game)) return;
-  const t = P.target;
-  if (!t || !mode.arrow) return;
-  if (t.kind === "mob") {
-    // A target that died, decayed or was left on another island simply stops
-    // resolving — no separate liveness check needed any more.
-    const m = targetMob(t);
-    if (!m || m.hp <= 0) { P.target = null; return; }
-    faceDelta(m.x - P.x, m.y - P.y);
-    // range AND a clear line of fire — arrows no longer thread cave walls
-    // (which made the dragon a shooting-gallery target from total safety)
-    if (dist(P.x, P.y, m.x, m.y) <= mode.reach && P.atkCd <= 0
-      && lineOfSight(cw(), P.x, P.y, m.x, m.y)) {
-      P.atkCd = P.atkRate;
-      if (playerShoot(cw(), P, m, mode.arrow)) P.target = null;
-    }
-  } else if (t.kind === "dummy") {
-    const tp = targetPoint();
-    if (!tp) return;
-    faceDelta(tp.x - P.x, tp.y - P.y);
-    const st = targetStruct(t);
-    if (st && dist(P.x, P.y, tp.x, tp.y) <= mode.reach && P.atkCd <= 0) {
-      P.atkCd = P.atkRate;
-      shootDummy(cw(), P, st, mode.arrow);
-    }
-  }
-}
-
-/**
- * Swing at the currently-kept MELEE target whenever it's within arm's reach
- * and the attack is off cooldown. Runs every frame (like tickRangedFire), so
- * the attack persists through manual movement and looting. Slightly more
- * reach slack than the approach stop-distance so a wiggling monster doesn't
- * stutter in and out of range.
- */
-function tickMeleeFire(): void {
-  if (refuseFromProtection(game)) return;
-  const t = P.target;
-  if (!t || t.kind !== "mob") return;
-  const m = targetMob(t);
-  if (!m || m.hp <= 0) { P.target = null; return; }
-  if (dist(P.x, P.y, m.x, m.y) <= MELEE_REACH_PX && P.atkCd <= 0) {
-    P.atkCd = P.atkRate;
-    faceDelta(m.x - P.x, m.y - P.y);
-    if (equippedBow(P.eq)) warnNoArrows(); // bow with an empty quiver pokes, but nags
-    if (playerAttack(cw(), P, m)) P.target = null;
-  }
-}
-
-/* ---------------- grid walking (player) ---------------- */
-
-/** Cached A* route the player is currently following (tile coords). */
-let walkRoute: { x: number; y: number }[] = [];
-let walkKey = "";
-
-/**
- * Tiles claimed by creatures — the player can never step onto one. Townsfolk
- * count: now that the smith walks, sharing his square would let him slide
- * through you, and A* routes around him for free anyway.
- */
-function playerOcc(world: World): Occupied {
-  return (tx, ty) => world.monsters.some((m) => m.tx === tx && m.ty === ty)
-    || world.npcs.some((n) => n.tx === tx && n.ty === ty);
-}
-
-/**
- * Walk the player toward the goal tile along an A*-planned route, spending up
- * to `budget` px of movement this frame. The route is cached and replanned
- * only when the goal changes or a monster steps into the next square, so the
- * cost stays negligible. Returns true while genuinely progressing — false
- * means "stuck or arrived", letting callers clear their destination.
- */
-function walkGrid(world: World, gx: number, gy: number, budget: number): boolean {
-  const occ = playerOcc(world);
-  const key = world.key + ":" + gx + "," + gy;
-  if (key !== walkKey) {
-    walkKey = key;
-    walkRoute = [];
-  }
-  let moved = false;
-  for (;;) {
-    const left = glideWalker(P, budget);
-    if (left < budget) moved = true; // some glide happened
-    budget = left;
-    if (budget <= 0) break;
-    if (P.tx === gx && P.ty === gy) break;
-    if (!walkRoute.length) {
-      walkRoute = findPath(world, P.tx, P.ty, gx, gy, occ);
-      if (!walkRoute.length) break;
-    }
-    const n = walkRoute[0];
-    const sx = n.x - P.tx;
-    const sy = n.y - P.ty;
-    const ok = Math.abs(sx) <= 1 && Math.abs(sy) <= 1 && tryStep(world, P, sx, sy, occ);
-    if (ok) {
-      walkRoute.shift();
-      faceDelta(sx, sy);
-      moved = true;
-      continue;
-    }
-    // a monster claimed the next square (or the route went stale): replan once
-    walkRoute = findPath(world, P.tx, P.ty, gx, gy, occ);
-    const n2 = walkRoute[0];
-    const s2x = n2 ? n2.x - P.tx : 0;
-    const s2y = n2 ? n2.y - P.ty : 0;
-    if (n2 && tryStep(world, P, s2x, s2y, occ)) {
-      walkRoute.shift();
-      faceDelta(s2x, s2y);
-      moved = true;
-      continue;
-    }
-    break; // boxed in this frame — try again next frame
-  }
-  return moved;
-}
-
-/* ---------------- update ---------------- */
-
 /* ---------------- proximity panels (Tibia-style auto-close) ---------------- */
 
 /**
@@ -2690,7 +2478,7 @@ function tickNpcTalk(world: World): void {
   const hold = (n: Npc | null | undefined): void => {
     if (n && world.npcs.includes(n)) n.talk = NPC_TALK_HOLD_S;
   };
-  if (P.target?.kind === "npc") { const n = targetNpc(); if (n) hold(n); }
+  if (P.target?.kind === "npc") { const n = targetNpc(game); if (n) hold(n); }
   if (hasWindow("shop")) hold(ui.npc);
   if (hasWindow("tasks")) hold(world.npcs.find((n) => n.key === "taskmaster"));
   if (hasWindow("wardrobe")) hold(world.npcs.find((n) => n.key === "tailor"));
@@ -2766,247 +2554,28 @@ function tickProximityPanels(dt: number): void {
   sweepContainerWindows();
 }
 
-/**
- * Standing in a campfire burns you.
+/* ---------------- the frame ----------------
  *
- * A camp fire seals nothing — its artwork is one tile exactly and only
- * twenty-one rows of it are flame, so a third of a solid square used to read as
- * bare ground the player was refused entry to. Making it walkable removed that
- * lie; this puts the cost back, which is what "walk through it if you like"
- * ought to mean.
- *
- * Deliberately the same shape as the burning ground a monster's fire field
- * leaves: elemental, so it goes straight past shield and armour — you cannot
- * raise a buckler against a fire you are standing in — one bite per tile per
- * tick, and no floating label, because the flame under your feet is the label.
- * The clock is keyed per TILE, so crossing three fires in a row costs three
- * bites while standing in one costs one.
+ * The game moving on by one frame is `tickGame` (tick/tick.ts, Etap 3.1d):
+ * the clocks, the walk, the blows, the creatures, the hazards and the pads.
+ * What is left here is the screen's share of the frame — the walk cycle,
+ * the floating numbers and spell art, the minimap, the windows that close
+ * when you walk off, the sound of the place, and this browser's autosave —
+ * and the four answers the tick needs from whoever holds the controls.
  */
-const fireClock = new Map<string, number>();
-let fireT = 0;
-
-function tickCampfireBurn(world: World, dt: number): void {
-  fireT += dt;
-  if (P.dead) return;
-  for (const f of world.fires) {
-    if (f.tx !== P.tx || f.ty !== P.ty) continue;
-    const key = `${world.key}|${f.tx}|${f.ty}`;
-    const next = fireClock.get(key) ?? 0;
-    if (fireT < next) continue;
-    fireClock.set(key, fireT + FIRE_BURN_TICK_S);
-    const raw = rndi(FIRE_BURN_DMG[0], FIRE_BURN_DMG[1]);
-    const dmg = Math.max(MIN_ELEMENTAL_DAMAGE,
-      Math.round(raw * elementEdgeMultiplier("fire", playerElement())));
-    hurtPlayer(world, P, dmg, true);
-  }
-  /* THE OTHER FOUR ELEMENTS BITE TOO, on the same terms.
-   *
-   * The lid of the temple carried sixteen glowing squares that looked exactly
-   * as dangerous as the camp fires beside them and cost nothing at all to walk
-   * through. That is the ground telling a lie, and it is the same lie the camp
-   * fire used to tell before it was made walkable and made to hurt.
-   *
-   * `ambientFx` ONLY. `attuneNodes` — the five rune circles — are left alone
-   * deliberately: they are the thing the errand is about, and charging a
-   * player health for accepting the gift he came for would be a joke at his
-   * expense. The two lists are separate in `World` for exactly this kind of
-   * reason.
-   *
-   * The clock is shared with the fires and keyed on the tile, so a field and a
-   * fire could not double-bite the same square even if one were ever placed on
-   * the other — and a test says none ever is.
-   */
-  for (const nd of world.ambientFx) {
-    if (nd.tx !== P.tx || nd.ty !== P.ty) continue;
-    const key = `${world.key}|${nd.tx}|${nd.ty}`;
-    const next = fireClock.get(key) ?? 0;
-    if (fireT < next) continue;
-    fireClock.set(key, fireT + FIELD_BURN_TICK_S);
-    const raw = rndi(FIELD_BURN_DMG[0], FIELD_BURN_DMG[1]);
-    const dmg = Math.max(MIN_ELEMENTAL_DAMAGE,
-      Math.round(raw * elementEdgeMultiplier(nd.el, playerElement())));
-    hurtPlayer(world, P, dmg, true);
-  }
-  // the map's fires never move, but travelling between worlds retires the keys
-  if (fireClock.size > 64) {
-    for (const k of fireClock.keys()) if (!k.startsWith(`${world.key}|`)) fireClock.delete(k);
-  }
-}
-
-/**
- * The same two hazards biting monsters instead of the player — Tibia burns
- * anything standing in a fire, not just the character. The cooldown lives on
- * the creature itself (`m.burnAt`), not in a map keyed like `fireClock`: a
- * monster's id never repeats, so a map entry per creature would grow by one
- * every respawn for the rest of the session and nothing would ever remove it.
- * A fire and a field are never stacked on one square (see `tickCampfireBurn`),
- * so at most one of the two loops below ever lands a hit per monster per
- * tick — the `break`s are just cheap insurance against that changing later.
- */
-function tickMonsterBurn(world: World): void {
-  for (const m of [...world.monsters]) {
-    if (m.hp <= 0) continue;
-    if ((m.burnAt ?? 0) > fireT) continue;
-    for (const f of world.fires) {
-      if (f.tx !== m.tx || f.ty !== m.ty) continue;
-      m.burnAt = fireT + FIRE_BURN_TICK_S;
-      burnMonster(world, P, m, "fire", rndi(FIRE_BURN_DMG[0], FIRE_BURN_DMG[1]));
-      break;
-    }
-    if (m.hp <= 0) continue;
-    for (const nd of world.ambientFx) {
-      if (nd.tx !== m.tx || nd.ty !== m.ty) continue;
-      m.burnAt = fireT + FIELD_BURN_TICK_S;
-      burnMonster(world, P, m, nd.el, rndi(FIELD_BURN_DMG[0], FIELD_BURN_DMG[1]));
-      break;
-    }
-  }
-}
-
-/**
- * The circle whose refusal has already been spoken, as `"tx,ty"`, or null when
- * the player is not standing in one. Purely a UI latch — transient, never
- * saved, and reset by simply walking off.
- */
-let refusedCircle: string | null = null;
-
-/**
- * Walking into a rune circle, which is the whole of the Calanais errand.
- *
- * There is no click and no prompt. The player has walked the disc, looked at
- * five coloured wedges, and stepped into one — stepping in IS the answer, and
- * asking "are you sure?" after they crossed an island to do it would be the
- * game second-guessing a decision it just watched them make.
- *
- * ONCE, EVER, and the guard is the mission stage rather than a flag or a
- * clock. `relicTaken` moves `active` to `complete`, and this returns early on
- * anything that is not `active` — so the other four circles go quiet the
- * instant the first one fires, the sanctum door upstairs goes dark behind the
- * player, and the dais to Chronos lights. The same three pads, in the same
- * three states, that a boss kill drives on the other two errands.
- *
- * `isAttuned` is checked as well, and it is not redundant: a character who
- * somehow already holds this element gets the circle refused rather than
- * spending their one errand on a duplicate.
- */
-function checkAttuneCircles(world: World): void {
-  const md = missionByEcho(world.key);
-  if (P.dead || !md || !grantsAttunement(md) || stageOf(md.id, P.level) !== "active") {
-    /* Not standing anywhere that can refuse, so the latch below is cleared on
-     * every path out — including leaving the sanctum entirely, which is why
-     * the four guards are one branch rather than four early returns. */
-    refusedCircle = null;
-    return;
-  }
-  for (const nd of world.attuneNodes) {
-    // The circle owns the 2x2 block it is centred on, so standing anywhere on
-    // its artwork counts — being refused by a ring you are visibly inside is
-    // the campfire's old collision bug wearing a different hat.
-    if (Math.abs(P.tx - nd.tx) > 1 || Math.abs(P.ty - nd.ty) > 1) continue;
-    if (isAttuned(nd.el)) {
-      /* SAID ONCE PER VISIT, not once per frame.
-       *
-       * This runs every tick, and `flash` writes a float AND a log line, so
-       * standing on a circle you already carry stacked six copies of "ten już
-       * w tobie jest" up the left of the screen and buried the chat log under
-       * them. The successful path never showed it because `markAttuned` moves
-       * the stage off `active` and the guard above then returns forever — so
-       * the bug only ever appeared on the refusal, which is exactly what
-       * Radek found: "robi tak wtedy kiedy juz ten żywioł mam".
-       *
-       * Latched on the SQUARE rather than on a timer, because the useful
-       * behaviour is per visit: stand still and it is said once, step off and
-       * back on — or onto a different circle — and it is said again, which is
-       * what a player checking two rings actually wants. */
-      const here = `${nd.tx},${nd.ty}`;
-      if (refusedCircle !== here) {
-        refusedCircle = here;
-        flash(t("attune.already", lang()), ELEMENT_COLOR[nd.el]);
-      }
-      return;
-    }
-    markAttuned(nd.el);
-    relicTaken(md.id, P.level);
-    applyMissionPads(game.worlds, P.level);
-    addFloat(world, P.x, P.y - 64, ELEMENT_LABEL[nd.el], ELEMENT_COLOR[nd.el]);
-    sfx("chime");
-    saveGame(game);
-    sageSays("sage.attuned.calanais", { then: () => {} });
-    return;
-  }
-  // Off every circle: the next one stepped into may speak again.
-  refusedCircle = null;
-}
-
-function checkPortals(): void {
-  /* A box on screen holds the pad. The player is standing on it, the jump has
-   * not happened, and the moment the box closes this runs again and takes it —
-   * so the chronicle below needs no callback and no "already travelling" flag.
-   * It simply refuses to move anyone who is reading. */
-  if (dialogueOpen()) return;
-  if (P.tpCd > 0) return;
-  for (const pt of cw().portals) {
-    if (portalCovers(pt, P.x, P.y)) {
-      if (pt.inactive) {
-        // a dark pad: hum, and say WHY it is dark — see `padRefusal`
-        const why = padRefusal(cw().key, pt.dest, P.level);
-        flash(t(why.key, lang(), why.vars), "#b9a6d8");
-        P.tpCd = 1.6; // don't spam the flash while standing on the pad
-        return;
-      }
-      /* THE CHRONICLE. Once per character, on the pad that opens a mission's
-       * hunting ground, BEFORE the jump rather than after it.
-       *
-       * Before, because this pad is in the sage's cellar and the cellar is a
-       * safe tile. The far side is not: the arrival pad on Liddesdale has
-       * smugglers inside the first fifth of the island, and a modal box that
-       * blocks input while one of them walks over is a page of folklore read
-       * at the cost of the health bar. The story is told where nothing can
-       * interrupt it, and the valley is entered with it already read. */
-      const m = missionByGround(pt.dest);
-      if (m && groundOpen(pt.dest, P.level) && !loreSeen(m.id)) {
-        markLoreSeen(m.id);
-        saveGame(game);
-        openDialogue({ titleKey: `lore.title.${m.id}`, bodyKey: `lore.${m.id}` });
-        return;
-      }
-      /* THE SAGE'S WORD IN THE SANCTUM. Same trick as the chronicle above and
-       * for the same reason: said on THIS side of the jump, where the player
-       * is standing on a mission pad and nothing can walk over while they
-       * read. The difference is that it is not once-per-character — the
-       * sanctum has no ladder back up, so a descent happens once per errand
-       * anyway, and gating it on a flag would only mean a player who logged
-       * out on the stair came back to a room of five permanent choices and no
-       * instructions.
-       *
-       * Gated on the stage rather than on the destination alone: once a circle
-       * has been walked into the errand is `complete`, the door is dark, and
-       * this cannot be reached at all. */
-      const echoM = missionByEcho(pt.dest);
-      if (echoM && grantsAttunement(echoM) && stageOf(echoM.id, P.level) === "active") {
-        travelTo(game, pt.dest);
-        openDialogue({ titleKey: `lore.title.${echoM.id}`, bodyKey: `sage.descend.${echoM.id}` });
-        return;
-      }
-      travelTo(game, pt.dest);
-      return;
-    }
-  }
-}
+const controls: TickControls = {
+  axis: () => moveAxis(),
+  reading: () => dialogueOpen(),
+  arrive: (t) => { useArrived(t); },
+  notice: (n) => {
+    if (n.kind === "sage") sageSays(n.key, { then: () => {} });
+    else openDialogue({ titleKey: n.titleKey, bodyKey: n.bodyKey });
+  },
+};
 
 function update(dt: number): void {
   const world = cw();
-  // level gates: seal/open against the current level (also right after level-ups)
-  applyGates(world, P.level);
-  // …and the same for the sage's doors, against the mission chain. Swept over
-  // EVERY world rather than the current one because the pad that has to change
-  // is usually somewhere else: take the mission in the cellar and the door that
-  // lights is on the island you are not standing on yet.
-  applyMissionPads(game.worlds, P.level);
   waveT += dt;
-  P.tpCd = Math.max(0, P.tpCd - dt);
-  P.atkCd = Math.max(0, P.atkCd - dt);
-  tickCrystalCooldown(dt);
   /* The clocks that must run WHATEVER the player is doing, ticked here at the
    * top where nothing can return past them.
    *
@@ -3017,9 +2586,9 @@ function update(dt: number): void {
    * that only runs while you are dead is not a clock.
    *
    * The skull's timer goes with it and for the same reason: dying does not
-   * launder a frag, and neither does standing still. */
+   * launder a frag, and neither does standing still. It is the game's clock,
+   * so it runs at the top of `tickGame`. */
   tickChat(dt);
-  tickSkull(dt);
   tickDialogue(dt);
   // mid-fight loot walk: the corpse clicked during combat pops open the
   // moment we're in range (or is forgotten if it despawned / got looted away)
@@ -3039,286 +2608,34 @@ function update(dt: number): void {
   lastPX = P.x;
   lastPY = P.y;
 
-  // death → respawn countdown
-  if (P.dead) {
-    P.deadT -= dt;
-    if (P.deadT <= 0) respawnAtHome(game);
-    updateFloats(dt);
-    updateSpellFx(dt);  // the spell that killed you still gets to finish
-    tickFields(dt);     // …and the ground it set alight still burns out on time
-    tickAuraFx(dt);
-    // The long locks keep counting while you are face down. Death already
-    // cleared the effects themselves, so this only advances `furyLock` and
-    // `aegisLock` — and it has to, or lying dead would pause the half-hour
-    // wait and dying would be a way to shorten it.
-    tickBuffs(P.buffs, dt);
-    // …and so does the cast behind it: a creature rooted in its windup when
-    // you died would still be rooted when you walked back in.
-    updateMonsterSpells(game.current, dt, { tx: P.tx, ty: P.ty, dead: true }, () => {});
-    return;
-  }
+  const tick = tickGame(game, dt, controls);
+  // steering by hand drops the body we were walking over to loot
+  if (tick.steered) pendingLoot = null;
 
-  // With a bow equipped (and arrows), an attack target is a "kite" target:
-  // it survives manual movement so you can shoot and run (Tibia-style).
-  const mode = attackMode();
-  const kiting = !!P.target
-    && (P.target.kind === "mob" || P.target.kind === "dummy")
-    && mode.ranged;
-  // A MELEE attack on a monster is just as sticky now: the marked target
-  // survives manual movement, and tickMeleeFire below swings whenever the
-  // monster is in reach — so you can step around, loot, and keep fighting.
-  const holdMelee = !!P.target && P.target.kind === "mob" && !mode.ranged;
-
-  // movement: WASD/joystick overrides auto-actions. All walking is grid
-  // walking now (Tibia-style): the player stands on ONE tile, glides toward
-  // its centre, and only from the centre claims an adjacent square. Monsters
-  // hard-block their tiles — a free square is always a real escape route.
-  /* A box on screen stops the feet. Both the keys and any click-to-walk
-   * destination already in flight, because a player who tapped the far side of
-   * the room and then stepped on the pad would otherwise read the chronicle
-   * while sliding out from under it. */
-  if (dialogueOpen()) { P.dest = null; P.gather = null; }
-  const ax = dialogueOpen() ? { dx: 0, dy: 0 } : moveAxis();
-  // Tibia-style grid walking: whatever state we're in, ALWAYS finish the
-  // in-flight glide toward the current tile centre FIRST. A step, once begun,
-  // always completes — so the player can never come to rest between tiles
-  // (releasing the key mid-step no longer freezes it half-way; approaching a
-  // monster / node settles it cleanly too). The unspent budget then funds any
-  // NEW steps below. While the glide is still running this frame `budget`
-  // comes back 0 and every branch simply waits a frame.
-  let budget = playerSpeed(P) * dt;
-  budget = glideWalker(P, budget);
-  if (ax.dx || ax.dy) {
-    P.dest = null; P.gather = null; pendingLoot = null;
-    if (!kiting && !holdMelee) P.target = null; // non-combat targets still drop
-    const occ = playerOcc(world);
-    for (;;) {
-      if (budget <= 0) break;
-      const { sx, sy } = stepDir(ax.dx, ax.dy);
-      if (!sx && !sy) break;
-      // diagonal blocked → slide along whichever axis is free (wall hugging)
-      if (!tryStep(world, P, sx, sy, occ)
-        && !(sx && sy && (tryStep(world, P, sx, 0, occ) || tryStep(world, P, 0, sy, occ)))) break;
-      budget = glideWalker(P, budget); // glide onto the freshly-claimed tile
-    }
-    walkKey = ""; // manual steps invalidate any cached auto-route
-    faceDelta(ax.dx, ax.dy);
-  } else if (P.dest) {
-    const gx = toTile(P.dest.x);
-    const gy = toTile(P.dest.y);
-    const there = P.tx === gx && P.ty === gy && atCenter(P);
-    if (there) P.dest = null;
-    else {
-      const moved = walkGrid(world, gx, gy, budget);
-      if (P.tx === gx && P.ty === gy && atCenter(P)) P.dest = null;
-      // unreachable click (water, rock): the best-effort route ended — stop
-      else if (!moved && atCenter(P)) P.dest = null;
-    }
-  } else if (P.target && !kiting) {
-    // melee / walk-up targets: approach along the grid, then act.
-    //
-    // STAND WHILE FIGHTING (chase off) applies to CREATURES only. Walking up
-    // to a chest, a corpse or an NPC is not a chase — it is the only way to
-    // reach them, and a player who turned off pursuit did not mean "never
-    // walk to a body again". Tibia draws the line in the same place: the
-    // toggle is labelled for opponents.
-    const chaseBlocked = !chasing()
-      && (P.target.kind === "mob" || P.target.kind === "dummy");
-    const tp = targetPoint();
-    if (tp) {
-      // Anything that OPENS A PANEL is measured with the very rule the panel
-      // closes on. Mixing the two — walk up to 48 px, then judge the open
-      // window by squares — is how you get a chest that pops and shuts in the
-      // same breath, because 48 px reaches a tile the square rule calls two
-      // away. Fighting keeps its pixel reach: a blade is not a window.
-      const t = P.target;
-      const inReach = t.kind === "corpse" || t.kind === "ground" ? withinReach(game, tp.x, tp.y)
-        : t.kind === "structure" ? (() => { const st = targetStruct(t); return !!st && structInReach(game, st); })()
-        : dist(P.x, P.y, tp.x, tp.y) <= (t.kind === "dummy" || t.kind === "mob" ? mode.reach : MELEE_REACH_PX);
-      if (inReach) resolveTarget();
-      else if (chaseBlocked) {
-        // standing our ground: keep the mark, take no step. tickMeleeFire
-        // below still swings the moment the creature walks into reach.
-      } else {
-        const moved = walkGrid(world, toTile(tp.x), toTile(tp.y), budget);
-        // the route ran out without arriving (walled-in chest, corpse across
-        // water): let go rather than shuffle against the obstacle forever
-        if (!moved && atCenter(P) && (t.kind === "corpse" || t.kind === "structure" || t.kind === "ground")) {
-          P.target = null;
-          flash("too far away", "#e0a06a");
-        }
-      }
-    }
-  } else if (kiting) {
-    // idle bowman: close the gap when the target drifted out of range OR a
-    // wall blocks the shot (walk around the corner instead of standing dumb)
-    const tp = targetPoint();
-    if (tp) {
-      const d = dist(P.x, P.y, tp.x, tp.y);
-      const blocked = P.target?.kind === "mob" && !lineOfSight(world, P.x, P.y, tp.x, tp.y);
-      // Standing archer: hold the spot and let the shot lapse rather than
-      // walking into the pack. This is the case the switch was asked for.
-      if (chasing() && (d > mode.reach || blocked)) walkGrid(world, toTile(tp.x), toTile(tp.y), budget);
-    }
-  } else if (P.gather) {
-    const gp = gatherPoint();
-    if (gp) {
-      const d = dist(P.x, P.y, gp.x, gp.y);
-      if (d > MELEE_REACH_PX) walkGrid(world, toTile(gp.x), toTile(gp.y), budget);
-      else if (P.atkCd <= 0 && P.gather) {
-        gatherTick(world, P, P.gather);
-      }
-    }
-  }
-
-  // Ranged fire pass: with a bow, keep shooting the kept target whenever it's in
-  // range and off cooldown — whether we're standing still or kiting on the move.
-  if (kiting) tickRangedFire(mode);
-  // Melee fire pass — the sword-arm mirror of the above: the marked monster
-  // eats a swing whenever it's within reach and the attack is off cooldown,
-  // even while the player is walking or has a loot window open.
-  else if (holdMelee) tickMeleeFire();
-
-  // monsters attack the player (only on dangerous islands)
-  if (!world.safe) {
-    updateMonsters(world, dt, { x: P.x, y: P.y, tx: P.tx, ty: P.ty, dead: P.dead }, (m, ranged) => {
-      /* THE OTHER HALF OF THE ZONE. A creature cannot WALK into a haven, and
-       * that was taken for a sanctuary — but a crossbowman reaches three
-       * hundred pixels and a sword reaches across the boundary tile, so the
-       * haven only ever stopped the ones that had to come to you. Asked on
-       * the tile the player is standing on RIGHT NOW, so stepping in cuts a
-       * bolt already loosed rather than letting it land a beat later. */
-      if (isSafeTile(world, P.tx, P.ty)) return;
-      markBattle();
-      const d = MONSTER_DEFS[m.kind];
-      const roll = ranged && d.ranged ? d.ranged.dmg : d.dmg;
-      hurtPlayer(world, P, Math.round(rndi(roll[0], roll[1]) * mobDamageMult(m)));
-    });
-    // respawns — never on top of the player (Tibia: nothing spawns on screen);
-    // if the whole area is camped, the respawn retries a few seconds later.
-    if (MONSTERS_ENABLED) {
-      for (let i = world.respawns.length - 1; i >= 0; i--) {
-        const r = world.respawns[i];
-        r.t -= dt;
-        if (r.t <= 0) {
-          // Every creature in the game is posted, so this is the only path
-          // left: it goes back to the square the map's author drew it on, or
-          // — if the player is standing there — to the nearest free ring
-          // around it. Etap 40 removed the camp and scatter branches.
-          const done = r.guard
-            ? spawnAtPost(world, r.kind, r.guard.tx, r.guard.ty, P)
-            : false;
-          if (done) world.respawns.splice(i, 1);
-          else r.t = RESPAWN_RETRY_S;
-        }
-      }
-    }
-  }
-
-  // corpse decay
-  for (let i = world.corpses.length - 1; i >= 0; i--) {
-    world.corpses[i].t -= dt;
-    if (world.corpses[i].t <= 0) {
-      if (ui.loot === world.corpses[i]) { ui.loot = null; closeWindow("loot"); }
-      world.corpses.splice(i, 1);
-    }
-  }
-
-  /* Dropped items fade from the ground after their lifetime (1h) — except
-   * CONTAINERS, which never do.
-   *
-   * A loot bag is a place you deliberately leave things. If it rotted on the
-   * same hour timer as a stray log, the feature would be a trap: you set your
-   * bag down by the corpses, clear a floor, come back and both the bag and
-   * everything in it are gone. Tibia's ground never eats a backpack either.
-   * The bag persists; the wood you dropped by accident still tidies itself. */
-  for (let i = world.ground.length - 1; i >= 0; i--) {
-    if (!groundDecays(world.ground[i])) continue;
-    world.ground[i].t -= dt;
-    if (world.ground[i].t > 0) continue;
-    // a loot bag rotting out from under an open window has to take the window
-    // with it, or the player is left dragging things into nowhere
-    if (ui.floor === world.ground[i]) { ui.floor = null; closeWindow("floor"); }
-    world.ground.splice(i, 1);
-  }
-
-  /* Rune effects, and Fury's bill.
-   *
-   * The damage is dealt HERE rather than inside buffs.ts because that module
-   * must not import combat.ts — `hurtPlayer` asks it for the Aegis cut and the
-   * Fury multiplier, so the arrow only points one way. `tickBuffs` counts the
-   * ticks that came due and this is the one place that knows how to hurt
-   * somebody.
-   *
-   * It goes through `hurtPlayer` as ELEMENTAL, which is what it is: the burn
-   * is inside you and no shield answers it. Aegis does reduce it, and that is
-   * fine — fifteen seconds against a five-minute debt is under a twentieth of
-   * the bill, so it reads as a small mercy rather than a way out.
-   *
-   * Mire ticks with the creatures it slowed, which is why that call sits next
-   * to this one rather than in updateMonsters: both are "time passing for an
-   * effect somebody bought". */
-  tickMonsterSlows(world, dt);
-  const bites = tickBuffs(P.buffs, dt);
-  if (bites > 0 && !P.dead) {
-    for (let i = 0; i < bites && !P.dead; i++) {
-      hurtPlayer(world, P, debtBite(P.maxhp), true);
-    }
-  }
-
-  // fed regeneration (Tibia-style): HP trickles back only while fed. The fed
-  // clock ticks down regardless of HP, exactly like the original.
-  if (P.fedS > 0) {
-    P.fedS = Math.max(0, P.fedS - dt);
-    if (!P.dead && P.hp < P.maxhp) P.hp = Math.min(P.maxhp, P.hp + FED_HP_PER_S * dt);
-  }
+  updateFloats(dt);
+  // spell bolts and the blooms they leave (cosmetic — the hit already landed),
+  // and the spell that killed you still gets to finish
+  updateSpellFx(dt);
+  tickAuraFx(dt);
+  if (tick.dead) return;
 
   // structure anim
   for (const s of world.structures) { s.anim = (s.anim ?? 0) + dt; if (s.hurtT) s.hurtT = Math.max(0, s.hurtT - dt); }
 
   // arrows in flight (cosmetic — the hit already landed when fired)
-  if (noArrowWarnT > 0) noArrowWarnT = Math.max(0, noArrowWarnT - dt);
   for (let i = world.shots.length - 1; i >= 0; i--) {
     const sh = world.shots[i];
     sh.p += dt / sh.dur;
     if (sh.p >= 1) world.shots.splice(i, 1);
   }
 
-  // spell bolts and the blooms they leave (also cosmetic, same rule)
-  updateSpellFx(dt);
-  // the burning ground is NOT cosmetic — it hurts — but it ages on the same beat
-  tickFields(dt);
-  tickAuraFx(dt);
-  // monster casts: windups landing, and the ground they left on fire. This is
-  // the one place spell damage reaches the player from a creature, so it is
-  // deliberately the same `hurtPlayer` the melee exchange uses — elemental
-  // damage ignores armor on its own, inside the damage roll.
-  updateMonsterSpells(world, dt, { tx: P.tx, ty: P.ty, dead: P.dead }, (dmg, el, name) => {
-    markBattle();
-    const adjusted = Math.max(MIN_ELEMENTAL_DAMAGE,
-      Math.round(dmg * elementEdgeMultiplier(el, playerElement())));
-    hurtPlayer(world, P, adjusted, true);
-    // Only the discrete hits announce themselves. The per-second burn passes
-    // `null`: it already draws a number every tick, and stacking the word
-    // "burning" on top of it once a second buried the player under his own
-    // damage log while he was standing in a fire he can plainly see.
-    if (name) addFloat(world, P.x, P.y - 26, name, ELEMENT_COLOR[el]);
-  });
-
-  tickCampfireBurn(world, dt);
-  tickMonsterBurn(world);
-  revealMinimap(world, P.tx, P.ty);
-  checkAttuneCircles(world);
-
-  tickRegrowth(world, dt, P.x, P.y, true);
+  // a pad that carried the player this frame left them on another map: the
+  // minimap catches up on the next one
+  if (cw() === world) revealMinimap(world, P.tx, P.ty);
   tickNpcTalk(world);
-  tickVoices(world, dt, P.x, P.y);
   tickBlood(dt);
   setAmbient(ambientFor(world.key));
-  updateNpcs(world, dt, P.x, P.y);
   tickProximityPanels(dt);
-  checkPortals();
-  updateFloats(dt);
   if (moveMarker) { moveMarker.t -= dt; if (moveMarker.t <= 0) moveMarker = null; }
 
   // autosave every 5s
@@ -3332,45 +2649,16 @@ function attackNearest(): void {
   if (targetNearest(game) === "marked") pendingLoot = null;
 }
 
-function resolveTarget(): void {
-  const t = P.target;
-  if (!t) return;
-  /* Every branch resolves its id first and lets go of a target that no longer
-   * exists. That "if it is gone, drop it" line used to be three different
-   * checks in three different shapes — `includes()`, `hp <= 0`, and nothing at
-   * all for structures — and now it is one, because a stale id cannot resolve. */
-  if (t.kind === "mob") {
-    const m = targetMob(t);
-    if (!m) { P.target = null; return; }
-    if (P.atkCd <= 0) {
-      P.atkCd = P.atkRate;
-      const mode = attackMode();
-      if (mode.ranged && mode.arrow) {
-        if (playerShoot(cw(), P, m, mode.arrow)) P.target = null;
-      } else {
-        if (equippedBow(P.eq)) warnNoArrows();
-        if (playerAttack(cw(), P, m)) P.target = null;
-      }
-    }
-  } else if (t.kind === "dummy") {
-    const st = targetStruct(t);
-    if (!st) { P.target = null; return; }
-    if (P.atkCd <= 0) {
-      P.atkCd = P.atkRate;
-      const mode = attackMode();
-      if (mode.ranged && mode.arrow) shootDummy(cw(), P, st, mode.arrow);
-      else if (st.key === "range") {
-        // the straw butt only takes arrows — no bow (or an empty quiver)
-        // means nothing to train with, so let go instead of punching it
-        flash("you need a bow and arrows", "#e0a06a");
-        P.target = null;
-      }
-      else { if (equippedBow(P.eq)) warnNoArrows(); hitDummy(cw(), P, st); }
-    }
-  } else if (t.kind === "corpse") {
-    const c = targetCorpse(t);
+/**
+ * The player has walked up to something that is USED rather than fought —
+ * the tick says so (`TickControls.arrive`) and lets go of the mark right
+ * after. What using it means is a window, a conversation, a pickup or a
+ * treasure chest, and choosing which is the client's.
+ */
+function useArrived(t: Target): void {
+  if (t.kind === "corpse") {
+    const c = targetCorpse(game, t);
     if (c) { ui.loot = c; openWindow("loot"); }
-    P.target = null;
   } else if (t.kind === "ground") {
     /* A CONTAINER on the floor opens; anything else is picked up.
      *
@@ -3384,15 +2672,14 @@ function resolveTarget(): void {
      * The `includes()` guard this branch used to open with is gone: somebody
      * else having taken the stack in the meantime is now the same thing as the
      * id failing to resolve. */
-    const gi = targetGround(t);
+    const gi = targetGround(game, t);
     if (gi) {
       if (isContainer(gi.kind)) { ui.floor = gi; openWindow("floor"); }
       else pickupGround(game, gi);
     }
-    P.target = null;
   } else if (t.kind === "npc") {
-    const n = targetNpc(t);
-    if (!n) { P.target = null; return; }
+    const n = targetNpc(game, t);
+    if (!n) return;
     if (n.key === "taskmaster") { openWindow("tasks"); }
     else if (n.key === "tailor") { openWindow("wardrobe"); }
     else if (n.key === "morgan") { openWindow("exchange"); }
@@ -3417,15 +2704,13 @@ function resolveTarget(): void {
     // yet — say so rather than putting an empty window on screen.
     else if (!SHOPS[n.key]) { flash(`${n.name} has nothing to say… yet`, "#b9a6d8"); }
     else { ui.npc = n; ui.shopTab = "buy"; openWindow("shop"); }
-    P.target = null;
   } else if (t.kind === "structure") {
-    const st = targetStruct(t);
-    if (!st) { P.target = null; return; }
+    const st = targetStruct(game, t);
+    if (!st) return;
     if (st.key === "forge") openWindow("forge");
     else if (st.key === "tower") openWindow("tower");
     else if (st.key === "chest") { ui.stash = st; openWindow("stash"); }
     else if (st.key === "treasure") openTreasure(game, st);
-    P.target = null;
   }
 }
 
@@ -3453,18 +2738,6 @@ function drawShadow(x: number, y: number, w = 16): void {
   vctx.beginPath();
   vctx.ellipse(x - cam.x, y - cam.y + 2, w, w * 0.4, 0, 0, 6.2832);
   vctx.fill();
-}
-
-
-/**
- * Pick the render facing from a movement/aim delta. Vertical wins only when it
- * clearly dominates, so diagonal movement keeps the more readable side view —
- * the same bias Tibia's outfits use.
- */
-function faceDelta(dx: number, dy: number): void {
-  const P = game.player;
-  if (Math.abs(dy) > Math.abs(dx) * 1.4) P.dir = dy < 0 ? "up" : "down";
-  else if (dx !== 0) { P.dir = "side"; P.face = dx < 0 ? -1 : 1; }
 }
 
 /**
@@ -4290,7 +3563,7 @@ function render(): void {
 
   // target reticle
   if (P.target && (P.target.kind === "mob" || P.target.kind === "dummy")) {
-    const tp = targetPoint();
+    const tp = targetPoint(game);
     if (tp) {
       const sx = Math.round(tp.x - cam.x);
       const sy = Math.round(tp.y - cam.y);
@@ -4307,7 +3580,7 @@ function render(): void {
   }
   // gather marker
   if (P.gather) {
-    const gp = gatherPoint();
+    const gp = gatherPoint(game);
     if (gp) {
       vctx.strokeStyle = "#8ce06a";
       vctx.lineWidth = 2;
