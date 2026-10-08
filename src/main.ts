@@ -1,5 +1,5 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, WATER_GLINT_CUT, WATER_GLINT_LEN_VAR, WATER_GLINT_SPEED_VAR, WATER_SWELL_COLOR, WATER_SWELL_ALPHA, WATER_SWELL_LEN, WATER_SWELL_SPEED, COAST_FOAM_COLOR, COAST_FOAM_SPEED, COAST_FOAM_CUT, COAST_FOAM_DASHES, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, MONSTERS_ENABLED, RESPAWN_RETRY_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, WATER_GLINT_CUT, WATER_GLINT_LEN_VAR, WATER_GLINT_SPEED_VAR, WATER_SWELL_COLOR, WATER_SWELL_ALPHA, WATER_SWELL_LEN, WATER_SWELL_SPEED, COAST_FOAM_COLOR, COAST_FOAM_SPEED, COAST_FOAM_CUT, COAST_FOAM_DASHES, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
 import { unstick, lineOfSight, groundBlocked, portalCovers, isSafeTile } from "./world/collision.ts";
 import { carryCap, carriedWeight } from "./entities/player.ts";
 import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
@@ -17,19 +17,18 @@ import { playerSex } from "./systems/sex.ts";
 import { logoutBlocked, markBattle, LOGOUT_REFUSED } from "./systems/battle.ts";
 import { characterName } from "./systems/character.ts";
 import { clamp, dist, rndi } from "./util.ts";
-import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
+import { playerSpeed, refreshDerived, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName, mobLabel, tickMonsterSlows } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, tryUpgrade, STRUCTS, canAfford, payCost, structCenter, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
+import { STRUCTS, structCenter, canPlaceAt, tierOf, footprint, solidRows } from "./systems/building.ts";
 import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow, structSprite } from "./gfx/buildingArt.ts";
 import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
-import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { setOutfitColor, resetOutfitColors, wearOutfit, type OutfitZone } from "./systems/outfit.ts";
 import { outfitSprites, syncOutfitArt } from "./gfx/outfitArt.ts";
-import { useCrystal, tickCrystalCooldown, crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
+import { tickCrystalCooldown, crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
 import { cooldownFrac } from "./systems/cooldowns.ts";
 import {
   actionSlots, setSlot, BINDABLE_CRYSTALS,
@@ -41,8 +40,7 @@ import {
   hudUserScale, stepHudUserScale, hudMenuOpen, toggleHudMenu, applyHudPreset, snapHudGroup,
   type HudGroup,
 } from "./systems/hudLayout.ts";
-import { researchById, isResearched, markResearched, towerTierOk, towerTierFor, levelOk,
-  ATTUNEMENT, isAttuned, markAttuned, clearAttuned, attunementOk, offerById, playerElement } from "./systems/tower.ts";
+import { isAttuned, markAttuned, clearAttuned, playerElement } from "./systems/tower.ts";
 import { tickBuffs, debtBite } from "./systems/buffs.ts";
 import { ELEMENT_LABEL, ELEMENT_COLOR, FIELD_BURN_TICK_S, FIELD_BURN_DMG, elementEdgeMultiplier,
   type Element } from "./systems/elements.ts";
@@ -58,11 +56,11 @@ import {
 import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
 import { monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
-import { placeOnGround } from "./world/ground.ts";
+import { SHOPS } from "./entities/npcs.ts";
 import { TARGET_SEEK_PX, MIN_ELEMENTAL_DAMAGE } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, taskById, hasRoomForTask, isActive, isComplete, rewardFits, maxActive, MAX_ACTIVE } from "./systems/tasks.ts";
 import { buyShelf, shelfEntry, shelfLabel, RANKS } from "./systems/shelf.ts";
-import { addItem, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagCount, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, compactBag } from "./items.ts";
+import { addItem, countAcross, removeAcross, ITEMS, itemWeight, bagCount, isContainer, equippedBow, activeArrow, bestPracticeArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
   SELF, activeChannel, bubbleFor, formatLine, lineAlpha, logServer,
@@ -71,7 +69,7 @@ import {
 import { chatInput, initChatInput } from "./ui/chatInput.ts";
 import { groundEntries, playerEntries, type ContextMenu, type MenuEntry } from "./ui/contextMenu.ts";
 import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellFx.ts";
-import { tickAuraFx, drawAuras, drawFlares, addFlare } from "./gfx/auraFx.ts";
+import { tickAuraFx, drawAuras, drawFlares } from "./gfx/auraFx.ts";
 import { lifePercent, lifeTrail, sweepLifeTrails, drawLifeBar, drawNameTag, drawNpcTag, NAME_GAP } from "./gfx/lifeBar.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
 import { tickFields } from "./systems/fields.ts";
@@ -87,7 +85,6 @@ import { terrainImage, bakedTerrain } from "./gfx/terrainArt.ts";
 import { loadAllArt } from "./gfx/loadArt.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
-import { planSwap, refused } from "./systems/loadout.ts";
 import { createGame, travelTo, applyGates, applyMissionPads, padRefusal, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { push as pushSave, sendOnLeave, checkIn, startAutosave } from "./net/cloudSave.ts";
@@ -112,13 +109,17 @@ import { Tile, isUnderground } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
 import type { EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
 import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays } from "./systems/containers.ts";
-import { tell, withinReach, structInReach } from "./intents/actor.ts";
+import { tell, withinReach, structInReach, nearStructure, nearNpc, refuseFromProtection } from "./intents/actor.ts";
 import {
   refCtxOf, refSlots, refUsable, moveItems, takeAllFrom, closeIfEmpty, takeOne,
   dropFromContainer, liftFloorStack, wearPackFrom, wearPackFromFloor, movePackTo, dropWornPack, unequipInto,
 } from "./intents/containers.ts";
 import { dropToGround, throwGroundItem, pickupGround, dropFromEq } from "./intents/ground.ts";
-import { useItem, equipItem, unequip, cycleAmmo, changeCoins } from "./intents/use.ts";
+import { useItem, equipItem, unequip, cycleAmmo, changeCoins, swapWeapon } from "./intents/use.ts";
+import { buy, sell, testGrant } from "./intents/trade.ts";
+import { craft, smelt, makeGem, upgrade, build } from "./intents/craft.ts";
+import { attune, buyOffer, research, buyCrystal } from "./intents/tower.ts";
+import { castCrystal, recall } from "./intents/cast.ts";
 import type { ContainerRef, RefWorld } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -474,12 +475,6 @@ const refCtx = (): RefWorld => refCtxOf(game);
  */
 const flash = (t: string, c?: string): void => { tell(game, t, c); };
 
-/** Recompute the player's max HP from current owned structures. */
-function recomputeBonuses(): void {
-  setActiveBonus({ maxhp: 0 });
-  refreshDerived(P);
-}
-
 /* ---------------- window management (multiple panels open at once) ---------------- */
 
 function findWindow(kind: PanelKind): PanelWindow | undefined {
@@ -697,18 +692,15 @@ const act: PanelActions = {
   },
   equipItem: (kind: ItemKind) => { equipItem(game, kind); },
   unequip: (slot: EqSlot) => { unequip(game, slot); },
-  smelt: (kind: ItemKind) => { doSmelt(kind); },
-  testGrant: (kind: ItemKind) => { doTestGrant(kind); },
-  makeGem: () => { doMakeGem(); },
-  upgrade: (s: Structure) => { doUpgrade(s); },
-  craft: (r: Recipe) => {
-    // craft requires standing at a Forge; enforced by only opening forge there
-    if (craftAt(r)) beep(360, 0.14, "square", 0.05);
-  },
-  attune: (el: Element) => { doAttune(el); },
-  buyOffer: (id: string) => { doBuyOffer(id); },
-  research: (id: string) => { doResearch(id); },
-  buyCrystal: (id: string) => { doBuyCrystal(id); },
+  smelt: (kind: ItemKind) => { smelt(game, kind); },
+  testGrant: (kind: ItemKind) => { testGrant(game, kind); },
+  makeGem: () => { makeGem(game); },
+  upgrade: (s: Structure) => { upgrade(game, s); },
+  craft: (r: Recipe) => { craft(game, r); },
+  attune: (el: Element) => { attune(game, el); },
+  buyOffer: (id: string) => { buyOffer(game, id); },
+  research: (id: string) => { research(game, id); },
+  buyCrystal: (id: string) => { buyCrystal(game, id); },
   takeLoot: (c: Corpse, index: number) => { takeOne(game, c, index); },
   takeAllLoot: (c: Corpse | null) => {
     // null = "whatever the front container window is showing" (a floor bag)
@@ -716,8 +708,8 @@ const act: PanelActions = {
       : ui.floor ? ({ c: "ground", id: ui.floor.id } as ContainerRef) : null;
     if (ref) takeAllFrom(game, ref);
   },
-  buy: (kind: ItemKind) => { doBuy(kind); },
-  sell: (kind: ItemKind) => { doSell(kind); },
+  buy: (kind: ItemKind) => { if (ui.npc) buy(game, ui.npc, kind); },
+  sell: (kind: ItemKind) => { if (ui.npc) sell(game, ui.npc, kind); },
   acceptTask: (id: string) => {
     if (acceptTask(id, P.level)) { flash("task accepted", "#9ad0ff"); beep(440, 0.12, "sine", 0.05, 120); }
     /* The only reason a legal entry is ever refused: three is the ceiling.
@@ -1043,217 +1035,25 @@ function splitConfirm(mode: "store" | "take" | "drop" | "throw" | "move"): void 
   ui.split = null;
 }
 
-import { craftAcross } from "./items.ts";
-function craftAt(r: Recipe): boolean {
-  const goldCost = r.gold ?? 0;
-  // the Forge already spends materials out of your chests; its fee follows the
-  // same purse, or you would be told you cannot afford what is ten feet away
-  const purse = [P.bag, ...homeChests(game)];
-  if (walletAcross(purse) < goldCost) { flash("not enough gold", "#d96a5a"); return false; }
-  if (craftAcross([P.bag, ...homeChests(game)], r)) {
-    takeGoldAcross(purse, goldCost);
-    flash(`crafted ${ITEMS[r.out].name}`, "#b9e07f");
-    return true;
-  }
-  return false;
-}
-
-/**
- * TEST ONLY — 100 of anything for one gold.
- *
- * Weight is deliberately not checked: the point is to put a feature in front
- * of the developer immediately, and refusing on encumbrance would defeat that.
- * Bag SLOTS still apply, because a full backpack has nowhere to put them and
- * silently eating the gold would be worse than saying so.
- */
-/**
- * TEST ONLY — a gold buys one slot's worth of anything.
- *
- * "One slot's worth" rather than a flat 100, because the two halves of the
- * catalog want different numbers. Wood, arrows and coal are things you hold a
- * hundred of, and handing over one is useless for testing. A sword is a thing
- * you hold ONE of: a hundred of them buries the backpack, the chest and the
- * carry limit under a single click, which is exactly what happened before
- * this read the stack size.
- */
-function doTestGrant(kind: ItemKind): void {
-  if (P.gold < 1) { flash("no gold", "#d96a5a"); return; }
-  const want = Math.min(100, ITEMS[kind].stack);
-  const left = addItem(P.bag, kind, want);
-  if (left === want) { flash("bag full", "#d96a5a"); return; }
-  takeGold(P.bag, 1);
-  flash(`TEST +${want - left} ${ITEMS[kind].name}`, "#e08a7a");
-}
-
-/** Best Forge standing on Home Isle: 0 none, 1..3 otherwise. */
-function forgeTier(): ForgeTier {
-  return Math.max(1, bestTier(game.worlds.home, "forge")) as ForgeTier;
-}
-/** Best Alchemy Tower standing on Home Isle. */
-function towerTier(): number {
-  return bestTier(game.worlds.home, "tower");
-}
-
-/**
- * Put one piece of gear in the furnace.
- *
- * Only ever consumes from the BACKPACK, never from a chest: melting is
- * destructive and irreversible, and reaching into storage to destroy
- * something the player did not have in hand is exactly the kind of help
- * nobody wants. Coal, being a bulk material like any other, may come from
- * the chest.
- */
-function doSmelt(kind: ItemKind): void {
-  const bags = [P.bag, ...homeChests(game)];
-  const why = smeltBlocker(bags, kind, forgeTier());
-  if (why === "no-coal") { flash("no coal for the furnace", "#d96a5a"); return; }
-  if (why !== null) return;
-  const y = applySmelt(bags, kind, forgeTier())!;
-  giveMaterial("iron", y.iron);
-  giveMaterial("steel", y.steel);
-  const parts = [y.iron > 0 ? `${y.iron} iron` : "", y.steel > 0 ? `${y.steel} steel` : ""].filter(Boolean);
-  flash(`smelted → ${parts.join(" + ")}`, "#b9e07f");
-  sfx("forge");
-}
-
-/** Backpack first, then the chests, then the floor — never nowhere. */
-function giveMaterial(kind: ItemKind, n: number): void {
-  if (n <= 0) return;
-  let left = addItem(P.bag, kind, n);
-  for (const ch of homeChests(game)) { if (left <= 0) break; left = addItem(ch, kind, left); }
-  if (left <= 0) return;
-  placeOnGround(cw(), kind, left, P.x, P.y);
-  flash(`${left} ${ITEMS[kind].name} dropped at your feet`, "#e0a06a");
-}
-
-/** Cut one Essential Gem from three DIFFERENT trophies plus coal. */
-function doMakeGem(): void {
-  if (forgeTier() < 3) { flash("needs a Forge III", "#d96a5a"); return; }
-  const bags = [P.bag, ...homeChests(game)];
-  const spent = applyGem(bags);
-  if (!spent) { flash(`needs ${GEM_TROPHY_KINDS} different trophies + coal`, "#d96a5a"); return; }
-  giveMaterial("essentialGem", 1);
-  flash("cut an Essential Gem", "#c9a6ff");
-  beep(660, 0.2, "sine", 0.06, 140);
-}
-
-/** Raise the structure the player is standing at by one tier. */
-function doUpgrade(s: Structure): void {
-  const cost = upgradeCost(s.key, tierOf(s));
-  if (!cost) { flash("already at the top tier", "#e0a06a"); return; }
-  if (!canAfford(P.bag, cost, homeChests(game))) { flash("not enough materials", "#d96a5a"); return; }
-  tryUpgrade(game.worlds.home, P, s, homeChests(game));
-}
-
-/**
- * Spend one attunement stone to open an element's lane.
- *
- * Deliberately separate from doResearch: attunement is not a project, has no
- * tower-tier gate, and must stay reachable at every tier so a lane can never
- * strand itself off the bottom of the panel.
- */
-function doAttune(el: Element): void {
-  if (isAttuned(el)) return;
-  const key = ATTUNEMENT[el];
-  if (!canAfford(P.bag, { [key]: 1 }, homeChests(game))) {
-    flash(`needs a ${ITEMS[key].name}`, "#d96a5a");
-    return;
-  }
-  payCost(P.bag, { [key]: 1 }, homeChests(game));
-  markAttuned(el);
-  flash(`attuned to ${ELEMENT_LABEL[el]}`, "#c9a6ff");
-  beep(600, 0.22, "square", 0.06, 140);
-}
-
-/**
- * Buy a batch off the elemental shelf. No research step: the stone opened the
- * element, the tower sets the price, and gold does the rest.
- */
-function doBuyOffer(id: string): void {
-  const o = offerById(id);
-  if (!o || !isAttuned(o.element)) return;
-  if (!canAfford(P.bag, o.cost, homeChests(game))) { flash("need materials"); return; }
-  if (walletAcross([P.bag, ...homeChests(game)]) < o.gold) { flash("need gold", "#d96a5a"); return; }
-  if (!canCarry(P, o.crystal, o.buyN)) { flash("too heavy"); return; }
-  const moved = o.buyN - addItem(P.bag, o.crystal, o.buyN);
-  if (moved < o.buyN) { if (moved > 0) removeItem(P.bag, o.crystal, moved); flash("bag full"); return; }
-  payCost(P.bag, o.cost, homeChests(game));
-  takeGoldAcross([P.bag, ...homeChests(game)], o.gold);
-  flash(`+${o.buyN} ${ITEMS[o.crystal].name}`, "#b9e07f");
-  beep(520, 0.18, "square", 0.05, 90);
-}
-
-function doResearch(id: string): void {
-  const r = researchById(id);
-  if (!r || isResearched(r.id)) return;
-  if (!towerTierOk(r, towerTier())) { flash(`needs an Alchemy Tower ${"I".repeat(towerTierFor(r))}`, "#d96a5a"); return; }
-  if (!attunementOk(r)) { flash("attune this element first", "#d96a5a"); return; }
-  if (!canAfford(P.bag, r.researchCost, homeChests(game))) { flash("need materials"); return; }
-  if (walletAcross([P.bag, ...homeChests(game)]) < (r.researchGold ?? 0)) { flash("need gold", "#d96a5a"); return; }
-  payCost(P.bag, r.researchCost, homeChests(game));
-  takeGoldAcross([P.bag, ...homeChests(game)], r.researchGold ?? 0);
-  markResearched(r.id);
-  flash(`researched ${r.name}`, "#c9a6ff");
-  beep(520, 0.18, "square", 0.06, 120);
-}
-
-function doBuyCrystal(id: string): void {
-  const r = researchById(id);
-  if (!r || !isResearched(r.id)) return;
-  // The level gate is checked here as well as drawn in the panel. The panel
-  // already refuses to make the row clickable, but a hotbar or a future
-  // shortcut could reach this function without going through it, and a gate
-  // that only exists in the renderer is not a gate.
-  if (!levelOk(r, P.level)) { flash(`needs level ${r.minLevel}`, "#c98a5a"); return; }
-  if (!canAfford(P.bag, r.buyCost, homeChests(game))) { flash("need materials"); return; }
-  if (walletAcross([P.bag, ...homeChests(game)]) < (r.buyGold ?? 0)) { flash("need gold", "#d96a5a"); return; }
-  if (!canCarry(P, r.crystal, r.buyN)) { flash("too heavy"); return; }
-  const moved = r.buyN - addItem(P.bag, r.crystal, r.buyN);
-  if (moved < r.buyN) { if (moved > 0) removeItem(P.bag, r.crystal, moved); flash("bag full"); return; }
-  payCost(P.bag, r.buyCost, homeChests(game));
-  takeGoldAcross([P.bag, ...homeChests(game)], r.buyGold ?? 0);
-  flash(`+${r.buyN} ${ITEMS[r.crystal].name}`, "#b9e07f");
-  beep(440, 0.12, "sine", 0.05, 120);
-}
-
 /** Trigger action slot `index` (keys 1–6 / on-screen buttons). */
 function useAction(index: number): void {
   const slot = actionSlots[index];
   if (!slot) return;
   if (slot.type === "crystal") { useCrystalItem(slot.item); return; }
-  if (slot.type === "swap") { swapWeapon(); return; }
+  if (slot.type === "swap") { swapWeapon(game); return; }
   // "attack" slot type is reserved for a future basic-attack binding.
 }
 
 /**
- * Quick weapon swap: toggles the equipped weapon between a bow and a melee
- * weapon, pulling the best matching spare from the pack. Reuses the normal
- * equip path so the two-handed bow↔shield rule and bag stow-away still apply.
+ * A crystal chosen — from the hotbar, a key, or a click on it in the pack.
  *
- * The CHOICE is made in `systems/loadout.ts` and only carried out here — see
- * that file for the two bugs that split it in half, both of which were about
- * what the search could see rather than about what the button does.
+ * Recall goes home at once and a Burst is ARMED: the next click on the map
+ * says where it lands. Anything else is cast now. Whether it may be cast is
+ * the request's to decide (intents/cast.ts); the armed cursor is the client's.
  */
-function swapWeapon(): void {
-  if (P.dead) return;
-  const plan = planSwap(P.bag, P.eq.weapon, P.eq.shield);
-  if (refused(plan)) {
-    if (plan.no === "room") {
-      flash("no room to stow the shield", "#e0a06a");
-    } else {
-      flash(plan.toBow ? "no bow in your pack" : "no melee weapon in your pack", "#e0a06a");
-    }
-    return;
-  }
-  act.equipItem(plan.weapon, 0); // removes from the tree, equips, stows the previous
-  if (plan.shield) act.equipItem(plan.shield, 0);
-  flash(`equipped ${ITEMS[plan.weapon].name}`, "#b9e07f");
-}
-
-/** Apply a crystal by kind: Recall travels home, others hit self/target. */
 function useCrystalItem(kind: ItemKind): void {
   if (P.dead) return;
-  if (kind === "recallCrystal") { doRecall(); return; }
+  if (kind === "recallCrystal") { recall(game); return; }
   if (isAimedCrystal(kind)) {
     // selecting the armed crystal again puts the cursor away, the same toggle
     // clicking your own target uses to stop attacking
@@ -1265,47 +1065,7 @@ function useCrystalItem(kind: ItemKind): void {
     flash(`${ITEMS[kind].name}: click a target`, "#ffce4a");
     return;
   }
-  if (isOffensiveCrystal(kind) && refuseFromProtection()) return;
-  if (refuseUntowered(kind)) return;
-  useCrystal(cw(), P, kind);
-}
-
-/**
- * Does this crystal HIT something?
- *
- * Every entry in `CRYSTAL_SPECS` is a shard, burst, nova or wave, and all four
- * deal damage. Life is not in that table and neither is Recall, which is the
- * whole distinction: one heals the caster, one moves him, and neither reaches
- * across the boundary of a protected zone at anybody.
- *
- * THE BUG THIS ANSWERS. `useCrystalItem` asked `refuseFromProtection()` about
- * EVERY crystal, so standing in Bonetown — a safe map, so every square of it —
- * refused the Life crystal too. Worse, it refused SILENTLY: the flash inside
- * that helper only fires when there is a target to drop, and a player pressing
- * heal in town has none. So the button did nothing and said nothing, which is
- * the least debuggable failure a button has.
- *
- * The protection rule is "you may not strike out of a refuge", not "no magic
- * indoors". A refuge you cannot bind your wounds in is not a refuge, and it is
- * exactly backwards for a town whose whole job is to be where you recover.
- */
-function isOffensiveCrystal(kind: ItemKind): boolean {
-  return CRYSTAL_SPECS[kind] !== undefined;
-}
-
-function doRecall(): void {
-  if (P.dead) return;
-  if (cw() === game.worlds.home) { flash("already home", "#8ab6ff"); return; }
-  if (bagCount(P.bag, "recallCrystal") <= 0) { flash("no recall crystal", "#8ab6ff"); return; }
-  removeItem(P.bag, "recallCrystal", 1);
-  travelTo(game, "home");
-  /* The flare goes off AFTER the travel, on Home Isle, and there is no
-   * matching one at the departure end — `drawFlares` filters by world, so an
-   * effect played on the island you are leaving is drawn into a world nobody
-   * is looking at. An arrival is the half of a teleport anyone actually
-   * sees. */
-  addFlare(game.current, P.x, P.y - 24, "recall", 1.2);
-  flash("recalled home", "#c9a6ff");
+  castCrystal(game, kind);
 }
 
 /**
@@ -1345,8 +1105,7 @@ function tpHome(): void {
    * the first `if (P.dead) {` in this file as the marker for the frame loop's
    * death branch. A braced guard in any function above `update` moves that
    * marker and reddens two tests that have nothing to do with this command.
-   * `doRecall` directly above is the same shape for the same reason. There is
-   * also nothing to say here — dying already sends you home. */
+   * There is also nothing to say here — dying already sends you home. */
   if (P.dead) return;
   if (cw() === game.worlds.home) { flash("already home", "#8ab6ff"); return; }
   travelTo(game, "home");
@@ -1431,40 +1190,6 @@ function navUp(ref: ContainerRef, win?: PanelWindow): void {
     if (gi) { ui.floor = gi; openWindow("floor"); }
   }
   beep(300, 0.05, "sine", 0.04, -40);
-}
-
-import { SHOPS } from "./entities/npcs.ts";
-function doBuy(kind: ItemKind): void {
-  if (!ui.npc) return;
-  const shop = SHOPS[ui.npc.key];
-  if (!shop) return;
-  const entry = shop.entries.find((e) => e.kind === kind);
-  if (!entry || entry.buy <= 0 || P.gold < entry.buy) return;
-  if (!canCarry(P, kind)) { flash("too heavy"); return; }
-  // pay FIRST: coins leaving the bag can be the very slot the goods need,
-  // and a purse of loose change is exactly when that happens
-  if (!takeGold(P.bag, entry.buy)) { flash("not enough gold", "#d96a5a"); return; }
-  if (addItem(P.bag, kind, 1) > 0) { giveGold(P.bag, entry.buy); flash("bag full"); return; }
-  sfx("coins");
-}
-function doSell(kind: ItemKind): void {
-  if (!ui.npc) return;
-  const shop = SHOPS[ui.npc.key];
-  if (!shop) return;
-  const entry = shop.entries.find((e) => e.kind === kind);
-  if (!entry || entry.sell <= 0) return;
-  // coins are goods too, and selling them to buy them back would be a bug
-  if (ITEMS[kind].coin) return;
-  // check the change will fit BEFORE handing the goods over, or a full bag
-  // turns a sale into a donation
-  if (!walletRoomFor(P.bag, entry.sell)) { flash("no room for the coins", "#e0a06a"); return; }
-  // a pack with things in it is not merchandise — see removeItemUnpacked
-  if (!removeItemUnpacked(P.bag, kind, 1)) {
-    flash(isContainer(kind) ? "empty it first" : "you have none", "#e0a06a");
-    return;
-  }
-  giveGold(P.bag, entry.sell);
-  sfx("coins");
 }
 
 /* ---------------- input wiring ---------------- */
@@ -1812,12 +1537,9 @@ function handleWorldTap(sx: number, sy: number): void {
   if (aimPending) {
     const kind = aimPending;
     aimPending = null;
-    /* Unconditional here, unlike the direct path above, and that asymmetry is
-     * correct rather than an oversight: only a Burst is ever armed, every
-     * Burst is in `CRYSTAL_SPECS`, and everything in that table hurts. There
-     * is no self-cast that can reach this line. */
-    if (refuseFromProtection() || refuseUntowered(kind)) return;
-    useCrystal(cw(), P, kind, { x: w.x, y: w.y });
+    /* The request holds a Burst to the protected-zone rule like anything that
+     * hurts — and every Burst hurts — and to the Tower's tier. */
+    castCrystal(game, kind, { x: w.x, y: w.y });
     return;
   }
   if (ui.placing) {
@@ -1839,17 +1561,11 @@ function handleWorldTap(sx: number, sy: number): void {
       else flash("tap again to build", "#9fe8a8");
       return;
     }
-    if (tryPlace(game.worlds.home, P, key, w.x, w.y, homeChests(game))) {
-      recomputeBonuses();
-      ui.placing = null; // placed — leave build mode
-      placeGhost = null;
-    } else if (!canAfford(P.bag, buildCost(key, countOwned(game.worlds.home, key)), homeChests(game))) {
-      flash("not enough materials", "#d96a5a");
+    /* Built, or nothing to build it with: build mode ends. A square it will
+     * not stand on keeps the mode, so the player can try another. */
+    if (build(game, key, w.x, w.y) !== "blocked") {
       ui.placing = null;
       placeGhost = null;
-    } else {
-      // invalid spot — stay in placing mode so the player can try elsewhere
-      flash("can't build here", "#e0a06a");
     }
     return;
   }
@@ -2910,66 +2626,6 @@ function lootKeepingAttack(c: Corpse): void {
   moveMarker = null;
 }
 
-/**
- * Is the player standing somewhere they may not fight from?
- *
- * A protection zone is a protection zone: you cannot strike out of one and
- * nothing can reach you inside it. Half of that was already true — a creature
- * cannot walk into a haven (`occOf` refuses the tile, `pushMonster` refuses
- * the spawn) — and the missing half is what made it an exploit rather than a
- * refuge. From a safe tile you could shell a pack that had no way to answer:
- * crystals, arrows, and a sword swung across the boundary all landed.
- *
- * `mayHit` in pvp.ts has always said this about PLAYERS and its comment notes
- * that monsters never come through it. This is the same sentence about
- * everything else, so the zone finally means one thing rather than two.
- */
-function inProtection(): boolean {
-  return isSafeTile(cw(), P.tx, P.ty);
-}
-
-/**
- * Refuse an attack made from a protection zone, and say so once.
- *
- * Once is the whole reason this is a function. Auto-attack asks twice a
- * second, so a refusal that flashed every time it was asked would bury the
- * screen; the mark is dropped instead, which is what Tibia does when you step
- * into a temple and is a thing the player can actually see happen.
- */
-function refuseFromProtection(): boolean {
-  if (!inProtection()) return false;
-  if (P.target) {
-    P.target = null;
-    flash("no fighting from a protected zone", "#8ab6ff");
-  }
-  return true;
-}
-
-/**
- * Refuse a crystal the player's tower cannot answer for.
- *
- * NOTHING USED TO CHECK THIS. The Alchemy Tower decided what the shelf SOLD
- * and stopped caring the moment a crystal was in a bag, so a level-one tower
- * plus one generous friend was the same as a level-three tower. Every gold
- * piece and every stone spent upgrading the building bought a shopping list,
- * not a capability — which is the whole of its power curve gone.
- *
- * Note what this deliberately does NOT check: the ELEMENT. A friend's Storm
- * Shard still works in the hands of a Flame mage, because gifts between
- * players are meant to work — that is what the role cooldown is for. Tier is
- * different: it is not a sideways choice, it is the ladder, and a ladder you
- * can be handed the top of is scenery.
- *
- * `offersFor` sells tier `towerTier - 1`, so that same subtraction is what
- * makes the shelf and the gate agree about what a tower is worth.
- */
-function refuseUntowered(kind: ItemKind): boolean {
-  const spec = CRYSTAL_SPECS[kind];
-  if (!spec || spec.tier <= towerTier() - 1) return false;
-  flash(`needs an Alchemy Tower ${"I".repeat(spec.tier + 1)}`, "#d96a5a");
-  return true;
-}
-
 function worldClick(w: Vec): void {
   if (P.dead) return;
   const world = cw();
@@ -3305,7 +2961,7 @@ function warnNoArrows(): void {
  * can walk away and still loose arrows. Faces the target and drops it on death.
  */
 function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind | null }): void {
-  if (refuseFromProtection()) return;
+  if (refuseFromProtection(game)) return;
   const t = P.target;
   if (!t || !mode.arrow) return;
   if (t.kind === "mob") {
@@ -3341,7 +2997,7 @@ function tickRangedFire(mode: { ranged: boolean; reach: number; arrow: ItemKind 
  * stutter in and out of range.
  */
 function tickMeleeFire(): void {
-  if (refuseFromProtection()) return;
+  if (refuseFromProtection(game)) return;
   const t = P.target;
   if (!t || t.kind !== "mob") return;
   const m = targetMob(t);
@@ -3425,21 +3081,6 @@ function walkGrid(world: World, gx: number, gy: number, budget: number): boolean
 
 /* ---------------- proximity panels (Tibia-style auto-close) ---------------- */
 
-/** Is the player near any owned Home-Isle structure of the given kinds? */
-function nearStructure(...keys: string[]): boolean {
-  if (cw() !== game.worlds.home) return false;
-  for (const s of game.worlds.home.structures) {
-    if (!keys.includes(s.key)) continue;
-    if (structInReach(game, s)) return true;
-  }
-  return false;
-}
-
-/** Is the player near an NPC accepted by `match` on the current island? */
-function nearNpc(match: (n: Npc) => boolean): boolean {
-  return cw().npcs.some((n) => match(n) && dist(P.x, P.y, n.x, n.y) < USE_RANGE_PX);
-}
-
 /**
  * Refresh the "someone is talking to me" hold. A townsperson is in conversation
  * while you hold them as a target OR while the window they opened is up — the
@@ -3502,17 +3143,17 @@ function tickProximityPanels(dt: number): void {
   if (proximityT > 0) return;
   proximityT = 0.25;
   const checks: ReadonlyArray<readonly [PanelKind, () => boolean]> = [
-    ["forge", () => nearStructure("forge")],
-    ["tower", () => nearStructure("tower")],
+    ["forge", () => nearStructure(game, "forge")],
+    ["tower", () => nearStructure(game, "tower")],
     ["stash", () => {
       const st = ui.stash;
       if (!st || cw() !== game.worlds.home || !game.worlds.home.structures.includes(st)) return false;
       return structInReach(game, st);
     }],
-    ["shop", () => !!ui.npc && cw().npcs.includes(ui.npc) && nearNpc((n) => n === ui.npc)],
-    ["tasks", () => nearNpc((n) => n.key === "taskmaster")],
-    ["wardrobe", () => nearNpc((n) => n.key === "tailor")],
-    ["exchange", () => nearNpc((n) => n.key === "morgan")],
+    ["shop", () => !!ui.npc && cw().npcs.includes(ui.npc) && nearNpc(game, (n) => n === ui.npc)],
+    ["tasks", () => nearNpc(game, (n) => n.key === "taskmaster")],
+    ["wardrobe", () => nearNpc(game, (n) => n.key === "tailor")],
+    ["exchange", () => nearNpc(game, (n) => n.key === "morgan")],
     ["loot", () => !!ui.loot && cw().corpses.includes(ui.loot)
       && withinReach(game, ui.loot.x, ui.loot.y)],
     ["floor", () => !!ui.floor && cw().ground.includes(ui.floor)
@@ -5523,7 +5164,7 @@ function drawDockControls(d: DockLayout, top: number): void {
   buttonBox(sctx, d.innerX, wy, swapW, wh, S, {});
   sctx.fillStyle = "#e9e2c8";
   sctx.fillText(bowOn ? "\u2192MELEE" : "\u2192BOW", d.innerX + swapW / 2, wy + wh / 2);
-  hotspots.push({ x: d.innerX, y: wy, w: swapW, h: wh, fn: () => swapWeapon() });
+  hotspots.push({ x: d.innerX, y: wy, w: swapW, h: wh, fn: () => swapWeapon(game) });
   touchButtons.push({ x: d.innerX, y: wy, w: swapW, h: wh });
 
   /* Chase is a STATE, not an action, so unlike the swap it stays lit while
@@ -5885,7 +5526,7 @@ function drawDeck(): void {
 
   const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
   hudBtn(d.swap.x, d.swap.y, d.swap.w, d.swap.h, bowOn ? "\u2192MELEE" : "\u2192BOW", false, () => {
-    if (!editing) swapWeapon();
+    if (!editing) swapWeapon(game);
   });
   drawMinimapAt(h, game, P, d.minimap.x, d.minimap.y, d.minimap.w);
   touchButtons.push({ ...d.minimap });
@@ -6374,7 +6015,7 @@ function drawTouchControls(): void {
     const swW = bs * 1.15, swH = bs * 0.62;
     const swapPos = placeHud("swap", swW, swH, sw, sh);
     const bowOn = P.eq.weapon ? !!ITEMS[P.eq.weapon].bow : false;
-    hudBtn(swapPos.x, swapPos.y, swW, swH, bowOn ? "→MELEE" : "→BOW", false, () => { if (!editing) swapWeapon(); });
+    hudBtn(swapPos.x, swapPos.y, swW, swH, bowOn ? "→MELEE" : "→BOW", false, () => { if (!editing) swapWeapon(game); });
     if (editing) drawGroupGrip("swap", swapPos.x, swapPos.y, swW, swH);
   }
 
