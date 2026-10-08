@@ -2519,7 +2519,7 @@ async function main(): Promise<void> {
     {
       const src = fs.readFileSync("src/main.ts", "utf8");
       const sweep = src.slice(src.indexOf("function sweepContainerWindows"), src.indexOf("function openWindow"));
-      ok(sweep.includes("slotsOf(w.ref, refCtx())") && sweep.includes("refUsable(w.ref)"),
+      ok(sweep.includes("slotsOf(w.ref, refCtx())") && sweep.includes("refUsable(game, w.ref)"),
         "a window pointing at a pack that has moved, dropped or rotted closes itself");
       ok(src.includes("sweepContainerWindows();"), "…and the sweep actually runs");
     }
@@ -2669,11 +2669,12 @@ async function main(): Promise<void> {
      * whether the player can REACH it always answered no — the drag died with
      * "too far away" while standing on top of the bag. */
     {
-      const src = await import("node:fs").then((fs) => fs.readFileSync("src/main.ts", "utf8"));
+      // moved out of main.ts into the requests in Etap 3.1c
+      const src = await import("node:fs").then((fs) => fs.readFileSync("src/intents/containers.ts", "utf8"));
       const lift = src.slice(src.indexOf("function liftFloorStack"), src.indexOf("/* ---------------- the worn backpack"));
       ok(lift.includes("sourceChecked: true"),
         "the throwaway holder is exempted from the reach test it can never pass");
-      ok(lift.includes("withinReach(gi.x, gi.y)"),
+      ok(lift.includes("withinReach(g, gi.x, gi.y)"),
         "…and the REAL reach test, against the stack on the ground, still runs");
       ok(lift.includes("will not fit inside itself"),
         "…and a bag cannot be lifted into itself");
@@ -2899,7 +2900,8 @@ async function main(): Promise<void> {
     const mainSrc27 = fs27.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
     ok(/n\.key === "morgan"[\s\S]{0,60}openWindow\("exchange"\)/.test(mainSrc27),
       "clicking Morgan opens the exchange window");
-    ok(mainSrc27.includes("exchangeCoins(P.bag,"), "…which spends through the same exchange the math above tests");
+    ok(fs27.readFileSync(new URL("../src/intents/use.ts", import.meta.url), "utf8").includes("exchangeCoins(P.bag,")
+      && mainSrc27.includes("changeCoins(game, to, n)"), "…which spends through the same exchange the math above tests");
     ok(!/consolidateCoins/.test(mainSrc27), "…and no silent fold is left anywhere in main.ts");
 
     // the two old gestures are GONE, not merely unused: a wallet that folds
@@ -11790,7 +11792,8 @@ async function main(): Promise<void> {
     const loose = [{ kind: "wood", n: 2 }, null] as never;
     ok(cont.slotsOf({ c: "loose", slots: loose } as never, ctx) === loose,
       "…which resolves to the bag it names");
-    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8");
+    const main = (await import("node:fs")).readFileSync("src/main.ts", "utf8")
+      + (await import("node:fs")).readFileSync("src/intents/containers.ts", "utf8");
     ok(main.includes('const via: ContainerRef = { c: "loose", slots: shim };'),
       "lifting a stack off the floor uses it instead of inventing a corpse");
     ok(!main.includes('body: { id: 0,'), "…and the fake body it replaced is gone");
@@ -11898,8 +11901,8 @@ async function main(): Promise<void> {
     const main = nfs.readFileSync("src/main.ts", "utf8");
     const inp = nfs.readFileSync("src/ui/chatInput.ts", "utf8");
 
-    ok(main.includes("const flash = (t: string, c = \"#ffe9a8\"): void => {")
-      && main.includes("logServer(t, c);"),
+    ok(main.includes("const flash = (t: string, c?: string): void => { tell(game, t, c); };")
+      && nfs.readFileSync("src/intents/actor.ts", "utf8").includes("logLine(text, color);"),
       "every flash is also recorded, so a refusal can be re-read");
     ok(main.includes("drawChatLog();"), "the log is drawn on the world");
     ok(main.includes("tickChat(dt);"), "…and aged");
@@ -13801,6 +13804,7 @@ async function main(): Promise<void> {
     const rfs = await import("node:fs");
     const rd = (f: string): string => rfs.readFileSync(new URL("../" + f, import.meta.url), "utf8");
     const rmain = rd("src/main.ts");
+    const ruse = rd("src/intents/use.ts"); // the item requests, out of main.ts since Etap 3.1c
     const rpan = rd("src/ui/panels.ts");
     const rhud = rd("src/ui/hud.ts");
 
@@ -13819,9 +13823,9 @@ async function main(): Promise<void> {
 
     /* #2 — the meat in a corpse. `removeItem(P.bag, …)` found nothing and
      * returned in silence, so the click landed and did nothing at all. */
-    ok(/const outside = !!from && rootOf\(from\) !== "player";/.test(rmain),
+    ok(/const outside = !!from && rootOf\(from\) !== "player";/.test(ruse),
       "\"somewhere else\" is decided by the container's ROOT, so a pack inside the pack is still yours");
-    ok(/const inPlace = outside && !!\(def\.food \|\| def\.heal\)/.test(rmain),
+    ok(/const inPlace = outside && !!\(def\.food \|\| def\.heal\)/.test(ruse),
       "food and potions are used where they lie, not only out of the pack");
     /* The backpack grew this branch and the world grid did not, so eating
      * worked in one window and silently did nothing in the other. */
@@ -13829,7 +13833,7 @@ async function main(): Promise<void> {
       "…and every grid means the same thing by a click on food, not just the pack's");
     ok(/p\.act\.useItem\(k, idx, ref\)/.test(rpan),
       "…because the panel now tells useItem which container was clicked");
-    ok(/if \(!spend\(\)\) return;/.test(rmain) && !/if \(!removeItem\(P\.bag, kind, 1\)\) return;\n      P\.fedS/.test(rmain),
+    ok(/if \(!spend\(\)\) return "handled";/.test(ruse) && !/if \(!removeItem\(P\.bag, kind, 1\)\) return "handled";\n    P\.fedS/.test(ruse),
       "…and both the eating and the drinking spend from that same place");
 
     /* #3 — a corpse lies where its owner died, which is where its friends are
@@ -15118,11 +15122,13 @@ async function main(): Promise<void> {
      * red when the third gate was added, so it was pinning the bug rather than
      * the behaviour. What matters is that every exit asks the same question,
      * and that the question is about the stack rather than its kind. */
+    const cont46 = (await import("node:fs"))
+      .readFileSync(new URL("../src/intents/containers.ts", import.meta.url), "utf8");
     for (const fn of ["function moveItems", "function dropFromContainer", "function dropWornPack"]) {
-      const body = main46.slice(main46.indexOf(fn), main46.indexOf(fn) + 2600);
-      ok(/carriesBound\(st, P\.level\)/.test(body), `${fn.slice(9)} asks the containment question`);
+      const body = cont46.slice(cont46.indexOf(fn), cont46.indexOf(fn) + 2600);
+      ok(cont46.includes(fn) && /carriesBound\(st, P\.level\)/.test(body), `${fn.slice(9)} asks the containment question`);
     }
-    ok(!/boundRelic\(st\.kind/.test(main46),
+    ok(!/boundRelic\(st\.kind/.test(main46 + cont46),
       "…and nothing asks the old kind-only question any more");
   }
 
@@ -15971,7 +15977,7 @@ async function main(): Promise<void> {
      * wearing the first one's clothes. Every name below is a road into mission
      * state, the attunement, the purse or the chest. */
     const tpBody = mainTp.slice(mainTp.indexOf("function tpHome"),
-      mainTp.indexOf("function takeOne"));
+      mainTp.indexOf("function navInto"));
     ok(tpBody.length > 0, "`tpHome` has a body to check");
     for (const forbidden of [
       "setStage", "resetMission", "relicTaken", "relicLost", "missionHandedIn",
@@ -16354,9 +16360,10 @@ async function main(): Promise<void> {
       "…while one past it resolves to nothing, which is what made items unreachable");
 
     /* The gate that stops it happening lives at the MOVE, where there is still
-     * a player to tell. Source-pinned because `moveItems` needs a canvas. */
+     * a player to tell. Pinned on the source here; since Etap 3.1c `moveItems`
+     * runs without a screen, and the 3.1c block drives it for real. */
     const m49 = (await import("node:fs"))
-      .readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+      .readFileSync(new URL("../src/intents/containers.ts", import.meta.url), "utf8");
     const mv49 = m49.slice(m49.indexOf("function moveItems"), m49.indexOf("function takeAllFrom"));
     ok(/st\.items && depthOf\(to\) >= MAX_NEST_DEPTH/.test(mv49),
       "moveItems refuses to bury a container past the cap");
@@ -18593,9 +18600,9 @@ async function main(): Promise<void> {
     CD58.tickCooldowns(HEAL58 + 0.01);
     ok(CD58.isReady("hpPotion"), "…until the two seconds are up");
     CD58.resetCooldowns();
-    const main58 = fs58.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+    const main58 = fs58.readFileSync(new URL("../src/intents/use.ts", import.meta.url), "utf8");
     const guard = main58.indexOf("if (def.heal && !isReady(kind))");
-    const spendAt = main58.indexOf("if (!spend()) return;", guard);
+    const spendAt = main58.indexOf('if (!spend()) return "handled";', guard);
     ok(guard > 0 && spendAt > guard && main58.indexOf("startCooldown(kind);", spendAt) > spendAt,
       "the drink checks the clock before spending the potion, and starts it after");
     ok(S58.herbalist!.entries.find((e) => e.kind === "hpPotion")!.buy
@@ -18797,9 +18804,9 @@ async function main(): Promise<void> {
     ok(ringPay("healthRing") > bestTier4, `…the cheapest of them above any tier-4 piece (${bestTier4}g)`);
 
     /* --- 5. THE POTION SPEAKS LIKE THE CRYSTAL -------------------------------- */
-    const main61 = fs61.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    ok(main61.includes('addFloat(cw(), P.x, P.y - 44, "still cooling", "#8ab6ff")')
-      && !main61.includes('flash("still cooling"'),
+    const main61 = fs61.readFileSync(new URL("../src/intents/use.ts", import.meta.url), "utf8");
+    ok(main61.includes('floatSelf(g.current, P.x, P.y - 44, "still cooling", "#8ab6ff")')
+      && !main61.includes('tell(g, "still cooling"'),
       "a potion refused by the heal clock floats the Life Crystal's words, where the crystal floats them");
 
     /* --- 6. THE SHELF COSTS ABOUT WHAT A KILL PAYS -----------------------------
@@ -21398,7 +21405,7 @@ async function main(): Promise<void> {
     const plain = die(false);
     const halved = die(true);
     ok(plain > 0 && Math.abs(halved - plain / 2) <= 1, `a blessed death costs half the experience (${halved} of ${plain})`);
-    const main = read("../src/main.ts");
+    const main = read("../src/intents/use.ts");
     const use = main.slice(main.indexOf("if (def.blessing) {"), main.indexOf("if (def.food) {"));
     ok(use.includes("if (P.blessed)") && use.includes("P.blessed = true") && use.indexOf("if (P.blessed)") < use.indexOf("spend()"),
       "the scroll blesses when used, and a second is refused, and kept, while the first holds");
@@ -21489,7 +21496,7 @@ async function main(): Promise<void> {
      * and 3.1b is where they go. */
     const srcDir = new URL("../src/", import.meta.url);
     const logicFiles: string[] = [];
-    for (const dir of ["systems", "entities", "world", "text"]) {
+    for (const dir of ["systems", "entities", "world", "text", "intents"]) { // intents/: Etap 3.1c
       for (const f of fs.readdirSync(new URL(`${dir}/`, srcDir))) if (f.endsWith(".ts")) logicFiles.push(`${dir}/${f}`);
     }
     logicFiles.push("items.ts", "game.ts", "config.ts", "util.ts", "save.ts");
@@ -21739,7 +21746,7 @@ async function main(): Promise<void> {
      * ones included, and none may reach the client — no exceptions left. */
     const srcDir = new URL("../src/", import.meta.url);
     const logicFiles: string[] = [];
-    for (const dir of ["systems", "entities", "world", "text"]) {
+    for (const dir of ["systems", "entities", "world", "text", "intents"]) { // intents/: Etap 3.1c
       for (const f of fs.readdirSync(new URL(`${dir}/`, srcDir))) if (f.endsWith(".ts")) logicFiles.push(`${dir}/${f}`);
     }
     logicFiles.push("items.ts", "game.ts", "config.ts", "util.ts", "save.ts");
@@ -21884,6 +21891,292 @@ async function main(): Promise<void> {
       "the sheets read the one facing rule the creatures use");
     ok(FAC.stepFacing("dragon", 0, 1, "left") === "left" && FAC.stepFacing("orc", 0, 1, "left") === "down",
       "…a dragon keeps its profile on a straight step down, an orc turns to face it");
+  }
+
+  console.log("\nEtap 3.1c-1 — what a player asks of their items is decided in intents/, and main.ts only asks:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const FX = await import("../src/systems/fxEvents.ts");
+    const GM = await import("../src/game.ts");
+    const IT = await import("../src/items.ts");
+    const PL = await import("../src/entities/player.ts");
+    const CD = await import("../src/systems/cooldowns.ts");
+    const BLD = await import("../src/systems/building.ts");
+    const WG = await import("../src/world/ground.ts");
+    const ACT = await import("../src/intents/actor.ts");
+    const CT = await import("../src/intents/containers.ts");
+    const GR = await import("../src/intents/ground.ts");
+    const US = await import("../src/intents/use.ts");
+    const { nextEntityId } = await import("../src/world/entities.ts");
+    const { TILE: T, FED_MAX_S, CORPSE_SLOTS, THROW_RANGE_PX } = await import("../src/config.ts");
+    const { Tile: TL } = await import("../src/world/types.ts");
+    type Ev = import("../src/systems/fxEvents.ts").FxEvent;
+    type Kind = import("../src/items.ts").ItemKind;
+    type Stack = import("../src/items.ts").ItemStack;
+    type Ref = import("../src/systems/containers.ts").ContainerRef;
+
+    /* ---- the split, read off the source ---------------------------------- */
+    const strip = (t: string): string => t
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n").map((l) => l.replace(/(^|[^:"'`\\])\/\/.*$/, "$1")).join("\n");
+    const main = read("../src/main.ts");
+    const intents = ["actor", "containers", "ground", "use"].map((f) => [f, read(`../src/intents/${f}.ts`)] as const);
+    const moved = ["refUsable", "chestRoomLeft", "moveItems", "takeAllFrom", "closeIfEmpty", "resolveThrowTarget",
+      "sendThroughPortal", "portalAt", "dropToGround", "dropContainerToGround", "throwGroundItem", "pickupGround",
+      "dropFromEq", "dropFromContainer", "liftFloorStack", "wearPackFrom", "wearPackFromFloor", "movePackTo",
+      "dropWornPack", "unequipInto", "takeOne", "runCoinExchange", "withinReach", "structInReach"];
+    const left = moved.filter((f) => new RegExp(`\\bfunction ${f}\\(`).test(main));
+    ok(left.length === 0, `main.ts defines none of the item requests any more${left.length ? ": " + left.join(", ") : ""}`);
+    ok(/useItem: \(kind: ItemKind, slotIndex: number, from\?: ContainerRef\) => \{[\s\S]{0,400}?useItem\(game, kind, from\)/.test(main)
+      && main.includes("equipItem: (kind: ItemKind) => { equipItem(game, kind); },")
+      && main.includes("unequip: (slot: EqSlot) => { unequip(game, slot); },")
+      && main.includes("cycleAmmo: () => { cycleAmmo(game); },")
+      && main.includes("removePack: () => { dropWornPack(game); },")
+      && main.includes("takeLoot: (c: Corpse, index: number) => { takeOne(game, c, index); },"),
+      "…the panels' item buttons only pass the request on");
+    const touching = intents.filter(([, t]) => /\bui\.|closeWindow|openWindow|ui\.split/.test(strip(t))).map(([f]) => f);
+    ok(touching.length === 0, `no request touches a window${touching.length ? ": " + touching.join(", ") : ""}`);
+    const shouting = intents.filter(([, t]) => /\b(addFloat|logServer|beep|sfx)\(/.test(strip(t))).map(([f]) => f);
+    ok(shouting.length === 0,
+      `…nor plays, paints or logs anything itself: it reports events${shouting.length ? ": " + shouting.join(", ") : ""}`);
+    const sweep = main.slice(main.indexOf("function sweepVanished"), main.indexOf("function tickProximityPanels"));
+    ok(/w\.corpses\.includes\(loot\)/.test(sweep) && /w\.ground\.includes\(floor\)/.test(sweep)
+      && /function tickProximityPanels\(dt: number\): void \{\n {2}sweepVanished\(\);/.test(main),
+      "the loot and floor windows close themselves once their body or bag is gone, before the reach check can call it far away");
+
+    /* ---- the tone: the item moves' blips, as an event -------------------- */
+    const evs: Ev[] = [];
+    const all: Ev[] = [];
+    const stop = FX.onFx((e) => { evs.push(e); all.push(e); });
+    const fresh = (): void => { evs.length = 0; };
+    const said = (): string[] => evs.filter((e): e is Extract<Ev, { fx: "log" }> => e.fx === "log").map((e) => e.text);
+    const tones = (): number[] => evs.filter((e): e is Extract<Ev, { fx: "tone" }> => e.fx === "tone").map((e) => e.freq);
+    const floats = (): Extract<Ev, { fx: "float" }>[] => evs.filter((e): e is Extract<Ev, { fx: "float" }> => e.fx === "float");
+    const heard = (id: string): Extract<Ev, { fx: "sound" }> | undefined =>
+      evs.find((e): e is Extract<Ev, { fx: "sound" }> => e.fx === "sound" && e.id === id);
+    FX.tone(440, 0.06, "sine", 0.04);
+    FX.tone(200, 0.06, "sine", 0.04, -60);
+    ok(evs.length === 2 && evs[0].fx === "tone" && !("slide" in evs[0])
+      && evs[1].fx === "tone" && evs[1].slide === -60,
+      "a tone is an event like the rest, carrying its pitch bend only when it has one");
+    ok(read("../src/fxClient.ts").includes('case "tone": beep(ev.freq, ev.dur, ev.wave, ev.vol, ev.slide); return;'),
+      "…and the client plays it as the very blip the item moves made before");
+
+    /* ---- one game, one player ------------------------------------------- */
+    const g = GM.createGame();
+    const p = g.player;
+    const home = g.worlds.home;
+    const count = (k: string): number => IT.bagCount(p.bag, k as Kind);
+    const stand = (tx: number, ty: number): void => { p.tx = tx; p.ty = ty; p.x = tx * T + T / 2; p.y = ty * T + T / 2; };
+    const spawn = { tx: p.tx, ty: p.ty };
+
+    fresh();
+    ACT.tell(g, "hello there");
+    const f0 = floats()[0];
+    ok(evs.length === 2 && !!f0 && f0.self && f0.text === "hello there" && f0.color === ACT.TELL_COLOR
+      && f0.world === g.current && f0.x === p.x && f0.y === p.y - 60 && said()[0] === "hello there",
+      "tell says it over the player's own head and in their Server Log, for them alone, as flash did");
+    ok(ACT.withinReach(g, p.x + T, p.y + T) && !ACT.withinReach(g, p.x + 2 * T, p.y),
+      "arm's reach is one square, diagonals included");
+
+    /* ---- a body on the ground --------------------------------------------- */
+    const body = (dx: number, items: Array<[string, number]>): { id: number; x: number; y: number; items: (Stack | null)[] } => {
+      const slots: (Stack | null)[] = new Array(CORPSE_SLOTS).fill(null);
+      items.forEach(([k, n], i) => { slots[i] = { kind: k as Kind, n }; });
+      const c = { id: nextEntityId(), name: "a test body", x: p.x + dx, y: p.y, items: slots, t: 999 };
+      g.current.corpses.push(c as never);
+      return c;
+    };
+    const c1 = body(T, [["meat", 3], ["wood", 4]]);
+    const r1: Ref = { c: "corpse", id: c1.id };
+    const wood0 = count("wood");
+    fresh();
+    CT.takeOne(g, c1 as never, 1);
+    ok(count("wood") === wood0 + 4 && c1.items[1] === null && tones()[0] === 440,
+      "a stack taken out of a body lands in the bag, with the bag's click");
+
+    p.fedS = 0;
+    fresh();
+    ok(US.useItem(g, "meat", r1) === "handled" && c1.items[0]?.n === 2 && p.fedS === IT.ITEMS.meat.food,
+      "meat in a body is eaten where it lies");
+    ok(["Munch.", "Gulp.", "Mmmh."].includes(said()[0]) && !!heard("eat"), "…with the words and the sound it always had");
+    p.fedS = FED_MAX_S;
+    fresh();
+    US.useItem(g, "meat", r1);
+    ok(c1.items[0]?.n === 2 && /^too full — wait \d+ min$/.test(said()[0] ?? ""), "…and refused, and kept, on a full stomach");
+    p.fedS = 0;
+    c1.x = p.x + 3 * T;
+    fresh();
+    ok(US.useItem(g, "meat", r1) === "handled" && c1.items[0]?.n === 2 && said()[0] === "too far away",
+      "…but only within reach of it — the reach every move out of that body is held to");
+    fresh();
+    CT.takeOne(g, c1 as never, 0);
+    ok(c1.items[0]?.n === 2 && said()[0] === "too far away", "…as taking it is");
+    c1.x = p.x + T;
+
+    const c2 = body(T, [["leatherShield", 1]]);
+    ok(US.useItem(g, "leatherShield", { c: "corpse", id: c2.id }) === "move",
+      "a shield in a body is not used but offered to be moved — the client opens the chooser");
+    IT.addItem(p.bag, "healRune", 1);
+    ok(US.useItem(g, "healRune") === "crystal", "…and a crystal is handed on to be cast");
+
+    fresh();
+    CT.takeAllFrom(g, r1);
+    ok(!g.current.corpses.includes(c1 as never) && count("meat") >= 2,
+      "emptying a body takes the body away — its window notices on its own (main.ts)");
+    const heavy = (Object.keys(IT.ITEMS) as Kind[]).find((k) => !IT.isContainer(k)
+      && IT.ITEMS[k].weight * IT.ITEMS[k].stack > PL.freeCap(p));
+    ok(!!heavy, "something is too heavy for a fresh character to carry");
+    const full = IT.ITEMS[heavy!].stack;
+    const c3 = body(T, [[heavy!, full]]);
+    fresh();
+    ok(!CT.moveItems(g, { c: "corpse", id: c3.id }, 0, { c: "bag" }, null, full)
+      && c3.items[0]?.n === full && said()[0] === "too heavy",
+      `…and ${full} ${IT.ITEMS[heavy!].name} too heavy to carry stay in the body`);
+
+    /* ---- the Storage Chest -------------------------------------------- */
+    let spot: { tx: number; ty: number } | null = null;
+    for (let y = 2; y < home.h - 4 && !spot; y++) {
+      for (let x = 2; x < home.w - 4; x++) if (BLD.canPlaceAt(home, "chest", x, y)) { spot = { tx: x, ty: y }; break; }
+    }
+    ok(!!spot, "there is room on Home Isle for a test chest");
+    const chest = { id: nextEntityId(), key: "chest", tx: spot!.tx, ty: spot!.ty, tier: 1, anim: 0, hurtT: 0, inv: IT.emptyStash() };
+    home.structures.push(chest as never);
+    const sref: Ref = { c: "stash", id: chest.id };
+    stand(spot!.tx, spot!.ty + 2);
+    ok(CT.refUsable(g, sref), "a chest one square away is in reach");
+    const arrows0 = count("arrow");
+    fresh();
+    ok(CT.moveItems(g, { c: "bag" }, p.bag.findIndex((s) => s?.kind === "arrow"), sref, null, 10)
+      && IT.bagCount(chest.inv, "arrow") === 10 && count("arrow") === arrows0 - 10 && tones()[0] === 360,
+      "ten arrows go into the chest, with the chest's lower click");
+    const keep = chest.inv;
+    chest.inv = chest.inv.map(() => ({ kind: "leatherShield" as Kind, n: 1 }));
+    fresh();
+    ok(!CT.moveItems(g, { c: "bag" }, p.bag.findIndex((s) => s?.kind === "bow"), sref, null, 1)
+      && count("bow") === 1 && said()[0] === "the chest is full", "…and a full chest refuses, with nothing moved");
+    chest.inv = keep;
+    stand(spot!.tx, spot!.ty + 4);
+    fresh();
+    ok(!CT.moveItems(g, { c: "bag" }, p.bag.findIndex((s) => s?.kind === "arrow"), sref, null, 5)
+      && IT.bagCount(chest.inv, "arrow") === 10 && said()[0] === "too far away", "…as does one three squares off");
+    stand(spot!.tx, spot!.ty + 2);
+    g.current = g.worlds.town;
+    ok(!CT.refUsable(g, sref), "…and no chest can be reached from another island");
+    g.current = home;
+
+    const worn = p.pack!;
+    fresh();
+    CT.movePackTo(g, sref);
+    const at = chest.inv.findIndex((s) => s === worn);
+    ok(!p.pack && at >= 0 && said().includes("backpack off"), "the worn backpack can be put away in the chest, contents and all");
+    fresh();
+    CT.wearPackFrom(g, sref, at);
+    ok(p.pack === worn && chest.inv[at] === null && said()[0] === "backpack on", "…and taken out of it onto the back again");
+
+    /* ---- the ground ------------------------------------------------------ */
+    stand(spawn.tx, spawn.ty);
+    const a1 = count("arrow");
+    fresh();
+    CT.dropFromContainer(g, { c: "bag" }, p.bag.findIndex((s) => s?.kind === "arrow"), 5);
+    const pile = g.current.ground.find((q) => q.kind === "arrow" && q.x === p.x && q.y === p.y);
+    ok(!!pile && pile.n === 5 && count("arrow") === a1 - 5 && said()[0] === `dropped 5 ${IT.ITEMS.arrow.name}`
+      && tones()[0] === 200, "five arrows dropped land at the player's feet");
+    fresh();
+    GR.pickupGround(g, pile!);
+    ok(!g.current.ground.includes(pile!) && count("arrow") === a1 && tones()[0] === 520, "…and are picked up again");
+    const far = WG.placeOnGround(g.current, "wood", 2, p.x + 3 * T, p.y);
+    fresh();
+    GR.pickupGround(g, far);
+    ok(g.current.ground.includes(far) && said()[0] === "too far away",
+      "…but nothing is picked up from three squares off: a request carries its own reach check");
+    fresh();
+    GR.throwGroundItem(g, far, p.x, p.y);
+    ok(far.x === p.x + 3 * T && said()[0] === "too far away", "…and nothing is shoved along the floor from there either");
+    const lift = WG.placeOnGround(g.current, "wood", 3, p.x, p.y);
+    const w1 = count("wood");
+    CT.liftFloorStack(g, lift, { c: "bag" }, null);
+    ok(!g.current.ground.includes(lift) && count("wood") === w1 + 3, "a stack at the player's feet drags straight into the bag");
+
+    let sea: { x: number; y: number } | null = null;
+    for (let y = 0; y < home.h && !sea; y++) {
+      for (let x = 0; x < home.w; x++) {
+        const cx = x * T + T / 2;
+        const cy = y * T + T / 2;
+        if (home.tile[y][x] === TL.Water && Math.hypot(cx - p.x, cy - p.y) <= THROW_RANGE_PX
+          && GR.resolveThrowTarget(g, cx, cy).sank) { sea = { x: cx, y: cy }; break; }
+      }
+    }
+    ok(!!sea, "there is sea within a throw of the spawn");
+    const ground0 = g.current.ground.length;
+    fresh();
+    GR.dropToGround(g, "wood", 2, sea!.x, sea!.y);
+    ok(g.current.ground.length === ground0 && said()[0] === `2 ${IT.ITEMS.wood.name} sank`
+      && floats().some((f) => !f.self && f.text === "splash") && !!heard("splash")?.at,
+      "wood thrown into the sea sinks — the splash is the sea's, for anyone there, the words are the thrower's");
+    const pt = home.portals.find((q) => !q.inactive)!;
+    const town = g.worlds.town;
+    const town0 = town.ground.length;
+    fresh();
+    GR.dropToGround(g, "wood", 3, pt.x, pt.y);
+    ok(town.ground.length === town0 + 1 && town.ground[town.ground.length - 1].kind === "wood"
+      && town.ground[town.ground.length - 1].n === 3 && !!heard("portal"),
+      "…and thrown into the portal it drops out beside the one on the far side");
+
+    const packNow = p.pack!;
+    fresh();
+    CT.dropWornPack(g);
+    const onFloor = g.current.ground.find((q) => q.items === packNow.items);
+    ok(!p.pack && !!onFloor && said().includes("backpack off"), "taking the backpack off puts it on the floor, contents and all");
+    fresh();
+    CT.wearPackFromFloor(g, onFloor!);
+    ok(p.pack?.items === packNow.items && !g.current.ground.includes(onFloor!) && said()[0] === "backpack on",
+      "…and wearing it again lifts it off the floor");
+
+    /* ---- what is worn ---------------------------------------------------- */
+    IT.addItem(p.bag, "leatherShield", 1);
+    US.equipItem(g, "leatherShield");
+    ok(p.eq.shield === "leatherShield", "a shield goes on");
+    fresh();
+    US.equipItem(g, "bow");
+    ok(p.eq.weapon === "bow" && p.eq.shield === null && count("leatherShield") === 1 && tones()[0] === 420,
+      "…and a bow takes it off again, into the pack: a bow wants both hands");
+    fresh();
+    US.unequip(g, "weapon");
+    ok(p.eq.weapon === null && count("bow") === 1 && tones()[0] === 300, "taking the bow off puts it back in the pack");
+    fresh();
+    US.cycleAmmo(g);
+    ok(p.ammo === "arrow" && said()[0] === `ammo: ${IT.ITEMS.arrow.name}`, "the arrows in the pack are loaded");
+
+    IT.addItem(p.bag, "goldCoin", 100);
+    const plat0 = count("platinumCoin");
+    fresh();
+    US.changeCoins(g, "platinumCoin", 1);
+    ok(count("platinumCoin") === plat0 + 1 && said()[0] === "+1 platinum" && !!heard("coins"),
+      "a hundred gold become one platinum at Morgan's counter");
+
+    IT.addItem(p.bag, "hpPotion", 2);
+    CD.resetCooldowns();
+    p.hp = 1;
+    fresh();
+    US.useItem(g, "hpPotion");
+    const heal = IT.ITEMS.hpPotion.heal ?? 0;
+    const healF = floats()[0];
+    ok(p.hp === Math.min(p.maxhp, 1 + heal) && !!healF && !healF.self && healF.text === `+${heal}`,
+      "a potion heals, and its number is for anyone looking");
+    p.hp = 1;
+    fresh();
+    US.useItem(g, "hpPotion");
+    const coolF = floats()[0];
+    ok(p.hp === 1 && count("hpPotion") === 1 && !!coolF && coolF.self && coolF.text === "still cooling",
+      "…while a second inside the heal clock is refused, and kept, in words for the drinker only");
+    CD.resetCooldowns();
+
+    const kinds = new Set(all.map((e) => e.fx));
+    ok([...kinds].every((k) => ["float", "log", "tone", "sound"].includes(k)),
+      `everything the item requests report is a float, a log line, a tone or a sound (${[...kinds].join(", ")})`);
+    stop();
   }
 
   console.log(`\\n${pass} passed, ${fail} failed`);
