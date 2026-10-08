@@ -47,7 +47,7 @@ import { applyOutfit } from "./systems/outfit.ts";
 import { resetPlayerState } from "./systems/playerState.ts";
 import { stampWorlds } from "./world/entities.ts";
 import { emptyStash } from "./items.ts";
-import { sfx } from "./audio.ts";
+import { sound } from "./systems/fxEvents.ts";
 import { WORLD_SEED, MONSTERS_ENABLED } from "./config.ts";
 import type { Portal, World, WorldKey } from "./world/types.ts";
 import type { Player } from "./entities/player.ts";
@@ -474,7 +474,7 @@ export function travelTo(g: Game, dest: WorldKey): void {
   g.player.tpCd = 1.6;
   g.tpFlash = 1;
   g.zoneFlash = { text: target.name + (target.safe ? "  (safe)" : "  (dangerous)") + extra, t: 2.8 };
-  sfx("portal");
+  sound("portal");
 }
 
 /** Send the player home alive (used on respawn after death). */

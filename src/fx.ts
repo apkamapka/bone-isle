@@ -19,6 +19,11 @@ export function addFloat(world: World, x: number, y: number, text: string, color
   floats.push({ x: x + rnd(-6, 6), y, text, color, t: 1.1, world });
 }
 
+/** Count, for the tests. */
+export function floatCount(): number {
+  return floats.length;
+}
+
 export function updateFloats(dt: number): void {
   for (let i = floats.length - 1; i >= 0; i--) {
     const f = floats[i];

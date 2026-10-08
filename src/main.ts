@@ -20,7 +20,7 @@ import { clamp, dist, rndi } from "./util.ts";
 import { playerSpeed, refreshDerived, canCarry, freeCap } from "./entities/player.ts";
 import type { Target } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName, mobLabel, tickMonsterSlows } from "./entities/monsters.ts";
-import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster, grantExp, setRelicNotice } from "./systems/combat.ts";
+import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
 import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
 import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow } from "./gfx/buildingArt.ts";
@@ -74,6 +74,8 @@ import { updateSpellFx, drawSpellBolts, spellBlastDrawables } from "./gfx/spellF
 import { tickAuraFx, drawAuras, drawFlares, addFlare } from "./gfx/auraFx.ts";
 import { lifePercent, lifeTrail, sweepLifeTrails, drawLifeBar, drawNameTag, drawNpcTag, NAME_GAP } from "./gfx/lifeBar.ts";
 import { updateMonsterSpells } from "./systems/monsterSpells.ts";
+import { tickFields } from "./systems/fields.ts";
+import { installFxClient } from "./fxClient.ts";
 import { unlockAudio, beep, sfx, setAmbient, ambientFor } from "./audio.ts";
 import { drawBlood, tickBlood } from "./gfx/blood.ts";
 import { tickVoices } from "./systems/voices.ts";
@@ -112,6 +114,11 @@ import type { StructKey } from "./systems/building.ts";
    The full modular prototype: three islands, combat, corpses & loot,
    NPC shops, crafting, spells, quests, mobile controls, and saves.
    ------------------------------------------------------------------ */
+
+/* The logic reports what should be seen and heard as events (Etap 3.1a), and
+ * this is what turns them into sounds, numbers, blood and spell art. Installed
+ * before anything else runs, so not one of them is dropped. */
+installFxClient();
 
 const screen = document.createElement("canvas");
 screen.style.imageRendering = "pixelated";
@@ -458,11 +465,6 @@ const flash = (t: string, c = "#ffe9a8"): void => {
   addFloat(cw(), P.x, P.y - 60, t, c);
   logServer(t, c);
 };
-
-// A relic lands in the PACK rather than on the body, so say so somewhere the
-// player can scroll back to — a float alone fades while their eye is on the
-// loot window. See `setRelicNotice` in combat.ts for the report behind this.
-setRelicNotice((text, color) => logServer(text, color));
 
 /** Recompute the player's max HP from current owned structures. */
 function recomputeBonuses(): void {
@@ -4537,6 +4539,7 @@ function update(dt: number): void {
     if (P.deadT <= 0) respawnAtHome(game);
     updateFloats(dt);
     updateSpellFx(dt);  // the spell that killed you still gets to finish
+    tickFields(dt);     // …and the ground it set alight still burns out on time
     tickAuraFx(dt);
     // The long locks keep counting while you are face down. Death already
     // cleared the effects themselves, so this only advances `furyLock` and
@@ -4777,6 +4780,8 @@ function update(dt: number): void {
 
   // spell bolts and the blooms they leave (also cosmetic, same rule)
   updateSpellFx(dt);
+  // the burning ground is NOT cosmetic — it hurts — but it ages on the same beat
+  tickFields(dt);
   tickAuraFx(dt);
   // monster casts: windups landing, and the ground they left on fire. This is
   // the one place spell damage reaches the player from a creature, so it is
