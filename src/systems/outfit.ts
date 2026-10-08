@@ -8,16 +8,19 @@
  *
  * Module state (like skills/tasks): serialize/load/reset from save.ts/game.ts.
  */
-import { PLAYER_MAP, bake } from "../gfx/sprites.ts";
-import { ADV_DOWN, ADV_SIDE, ADV_UP } from "../gfx/adventurer.ts";
-import { setHeroDyes, setHeroLook, type HeroZone, type HeroLook } from "../gfx/heroSheet.ts";
 import { active as activeState } from "./playerState.ts";
-import type { Player } from "../entities/player.ts";
 
 /** The four render facings. `left` is `side` mirrored at draw time, so only
  *  three maps are stored. */
 export type Facing = "down" | "up" | "side";
-export type DirSprites = Readonly<Record<Facing, HTMLCanvasElement>>;
+
+/** The LPC clothes an outfit is drawn in: the NAME of a layer set the client
+ *  loads (gfx/heroSheet.ts). Defined here since Etap 3.1b, with the outfits. */
+export type HeroLook = "adventurer" | "ranger";
+
+/** The baked pixel maps an outfit falls back to when the LPC hero is not
+ *  loaded: the NAME of a map set the client keeps (gfx/outfitArt.ts). */
+export type OutfitFrames = "adventurer" | "classic";
 
 /** The four dye zones. The internal keys stay hair/primary/secondary (+shoes)
  *  so older saves load untouched; they now paint the LPC hero's hair, shirt,
@@ -110,41 +113,38 @@ const LEGACY_REMAP: readonly number[] = [
 const DEFAULT_DYES = { hair: 57, primary: 95, secondary: 95, shoes: 114 } as const;
 
 /**
- * An outfit is three pixel maps — one per facing. Single-view outfits (the
- * original Classic map) just repeat the same map, so every outfit reads the
- * same way at bake time.
+ * An outfit names its pictures and holds none (Etap 3.1b): `frames` is the set
+ * of baked maps it falls back to — three for the Adventurer, one repeated for
+ * the original Classic — and `lpc` the LPC clothes it is really drawn in. The
+ * client turns both names into pictures (gfx/outfitArt.ts).
  */
 interface OutfitDef {
   name: string;
-  frames: Readonly<Record<Facing, readonly string[]>>;
+  frames: OutfitFrames;
   labels: Readonly<Record<OutfitZone, string>>;
   /** LPC clothes of its own (Etap 92): the hero's layer set and the Wardrobe's
    *  captions for it. Absent means the Adventurer's clothes. */
   lpc?: { look: HeroLook; labels: Readonly<Record<OutfitZone, string>> };
 }
 
-function oneView(map: readonly string[]): Readonly<Record<Facing, readonly string[]>> {
-  return { down: map, side: map, up: map };
-}
-
 export const OUTFITS: Readonly<Record<string, OutfitDef>> = {
   adventurer: {
     name: "Adventurer",
-    frames: { down: ADV_DOWN, side: ADV_SIDE, up: ADV_UP },
+    frames: "adventurer",
     labels: ADV_LABELS,
   },
-  classic: { name: "Classic", frames: oneView(PLAYER_MAP), labels: LEGACY_LABELS },
+  classic: { name: "Classic", frames: "classic", labels: LEGACY_LABELS },
   /* The first outfit with LPC clothes of its own, bought at Grizelda's shelf
    * (Etap 92). Headless, or if its sheets fail, it falls back to the
    * Adventurer's baked maps like everything else. */
   ranger: {
     name: "Ranger",
-    frames: { down: ADV_DOWN, side: ADV_SIDE, up: ADV_UP },
+    frames: "adventurer",
     labels: RANGER_LABELS,
     lpc: { look: "ranger", labels: RANGER_LABELS },
   },
 };
-const DEFAULT_OUTFIT = "adventurer";
+export const DEFAULT_OUTFIT = "adventurer";
 
 /** What the Wardrobe lets a character switch between, in order, of what he
  *  owns. "classic" is a fallback map with no LPC clothes of its own, so on
@@ -195,75 +195,23 @@ export function outfitState(): Readonly<OutfitSave> {
   return state;
 }
 
-/** Darken a #rrggbb color — the shade glyphs (H, R, P) derive from the base
- *  dye so every color choice keeps the sprite's original shading. */
-function darken(hex: string, f = 0.68): string {
-  const n = parseInt(hex.slice(1), 16);
-  const r = Math.round(((n >> 16) & 255) * f);
-  const g = Math.round(((n >> 8) & 255) * f);
-  const b = Math.round((n & 255) * f);
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
-}
-
-/** Bake the current outfit + dyes into a fresh set of directional sprites. */
-export function bakeOutfitSprites(): DirSprites {
-  const o = OUTFITS[state.current] ?? OUTFITS[DEFAULT_OUTFIT];
-  const hair = OUTFIT_COLORS[state.hair] ?? OUTFIT_COLORS[0];
-  const prim = OUTFIT_COLORS[state.primary] ?? OUTFIT_COLORS[1];
-  const sec = OUTFIT_COLORS[state.secondary] ?? OUTFIT_COLORS[2];
-  const over = {
-    h: hair, H: darken(hair),
-    r: prim, R: darken(prim),
-    p: sec, P: darken(sec),
-  };
-  return {
-    down: bake(o.frames.down, over),
-    side: bake(o.frames.side, over),
-    up: bake(o.frames.up, over),
-  };
-}
-
-/** Legacy single-sprite entry point — the front view. */
-export function bakeOutfitSprite(): HTMLCanvasElement {
-  return bakeOutfitSprites().down;
-}
-
-/** The four Wardrobe dyes as hex, mapped to the LPC hero's layer zones. */
-function heroDyeColors(): Record<HeroZone, string> {
-  const at = (i: number, fb: string) => OUTFIT_COLORS[i] ?? fb;
-  return {
-    hair: at(state.hair, "#929292"),
-    shirt: at(state.primary, "#494949"),
-    pants: at(state.secondary, "#494949"),
-    shoes: at(state.shoes, "#242424"),
-  };
-}
-
-/** Re-bake and hand the player their current look. Call after any change.
- *  Drives both the LPC hero (the tinted layers) and the baked Adventurer
- *  fallback, so a dye change shows up whichever one is on screen. */
-export function applyOutfit(p: Player): void {
-  const set = bakeOutfitSprites();
-  p.sprDir = set;
-  p.spr = set.down; // keep the generic walker field in sync (shadows, corpses)
-  setHeroLook(heroLookOf(state.current));
-  setHeroDyes(heroDyeColors());
-}
+/* Changing the look changes STATE and nothing else. The character used to be
+ * handed freshly baked sprites here (`applyOutfit`); since Etap 3.1b the client
+ * notices the change and redraws (gfx/outfitArt.ts `syncOutfitArt`), so none of
+ * these needs to know which character's picture is on screen. */
 
 /** Pick a dye for one zone (Wardrobe swatch click). */
-export function setOutfitColor(p: Player, zone: OutfitZone, idx: number): void {
+export function setOutfitColor(zone: OutfitZone, idx: number): void {
   if (idx < 0 || idx >= OUTFIT_COLORS.length) return;
   state[zone] = idx;
-  applyOutfit(p);
 }
 
 /** Back to the classic look (colors only — owned outfits are never lost). */
-export function resetOutfitColors(p: Player): void {
+export function resetOutfitColors(): void {
   state.hair = DEFAULT_DYES.hair;
   state.primary = DEFAULT_DYES.primary;
   state.secondary = DEFAULT_DYES.secondary;
   state.shoes = DEFAULT_DYES.shoes;
-  applyOutfit(p);
 }
 
 /** New game: module state must not leak a previous character's wardrobe. */
@@ -294,10 +242,9 @@ export function wardrobeOutfits(): string[] {
 
 /** Put on another owned outfit. The dyes stay: they are the character's, not
  *  the outfit's, as in Tibia. */
-export function wearOutfit(p: Player, id: string): boolean {
+export function wearOutfit(id: string): boolean {
   if (!(id in OUTFITS) || !state.owned.includes(id) || state.current === id) return false;
   state.current = id;
-  applyOutfit(p);
   return true;
 }
 

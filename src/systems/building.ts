@@ -3,8 +3,6 @@ import { TILE } from "../config.ts";
 import { sound, floatSelf } from "./fxEvents.ts";
 import { dist } from "../util.ts";
 import { nextEntityId } from "../world/entities.ts";
-import { SPR, bakeForge, bakeLibrary, bakeDummy, bakeRange, bakeChest, bakeTreasureChest } from "../gfx/sprites.ts";
-import { buildingArt } from "../gfx/buildingArt.ts";
 import { countAcross, removeAcross, emptyStash } from "../items.ts";
 import { unstick } from "../world/collision.ts";
 import { Tile } from "../world/types.ts";
@@ -27,8 +25,9 @@ export interface TierDef {
 }
 
 export interface StructDef {
+  /** The building's name. Its picture is found by its KEY on the client's side
+   *  (gfx/buildingArt.ts `structSprite`), so a definition holds none. */
   name: string;
-  spr: HTMLCanvasElement;
   /** Solid structures block movement. */
   solid: boolean;
   /** Occupies a single tile instead of the full 2×2 pad. */
@@ -83,7 +82,7 @@ export type StructKey = "forge" | "tower" | "dummy" | "range" | "chest";
  */
 export const STRUCTS: Record<StructKey, StructDef> = {
   forge: {
-    name: "Forge", spr: bakeForge(), solid: true,
+    name: "Forge", solid: true,
     tiers: [
       { cost: { wood: 50, stone: 20 }, desc: "Smelt looted gear into iron · craft arrows" },
       { cost: { stone: 100, wood: 50, iron: 8 }, desc: "The same gear now yields steel" },
@@ -91,7 +90,7 @@ export const STRUCTS: Record<StructKey, StructDef> = {
     ],
   },
   tower: {
-    name: "Alchemy Tower", spr: bakeLibrary(), solid: true,
+    name: "Alchemy Tower", solid: true,
     tiers: [
       { cost: { wood: 50, stone: 30 }, desc: "Research tier I crystals" },
       { cost: { wood: 100, stone: 100, iron: 40, steel: 12 }, desc: "Unlocks tier II crystals" },
@@ -99,7 +98,7 @@ export const STRUCTS: Record<StructKey, StructDef> = {
     ],
   },
   dummy: {
-    name: "Training Dummy", spr: bakeDummy(), solid: true, single: true,
+    name: "Training Dummy", solid: true, single: true,
     tiers: [
       { cost: { wood: 20, stone: 15 }, desc: "Trains Sword Fighting at half rate" },
       { cost: { wood: 50, stone: 30, bones: 20 }, desc: "Also trains Shielding" },
@@ -107,13 +106,13 @@ export const STRUCTS: Record<StructKey, StructDef> = {
     ],
   },
   range: {
-    name: "Archery Range", spr: bakeRange(), solid: true, single: true,
+    name: "Archery Range", solid: true, single: true,
     tiers: [{ cost: { wood: 20, stone: 10 }, desc: "Shoot it to train Distance Fighting" }],
   },
   chest: {
     // Waist-high furniture, not a building: only the row it rests on blocks,
     // so the player can stand behind it the way they stand behind a tree.
-    name: "Storage Chest", spr: bakeChest(), solid: true, solidRows: 1, multi: true,
+    name: "Storage Chest", solid: true, solidRows: 1, multi: true,
     tiers: [
       { cost: { wood: 10, stone: 5 }, desc: "10 slots" },
       { cost: { wood: 60, stone: 60, bones: 40 }, desc: "50 slots" },
@@ -369,18 +368,3 @@ export function applyStructureSolidity(home: World): void {
   }
 }
 
-let treasureSpr: HTMLCanvasElement | null = null;
-
-/**
- * Look up the sprite for a placed structure at a given tier.
- *
- * The tier matters because the drawn artwork rebuilds a structure in a better
- * material as it climbs — a Forge III is stone and steel where a Forge I is
- * planks. `def.spr` is the baked fallback and knows nothing of tiers, so every
- * tier of an unrendered structure keeps sharing one sprite exactly as before;
- * only the artwork splits them.
- */
-export function structSprite(key: string, tier: number = 1): HTMLCanvasElement {
-  if (key === "treasure") return (treasureSpr ??= bakeTreasureChest());
-  return buildingArt(key, tier) ?? STRUCTS[key as StructKey]?.spr ?? SPR.rock;
-}

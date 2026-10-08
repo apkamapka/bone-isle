@@ -49,24 +49,3 @@ export function mergeLoot<K>(
 ): { items: { kind: K; n: number }[]; gold: number } {
   return { items: [...a.items, ...b.items], gold: a.gold + b.gold };
 }
-
-/** A pulsing gold ring at the creature's feet and a few motes rising off it. */
-export function drawEliteAura(ctx: CanvasRenderingContext2D, sx: number, sy: number, t: number): void {
-  const pulse = 0.5 + 0.5 * Math.sin(t * 3);
-  ctx.save();
-  ctx.globalAlpha = 0.3 + 0.35 * pulse;
-  ctx.strokeStyle = "#ffd23a";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.ellipse(sx, sy, 15 + pulse * 2, 6 + pulse, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = "#ffe98a";
-  for (let i = 0; i < 3; i++) {
-    const ph = (t * 0.6 + i / 3) % 1;
-    ctx.globalAlpha = 0.8 * (1 - ph);
-    const mx = sx + Math.sin(i * 2.1 + t * 1.7) * 10;
-    const my = sy - 4 - ph * 26;
-    ctx.fillRect(Math.round(mx) - 1, Math.round(my) - 1, 2, 2);
-  }
-  ctx.restore();
-}
