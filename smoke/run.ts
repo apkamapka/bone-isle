@@ -8679,7 +8679,9 @@ async function main(): Promise<void> {
      * It said "north" from the day it was written until somebody walked it. */
     ok(/trapdoor west of here/.test(main), "upstairs he points WEST, which is where the trapdoor is");
     ok(!/trapdoor north of here/.test(main), "…and no longer north, which it never was");
-    ok(/function talkToSage/.test(main), "…and downstairs he runs the mission state machine");
+    ok(/\} else showSage\(talkToSage\(game\)\);/.test(main)
+      && /export function talkToSage\(g: Game\): SageSpeech/.test(nfs.readFileSync(new URL("../src/intents/missions.ts", import.meta.url), "utf8")),
+      "…and downstairs he runs the mission state machine (a request since Etap 3.1c)");
     /* The fifty-five-character ceiling is GONE, and this is the test that used
      * to enforce it. Every line he spoke was written to fit `fitLine`, which
      * cuts the log to the width available and ellipsises the rest — the first
@@ -11526,9 +11528,10 @@ async function main(): Promise<void> {
       "standing our ground is decided BEFORE the walk, not after it");
 
     /* Attack-nearest must not reach through walls, and must be releasable. */
-    ok(main.includes("if (!lineOfSight(world, P.x, P.y, m.x, m.y)) continue;"),
+    const tgt = (await import("node:fs")).readFileSync("src/intents/target.ts", "utf8"); // Etap 3.1c
+    ok(tgt.includes("if (!lineOfSight(world, P.x, P.y, m.x, m.y)) continue;"),
       "attack-nearest will not mark a creature through a wall");
-    ok(main.includes('if (P.target?.kind === "mob") {\n    P.target = null;'),
+    ok(tgt.includes('if (P.target?.kind === "mob") {\n    P.target = null;'),
       "…and pressing it again releases the mark rather than re-marking");
     const cfg = (await import("node:fs")).readFileSync("src/config.ts", "utf8");
     ok(cfg.includes("export const TARGET_SEEK_PX = 8 * TILE;"),
@@ -11689,20 +11692,23 @@ async function main(): Promise<void> {
     /* Every constructor site. A single `{ kind: "mob", m }` left behind would
      * not typecheck, but a `{ kind: "mob", id: m.id }` written as a literal
      * number somewhere would — so pin the shape. */
+    // since Etap 3.1c every click and menu entry asks intents/target.ts to mark
+    const tgt32 = (await import("node:fs")).readFileSync("src/intents/target.ts", "utf8");
     for (const lit of [
-      'P.target = { kind: "mob", id: m.id };',
-      'P.target = { kind: "ground", id: gi.id };',
-      'P.target = { kind: "corpse", id: c.id };',
-      'P.target = { kind: "npc", id: n.id };',
-      'P.target = { kind: "dummy", id: s.id };',
-      'else P.target = { kind: "structure", id: s.id };',
-      'P.target = { kind: "mob", id: best.id };',
+      'setTarget(game, { kind: "mob", id: m.id })',
+      'setTarget(game, { kind: "ground", id: gi.id })',
+      'setTarget(game, { kind: "corpse", id: c.id })',
+      'setTarget(game, { kind: "npc", id: n.id })',
+      'const kind = s.key === "dummy" || s.key === "range" ? "dummy" : "structure";',
+      'setTarget(game, { kind, id: s.id })',
     ]) ok(main.includes(lit), `target constructor: ${lit.trim()}`);
+    ok(tgt32.includes('P.target = { kind: "mob", id: best.id };'), 'target constructor: P.target = { kind: "mob", id: best.id };');
+    ok(!/P\.target = \{/.test(main), "…and main.ts builds no target by hand any more");
 
     /* Toggling the attack off by re-clicking must compare ids, not objects. */
-    ok(main.includes('if (P.target?.kind === "mob" && P.target.id === m.id) {'),
+    ok(tgt32.includes('(t.kind === "mob" || t.kind === "dummy") && P.target?.kind === t.kind && P.target.id === t.id'),
       "re-clicking the marked creature compares by id");
-    ok(main.includes('if (P.target?.kind === "dummy" && P.target.id === s.id) {'),
+    ok(/const kind = s\.key === "dummy"/.test(main) && tgt32.includes('t.kind === "dummy"'),
       "…and so does re-clicking the dummy");
 
     /* The liveness checks the ids replaced must be GONE, not merely bypassed:
@@ -13367,9 +13373,11 @@ async function main(): Promise<void> {
       "SPACE turns the page instead of swinging");
     /* The offer is now a QUESTION. Taking the errand is the answer to it, not
      * the act of walking up to him. */
-    const talk = main42.slice(main42.indexOf("function talkToSage"), main42.indexOf("function worldClick"));
-    ok(!/setStage\(/.test(talk), "talking no longer takes the mission on the player's behalf");
-    ok(/function acceptMission/.test(main42) && /setStage\(m\.id, "active"\)/.test(main42),
+    const mis42 = fs42.readFileSync(new URL("../src/intents/missions.ts", import.meta.url), "utf8"); // Etap 3.1c
+    const talk = mis42.slice(mis42.indexOf("function talkToSage"), mis42.indexOf("function acceptMission"));
+    ok(talk.length > 0 && !/setStage\(/.test(talk), "talking no longer takes the mission on the player's behalf");
+    ok(/function acceptMission/.test(mis42) && /setStage\(m\.id, "active"\)/.test(mis42)
+      && /case "accept": \{ const s = acceptMission\(game, c\.mission\)/.test(main42),
       "…the first answer does");
 
     /* --- he never leaves the player at a dead end --------------------------
@@ -13377,13 +13385,14 @@ async function main(): Promise<void> {
      * speech was followed by exactly one button — the testing reset — and the
      * next errand could only be found by walking away and clicking him again.
      * A chain of ten missions cannot afford to look finished after the first. */
-    ok(/sageSays\(`sage\.handIn\.\$\{cur\.id\}`, \{ then: talkToSage \}\)/.test(main42),
+    ok(/return \{ key: `sage\.handIn\.\$\{cur\.id\}`, thenTalk: true \};/.test(mis42)
+      && main42.includes("then: s.thenTalk ? () => showSage(talkToSage(game)) : undefined"),
       "handing in rolls straight on into whatever he has next");
-    ok(!/sageSays\(`sage\.handIn[^;]*forgetChoice/.test(main42),
+    ok(!/sage\.handIn[^;]*forgetChoice/.test(main42 + mis42),
       "…and the reward speech is not left with the testing reset as its only answer");
     /* Two exits from the chain, and both have to say something useful: the
      * level to come back at, or that there is more coming later. */
-    ok(/sage\.locked", \{ choices: \[[^\]]*leaveChoice\(\)\], vars: \{ lv:/.test(main42),
+    ok(/key: "sage\.locked", choices: \[[^\]]*LEAVE\], vars: \{ lv:/.test(mis42),
       "too low a level is answered with the level to come back at");
     for (const lg of SP.LANGS) {
       ok(SP.t("sage.locked", lg, { lv: 12 }).includes("12"),
@@ -13398,9 +13407,10 @@ async function main(): Promise<void> {
      * A speech with no answers already closes on a tap, so these buttons
      * change nothing mechanically. Without them the last page is a wall of
      * text and a blinking arrow, and dismissing it is a guess. */
-    ok(/function leaveChoice/.test(main42), "there is a way out of a conversation that is spelled out");
+    ok(/const LEAVE: SageChoice = \{ key: "sage\.choice\.notYet", does: "leave" \};/.test(mis42),
+      "there is a way out of a conversation that is spelled out");
     ok(SP.t("sage.choice.notYet", "pl") === "Jeszcze nie.", "…and it says so plainly");
-    ok((main42.match(/leaveChoice\(\)/g) ?? []).length >= 4,
+    ok((mis42.match(/\bLEAVE\b/g) ?? []).length >= 5,
       "…on every speech that ends one: no relic, reminder, level gate, end of chain");
 
     /* --- TEMP-ETAP42: the reset that must not outlive the testing ----------
@@ -13416,10 +13426,10 @@ async function main(): Promise<void> {
      * handle. When the chain is done being walked, pull the tag and this block
      * goes red until it is pulled too. */
     ok(/TEMP-ETAP42/.test(main42), "the testing reset is tagged for removal");
-    ok(/function forgetEverything/.test(main42), "…it wipes the chain");
-    const forget = main42.slice(main42.indexOf("function forgetEverything"),
-      main42.indexOf("/**\n * The way OUT"));
-    ok(/resetMissions\(\)/.test(forget) && /removeAcross/.test(forget) && /game\.opened = /.test(forget),
+    ok(/function forgetEverything/.test(mis42), "…it wipes the chain");
+    const forget = mis42.slice(mis42.indexOf("function forgetEverything"),
+      mis42.indexOf("/* ---- the one-time treasure chests"));
+    ok(/resetMissions\(\)/.test(forget) && /removeAcross/.test(forget) && /g\.opened = /.test(forget),
       "…the stages, the relic in the pack and the one-time chest, which is all three halves of a re-run");
     ok(/=== "\/forget"/.test(main42), "…and it is reached by typing, not by pressing");
     ok(!/forgetChoice/.test(main42) && !SP.hasText("sage.choice.forget"),
@@ -14624,7 +14634,8 @@ async function main(): Promise<void> {
      * proof that it closes both. If either ever opens, this is a mint. */
     const fsR2 = await import("node:fs");
     const mainR2 = fsR2.readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    const body = mainR2.slice(mainR2.indexOf("function replayMissions"), mainR2.indexOf("function forgetEverything"));
+    const misR2 = fsR2.readFileSync(new URL("../src/intents/missions.ts", import.meta.url), "utf8"); // Etap 3.1c
+    const body = misR2.slice(misR2.indexOf("function replayMissions"), misR2.indexOf("function forgetEverything"));
     ok(body.length > 0, "`/replay` has a body to check");
 
     /* THE CHEST. `forgetEverything` un-opens every mission hoard; this one must
@@ -14632,10 +14643,10 @@ async function main(): Promise<void> {
      * lives on `game`, which this suite has no instance of — and because the
      * failure mode is somebody copying the line across from the function two
      * screens down, which is a source-level mistake. */
-    ok(!/game\.opened/.test(body),
+    ok(!/\.opened/.test(body),
       "`/replay` never re-opens a one-time chest — the purse is paid once, ever");
-    ok(/game\.opened = game\.opened\.filter/.test(
-      mainR2.slice(mainR2.indexOf("function forgetEverything"))),
+    ok(/g\.opened = g\.opened\.filter/.test(
+      misR2.slice(misR2.indexOf("function forgetEverything"))),
       "…while `/forget`, which does, stays dev-only");
     ok(/import\.meta\.env\.DEV\s*&&\s*text\.trim\(\)\.toLowerCase\(\) === "\/forget"/.test(mainR2),
       "…and that gate is still on it");
@@ -14739,20 +14750,21 @@ async function main(): Promise<void> {
       "`/replay <id>` is a branch of its own");
     const bare = main44.slice(main44.indexOf('text.trim().toLowerCase() === "/replay"'),
       main44.indexOf('text.trim().toLowerCase().startsWith("/replay ")'));
-    ok(/missionReport\(\)/.test(bare) && !/replayMissions\(/.test(bare),
+    ok(/missionReport\(game\)/.test(bare) && !/replayMissions\(/.test(bare),
       "bare `/replay` LISTS the chain — the wipe is not behind the shorter word");
-    const dispatch = main44.slice(main44.indexOf("function replayCommand"),
-      main44.indexOf("function replayMissions"));
+    const mis44 = fs44.readFileSync(new URL("../src/intents/missions.ts", import.meta.url), "utf8"); // Etap 3.1c
+    const dispatch = mis44.slice(mis44.indexOf("function replayCommand"),
+      mis44.indexOf("function replayMissions"));
     ok(/arg === "all"/.test(dispatch) && /missionById\(arg\)/.test(dispatch),
       "…the whole-chain reset needs the word `all`, and anything else is looked up");
-    ok(/if \(!m\) \{/.test(dispatch) && dispatch.indexOf("if (!m)") < dispatch.indexOf("replayMissions(m)"),
+    ok(/if \(!m\) \{/.test(dispatch) && dispatch.indexOf("if (!m)") < dispatch.indexOf("replayMissions(g, m)"),
       "…and an unknown id falls out BEFORE anything is reset, so a typo is not read as `all`");
 
     /* The two things a mission pays are still closed, per mission rather than
      * per chain. If either ever opens, `/replay` is a mint — see Etap 43a. */
-    const body44 = main44.slice(main44.indexOf("function replayMissions"),
-      main44.indexOf("function forgetEverything"));
-    ok(!/game\.opened/.test(body44),
+    const body44 = mis44.slice(mis44.indexOf("function replayMissions"),
+      mis44.indexOf("function forgetEverything"));
+    ok(body44.length > 0 && !/\.opened/.test(body44),
       "a single replay still never re-opens a one-time chest");
     ok(/const list = only \? \[only\] : MISSIONS/.test(body44),
       "…and charges the claw-back over the missions it is actually resetting");
@@ -14763,8 +14775,8 @@ async function main(): Promise<void> {
      * purpose: the overlay keeps the newest six lines and drops the rest, so
      * with a long catalogue the header would be the first thing to scroll off
      * and the one line that has to survive is the one that says what to type. */
-    const report = main44.slice(main44.indexOf("function missionReport"),
-      main44.indexOf("function replayCommand"));
+    const report = mis44.slice(mis44.indexOf("function missionReport"),
+      mis44.indexOf("function replayCommand"));
     const usage = report.indexOf("/replay <id>");
     ok(usage > report.indexOf("for (const m of MISSIONS)"),
       "the usage line is written after the list, so it is the one that survives the overlay");
@@ -14960,12 +14972,13 @@ async function main(): Promise<void> {
      * Tagged, and the tag is the removal handle. The test is the reminder:
      * pull the tag and this block goes red until the feature is pulled too,
      * which is the arrangement TEMP-ETAP42 and TEMP-ETAP43 already use. */
-    ok(/TEMP-ETAP45-TESTMENU/.test(main45), "the start-over menu is tagged for removal");
+    const mis45 = fs45.readFileSync(new URL("../src/intents/missions.ts", import.meta.url), "utf8"); // Etap 3.1c
+    ok(/TEMP-ETAP45-TESTMENU/.test(mis45), "the start-over menu is tagged for removal");
     ok(SP45.hasText("sage.test.restart") && SP45.hasText("sage.test.pick"),
       "…and its two strings are written, so the button is not raw English on a Polish screen");
-    const menu45 = main45.slice(main45.indexOf("function restartChoice"),
-      main45.indexOf("function talkToSage"));
-    ok(/replayMissions\(m\)/.test(menu45),
+    const menu45 = mis45.slice(mis45.indexOf("function restartChoice"),
+      mis45.indexOf("export function sweepRelic"));
+    ok(/replayMissions\(g, m\)/.test(menu45),
       "…and it goes through the same claw-back as `/replay`, so it hands out nothing either");
     ok(/mission\.title\.\$\{m\.id\}/.test(menu45),
       "…offering titles rather than internal ids, since a player is reading it");
@@ -14974,15 +14987,15 @@ async function main(): Promise<void> {
      * happened is noise on the one conversation that matters most. */
     ok(/!== "locked"/.test(menu45) && /!== "available"/.test(menu45),
       "…and it only lists errands there is something to put back");
-    ok(/if \(!started\.length\) return \[\]/.test(menu45),
+    ok(/return startedMissions\(g\)\.length \? \[\{ key: "sage\.test\.restart", does: "restart" \}\] : \[\];/.test(menu45),
       "…so a character who has never taken one is not offered the button at all");
     /* On the idle branches, and NOT on the hand-in: the one screen where the
      * only answer should be about the next errand is the one where he has just
      * paid you for the last. That was TEMP-ETAP42's exact mistake. */
-    ok((main45.match(/restartChoice\(\)/g) ?? []).length >= 5,
+    ok((mis45.match(/restartChoice\(g\)/g) ?? []).length >= 5,
       "…on every speech that ends a conversation");
-    const handIn45 = main45.slice(main45.indexOf("sageSays(`sage.handIn."), main45.indexOf("/* He wanted it"));
-    ok(!/restartChoice/.test(handIn45),
+    const handIn45 = mis45.slice(mis45.indexOf("return { key: `sage.handIn."), mis45.indexOf("/* He wanted it"));
+    ok(handIn45.length > 0 && !/restartChoice/.test(handIn45),
       "…but never as the answer to being thanked, which is where the last one went wrong");
 
     /* The picker and the menu it hangs off both have to fit the box like any
@@ -15106,10 +15119,12 @@ async function main(): Promise<void> {
      * moves, and that it covers both places an item can sit. */
     const main46 = (await import("node:fs"))
       .readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    const reopen = main46.slice(main46.indexOf("/* He wanted it"),
-      main46.indexOf("sageSays(`sage.empty."));
-    ok(/sweepRelic\(cur\.relic\)/.test(reopen), "the reopen sweeps before it opens");
-    ok(reopen.indexOf("sweepRelic(cur.relic)") < reopen.indexOf("relicLost(cur.id"),
+    const mis46 = (await import("node:fs"))
+      .readFileSync(new URL("../src/intents/missions.ts", import.meta.url), "utf8"); // Etap 3.1c
+    const reopen = mis46.slice(mis46.indexOf("/* He wanted it"),
+      mis46.indexOf("return { key: `sage.empty."));
+    ok(/sweepRelic\(g, cur\.relic\)/.test(reopen), "the reopen sweeps before it opens");
+    ok(reopen.indexOf("sweepRelic(g, cur.relic)") < reopen.indexOf("relicLost(cur.id"),
       "…before the stage goes back, so there is never an open door and a live relic at once");
     /* The sweep used to be written inline HERE and looked only at
      * `game.worlds[cur.echo]`, top level. Both bounds were wrong: a player who
@@ -15117,9 +15132,9 @@ async function main(): Promise<void> {
      * who tucked it in a spare pack left it a slot deeper than the loop could
      * see. It is a named function now, and what it covers is pinned below
      * rather than by matching the shape of a loop. */
-    const sweepSrc = main46.slice(main46.indexOf("function sweepRelic"),
-      main46.indexOf("function restartChoice"));
-    ok(/Object\.keys\(game\.worlds\)/.test(sweepSrc),
+    const sweepSrc = mis46.slice(mis46.indexOf("function sweepRelic"),
+      mis46.indexOf("/* ---- the chain, for testing"));
+    ok(/Object\.keys\(g\.worlds\)/.test(sweepSrc),
       "…and it walks every world, not just the echo");
     ok(/scrub\(c\.items\)/.test(sweepSrc) && /w\.ground\.splice/.test(sweepSrc),
       "…covering both the bodies and the floor");
@@ -15551,7 +15566,7 @@ async function main(): Promise<void> {
     ok(T47.isAttuned("fire"), "the element is written on the character");
     T47.clearAttuned();
     ok(!T47.isAttuned("fire"), "…and the reset takes it back");
-    const mainSrc = read47("src/main.ts");
+    const mainSrc = read47("src/intents/missions.ts"); // the resets moved out of main.ts in Etap 3.1c
     const replayBody = mainSrc.slice(mainSrc.indexOf("function replayMissions"),
       mainSrc.indexOf("function forgetEverything"));
     ok(/grantsAttunement\(m\)\s*\)\s*clearAttuned\(\)/.test(replayBody),
@@ -22509,6 +22524,262 @@ async function main(): Promise<void> {
     const kinds = new Set(all.map((e) => e.fx));
     ok([...kinds].every((k) => ["float", "log", "tone", "sound", "flare", "blast", "bolt", "blood", "shot"].includes(k)),
       `what these requests report are events the client already knows (${[...kinds].join(", ")})`);
+    stop();
+  }
+
+  console.log("\nEtap 3.1c-3 — the townsfolk, the sage's errands and the choice of a target are requests too:");
+  {
+    const fs = await import("node:fs");
+    const read = (f: string): string => fs.readFileSync(new URL(f, import.meta.url), "utf8");
+    const FX = await import("../src/systems/fxEvents.ts");
+    const GM = await import("../src/game.ts");
+    const IT = await import("../src/items.ts");
+    const PL = await import("../src/entities/player.ts");
+    const TK = await import("../src/systems/tasks.ts");
+    const OF = await import("../src/systems/outfit.ts");
+    const MS = await import("../src/systems/missions.ts");
+    const PS = await import("../src/systems/persist.ts");
+    const COL = await import("../src/world/collision.ts");
+    const NP = await import("../src/intents/npcs.ts");
+    const MI = await import("../src/intents/missions.ts");
+    const TG = await import("../src/intents/target.ts");
+    const { nextEntityId } = await import("../src/world/entities.ts");
+    const { TILE: T, USE_RANGE_PX, NPC_TALK_HOLD_S, TARGET_SEEK_PX, CORPSE_SLOTS } = await import("../src/config.ts");
+    type Ev = import("../src/systems/fxEvents.ts").FxEvent;
+    type Kind = import("../src/items.ts").ItemKind;
+    type Stack = import("../src/items.ts").ItemStack;
+
+    /* ---- the split, read off the source ---------------------------------- */
+    const strip = (t: string): string => t
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n").map((l) => l.replace(/(^|[^:"'`\\])\/\/.*$/, "$1")).join("\n");
+    const main = read("../src/main.ts");
+    const moved = ["openTreasure", "missionReport", "replayCommand", "replayMissions", "forgetEverything",
+      "leaveChoice", "acceptMission", "sweepRelic", "restartChoice", "talkToSage"];
+    const left = moved.filter((f) => new RegExp(`\\bfunction ${f}\\(`).test(main));
+    ok(left.length === 0, `main.ts runs none of the sage's errands or the treasure chests itself any more${left.length ? ": " + left.join(", ") : ""}`);
+    ok(["acceptTask: (id: string) => { takeTask(game, id); },", "abandonTask: (id: string) => { dropTask(game, id); },",
+      "handInTask: (id: string) => { turnInTask(game, id); },", "buyShelf: (id: string) => { buyFromShelf(game, id); },",
+      "wearOutfit: (id: string) => { changeOutfit(game, id); },",
+      "setOutfitColor: (zone: OutfitZone, idx: number) => { dyeOutfit(game, zone, idx); },",
+      "resetOutfitColors: () => { resetDyes(game); },"].every((l) => main.includes(l)),
+      "…the task board's and the Wardrobe's buttons only pass the request on");
+    const click = main.slice(main.indexOf("function worldClick("), main.indexOf("/* ---------------- interaction ranges"));
+    ok((click.match(/setTarget\(game, \{ kind/g) ?? []).length === 5 && !/P\.target = \{/.test(click),
+      "…and a click on a creature, a stack, a body, a townsperson or a building is a request to mark it");
+    ok(main.includes("} else showSage(talkToSage(game));") && main.includes("openTreasure(game, st)")
+      && /function attackNearest\(\): void \{\n {2}if \(targetNearest\(game\) === "marked"\) pendingLoot = null;\n\}/.test(main),
+      "…as are talking to Chronos, opening a treasure chest and the crossed-swords button");
+    ok(main.includes("onSaveNow(saveGame);"), "the client tells the requests how to save on the spot: the browser's save");
+    const files = ["npcs", "missions", "target"].map((f) => [f, read(`../src/intents/${f}.ts`)] as const);
+    files.push(["persist", read("../src/systems/persist.ts")]);
+    const touching = files.filter(([, t]) => /\bui\.|closeWindow|openWindow|openDialogue|sageSays|showSage|saveGame/.test(strip(t))).map(([f]) => f);
+    ok(touching.length === 0, `none of them opens a window or a dialogue, or saves the browser's way${touching.length ? ": " + touching.join(", ") : ""}`);
+    const shouting = files.filter(([, t]) => /\b(addFloat|addFlare|logServer|beep|sfx)\(/.test(strip(t))).map(([f]) => f);
+    ok(shouting.length === 0, `…nor plays, paints or logs anything itself${shouting.length ? ": " + shouting.join(", ") : ""}`);
+
+    const evs: Ev[] = [];
+    const all: Ev[] = [];
+    const stop = FX.onFx((e) => { evs.push(e); all.push(e); });
+    const fresh = (): void => { evs.length = 0; };
+    const said = (): string[] => evs.filter((e): e is Extract<Ev, { fx: "log" }> => e.fx === "log").map((e) => e.text);
+    const tones = (): number[] => evs.filter((e): e is Extract<Ev, { fx: "tone" }> => e.fx === "tone").map((e) => e.freq);
+    const heard = (id: string): boolean => evs.some((e) => e.fx === "sound" && e.id === id);
+
+    const g = GM.createGame();
+    const p = g.player;
+    const town = g.worlds.town;
+    const count = (k: string): number => IT.bagCount(p.bag, k as Kind);
+    const stand = (tx: number, ty: number): void => { p.tx = tx; p.ty = ty; p.x = tx * T + T / 2; p.y = ty * T + T / 2; };
+    const far = Math.ceil(USE_RANGE_PX / T) + 2;
+
+    /* ---- saving on the spot ------------------------------------------------ */
+    let saves = 0;
+    const unsave = PS.onSaveNow((gg) => { if (gg === g) saves++; });
+    PS.saveNow(g);
+    ok(saves === 1, "a request that must be kept at once asks for a save, and whoever runs the game writes it");
+
+    /* ---- the task board -------------------------------------------------- */
+    g.current = town;
+    const master = town.npcs.find((n) => n.key === "taskmaster")!;
+    const task = TK.TASKS.find((d) => d.reqLevel <= p.level)!;
+    stand(master.tx + far, master.ty);
+    fresh();
+    NP.takeTask(g, task.id);
+    ok(!TK.isActive(task.id) && said()[0] === "too far away", "no task is taken from across the room");
+    stand(master.tx + 1, master.ty);
+    fresh();
+    NP.takeTask(g, task.id);
+    ok(TK.isActive(task.id) && said()[0] === "task accepted" && tones()[0] === 440, `"${task.title}" is taken at the board`);
+    fresh();
+    NP.turnInTask(g, task.id);
+    ok(TK.isActive(task.id) && said()[0] === "not ready to hand in", "…not handed in before it is done");
+    fresh();
+    NP.dropTask(g, task.id);
+    ok(!TK.isActive(task.id) && said()[0] === "task dropped · kills still count", "…and can be given back");
+    fresh();
+    NP.buyFromShelf(g, "nothing-by-that-name");
+    ok(said().length === 0, "a shelf entry that does not exist buys nothing and says nothing");
+
+    /* ---- the Wardrobe ------------------------------------------------------ */
+    const tailor = town.npcs.find((n) => n.key === "tailor")!;
+    OF.resetOutfit();
+    stand(tailor.tx + far, tailor.ty);
+    fresh();
+    NP.dyeOutfit(g, "primary", 7);
+    ok(OF.outfitState().primary !== 7 && said()[0] === "too far away", "nothing is dyed from across the room");
+    stand(tailor.tx + 1, tailor.ty);
+    fresh();
+    NP.dyeOutfit(g, "primary", 7);
+    ok(OF.outfitState().primary === 7 && tones()[0] === 480, "…and at the tailor's, a shirt takes the dye");
+    fresh();
+    NP.resetDyes(g);
+    ok(OF.outfitState().primary !== 7 && said()[0] === "back to the classic look", "…and washes out again");
+    fresh();
+    NP.changeOutfit(g, "ranger");
+    ok(OF.outfitState().current !== "ranger" && tones().length === 0, "an outfit not owned is not put on");
+    OF.grantOutfit("ranger");
+    NP.changeOutfit(g, "ranger");
+    ok(OF.outfitState().current === "ranger", "…and one owned is");
+    OF.resetOutfit();
+
+    /* ---- Chronos ------------------------------------------------------------ */
+    const first = MS.MISSIONS[0];
+    const second = MS.MISSIONS.find((m) => m.relic && m.reqLevel > first.reqLevel)!;
+    p.level = 1;
+    let s = MI.talkToSage(g);
+    ok(s.key === "sage.locked" && s.vars?.lv === first.reqLevel && s.choices?.length === 1 && s.choices[0].does === "leave",
+      `a level-one character is told to come back at level ${first.reqLevel}, and offered only the door`);
+    p.level = first.reqLevel;
+    PL.refreshDerived(p);
+    s = MI.talkToSage(g);
+    ok(s.key === `sage.offer.${first.id}` && s.choices?.[0].does === "accept" && s.choices[1].does === "decline",
+      "at that level he offers the first errand, to take or to turn down");
+    ok(MI.declineMission(first.id).key === `sage.decline.${first.id}` && MS.stageOf(first.id, p.level) === "available",
+      "…turning it down changes nothing");
+    ok(MI.acceptMission(g, second.id) === null && MS.stageOf(second.id, p.level) !== "active",
+      "an errand he has not offered cannot be taken by naming it");
+    saves = 0;
+    fresh();
+    const took = MI.acceptMission(g, first.id);
+    ok(took?.key === `sage.accept.${first.id}` && MS.stageOf(first.id, p.level) === "active" && saves === 1
+      && said().length === 1 && tones()[0] === 520, "…and the offered one is taken: the stage moves, the goal is logged, the save is written");
+    s = MI.talkToSage(g);
+    ok(s.key === `sage.remind.${first.id}` && s.choices?.some((c) => c.does === "restart") && s.choices.at(-1)?.does === "leave",
+      "talked to again, he reminds — with the testing restart now that something has begun");
+    const menu = MI.restartMenu(g);
+    ok(menu.key === "sage.test.pick" && menu.choices?.[0].does === "replay"
+      && (menu.choices[0] as { mission: string }).mission === first.id && menu.choices.at(-1)?.does === "leave",
+      "…whose picker lists the errand begun");
+    MI.replayMission(g, first.id);
+    ok(MS.stageOf(first.id, p.level) === "available", "…and puts it back to the start");
+    MI.acceptMission(g, first.id);
+    MS.setStage(first.id, "complete");
+    const lv0 = p.level;
+    const xp0 = p.exp;
+    saves = 0;
+    fresh();
+    s = MI.talkToSage(g);
+    ok(s.key === `sage.handIn.${first.id}` && s.thenTalk === true && MS.stageOf(first.id, p.level) === "closed"
+      && (p.level > lv0 || p.exp > xp0) && heard("reward") && saves === 1,
+      "a finished errand is handed in: closed, paid in experience, saved — and he goes straight on to what is next");
+    p.level = second.reqLevel;
+    PL.refreshDerived(p);
+    const offered = MI.talkToSage(g);
+    ok(offered.key === `sage.offer.${second.id}`, `…which at level ${second.reqLevel} is the next errand`);
+    MI.acceptMission(g, second.id);
+    MS.setStage(second.id, "complete");
+    // a copy of the relic lying in a body and on the floor of another island
+    const elsewhere = g.worlds.reach;
+    const slots: (Stack | null)[] = new Array(CORPSE_SLOTS).fill(null);
+    slots[0] = { kind: second.relic!, n: 1 };
+    elsewhere.corpses.push({ id: nextEntityId(), name: "a body", x: 64, y: 64, items: slots, t: 999 } as never);
+    elsewhere.ground.push({ id: nextEntityId(), kind: second.relic!, n: 1, x: 96, y: 96, t: 999 } as never);
+    fresh();
+    s = MI.talkToSage(g);
+    ok(s.key === `sage.empty.${second.id}` && MS.stageOf(second.id, p.level) === "active",
+      "a finished errand with empty hands reopens the echo");
+    ok(slots[0] === null && !elsewhere.ground.some((q) => q.kind === second.relic),
+      "…after sweeping every stray copy of the relic out of the world, bodies and floor alike");
+    MS.setStage(second.id, "complete");
+    IT.addItem(p.bag, second.relic!, 1);
+    s = MI.talkToSage(g);
+    ok(s.key === `sage.handIn.${second.id}` && count(second.relic!) === 0 && MS.stageOf(second.id, p.level) === "closed",
+      "…and with the relic in hand it is handed in, the relic left on his table");
+
+    /* ---- a one-time treasure chest ------------------------------------------ */
+    let chestWorld: import("../src/world/types.ts").World | null = null;
+    let chest: import("../src/world/types.ts").Structure | null = null;
+    for (const w of Object.values(g.worlds)) {
+      const st = w.structures.find((q) => q.key === "treasure");
+      if (st) { chestWorld = w; chest = st; break; }
+    }
+    ok(!!chest, "there is a treasure chest somewhere to open");
+    g.current = chestWorld!;
+    stand(chest!.tx + 3, chest!.ty);
+    const stash0 = JSON.stringify(p.bag);
+    fresh();
+    MI.openTreasure(g, chest!);
+    ok(JSON.stringify(p.bag) === stash0 && g.opened.length === 0 && said().length === 0,
+      "a treasure chest three squares off does not open");
+    stand(chest!.tx, chest!.ty + 1);
+    saves = 0;
+    fresh();
+    MI.openTreasure(g, chest!);
+    ok(g.opened.length === 1 && said()[0]?.startsWith("You have found ") && heard("reward") && saves === 1,
+      `…beside it, it pays out once: ${said()[0]}`);
+    fresh();
+    MI.openTreasure(g, chest!);
+    ok(g.opened.length === 1 && said()[0] === "the chest is empty", "…and is empty after that");
+
+    /* ---- the mark ------------------------------------------------------------ */
+    const reach = g.worlds.reach;
+    g.current = reach;
+    const m0 = reach.monsters.find((m) => m.hp > 0)!;
+    let spot: { tx: number; ty: number } | null = null;
+    for (let d = 2; d <= 4 && !spot; d++) {
+      for (const [dx, dy] of [[d, 0], [-d, 0], [0, d], [0, -d]]) {
+        const tx = Math.floor(m0.x / T) + dx;
+        const ty = Math.floor(m0.y / T) + dy;
+        if (!COL.lineOfSight(reach, tx * T + T / 2, ty * T + T / 2, m0.x, m0.y)) continue;
+        spot = { tx, ty };
+        break;
+      }
+    }
+    ok(!!spot, "somewhere in sight of a creature on Bone Reach");
+    stand(spot!.tx, spot!.ty);
+    p.target = null;
+    p.dest = { x: 1, y: 1 };
+    fresh();
+    ok(TG.targetNearest(g) === "marked" && p.target?.kind === "mob" && p.dest === null,
+      "the crossed-swords button marks the nearest creature in sight, and the walk is forgotten");
+    const marked = reach.monsters.find((m) => p.target?.kind === "mob" && m.id === p.target.id)!;
+    ok(Math.hypot(marked.x - p.x, marked.y - p.y) <= TARGET_SEEK_PX, "…one within the seeking range");
+    fresh();
+    ok(TG.targetNearest(g) === "released" && p.target === null && said()[0] === "target released", "…and pressed again lets it go");
+    g.current = g.worlds.home;
+    stand(5, 5);
+    fresh();
+    ok(TG.targetNearest(g) === "none" && said()[0] === "nothing in sight", "on Home Isle there is nothing to mark");
+    g.current = reach;
+    stand(spot!.tx, spot!.ty);
+    fresh();
+    ok(TG.setTarget(g, { kind: "mob", id: m0.id }) === "marked" && p.target?.kind === "mob" && said().length === 0,
+      "a creature clicked is marked");
+    ok(TG.setTarget(g, { kind: "mob", id: m0.id }) === "stopped" && p.target === null && said()[0] === "attack stopped",
+      "…and clicked again, the attack stops");
+    g.current = town;
+    const smith = town.npcs.find((n) => n.key !== "taskmaster" && n.key !== "tailor")!;
+    stand(smith.tx + 2, smith.ty);
+    smith.talk = 0;
+    ok(TG.setTarget(g, { kind: "npc", id: smith.id }) === "marked" && smith.talk === NPC_TALK_HOLD_S,
+      `${smith.name} clicked stops where he is to talk`);
+    ok(TG.setTarget(g, { kind: "npc", id: smith.id }) === "marked", "…and a townsperson is never 'stopped' like a fight");
+
+    const kinds = new Set(all.map((e) => e.fx));
+    ok([...kinds].every((k) => ["float", "log", "tone", "sound", "flare", "buzz"].includes(k)),
+      `what these requests report are events the client already knows (${[...kinds].join(", ")})`);
+    unsave();
     stop();
   }
 
