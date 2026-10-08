@@ -17,11 +17,12 @@
  * moment in the loop.
  */
 
-export type SfxId =
-  | "hit" | "whiff" | "bow" | "knock" | "hurt" | "block" | "death" | "kill"
-  | "levelup" | "skillup" | "chop" | "mine" | "heal" | "buff" | "mire" | "fury"
-  | "cast" | "rune" | "portal" | "eat" | "coins" | "reward" | "splash"
-  | "build" | "forge" | "chime" | "mobheal";
+/* The NAMES of the sounds are in systems/fxEvents.ts since Etap 3.1a — the
+ * logic asks for a sound by name and must not have to load this file to do
+ * it. The record below still has to cover every one of them, and the type
+ * checker holds it to that. */
+import type { SfxId } from "../systems/fxEvents.ts";
+export type { SfxId };
 
 export type AmbientId = "sea" | "cave" | "town";
 
