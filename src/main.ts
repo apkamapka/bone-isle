@@ -10,7 +10,7 @@ import { attuneFrame, ATTUNE_SPAN } from "./gfx/attuneSheet.ts";
 import { drawAmbientField } from "./gfx/spellFx.ts";
 import { scenerySprite, FOOTPRINT, SCENERY_NAME } from "./gfx/sceneryArt.ts";
 import { updateNpcs, faceToward } from "./entities/npcs.ts";
-import { SPR, iconW, iconH, hasPropArt, propSprite, CHEST_LIFT } from "./gfx/sprites.ts";
+import { SPR, iconW, iconH, hasPropArt, propSprite, treeSprite, CHEST_LIFT } from "./gfx/sprites.ts";
 import { itemSprite } from "./gfx/itemArt.ts";
 import { loadHeroSheet, heroSprite, heroCorpse } from "./gfx/heroSheet.ts";
 import { playerSex } from "./systems/sex.ts";
@@ -22,12 +22,13 @@ import type { Target } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName, mobLabel, tickMonsterSlows } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, tryUpgrade, structSprite, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
-import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow } from "./gfx/buildingArt.ts";
+import { tryPlace, tryUpgrade, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
+import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow, structSprite } from "./gfx/buildingArt.ts";
 import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
 import { setActiveBonus } from "./systems/derived.ts";
-import { applyOutfit, setOutfitColor, resetOutfitColors, wearOutfit, type OutfitZone } from "./systems/outfit.ts";
+import { setOutfitColor, resetOutfitColors, wearOutfit, type OutfitZone } from "./systems/outfit.ts";
+import { outfitSprites, syncOutfitArt } from "./gfx/outfitArt.ts";
 import { useCrystal, tickCrystalCooldown, crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
 import { cooldownFrac, isReady, startCooldown } from "./systems/cooldowns.ts";
 import {
@@ -79,7 +80,12 @@ import { installFxClient } from "./fxClient.ts";
 import { unlockAudio, beep, sfx, setAmbient, ambientFor } from "./audio.ts";
 import { drawBlood, tickBlood } from "./gfx/blood.ts";
 import { tickVoices } from "./systems/voices.ts";
-import { drawEliteAura, mobDamageMult } from "./systems/elite.ts";
+import { mobDamageMult } from "./systems/elite.ts";
+import { drawEliteAura } from "./gfx/eliteAura.ts";
+import { mobSprite } from "./gfx/mobArt.ts";
+import { npcSprite } from "./gfx/npcArt.ts";
+import { terrainImage, bakedTerrain } from "./gfx/terrainArt.ts";
+import { loadAllArt } from "./gfx/loadArt.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
 import { planSwap, refused, freeSlots } from "./systems/loadout.ts";
@@ -119,6 +125,9 @@ import type { StructKey } from "./systems/building.ts";
  * this is what turns them into sounds, numbers, blood and spell art. Installed
  * before anything else runs, so not one of them is dropped. */
 installFxClient();
+/* …and every picture is the client's to fetch (Etap 3.1b): building the
+ * islands below touches none, so the artwork starts loading here, once. */
+loadAllArt();
 
 const screen = document.createElement("canvas");
 screen.style.imageRendering = "pixelated";
@@ -307,7 +316,7 @@ refreshDerived(game.player);
 compactBag(game.player.bag);
 for (const inv of homeChests(game)) compactBag(inv);
 const P = game.player;
-applyOutfit(P); // wear the saved dyes (or the classic look) from frame one
+syncOutfitArt(); // wear the saved look and dyes (or the classic look) from frame one
 if (unstick(game.current, P)) { /* freed a player boxed in by an old build */ }
 const cam = { x: 0, y: 0 };
 /**
@@ -903,7 +912,7 @@ const act: PanelActions = {
     if (why) flash(why, "#e0a06a");
   },
   wearOutfit: (id: string) => {
-    if (wearOutfit(P, id)) beep(480, 0.05, "sine", 0.04, 60);
+    if (wearOutfit(id)) beep(480, 0.05, "sine", 0.04, 60);
   },
   moveStack: (ref: ContainerRef, index: number) => { openMoveChooser(ref, index); },
   openNested: (ref: ContainerRef, index: number, win: PanelWindow) => { navInto(ref, index, win); },
@@ -930,11 +939,11 @@ const act: PanelActions = {
     beep(520, 0.05, "sine", 0.04, 60);
   },
   setOutfitColor: (zone: OutfitZone, idx: number) => {
-    setOutfitColor(P, zone, idx);
+    setOutfitColor(zone, idx);
     beep(480, 0.05, "sine", 0.04, 60);
   },
   resetOutfitColors: () => {
-    resetOutfitColors(P);
+    resetOutfitColors();
     flash("back to the classic look", "#e8dcc0");
     beep(360, 0.08, "sine", 0.04);
   },
@@ -3754,7 +3763,8 @@ function worldClick(w: Vec): void {
 
   // monsters
   for (const m of world.monsters) {
-    if (Math.abs(w.x - m.x) < m.spr.width / 2 && w.y > m.y - m.spr.height && w.y < m.y + 10) {
+    const mspr = mobSprite(m.kind);
+    if (Math.abs(w.x - m.x) < mspr.width / 2 && w.y > m.y - mspr.height && w.y < m.y + 10) {
       // clicking the monster you're already attacking STOPS the attack (Tibia-style toggle)
       if (P.target?.kind === "mob" && P.target.id === m.id) {
         P.target = null;
@@ -5000,7 +5010,7 @@ function faceDelta(dx: number, dy: number): void {
  * marker all go through here so the click box always matches the pixels.
  */
 function npcSpr(n: Npc): HTMLCanvasElement {
-  return npcFrame(n.key, n.dir, n.moving, n.phase) ?? n.spr;
+  return npcFrame(n.key, n.dir, n.moving, n.phase) ?? npcSprite(n.key);
 }
 
 function drawSprite(spr: HTMLCanvasElement, x: number, y: number, face = 1, bobY = 0): void {
@@ -5188,10 +5198,11 @@ function render(): void {
   const camY = Math.round(cam.y);
   // A Tiled export is already at native tile resolution, so it blits 1:1;
   // the procedural bake is half-scale and gets blown up by SPRITE_SCALE.
-  const art = world.mapImage;
-  const srcImg: CanvasImageSource = art ?? world.mapCanvas;
-  const artW = art ? art.naturalWidth : world.mapCanvas.width;
-  const artH = art ? art.naturalHeight : world.mapCanvas.height;
+  const art = terrainImage(world);
+  const bake = art ? null : bakedTerrain(world);
+  const srcImg: CanvasImageSource = art ?? bake!.canvas;
+  const artW = art ? art.naturalWidth : bake!.canvas.width;
+  const artH = art ? art.naturalHeight : bake!.canvas.height;
   const K = art ? 1 : SPRITE_SCALE;
   /* Floored at zero now that the camera can sit outside the map: a negative
    * source rect draws nothing at all, which is how the whole map would vanish
@@ -5287,11 +5298,11 @@ function render(): void {
     }
     vctx.globalAlpha = 1;
 
-    /* 3. THE SHORE. The foam loop further down reads `art ? [] : coastWater`,
-     * so on every map with a Tiled export it is handed an empty array and the
-     * coast never moves. The list itself is fine — the baker fills it either
-     * way — it simply never reaches the screen on Bonetown, Calanais or either
-     * mission island. A sea that moves against an edge that does not is the
+    /* 3. THE SHORE. The foam loop further down reads the baked fallback's
+     * coast list, and only when there is no picture, so on every map with a
+     * Tiled export it is handed an empty array and the coast never moves. The
+     * list itself is fine — it simply never reaches the screen on Bonetown,
+     * Calanais or either mission island. A sea that moves against an edge that does not is the
      * one place a still sea gives itself away.
      *
      * TWO THINGS HERE ARE NOT OBVIOUS AND BOTH WERE WRONG ON THE FIRST TRY.
@@ -5345,7 +5356,7 @@ function render(): void {
 
   // animated coastal foam — only on procedurally baked terrain
   vctx.fillStyle = "rgba(200,240,235,.5)";
-  for (const cwv of art ? [] : world.coastWater) {
+  for (const cwv of bake ? bake.coast : []) {
     const sx = cwv.x - cam.x;
     const sy = cwv.y - cam.y;
     if (sx < -TILE || sy < -TILE || sx > VW || sy > VH) continue;
@@ -5497,7 +5508,7 @@ function render(): void {
       drawList.push({ y: by, fn: () => {
         artShadow(bx, by, 12);
         const shake = tr.hurtT > 0 ? Math.round(Math.sin(tr.hurtT * 40) * 3) : 0;
-        drawSprite(tr.spr, bx + shake, by);
+        drawSprite(treeSprite(tr), bx + shake, by);
         if (tr.hp < tr.maxhp) hpBar(bx, tr.ty * TILE - 8, tr.hp / tr.maxhp);
       } });
     }
@@ -5714,7 +5725,7 @@ function render(): void {
     // rest keep the old idle bob, which on an animated body reads as a limp.
     const walk = mobFrame(m.kind, m.dir, !atCenter(m), waveT + m.bob);
     const bob = walk ? 0 : Math.sin(m.bob) * 3;
-    const spr = walk ?? m.spr;
+    const spr = walk ?? mobSprite(m.kind);
     drawList.push({ y: m.y, fn: () => {
       drawShadow(m.x, m.y, MOB_SHADOW[m.kind]);
       if (m.elite) drawEliteAura(vctx, m.x - cam.x, m.y - cam.y, waveT);
@@ -5736,7 +5747,7 @@ function render(): void {
     // stand-in would be; the baked outfit still gets the ghosting treatment
     vctx.globalAlpha = P.dead && !lpc ? 0.4 : 1;
     if (lpc) drawSprite(lpc, P.x, P.y, 1, 0);
-    else drawSprite(P.sprDir[P.dir], P.x, P.y, P.dir === "side" ? P.face : 1, pbob);
+    else drawSprite(outfitSprites()[P.dir], P.x, P.y, P.dir === "side" ? P.face : 1, pbob);
     vctx.globalAlpha = 1;
     /* Measured off the sheet rather than guessed: an LPC cell is 64 tall and
      * drawn feet-down, and the first row with anything in it is row 15 — so
@@ -7430,6 +7441,9 @@ function frame(now: number): void {
   update(dt);
   if (game.tpFlash > 0) game.tpFlash = Math.max(0, game.tpFlash - dt * 2.2);
   if (game.zoneFlash.t > 0) game.zoneFlash.t -= dt;
+  // a Wardrobe change is state only now; the hero is re-dressed here, once a
+  // frame, and only when the look or a dye really moved (Etap 3.1b)
+  syncOutfitArt();
   render();
   requestAnimationFrame(frame);
 }

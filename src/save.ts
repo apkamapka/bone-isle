@@ -24,7 +24,7 @@ import { taskState, loadTaskState, type TaskSave } from "./systems/tasks.ts";
 import { killState, loadKillState, type KillSave } from "./systems/kills.ts";
 import { missionState, loadMissionState, loreState, loadLoreState } from "./systems/missions.ts";
 import { serializeSlots, loadSlots, actionSlotCount, setActionSlotCount, type SlotAction } from "./systems/actions.ts";
-import { outfitSave, loadOutfitSave, applyOutfit, type OutfitSave } from "./systems/outfit.ts";
+import { outfitSave, loadOutfitSave, type OutfitSave } from "./systems/outfit.ts";
 import { setActiveBonus } from "./systems/derived.ts";
 import { skills, type SkillKey } from "./systems/skills.ts";
 import { stance, setStance, STANCES, type Stance } from "./systems/stance.ts";
@@ -540,7 +540,6 @@ function loadFrom(raw: string | null): Game | null {
   // Absent in pre-v11 saves, where six was the only length there was.
   setActionSlotCount(data.slotCount ?? 6);
   loadOutfitSave(data.outfit); // absent in older saves → classic look
-  applyOutfit(player);
 
   setActiveBonus({ maxhp: 0 });
   refreshDerived(player, { maxhp: 0 });

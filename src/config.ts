@@ -796,12 +796,14 @@ export const WATER_SWELL_SPEED = 0.55; // crests per second
 /**
  * Coastal foam on IMAGE-BASED terrain.
  *
- * `world.coastWater` is filled by the procedural baker and by nothing else, so
- * the line that draws it reads `art ? [] : world.coastWater` — every hand-drawn
- * map in the game has had a dead shoreline. The sea moved and the edge where it
- * meets the land did not, which is the one place a still sea is most obvious.
+ * The coast list is filled by the procedural baker and by nothing else (it
+ * lives with the baked fallback in gfx/terrainArt.ts since Etap 3.1b), so the
+ * line that draws it hands it out only when there is no picture — every
+ * hand-drawn map in the game has had a dead shoreline. The sea moved and the
+ * edge where it meets the land did not, which is the one place a still sea is
+ * most obvious.
  *
- * The shore is found the same way `generate.ts` finds it: a water tile with
+ * The shore is found the same way the baker finds it: a water tile with
  * land on one of its four sides, and the foam is drawn against that side. No
  * new data — the collision grid already knows.
  */

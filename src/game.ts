@@ -13,7 +13,6 @@ import { BANDITDEEP_SPEC } from "./world/banditDeepSpec.ts";
 import { LIDDESDALE_SPEC } from "./world/liddesdaleSpec.ts";
 import { HERMITAGE_SPEC } from "./world/hermitageSpec.ts";
 import { HARAMSEY_SPEC } from "./world/haramseySpec.ts";
-import { loadAttuneArt } from "./gfx/attuneSheet.ts";
 import { HAUGR_SPEC } from "./world/haugrSpec.ts";
 import { CALANAIS_SPEC } from "./world/calanaisSpec.ts";
 import { TURSACHAN_SPEC } from "./world/tursachanSpec.ts";
@@ -27,23 +26,12 @@ import { BANDIT_SPEC } from "./world/banditSpec.ts";
 import { REACH_SPEC } from "./world/reachSpec.ts";
 import { placeWalker } from "./world/grid.ts";
 import { makeHandmadeWorld, HOME_SPEC, TOWN_SPEC, CELLAR_SPEC } from "./world/handmade.ts";
-import { loadTerrainImages } from "./world/terrainImage.ts";
 import { missionByGround, missionByEcho, groundOpen, echoOpen, relicRoadOpen, stageOf } from "./systems/missions.ts";
-import { loadPropArt } from "./world/propArt.ts";
-import { loadMobSheets } from "./gfx/mobSheet.ts";
-import { loadFireSheet } from "./gfx/fireSheet.ts";
-import { loadSceneryArt } from "./gfx/sceneryArt.ts";
-import { loadBuildingArt } from "./gfx/buildingArt.ts";
-import { loadControlIcons } from "./ui/icons.ts";
-import { loadSpellArt } from "./gfx/spellArt.ts";
-import { loadAuraArt } from "./gfx/auraFx.ts";
-import { loadItemArt } from "./gfx/itemArt.ts";
 import { portalSpawn, worldSpawn } from "./world/collision.ts";
 import { spawnAtPost } from "./entities/monsters.ts";
 import { createPlayer } from "./entities/player.ts";
 import { clearMonsterSpells } from "./systems/monsterSpells.ts";
 import type { ItemKind } from "./items.ts";
-import { applyOutfit } from "./systems/outfit.ts";
 import { resetPlayerState } from "./systems/playerState.ts";
 import { stampWorlds } from "./world/entities.ts";
 import { emptyStash } from "./items.ts";
@@ -267,17 +255,9 @@ export function buildWorlds(_seed: number): Record<WorldKey, World> {
     orcIsle: makeHandmadeWorld(ORCISLE_SPEC),
     gorak: makeHandmadeWorld(GORAK_SPEC),
   };
-  loadTerrainImages(worlds); // async; the baked terrain shows until it lands
-  loadPropArt(worlds);       // likewise for trees, rocks, stumps and rubble
-  loadMobSheets();           // directional walk cycles for humanoid creatures
-  loadFireSheet();           // the campfire flicker
-  loadSceneryArt();          // totems and dead trees the player walks behind
-  loadBuildingArt();         // the forge, the tower and the posts, one image per tier
-  loadControlIcons();        // the five sidebar buttons, 16x16 each
-  loadItemArt();             // drawn icons over the baked stand-ins
-  loadSpellArt();            // bolts and blooms, one strip per element and tier
-  loadAuraArt();             // the five crystal auras, one strip each
-  loadAttuneArt();           // the five rune circles in the sanctum under Calanais
+  // The artwork used to start loading here. A world holds no picture since
+  // Etap 3.1b, so building one fetches none: the client loads every picture
+  // once at boot (gfx/loadArt.ts) and finds each by name when it draws.
   return worlds;
 }
 
@@ -318,7 +298,6 @@ export function createGame(seed = WORLD_SEED): Game {
   // state object rather than seven separate resets that could drift apart.
   resetPlayerState();
   const player = createPlayer(worldSpawn(worlds.home));
-  applyOutfit(player);
   return {
     seed,
     worlds,
