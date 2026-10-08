@@ -23140,6 +23140,76 @@ async function main(): Promise<void> {
     PSt.setActive(before);
   }
 
+  console.log("\nEtap 3.1e — the game's logic runs in a bare Node process, the way the server will run it:");
+  {
+    /* THIS suite loads the game under stub.ts, which fakes a browser, because
+     * it tests the screen as well as the rules. The server will have no
+     * browser to fake, so the question is asked in a process of its own:
+     * smoke/bare-node.ts loads every logic module with each browser global
+     * booby-trapped, plays ten busy minutes on a server's fixed tick, and
+     * reports. Three of them run side by side: one seed twice, to show the
+     * session is the same session both times, and a second seed. */
+    const cp = await import("node:child_process");
+    const nfs = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    const strip = (t: string): string => t
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n").map((l) => l.replace(/(^|[^:"'`\\])\/\/.*$/, "$1")).join("\n");
+    const runner = strip(nfs.readFileSync(new URL("./bare-node.ts", import.meta.url), "utf8"));
+    ok(!/stub\.ts/.test(runner) && !/^import[^\n]*from "\.\.\/src\//m.test(runner),
+      "the runner leans on no stub, and loads nothing of the game before its traps are set");
+
+    interface Report {
+      ticks: number; ms: number; logicModules: number; loaded: number;
+      outside: string[]; bare: string[]; viteOnly: string[]; timers: string[]; untrapped: string[];
+      touched: Record<string, string>; loadErrors: string[]; errors: string[]; violations: string[];
+      arrived: Record<string, number>; notices: Record<string, number>; kills: number; deaths: number;
+      woke: boolean; errand: string; visited: string[]; hash: string;
+    }
+    const play = (seed: number): Promise<{ code: number | null; r: Report | null; err: string }> =>
+      new Promise((resolve) => {
+        const child = cp.spawn(process.execPath, ["--import", "tsx", "smoke/bare-node.ts", String(seed), "10"],
+          { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+        let out = "";
+        let err = "";
+        child.stdout.on("data", (d: Buffer) => { out += d; });
+        child.stderr.on("data", (d: Buffer) => { err += d; });
+        child.on("close", (code: number | null) => {
+          let r: Report | null = null;
+          try { r = JSON.parse(out.trim().split("\n").pop() ?? "") as Report; } catch { /* no report at all */ }
+          resolve({ code, r, err });
+        });
+      });
+    const [a, b, c] = await Promise.all([play(31), play(31), play(32)]);
+    const r = a.r;
+    const list = (xs: readonly string[]): string => (xs.length ? ": " + xs.slice(0, 4).join("; ") : "");
+    ok(a.code === 0 && r !== null,
+      `a bare Node process loads the logic and plays ten minutes of it${r ? ` (${r.ticks} ticks in ${r.ms} ms)` : ": " + a.err.slice(0, 400)}`);
+    if (r) {
+      ok(r.logicModules >= 100 && r.loaded === r.logicModules,
+        `every logic module loads with no browser to lean on (${r.loaded} of ${r.logicModules})${list(r.loadErrors)}`);
+      ok(r.outside.length === 0 && r.bare.length === 0,
+        `…and none of them imports a picture, a window, a sound or a package${list([...r.outside, ...r.bare])}`);
+      ok(r.viteOnly.length === 0 && r.timers.length === 0,
+        `…nor anything only Vite understands, nor a timer that would run outside the tick${list([...r.viteOnly, ...r.timers])}`);
+      ok(r.untrapped.length === 0 && Object.keys(r.touched).length === 0,
+        `nothing in the logic reaches for a window, a document, the browser's storage or the network${list([...r.untrapped.map((k) => `${k} could not be trapped`), ...Object.entries(r.touched).map(([k, v]) => `${k} ${v}`)])}`);
+      ok(r.errors.length === 0, `…nothing throws in ${r.ticks} ticks${list(r.errors)}`);
+      ok(r.violations.length === 0,
+        `…and nothing stops being a number, leaves its map or walks into a wall${list(r.violations)}`);
+      ok(r.kills > 0 && (r.arrived.corpse ?? 0) > 0 && (r.arrived.npc ?? 0) > 0 && r.visited.length >= 8,
+        `it was a busy ten minutes: ${r.kills} kills, ${r.arrived.corpse ?? 0} bodies looted, ${r.arrived.npc ?? 0} conversations, ${r.visited.length} maps`);
+      ok(r.errand.startsWith("calanais:") && r.notices.lore === 1,
+        "…the sage's errand taken, and its chronicle read on the pad before the jump");
+      ok(r.deaths >= 1 && r.woke, "…and a death, with the wake-up at home");
+    }
+    ok(!!a.r && !!b.r && a.r.hash !== "" && a.r.hash === b.r.hash,
+      `the same seed plays the same session to the same end (${a.r?.hash === b.r?.hash ? `${a.r?.hash} both times` : `${a.r?.hash}, then ${b.r?.hash}`})`);
+    ok(!!a.r && !!c.r && c.code === 0 && a.r.hash !== c.r.hash,
+      `…and another seed plays another, as cleanly (${c.r?.hash})`);
+  }
+
   console.log(`\\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }
