@@ -12,7 +12,7 @@
  * logic's — the cases themselves stay as they are.
  */
 import { onFx, type FxEvent } from "./systems/fxEvents.ts";
-import { sfx, buzz } from "./audio.ts";
+import { sfx, buzz, beep } from "./audio.ts";
 import { addFloat } from "./fx.ts";
 import { splash, pool } from "./gfx/blood.ts";
 import { addFlare } from "./gfx/auraFx.ts";
@@ -26,6 +26,7 @@ export function playFx(ev: FxEvent): void {
     case "buzz": buzz(ev.pattern); return;
     case "float": addFloat(ev.world, ev.x, ev.y, ev.text, ev.color); return;
     case "log": logServer(ev.text, ev.color); return;
+    case "tone": beep(ev.freq, ev.dur, ev.wave, ev.vol, ev.slide); return;
     case "speech": bubble(ev.who, ev.text, ev.color); return;
     case "blood":
       if (ev.pool) pool(ev.world, ev.x, ev.y, ev.blood);

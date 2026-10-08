@@ -1,8 +1,8 @@
 import "./style.css";
-import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, MONSTERS_ENABLED, USE_RANGE_PX, PANEL_REACH_TILES, RESPAWN_RETRY_S, THROW_RANGE_PX, FED_MAX_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, WATER_GLINT_CUT, WATER_GLINT_LEN_VAR, WATER_GLINT_SPEED_VAR, WATER_SWELL_COLOR, WATER_SWELL_ALPHA, WATER_SWELL_LEN, WATER_SWELL_SPEED, COAST_FOAM_COLOR, COAST_FOAM_SPEED, COAST_FOAM_CUT, COAST_FOAM_DASHES, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
-import { unstick, blockedAt, lineOfSight, groundBlocked, portalCovers, isSafeTile } from "./world/collision.ts";
+import { VIEW_W, VIEW_H, TILE, SPRITE_SCALE, MIN_VIEW_W, MIN_VIEW_H, NPC_TALK_HOLD_S, ARROW_MISS_WARN_S, MONSTERS_ENABLED, USE_RANGE_PX, RESPAWN_RETRY_S, FED_HP_PER_S, MELEE_REACH_PX, worldZoom, WATER_GLINT_COLOR, WATER_GLINT_PCT, WATER_GLINT_ALPHA, WATER_GLINT_DRIFT, WATER_GLINT_LEN, WATER_GLINT_CUT, WATER_GLINT_LEN_VAR, WATER_GLINT_SPEED_VAR, WATER_SWELL_COLOR, WATER_SWELL_ALPHA, WATER_SWELL_LEN, WATER_SWELL_SPEED, COAST_FOAM_COLOR, COAST_FOAM_SPEED, COAST_FOAM_CUT, COAST_FOAM_DASHES, PORTAL_LIVE_HALO, PORTAL_LIVE_CORE, PORTAL_DORMANT_HALO, PORTAL_DORMANT_CORE } from "./config.ts";
+import { unstick, lineOfSight, groundBlocked, portalCovers, isSafeTile } from "./world/collision.ts";
 import { carryCap, carriedWeight } from "./entities/player.ts";
-import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, chebToPoint, type Occupied } from "./world/grid.ts";
+import { toTile, glideWalker, tryStep, stepDir, atCenter, findPath, type Occupied } from "./world/grid.ts";
 import { nearestHit, footprintHit } from "./world/pick.ts";
 import { mobFrame, npcFrame, corpseSprite } from "./gfx/mobSheet.ts";
 import { campfireFrame, FIRE_LIFT, FIRE_BURN_TICK_S, FIRE_BURN_DMG } from "./gfx/fireSheet.ts";
@@ -22,7 +22,7 @@ import type { Target } from "./entities/player.ts";
 import { updateMonsters, MONSTER_DEFS, spawnAtPost, mobName, mobLabel, tickMonsterSlows } from "./entities/monsters.ts";
 import { playerAttack, playerShoot, hitDummy, shootDummy, hurtPlayer, burnMonster, grantExp } from "./systems/combat.ts";
 import { gatherTick, tickRegrowth } from "./systems/gather.ts";
-import { tryPlace, tryUpgrade, STRUCTS, canAfford, payCost, structCenter, structGap, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
+import { tryPlace, tryUpgrade, STRUCTS, canAfford, payCost, structCenter, canPlaceAt, buildCost, upgradeCost, tierOf, bestTier, footprint, solidRows, countOwned } from "./systems/building.ts";
 import { buildingFrame, buildingShadow, hasBuildingArt, recoilFrameIndex, recoilRow, structSprite } from "./gfx/buildingArt.ts";
 import { drawBuildingFx, fxSeed, hasBuildingFx } from "./gfx/buildingFx.ts";
 import { applySmelt, smeltBlocker, applyGem, GEM_TROPHY_KINDS, type ForgeTier } from "./systems/smelt.ts";
@@ -30,7 +30,7 @@ import { setActiveBonus } from "./systems/derived.ts";
 import { setOutfitColor, resetOutfitColors, wearOutfit, type OutfitZone } from "./systems/outfit.ts";
 import { outfitSprites, syncOutfitArt } from "./gfx/outfitArt.ts";
 import { useCrystal, tickCrystalCooldown, crystalCooldownLeft, isAimedCrystal, BURST_TILES, CRYSTAL_SPECS } from "./systems/crystals.ts";
-import { cooldownFrac, isReady, startCooldown } from "./systems/cooldowns.ts";
+import { cooldownFrac } from "./systems/cooldowns.ts";
 import {
   actionSlots, setSlot, BINDABLE_CRYSTALS,
   actionSlotCount, addActionSlots, removeActionSlots,
@@ -47,23 +47,22 @@ import { tickBuffs, debtBite } from "./systems/buffs.ts";
 import { ELEMENT_LABEL, ELEMENT_COLOR, FIELD_BURN_TICK_S, FIELD_BURN_DMG, elementEdgeMultiplier,
   type Element } from "./systems/elements.ts";
 import { loadPanelPrefs, panelZoom, setPanelRows } from "./systems/panelPrefs.ts";
-import { skills, type SkillKey } from "./systems/skills.ts";
 import { cycleStance, STANCE_LABEL, STANCE_COLOR } from "./systems/stance.ts";
 import { totalExpFor, expNeeded } from "./config.ts";
 import {
   MISSIONS, stageOf, setStage, offeredMission, currentMission,
-  missionHandedIn, relicLost, missionByGround, groundOpen, carriesBound,
+  missionHandedIn, relicLost, missionByGround, groundOpen,
   loreSeen, markLoreSeen, resetMissions, resetMission, missionById, type MissionDef,
   relicTaken, grantsAttunement, missionByEcho,
 } from "./systems/missions.ts";
 import { chasing, toggleChase } from "./systems/playerState.ts";
 import { pvpArmed, togglePvpArmed, skull, skullIcon, tickSkull, type Skull } from "./systems/pvp.ts";
-import { byId, monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
-import { placeOnGround, moveToPile } from "./world/ground.ts";
+import { monsterById, corpseById, groundById, npcById, structureById } from "./world/entities.ts";
+import { placeOnGround } from "./world/ground.ts";
 import { TARGET_SEEK_PX, MIN_ELEMENTAL_DAMAGE } from "./config.ts";
 import { acceptTask, abandonTask, handInTask, taskById, hasRoomForTask, isActive, isComplete, rewardFits, maxActive, MAX_ACTIVE } from "./systems/tasks.ts";
 import { buyShelf, shelfEntry, shelfLabel, RANKS } from "./systems/shelf.ts";
-import { addItem, addStack, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagWeight, bagCount, bagSlotsUsed, stackSlotCost, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, cycleArrow, compactBag, exchangeCoins } from "./items.ts";
+import { addItem, removeItem, removeItemUnpacked, countAcross, removeAcross, ITEMS, itemWeight, bagCount, isContainer, giveGold, takeGold, walletAcross, takeGoldAcross, walletRoomFor, equippedBow, activeArrow, bestPracticeArrow, compactBag } from "./items.ts";
 import { addFloat, updateFloats, drawFloats } from "./fx.ts";
 import {
   SELF, activeChannel, bubbleFor, formatLine, lineAlpha, logServer,
@@ -88,7 +87,7 @@ import { terrainImage, bakedTerrain } from "./gfx/terrainArt.ts";
 import { loadAllArt } from "./gfx/loadArt.ts";
 import { initInput, moveAxis, spellKeyLabel } from "./input.ts";
 import { initTouch, drawJoystick, isTouchDevice } from "./ui/touch.ts";
-import { planSwap, refused, freeSlots } from "./systems/loadout.ts";
+import { planSwap, refused } from "./systems/loadout.ts";
 import { createGame, travelTo, applyGates, applyMissionPads, padRefusal, respawnAtHome, homeChests, CHEST_PRIZES, type Game } from "./game.ts";
 import { saveGame, loadGame } from "./save.ts";
 import { push as pushSave, sendOnLeave, checkIn, startAutosave } from "./net/cloudSave.ts";
@@ -111,8 +110,15 @@ import { t } from "./text/speech.ts";
 import { lang } from "./systems/panelPrefs.ts";
 import { Tile, isUnderground } from "./world/types.ts";
 import type { Vec, World, WorldKey, Corpse, GroundItem, Npc, Structure, Monster } from "./world/types.ts";
-import type { Bag, EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
-import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays, depthOf, MAX_NEST_DEPTH } from "./systems/containers.ts";
+import type { EqSlot, ItemKind, ItemStack, Recipe } from "./items.ts";
+import { slotsOf, baseOf, rootOf, sameRef, isInside, groundDecays } from "./systems/containers.ts";
+import { tell, withinReach, structInReach } from "./intents/actor.ts";
+import {
+  refCtxOf, refSlots, refUsable, moveItems, takeAllFrom, closeIfEmpty, takeOne,
+  dropFromContainer, liftFloorStack, wearPackFrom, wearPackFromFloor, movePackTo, dropWornPack, unequipInto,
+} from "./intents/containers.ts";
+import { dropToGround, throwGroundItem, pickupGround, dropFromEq } from "./intents/ground.ts";
+import { useItem, equipItem, unequip, cycleAmmo, changeCoins } from "./intents/use.ts";
 import type { ContainerRef, RefWorld } from "./systems/containers.ts";
 import type { StructKey } from "./systems/building.ts";
 
@@ -460,20 +466,13 @@ const cw = (): World => game.current;
  * player takes a ladder, and a stale context would resolve a corpse id
  * against the floor above. It is three property reads.
  */
-const refCtx = (): RefWorld => ({ bag: P.bag, world: game.current, home: game.worlds.home });
+const refCtx = (): RefWorld => refCtxOf(game);
 /**
- * Say something to the player.
- *
- * Two places at once, on purpose. The float is how it is READ — it appears
- * where the eyes already are and needs no attention — and the log is how it is
- * RE-read, which nothing before this could do: a refusal you blinked past was
- * simply gone. Every one of the hundred-odd `flash` calls in this file became
- * a Server Log line for free the moment this one line changed.
+ * Say something to the player: a float over their head and a line in the
+ * Server Log. It is `tell` (intents/actor.ts) — the one voice the requests
+ * answer in — so a refusal from a click and one from a rule read alike.
  */
-const flash = (t: string, c = "#ffe9a8"): void => {
-  addFloat(cw(), P.x, P.y - 60, t, c);
-  logServer(t, c);
-};
+const flash = (t: string, c?: string): void => { tell(game, t, c); };
 
 /** Recompute the player's max HP from current owned structures. */
 function recomputeBonuses(): void {
@@ -633,7 +632,7 @@ function sweepContainerWindows(): void {
     if (w.kind !== "container" || !w.ref) continue;
     // a window pointing at a pack that no longer exists has nothing to show
     // and, worse, is a live drop target aimed at nowhere
-    if (!slotsOf(w.ref, refCtx()) || !refUsable(w.ref)) ui.windows.splice(i, 1);
+    if (!slotsOf(w.ref, refCtx()) || !refUsable(game, w.ref)) ui.windows.splice(i, 1);
   }
 }
 
@@ -687,171 +686,17 @@ function togglePanel(which: PanelKind): void {
 
 const act: PanelActions = {
   startPlacing: (key: StructKey) => { ui.placing = key; placeGhost = null; closeWindow("build"); },
-  useItem: (kind: ItemKind, _slotIndex: number, from?: ContainerRef) => {
-    const def = ITEMS[kind];
-    /* WHERE IT IS BEING EATEN FROM.
-     *
-     * This used to assume the pack, unconditionally — `removeItem(P.bag, …)` —
-     * so clicking the meat inside a corpse found nothing to remove and
-     * returned in silence. The click landed, the handler ran, and nothing
-     * happened, which reads as a dead button rather than as a rule.
-     *
-     * Tibia's rule is the right one and it is the one Radek asked for: food
-     * and drink are USED where they lie. You do not carry a ham home to eat
-     * it, and in a fight against four things at once the two seconds spent
-     * moving it into the pack are the two seconds you did not have.
-     *
-     * Only food and potions, though. A crystal is bound to a hotbar slot and
-     * counted out of the pack, and a corpse is not a quiver — those still have
-     * to be picked up, and fall through to the ordinary take below. */
-    /* IN PLACE means "somewhere that is not already yours". The pack and any
-     * pack inside it are yours, so eating out of those is the ordinary spend
-     * — `removeItem` walks the tree and finds it wherever it is nested. A
-     * body, a chest or a bag on the floor is not, and that is the case this
-     * whole branch exists for. `rootOf` is what tells the two apart; asking
-     * `from.c !== "bag"` got a pack inside the pack wrong. */
-    const outside = !!from && rootOf(from) !== "player";
-    const inPlace = outside && !!(def.food || def.heal);
-    const spend = (): boolean => {
-      if (!inPlace) return removeItem(P.bag, kind, 1);
-      const slots = refSlots(from);
-      if (!slots) return false;
-      if (!removeItem(slots, kind, 1)) return false;
-      closeIfEmpty(from);
-      return true;
-    };
-    if (outside && !inPlace && from) { openMoveChooser(from, _slotIndex); return; }
-
-    if (def.crystal) { useCrystalItem(kind); return; }
-    if (def.blessing) {
-      /* Huntress' Blessing (Etap 92). One at a time: a second scroll on a
-       * blessed character is refused, and kept, which is also how a player
-       * finds out that the first one still holds. */
-      if (P.blessed) { flash("you are already blessed", "#c9a6ff"); return; }
-      if (!spend()) return;
-      P.blessed = true;
-      addFloat(cw(), P.x, P.y - 44, "blessed", "#c9a6ff");
-      sfx("reward");
-      return;
-    }
-    if (def.food) {
-      // Tibia rule: you can bank at most 20 minutes of fed time — eating past
-      // it is refused (and the food is NOT consumed)
-      /* Naming the wait matters more than it looks. A click that is refused in
-       * silence and a click that does nothing are the same event to the
-       * player, and "can't eat any more" was being read as "eating is
-       * broken". */
-      if (P.fedS + def.food > FED_MAX_S) {
-        flash(`too full — wait ${Math.ceil((P.fedS + def.food - FED_MAX_S) / 60)} min`, "#e0a06a");
-        return;
-      }
-      if (!spend()) return;
-      P.fedS += def.food;
-      flash(["Munch.", "Gulp.", "Mmmh."][rndi(0, 2)], "#e8dcc0");
-      sfx("eat");
-      return;
-    }
-    if (def.testLevel) {
-      // TEST item (Level Stone): one level per stone, granted as the exact
-      // experience still missing — so the level-up path, its effects and its
-      // derived stats all run exactly as they do off a kill.
-      if (!removeItem(P.bag, kind, 1)) return;
-      const targetLv = P.level + def.testLevel;
-      const missing = totalExpFor(targetLv) - (totalExpFor(P.level) + P.exp);
-      if (missing > 0) grantExp(cw(), P, missing);
-      refreshDerived(P);
-      P.hp = P.maxhp;
-      flash(`TEST +${def.testLevel} level${def.testLevel > 1 ? "s" : ""}`, "#e3b341");
-      beep(700, 0.2, "square", 0.06, 160);
-      return;
-    }
-    if (def.testSkill) {
-      // TEST item (Skill Stone): three points on every skill already started.
-      // A skill you have never used stays at zero — the stone is a shortcut
-      // through the grind, not a way to own skills you never trained.
-      if (!removeItem(P.bag, kind, 1)) return;
-      for (const k of Object.keys(skills) as SkillKey[]) {
-        const sk = skills[k];
-        if (!sk.active) continue;
-        sk.lv += def.testSkill;
-        sk.pts = 0;
-      }
-      refreshDerived(P);
-      flash(`TEST +${def.testSkill} to every skill`, "#4fb6e0");
-      beep(520, 0.2, "square", 0.06, 160);
-      return;
-    }
-    // don't waste a potion charge when already at full health
-    if (def.heal && P.hp >= P.maxhp) { flash("full hp", "#7dff9e"); return; }
-    /* THE HEAL CLOCK (Etap 58). A potion used to skip it entirely — no
-     * cooldown, forty-five points a click for as long as the gold lasted. It
-     * now shares the Life Crystal's two seconds both ways: drinking starts the
-     * clock the crystal reads, and a crystal just used refuses the potion.
-     * Checked BEFORE `spend`, so a refused drink keeps the potion.
-     *
-     * Both lines speak the way the Life Crystal does (Etap 61): the refusal
-     * floats where the crystal's does and in its colour, and the heal is the
-     * crystal's green number. One heal clock should be one set of words. */
-    if (def.heal && !isReady(kind)) { addFloat(cw(), P.x, P.y - 44, "still cooling", "#8ab6ff"); return; }
-    if (!spend()) return;
-    if (def.heal) {
-      startCooldown(kind);
-      P.hp = Math.min(P.maxhp, P.hp + def.heal);
-      addFloat(cw(), P.x, P.y - 40, `+${def.heal}`, "#7dff9e");
-    }
-    beep(500, 0.12, "sine", 0.05, 180);
+  useItem: (kind: ItemKind, slotIndex: number, from?: ContainerRef) => {
+    /* The rules are in intents/use.ts. What comes back says what the click
+     * should turn into when it was not a plain use: something lying in a body
+     * that is not food or drink is offered to be MOVED instead, and a crystal
+     * goes to the crystal code. */
+    const r = useItem(game, kind, from);
+    if (r === "move" && from) openMoveChooser(from, slotIndex);
+    else if (r === "crystal") useCrystalItem(kind);
   },
-  equipItem: (kind: ItemKind) => {
-    const def = ITEMS[kind];
-    const slot = def.slot;
-    if (!slot) return;
-    /* WHAT COMES OFF, decided before anything moves.
-     *
-     * Equipping displaces up to two pieces: whatever is in the slot, and — for
-     * a bow — the shield the second hand was holding. Both used to be handed
-     * to a `stowOrDrop` that put them on the FLOOR when the bag was full, and
-     * a bow swap in a full pack therefore left a shield lying in a dungeon
-     * with nothing said about it. Gear does not fall out of a character.
-     *
-     * So the room is checked first and the whole equip is refused if it is not
-     * there. The incoming item vacates its own slot on the way out, which is
-     * why one displaced piece always fits and only the SECOND needs room. */
-    const displaced: ItemKind[] = [];
-    const prev = P.eq[slot];
-    if (prev) displaced.push(prev);
-    if (def.bow && P.eq.shield) displaced.push(P.eq.shield);
-    if (slot === "shield" && P.eq.weapon && ITEMS[P.eq.weapon].bow) displaced.push(P.eq.weapon);
-    if (displaced.length > 1 && freeSlots(P.bag) < displaced.length - 1) {
-      flash("no room to stow what comes off", "#d96a5a");
-      return;
-    }
-    if (!removeItem(P.bag, kind, 1)) return;
-    // stow a displaced piece into the bag; the room for it was checked above,
-    // and the floor stays a last resort for the impossible case
-    const stowOrDrop = (k: ItemKind): void => {
-      if (addItem(P.bag, k, 1) > 0) dropToGround(k, 1);
-    };
-    P.eq[slot] = kind;
-    if (prev) stowOrDrop(prev);
-    // Two-handed rule: a bow occupies both hands, so it can't share with a shield.
-    if (def.bow && P.eq.shield) { stowOrDrop(P.eq.shield); P.eq.shield = null; }
-    if (slot === "shield" && P.eq.weapon && ITEMS[P.eq.weapon].bow) {
-      stowOrDrop(P.eq.weapon); P.eq.weapon = null;
-    }
-    refreshDerived(P);
-    beep(420, 0.1, "triangle", 0.05);
-  },
-  unequip: (slot: EqSlot) => {
-    const cur = P.eq[slot];
-    if (!cur) return;
-    // worn gear doesn't count toward carry cap, so moving it into the bag adds
-    // weight — respect the cap the same way every other pickup does
-    if (!canCarry(P, cur)) { flash("too heavy"); return; }
-    if (addItem(P.bag, cur, 1) > 0) { flash("bag full"); return; }
-    P.eq[slot] = null;
-    refreshDerived(P);
-    beep(300, 0.08, "triangle", 0.05);
-  },
+  equipItem: (kind: ItemKind) => { equipItem(game, kind); },
+  unequip: (slot: EqSlot) => { unequip(game, slot); },
   smelt: (kind: ItemKind) => { doSmelt(kind); },
   testGrant: (kind: ItemKind) => { doTestGrant(kind); },
   makeGem: () => { doMakeGem(); },
@@ -864,12 +709,12 @@ const act: PanelActions = {
   buyOffer: (id: string) => { doBuyOffer(id); },
   research: (id: string) => { doResearch(id); },
   buyCrystal: (id: string) => { doBuyCrystal(id); },
-  takeLoot: (c: Corpse, index: number) => { takeOne(c, index); },
+  takeLoot: (c: Corpse, index: number) => { takeOne(game, c, index); },
   takeAllLoot: (c: Corpse | null) => {
     // null = "whatever the front container window is showing" (a floor bag)
     const ref = c ? ({ c: "corpse", id: c.id } as ContainerRef)
       : ui.floor ? ({ c: "ground", id: ui.floor.id } as ContainerRef) : null;
-    if (ref) takeAllFrom(ref);
+    if (ref) takeAllFrom(game, ref);
   },
   buy: (kind: ItemKind) => { doBuy(kind); },
   sell: (kind: ItemKind) => { doSell(kind); },
@@ -917,9 +762,9 @@ const act: PanelActions = {
   moveStack: (ref: ContainerRef, index: number) => { openMoveChooser(ref, index); },
   openNested: (ref: ContainerRef, index: number, win: PanelWindow) => { navInto(ref, index, win); },
   navUp: (ref: ContainerRef) => { navUp(ref); },
-  removePack: () => { dropWornPack(); },
+  removePack: () => { dropWornPack(game); },
   splitConfirm: (mode: "store" | "take" | "drop" | "throw" | "move") => { splitConfirm(mode); },
-  exchangeCoins: (to: "goldCoin" | "platinumCoin", n: number) => { runCoinExchange(to, n); },
+  exchangeCoins: (to: "goldCoin" | "platinumCoin", n: number) => { changeCoins(game, to, n); },
   readLore: (id: string) => {
     openDialogue({ titleKey: `lore.title.${id}`, bodyKey: `lore.${id}` });
   },
@@ -931,13 +776,7 @@ const act: PanelActions = {
    * already-open root view is raised and otherwise a second window appears,
    * which is how you get two packs side by side, as in Tibia. */
   openBag: () => { openContainer({ c: "bag" }); },
-  cycleAmmo: () => {
-    const next = cycleArrow(P.bag, P.ammo);
-    if (!next) { flash("no ammo to load", "#cfa86a"); return; }
-    P.ammo = next;
-    flash(`ammo: ${ITEMS[next].name}`, "#ffe9a8");
-    beep(520, 0.05, "sine", 0.04, 60);
-  },
+  cycleAmmo: () => { cycleAmmo(game); },
   setOutfitColor: (zone: OutfitZone, idx: number) => {
     setOutfitColor(zone, idx);
     beep(480, 0.05, "sine", 0.04, 60);
@@ -952,418 +791,19 @@ const act: PanelActions = {
 
 /* ---------------- storage chest ---------------- */
 
-/* ---------------- container moves (one rule for every window) ---------------- */
-
-/** The slots behind an address, or null if the address has gone stale. */
-function refSlots(ref: ContainerRef): Bag | null {
-  return slotsOf(ref, refCtx());
-}
-
-/**
- * Can the player act on this container at all right now?
+/* ---------------- container moves (one rule for every window) ----------------
  *
- * Two different questions folded into one: does the thing still EXIST (the
- * corpse may have rotted, the pack may have been picked up, the chest torn
- * down), and is the player close enough to touch it. Both have to be asked on
- * every single move, because a window can outlive its subject by a frame and
- * a drag can outlive the walk that started it.
- */
-function refUsable(ref: ContainerRef): boolean {
-  const base = baseOf(ref);
-  const world = cw();
-  switch (base.c) {
-    case "bag": return !!P.pack;
-    case "stash": {
-      // Deliberately looked up in HOME only, not through the home fallback:
-      // a chest is reachable when you are standing on the island with it.
-      const st = byId(game.worlds.home.structures, base.id);
-      return cw() === game.worlds.home && !!st && structInReach(st);
-    }
-    // The "is it still there?" half of these used to be an `includes()` call
-    // beside the reach test. A missing entity now simply fails to resolve.
-    case "corpse": {
-      const c = corpseById(world, base.id);
-      return !!c && withinReach(c.x, c.y);
-    }
-    case "ground": {
-      const gi = groundById(world, base.id);
-      return !!gi && withinReach(gi.x, gi.y);
-    }
-    // Held in hand for one statement, by code that already checked the source.
-    case "loose": return true;
-  }
-}
-
-/**
- * Slots still free in a Storage Chest's whole tree, or null for anything else.
- *
- * The chest is the one container with a budget rather than a shape, and the
- * budget is recursive on purpose (see the panel's comment): a pack inside it
- * costs its own cell plus one for everything within.
- */
-function chestRoomLeft(ref: ContainerRef): number | null {
-  const base = baseOf(ref);
-  if (base.c !== "stash") return null;
-  const inv = structureById(cw(), base.id, game.worlds.home)?.inv;
-  if (!inv) return null;
-  return inv.length - bagSlotsUsed(inv);
-}
-
-/** Rearrange within one container: fill empty, merge like kinds, else swap. */
-function swapOrMerge(arr: Bag, from: number, to: number): void {
-  if (from === to) return;
-  const a = arr[from];
-  if (!a) return;
-  const b = arr[to];
-  if (!b) { arr[to] = a; arr[from] = null; return; }
-  if (b.kind === a.kind && ITEMS[a.kind].stack > 1 && !a.items && !b.items) {
-    const space = ITEMS[a.kind].stack - b.n;
-    const mv = Math.min(space, a.n);
-    b.n += mv; a.n -= mv;
-    if (a.n <= 0) arr[from] = null;
-  } else {
-    arr[from] = b; arr[to] = a;
-  }
-}
-
-/**
- * Move part or all of one slot into another container. THE move — every
- * window, every direction, every nesting depth goes through here.
- *
- * `ti` is where the drag was released; null means "wherever it fits". A
- * container always travels whole, contents included, because splitting one
- * is meaningless and merging two would silently destroy the contents of one.
- */
-function moveItems(
-  from: ContainerRef, fi: number, to: ContainerRef, ti: number | null, n: number,
-  opts?: { sourceChecked?: boolean },
-): boolean {
-  const src = refSlots(from);
-  const dst = refSlots(to);
-  if (!src || !dst) return false;
-  // `sourceChecked` is for a source that is NOT a live container in the world
-  // — a loose stack on the floor, wrapped in a throwaway holder by
-  // `liftFloorStack`. Asking `refUsable` about that holder always says no,
-  // because it is not in `world.corpses` and never will be.
-  if ((!opts?.sourceChecked && !refUsable(from)) || !refUsable(to)) {
-    flash("too far away", "#d96a5a");
-    return false;
-  }
-  const st = src[fi];
-  if (!st) return false;
-
-  /* Dropping ONTO a container puts the thing INSIDE it rather than swapping
-   * cells with it. Tibia's rule, and the one a player assumes: an open box is
-   * a destination, not an obstacle. Without it, dragging wood onto the spare
-   * backpack in your bag merely traded their positions — the two of them
-   * looked identical afterwards and nothing had gone in. */
-  if (ti !== null && !(sameRef(from, to) && ti === fi)) {
-    const cell = dst[ti];
-    if (cell?.items && cell !== st) {
-      return moveItems(from, fi, { c: "nested", via: to, i: ti }, null, n, opts);
-    }
-  }
-
-  // same container: pure rearrangement, no rules to check
-  if (sameRef(from, to)) {
-    if (ti !== null) swapOrMerge(src, fi, ti);
-    return true;
-  }
-
-  /* THE BOUND RELIC. A mission relic the sage is still waiting for does not
-   * leave the player — not into a chest, not into a body, not into a bag on
-   * the floor. The rule is one relic per head, and a relic parked out of sight
-   * is how one head comes to hold two: the sage finds empty hands, reopens the
-   * echo, and the boss is standing there again with the same cap on.
-   *
-   * Checked HERE because this is the one funnel every move goes through, which
-   * is the same reason weight and the chest budget are checked two lines down.
-   * Moving it about inside the player's own pack is untouched — the rule is
-   * about leaving, not about tidiness. */
-  if (rootOf(from) === "player" && rootOf(to) === "world" && carriesBound(st, P.level)) {
-    flash("the sage is waiting for that — it stays with you", "#e0a06a");
-    return false;
-  }
-
-  /* A container may not be put inside itself, at any depth. Without this the
-   * tree becomes a cycle: the pack still renders, but its contents are now
-   * unreachable from any root and every recursive walk runs forever. */
-  if (st.items && isInside(to, { c: "nested", via: from, i: fi })) {
-    flash("it will not fit inside itself", "#d96a5a");
-    return false;
-  }
-
-  /* …and a container may not be buried deeper than the resolver can read.
-   *
-   * MAX_NEST_DEPTH was enforced in exactly one place — `slotsOf`, on the way
-   * OUT — and nothing checked it on the way in. So the seventh nested pack
-   * could be placed and then never opened again: its view ref resolves to
-   * null, the window shows nothing, and `bagWeight` goes on charging the
-   * player for contents no hand can reach. Containers travel whole, so one
-   * drag of a full loot bag was enough to lose everything in it.
-   *
-   * The check belongs here, where there is still a player to tell. The one in
-   * `slotsOf` stays exactly as its comment describes it — the defence against
-   * a corrupt save, not the rule. */
-  if (st.items && depthOf(to) >= MAX_NEST_DEPTH) {
-    flash("that pack is already too deep to open", "#d96a5a");
-    return false;
-  }
-
-  const whole = !!st.items || ITEMS[st.kind].stack === 1;
-  const take = whole ? st.n : Math.max(1, Math.min(n, st.n));
-
-  // weight is charged only on the way IN to the player
-  if (rootOf(to) === "player" && rootOf(from) === "world") {
-    const wgt = ITEMS[st.kind].weight * take + (st.items ? bagWeight(st.items) : 0);
-    if (wgt > freeCap(P)) { flash("too heavy", "#d96a5a"); return false; }
-  }
-  // …and the chest budget only on the way in to a chest
-  const room = chestRoomLeft(to);
-  if (room !== null) {
-    const cost = whole ? stackSlotCost(st) : 1;
-    // topping up a stack already in the chest costs no new slot
-    const merging = ti !== null && dst[ti]?.kind === st.kind && !whole;
-    if (!merging && cost > room) { flash("the chest is full", "#d96a5a"); return false; }
-  }
-
-  if (whole) {
-    // detach first, so addStack cannot see it in two places at once
-    src[fi] = null;
-    const placed = ti !== null && dst[ti] === null ? (dst[ti] = st, true) : addStack(dst, st);
-    if (!placed) { src[fi] = st; flash("no room", "#d96a5a"); return false; }
-  } else {
-    const before = take;
-    let left: number;
-    if (ti !== null && (dst[ti] === null || dst[ti]?.kind === st.kind)) {
-      const cell = dst[ti];
-      if (!cell) { dst[ti] = { kind: st.kind, n: take }; left = 0; }
-      else {
-        const space = ITEMS[st.kind].stack - cell.n;
-        const mv = Math.min(space, take);
-        cell.n += mv;
-        left = take - mv;
-      }
-    } else {
-      left = addItem(dst, st.kind, take);
-    }
-    const moved = before - left;
-    if (moved <= 0) { flash("no room", "#d96a5a"); return false; }
-    st.n -= moved;
-    if (st.n <= 0) src[fi] = null;
-  }
-
-  beep(rootOf(to) === "player" ? 440 : 360, 0.06, "sine", 0.04);
-  return true;
-}
-
-/** Empty a world container into the bag, as far as weight and space allow. */
-function takeAllFrom(ref: ContainerRef): void {
-  const slots = refSlots(ref);
-  if (!slots) return;
-  let blocked = false;
-  for (let i = slots.length - 1; i >= 0; i--) {
-    if (!slots[i]) continue;
-    if (!moveItems(ref, i, { c: "bag" }, null, slots[i]!.n)) { blocked = true; break; }
-  }
-  if (!blocked) closeIfEmpty(ref);
-}
-
-/** A looted-out corpse disappears, exactly as it always did. */
-function closeIfEmpty(ref: ContainerRef): void {
-  const base = baseOf(ref);
-  if (base.c !== "corpse") return;
-  const c = corpseById(cw(), base.id);
-  if (!c || c.items.some((s) => s !== null)) return;
-  const w = cw();
-  const idx = w.corpses.indexOf(c);
-  if (idx >= 0) w.corpses.splice(idx, 1);
-  if (ui.loot === c) { ui.loot = null; closeWindow("loot"); }
-}
-
-/** Is this pixel over open water? */
-function waterAt(w: World, px: number, py: number): boolean {
-  const x = Math.floor(px / TILE);
-  const y = Math.floor(py / TILE);
-  if (x < 0 || y < 0 || x >= w.w || y >= w.h) return false;
-  return w.tile[y][x] === Tile.Water;
-}
-
-/**
- * Where a throw aimed at (tx,ty) actually lands. The target is clamped to
- * THROW_RANGE_PX from the player, snapped to the tile centre, then — if that
- * tile is solid or out of sight — slides back along the throw line toward the
- * player half a tile at a time until it's legal (Tibia does the same: an item
- * thrown at a wall falls at its foot). Worst case it lands at your feet.
- *
- * WATER is a legal landing spot even though it is not walkable, and `sank`
- * says so. The sea is the game's rubbish bin: what goes in does not come
- * back, there is no prompt, and the throw range is the ordinary one — the
- * whole gesture has to be as cheap as throwing onto grass or it stops being
- * a way to get rid of things.
- */
-function resolveThrowTarget(tx: number, ty: number): { x: number; y: number; sank: boolean } {
-  const world = cw();
-  let dx = tx - P.x;
-  let dy = ty - P.y;
-  const d = Math.hypot(dx, dy);
-  if (d > THROW_RANGE_PX) { dx *= THROW_RANGE_PX / d; dy *= THROW_RANGE_PX / d; }
-  const steps = Math.ceil(Math.hypot(dx, dy) / (TILE / 2));
-  for (let i = steps; i >= 1; i--) {
-    const px = P.x + dx * (i / steps);
-    const py = P.y + dy * (i / steps);
-    // snap to the tile centre so thrown loot sits tidily on the grid
-    const cx = Math.floor(px / TILE) * TILE + TILE / 2;
-    const cy = Math.floor(py / TILE) * TILE + TILE / 2;
-    if (!lineOfSight(world, P.x, P.y, cx, cy)) continue;
-    const wet = waterAt(world, cx, cy);
-    if (wet || !blockedAt(world, cx, cy)) return { x: cx, y: cy, sank: wet };
-  }
-  return { x: P.x, y: P.y + 4, sank: false };
-}
-
-/** Swallow a stack thrown into the sea. Nothing is recoverable. */
-function sink(kind: ItemKind, n: number, x: number, y: number): void {
-  addFloat(cw(), x, y - 12, "splash", "#8ecfff");
-  flash(`${n} ${ITEMS[kind].name} sank`, "#8ecfff");
-  sfx("splash");
-}
-
-/**
- * A thrown stack that lands on a portal travels THROUGH it (Etap 11) — the
- * classic loot-bag trick: pitch your haul into the teleport and it drops out
- * beside the matching portal on the far side, exactly where you'd arrive.
- */
-function sendThroughPortal(kind: ItemKind, n: number, pt: { dest: WorldKey }, contents?: Bag): void {
-  const from = cw();
-  const dest = game.worlds[pt.dest];
-  const back = dest.portals.find((p2) => p2.dest === from.key) ?? dest.portals[0];
-  const gx = back?.x ?? dest.w * TILE / 2;
-  const gy = (back?.y ?? dest.h * TILE / 2) + 28;
-  /* One rule for landing on a square, and `placeOnGround` is it: the haul
-   * arrives on top of whatever is already lying by the far portal, and a pack
-   * shoved through arrives WITH what is in it and never merges. */
-  placeOnGround(dest, kind, n, gx, gy, { items: contents });
-  flash(`whoosh — ${n} ${ITEMS[kind].name} through the portal!`, "#8ab6ff");
-  sfx("portal");
-}
-
-/** The portal (if any) whose swirl covers world point (x,y). A dormant pad is
- *  not a portal for this purpose: it refuses to carry the player, so it must
- *  not swallow a thrown stack either — the goods would land on the far side of
- *  a door that doesn't open. Items simply drop on top of it instead. */
-function portalAt(x: number, y: number): { dest: WorldKey } | null {
-  for (const pt of cw().portals) {
-    if (pt.inactive) continue;
-    if (portalCovers(pt, x, y, 24)) return pt;
-  }
-  return null;
-}
-
-/** Drop an item stack onto the ground — at the player's feet, or thrown to a
- *  target spot (Tibia-style) when (tx,ty) is given. */
-function dropToGround(kind: ItemKind, n: number, tx?: number, ty?: number): void {
-  if (n <= 0) return;
-  const world = cw();
-  let gx: number;
-  let gy: number;
-  if (tx !== undefined && ty !== undefined) {
-    const t = resolveThrowTarget(tx, ty);
-    // aimed at a portal → the stack takes the trip instead of landing
-    const pt = portalAt(t.x, t.y);
-    if (pt) { sendThroughPortal(kind, n, pt); return; }
-    if (t.sank) { sink(kind, n, t.x, t.y); return; }
-    gx = t.x; gy = t.y;
-  } else {
-    /* At your feet means at your feet — the square you are standing on, not a
-     * jittered point inside it. The jitter was there to keep a heap from
-     * overlapping exactly, and it cost the pile its order: a random `y` is a
-     * random depth, so half the drops slid under what was already there. */
-    gx = P.x;
-    gy = P.y;
-  }
-  // one square, one pile, newest on top — and loose material joins the stack
-  // already on top of it rather than one buried under a helmet
-  placeOnGround(world, kind, n, gx, gy);
-  flash(`dropped ${n} ${ITEMS[kind].name}`, "#cfa86a");
-  beep(200, 0.06, "sine", 0.04, -60);
-}
-
-/** Move an already-dropped ground stack to another spot (drag-throw). Same
- *  legality rules as a bag throw; merges into a near stack at the landing. */
-function throwGroundItem(gi: GroundItem, tx: number, ty: number): void {
-  const world = cw();
-  if (!world.ground.includes(gi)) return;
-  const t = resolveThrowTarget(tx, ty);
-  // shoving a ground stack into a portal sends it through too
-  const pt = portalAt(t.x, t.y);
-  if (pt) {
-    const idx = world.ground.indexOf(gi);
-    if (idx >= 0) world.ground.splice(idx, 1);
-    sendThroughPortal(gi.kind, gi.n, pt, gi.items);
-    return;
-  }
-  // ...and shoving one into the sea loses it, exactly like a bag throw
-  if (t.sank) {
-    const idx = world.ground.indexOf(gi);
-    if (idx >= 0) world.ground.splice(idx, 1);
-    sink(gi.kind, gi.n, t.x, t.y);
-    return;
-  }
-  /* It lands like anything else: on TOP of the square it was aimed at. Moving
-   * the coordinates alone used to leave it wherever it sat in `world.ground`,
-   * so a stack shoved onto a pile kept the depth of the square it came from —
-   * and two backpacks still never merge, which `moveToPile` enforces. */
-  moveToPile(world, gi, t.x, t.y);
-  beep(200, 0.06, "sine", 0.04, -60);
-}
-
-/** Pick a dropped stack back up, as far as weight/space allow. */
-function pickupGround(gi: GroundItem): void {
-  const world = cw();
-  /* A container has to travel as ONE object. Routing it through `addItem`
-   * would mint a fresh empty pack of the same kind and leave everything
-   * inside it on the floor with no owner — a silent, unrecoverable loss. */
-  if (isContainer(gi.kind)) {
-    const st: ItemStack = { kind: gi.kind, n: 1, items: gi.items };
-    if (bagWeight([st]) + ITEMS[gi.kind].weight > freeCap(P)) { flash("too heavy"); return; }
-    if (!addStack(P.bag, st)) { flash("bag full"); return; }
-    const i = world.ground.indexOf(gi);
-    if (i >= 0) world.ground.splice(i, 1);
-    if (ui.floor === gi) { ui.floor = null; closeWindow("floor"); }
-    beep(520, 0.06, "sine", 0.05, 80);
-    return;
-  }
-  const fitByWeight = Math.floor(freeCap(P) / itemWeight(gi.kind, 1));
-  if (fitByWeight <= 0) { flash("too heavy"); return; }
-  const want = Math.min(gi.n, fitByWeight);
-  const left = addItem(P.bag, gi.kind, want) + (gi.n - want);
-  const took = gi.n - left;
-  if (took <= 0) { flash("bag full"); return; }
-  compactBag(P.bag);
-  if (left > 0) gi.n = left;
-  else { const idx = world.ground.indexOf(gi); if (idx >= 0) world.ground.splice(idx, 1); }
-  beep(520, 0.06, "sine", 0.05, 80);
-}
+ * The rules — reach, weight, the chest's budget, the bound relic — live in
+ * intents/containers.ts and intents/ground.ts (Etap 3.1c). What is left here
+ * is the client's half: which window a drag started in and ended on, whether
+ * to ask "how many?" first, and which container a double tap means. */
 
 /** How many are actually in a slot right now (the drag may be stale). */
 const currentN = (ref: ContainerRef, index: number): number => {
-  const arr = refSlots(ref);
+  const arr = refSlots(game, ref);
   const s = arr ? arr[index] : null;
   return s ? s.n : 0;
 };
-
-/** Take gear off a paperdoll slot and throw it on the ground (optionally aimed).
- *  Worn gear never counted toward carry cap, so this needs no weight check —
- *  it goes straight from the body to the floor, Tibia-style. */
-function dropFromEq(slot: EqSlot, tx?: number, ty?: number): void {
-  const kind = P.eq[slot];
-  if (!kind) return;
-  P.eq[slot] = null;
-  refreshDerived(P);
-  dropToGround(kind, 1, tx, ty);
-  beep(300, 0.08, "triangle", 0.05);
-}
 
 /**
  * Resolve where a dragged item was released.
@@ -1385,7 +825,7 @@ function resolveItemDrop(rx: number, ry: number): void {
 
     // onto the paperdoll
     if (it.eqSlot) {
-      if (it.eqSlot === "pack") { wearPackFrom(d); return; }
+      if (it.eqSlot === "pack") { wearDragged(d); return; }
       if (d.ref) act.equipItem(d.kind, d.index);
       return;
     }
@@ -1393,12 +833,12 @@ function resolveItemDrop(rx: number, ry: number): void {
 
     // from the paperdoll
     if (d.eqSlot) {
-      if (d.eqSlot === "pack") { movePackTo(it.ref); return; }
-      unequipInto(d.eqSlot, it.ref);
+      if (d.eqSlot === "pack") { movePackTo(game, it.ref); return; }
+      unequipInto(game, d.eqSlot, it.ref);
       return;
     }
     // from the floor
-    if (d.floor) { liftFloorStack(d.floor, it.ref, it.index); return; }
+    if (d.floor) { liftFloorStack(game, d.floor, it.ref, it.index); return; }
     // container → container
     if (d.ref) askThenMove(d.ref, d.index, it.ref, it.index);
     return;
@@ -1407,9 +847,9 @@ function resolveItemDrop(rx: number, ry: number): void {
   // ---- released over a window, but not on a cell: aim at that container ----
   const overRef = containerWindowAt(rx, ry);
   if (overRef) {
-    if (d.eqSlot === "pack") { movePackTo(overRef); return; }
-    if (d.eqSlot) { unequipInto(d.eqSlot, overRef); return; }
-    if (d.floor) { liftFloorStack(d.floor, overRef, null); return; }
+    if (d.eqSlot === "pack") { movePackTo(game, overRef); return; }
+    if (d.eqSlot) { unequipInto(game, d.eqSlot, overRef); return; }
+    if (d.floor) { liftFloorStack(game, d.floor, overRef, null); return; }
     if (d.ref) askThenMove(d.ref, d.index, overRef, null);
     return;
   }
@@ -1418,31 +858,28 @@ function resolveItemDrop(rx: number, ry: number): void {
   // ---- released on the map → throw it there (Tibia-style) ----
   const wx = rx / vScale + cam.x;
   const wy = ry / vScale + cam.y;
-  if (d.eqSlot === "pack") { dropWornPack(wx, wy); return; }
-  if (d.eqSlot) { dropFromEq(d.eqSlot, wx, wy); return; }
-  if (d.floor) {
-    // no telekinesis: pushing loot around requires standing near it
-    if (!withinReach(d.floor.x, d.floor.y)) { flash("too far away", "#d96a5a"); return; }
-    throwGroundItem(d.floor, wx, wy);
-    return;
-  }
+  if (d.eqSlot === "pack") { dropWornPack(game, wx, wy); return; }
+  if (d.eqSlot) { dropFromEq(game, d.eqSlot, wx, wy); return; }
+  // a loose stack is shoved along the floor — from within reach only, which
+  // the request checks for itself
+  if (d.floor) { throwGroundItem(game, d.floor, wx, wy); return; }
   if (!d.ref) return;
   if (rootOf(d.ref) === "world") {
     // straight from a corpse or a floor bag onto the ground beside it —
     // point 3 of the brief: loot you do not want should not have to detour
-    // through your backpack to reach the floor
-    if (!refUsable(d.ref)) { flash("too far away", "#d96a5a"); return; }
-    dropFromContainer(d.ref, d.index, currentN(d.ref, d.index), wx, wy);
+    // through your backpack to reach the floor (within reach: the request
+    // checks that itself)
+    dropFromContainer(game, d.ref, d.index, currentN(d.ref, d.index), wx, wy);
     return;
   }
   const n = currentN(d.ref, d.index);
-  const slots = refSlots(d.ref);
+  const slots = refSlots(game, d.ref);
   const st = slots ? slots[d.index] : null;
   if (n > 1 && !st?.items) {
     // a stack asks how many to throw; the aimed spot rides along in `at`
     ui.split = { kind: d.kind, index: d.index, ref: d.ref, max: n, n, canStore: false, at: { x: wx, y: wy } };
   } else if (n >= 1) {
-    dropFromContainer(d.ref, d.index, n, wx, wy);
+    dropFromContainer(game, d.ref, d.index, n, wx, wy);
   }
 }
 
@@ -1457,13 +894,13 @@ function resolveItemDrop(rx: number, ry: number): void {
  * a dialog with only one possible answer is just a second click.
  */
 function askThenMove(from: ContainerRef, fi: number, to: ContainerRef, ti: number | null): void {
-  const slots = refSlots(from);
+  const slots = refSlots(game, from);
   const st = slots ? slots[fi] : null;
   if (!st) return;
   // rearranging INSIDE one container is positional, never a quantity question
   const rearrange = sameRef(from, to) && !(ti !== null && slots![ti]?.items);
   if (st.items || st.n <= 1 || rearrange) {
-    if (moveItems(from, fi, to, ti, st.n)) closeIfEmpty(from);
+    if (moveItems(game, from, fi, to, ti, st.n)) closeIfEmpty(game, from);
     return;
   }
   ui.split = { kind: st.kind, index: fi, ref: from, max: st.n, n: st.n, canStore: false, to: { ref: to, index: ti } };
@@ -1528,7 +965,7 @@ function baseRefOf(kind: PanelKind): ContainerRef | null {
  * "drop on the ground" is how you lose a rare.
  */
 function sendStack(from: ContainerRef, index: number): boolean {
-  const slots = refSlots(from);
+  const slots = refSlots(game, from);
   const st = slots?.[index];
   if (!slots || !st) return false;
 
@@ -1541,194 +978,28 @@ function sendStack(from: ContainerRef, index: number): boolean {
   }
   if (P.pack) open.push({ c: "bag" });
 
-  const dest = open.find((r) => !sameRef(baseOf(r), baseOf(from)) && !isInside(r, from) && refUsable(r));
+  const dest = open.find((r) => !sameRef(baseOf(r), baseOf(from)) && !isInside(r, from) && refUsable(game, r));
   if (!dest) {
     flash("open another container to send to", "#e0a06a");
     return false;
   }
-  if (!moveItems(from, index, dest, null, st.n)) return false;
+  if (!moveItems(game, from, index, dest, null, st.n)) return false;
   beep(420, 0.04, "sine", 0.03, -30);
   return true;
-}
-
-/** Take `n` out of a container and put them on the ground (optionally aimed). */
-function dropFromContainer(ref: ContainerRef, index: number, n: number, tx?: number, ty?: number): void {
-  const slots = refSlots(ref);
-  const st = slots ? slots[index] : null;
-  if (!slots || !st) return;
-  /* The other door out of the pack, and the same rule as in `moveItems`: a
-   * relic the sage is still waiting for cannot be put down. The ground is the
-   * easiest hiding place of the lot — it is one drag and the cap is still four
-   * tiles away when Chronos looks at your hands. */
-  if (rootOf(ref) === "player" && carriesBound(st, P.level)) {
-    flash("the sage is waiting for that — it stays with you", "#e0a06a");
-    return;
-  }
-  if (st.items) {
-    // a pack goes down whole, contents and all — that IS the loot bag
-    slots[index] = null;
-    dropContainerToGround(st, tx, ty);
-    return;
-  }
-  const take = Math.min(n, st.n);
-  st.n -= take;
-  if (st.n <= 0) slots[index] = null;
-  dropToGround(st.kind, take, tx, ty);
-}
-
-/** Put a whole container object on the floor, keeping what is inside it. */
-function dropContainerToGround(st: ItemStack, tx?: number, ty?: number): void {
-  const world = cw();
-  let gx: number;
-  let gy: number;
-  if (tx !== undefined && ty !== undefined) {
-    const t = resolveThrowTarget(tx, ty);
-    // a pack aimed at a portal takes the trip, contents and all — the same
-    // deal a loose stack gets, and the one a player will assume
-    const pt = portalAt(t.x, t.y);
-    if (pt) { sendThroughPortal(st.kind, 1, pt, st.items); return; }
-    // …and a pack thrown into the sea is a pack, and everything in it, gone
-    if (t.sank) { sink(st.kind, 1, t.x, t.y); return; }
-    gx = t.x; gy = t.y;
-  } else {
-    gx = P.x;
-    gy = P.y;
-  }
-  // never merged into a nearby stack: two backpacks are two objects
-  placeOnGround(world, st.kind, 1, gx, gy, { items: st.items });
-  flash(`dropped ${ITEMS[st.kind].name}`, "#cfa86a");
-  beep(200, 0.06, "sine", 0.04, -60);
-}
-
-/** A loose floor stack dragged into a container. */
-function liftFloorStack(gi: GroundItem, to: ContainerRef, ti: number | null): void {
-  const world = cw();
-  if (!world.ground.includes(gi)) return;
-  if (!withinReach(gi.x, gi.y)) { flash("too far away", "#d96a5a"); return; }
-  if (!refUsable(to)) { flash("too far away", "#d96a5a"); return; }
-  const dst = refSlots(to);
-  if (!dst) return;
-  // a pack cannot be lifted into itself
-  if (baseOf(to).c === "ground" && (baseOf(to) as { id: number }).id === gi.id) {
-    flash("it will not fit inside itself", "#d96a5a");
-    return;
-  }
-  /* Route it through a throwaway one-slot holder so the ONE move with all the
-   * rules in it stays the only code that puts something somewhere. The holder
-   * is not in the world, so its reach was checked above instead — hence
-   * `sourceChecked`. */
-  const shim: Bag = [{ kind: gi.kind, n: gi.n, items: gi.items }];
-    /* A `loose` address rather than a fake corpse. The stack being lifted is
-   * not in any container yet, so it is handed an address that names the shim
-   * directly — which is exactly what the `loose` member exists for, and it
-   * stops this from being a body that pretends to lie on the floor. */
-  const via: ContainerRef = { c: "loose", slots: shim };
-  if (!moveItems(via, 0, to, ti, gi.n, { sourceChecked: true })) return;
-  const leftover = shim[0];
-  if (leftover) { gi.n = leftover.n; gi.items = leftover.items; }
-  else {
-    const idx = world.ground.indexOf(gi);
-    if (idx >= 0) world.ground.splice(idx, 1);
-  }
 }
 
 /* ---------------- the worn backpack ---------------- */
 
 /** Put on the backpack the player just dragged onto the Bag slot. */
-function wearPackFrom(d: NonNullable<typeof itemDrag>): void {
-  if (d.floor) { wearPackFromFloor(d.floor); return; }
+function wearDragged(d: NonNullable<typeof itemDrag>): void {
+  if (d.floor) { wearPackFromFloor(game, d.floor); return; }
   if (d.eqSlot || !d.ref) return;
-  const slots = refSlots(d.ref);
-  const st = slots ? slots[d.index] : null;
-  if (!slots || !st) return;
-  if (!isContainer(st.kind)) { flash("that is not a backpack", "#d96a5a"); return; }
-  if (!refUsable(d.ref)) { flash("too far away", "#d96a5a"); return; }
-  const old = P.pack;
-  slots[d.index] = null;
-  P.pack = st;
-  /* The pack being replaced goes INSIDE the new one. It has to go somewhere,
-   * and the alternative — refuse the swap — is a dead end, because the new
-   * pack is almost always sitting in the old one and could not be worn at
-   * all. Detaching first is what keeps that from becoming a cycle. */
-  if (old) {
-    if (!addStack(st.items!, old)) dropContainerToGround(old);
-  }
-  flash("backpack on", "#b9e07f");
-  beep(420, 0.07, "sine", 0.05);
-}
-
-/** …the same, but the pack was lying on the floor. */
-function wearPackFromFloor(gi: GroundItem): void {
-  const world = cw();
-  if (!isContainer(gi.kind)) { flash("that is not a backpack", "#d96a5a"); return; }
-  if (!world.ground.includes(gi)) return;
-  if (!withinReach(gi.x, gi.y)) { flash("too far away", "#d96a5a"); return; }
-  const st: ItemStack = { kind: gi.kind, n: 1, items: gi.items };
-  const old = P.pack;
-  P.pack = st;
-  const idx = world.ground.indexOf(gi);
-  if (idx >= 0) world.ground.splice(idx, 1);
-  if (old && !addStack(st.items ?? [], old)) dropContainerToGround(old);
-  if (ui.floor === gi) { ui.floor = null; closeWindow("floor"); }
-  flash("backpack on", "#b9e07f");
-}
-
-/** Take the worn pack off into some other container. */
-function movePackTo(to: ContainerRef): void {
-  const st = P.pack;
-  if (!st) return;
-  // it cannot go into itself, and "the bag" IS itself
-  if (baseOf(to).c === "bag") { flash("it will not fit inside itself", "#d96a5a"); return; }
-  if (!refUsable(to)) { flash("too far away", "#d96a5a"); return; }
-  const dst = refSlots(to);
-  if (!dst) return;
-  const room = chestRoomLeft(to);
-  if (room !== null && stackSlotCost(st) > room) { flash("the chest is full", "#d96a5a"); return; }
-  if (!addStack(dst, st)) { flash("no room", "#d96a5a"); return; }
-  P.pack = null;
-  flash("backpack off", "#e0a06a");
-}
-
-/** Take the worn pack off onto the ground. */
-/* The THIRD door out of the pack, and until now the only one with no lock on
- * it at all. Taking the backpack off is one button and it puts the whole tree
- * on the floor — where, because `groundDecays` deliberately never eats a
- * container, it would sit for as long as the character cared to leave it.
- * The two gates in `moveItems` and `dropFromContainer` were guarding the front
- * door while this stood open. */
-function dropWornPack(tx?: number, ty?: number): void {
-  const st = P.pack;
-  if (!st) return;
-  if (carriesBound(st, P.level)) {
-    flash("the sage is waiting for what is in there — it stays with you", "#e0a06a");
-    return;
-  }
-  P.pack = null;
-  dropContainerToGround(st, tx, ty);
-  flash("backpack off", "#e0a06a");
-}
-
-/** Unequip a worn gear piece into a specific container. */
-function unequipInto(slot: EqSlot, to: ContainerRef): void {
-  const kind = P.eq[slot];
-  if (!kind) return;
-  if (!refUsable(to)) { flash("too far away", "#d96a5a"); return; }
-  const dst = refSlots(to);
-  if (!dst) return;
-  const room = chestRoomLeft(to);
-  if (room !== null && room < 1) { flash("the chest is full", "#d96a5a"); return; }
-  // worn gear never counted toward carry cap, so putting it in the bag can
-  // push you over — the same check a pickup gets
-  if (rootOf(to) === "player" && itemWeight(kind, 1) > freeCap(P)) { flash("too heavy", "#d96a5a"); return; }
-  if (!addStack(dst, { kind, n: 1 })) { flash("no room", "#d96a5a"); return; }
-  P.eq[slot] = null;
-  refreshDerived(P);
-  beep(300, 0.08, "triangle", 0.05);
+  wearPackFrom(game, d.ref, d.index);
 }
 
 /** Open the quantity chooser for a container slot (or move a single item flat). */
 function openMoveChooser(ref: ContainerRef, index: number): void {
-  const arr = refSlots(ref);
+  const arr = refSlots(game, ref);
   const slot = arr ? arr[index] : null;
   if (!slot) return;
   // a container is never split, and tapping one opens it rather than moving it
@@ -1738,9 +1009,9 @@ function openMoveChooser(ref: ContainerRef, index: number): void {
   // still opens it, because Drop vs Throw is a real choice there (no mouse
   // drag exists to aim a throw with).
   if (slot.n <= 1) {
-    if (rootOf(ref) === "world") { moveItems(ref, index, { c: "bag" }, null, 1); closeIfEmpty(ref); return; }
-    if (canStore && ui.stash) { moveItems(ref, index, { c: "stash", id: ui.stash.id }, null, 1); return; }
-    if (!touchUI) { dropFromContainer(ref, index, 1); return; }
+    if (rootOf(ref) === "world") { moveItems(game, ref, index, { c: "bag" }, null, 1); closeIfEmpty(game, ref); return; }
+    if (canStore && ui.stash) { moveItems(game, ref, index, { c: "stash", id: ui.stash.id }, null, 1); return; }
+    if (!touchUI) { dropFromContainer(game, ref, index, 1); return; }
   }
   ui.split = { kind: slot.kind, index, ref, max: slot.n, n: slot.n, canStore };
 }
@@ -1752,22 +1023,22 @@ function splitConfirm(mode: "store" | "take" | "drop" | "throw" | "move"): void 
   // the source may have walked out of reach or rotted while the chooser sat
   // open, so every path re-validates rather than trusting the captured ref
   if (mode === "move") {
-    if (sp.to) { moveItems(sp.ref, sp.index, sp.to.ref, sp.to.index, n); closeIfEmpty(sp.ref); }
+    if (sp.to) { moveItems(game, sp.ref, sp.index, sp.to.ref, sp.to.index, n); closeIfEmpty(game, sp.ref); }
   } else if (mode === "store") {
     if (!ui.stash || !hasWindow("stash")) { ui.split = null; return; }
-    moveItems(sp.ref, sp.index, { c: "stash", id: ui.stash.id }, null, n);
+    moveItems(game, sp.ref, sp.index, { c: "stash", id: ui.stash.id }, null, n);
   } else if (mode === "take") {
-    moveItems(sp.ref, sp.index, { c: "bag" }, null, n);
-    closeIfEmpty(sp.ref);
+    moveItems(game, sp.ref, sp.index, { c: "bag" }, null, n);
+    closeIfEmpty(game, sp.ref);
   } else if (mode === "throw") {
-    if (sp.at) dropFromContainer(sp.ref, sp.index, n, sp.at.x, sp.at.y); // aimed by the drag
+    if (sp.at) dropFromContainer(game, sp.ref, sp.index, n, sp.at.x, sp.at.y); // aimed by the drag
     else {
       // arm the throw: the NEXT tap on the map is the target tile
       throwPending = { kind: sp.kind, n };
       flash("tap the ground to throw", "#8ab6ff");
     }
   } else {
-    dropFromContainer(sp.ref, sp.index, n);
+    dropFromContainer(game, sp.ref, sp.index, n);
   }
   ui.split = null;
 }
@@ -2086,12 +1357,6 @@ function tpHome(): void {
   saveGame(game);
 }
 
-function takeOne(c: Corpse, index: number): void {
-  const ref: ContainerRef = { c: "corpse", id: c.id };
-  moveItems(ref, index, { c: "bag" }, null, refSlots(ref)?.[index]?.n ?? 1);
-  closeIfEmpty(ref);
-}
-
 /* ---------------- container window navigation ---------------- */
 
 /**
@@ -2353,31 +1618,6 @@ function walkToPoint(at: Vec): void {
  * bottom where the thumb naturally rests and the object's own verbs sit above
  * it, closest to the thing they act on.
  */
-/**
- * The one place gold and platinum actually change denomination: Morgan's
- * counter in Bonetown.
- *
- * It used to be a right-click on a coin slot and a button in the quantity
- * dialog. Both are gone — a wallet that folds itself up anywhere in the world
- * makes the weight of money meaningless, and Tibia always made you walk back
- * to a banker for it. `n` is how many platinum coins are being made or broken;
- * the amount buttons in the window work it out from what the bag can take.
- *
- * The weight check is only ever needed going DOWN: a hundred gold weigh ten
- * ounces against the platinum coin's tenth of one. `maxExchange` applies the
- * same limit when it sizes the Max button, so this is the backstop for x1 and
- * x10, not the usual path.
- */
-function runCoinExchange(to: "goldCoin" | "platinumCoin", n: number): void {
-  if (to === "goldCoin") {
-    const added = (ITEMS.goldCoin.weight * 100 - ITEMS.platinumCoin.weight) * n;
-    if (added > freeCap(P)) { flash("too heavy", "#d96a5a"); return; }
-  }
-  if (!exchangeCoins(P.bag, to, n)) { flash("no room in bag", "#d96a5a"); return; }
-  flash(to === "platinumCoin" ? `+${n} platinum` : `+${n * 100} gold`, "#ffe9a8");
-  sfx("coins");
-}
-
 function openContextMenu(sx: number, sy: number): void {
   if (P.dead || hudEditing()) return;
   /* Not under a modal box. The box is drawn last and over everything, so a
@@ -2563,7 +1803,7 @@ function handleWorldTap(sx: number, sy: number): void {
     const t = throwPending;
     throwPending = null;
     const idx = P.bag.findIndex((s) => s !== null && s.kind === t.kind);
-    if (idx >= 0) dropFromContainer({ c: "bag" }, idx, t.n, w.x, w.y);
+    if (idx >= 0) dropFromContainer(game, { c: "bag" }, idx, t.n, w.x, w.y);
     return;
   }
   // an armed Burst lands here. The cursor is spent by the click whether or not
@@ -3281,7 +2521,7 @@ function openTreasure(s: Structure): void {
     // bag and the floor: two half-piles of platinum is worse to pick up than
     // one whole one, and `addItem` already reports the remainder it refused.
     const fits = freeCap(P) >= itemWeight(kind, n) && addItem(P.bag, kind, n) === 0;
-    if (!fits) dropToGround(kind, n);
+    if (!fits) dropToGround(game, kind, n);
     parts.push(n > 1 ? `${n} ${ITEMS[kind].name}` : ITEMS[kind].name);
   }
   flash(`You have found ${parts.join(" and ")}.`, "#ffe9a8");
@@ -3660,7 +2900,7 @@ function talkToSage(): void {
  * forgiving one claims almost all of them.
  */
 function lootKeepingAttack(c: Corpse): void {
-  if (withinReach(c.x, c.y)) {
+  if (withinReach(game, c.x, c.y)) {
     ui.loot = c;
     openWindow("loot");
   } else {
@@ -4185,26 +3425,12 @@ function walkGrid(world: World, gx: number, gy: number, budget: number): boolean
 
 /* ---------------- proximity panels (Tibia-style auto-close) ---------------- */
 
-/**
- * Within arm's reach of a loose thing in the world — a corpse, a container on
- * the floor. One square, counted on the grid, so a diagonal neighbour counts
- * and a tile two along never does.
- */
-function withinReach(x: number, y: number): boolean {
-  return chebToPoint(P.tx, P.ty, x, y) <= PANEL_REACH_TILES;
-}
-
-/** The same reach, against a placed structure's footprint. */
-function structInReach(s: Structure): boolean {
-  return structGap(s, P.tx, P.ty) <= PANEL_REACH_TILES;
-}
-
 /** Is the player near any owned Home-Isle structure of the given kinds? */
 function nearStructure(...keys: string[]): boolean {
   if (cw() !== game.worlds.home) return false;
   for (const s of game.worlds.home.structures) {
     if (!keys.includes(s.key)) continue;
-    if (structInReach(s)) return true;
+    if (structInReach(game, s)) return true;
   }
   return false;
 }
@@ -4234,6 +3460,36 @@ function tickNpcTalk(world: World): void {
 
 let proximityT = 0;
 /**
+ * Close the loot and floor windows whose body or bag no longer exists.
+ *
+ * A window follows what it shows: a body looted bare is taken away, and a bag
+ * on the floor can be picked up, worn or shoved into a pack. The requests that
+ * do that used to close the window themselves; they live in intents/ now and
+ * know nothing about windows (Etap 3.1c), so the window notices instead —
+ * which it will have to do anyway once someone else can empty the body you
+ * are looking at.
+ *
+ * Gone means gone from EVERY world. A body still lying on the floor the
+ * player has just climbed away from is out of reach, not gone, and the check
+ * below closes that window with its "too far away", as it always has.
+ */
+function sweepVanished(): void {
+  const worlds = Object.values(game.worlds);
+  const loot = ui.loot;
+  if (loot && !worlds.some((w) => w.corpses.includes(loot))) {
+    // a sheet pushed off a phone leaves its subject behind with no window;
+    // that is simply forgotten, with no close sound for a window not there
+    if (hasWindow("loot")) closeWindow("loot");
+    else ui.loot = null;
+  }
+  const floor = ui.floor;
+  if (floor && !worlds.some((w) => w.ground.includes(floor))) {
+    if (hasWindow("floor")) closeWindow("floor");
+    else ui.floor = null;
+  }
+}
+
+/**
  * Interaction panels stay open while dragging other windows around (Tibia-style
  * — clicking elsewhere never closes them), but they DO close when the player
  * walks away from their source. Without this, an open Storage Chest would allow
@@ -4241,6 +3497,7 @@ let proximityT = 0;
  * shops / the Forge / the task board could be used from anywhere.
  */
 function tickProximityPanels(dt: number): void {
+  sweepVanished();
   proximityT -= dt;
   if (proximityT > 0) return;
   proximityT = 0.25;
@@ -4250,16 +3507,16 @@ function tickProximityPanels(dt: number): void {
     ["stash", () => {
       const st = ui.stash;
       if (!st || cw() !== game.worlds.home || !game.worlds.home.structures.includes(st)) return false;
-      return structInReach(st);
+      return structInReach(game, st);
     }],
     ["shop", () => !!ui.npc && cw().npcs.includes(ui.npc) && nearNpc((n) => n === ui.npc)],
     ["tasks", () => nearNpc((n) => n.key === "taskmaster")],
     ["wardrobe", () => nearNpc((n) => n.key === "tailor")],
     ["exchange", () => nearNpc((n) => n.key === "morgan")],
     ["loot", () => !!ui.loot && cw().corpses.includes(ui.loot)
-      && withinReach(ui.loot.x, ui.loot.y)],
+      && withinReach(game, ui.loot.x, ui.loot.y)],
     ["floor", () => !!ui.floor && cw().ground.includes(ui.floor)
-      && withinReach(ui.floor.x, ui.floor.y)],
+      && withinReach(game, ui.floor.x, ui.floor.y)],
   ];
   for (const [kind, inRange] of checks) {
     if (hasWindow(kind) && !inRange()) {
@@ -4529,7 +3786,7 @@ function update(dt: number): void {
   // moment we're in range (or is forgotten if it despawned / got looted away)
   if (pendingLoot) {
     if (!world.corpses.includes(pendingLoot)) pendingLoot = null;
-    else if (withinReach(pendingLoot.x, pendingLoot.y)) {
+    else if (withinReach(game, pendingLoot.x, pendingLoot.y)) {
       ui.loot = pendingLoot;
       openWindow("loot");
       pendingLoot = null;
@@ -4636,8 +3893,8 @@ function update(dt: number): void {
       // same breath, because 48 px reaches a tile the square rule calls two
       // away. Fighting keeps its pixel reach: a blade is not a window.
       const t = P.target;
-      const inReach = t.kind === "corpse" || t.kind === "ground" ? withinReach(tp.x, tp.y)
-        : t.kind === "structure" ? (() => { const st = targetStruct(t); return !!st && structInReach(st); })()
+      const inReach = t.kind === "corpse" || t.kind === "ground" ? withinReach(game, tp.x, tp.y)
+        : t.kind === "structure" ? (() => { const st = targetStruct(t); return !!st && structInReach(game, st); })()
         : dist(P.x, P.y, tp.x, tp.y) <= (t.kind === "dummy" || t.kind === "mob" ? mode.reach : MELEE_REACH_PX);
       if (inReach) resolveTarget();
       else if (chaseBlocked) {
@@ -4924,7 +4181,7 @@ function resolveTarget(): void {
     const gi = targetGround(t);
     if (gi) {
       if (isContainer(gi.kind)) { ui.floor = gi; openWindow("floor"); }
-      else pickupGround(gi);
+      else pickupGround(game, gi);
     }
     P.target = null;
   } else if (t.kind === "npc") {
